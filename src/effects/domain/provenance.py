@@ -52,31 +52,56 @@ class KeyResolution(StrEnum):
 
 @dataclass(frozen=True, slots=True)
 class ProvenanceKey:
-    """``(script_file, face, trait_kind, index_within_kind)``.
+    """``(script_file, face, trait_kind, index_within_kind, option?)``.
 
     ``script_file`` is the path as written, including its tree, and is produced
     identically by the Java writer and the Python reader — a disagreement is the
     fail-loudly case at the join. ``index_within_kind`` indexes that kind's slice
     of the face's raw trait list, not a global ordinal.
+
+    ``option`` names one mode of a charm: its 0-based position in the root's
+    ``Choices$``. Forge gives a mode no identity of its own — it clones each
+    chosen mode and climbs every clone to the root — so the position is the one
+    identity both the converter and the collector can compute. A key without it
+    names the root, and the two never compare equal.
     """
 
     script_file: str
     face: int
     trait_kind: str
     index_within_kind: int
+    option: int | None = None
 
     @property
     def tree(self) -> str:
         """The source tree this key's script file belongs to."""
         return self.script_file.split("/", 1)[0]
 
+    @property
+    def root(self) -> ProvenanceKey:
+        """The charm's own key for a mode key; the key itself otherwise."""
+        if self.option is None:
+            return self
+        return ProvenanceKey(
+            self.script_file, self.face, self.trait_kind, self.index_within_kind,
+        )
+
     def as_dict(self) -> dict:
-        return {
+        out = {
             "script_file": self.script_file,
             "face": self.face,
             "trait_kind": self.trait_kind,
             "index_within_kind": self.index_within_kind,
         }
+        if self.option is not None:
+            out["option"] = self.option
+        return out
+
+    def sidecar_dict(self) -> dict:
+        """The key as a sidecar spells it: without the shared ``script_file``."""
+        out = self.as_dict()
+        del out["script_file"]
+        return out
 
     @classmethod
     def from_dict(cls, data: dict, *, script_file: str | None = None) -> ProvenanceKey:
@@ -96,6 +121,7 @@ class ProvenanceKey:
             face=int(data["face"]),
             trait_kind=str(data["trait_kind"]),
             index_within_kind=int(data["index_within_kind"]),
+            option=None if data.get("option") is None else int(data["option"]),
         )
 
 
@@ -265,6 +291,24 @@ class ProvenanceSidecar:
         """
         row = self.row_for(key)
         return None if row is None else self.lines[row]
+
+    def option_rows_after(self, row: int) -> list[int]:
+        """The keyed ``option`` rows that immediately follow ``row``.
+
+        A charm's modes sit right after its root line in ``Choices$`` order, so
+        adjacency plus the key is the whole link between a mode and its root.
+        A die-roll ``option`` line carries no key and ends the run, as does any
+        line that is not an ``option`` line.
+        """
+        rows: list[int] = []
+        for following in range(row + 1, len(self.lines)):
+            line = self.lines[following]
+            if line.line_kind != "option" or not any(
+                key.option is not None for key in line.provenance
+            ):
+                break
+            rows.append(following)
+        return rows
 
     def _mismatch_message(self, key: ProvenanceKey) -> str:
         return (

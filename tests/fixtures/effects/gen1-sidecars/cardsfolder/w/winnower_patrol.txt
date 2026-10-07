@@ -1,0 +1,5 @@
+name: winnower patrol
+mana cost: {2}{G}
+types: creature elf warrior
+power toughness: 3/2
+triggered: kinship — at the beginning of your upkeep, you may look at the top card of your library. if it shares a creature type with CARDNAME, you may reveal it. if you do, put a +1/+1 counter on CARDNAME.

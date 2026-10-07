@@ -1,0 +1,5 @@
+name: scaled nurturer
+mana cost: {1}{G}
+types: creature dragon druid
+power toughness: 0/2
+activated[1]: {T}: add {G}. when you spend this mana to cast a dragon creature spell, you gain 2 life.

@@ -1,0 +1,6 @@
+name: ancient bronze dragon
+mana cost: {5}{G}{G}
+types: creature elder dragon
+power toughness: 7/7
+static: flying
+triggered: whenever CARDNAME deals combat damage to a player, roll a d20. when you do, put X +1/+1 counters on each of up to two target creatures, where X is the result. when you do, put X +1/+1 counters on each of up to two target creatures, where X is the result.

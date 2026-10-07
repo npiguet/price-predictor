@@ -1,0 +1,5 @@
+name: the ooze
+mana cost: {2}
+types: legendary artifact
+activated[1]: {T}: exile target card from a graveyard. create a mutagen token.
+triggered: whenever a creature you control with a +1/+1 counter on it leaves the battlefield, create a mutagen token for each +1/+1 counter on it.

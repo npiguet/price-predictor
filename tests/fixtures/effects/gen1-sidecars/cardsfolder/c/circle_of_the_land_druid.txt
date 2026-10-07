@@ -1,0 +1,6 @@
+name: circle of the land druid
+mana cost: {1}{G}
+types: creature gnome druid
+power toughness: 1/1
+triggered: when CARDNAME enters, you may mill four cards.
+triggered: natural recovery — when CARDNAME dies, return target land card from your graveyard to your hand.

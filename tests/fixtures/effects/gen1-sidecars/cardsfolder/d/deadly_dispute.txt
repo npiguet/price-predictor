@@ -1,0 +1,5 @@
+name: deadly dispute
+mana cost: {1}{B}
+types: instant
+additional cost: sacrifice an artifact or creature.
+spell[1]: draw two cards and create a treasure token.

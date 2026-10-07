@@ -1,0 +1,6 @@
+name: dream beavers
+mana cost: {B}
+types: creature beaver nightmare
+power toughness: 1/1
+static: flying
+triggered: when this creature enters, each opponent loses 1 life and you gain 1 life. scry 1.

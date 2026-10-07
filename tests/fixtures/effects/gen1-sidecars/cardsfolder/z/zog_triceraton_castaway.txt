@@ -1,0 +1,8 @@
+name: zog, triceraton castaway
+mana cost: {4}{R}
+types: legendary creature dinosaur soldier
+power toughness: 5/4
+static: reach
+static: trample
+activated[1]: mountaincycling {2}
+triggered: when CARDNAME enters, target creature can't block this turn.

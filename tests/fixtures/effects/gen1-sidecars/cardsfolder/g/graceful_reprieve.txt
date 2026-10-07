@@ -1,0 +1,4 @@
+name: graceful reprieve
+mana cost: {1}{W}
+types: instant
+spell[1]: when target creature dies this turn, return that card to the battlefield under its owner's control.

@@ -1,0 +1,6 @@
+name: black dragon
+mana cost: {5}{B}{B}
+types: creature dragon
+power toughness: 4/4
+static: flying
+triggered: acid breath — when CARDNAME enters, target creature an opponent controls gets -3/-3 until end of turn.

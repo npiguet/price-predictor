@@ -1,0 +1,4 @@
+name: manhole missile
+mana cost: {1}{R}
+types: instant
+spell[1]: CARDNAME deals 3 damage to target creature. you may put a card from your hand on the bottom of your library. if you do, draw a card.

@@ -1,0 +1,5 @@
+name: nobody
+mana cost: {1}{U/R}{U/R}
+types: artifact creature human hero
+power toughness: 3/2
+triggered: when this creature enters, return up to one other target artifact you control to its owner's hand. scry 1.

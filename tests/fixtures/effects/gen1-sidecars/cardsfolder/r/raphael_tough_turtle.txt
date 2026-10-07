@@ -1,0 +1,5 @@
+name: raphael, tough turtle
+mana cost: {1}{R}
+types: legendary creature mutant ninja turtle
+power toughness: 1/3
+triggered: alliance — whenever another creature you control enters, CARDNAME deals 1 damage to target opponent.

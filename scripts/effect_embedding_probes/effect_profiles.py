@@ -83,7 +83,7 @@ def _init(keymap_path: str) -> None:
 def acting_text(record: dict) -> str | None:
     for key in record.get("ability") or ():
         text = _KEYMAP.get((key["script_file"], key["face"], key["trait_kind"],
-                            key["index_within_kind"]))
+                            key["index_within_kind"], key.get("option")))
         if text is not None:
             return text
     return None

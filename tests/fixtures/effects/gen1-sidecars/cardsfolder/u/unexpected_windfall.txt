@@ -1,0 +1,5 @@
+name: unexpected windfall
+mana cost: {2}{R}{R}
+types: instant
+additional cost: discard a card.
+spell[1]: draw two cards and create two treasure tokens.

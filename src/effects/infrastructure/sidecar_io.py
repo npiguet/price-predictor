@@ -65,14 +65,7 @@ def sidecar_to_dict(sidecar: ProvenanceSidecar) -> dict:
             {
                 "line_index": line.line_index,
                 "line_kind": line.line_kind,
-                "provenance": [
-                    {
-                        "face": key.face,
-                        "trait_kind": key.trait_kind,
-                        "index_within_kind": key.index_within_kind,
-                    }
-                    for key in line.provenance
-                ],
+                "provenance": [key.sidecar_dict() for key in line.provenance],
                 "sub_ability_links": [
                     {"path": list(link.path), "label": link.label}
                     for link in line.sub_ability_links
@@ -87,14 +80,7 @@ def sidecar_to_dict(sidecar: ProvenanceSidecar) -> dict:
             }
             for line in sidecar.lines
         ],
-        "dropped_keys": [
-            {
-                "face": key.face,
-                "trait_kind": key.trait_kind,
-                "index_within_kind": key.index_within_kind,
-            }
-            for key in sidecar.dropped_keys
-        ],
+        "dropped_keys": [key.sidecar_dict() for key in sidecar.dropped_keys],
     }
 
 

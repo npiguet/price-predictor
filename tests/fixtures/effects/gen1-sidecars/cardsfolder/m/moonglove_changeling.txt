@@ -1,0 +1,6 @@
+name: moonglove changeling
+mana cost: {2}{B}
+types: creature shapeshifter
+power toughness: 2/2
+static: changeling
+activated[1]: {B}: CARDNAME gains deathtouch until end of turn.

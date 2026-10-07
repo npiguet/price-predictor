@@ -1,0 +1,6 @@
+name: insectoid exterminator
+mana cost: {2}{B}
+types: creature insect mutant
+power toughness: 2/2
+static: flying
+triggered: disappear — at the beginning of your end step, if a permanent left the battlefield under your control this turn, scry 1.

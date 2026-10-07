@@ -1,0 +1,6 @@
+name: quintessential katana
+mana cost: {W}
+types: artifact equipment
+activated[1]: equip {2}
+triggered: whenever a ninja you control enters, you may attach this equipment to it.
+static: equipped creature gets +1/+1 and has "whenever this creature deals combat damage, untap it and you gain 2 life."

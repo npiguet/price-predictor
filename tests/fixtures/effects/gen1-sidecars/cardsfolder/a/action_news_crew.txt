@@ -1,0 +1,6 @@
+name: action news crew
+mana cost: {1}{W}
+types: creature human citizen
+power toughness: 2/2
+static: vigilance
+activated[1]: channel — {6}, discard CARDNAME: put a +1/+1 counter on each creature you control. draw a card.

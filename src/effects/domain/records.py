@@ -140,7 +140,12 @@ PARTNERLESS_OUTCOMES: frozenset[ResolutionOutcome] = frozenset({
 #: and not about the game.
 COLLECTION_METADATA_FIELDS: frozenset[str] = frozenset({
     "mode", "interventional", "fork", "synthetic", "ability_unresolved",
+    "random_seat", "what_if",
 })
+
+#: The legality subkinds that carry ``what_if`` (FR-031). A ``decision`` record
+#: is always a real evaluation of a real candidate, so the question never arises.
+WHAT_IF_SUBKINDS: frozenset[str] = frozenset({"attackers", "blockers"})
 
 #: Why a record that does name an acting line carries no key for it. A closed
 #: vocabulary, because the point of the field is to separate "no printed line
@@ -435,6 +440,14 @@ class EffectRecord:
     interventional: bool = False
     fork: bool = False
     synthetic: bool = False
+    #: ``actor_player`` is the random seat (FR-030). A gen-1 shard never wrote
+    #: it, and its records read as on-policy. Collection metadata.
+    random_seat: bool = False
+    #: On ``attackers`` and ``blockers`` records only: False for the declaration
+    #: a player actually made, True for a query the AI asked about a
+    #: hypothetical (FR-027, FR-031). None is unknown — a gen-1 record — and
+    #: never counts as a real decision. Collection metadata.
+    what_if: bool | None = None
     #: The acting line, as several keys where the rendered line merged several
     #: traits. On a modal resolution this is the chosen ``option`` line's key,
     #: not the parent ``spell`` line's (FR-017).
@@ -520,6 +533,13 @@ class EffectRecord:
             raise ValueError("mirror_of names the real record a fork mirrors")
         if self.variant_of is not None and not self.synthetic:
             raise ValueError("variant_of names the card a synthetic script came from")
+        if self.what_if is not None and (
+            self.subkind is None or self.subkind.value not in WHAT_IF_SUBKINDS
+        ):
+            raise ValueError(
+                "what_if classes a legality record; "
+                f"kind={self.kind.value} subkind={self.subkind} carries it"
+            )
 
     def _check_link_id(self) -> None:
         if self.link_id is None:

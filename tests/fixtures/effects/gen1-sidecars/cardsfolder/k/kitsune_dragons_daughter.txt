@@ -1,0 +1,6 @@
+name: kitsune, dragon's daughter
+mana cost: {4}{U}{U}
+types: legendary creature fox warlock avatar
+power toughness: 6/6
+static: vigilance
+triggered: whenever CARDNAME enters or deals combat damage to a player, you may exchange control of two other target creatures controlled by different players.

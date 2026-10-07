@@ -68,7 +68,7 @@ def make_record(snapshot, ability_key):
             )
         elif kind is RecordKind.COMBAT:
             defaults["payload"] = CombatPayload()
-        else:
+        elif "payload" not in overrides:
             raise ValueError(f"make_record has no default payload for {kind}")
         defaults.update(overrides)
         return EffectRecord(**defaults)

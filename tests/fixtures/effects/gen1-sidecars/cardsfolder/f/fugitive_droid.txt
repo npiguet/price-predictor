@@ -1,0 +1,6 @@
+name: fugitive droid
+mana cost: {U}
+types: artifact creature robot scientist
+power toughness: 1/1
+activated[1]: {U}, sacrifice CARDNAME: counter target spell that targets an artifact or creature you control.
+static: this creature can't be blocked if an artifact entered the battlefield under your control this turn.

@@ -1,0 +1,4 @@
+name: return to the sewers
+mana cost: {3}{U}
+types: instant
+spell[1]: target creature's owner puts it on their choice of the top or bottom of their library. you create a mutagen token.

@@ -94,8 +94,8 @@ _JSON_SEPARATORS = (",", ":")  # compact, newline-free
 _KNOWN_ENVELOPE_KEYS = frozenset({
     "record_id", "run_id", "timestamp", "game_id", "kind", "moment", "subkind",
     "link_id", "mirror_of", "variant_of", "mode", "interventional", "fork",
-    "synthetic", "actor_player", "ability", "ability_unresolved", "state",
-    "payload",
+    "synthetic", "random_seat", "what_if", "actor_player", "ability",
+    "ability_unresolved", "state", "payload",
 })
 
 
@@ -557,6 +557,11 @@ def record_to_dict(record: EffectRecord) -> dict:
         "interventional": record.interventional,
         "fork": record.fork,
         "synthetic": record.synthetic,
+        "random_seat": record.random_seat,
+    }
+    if record.what_if is not None:
+        out["what_if"] = record.what_if
+    out |= {
         "actor_player": record.actor_player,
         "ability": (
             _keys_to_json(record.ability) if record.ability is not None else None
@@ -595,6 +600,10 @@ def record_from_dict(data: dict) -> EffectRecord:
         interventional=data.get("interventional", False),
         fork=data.get("fork", False),
         synthetic=data.get("synthetic", False),
+        # Absent on a gen-1 shard (FR-033): off-policy is something a record
+        # has to claim, and an unclassed legality record is never real.
+        random_seat=data.get("random_seat", False),
+        what_if=data.get("what_if"),
         ability=_keys_from_json(ability) if ability is not None else None,
         ability_unresolved=data.get("ability_unresolved"),
         extra_fields={

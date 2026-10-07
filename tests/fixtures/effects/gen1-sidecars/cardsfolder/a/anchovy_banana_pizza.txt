@@ -1,0 +1,5 @@
+name: anchovy & banana pizza
+mana cost: {2}{B}{B}
+types: artifact food
+activated[1]: {2}, {T}, sacrifice this artifact: you gain 3 life.
+triggered: when this artifact enters, destroy target creature.

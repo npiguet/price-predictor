@@ -1,0 +1,6 @@
+name: stinkdrinker bandit
+mana cost: {3}{B}
+types: creature goblin rogue
+power toughness: 2/1
+alternate cost: prowl {1}{B}
+triggered: whenever a rogue you control attacks and isn't blocked, it gets +2/+1 until end of turn.

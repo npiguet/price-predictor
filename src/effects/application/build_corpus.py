@@ -76,20 +76,25 @@ def ability_key(record: EffectRecord) -> str | None:
     """
     if not record.ability:
         return None
-    return _KEY_SEPARATOR.join(
-        _KEY_FIELD_SEPARATOR.join(
-            (key.script_file, str(key.face), key.trait_kind, str(key.index_within_kind))
-        )
-        for key in record.ability
-    )
+    return _KEY_SEPARATOR.join(_render_key(key) for key in record.ability)
+
+
+def _render_key(key: ProvenanceKey) -> str:
+    fields = [key.script_file, str(key.face), key.trait_kind, str(key.index_within_kind)]
+    if key.option is not None:
+        fields.append(str(key.option))
+    return _KEY_FIELD_SEPARATOR.join(fields)
 
 
 def parse_ability_key(rendered: str) -> tuple[ProvenanceKey, ...]:
     """The inverse of :func:`ability_key`."""
     keys = []
     for part in rendered.split(_KEY_SEPARATOR):
-        script_file, face, trait_kind, index = part.split(_KEY_FIELD_SEPARATOR)
-        keys.append(ProvenanceKey(script_file, int(face), trait_kind, int(index)))
+        script_file, face, trait_kind, index, *option = part.split(_KEY_FIELD_SEPARATOR)
+        keys.append(ProvenanceKey(
+            script_file, int(face), trait_kind, int(index),
+            int(option[0]) if option else None,
+        ))
     return tuple(keys)
 
 

@@ -53,6 +53,7 @@ from effects.infrastructure.record_io import (
     ShardWriter,
     count_records,
     format_record_line,
+    iter_shard_lines,
     iter_shards,
     read_records,
     read_shard,
@@ -737,3 +738,47 @@ def test_write_shard_writes_a_readable_empty_shard_for_no_records(tmp_path):
     path = tmp_path / "curated.0-a.jsonl.gz"
     assert write_shard(path, []) == 0
     assert list(read_shard(path)) == []
+
+
+_GEN1_FIXTURE = (
+    Path(__file__).parents[3] / "fixtures" / "effects" / "gen1-records.jsonl.gz"
+)
+
+
+class TestGen2EnvelopeFields:
+    """``random_seat`` and ``what_if`` (FR-030, FR-031, FR-033)."""
+
+    def test_every_gen1_record_reads_with_the_defaults(self):
+        records = list(read_shard(_GEN1_FIXTURE))
+        assert len(records) > 40
+        for record in records:
+            assert record.random_seat is False
+            assert record.what_if is None
+            assert record.extra_fields == {}
+
+    def test_a_gen1_line_carries_neither_field(self):
+        for line in iter_shard_lines(_GEN1_FIXTURE):
+            data = json.loads(line)
+            assert "random_seat" not in data and "what_if" not in data
+
+    def test_random_seat_round_trips(self):
+        record = _record(random_seat=True)
+        assert record_from_dict(record_to_dict(record)) == record
+
+    def test_what_if_round_trips_on_a_legality_record(self):
+        for value in (True, False):
+            record = _record(**ALL_KINDS["playability-blockers"], what_if=value)
+            data = record_to_dict(record)
+            assert data["what_if"] is value
+            assert record_from_dict(data) == record
+
+    def test_what_if_is_written_only_when_set(self):
+        data = record_to_dict(_record(**ALL_KINDS["playability-blockers"]))
+        assert "what_if" not in data
+        assert data["random_seat"] is False
+
+    def test_random_seat_follows_synthetic_in_the_envelope(self):
+        keys = list(record_to_dict(_record(**ALL_KINDS["playability-blockers"],
+                                           what_if=False)))
+        assert keys.index("random_seat") == keys.index("synthetic") + 1
+        assert keys.index("what_if") == keys.index("random_seat") + 1

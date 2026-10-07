@@ -1,0 +1,4 @@
+name: mind transfer protocol
+mana cost: {2}{U}
+types: instant
+spell[1]: until end of turn, target artifact or creature becomes an artifact creature with base power and toughness 4/5. draw a card.

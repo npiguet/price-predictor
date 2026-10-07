@@ -56,7 +56,25 @@ _FROZEN_ENVELOPE: dict[str, str] = {
     # could not tell "no printed line exists" (an engine-built card) from "the
     # resolver failed", which is how a resolver bug survived a whole run.
     "ability_unresolved": "str | None",
+    # Gen-2 (feature 024), both under rule 1 and both collection metadata:
+    # whether the acting player was the random seat, and whether a legality
+    # record is a real declaration or a what-if query. Absent on gen-1 shards.
+    "random_seat": "bool",
+    "what_if": "bool | None",
     "extra_fields": "dict",
+}
+
+#: The one field gen-2 redefines rather than adds, and so the one named
+#: exception to rule 1 (FR-030a). On a gen-2 ``playability`` record
+#: ``actor_player`` names the deciding player — the candidates' controller on
+#: ``attackers``, the blockers' controller on ``blockers``, the candidate
+#: ability's controller on ``decision`` — where feature 023 wrote the active
+#: player (``attackers``, ``decision``) or the attacking player (``blockers``).
+#: Its type is unchanged; its meaning is versioned by shard generation, the
+#: presence of ``random_seat`` (FR-033). Listed here so the exception is
+#: documented in the test that would otherwise forbid it, not skipped.
+_REDEFINED_IN_GEN2: dict[str, set[str]] = {
+    "actor_player": {"attackers", "blockers", "decision"},
 }
 
 # The enum values reachable from stage one onward. A later stage may append;
@@ -88,6 +106,23 @@ class TestRuleOneFieldsMayBeAddedNotRepurposed:
             "a field was added to the envelope; that is allowed, but this list "
             f"must be updated in the same change so the next one is caught: {added}"
         )
+
+
+class TestTheActorPlayerException:
+    """FR-030a: the one redefinition, on ``playability`` records of gen-2 only."""
+
+    def test_the_redefined_field_keeps_its_type(self):
+        actual = {f.name: f.type for f in fields(EffectRecord)}
+        for name in _REDEFINED_IN_GEN2:
+            assert actual[name] == _FROZEN_ENVELOPE[name]
+
+    def test_the_exception_covers_exactly_the_playability_subkinds(self):
+        assert _REDEFINED_IN_GEN2["actor_player"] == {
+            s.value for s in PlayabilitySubkind
+        }
+
+    def test_the_generation_marker_is_an_envelope_field(self):
+        assert "random_seat" in {f.name for f in fields(EffectRecord)}
 
 
 class TestRuleTwoEnumValuesMayBeAddedNotReused:
@@ -148,6 +183,7 @@ class TestRuleFourMetadataNeverBecomesAModelInput:
     def test_the_metadata_set_is_the_one_the_contract_names(self):
         assert COLLECTION_METADATA_FIELDS == {
             "mode", "interventional", "fork", "synthetic", "ability_unresolved",
+            "random_seat", "what_if",
         }
 
     def test_every_metadata_field_is_a_real_envelope_field(self):

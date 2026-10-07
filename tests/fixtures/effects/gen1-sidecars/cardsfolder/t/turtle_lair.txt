@@ -1,0 +1,5 @@
+name: turtle lair
+types: land
+activated[1]: {T}: add {C}.
+activated[2]: {T}: add one mana of any color. spend this mana only to cast a ninja or turtle spell.
+activated[3]: {3}, {T}: target ninja or turtle can't be blocked this turn.

@@ -61,8 +61,8 @@ from effects.infrastructure.sidecar_io import (  # noqa: E402
 VARIANT_TREE = ROOT / "output" / "effects" / "variant-scripts"
 
 
-def key_tuple(script_file: str, key) -> tuple[str, int, str, int]:
-    return (script_file, key.face, key.trait_kind, key.index_within_kind)
+def key_tuple(script_file: str, key) -> tuple[str, int, str, int, int | None]:
+    return (script_file, key.face, key.trait_kind, key.index_within_kind, key.option)
 
 
 def main() -> None:

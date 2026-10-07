@@ -600,3 +600,16 @@ class TestTheTableIsTheSingleSource:
         assert isinstance(participant, CombatParticipant)
         with pytest.raises(dataclasses.FrozenInstanceError):
             participant.controller = "P1"
+
+
+def test_the_keyword_predicate_module_does_not_import_torch():
+    """build-corpus survey workers use it (FR-045) and must not load torch."""
+    import subprocess
+    import sys
+
+    code = (
+        "import sys; import effects.domain.damage_step_keywords as m; "
+        "assert m.KeywordResolver and m.qualifying_observations; "
+        "sys.exit(1 if 'torch' in sys.modules else 0)"
+    )
+    assert subprocess.run([sys.executable, "-c", code]).returncode == 0

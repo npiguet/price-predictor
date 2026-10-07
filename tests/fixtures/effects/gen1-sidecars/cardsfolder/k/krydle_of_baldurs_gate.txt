@@ -1,0 +1,6 @@
+name: krydle of baldur's gate
+mana cost: {U}{B}
+types: legendary creature human elf rogue
+power toughness: 1/3
+triggered: whenever CARDNAME deals combat damage to a player, that player loses 1 life and mills a card, then you gain 1 life and scry 1.
+triggered: whenever you attack, you may pay {2}. if you do, target creature can't be blocked this turn.

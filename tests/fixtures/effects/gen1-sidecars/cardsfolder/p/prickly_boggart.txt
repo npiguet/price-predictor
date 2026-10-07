@@ -1,0 +1,5 @@
+name: prickly boggart
+mana cost: {B}
+types: creature goblin rogue
+power toughness: 1/1
+static: fear

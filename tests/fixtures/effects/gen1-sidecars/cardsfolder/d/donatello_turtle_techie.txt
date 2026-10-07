@@ -1,0 +1,5 @@
+name: donatello, turtle techie
+mana cost: {3}{U}
+types: legendary creature mutant ninja turtle
+power toughness: 3/4
+triggered: when CARDNAME enters, if you control an artifact, draw a card.

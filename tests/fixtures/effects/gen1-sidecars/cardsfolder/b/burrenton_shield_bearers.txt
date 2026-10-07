@@ -1,0 +1,5 @@
+name: burrenton shield-bearers
+mana cost: {4}{W}
+types: creature kithkin soldier
+power toughness: 3/3
+triggered: whenever CARDNAME attacks, target creature gets +0/+3 until end of turn.

@@ -33,9 +33,9 @@ import torch
 from effects.domain.damage_step_keywords import (
     CombatParticipant,
     DamageStepKeyword,
+    KeywordResolver,
     KeywordsOf,
-    combat_participant,
-    keyword_of_line,
+    qualifying_observations,
     subject_id,
 )
 from effects.domain.effect_model import (
@@ -45,7 +45,6 @@ from effects.domain.effect_model import (
     FieldSpec,
     FieldType,
 )
-from effects.domain.records import RecordKind
 
 #: Observations per forward pass. Half of gate 1's record batch, because every
 #: observation is built twice — as collected and perturbed — in one batch.
@@ -66,85 +65,6 @@ class KeywordScore:
     agreeing: int = 0
     #: ``effect label -> (agreeing, scored)``.
     per_field: dict[str, tuple[int, int]] = field(default_factory=dict)
-
-
-class KeywordResolver:
-    """An entity's keywords, from both channels, memoized by provenance key.
-
-    Both channels have to be looked at. An entity's printed and
-    attachment-granted keywords reach the model as ability tokens, and only a
-    keyword granted until end of turn appears as a bare string in the overlay —
-    so reading the overlay alone sees the rare case and misses every creature
-    that printed the keyword, which is the common one.
-
-    The memo is what makes that affordable: a corpus repeats the same few
-    thousand cards across millions of combat records, and resolving each key
-    once turns the walk into a dict hit.
-    """
-
-    def __init__(self, sidecars=None) -> None:
-        self._sidecars = sidecars
-        self._by_key: dict[object, str | None] = {}
-
-    def _keyword_for(self, key) -> str | None:
-        if key not in self._by_key:
-            keyword = None
-            try:
-                line = self._sidecars.line_for(key)
-            except (KeyError, FileNotFoundError):
-                line = None
-            if line is not None:
-                keyword = keyword_of_line(line)
-            self._by_key[key] = keyword
-        return self._by_key[key]
-
-    def keywords_of(self, entity) -> set[str]:
-        # Already in this package's spelling: ``record_io`` runs Forge's
-        # keyword strings through ``normalize_keyword`` at parse time.
-        found = set(entity.granted_temporary.keywords)
-        if self._sidecars is None:
-            return found
-        for key in (*entity.printed, *entity.granted_attached):
-            keyword = self._keyword_for(key)
-            if keyword is not None:
-                found.add(keyword)
-        return found
-
-
-# ── who is observed ─────────────────────────────────────────────────────
-
-
-def qualifying_observations(
-    record, rows: tuple[DamageStepKeyword, ...], resolver: KeywordResolver,
-) -> list[tuple[DamageStepKeyword, CombatParticipant]]:
-    """Every ``(row, carrier)`` in one combat record the gate can observe.
-
-    The whole condition is the row's own ``qualifies`` — at least one effect
-    that applies and has a subject on the board — and it is a board fact rather
-    than a model fact, so the counter and the scorer reach the same answer by
-    asking the same question rather than by two rules kept in step.
-    """
-    if record.kind is not RecordKind.COMBAT:
-        return []
-    found: list[tuple[DamageStepKeyword, CombatParticipant]] = []
-    wanted = {row.keyword for row in rows}
-    for entity in record.state.entities:
-        if entity.combat is None:
-            continue
-        carried = resolver.keywords_of(entity) & wanted
-        if not carried:
-            continue
-        participant = combat_participant(record.state, entity)
-        if participant is None:
-            continue
-        # In table order, not set-iteration order: which observations share a
-        # batch would otherwise depend on the hash seed.
-        for row in rows:
-            if row.keyword not in carried:
-                continue
-            if row.qualifies(participant, resolver.keywords_of):
-                found.append((row, participant))
-    return found
 
 
 def count_qualifying_all(

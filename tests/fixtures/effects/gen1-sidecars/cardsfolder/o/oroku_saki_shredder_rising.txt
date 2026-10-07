@@ -1,0 +1,6 @@
+name: oroku saki, shredder rising
+mana cost: {2}{B}
+types: legendary creature human ninja
+power toughness: 3/1
+alternate cost: sneak {1}{B}
+triggered: whenever CARDNAME deals combat damage to a player, you draw a card and lose 1 life.

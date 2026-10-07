@@ -1,0 +1,6 @@
+name: does machines
+mana cost: {1}{U}
+types: enchantment class
+level[1]: when this class enters, mill two cards, draw two cards, then discard two cards.
+level[2]: {1}{U}: when this class becomes level 2, return up to two target artifact cards from your graveyard to your hand.
+level[3]: {4}{U}: at the beginning of combat on your turn, put three +1/+1 counters on target artifact you control. if it isn't a creature, it becomes a 0/0 robot creature in addition to its other types.

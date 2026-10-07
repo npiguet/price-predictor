@@ -226,6 +226,7 @@ class TestCollectionMetadataStaysOutOfTheModel:
     def test_the_metadata_fields_are_named(self):
         assert COLLECTION_METADATA_FIELDS == {
             "mode", "interventional", "fork", "synthetic", "ability_unresolved",
+            "random_seat", "what_if",
         }
 
     def test_no_metadata_field_reaches_the_model_input_projection(
@@ -322,3 +323,46 @@ class TestTheUnresolvedVocabularyIsOneSet:
             "the reader accepts reasons nothing writes: "
             f"{sorted(UNRESOLVED_REASONS - self._java_reasons())}"
         )
+
+
+class TestGen2Flags:
+    """``random_seat`` on every kind; ``what_if`` on legality records only (FR-031)."""
+
+    def test_random_seat_defaults_to_on_policy(self, make_record):
+        assert make_record().random_seat is False
+
+    @pytest.mark.parametrize("subkind", ["attackers", "blockers"])
+    def test_a_legality_record_may_carry_what_if(self, make_record, subkind):
+        record = make_record(**_legality(subkind), what_if=False)
+        assert record.what_if is False
+
+    def test_a_decision_record_never_carries_what_if(self, make_record):
+        with pytest.raises(ValueError, match="what_if"):
+            make_record(**_legality("decision"), what_if=True)
+
+    def test_a_resolution_never_carries_what_if(self, make_record):
+        with pytest.raises(ValueError, match="what_if"):
+            make_record(what_if=True)
+
+    def test_both_are_collection_metadata(self, make_record):
+        record = make_record(random_seat=True)
+        assert not {"random_seat", "what_if"} & set(record.model_input_fields())
+
+
+def _legality(subkind: str) -> dict:
+    from effects.domain.records import (
+        PlayabilityAttackersPayload,
+        PlayabilityBlockersPayload,
+        PlayabilityDecisionPayload,
+        PlayabilitySubkind,
+    )
+
+    payloads = {
+        "attackers": PlayabilityAttackersPayload(legal_attackers=("E1",)),
+        "blockers": PlayabilityBlockersPayload(anchor_attacker="E1"),
+        "decision": PlayabilityDecisionPayload(candidates=()),
+    }
+    return dict(
+        kind=RecordKind.PLAYABILITY, ability=None,
+        subkind=PlayabilitySubkind(subkind), payload=payloads[subkind],
+    )

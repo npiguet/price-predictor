@@ -1,0 +1,5 @@
+name: april o'neil, hacktivist
+mana cost: {3}{U}
+types: legendary creature human scientist
+power toughness: 1/5
+triggered: at the beginning of your end step, draw a card for each card type among spells you've cast this turn.

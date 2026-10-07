@@ -1,0 +1,6 @@
+name: drider
+mana cost: {4}{B}
+types: creature elf spider
+power toughness: 4/3
+static: reach
+triggered: whenever CARDNAME deals combat damage to a player, create a 2/1 black spider creature token with menace and reach.

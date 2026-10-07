@@ -39,6 +39,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from enum import StrEnum
 
+from effects.domain.records import RecordKind
 from effects.domain.state_snapshot import EntityState, StateSnapshot
 
 
@@ -625,3 +626,86 @@ def keyword_of_line(line) -> str | None:
     if not script or "$" in script or "|" in script:
         return None
     return script.strip().lower().replace(" ", "_")
+
+
+# ── who is observed ─────────────────────────────────────────────────────
+#
+# Shared by gate 2 and by build-corpus's game-disjoint placement (FR-045),
+# which is why it lives here rather than beside the gate: the gate imports
+# torch at module top, and a corpus survey worker must not.
+
+
+class KeywordResolver:
+    """An entity's keywords, from both channels, memoized by provenance key.
+
+    Both channels have to be looked at. An entity's printed and
+    attachment-granted keywords reach the model as ability tokens, and only a
+    keyword granted until end of turn appears as a bare string in the overlay —
+    so reading the overlay alone sees the rare case and misses every creature
+    that printed the keyword, which is the common one.
+
+    The memo is what makes that affordable: a corpus repeats the same few
+    thousand cards across millions of combat records, and resolving each key
+    once turns the walk into a dict hit.
+    """
+
+    def __init__(self, sidecars=None) -> None:
+        self._sidecars = sidecars
+        self._by_key: dict[object, str | None] = {}
+
+    def _keyword_for(self, key) -> str | None:
+        if key not in self._by_key:
+            keyword = None
+            try:
+                line = self._sidecars.line_for(key)
+            except (KeyError, FileNotFoundError):
+                line = None
+            if line is not None:
+                keyword = keyword_of_line(line)
+            self._by_key[key] = keyword
+        return self._by_key[key]
+
+    def keywords_of(self, entity) -> set[str]:
+        # Already in this package's spelling: ``record_io`` runs Forge's
+        # keyword strings through ``normalize_keyword`` at parse time.
+        found = set(entity.granted_temporary.keywords)
+        if self._sidecars is None:
+            return found
+        for key in (*entity.printed, *entity.granted_attached):
+            keyword = self._keyword_for(key)
+            if keyword is not None:
+                found.add(keyword)
+        return found
+
+
+def qualifying_observations(
+    record, rows: tuple[DamageStepKeyword, ...], resolver: KeywordResolver,
+) -> list[tuple[DamageStepKeyword, CombatParticipant]]:
+    """Every ``(row, carrier)`` in one combat record the gate can observe.
+
+    The whole condition is the row's own ``qualifies`` — at least one effect
+    that applies and has a subject on the board — and it is a board fact rather
+    than a model fact, so the counter and the scorer reach the same answer by
+    asking the same question rather than by two rules kept in step.
+    """
+    if record.kind is not RecordKind.COMBAT:
+        return []
+    found: list[tuple[DamageStepKeyword, CombatParticipant]] = []
+    wanted = {row.keyword for row in rows}
+    for entity in record.state.entities:
+        if entity.combat is None:
+            continue
+        carried = resolver.keywords_of(entity) & wanted
+        if not carried:
+            continue
+        participant = combat_participant(record.state, entity)
+        if participant is None:
+            continue
+        # In table order, not set-iteration order: which observations share a
+        # batch would otherwise depend on the hash seed.
+        for row in rows:
+            if row.keyword not in carried:
+                continue
+            if row.qualifies(participant, resolver.keywords_of):
+                found.append((row, participant))
+    return found

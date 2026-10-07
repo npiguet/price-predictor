@@ -1,0 +1,6 @@
+name: walker of the grove
+mana cost: {6}{G}{G}
+types: creature elemental
+power toughness: 7/7
+alternate cost: evoke {4}{G}
+triggered: when CARDNAME leaves the battlefield, create a 4/4 green elemental creature token.

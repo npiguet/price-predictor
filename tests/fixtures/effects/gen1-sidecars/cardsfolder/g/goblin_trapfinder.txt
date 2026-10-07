@@ -1,0 +1,5 @@
+name: goblin trapfinder
+mana cost: {R}
+types: creature goblin
+power toughness: 1/1
+triggered: when CARDNAME dies, seek a creature card with mana value 3 or less. that card perpetually gains haste, "this spell costs {1} less to cast," and "at the beginning of your end step, sacrifice this creature."

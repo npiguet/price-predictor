@@ -1,0 +1,5 @@
+name: crustacean commando
+mana cost: {1}{U}
+types: creature crab mutant soldier
+power toughness: 0/3
+triggered: when this creature enters, create a mutagen token.

@@ -430,3 +430,46 @@ class TestATransientOpenFailureIsRetried:
             read_sidecar(path)
 
         assert len(attempts) == _sidecar_io._SIDECAR_READ_ATTEMPTS
+
+
+class TestOptionKeys:
+    """A charm mode's key carries ``option``; a root or plain key does not (FR-005a)."""
+
+    _SCRIPT = "cardsfolder/c/cryptic_command.txt"
+
+    def _sidecar(self) -> ProvenanceSidecar:
+        root = ProvenanceKey(self._SCRIPT, 0, "spell", 0)
+        return ProvenanceSidecar(
+            card="cryptic command", script_file=self._SCRIPT,
+            lines=(
+                SidecarLine(line_index=3, line_kind="spell", provenance=(root,),
+                            script_text="CharmNum$ 2 | Choices$ SV1,SV2 | SP$ Charm"),
+                SidecarLine(line_index=4, line_kind="option",
+                            provenance=(ProvenanceKey(self._SCRIPT, 0, "spell", 0, 0),),
+                            script_text="SV1: DB$ Counter"),
+                SidecarLine(line_index=5, line_kind="option",
+                            provenance=(ProvenanceKey(self._SCRIPT, 0, "spell", 0, 1),),
+                            script_text="SV1: DB$ Draw | NumCards$ 1"),
+            ),
+            dropped_keys=(ProvenanceKey(self._SCRIPT, 1, "spell", 0, 3),),
+        )
+
+    def test_round_trip_keeps_the_option_component(self):
+        sidecar = self._sidecar()
+        assert sidecar_from_dict(sidecar_to_dict(sidecar)) == sidecar
+
+    def test_option_is_written_only_when_set(self):
+        data = sidecar_to_dict(self._sidecar())
+        assert data["lines"][0]["provenance"] == [
+            {"face": 0, "trait_kind": "spell", "index_within_kind": 0}
+        ]
+        assert data["lines"][1]["provenance"][0]["option"] == 0
+        assert data["dropped_keys"][0]["option"] == 3
+
+    def test_a_gen1_sidecar_reads_with_no_option(self):
+        data = sidecar_to_dict(self._sidecar())
+        for line in data["lines"]:
+            for key in line["provenance"]:
+                key.pop("option", None)
+        sidecar = sidecar_from_dict(data)
+        assert all(key.option is None for line in sidecar.lines for key in line.provenance)

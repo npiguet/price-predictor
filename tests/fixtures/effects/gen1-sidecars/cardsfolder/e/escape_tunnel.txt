@@ -1,0 +1,4 @@
+name: escape tunnel
+types: land
+activated[1]: {T}, sacrifice CARDNAME: search your library for a basic land card, put it onto the battlefield tapped, then shuffle.
+activated[2]: {T}, sacrifice CARDNAME: target creature with power 2 or less can't be blocked this turn.

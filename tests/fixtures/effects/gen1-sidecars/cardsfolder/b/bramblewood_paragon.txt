@@ -1,0 +1,6 @@
+name: bramblewood paragon
+mana cost: {1}{G}
+types: creature elf warrior
+power toughness: 2/2
+replacement: each other warrior creature you control enters with an additional +1/+1 counter on it.
+static: each creature you control with a +1/+1 counter on it has trample.

@@ -1,0 +1,5 @@
+name: tcri building
+types: land
+activated[1]: {T}: add {U} or {R}.
+triggered: when this land enters, you gain 1 life.
+replacement: this land enters tapped.

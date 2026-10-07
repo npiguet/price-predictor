@@ -1,0 +1,5 @@
+name: hostile realm
+mana cost: {2}{R}
+types: enchantment aura
+static: enchant land
+static: enchanted land has "{T}: target creature can't block this turn."

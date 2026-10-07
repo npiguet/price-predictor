@@ -44,7 +44,7 @@ import argparse
 from collections import Counter, defaultdict
 from pathlib import Path
 
-from effects.application.gate_two import KeywordResolver
+from effects.domain.damage_step_keywords import KeywordResolver
 from effects.domain.damage_step_keywords import _power, _remaining_toughness
 from effects.domain.records import PlayabilitySubkind, RecordKind
 from effects.infrastructure.record_io import read_records

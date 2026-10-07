@@ -1,0 +1,5 @@
+name: scarblade elite
+mana cost: {B}{B}
+types: creature elf assassin
+power toughness: 2/2
+activated[1]: {T}, exile an assassin card from your graveyard: destroy target creature.

@@ -1,0 +1,5 @@
+name: mouser foundry
+mana cost: {1}{R}
+types: artifact
+activated[1]: {4}{R}, sacrifice this artifact: it deals 3 damage to target creature.
+triggered: when this artifact enters or leaves the battlefield, create a 1/1 colorless robot artifact creature token.

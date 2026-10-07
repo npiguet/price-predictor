@@ -1,0 +1,5 @@
+name: northampton farm
+types: land
+activated[1]: {T}: add {C}.
+activated[2]: {1}, {T}: exile target creature you own.
+activated[3]: {2}, {T}, sacrifice this land: return a creature card exiled with this land to the battlefield under your control. return each other card exiled with this land to its owner's hand.

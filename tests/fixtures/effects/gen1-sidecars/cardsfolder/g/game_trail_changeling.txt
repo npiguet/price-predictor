@@ -1,0 +1,6 @@
+name: game-trail changeling
+mana cost: {3}{G}{G}
+types: creature shapeshifter
+power toughness: 4/4
+static: changeling
+static: trample
