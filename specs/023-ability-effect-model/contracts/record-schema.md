@@ -29,13 +29,15 @@ final line — a JVM crash mid-write is expected, not exceptional.
   "kind":           "resolution",           // resolution|rewrite|continuous|combat|trigger|playability
   "moment":         "resolution",           // resolution kind only: activation|resolution
   "subkind":        null,                   // playability kind only: decision|attackers|blockers
-  "link_id":        "…",                    // joins a resolution pair; absent where no partner
+  "link_id":        "…",                    // joins a cost half and its effect halves; absent where no partner
   "mirror_of":      null,                   // fork records: the real record mirrored
   "variant_of":     null,                   // synthetic records: the source card name
   "mode":           "degraded",             // patched|degraded
   "interventional": false,
   "fork":           false,
   "synthetic":      false,
+  "random_seat":    false,                  // gen-2: actor_player is the random seat
+  "what_if":        false,                  // gen-2, playability attackers/blockers only
   "actor_player":   "P0",
   "ability":        [ /* ProvenanceKey[] */ ],
   "ability_unresolved": null,               // why `ability` is empty, where a line was sought
@@ -50,12 +52,15 @@ final line — a JVM crash mid-write is expected, not exceptional.
 |---|---|
 | `record_id` | unique across the run's shards; carries the worker slot because workers count independently, and the JVM lifetime because each worker JVM counts from zero |
 | `game_id` | same construction; **the join key for a checkpoint's recorded split** |
-| `link_id` | absent on a half with no partner: a `fizzled`, `countered`, or `declined` cost record, or an interventional effect half |
+| `link_id` | joins one cost half with every effect half of its resolution: one effect half ordinarily, one per chosen mode resolution on a patched modal resolution (feature 024, FR-029d), each acting through a key carrying `option` of one root. Absent on a half with no partner: a `fizzled`, `countered`, or `declined` cost record, or an interventional effect half |
 | `mirror_of` | set only when `fork = true` and a same-game real counterpart exists |
 | `variant_of` | set only when `synthetic = true` |
-| `ability` | absent where no single line acts (`combat`, `playability`); the chosen `option` line on modal resolutions; several keys where the rendered line merged several traits |
+| `ability` | absent where no single line acts (`combat`, `playability`); on a patched modal resolution the cost half names the charm's root key and each effect half the chosen mode's key, root key plus `option` (feature 024, FR-029a); a degraded worker's single effect half names the root (FR-029e); several keys where the rendered line merged several traits |
+| `actor_player` | on `playability` records of a **gen-2** shard, the deciding player: the candidate attackers' controller (`attackers`), the candidate blockers' controller (`blockers`), the candidate ability's controller (`decision`). A gen-1 shard keeps feature 023's meaning: the active player (`attackers`, `decision`) or the anchored attacker's controller (`blockers`). The one named exception to compatibility rule 1 (feature 024, FR-030a), versioned by shard generation |
+| `random_seat` | every gen-2 record; `true` when `actor_player` is the random seat (feature 024, FR-030). Absent on a gen-1 record, read as `false` |
+| `what_if` | gen-2 `playability` records of subkind `attackers` or `blockers` only, after `random_seat`: `false` for a real decision, `true` for a what-if query (FR-027, FR-031). Absent on a gen-1 record, read as unknown, which never counts as a real decision |
 | `ability_unresolved` | set only where `ability` is an empty array on a kind that does name a line; a closed vocabulary (`engine_effect` \| `no_card_state` \| `unknown_kind` \| `unindexable`) saying why no printed line was found. An empty `ability` alone cannot separate "the Monarch has no printed line in any tree" from "the resolver regressed", which is the ambiguity that hid a broken resolver for a whole collection run |
-| `mode`, `interventional`, `fork`, `synthetic`, `ability_unresolved` | **collection metadata; never model inputs** |
+| `mode`, `interventional`, `fork`, `synthetic`, `ability_unresolved`, `random_seat`, `what_if` | **collection metadata; never model inputs** |
 
 ### Flag signatures
 
@@ -66,6 +71,34 @@ final line — a JVM crash mid-write is expected, not exceptional.
 | damage-step probe | `combat` | false | true |
 
 The probe's `interventional = false` is what distinguishes it from an intervention by flags alone.
+
+### Shard generation
+
+A shard whose records carry `random_seat` is a gen-2 shard, and its `playability` records'
+`actor_player` has the deciding-player meaning; a shard without it is gen-1. Every record of a gen-2
+shard carries `random_seat`, and every legality record carries `what_if`; `validate-corpus` fails a
+shard where some records carry a field and others of the kinds that must do not. `build-corpus`,
+`train-effect-model`, `evaluate-effect-model` and the knowledge probes refuse a records set holding
+both generations before reading a record.
+
+### Real decisions and what-ifs
+
+| Subkind | `what_if = false` when |
+|---|---|
+| `attackers` | snapshot phase `combat_declare_attackers` and `actor_player` is the active player, or written by the random seat for its own declaration |
+| `blockers` | snapshot phase `combat_declare_blockers` and the anchored attacker is attacking, or written by the random seat for its own declaration |
+
+Every other legality record is a what-if. The legality de-duplication key is
+`(subkind, payload, snapshot)`; `--legality-rate` samples what-ifs only, and every real decision is
+written.
+
+### Modal resolutions
+
+| Worker | Records |
+|---|---|
+| patched | one cost half (root key) + one effect half per chosen mode resolution (root key + `option`), sharing one `link_id`; each effect half carries only its mode's clauses' events and a snapshot taken just before that mode's first clause resolves; a Pawprint or repeated mode gives one half per resolution |
+| degraded | one cost half + one effect half (root key) carrying every chosen mode's events |
+| fork (`ForkCollector`) | one effect half per chosen mode, by the patched rule |
 
 ## State snapshot
 
@@ -739,7 +772,8 @@ before the segment stay readable and report an empty lifetime.
 
 ### The rules
 
-1. A field may be **added**; existing fields may not change meaning or type.
+1. A field may be **added**; existing fields may not change meaning or type. One named exception:
+   `actor_player` on gen-2 `playability` records (above), versioned by shard generation.
 2. A new `kind` or `subkind` value may be introduced; existing values may not be repurposed.
 3. Snapshot tiers are additive; absence is uncollected.
 4. Nothing in this schema may become a model input that is listed above as collection metadata.

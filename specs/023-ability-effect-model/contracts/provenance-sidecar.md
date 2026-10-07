@@ -17,7 +17,7 @@ different things on the two sides. The stable key is **printed provenance**.
 ## Key
 
 ```
-ProvenanceKey = (script_file, face, trait_kind, index_within_kind)
+ProvenanceKey = (script_file, face, trait_kind, index_within_kind, option?)
 ```
 
 - `script_file` includes its tree **and that tree's own layout**, which differ: `cardsfolder/` is
@@ -27,6 +27,10 @@ ProvenanceKey = (script_file, face, trait_kind, index_within_kind)
   reader — a mismatch is the fail-loudly case below.
 - `index_within_kind` is the index within that kind's slice of the face's raw trait list, not a
   global ordinal.
+- `option` (feature 024, FR-005a) names one mode of a charm: its 0-based position in the root's
+  `Choices$`. It is written only when set (`{"face":0,"trait_kind":"spell","index_within_kind":0,
+  "option":2}`), and a key carrying it never equals the root key without it. Records' `ability`
+  lists and sidecars' `provenance` lists both carry it.
 
 ## File
 
@@ -80,6 +84,11 @@ join — and the mismatch is the one condition that must fail loudly.
 | A record whose `ability` is empty and whose `ability_unresolved` is `engine_effect` | expected, not an error, and **not** a `dropped_keys` case: the acting card is engine-built (The Monarch, The Initiative, dungeons, emblems, speed) and has no script file in any tree, so there is no sidecar to drop from. A sentinel `script_file` would turn that honest answer into a hard join failure, inverting the fail-loudly rule above |
 | An event attributed to a sub-ability link absent from `sub_ability_links` falls back to the **root line** | attribution never drops an event |
 | `script_text` is the stage-four primary encoding surface | every command that encodes reads it here and needs no Forge-cardsfolder path of its own |
+| `script_text` is the trait's whole chain (feature 024, FR-001–003) | `seg₀ [SEG] SV1: seg₁ [SEG] SV2: seg₂ …`: the root segment, then the trigger's `Execute$` ability, every sub-ability in chain order including `RepeatSubAbility`, and a replacement's `ReplaceWith$` ability with its chain. Each segment is its trait's parameters in key order and opens, after the root, with the label its parent referenced it by. Chain labels (values of `Execute$`, `SubAbility$`, `RepeatSubAbility$`, `ReplaceWith$`, each `Choices$` item of a chooser API, and segment openers) are renamed `SV1…` by first appearance, restarting per line; amount SVars are not renamed. Each SVar appears once per chain; one the script does not define is reported by `convert` and left out |
+| A charm root line carries its own segment only | `Choices$ SV1,SV2,…`, no mode inlined |
+| A charm-mode `option` line follows its root, in `Choices$` order | `provenance: [root key + option]`; `script_text` is the mode's chain opened `SV1:`; `script_api_type` is the mode's |
+| A non-charm `option` line (a die-roll outcome) | `provenance: []` and no `script_text`, as before; no record acts through it |
+| A charm with no description renders no root line | its root key is in `dropped_keys`; its option lines carry their mode keys |
 | `role_spans` are character ranges over the **converted prose** | roles are `cost` \| `effect` \| `trigger-condition` \| `target-spec` |
 | Row `i` of the ability cache corresponds to `lines[i]` | rendered lines for a converted tree, script lines for the variant tree |
 

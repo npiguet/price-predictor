@@ -1044,6 +1044,48 @@ python -m effects evaluate-effect-model \
   --variant-checkpoint identity=models/effects/effect-model/identity/latest.pt
 ```
 
+### Generation 2
+
+Gen-2 (feature 024, `specs/024-ability-effect-model-gen2/quickstart.md`) changes
+what the model reads and how it is judged. Its stages run in this order, and
+stages 1 and 2 must be complete before the first gen-2 game, because the
+encoding text, the holdout and the two new envelope fields cannot be applied to
+records afterwards:
+
+```bash
+# 0. gen-1 artifacts, before stage 1 reconverts the sidecars
+cp -r output/cardsfolder output/gen1-cardsfolder
+cp -r output/tokenscripts output/gen1-tokenscripts
+python scripts/effect_knowledge_probes/run.py --checkpoint <gen-1>.pt     --cards-folder output/gen1-cardsfolder --cards-folder output/gen1-tokenscripts     --freeze-probe-set
+python -m effects train-effect-model --corpus output/effects/corpus/     --cards-folder output/gen1-cardsfolder --cards-folder output/gen1-tokenscripts     --e-noise 0.1 --value-weight 0.05 --epochs 3      # noise pilot, one per ratio
+
+# 1. chained, label-renamed script text; template holdout
+python -m effects extract-keyword-definitions
+python -m price_predictor convert                   # reports undefined SVars
+python -m effects build-vocab --surface script
+python -m effects holdout-cards --holdout-unit template --out output/effects/holdout-cards.txt
+
+# 2-3. collection with the random seat (records only for its matches)
+python -m sealed match-outcomes --effect-records output/effects/records/     --exclude-cards output/effects/holdout-cards.txt     --random-seat-share 0.125 --random-seat-probability P
+python -m effects collect-coverage --only-cards output/effects/holdout-cards.txt --min-text-games 5
+
+# 4. one curated dataset, balanced across rule families and outcome signatures
+python -m effects build-corpus --records-dir output/effects/records/     --output output/effects/corpus-gen2/ --vocab-path models/effects/vocab-script.txt
+
+# 5. per sweep arm: train, encode, evaluate, probe
+python -m effects train-effect-model --corpus output/effects/corpus-gen2/     --e-dim D --encoder-layers L --encoder-d-model W --e-noise R
+python -m effects encode-abilities --checkpoint <arm>/latest.pt
+python -m effects evaluate-effect-model --checkpoint <arm>/latest.pt
+python scripts/effect_knowledge_probes/run.py --checkpoint <arm>/latest.pt
+python -m effects scorer-smoke-test --checkpoint <arm>/latest.pt --scratch-dir scratch/smoke-<arm>/
+python scripts/effect_knowledge_probes/compare.py output/effects/reports/knowledge-probes-*/scorecard.json
+```
+
+A random-seat match writes effect records only, never a row of
+`match-outcomes.txt` or `cards-played.txt`. Readers refuse a records set that
+mixes gen-1 and gen-2 shards, because `actor_player` on playability records
+means a different player in each.
+
 Collection rides matches that were going to be played anyway, so it costs no
 extra simulation. `--effect-records` has **no default** on `match-outcomes`,
 because a default would quietly turn every self-play run into a collection run;
