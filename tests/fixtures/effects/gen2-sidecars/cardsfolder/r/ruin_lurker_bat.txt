@@ -1,0 +1,7 @@
+name: ruin-lurker bat
+mana cost: {W}
+types: creature bat
+power toughness: 1/1
+static: flying
+static: lifelink
+triggered: at the beginning of your end step, if you descended this turn, scry 1.

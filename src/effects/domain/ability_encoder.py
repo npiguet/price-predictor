@@ -39,7 +39,9 @@ from effects.domain.ability_tokenizer import AbilityTokenizer, Token
 ROLE_ORDER: tuple[str, ...] = ("cost", "effect", "trigger-condition", "target-spec")
 NO_ROLE_INDEX = 0
 
-# Hardcoded architecture (contracts/cli.md: "Hardcoded, not flags").
+# Defaults of `--encoder-d-model` and `--encoder-layers` (FR-061), and the size
+# a checkpoint that records neither loads at. The head count stays pinned: a
+# width must divide by it, which `train-effect-model` checks before training.
 ENCODER_D_MODEL = 256
 ENCODER_N_LAYERS = 4
 ENCODER_N_HEADS = 4
@@ -55,21 +57,28 @@ MAX_ABILITY_TOKENS = 512
 class AbilityEncoderConfig:
     """Architecture of the ability encoder.
 
-    Only ``e_dim`` and ``e_noise`` are flags; the rest are the pinned constants
-    above, carried here so a checkpoint is self-describing.
+    ``e_dim``, ``d_model`` and ``n_layers`` are flags; the rest are pinned
+    constants, carried here so a checkpoint is self-describing. ``ff_dim``
+    follows the width (``d_model × 4``) unless a checkpoint recorded its own.
+
+    There is no noise here (FR-057): noise on ``e`` is applied in the batcher,
+    scaled to the spread of the vectors themselves, so ``e`` receives it from
+    one place only.
     """
 
     vocab_size: int
     e_dim: int = 64
-    e_noise: float = 0.05
     d_model: int = ENCODER_D_MODEL
     n_layers: int = ENCODER_N_LAYERS
     n_heads: int = ENCODER_N_HEADS
-    ff_dim: int = ENCODER_D_MODEL * FF_MULTIPLIER
+    #: 0 means "follow ``d_model``"; resolved in ``__post_init__``.
+    ff_dim: int = 0
     dropout: float = DROPOUT
     max_seq_len: int = MAX_ABILITY_TOKENS
 
     def __post_init__(self) -> None:
+        if self.ff_dim == 0 and self.d_model > 0:
+            object.__setattr__(self, "ff_dim", self.d_model * FF_MULTIPLIER)
         for name in ("vocab_size", "e_dim", "d_model", "n_layers", "n_heads",
                      "ff_dim", "max_seq_len"):
             if getattr(self, name) <= 0:
@@ -79,8 +88,6 @@ class AbilityEncoderConfig:
                 f"d_model ({self.d_model}) must be divisible by n_heads "
                 f"({self.n_heads})"
             )
-        if self.e_noise < 0.0:
-            raise ValueError(f"e_noise must be >= 0, got {self.e_noise}")
 
 
 class MonotoneNumberEmbedding(nn.Module):
@@ -174,11 +181,6 @@ class AbilityEncoder(nn.Module):
         # [CLS] pooling: position 0 by construction, so no masked reduction is
         # needed and the pooled vector cannot be diluted by padding.
         e = self.to_e(hidden[:, 0, :])
-        if self.training and self.config.e_noise > 0.0:
-            # Additive noise on the bottleneck. It keeps the head from reading
-            # e at a precision the cache cannot reproduce, and widens the
-            # neighbourhood of each ability so nearby texts stay nearby.
-            e = e + torch.randn_like(e) * self.config.e_noise
         return e, hidden
 
 
@@ -234,6 +236,8 @@ class EncodedLine:
     role_ids: list[int]
     numbers: list[float]
     number_mask: list[int]
+    #: The line ran past the encoder's window and lost its tail (FR-006).
+    truncated: bool = False
 
     def __len__(self) -> int:
         return len(self.token_ids)
@@ -249,6 +253,9 @@ def prepare_line(
 
     Truncation keeps ``[CLS]`` and drops from the tail, so the pooled vector
     always exists even for a line whose keyword expansions overran the window.
+    The result says whether it truncated, so the command that encoded the line
+    can report it (FR-006): a chained script text can run long, and a tail
+    dropped silently is a sub-ability the model never read.
     """
     token_ids = [tokenizer.cls_id]
     role_ids = [NO_ROLE_INDEX]
@@ -259,7 +266,52 @@ def prepare_line(
         role_ids.append(role_index(token.role))
         numbers.append(token.number if token.number is not None else 0.0)
         number_mask.append(1 if token.number is not None else 0)
-    return EncodedLine(token_ids, role_ids, numbers, number_mask)
+    return EncodedLine(
+        token_ids, role_ids, numbers, number_mask,
+        truncated=len(tokens) > max_len - 1,
+    )
+
+
+class TruncationLog:
+    """Reports each truncated line once per run, by provenance key (FR-006).
+
+    Shared by every command that encodes: the trainer hands one instance to
+    every per-batch batcher, so a text truncated in every epoch is reported
+    once rather than once per batch.
+    """
+
+    def __init__(self, report) -> None:
+        """``report(text, keys)`` is called the first time a text truncates."""
+        self._report = report
+        self.texts: set[str] = set()
+
+    def note(self, text: str, keys=()) -> None:
+        if text in self.texts:
+            return
+        self.texts.add(text)
+        self._report(text, tuple(keys))
+
+
+def log_truncation(logger, command: str):
+    """A :class:`TruncationLog` reporter that writes one warning per line."""
+
+    def report(text: str, keys: tuple) -> None:
+        named = ", ".join(_key_label(key) for key in keys) or "(no provenance key)"
+        logger.warning(
+            "%s: truncated at %d tokens: %s — %.80s",
+            command, MAX_ABILITY_TOKENS, named, text,
+        )
+
+    return report
+
+
+def _key_label(key) -> str:
+    option = getattr(key, "option", None)
+    suffix = f" option {option}" if option is not None else ""
+    return (
+        f"{key.script_file} face {key.face} {key.trait_kind}"
+        f"[{key.index_within_kind}]{suffix}"
+    )
 
 
 def collate_lines(

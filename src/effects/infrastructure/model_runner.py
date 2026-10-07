@@ -31,8 +31,16 @@ from effects.application.train_effect_model import (
     sampling_class,
     variant_masks,
 )
-from effects.domain.ability_encoder import AbilityEncoder, surface_of
-from effects.domain.ability_tokenizer import AbilityTokenizer
+from effects.domain.ability_encoder import (
+    AbilityEncoder,
+    TruncationLog,
+    log_truncation,
+    surface_of,
+)
+from effects.domain.ability_tokenizer import (
+    INFERENCE_KEYWORD_EXPAND_P,
+    AbilityTokenizer,
+)
 from effects.domain.effect_head_input import (
     SlotKind,
     act_features,
@@ -41,7 +49,7 @@ from effects.domain.effect_head_input import (
     player_features,
 )
 from effects.domain.effect_model import EffectModel, active_fields
-from effects.infrastructure.sidecar_io import SidecarCache
+from effects.infrastructure.sidecar_io import SidecarCache, sidecar_roots
 from price_predictor.infrastructure.tokenizer_store import load_vocabulary
 
 logger = logging.getLogger(__name__)
@@ -55,11 +63,14 @@ IDENTITY_TABLE_KEY = "identity_table"
 
 
 def build_sidecars(config) -> SidecarCache:
-    roots = {Path(f).name: Path(f) for f in config.cards_folders}
-    variant_scripts = getattr(config, "variant_scripts", None)
-    if variant_scripts:
-        roots["variant-scripts"] = Path(variant_scripts)
-    return SidecarCache(roots)
+    """The sidecar roots ``--cards-folder`` names (FR-063b).
+
+    A folder keyed by the tree its name ends in, so a kept-aside copy such as
+    ``output/gen1-cardsfolder`` serves the keys that name ``cardsfolder/``.
+    """
+    return SidecarCache(sidecar_roots(
+        config.cards_folders, getattr(config, "variant_scripts", None),
+    ))
 
 
 def feature_widths(records) -> dict[SlotKind, int]:
@@ -103,8 +114,13 @@ def load_runnable(
         load_keyword_definitions(keyword_path) if Path(keyword_path).exists()
         else {}
     )
-    tokenizer = AbilityTokenizer(load_vocabulary(Path(vocab_path)), definitions)
+    tokenizer = AbilityTokenizer(
+        load_vocabulary(Path(vocab_path)), definitions,
+        surface=surface_of(vocab_path),
+    )
 
+    # Built at the size the checkpoint recorded (FR-061): a non-default arm
+    # loads without its flags restated.
     encoder = AbilityEncoder(checkpoint.encoder_config).to(device)
     if checkpoint.encoder_state:
         encoder.load_state_dict(checkpoint.encoder_state)
@@ -142,10 +158,11 @@ def load_runnable(
         withhold_keyword=checkpoint.provenance.withheld_keyword,
         # Both are training-time augmentations. Sampling them at evaluation
         # would make the gate's numbers depend on a coin flip.
-        keyword_expand_p=0.0,
+        keyword_expand_p=INFERENCE_KEYWORD_EXPAND_P,
         context_dropout=0.0,
         rng=random.Random(RANDOM_SEED),
         identity_table=identity_table,
+        truncations=TruncationLog(log_truncation(logger, "evaluation")),
     )
     fields = active_fields(
         present_classes=frozenset(sampling_class(r) for r in records),

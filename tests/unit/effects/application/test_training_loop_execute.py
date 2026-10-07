@@ -66,6 +66,8 @@ def run(tmp_path, make_record, monkeypatch):  # noqa: F811
         lambda self: type("T", (), {"vocab_size": 8})(),
     )
     monkeypatch.setattr(TrainingLoop, "_build_sidecars", lambda self: SidecarCache({}))
+    # The script-API vocabulary is read off every real sidecar; none here.
+    monkeypatch.setattr(TrainingLoop, "_script_vocabularies", lambda self: ([], []))
     monkeypatch.setattr(
         TrainingLoop, "_feature_widths",
         lambda self, records: dict.fromkeys(loop_module.SlotKind, 4),

@@ -56,7 +56,6 @@ from effects.domain.effect_model import (
     created_objects_loss,
     field_loss,
     mlm_loss,
-    pairing_loss,
     per_entity_loss,
     scatter_e_rows,
     verdict_loss,
@@ -474,13 +473,6 @@ class TestLosses:
         with pytest.raises(ValueError, match="at least one"):
             api_loss(None, None, None, None)
 
-    def test_pairing_loss_stops_the_gradient_on_the_script_side(self):
-        script = torch.randn(2, 4, requires_grad=True)
-        prose = torch.randn(2, 4, requires_grad=True)
-        pairing_loss(script, prose).backward()
-        assert script.grad is None
-        assert prose.grad is not None
-
 
 class TestFieldSpec:
     def test_an_unknown_field_type_is_rejected_by_width(self):
@@ -735,12 +727,14 @@ class TestCollateSurfaces:
         e_vectors = torch.zeros(batch, width, e_dim)
         e_rows = torch.full((batch, width), -1, dtype=torch.long)
         attention = torch.zeros(batch, width, dtype=torch.long)
+        option_kinds = torch.zeros(batch, width, dtype=torch.long)
 
         for row, surface in enumerate(surfaces):
             for column, slot in enumerate(surface.slots):
                 slot_kinds[row, column] = int(slot.kind)
                 positions[row, column] = slot.position
                 attention[row, column] = 1
+                option_kinds[row, column] = int(slot.option)
                 if slot.features and slot.kind in features:
                     values = torch.tensor(slot.features, dtype=torch.float32)
                     features[slot.kind][row, column, : values.shape[0]] = values
@@ -757,6 +751,7 @@ class TestCollateSurfaces:
             "e_vectors": e_vectors,
             "e_rows": e_rows,
             "attention_mask": attention,
+            "option_kinds": option_kinds,
         }
 
     def _assert_same(self, surfaces, *, e_dim, widths):
@@ -769,7 +764,7 @@ class TestCollateSurfaces:
             assert mine.dtype == tensor.dtype
             assert torch.equal(mine, tensor)
         for name in ("slot_kinds", "positions", "e_vectors", "e_rows",
-                     "attention_mask"):
+                     "attention_mask", "option_kinds"):
             assert got[name].dtype == want[name].dtype, name
             assert torch.equal(got[name], want[name]), name
 
@@ -835,3 +830,105 @@ class TestCollateSurfaces:
 
     def test_an_empty_batch_keeps_its_shapes(self):
         self._assert_same([], e_dim=3, widths={SlotKind.CARD: 2})
+
+
+class TestGen2Heads:
+    """The value head, the option-kind embedding, and the wired losses."""
+
+    def test_the_value_head_reads_e_and_is_training_only(self, model):
+        from effects.domain.effect_model import VALUE_WIDTH
+
+        assert model.value_head(torch.randn(3, _CONFIG.e_dim)).shape == (3, VALUE_WIDTH)
+        assert "value_head" in EffectModel.TRAINING_ONLY_HEADS
+
+    def test_the_mlm_head_is_sized_from_the_encoders_width(self):
+        model = EffectModel(EffectModelConfig(
+            global_features=8, act_features=6, player_features=10, card_features=12,
+            e_dim=4, vocab_size=32, encoder_d_model=48,
+            d_model=16, n_layers=1, n_heads=2, ff_dim=32,
+        ))
+        assert model.mlm_head.in_features == 48
+
+    def test_the_option_kind_embedding_starts_at_zero(self, model):
+        assert torch.count_nonzero(model.option_kind_embedding.weight) == 0
+
+    def test_an_untrained_option_flag_changes_no_output(self, model):
+        model.eval()
+        batch = _surface()
+        flagged = dict(batch, option_kinds=torch.ones_like(batch["slot_kinds"]))
+        with torch.no_grad():
+            assert torch.equal(model(**batch), model(**flagged))
+
+    def test_the_verdict_loss_scores_only_the_masked_columns(self):
+        prediction = torch.zeros(2, VERDICT_WIDTH)
+        target = torch.ones(2, VERDICT_WIDTH)
+        mask = torch.zeros(2, VERDICT_WIDTH, dtype=torch.bool)
+        mask[0, :3] = True
+        bits_only = verdict_loss(prediction, target, mask)
+        mask[1, -1] = True
+        with_trigger = verdict_loss(prediction, target, mask)
+        assert 0 < float(bits_only) < float(with_trigger)
+
+    def test_the_created_objects_mask_drops_unsupervised_records(self):
+        target = torch.zeros(2, CREATED_OBJECTS_WIDTH)
+        prediction = torch.zeros(2, CREATED_OBJECTS_WIDTH)
+        prediction[1, 0] = 9.0  # the unsupervised row is badly wrong
+        mask = torch.tensor([True, False])
+        assert created_objects_loss(prediction, target, mask) < (
+            created_objects_loss(prediction, target)
+        )
+
+    def test_the_value_loss_skips_masked_targets(self):
+        from effects.domain.effect_model import VALUE_WIDTH, value_loss
+        from effects.domain.value_targets import VALUE_TARGETS
+
+        prediction = torch.zeros(2, VALUE_WIDTH)
+        target = torch.full((2, len(VALUE_TARGETS)), 3.0)
+        none = torch.zeros(2, len(VALUE_TARGETS), dtype=torch.bool)
+        assert float(value_loss(prediction, target, none)) == 0.0
+        assert float(value_loss(prediction, target, ~none)) > 0.0
+
+    def test_the_api_loss_skips_a_line_with_no_api_type(self):
+        logits = torch.randn(2, 5)
+        alone = api_loss(logits, torch.tensor([-1, -1]), None, None)
+        assert float(alone) == 0.0
+        assert float(api_loss(logits, torch.tensor([-1, 2]), None, None)) > 0.0
+
+
+_GEN1_CHECKPOINT = (
+    __import__("pathlib").Path(__file__).parents[4]
+    / "models" / "effects" / "runs" / "2026-09-17-full-textless-corpus" / "latest.pt"
+)
+
+
+@pytest.mark.skipif(not _GEN1_CHECKPOINT.exists(), reason="gen-1 checkpoint absent")
+def test_a_gen1_checkpoint_reads_option_rows_as_it_trained():
+    """T103: loaded with ``strict=False``, the zero embedding is a no-op."""
+    from effects.infrastructure.effect_model_store import EffectModelStore
+
+    checkpoint = EffectModelStore(_GEN1_CHECKPOINT.parent).load(_GEN1_CHECKPOINT)
+    config = checkpoint.model_config
+    model = EffectModel(config)
+    model.load_state_dict(checkpoint.model_state, strict=False)
+    model.eval()
+    torch.manual_seed(5)
+    slots = 7
+    kwargs = {
+        "slot_features": {
+            kind: torch.randn(2, slots, width) for kind, width in (
+                (SlotKind.GLOBAL, config.global_features),
+                (SlotKind.ACT, config.act_features),
+                (SlotKind.PLAYER, config.player_features),
+                (SlotKind.CARD, config.card_features),
+            )
+        },
+        "slot_kinds": torch.full((2, slots), int(SlotKind.ABILITY)),
+        "positions": torch.arange(slots).expand(2, -1),
+        "e_vectors": torch.randn(2, slots, config.e_dim),
+        "attention_mask": torch.ones(2, slots, dtype=torch.long),
+    }
+    with torch.no_grad():
+        plain = model(**kwargs, option_kinds=torch.zeros(2, slots, dtype=torch.long))
+        flagged = model(**kwargs, option_kinds=torch.ones(2, slots, dtype=torch.long))
+        absent = model(**kwargs)
+    assert torch.equal(plain, flagged) and torch.equal(plain, absent)

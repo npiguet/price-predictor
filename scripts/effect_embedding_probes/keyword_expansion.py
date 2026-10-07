@@ -1,8 +1,7 @@
 """Does keyword expansion work, and can the encoder still read unknown keywords?
 
-Two questions about the shipping ability encoder
-(``models/effects/runs/2026-09-17-full-textless-corpus/latest.pt``, script
-surface, vocabulary ``models/effects/vocab-script.txt``):
+Two questions about one checkpoint's ability encoder (``--checkpoint``, on the
+encoding surface and vocabulary it recorded):
 
 1. **Does a keyword's encoding look like the encoding of its definition?**
    Training replaces a keyword token with its definition with probability
@@ -13,10 +12,9 @@ surface, vocabulary ``models/effects/vocab-script.txt``):
 What it measures, all on CPU with the checkpoint's own encoder and tokenizer:
 
 - **Token sequences** the encoder receives for representative keyword lines,
-  with expansion off, forced (``probability=1.0``, which is also what
-  ``encode-abilities`` uses for the shipping cache), and with the keyword
-  removed from the vocabulary (the unknown-keyword path), next to what the
-  unused ``tokenize_script`` would have produced.
+  with expansion off, forced (``probability=1.0``), and with the keyword
+  removed from the vocabulary (the unknown-keyword path), next to what
+  ``tokenize`` produces under the script surface's rules.
 - **Keyword vs definition**: for every keyword line in the converted corpus
   whose expansion fires, the cosine between the bare line (expansion off) and
   the forced expansion, and the rank of the keyword's own definition among all
@@ -32,20 +30,21 @@ What it measures, all on CPU with the checkpoint's own encoder and tokenizer:
   new keyword would be) and without (a bare ``[UNK]``) — and whether that lands
   near the real keyword's encoding and near its longhand twins.
 - **Cache vs model input**: how far forced expansion moves every corpus text
-  containing a keyword word, since the cache is built with it and the effect
-  head trains mostly without it.
+  containing a keyword word, and how far the cache sits from each encoding.
 
 Run from the repo root (a few minutes on CPU; the corpus encoding is cached in
 the output directory and reused)::
 
-    python scripts/effect_embedding_probes/keyword_expansion.py
+    python scripts/effect_embedding_probes/keyword_expansion.py \
+        --checkpoint PATH --abilities-root DIR
 
-Writes CSVs and ``summary.txt`` to
-``output/effects/reports/keyword-expansion-20260919/``.
+Writes CSVs and ``summary.txt`` to ``keyword-expansion/`` under the
+checkpoint's ``embedding-probes-<checkpoint>-<date>/`` report directory.
 """
 
 from __future__ import annotations
 
+import argparse
 import json
 import sys
 from collections import Counter, defaultdict
@@ -57,6 +56,14 @@ import torch
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "src"))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from common import (  # noqa: E402
+    ProbePaths,
+    add_probe_arguments,
+    load_manifest_sets,
+    resolve_paths,
+)
 
 from effects.application.extract_keyword_definitions import (  # noqa: E402
     load_keyword_definitions,
@@ -73,19 +80,11 @@ from effects.domain.ability_tokenizer import (  # noqa: E402
 from effects.infrastructure.effect_model_store import (  # noqa: E402
     EffectModelStore,
 )
+from effects.infrastructure.sidecar_io import tree_of_folder  # noqa: E402
 from price_predictor.infrastructure.tokenizer_store import (  # noqa: E402
     load_vocabulary,
 )
 
-CHECKPOINT = (
-    ROOT / "models" / "effects" / "runs" / "2026-09-17-full-textless-corpus"
-    / "latest.pt"
-)
-KEYWORDS = ROOT / "output" / "effects" / "keyword-definitions.json"
-TREES = (ROOT / "output" / "cardsfolder", ROOT / "output" / "tokenscripts")
-CACHE_ROOT = ROOT / "output" / "effects" / "abilities" / "cardsfolder"
-MANIFEST = ROOT / "output" / "effects" / "corpus" / "manifest.json"
-OUT = ROOT / "output" / "effects" / "reports" / "keyword-expansion-20260919"
 BATCH = 256
 
 #: Hand classification of the corpus's keywords by what they do. A keyword
@@ -188,8 +187,9 @@ SHOWCASE = (
 # ── loading ────────────────────────────────────────────────────────────
 
 
-def load_encoder():
-    checkpoint = EffectModelStore(CHECKPOINT.parent).load(CHECKPOINT)
+def load_encoder(checkpoint_path: Path):
+    """The checkpoint's encoder, at the size it recorded, and its vocabulary."""
+    checkpoint = EffectModelStore(checkpoint_path.parent).load(checkpoint_path)
     provenance = checkpoint.provenance
     vocab_path = ROOT / provenance.vocab_path
     keyword_path = ROOT / provenance.keyword_definitions_path
@@ -197,16 +197,18 @@ def load_encoder():
     encoder = AbilityEncoder(checkpoint.encoder_config)
     encoder.load_state_dict(checkpoint.encoder_state)
     encoder.eval()
-    return encoder, load_vocabulary(vocab_path), provenance
+    return encoder, load_vocabulary(vocab_path), provenance, keyword_path
 
 
-def corpus_lines() -> list[dict]:
+def corpus_lines(trees) -> list[dict]:
     """Every sidecar line with script text, with its card and tree path."""
     rows = []
-    for tree in TREES:
+    for tree in trees:
         for path in sorted(tree.rglob("*.provenance.json")):
             sidecar = json.loads(path.read_text(encoding="utf-8"))
-            rel = path.relative_to(tree.parent).as_posix()
+            # Named by the source tree the keys spell, not the folder's own
+            # name: a kept-aside ``gen1-cardsfolder`` still holds ``cardsfolder``.
+            rel = (Path(tree_of_folder(tree)) / path.relative_to(tree)).as_posix()
             stem = rel.removesuffix(".provenance.json")
             for index, line in enumerate(sidecar["lines"]):
                 text = line.get("script_text")
@@ -285,29 +287,41 @@ def freq_bin(carriers: int) -> str:
 # ── main ───────────────────────────────────────────────────────────────
 
 
-def main() -> None:  # noqa: C901, PLR0912, PLR0915 — one linear report
+def main() -> None:
+    parser = add_probe_arguments(
+        argparse.ArgumentParser(description=__doc__.splitlines()[0]),
+    )
+    report(resolve_paths(parser.parse_args()))
+
+
+def report(paths: ProbePaths) -> None:  # noqa: C901, PLR0912, PLR0915 — one linear report
     global UNK_ID
+    OUT = paths.out / "keyword-expansion"  # noqa: N806 — the report directory
+    CACHE_ROOT = paths.abilities_root / "cardsfolder"  # noqa: N806
     OUT.mkdir(parents=True, exist_ok=True)
     torch.set_num_threads(max(1, torch.get_num_threads()))
-    encoder, vocab, provenance = load_encoder()
-    definitions = load_keyword_definitions(KEYWORDS)
-    tok = AbilityTokenizer(vocab, definitions)
+    encoder, vocab, provenance, keyword_path = load_encoder(paths.checkpoint)
+    definitions = load_keyword_definitions(keyword_path)
+    # The checkpoint's own surface, so every sequence below is what that
+    # encoder read; ``script_tok`` shows the script surface's rules beside it.
+    tok = AbilityTokenizer(vocab, definitions, surface=paths.surface)
+    script_tok = AbilityTokenizer(vocab, definitions, surface="script")
     UNK_ID = tok.unk_id
     summary: list[str] = [
-        f"checkpoint {CHECKPOINT.relative_to(ROOT)}",
+        f"checkpoint {paths.checkpoint}",
         f"vocab {provenance.vocab_path}, keywords "
         f"{provenance.keyword_definitions_path}, withheld keyword "
         f"{provenance.withheld_keyword!r}",
         "",
     ]
 
-    lines = corpus_lines()
+    lines = corpus_lines(paths.cards_folders)
     keyword_lines = [r for r in lines if r["api"] == "Keyword"]
     carriers = Counter(r["text"].split(":")[0] for r in keyword_lines)
     variants: dict[str, Counter] = defaultdict(Counter)
     for r in keyword_lines:
         variants[r["text"].split(":")[0]][r["text"]] += 1
-    rarity = json.loads(MANIFEST.read_text(encoding="utf-8"))["rarity"]
+    _, rarity = load_manifest_sets(paths)
 
     # ── 1. the definition table against the vocabulary ────────────────
     def_rows = []
@@ -321,7 +335,7 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915 — one linear report
             "token": token,
             "multi_word": "_" in token,
             "in_vocab": token in vocab,
-            "host_bodied": token in HOST_BODIED_KEYWORDS,
+            "host_bodied": name.lower() in HOST_BODIED_KEYWORDS,
             "has_script": bool(definition.generated_script),
             "placeholder": "%d" in template or "$d" in template
             or "%s" in template,
@@ -358,8 +372,8 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915 — one linear report
         seq.append(f"  tokenize (expansion off, validation/gates): {show(tokens)}")
         seq.append(f"  forced expansion (p=1, the shipping cache): {show(forced)}")
         seq.append(
-            f"  tokenize_script (never called):              "
-            f"{show(tok.tokenize_script(text))}"
+            f"  tokenize, script surface:                    "
+            f"{show(script_tok.tokenize(text))}"
         )
         for t in tokens:
             if tok.expandable(t) and "_" not in t.text:

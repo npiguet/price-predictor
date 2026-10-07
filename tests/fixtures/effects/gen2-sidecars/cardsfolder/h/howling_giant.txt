@@ -1,0 +1,6 @@
+name: howling giant
+mana cost: {5}{G}{G}
+types: creature giant druid
+power toughness: 5/5
+static: reach
+triggered: when CARDNAME enters, create two 2/2 green wolf creature tokens.

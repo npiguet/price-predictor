@@ -1,0 +1,5 @@
+name: scaled herbalist
+mana cost: {1}{G}
+types: creature lizard druid
+power toughness: 1/3
+activated[1]: {T}: you may put a land card from your hand onto the battlefield.

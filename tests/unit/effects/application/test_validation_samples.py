@@ -108,3 +108,52 @@ def test_two_records_with_one_id_do_not_compare_the_records_themselves(make_reco
     heap.offer(7, make_record(record_id="same", game_id="g1"))
     heap.offer(7, make_record(record_id="same", game_id="g2"))
     assert len(heap.records()) == 2
+
+
+# ── FR-051: round-robin over held-out texts (T081) ──────────────────────
+
+
+def test_round_robin_takes_four_per_text_per_round_by_smallest_value():
+    from effects.application.validation_samples import round_robin
+
+    taken = round_robin({"a": list(range(100, 110)), "b": [5, 1, 3]}, quota=10)
+
+    # Round one: a's four smallest, then all three of b; round two: a's next four.
+    assert taken[:4] == [100, 101, 102, 103]
+    assert sorted(taken[4:7]) == [1, 3, 5]
+    assert taken[7:] == [104, 105, 106]
+
+
+def test_round_robin_stops_when_every_text_is_exhausted():
+    from effects.application.validation_samples import round_robin
+
+    assert sorted(round_robin({"a": [1], "b": [2, 3]}, quota=50)) == [1, 2, 3]
+
+
+def test_card_disjoint_resolution_slots_spread_over_held_out_texts(tmp_path, make_record):  # noqa: F811
+    """Spec Story 4 scenario 9: a text with many records cannot crowd one with few."""
+    from effects.application.build_corpus import ability_key as render
+    from effects.domain.provenance import ProvenanceKey
+
+    common = ProvenanceKey("cardsfolder/c/common.txt", 0, "spell", 0)
+    rare = ProvenanceKey("cardsfolder/r/rare.txt", 0, "spell", 0)
+    records = [
+        make_record(record_id=f"common{i}", game_id="g1", ability=(common,)) for i in range(40)
+    ] + [
+        make_record(record_id=f"rare{i}", game_id="g2", ability=(rare,)) for i in range(3)
+    ]
+    for name in ("card", "gate"):
+        write_shard(tmp_path / name / "s.jsonl.gz", records)
+    write_shard(tmp_path / "game" / "s.jsonl.gz", records[:1])
+    text_of_key = {
+        render(records[0]): "common text", render(records[-1]): "rare text",
+    }
+
+    samples = draw_samples(
+        card_disjoint=tmp_path / "card", game_disjoint=tmp_path / "game",
+        gate_one=tmp_path / "gate", mix={CLASS_RESOLUTION_EFFECT: 1.0}, size=10, seed=1,
+        held_out_text_of_key=text_of_key,
+    )
+    chosen = [r.record_id for r in samples["card-disjoint"]]
+    assert len(chosen) == 10
+    assert sum(1 for rid in chosen if rid.startswith("rare")) == 3

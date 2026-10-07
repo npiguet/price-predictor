@@ -121,6 +121,7 @@ def _run_loss_for(monkeypatch, loop, *, autocast: bool):
         loop_module, "per_entity_loss",
         lambda *a, **k: (torch.tensor(0.0), {}),
     )
+    monkeypatch.setattr(TrainingLoop, "_head_terms", lambda self, *a, **k: {})
 
     class _Plan:
         records = [object()]
@@ -196,6 +197,8 @@ def _run_execute(monkeypatch, tmp_path, make_record, *, cuda: bool):  # noqa: F8
     from effects.infrastructure.sidecar_io import SidecarCache
 
     monkeypatch.setattr(TrainingLoop, "_build_sidecars", lambda self: SidecarCache({}))
+    # The script-API vocabulary is read off every real sidecar; none here.
+    monkeypatch.setattr(TrainingLoop, "_script_vocabularies", lambda self: ([], []))
     monkeypatch.setattr(
         TrainingLoop, "_feature_widths",
         lambda self, records: dict.fromkeys(loop_module.SlotKind, 4),

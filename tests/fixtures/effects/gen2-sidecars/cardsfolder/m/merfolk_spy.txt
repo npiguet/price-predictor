@@ -1,0 +1,6 @@
+name: merfolk spy
+mana cost: {U}
+types: creature merfolk rogue
+power toughness: 1/1
+static: islandwalk
+triggered: whenever CARDNAME deals combat damage to a player, that player reveals a card at random from their hand.

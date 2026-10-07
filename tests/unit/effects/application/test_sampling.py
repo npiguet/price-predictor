@@ -219,12 +219,19 @@ class TestSampleWeightsRarityTable:
     resident shard's own count (FR-146)."""
 
     def test_sample_weights_prefer_a_supplied_corpus_wide_rarity_table(self):
-        records = [_record(RecordKind.COMBAT, game_id="g1", record_id="r1")]
-        # The resident shard shows one game; corpus-wide the text was in a
-        # hundred.
-        corpus_wide = sample_weights(records, lambda r: "t", rarity={"t": 100})
-        shard_only = sample_weights(records, lambda r: "t")
-        assert corpus_wide[0] < shard_only[0]
+        records = [
+            _record(RecordKind.COMBAT, game_id="g1", record_id="r1"),
+            _record(RecordKind.COMBAT, game_id="g1", record_id="r2"),
+        ]
+        texts = {"r1": "t", "r2": "u"}
+        # The resident shard shows one game of each; corpus-wide ``t`` was in
+        # a hundred, so within the class it now weighs less than ``u``.
+        corpus_wide = sample_weights(
+            records, lambda r: texts[r.record_id], rarity={"t": 100, "u": 1},
+        )
+        shard_only = sample_weights(records, lambda r: texts[r.record_id])
+        assert corpus_wide[0] < corpus_wide[1]
+        assert shard_only[0] == shard_only[1]
 
     def test_a_text_the_table_does_not_name_falls_back_to_the_shard(self):
         """A shard collected after the dataset was built still weights sanely."""
@@ -390,3 +397,48 @@ class TestBatchesWithoutReplacement:
             records, [1.0] * 3, batch_size=32, rng=random.Random(0),
         ))
         assert len(plan.records) == 3
+
+
+class TestRarityWeightsWithinAClass:
+    """FR-054: ∝ effective_games^(-0.5), capped at 20× the p99 text's weight,
+    normalized within each sampling class (spec Story 5 scenario 1)."""
+
+    def test_the_ceiling_is_set_against_the_99th_percentile_text(self):
+        # 200 texts seen in 400 games each and one ubiquitous outlier: the
+        # outlier is past the 99th percentile, so the ceiling is 20 × 400^-0.5,
+        # not 20 × 1,000,000^-0.5 as a maximum-based ceiling would set it.
+        games = {f"t{i}": 400 for i in range(200)}
+        games["flying"] = 1_000_000
+        games["once"] = 1
+        weights = rarity_weights(games)
+        assert weights["once"] == pytest.approx(RARITY_CAP * 400 ** -0.5)
+
+    def test_no_weight_exceeds_twenty_times_the_p99_weight(self):
+        games = {f"t{i}": i + 1 for i in range(1000)}
+        weights = rarity_weights(games)
+        p99_weight = 990 ** -0.5
+        assert max(weights.values()) <= RARITY_CAP * p99_weight + 1e-12
+
+    def test_weights_are_normalized_within_each_class(self):
+        from effects.application.train_effect_model import sampling_class
+
+        resolutions = [
+            _record(RecordKind.RESOLUTION, game_id=f"g{i}", record_id=f"r{i}")
+            for i in range(6)
+        ]
+        combats = [
+            _record(RecordKind.COMBAT, game_id=f"c{i}", record_id=f"c{i}")
+            for i in range(3)
+        ]
+        texts = {f"r{i}": ("rare" if i == 0 else "common") for i in range(6)}
+        records = [*resolutions, *combats]
+        weights = sample_weights(
+            records, lambda r: texts.get(r.record_id),
+            rarity={"rare": 1, "common": 100}, class_of=sampling_class,
+        )
+        resolution_weights = weights[:6]
+        assert sum(resolution_weights) / 6 == pytest.approx(1.0)
+        assert resolution_weights[0] > resolution_weights[1]
+        # Rarity moves no mass between classes: a class with no text stays
+        # uniform at one.
+        assert weights[6:] == [1.0, 1.0, 1.0]

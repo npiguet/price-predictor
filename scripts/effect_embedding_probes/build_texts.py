@@ -1,14 +1,16 @@
 """Build the per-unique-text table every probe in this directory reads.
 
-Walks every provenance sidecar under ``output/cardsfolder`` and
-``output/tokenscripts``, joins each line to its row of the shipping ability
-cache (``<name>.npz``) and of the taxonomy baseline's cache
-(``<name>.taxonomy.npz``), and keeps one row per unique encoding text on the
-script surface. For each text it records the hand-parsed script features
-(API type, line kind, trigger/static mode, parameter-key presence, cost,
-target, amounts, who is named as affected, duration, length), the facts of the
-first card carrying it (type line, mana value, colours), how many cards carry
-it, whether the curated corpus holds it out, and the corpus's rarity count.
+Walks every provenance sidecar under the checkpoint's sidecar trees, joins
+each line to its row of the checkpoint's ability cache (``<name>.npz``) and,
+where one exists, of the taxonomy baseline's cache (``<name>.taxonomy.npz``),
+and keeps one row per unique encoding text on the checkpoint's surface. A
+sidecar with no taxonomy cache keeps its rows with ``e_tax`` empty, and the
+scripts that read it omit those columns (FR-072). For each text it records
+the hand-parsed script features (API type, line kind, trigger/static mode,
+parameter-key presence, cost, target, amounts, who is named as affected,
+duration, length), the facts of the first card carrying it (type line, mana
+value, colours), how many cards carry it, whether the curated corpus holds it
+out, and the corpus's rarity count.
 
 It also writes ``cache/keymap.pkl``: every provenance key (including the
 perturbed-variant tree's) mapped to its encoding text, which
@@ -19,11 +21,13 @@ It checks, and reports, that every card carrying a text got the same vector
 for it: the cache is computed per card, so a disagreement would mean the
 encoder is not a function of the text.
 
-Run: ``python scripts/effect_embedding_probes/build_texts.py`` (CPU, ~2 min).
+Run: ``python scripts/effect_embedding_probes/build_texts.py --checkpoint PATH
+--abilities-root DIR`` (CPU, ~2 min).
 """
 
 from __future__ import annotations
 
+import argparse
 import pickle
 import sys
 from pathlib import Path
@@ -34,31 +38,28 @@ import pandas as pd
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from common import (  # noqa: E402
-    ABILITIES,
-    CACHE,
     CARD_TYPES,
-    OUT,
-    ROOT,
-    TEXT_TABLE,
-    TREES,
+    VARIANT_TREE,
+    ProbePaths,
+    add_probe_arguments,
     affected_features,
     card_facts,
     cost_features,
     count_amounts,
     load_manifest_sets,
     parse_script,
+    resolve_paths,
     target_type,
 )
 
-from effects.domain.ability_encoder import SURFACE_SCRIPT, encoding_text  # noqa: E402
+from effects.domain.ability_encoder import encoding_text  # noqa: E402
 from effects.infrastructure.sidecar_io import (  # noqa: E402
     converted_text_path,
     prose_for,
     prose_lines,
     read_sidecar,
+    tree_of_folder,
 )
-
-VARIANT_TREE = ROOT / "output" / "effects" / "variant-scripts"
 
 
 def key_tuple(script_file: str, key) -> tuple[str, int, str, int, int | None]:
@@ -66,32 +67,48 @@ def key_tuple(script_file: str, key) -> tuple[str, int, str, int, int | None]:
 
 
 def main() -> None:
-    held_out, rarity = load_manifest_sets()
+    parser = add_probe_arguments(argparse.ArgumentParser(
+        description=__doc__.splitlines()[0],
+    ))
+    build(resolve_paths(parser.parse_args()))
+
+
+def build(paths: ProbePaths) -> pd.DataFrame:
+    """Write the text table and keymap for ``paths``'s checkpoint, and return it."""
+    held_out, rarity = load_manifest_sets(paths)
     rows: dict[str, dict] = {}
     keymap: dict[tuple, str] = {}
     mismatch_max = 0.0
-    skipped = {"no_cache": 0, "row_mismatch": 0, "no_text": 0}
-    for tree in TREES:
-        for sidecar_path in sorted((ROOT / "output" / tree).rglob("*.provenance.json")):
+    skipped = {"no_cache": 0, "row_mismatch": 0, "no_text": 0, "no_taxonomy": 0}
+    empty = np.zeros(0, dtype=np.float32)
+    for folder in paths.cards_folders:
+        tree = tree_of_folder(folder)
+        for sidecar_path in sorted(Path(folder).rglob("*.provenance.json")):
             sidecar = read_sidecar(sidecar_path)
             rel = Path(sidecar.script_file)
-            base = ABILITIES / rel.parent / rel.stem
+            base = paths.abilities_root / rel.parent / rel.stem
             full_path = base.with_suffix(".npz")
             tax_path = base.parent / f"{rel.stem}.taxonomy.npz"
-            if not full_path.exists() or not tax_path.exists():
+            if not full_path.exists():
                 skipped["no_cache"] += 1
                 continue
             full = np.load(full_path)["e"]
-            tax = np.load(tax_path)["e"]
-            if len(full) != len(sidecar.lines) or len(tax) != len(sidecar.lines):
+            tax = np.load(tax_path)["e"] if tax_path.exists() else None
+            if tax is None:
+                skipped["no_taxonomy"] += 1
+            if len(full) != len(sidecar.lines) or (
+                tax is not None and len(tax) != len(sidecar.lines)
+            ):
                 skipped["row_mismatch"] += 1
                 continue
             converted = converted_text_path(sidecar_path)
             rendered = prose_lines(converted)
             facts = None
-            for row_full, row_tax, line in zip(full, tax, sidecar.lines):
+            for index, line in enumerate(sidecar.lines):
+                row_full = full[index]
+                row_tax = empty if tax is None else tax[index]
                 prose = prose_for(line, rendered)
-                text = encoding_text(line, prose, SURFACE_SCRIPT)
+                text = encoding_text(line, prose, paths.surface)
                 if not text:
                     skipped["no_text"] += 1
                     continue
@@ -124,7 +141,7 @@ def main() -> None:
     for sidecar_path in sorted(VARIANT_TREE.glob("*.provenance.json")):
         sidecar = read_sidecar(sidecar_path)
         for line in sidecar.lines:
-            text = encoding_text(line, None, SURFACE_SCRIPT)
+            text = encoding_text(line, None, paths.surface)
             if text:
                 for key in line.provenance:
                     keymap[key_tuple(sidecar.script_file, key)] = text
@@ -139,11 +156,14 @@ def main() -> None:
     table["rarity_games"] = table.text.map(lambda t: rarity.get(t, 0))
     table["pairs"] = table.text.map(parse_script)
     table = add_features(table)
-    CACHE.mkdir(parents=True, exist_ok=True)
-    table.to_pickle(TEXT_TABLE)
-    with open(CACHE / "keymap.pkl", "wb") as handle:
+    paths.cache.mkdir(parents=True, exist_ok=True)
+    table.to_pickle(paths.text_table)
+    with open(paths.keymap, "wb") as handle:
         pickle.dump(keymap, handle)
     lines = [
+        f"checkpoint: {paths.checkpoint} (surface {paths.surface}, "
+        f"e width {paths.e_width})",
+        f"sidecar trees: {', '.join(str(f) for f in paths.cards_folders)}",
         f"unique texts: {len(table)}",
         f"keymap keys: {len(keymap)}",
         f"skipped: {skipped}",
@@ -152,8 +172,9 @@ def main() -> None:
         f"of {len(held_out)} in the manifest",
         f"texts with a rarity entry: {int((table.rarity_games > 0).sum())}",
     ]
-    (OUT / "build_texts.txt").write_text("\n".join(lines) + "\n", encoding="utf-8")
+    (paths.out / "build_texts.txt").write_text("\n".join(lines) + "\n", encoding="utf-8")
     print("\n".join(lines))
+    return table
 
 
 def add_features(table: pd.DataFrame) -> pd.DataFrame:

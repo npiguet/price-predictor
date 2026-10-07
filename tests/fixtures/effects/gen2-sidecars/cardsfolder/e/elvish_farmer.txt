@@ -1,0 +1,7 @@
+name: elvish farmer
+mana cost: {1}{G}
+types: creature elf
+power toughness: 0/2
+activated[1]: remove three spore counters from CARDNAME: create a 1/1 green saproling creature token.
+activated[2]: sacrifice a saproling: you gain 2 life.
+triggered: at the beginning of your upkeep, put a spore counter on CARDNAME.

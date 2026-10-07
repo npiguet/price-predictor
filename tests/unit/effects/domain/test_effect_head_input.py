@@ -747,3 +747,75 @@ class TestFeatureEquivalence:
                 )
         for value in (0, -0.0, 3, -3, 2.5, -2.5, 1e6, -1e6):
             assert _scalar(value) == self._ref_scalar(value)
+
+
+class TestOptionRows:
+    """FR-063a: a charm's mode rows follow its root row inside the card's block."""
+
+    _CHARM = ProvenanceKey("cardsfolder/c/cryptic_command.txt", 0, "spell", 0)
+
+    def _modes(self):
+        return tuple(
+            ProvenanceKey(self._CHARM.script_file, 0, "spell", 0, option)
+            for option in range(3)
+        )
+
+    def _surface(self, options_for):
+        vectors = {self._CHARM: (0.5,) * E_DIM}
+        vectors |= {mode: (float(mode.option),) * E_DIM for mode in self._modes()}
+        record = _record(state=_snapshot(entities=(
+            _entity("E1", printed=(self._CHARM, _ANTHEM)),
+        )))
+        return build_effect_head_input(
+            record, e_for=lambda key: vectors.get(key, _VECTORS.get(key)),
+            e_dim=E_DIM, options_for=options_for,
+        )
+
+    def test_a_charm_gets_its_root_then_its_modes_in_choices_order(self):
+        modes = self._modes()
+        surface = self._surface(
+            lambda key: modes if key == self._CHARM else (),
+        )
+        abilities = surface.of_kind(SlotKind.ABILITY)
+        assert [slot.option for slot in abilities] == [False, True, True, True, False]
+        assert [slot.e[0] for slot in abilities[1:4]] == [0.0, 1.0, 2.0]
+        assert [slot.position for slot in abilities] == [1, 2, 3, 4, 5]
+
+    def test_no_options_callback_adds_no_rows(self):
+        abilities = self._surface(None).of_kind(SlotKind.ABILITY)
+        assert [slot.option for slot in abilities] == [False, False]
+
+    def test_the_batcher_reads_the_modes_off_the_sidecar(self):
+        import torch
+
+        from effects.application.surface_batching import SurfaceBatcher
+        from effects.application.train_effect_model import VariantMasks
+        from effects.domain.provenance import ProvenanceSidecar, SidecarLine
+
+        modes = self._modes()
+        sidecar = ProvenanceSidecar(
+            card="cryptic command", script_file=self._CHARM.script_file,
+            lines=(
+                SidecarLine(3, "spell", (self._CHARM,), script_text="Choices$ SV1,SV2,SV3"),
+                *(SidecarLine(4 + m.option, "option", (m,), script_text=f"SV1: DB$ M{m.option}")
+                  for m in modes),
+                SidecarLine(7, "option", (), script_text=""),
+            ),
+        )
+
+        class _Sidecars:
+            def get(self, script_file):
+                return sidecar
+
+            def line_for(self, key):
+                return sidecar.line_for(key)
+
+            def prose_for(self, key):
+                return None
+
+        batcher = SurfaceBatcher(
+            tokenizer=None, sidecars=_Sidecars(), masks=VariantMasks(),
+            surface="script", e_dim=E_DIM, widths={}, device=torch.device("cpu"),
+        )
+        assert batcher.options_for(self._CHARM) == modes
+        assert batcher.options_for(modes[0]) == ()

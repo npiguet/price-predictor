@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import hashlib
 import random
+from dataclasses import dataclass, field, replace
 
 import numpy as np
 import torch
@@ -26,6 +27,7 @@ from effects.application.train_effect_model import (
 )
 from effects.domain.ability_encoder import (
     AbilityEncoder,
+    TruncationLog,
     collate_lines,
     encoding_text,
     prepare_line,
@@ -38,11 +40,104 @@ from effects.domain.effect_head_input import (
     continuous_masked_keywords,
 )
 from effects.domain.effect_model import collate_surfaces, scatter_e_rows
+from effects.domain.records import PlayabilityDecisionPayload
 from effects.infrastructure.sidecar_io import UnconfiguredTree
 
 #: Rows in the ``identity`` baseline's free-embedding table. Ample for the
 #: corpus's distinct ability texts, so collisions stay rare.
 IDENTITY_TABLE_SIZE = 1 << 17
+
+
+#: Running-covariance decay for the noise on ``e`` (FR-056).
+NOISE_DECAY = 0.99
+#: Diagonal jitter added before the Cholesky factor, so a covariance that is
+#: singular along some direction — a batch with fewer texts than ``e_dim`` —
+#: still factors.
+NOISE_JITTER = 1e-6
+
+
+class NoiseState:
+    """Gaussian noise on ``e`` scaled to the spread of ``e`` itself (FR-056).
+
+    A fixed σ meant different things at different points of a run: the scale
+    of ``e`` is learned, so a σ that is a nudge at step zero is nothing once the
+    vectors have grown. Here the noise has covariance ``r² Σ``, where ``Σ`` is a
+    running average of the covariance of the batch's ``e`` vectors about their
+    mean, held with the gradient stopped, and ``r`` rises linearly from 0 to the
+    ratio over the first ``ramp_steps`` optimizer steps.
+
+    Owned by the training loop and handed to each training batch's batcher;
+    validation, evaluation and encoding build their batchers without one, so
+    nothing outside training is ever perturbed. Everything stays on the device:
+    the update is one covariance, the draw one Cholesky factor and one matmul,
+    and nothing is read back to the host.
+    """
+
+    def __init__(
+        self, ratio: float, ramp_steps: int, *,
+        decay: float = NOISE_DECAY, jitter: float = NOISE_JITTER,
+    ) -> None:
+        self.ratio = ratio
+        self.ramp_steps = max(int(ramp_steps), 1)
+        self.decay = decay
+        self.jitter = jitter
+        #: The running covariance, seeded from the first batch.
+        self.sigma: torch.Tensor | None = None
+        #: Optimizer steps taken; set by the training loop before each batch.
+        self.step = 0
+
+    def scale(self) -> float:
+        """``r`` at the current step."""
+        return self.ratio * min(1.0, self.step / self.ramp_steps)
+
+    def update(self, matrix: torch.Tensor) -> None:
+        """Fold one batch's covariance into ``Σ``. No gradient flows here."""
+        if matrix.shape[0] < 2:
+            return
+        with torch.no_grad():
+            vectors = matrix.detach().float()
+            centred = vectors - vectors.mean(dim=0, keepdim=True)
+            covariance = centred.T @ centred / (vectors.shape[0] - 1)
+            if self.sigma is None:
+                self.sigma = covariance
+            else:
+                self.sigma = (
+                    self.decay * self.sigma + (1.0 - self.decay) * covariance
+                )
+
+    def apply(self, matrix: torch.Tensor) -> torch.Tensor:
+        """``matrix`` plus ``L z``, ``L`` the Cholesky factor of ``r²Σ + εI``."""
+        self.update(matrix)
+        r = self.scale()
+        if r <= 0.0 or self.sigma is None:
+            return matrix
+        with torch.no_grad():
+            dim = self.sigma.shape[0]
+            factor = torch.linalg.cholesky(
+                r * r * self.sigma
+                + self.jitter * torch.eye(dim, device=self.sigma.device)
+            )
+            draw = torch.randn(
+                matrix.shape[0], dim, device=matrix.device,
+            ) @ factor.T
+        return matrix + draw.to(matrix.dtype)
+
+
+@dataclass
+class EncodedBatch:
+    """What one ``build`` encoded, for the heads that read ``e`` directly.
+
+    ``texts`` are the batch's unique ability texts in matrix-row order,
+    ``lines`` each text's sidecar line, and ``matrix`` the ``e`` rows the
+    surfaces scattered (after noise, in training). The value and script-API
+    heads read these rows, one per text rather than one per slot.
+    """
+
+    texts: list[str]
+    lines: dict[str, object]
+    matrix: torch.Tensor | None
+    #: ``EncodedLine`` per text, as fed to the encoder; the MLM pass masks them.
+    prepared: list = field(default_factory=list)
 
 
 def text_slot(text: str, size: int) -> int:
@@ -73,8 +168,13 @@ class SurfaceBatcher:
         context_dropout: float = 0.0,
         rng: random.Random | None = None,
         identity_table: torch.nn.Embedding | None = None,
+        noise: NoiseState | None = None,
+        truncations: TruncationLog | None = None,
     ) -> None:
         self.tokenizer = tokenizer
+        #: Where a text the encoder's window cuts short is reported, once per
+        #: run (FR-006). The caller owns it, so it outlives this batch.
+        self.truncations = truncations
         self.sidecars = sidecars
         self.masks = masks
         self.surface = surface
@@ -86,6 +186,13 @@ class SurfaceBatcher:
         self.context_dropout = context_dropout
         self.rng = rng or random.Random(0)
         self.identity_table = identity_table
+        #: Training only: the noise on every ``e`` this batch carries.
+        self.noise = noise
+        #: The last ``build``'s unique texts and their ``e`` rows.
+        self.encoded: EncodedBatch | None = None
+        self._prepared: list = []
+        #: ``key -> option-line keys after its line``, memoised like the text.
+        self._options_by_key: dict[object, tuple] = {}
         #: ``key -> (text, line)``, the join's answer for one key on this
         #: run's surface. ``SidecarCache`` already reads each card once, but
         #: the *key* is still resolved three or four times per batch — once by
@@ -162,13 +269,55 @@ class SurfaceBatcher:
             return text
 
         for record in records:
-            for key in record.ability or ():
+            for key in self.acting_keys(record):
                 if note(key) is not None:
                     break
             for entity in record.state.entities:
                 for key in (*entity.printed, *entity.granted_attached):
-                    note(key)
+                    if note(key) is not None:
+                        for mode in self.options_for(key):
+                            note(mode)
         return texts
+
+    @staticmethod
+    def acting_keys(record) -> tuple:
+        """The keys ``[ACT]`` reads: the acting line, or a decision's candidate.
+
+        A ``decision`` record names no acting line of its own; its ``[ACT]``
+        carries the candidate's ``e`` (FR-060a), and Java writes one candidate
+        per record, so it is the payload's first.
+        """
+        payload = record.payload
+        if isinstance(payload, PlayabilityDecisionPayload):
+            return payload.candidates[0].ability if payload.candidates else ()
+        return record.ability or ()
+
+    def options_for(self, key) -> tuple:
+        """The keys of the charm-mode lines that follow ``key``'s line (FR-063a).
+
+        Empty for every line that is not a charm's root, and for a sidecar
+        source that cannot say (a stub, an unconverted script).
+        """
+        cached = self._options_by_key.get(key)
+        if cached is not None:
+            return cached
+        found: tuple = ()
+        get = getattr(self.sidecars, "get", None)
+        # A mode is never a root: its siblings follow it in the sidecar too,
+        # and must not be read as its own options.
+        if get is not None and getattr(key, "option", None) is None:
+            try:
+                sidecar = get(key.script_file)
+                row = sidecar.row_for(key)
+            except KeyError:
+                row = None
+            if row is not None:
+                found = tuple(
+                    next(k for k in sidecar.lines[r].provenance if k.option is not None)
+                    for r in sidecar.option_rows_after(row)
+                )
+        self._options_by_key[key] = found
+        return found
 
     # ── the ability vectors ─────────────────────────────────────────────
 
@@ -200,6 +349,15 @@ class SurfaceBatcher:
         if self.masks.taxonomy_embedding:
             return rows, self._taxonomy_vectors(ordered, texts)
 
+        lines = self.prepare_texts(ordered)
+        self._prepared = lines
+        batch = collate_lines(lines, self.tokenizer.pad_id)
+        batch = {k: v.to(self.device) for k, v in batch.items()}
+        vectors, _hidden = encoder(**batch)
+        return rows, vectors
+
+    def prepare_texts(self, ordered: list[str]) -> list:
+        """Each text tokenized, withheld keyword hidden, keywords expanded."""
         hidden_keywords, _force = withheld_keyword_rules(self.withhold_keyword)
         lines = []
         for text in ordered:
@@ -208,11 +366,53 @@ class SurfaceBatcher:
             tokens = self.tokenizer.expand_keywords(
                 tokens, probability=self.keyword_expand_p, rng=self.rng,
             )
-            lines.append(prepare_line(self.tokenizer, tokens))
-        batch = collate_lines(lines, self.tokenizer.pad_id)
+            line = prepare_line(self.tokenizer, tokens)
+            if line.truncated and self.truncations is not None:
+                self.truncations.note(text, self._keys_of(text))
+            lines.append(line)
+        return lines
+
+    def _keys_of(self, text: str) -> list:
+        """The keys resolved to ``text`` so far: how a truncation is named."""
+        return [key for key, (known, _) in self._text_by_key.items() if known == text]
+
+    def mlm_inputs(self, encoder: AbilityEncoder, mask_prob: float):
+        """The MLM pass over the last build's texts (FR-060b).
+
+        A second forward pass over the same prepared lines with a share
+        ``mask_prob`` of their tokens replaced by ``[MASK]`` — never ``[CLS]``,
+        never padding — so the effect head keeps reading the unmasked ``e`` and
+        the corruption shapes only what the encoder's token outputs must
+        recover. Returns ``(hidden, targets, mask)`` on the device, or None
+        when nothing was masked.
+        """
+        if not self._prepared or mask_prob <= 0.0:
+            return None
+        masked_lines, targets, chosen = [], [], []
+        for line in self._prepared:
+            ids = list(line.token_ids)
+            picks = [0] * len(ids)
+            for position in range(1, len(ids)):
+                if self.rng.random() < mask_prob:
+                    picks[position] = 1
+                    ids[position] = self.tokenizer.mask_id
+            masked_lines.append(replace(line, token_ids=ids))
+            targets.append(list(line.token_ids))
+            chosen.append(picks)
+        if not any(any(row) for row in chosen):
+            return None
+        width = max(len(row) for row in targets)
+        target = torch.tensor(
+            [row + [self.tokenizer.pad_id] * (width - len(row)) for row in targets],
+            dtype=torch.long,
+        )
+        mask = torch.tensor(
+            [row + [0] * (width - len(row)) for row in chosen], dtype=torch.bool,
+        )
+        batch = collate_lines(masked_lines, self.tokenizer.pad_id)
         batch = {k: v.to(self.device) for k, v in batch.items()}
-        vectors, _hidden = encoder(**batch)
-        return rows, vectors
+        _e, hidden = encoder(**batch)
+        return hidden, target.to(self.device), mask.to(self.device)
 
     def _identity_vectors(self, ordered: list[str]) -> torch.Tensor:
         """A free learned vector per ability text, keyed by hash.
@@ -289,11 +489,19 @@ class SurfaceBatcher:
             e_for=e_for,
             has_line=has_line,
             e_dim=self.e_dim,
+            # A decision record's [ACT] reads its candidate's e (FR-060a);
+            # without it [ACT] read a zero vector and the verdict head would
+            # have trained on nothing.
+            candidate_index=(
+                0 if isinstance(record.payload, PlayabilityDecisionPayload)
+                else None
+            ),
             context_dropout=self.context_dropout,
             rng=self.rng,
             masked_keywords=continuous_masked_keywords(record),
             stripped_keywords=strip_keywords,
             keyword_of=self.keyword_of_key,
+            options_for=self.options_for,
         )
 
     def build(self, records, encoder: AbilityEncoder, strip_per_record=None):
@@ -305,7 +513,16 @@ class SurfaceBatcher:
         the same batch: they share every encoded ability text, and one map would
         strip both.
         """
-        rows, matrix = self.encode_texts(self.batch_texts(records), encoder)
+        texts = self.batch_texts(records)
+        self._prepared = []
+        rows, matrix = self.encode_texts(texts, encoder)
+        if self.noise is not None and matrix is not None:
+            # Every e of the batch, whichever variant produced it (FR-056).
+            matrix = self.noise.apply(matrix)
+        self.encoded = EncodedBatch(
+            texts=sorted(rows, key=rows.__getitem__), lines=texts,
+            matrix=matrix, prepared=self._prepared,
+        )
         strips = strip_per_record or [None] * len(records)
         surfaces = [
             self.surface_for(record, rows, strip)

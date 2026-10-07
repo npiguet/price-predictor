@@ -1,0 +1,15 @@
+layout: adventure
+name: mosswood dreadknight
+mana cost: {1}{G}
+types: creature human knight
+power toughness: 3/2
+static: trample
+triggered: when CARDNAME dies, you may cast it from your graveyard as an adventure until the end of your next turn.
+
+ALTERNATE
+
+name: dread whispers
+mana cost: {1}{B}
+types: sorcery adventure
+spell[1]: you draw a card and you lose 1 life.
+replacement: adventure

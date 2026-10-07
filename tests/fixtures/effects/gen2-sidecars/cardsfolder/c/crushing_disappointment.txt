@@ -1,0 +1,5 @@
+name: crushing disappointment
+mana cost: {3}{B}
+types: instant
+spell[1]: each player loses 2 life.
+spell[2]: you draw two cards.

@@ -1,0 +1,5 @@
+name: bone splinters
+mana cost: {B}
+types: sorcery
+additional cost: sacrifice a creature.
+spell[1]: destroy target creature.

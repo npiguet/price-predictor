@@ -362,3 +362,26 @@ class TestMatchWorkerConnectorEffectRecords:
                 tmp_path, mock_popen, effect_records_dir=records, worker_index=2
             )
         assert first == second
+
+
+class TestMatchWorkerConnectorRandomSeat:
+    """The random-seat knobs ride the caps dict to the worker (FR-021)."""
+
+    def test_both_properties_reach_the_command_line(self, tmp_path, stub_classpath):
+        import argparse
+
+        from sealed.infrastructure.cli import _effect_collection_caps
+
+        caps = _effect_collection_caps(argparse.Namespace(
+            random_seat_share=0.125, random_seat_probability=0.25,
+        ))
+        connector = MatchWorkerConnector()
+        with patch("subprocess.Popen") as mock_popen:
+            mock_popen.return_value = MagicMock()
+            connector.start(
+                tmp_path / "outcomes.txt", run_id=RUN_ID, best_of=BEST_OF,
+                effect_records_dir=tmp_path / "records", collection_caps=caps,
+            )
+        cmd = mock_popen.call_args[0][0]
+        assert "-Deffect.random.seat.share=0.125" in cmd
+        assert "-Deffect.random.seat.probability=0.25" in cmd

@@ -5,7 +5,8 @@ cache with each script API type's mean vector subtracted) or ``taxonomy`` (the
 hash baseline) — over one vector per unique script-surface text:
 
 1. the variance share of each principal component (the centred PCA the
-   gate-3 canary reads);
+   gate-3 canary reads), and the participation ratio ``(Σλ)² / Σλ²`` over the
+   eigenvalues: how many dimensions the space effectively uses (FR-073);
 2. the ten texts at each end of the top ten components, with prose and
    script;
 3. for every candidate feature, the share of each component's variance it
@@ -23,8 +24,9 @@ hash baseline) — over one vector per unique script-surface text:
 6. when ``effect_profiles.csv`` exists, the observed-effect statistics most
    correlated with each component (weighted by ``n/(n+5)`` resolutions).
 
-Run: ``python scripts/effect_embedding_probes/pca_directions.py --space full``
-(then ``--space residual`` and ``--space taxonomy``). CPU only, ~2 min each.
+Run: ``python scripts/effect_embedding_probes/pca_directions.py --checkpoint PATH
+--abilities-root DIR --space full`` (then ``--space residual`` and
+``--space taxonomy``). CPU only, ~2 min each.
 Writes ``pca_<space>_*.md|csv`` to the report directory.
 """
 
@@ -46,14 +48,17 @@ from common import (  # noqa: E402
     CARD,
     CORPUS,
     NUMERIC_SCRIPT,
-    OUT,
+    add_probe_arguments,
     design,
     eta_squared,
     group_means_residual,
+    has_taxonomy,
     matrix,
     multivariate_eta_squared,
+    participation_ratio,
     pca,
     prepared,
+    resolve_paths,
     weighted_corr,
     write_markdown,
 )
@@ -108,25 +113,37 @@ def cv_r2(X: np.ndarray, Y: np.ndarray, groups: np.ndarray) -> np.ndarray:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser = add_probe_arguments(
+        argparse.ArgumentParser(description=__doc__.splitlines()[0]),
+    )
     parser.add_argument("--space", choices=("full", "residual", "taxonomy"),
                         default="full")
     args = parser.parse_args()
+    paths = resolve_paths(args)
     space = args.space
-    table, key_columns = prepared()
+    table, key_columns = prepared(paths)
+    if space == "taxonomy" and not has_taxonomy(table):
+        print(f"no taxonomy cache under {paths.abilities_root}; nothing to "
+              "decompose in the taxonomy space")
+        return
     E = space_matrix(table, space)
     scores, _, share = pca(E)
     sd = scores.std(axis=0)
     z = scores / sd
 
+    shown = min(20, len(share))
     variance = pd.DataFrame({
-        "component": np.arange(1, 21),
-        "share": share[:20],
-        "cumulative": np.cumsum(share)[:20],
+        "component": np.arange(1, shown + 1),
+        "share": share[:shown],
+        "cumulative": np.cumsum(share)[:shown],
     })
-    write_markdown(variance, OUT / f"pca_{space}_variance.md",
+    ratio = participation_ratio(share)
+    write_markdown(variance, paths.out / f"pca_{space}_variance.md",
                    f"Variance share by principal component ({space}, "
-                   f"{len(table)} unique texts)")
+                   f"{len(table)} unique texts)",
+                   f"Participation ratio (Σλ)² / Σλ² over all {len(share)} "
+                   f"eigenvalues: {ratio:.2f}.")
+    print(f"participation ratio ({space}): {ratio:.2f} of {len(share)} dimensions")
 
     # ── extremes ──
     lines = [f"# Extreme texts along each principal component ({space})", ""]
@@ -145,7 +162,7 @@ def main() -> None:
                 lines.append(f"| {z[i, k]:+.2f} | {row.card} | {row.api} | "
                              f"{row.line_kind} | {prose} | `{script}` |")
         lines.append("")
-    (OUT / f"pca_{space}_extremes.md").write_text("\n".join(lines),
+    (paths.out / f"pca_{space}_extremes.md").write_text("\n".join(lines),
                                                    encoding="utf-8")
 
     # ── single-feature attribution ──
@@ -167,7 +184,7 @@ def main() -> None:
         row["whole space"] = space_r2_numeric(E, x)
         rows.append(row)
     attribution = pd.DataFrame(rows)
-    attribution.to_csv(OUT / f"pca_{space}_feature_r2.csv", index=False)
+    attribution.to_csv(paths.out / f"pca_{space}_feature_r2.csv", index=False)
     top = []
     for k in range(N_PCS):
         column = f"PC{k + 1}"
@@ -177,7 +194,7 @@ def main() -> None:
             "top features (variance explained alone)": "; ".join(
                 f"{f} {v:.2f}" for f, v in zip(best.feature, best[column])),
         })
-    write_markdown(pd.DataFrame(top), OUT / f"pca_{space}_top_features.md",
+    write_markdown(pd.DataFrame(top), paths.out / f"pca_{space}_top_features.md",
                    f"Features explaining the most variance per component ({space})",
                    "η² for categoricals, r² for numeric and 0/1 features. "
                    "Full table: pca_" + space + "_feature_r2.csv.")
@@ -206,16 +223,17 @@ def main() -> None:
             row[f"PC{k + 1}"] = per_pc[k]
         row["whole space"] = whole
         nested.append(row)
-    write_markdown(pd.DataFrame(nested), OUT / f"pca_{space}_nested_r2.md",
+    write_markdown(pd.DataFrame(nested), paths.out / f"pca_{space}_nested_r2.md",
                    f"Cross-validated R² of nested feature sets ({space})",
                    "Ridge (alpha 10), 5 folds grouped by carrying card. "
-                   "'whole space' is the pooled R² over all 64 dimensions.")
+                   f"'whole space' is the pooled R² over all {E.shape[1]} "
+                   "dimensions.")
 
     # ── API types along PC1 and within-type target splits ──
     by_type = (pd.DataFrame({"api": table.api, "z": z[:, 0]})
                .groupby("api").z.agg(["count", "mean"]).reset_index())
     by_type = by_type[by_type["count"] >= 150].sort_values("mean")
-    write_markdown(by_type, OUT / f"pca_{space}_pc1_by_api.md",
+    write_markdown(by_type, paths.out / f"pca_{space}_pc1_by_api.md",
                    f"Mean PC1 position by API type, SD units ({space}; types "
                    "with at least 150 texts)", floatfmt=".2f")
     split = (pd.DataFrame({"api": table.api, "target": table.target,
@@ -225,7 +243,7 @@ def main() -> None:
                   pc3=("z3", "mean"))
              .reset_index())
     split = split[split["count"] >= 30].sort_values(["api", "pc1"])
-    write_markdown(split, OUT / f"pca_{space}_by_api_target.md",
+    write_markdown(split, paths.out / f"pca_{space}_by_api_target.md",
                    f"Mean position on PCs 1-3 by API type and target ({space})",
                    floatfmt=".2f")
 
@@ -254,7 +272,7 @@ def main() -> None:
                 row[f"PC{k + 1}"] = weighted_corr(values, scores[:, k], w)
             corr_rows.append(row)
         corr = pd.DataFrame(corr_rows)
-        corr.to_csv(OUT / f"pca_{space}_effect_corr.csv", index=False)
+        corr.to_csv(paths.out / f"pca_{space}_effect_corr.csv", index=False)
         summary = []
         for k in range(N_PCS):
             column = f"PC{k + 1}"
@@ -268,7 +286,7 @@ def main() -> None:
                     f"{s} {v:+.2f}" for s, v in
                     zip(ordered.statistic[::-1][:5], ordered[column][::-1][:5])),
             })
-        write_markdown(pd.DataFrame(summary), OUT / f"pca_{space}_effect_corr.md",
+        write_markdown(pd.DataFrame(summary), paths.out / f"pca_{space}_effect_corr.md",
                        f"Observed-effect statistics most correlated with each "
                        f"component ({space})",
                        "Weighted Pearson correlation over acting texts, weight "

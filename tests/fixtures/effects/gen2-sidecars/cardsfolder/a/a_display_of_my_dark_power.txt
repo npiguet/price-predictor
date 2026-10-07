@@ -1,0 +1,3 @@
+name: a display of my dark power
+types: scheme
+triggered: when you set this scheme in motion, until your next turn, whenever a player taps a land for mana, that player adds one mana of any type that land produced.

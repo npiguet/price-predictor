@@ -1,0 +1,5 @@
+name: lavabrink floodgates
+mana cost: {3}{R}
+types: artifact
+activated[1]: {T}: add {R}{R}.
+triggered: at the beginning of each player's upkeep, that player may put a doom counter on CARDNAME or remove a doom counter from it. then if it has three or more doom counters on it, sacrifice CARDNAME. when you do, it deals 6 damage to each creature. when you do, it deals 6 damage to each creature.

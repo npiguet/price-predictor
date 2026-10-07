@@ -1,0 +1,5 @@
+name: stromgald cabal
+mana cost: {1}{B}{B}
+types: creature human knight
+power toughness: 2/2
+activated[1]: {T}, pay 1 life: counter target white spell.

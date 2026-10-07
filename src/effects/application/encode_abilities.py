@@ -30,7 +30,7 @@ from effects.infrastructure.effect_model_store import (
     model_output_for,
     resolve_inference_paths,
 )
-from effects.infrastructure.sidecar_io import SIDECAR_SUFFIX, read_sidecar
+from effects.infrastructure.sidecar_io import SIDECAR_SUFFIX, prose_for, read_sidecar
 
 logger = logging.getLogger(__name__)
 
@@ -76,9 +76,12 @@ def tree_of(cards_folder: Path) -> str:
 
     Read from the folder's own name, which mirrors the tree it was converted
     from — the same string a provenance key's ``script_file`` is prefixed with.
+    A kept-aside copy (``output/gen1-cardsfolder``) still holds the
+    ``cardsfolder`` tree, so its cache lands where its keys look for it.
     """
-    name = Path(cards_folder).name
-    return name or "cardsfolder"
+    from effects.infrastructure.sidecar_io import tree_of_folder
+
+    return tree_of_folder(Path(cards_folder))
 
 
 def iter_sidecars(cards_folder: Path) -> list[Path]:
@@ -181,6 +184,30 @@ def run(config: EncodeAbilitiesConfig, *, encode_lines=None) -> EncodeSummary:
     return EncodeSummary(sources=sources, rows=rows, skipped=skipped, cleaned=cleaned)
 
 
+def truncated_lines(
+    tokenizer, sidecar: ProvenanceSidecar, prose: list[str], surface: str,
+) -> list[tuple[SidecarLine, str]]:
+    """The lines of one source the encoder's window cuts short, with their text.
+
+    Tokenized exactly as the cache encodes them: the line's encoding text on
+    this surface, keywords expanded at the inference probability (FR-006).
+    """
+    from effects.domain.ability_encoder import encoding_text, prepare_line
+    from effects.domain.ability_tokenizer import INFERENCE_KEYWORD_EXPAND_P
+
+    cut: list[tuple[SidecarLine, str]] = []
+    for line in sidecar.lines:
+        text = encoding_text(line, prose_for(line, prose), surface)
+        if not text:
+            continue
+        tokens = tokenizer.expand_keywords(
+            tokenizer.tokenize(text), probability=INFERENCE_KEYWORD_EXPAND_P,
+        )
+        if prepare_line(tokenizer, tokens).truncated:
+            cut.append((line, text))
+    return cut
+
+
 def build_encode_lines(config: EncodeAbilitiesConfig):
     """The real encoder as a ``sidecar -> (n_lines, e_dim)`` callable.
 
@@ -190,6 +217,11 @@ def build_encode_lines(config: EncodeAbilitiesConfig):
     """
     from effects.application.extract_keyword_definitions import (
         load_keyword_definitions,
+    )
+    from effects.domain.ability_encoder import (
+        TruncationLog,
+        log_truncation,
+        surface_of,
     )
     from effects.domain.ability_tokenizer import AbilityTokenizer
     from effects.infrastructure.ability_encoder_runner import (
@@ -211,15 +243,21 @@ def build_encode_lines(config: EncodeAbilitiesConfig):
     definitions = (
         load_keyword_definitions(keyword_path) if keyword_path.exists() else {}
     )
-    tokenizer = AbilityTokenizer(load_vocabulary(vocab_path), definitions)
+    surface = surface_of(vocab_path)
+    tokenizer = AbilityTokenizer(
+        load_vocabulary(vocab_path), definitions, surface=surface,
+    )
     runner = AbilityEncoderRunner.from_checkpoint(
         checkpoint, tokenizer, vocab_path=vocab_path,
     )
+    truncations = TruncationLog(log_truncation(logger, "encode-abilities"))
 
     def encode_lines(sidecar: ProvenanceSidecar, sidecar_path: Path) -> np.ndarray:
         # The prose surface reads the converted .txt beside the sidecar; the
         # script surface does not, and a variant tree has no prose at all.
         prose = prose_lines(converted_text_path(sidecar_path))
+        for line, text in truncated_lines(tokenizer, sidecar, prose, surface):
+            truncations.note(text, line.provenance)
         return runner.encode_sidecar_lines(sidecar, prose)
 
     return encode_lines

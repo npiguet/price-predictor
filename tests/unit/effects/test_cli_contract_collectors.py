@@ -143,3 +143,20 @@ class TestSubcommandTable:
     def test_an_unknown_subcommand_is_rejected(self):
         with pytest.raises(SystemExit):
             parse("collect-everything")
+
+
+class TestTheHeldOutCoverageRound:
+    """contracts/cli.md § collect-coverage: the two gen-2 flags and their defaults."""
+
+    def test_only_cards_is_off_by_default_and_the_floor_is_five(self):
+        args = parse("collect-coverage")
+        assert args.only_cards is None
+        assert args.min_text_games == 5
+
+    def test_only_cards_beside_exclude_cards_is_refused(self):
+        from effects.infrastructure.cli import coverage_config_from
+
+        with pytest.raises(ValueError, match="--exclude-cards"):
+            coverage_config_from(parse(
+                "collect-coverage", "--only-cards", "h.txt", "--exclude-cards", "h.txt",
+            ))

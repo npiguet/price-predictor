@@ -1,0 +1,4 @@
+name: arc trail
+mana cost: {1}{R}
+types: sorcery
+spell[1]: CARDNAME deals 2 damage to any target and 1 damage to any other target.

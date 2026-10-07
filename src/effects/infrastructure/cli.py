@@ -352,6 +352,22 @@ def _collect_coverage_parser(subparsers) -> None:
         ),
     )
     parser.add_argument(
+        "--only-cards", type=str, default=None,
+        help=(
+            "The held-out coverage round: the list 'holdout-cards' writes. "
+            "Decks are built from these cards alone, plus basics, records are "
+            "full strength, and the unit is the held-out ability text. "
+            "Refused beside --exclude-cards, --training-corpus or --split-from"
+        ),
+    )
+    parser.add_argument(
+        "--min-text-games", type=int, default=5,
+        help=(
+            "With --only-cards: distinct games a held-out text must act in to "
+            "be satisfied (default: 5)"
+        ),
+    )
+    parser.add_argument(
         "--target-records", type=int, default=50,
         help="Per-card satisfaction goal (default: 50)",
     )
@@ -420,8 +436,27 @@ def coverage_config_from(args: argparse.Namespace):
     """The coverage config, with the corpus location already resolved."""
     from effects.application.collect_coverage import CollectCoverageConfig
 
+    only_cards = getattr(args, "only_cards", None)
+    if only_cards is not None:
+        clashing = [
+            flag for flag, value in (
+                ("--exclude-cards", args.exclude_cards),
+                ("--training-corpus", getattr(args, "training_corpus", None)),
+                ("--split-from", args.split_from),
+            ) if value
+        ]
+        if clashing:
+            # FR-038: the round decks the held-out cards on purpose, and each of
+            # these names a holdout to keep out of the decks — the opposite
+            # instruction, so one of them is a mistake.
+            raise ValueError(
+                f"--only-cards decks the held-out cards; {', '.join(clashing)} "
+                "keeps a holdout out of every deck. Pass one or the other."
+            )
     records, listed = resolve_training_corpus(args)
     return CollectCoverageConfig(
+        only_cards=Path(only_cards) if only_cards else None,
+        min_text_games=getattr(args, "min_text_games", 5),
         effect_records=records,
         cards_folders=resolve_cards_folders(args.cards_folders),
         split_from=Path(args.split_from) if args.split_from else None,
@@ -437,8 +472,14 @@ def coverage_config_from(args: argparse.Namespace):
 def run_collect_coverage(args: argparse.Namespace) -> int:
     from effects.application.collect_coverage import run as collect
 
+    try:
+        # Before any worker starts: every refusal lives in the config.
+        config = coverage_config_from(args)
+    except ValueError as exc:
+        print(f"collect-coverage: {exc}")
+        return 1
     print(announce_probe_state(args.probe_keywords, args.probes_per_game))
-    return collect(coverage_config_from(args))
+    return collect(config)
 
 
 # ── build-corpus ────────────────────────────────────────────────────────
@@ -468,6 +509,16 @@ def _class_mix(text: str) -> dict[str, float]:
         return parse_kind_mix(text)
     except ValueError as exc:
         raise argparse.ArgumentTypeError(str(exc)) from None
+
+
+#: FR-045's default; restated rather than imported so ``--help`` stays light.
+DEFAULT_GAME_DISJOINT_KEYWORDS: tuple[str, ...] = (
+    "first strike", "deathtouch", "trample", "indestructible", "wither", "infect",
+)
+
+
+def _keyword_list(text: str) -> tuple[str, ...]:
+    return tuple(part.strip() for part in text.split(",") if part.strip())
 
 
 def _build_corpus_parser(subparsers) -> None:
@@ -518,11 +569,19 @@ def _build_corpus_parser(subparsers) -> None:
             f"(default: {HOLDOUT_MAX_CARRIERS})"
         ),
     )
+    _add_holdout_unit(parser, default="template")
     parser.add_argument(
         "--text-cap", type=int, default=200,
         help=(
-            "Max training records kept per unique ability text; 0 means no cap "
-            "(default: 200)"
+            "Max written training records per ability text per selection cell, "
+            "repeats included; 0 means no cap (default: 200)"
+        ),
+    )
+    parser.add_argument(
+        "--reuse-cap", type=int, default=4,
+        help=(
+            "Max copies of one record toward a short rule family's share; 1 "
+            "means no repeats (default: 4)"
         ),
     )
     parser.add_argument(
@@ -540,10 +599,34 @@ def _build_corpus_parser(subparsers) -> None:
         ),
     )
     parser.add_argument(
-        "--game-disjoint-games", type=int, default=1000,
+        "--game-disjoint-share", type=float, default=0.01,
         help=(
-            "Games withheld for the game-disjoint stratum; 0 leaves that stratum "
-            "empty (default: 1000)"
+            "A game naming no held-out card enters the game-disjoint stratum "
+            "when crc32(game_id) mod 1e6 / 1e6 is below this, so a rebuild over "
+            "a grown corpus keeps every game it placed (default: 0.01)"
+        ),
+    )
+    parser.add_argument(
+        "--game-disjoint-keyword-share", type=float, default=0.15,
+        help=(
+            "The threshold instead for a game holding a combat gate 2 qualifies "
+            "for one of --game-disjoint-keywords (default: 0.15)"
+        ),
+    )
+    parser.add_argument(
+        "--game-disjoint-keywords", type=_keyword_list,
+        default=DEFAULT_GAME_DISJOINT_KEYWORDS,
+        help=(
+            "Comma list of damage-step keywords raising a game's threshold "
+            f"(default: {','.join(DEFAULT_GAME_DISJOINT_KEYWORDS)})"
+        ),
+    )
+    parser.add_argument(
+        "--keyword-definitions", type=str, default=DEFAULT_KEYWORD_DEFINITIONS,
+        help=(
+            "The keyword table the tokenizer expands with; the build fails when "
+            "a display-name match would expand a non-keyword line "
+            f"(default: {DEFAULT_KEYWORD_DEFINITIONS})"
         ),
     )
     parser.add_argument(
@@ -626,10 +709,17 @@ def run_build_corpus(args: argparse.Namespace) -> int:
             remap_token_keys=args.remap_token_keys,
             holdout_permille=args.holdout_permille,
             holdout_max_carriers=args.holdout_max_carriers,
+            holdout_unit=args.holdout_unit,
             text_cap=args.text_cap,
+            reuse_cap=args.reuse_cap,
             class_mix=args.class_mix,
             training_records=args.training_records,
-            game_disjoint_target=args.game_disjoint_games,
+            game_disjoint_share=args.game_disjoint_share,
+            game_disjoint_keyword_share=args.game_disjoint_keyword_share,
+            game_disjoint_keywords=args.game_disjoint_keywords,
+            keyword_definitions=(
+                Path(args.keyword_definitions) if args.keyword_definitions else None
+            ),
             card_disjoint_text_cap=args.card_disjoint_text_cap,
             shard_records=args.shard_records,
             max_events=args.max_events_per_record,
@@ -696,6 +786,21 @@ def _holdout_cards_parser(subparsers) -> None:
             f"(default: {HOLDOUT_MAX_CARRIERS})"
         ),
     )
+    _add_holdout_unit(parser, default="template")
+
+
+def _add_holdout_unit(parser: argparse.ArgumentParser, *, default: str | None) -> None:
+    """``--holdout-unit``, shared by every command that computes the holdout."""
+    parser.add_argument(
+        "--holdout-unit", choices=("template", "text"), default=default,
+        help=(
+            "What the holdout keys on: 'template' holds out every text sharing "
+            "a masked template (digits, CARDNAME and descriptions masked) "
+            "together; 'text' is feature 023's per-text rule"
+            + (f" (default: {default})" if default else
+               " (default: the corpus manifest's recorded unit)")
+        ),
+    )
 
 
 def run_holdout_cards(args: argparse.Namespace) -> int:
@@ -705,7 +810,7 @@ def run_holdout_cards(args: argparse.Namespace) -> int:
     and it is the knob the two holdout flags actually turn.
     """
     from effects.application.holdout_cards import (
-        depletion_list,
+        holdout_report,
         write_depletion_list,
     )
     from effects.application.train_effect_model import (
@@ -735,17 +840,20 @@ def run_holdout_cards(args: argparse.Namespace) -> int:
             "lowercase spelling. Every comparison folds case, so depletion "
             "still works."
         )
-    names = depletion_list(
+    report = holdout_report(
         card_files, texts_by_card,
         permille=args.holdout_permille,
         max_carriers=args.holdout_max_carriers,
+        unit=args.holdout_unit,
         canonical_names=canonical,
     )
-    written = write_depletion_list(names, Path(args.out))
-    share = 100.0 * written / len(card_files)
+    written = write_depletion_list(report.names, Path(args.out))
+    if report.unit == "template":
+        print(f"held-out templates: {report.keys}")
+    print(f"held-out texts: {report.texts}")
     print(
-        f"{written} of {len(card_files)} cards ({share:.1f}%) carry a held-out "
-        f"text -> {args.out}"
+        f"held-out cards: {written} of {len(card_files)} converted "
+        f"({100.0 * report.depleted_share:.1f}% depleted) -> {args.out}"
     )
     if not written:
         print(
@@ -990,6 +1098,7 @@ def run_validate_corpus(args: argparse.Namespace) -> int:
     tells an operator whether a fix worked or merely moved.
     """
     from effects.application.validate_corpus import (
+        FieldPresence,
         Thresholds,
         read_window,
         validate_corpus,
@@ -1019,7 +1128,10 @@ def run_validate_corpus(args: argparse.Namespace) -> int:
         max_mirror_turn_disagreement_rate=args.max_mirror_turn_disagreement_rate,
     )
     sidecars = _sidecars_for_validation(args)
-    findings = validate_corpus(read_window(root, args.limit), thresholds, sidecars)
+    presence = FieldPresence()
+    findings = validate_corpus(
+        read_window(root, args.limit, presence), thresholds, sidecars, presence,
+    )
 
     window = f" (first {args.limit} records)" if args.limit else ""
     print(f"{len(shards)} shards under {root}{window}\n")
@@ -1047,13 +1159,11 @@ def _sidecars_for_validation(args: argparse.Namespace):
     against. The keyword-join check reports "not checked" for that, and holds
     only over the trees it could actually read.
     """
-    from effects.infrastructure.sidecar_io import SidecarCache
+    from effects.infrastructure.sidecar_io import SidecarCache, sidecar_roots
 
-    roots = {
-        path.name: path
-        for path in resolve_cards_folders(args.cards_folders)
-        if path.is_dir()
-    }
+    roots = sidecar_roots(
+        path for path in resolve_cards_folders(args.cards_folders) if path.is_dir()
+    )
     return SidecarCache(roots) if roots else None
 
 
@@ -1190,6 +1300,7 @@ def _train_effect_model_parser(subparsers) -> None:
         ),
     )
     _add_cards_folder(parser)
+    _add_holdout_unit(parser, default=None)
     parser.add_argument(
         "--variant-scripts", type=str, default=None,
         help=f"Stage four: perturbed scripts (default: {DEFAULT_VARIANT_SCRIPTS})",
@@ -1219,7 +1330,28 @@ def _train_effect_model_parser(subparsers) -> None:
         default="full",
     )
     parser.add_argument("--e-dim", type=int, default=64)
-    parser.add_argument("--e-noise", type=float, default=0.05)
+    parser.add_argument(
+        "--e-noise", type=float, default=0.1,
+        help=(
+            "Noise ratio on e, relative to the running covariance of e itself; "
+            "ramps in over the first --steps-per-epoch steps (default: 0.1)"
+        ),
+    )
+    parser.add_argument(
+        "--value-weight", type=float, default=0.05,
+        help="Loss weight of the training-only value head (default: 0.05)",
+    )
+    parser.add_argument(
+        "--encoder-layers", type=int, default=4,
+        help="Ability-encoder layers, recorded in the checkpoint (default: 4)",
+    )
+    parser.add_argument(
+        "--encoder-d-model", type=int, default=256,
+        help=(
+            "Ability-encoder width, recorded in the checkpoint; must divide by "
+            "the encoder's head count (default: 256)"
+        ),
+    )
     parser.add_argument("--keyword-expand-p", type=float, default=0.25)
     parser.add_argument("--context-dropout", type=float, default=0.15)
     parser.add_argument("--mlm-weight", type=float, default=0.1)
@@ -1285,6 +1417,21 @@ def run_train_effect_model(args: argparse.Namespace) -> int:
     # pre-flight check rather than caught, since it cannot raise.
     require_split_from(args.variant, split_from, corpus=args.corpus)
 
+    from effects.domain.ability_encoder import ENCODER_N_HEADS
+
+    # Refused here, before anything is read (FR-062): the encoder's attention
+    # splits its width across a fixed head count.
+    if args.encoder_d_model <= 0 or args.encoder_d_model % ENCODER_N_HEADS:
+        logger.error(
+            "--encoder-d-model %d is not divisible by the encoder's %d "
+            "attention heads; pick a multiple of %d.",
+            args.encoder_d_model, ENCODER_N_HEADS, ENCODER_N_HEADS,
+        )
+        return 2
+    if args.encoder_layers <= 0:
+        logger.error("--encoder-layers must be at least 1, got %d.", args.encoder_layers)
+        return 2
+
     config = train_config_from(args)
 
     from effects.application.train_effect_model import run as train
@@ -1318,12 +1465,16 @@ def train_config_from(args: argparse.Namespace):
             Path(args.variant_scripts) if args.variant_scripts else None
         ),
         split_from=Path(args.split_from) if args.split_from else None,
+        holdout_unit=args.holdout_unit,
         vocab_path=Path(args.vocab_path),
         keyword_definitions=Path(args.keyword_definitions),
         model_output=Path(args.model_output) if args.model_output else None,
         variant=args.variant,
         e_dim=args.e_dim,
         e_noise=args.e_noise,
+        value_weight=args.value_weight,
+        encoder_layers=args.encoder_layers,
+        encoder_d_model=args.encoder_d_model,
         keyword_expand_p=args.keyword_expand_p,
         context_dropout=args.context_dropout,
         mlm_weight=args.mlm_weight,
@@ -1449,6 +1600,10 @@ def _evaluate_effect_model_parser(subparsers) -> None:
         default="models/sealed/encoder/latest.pt",
         help="Read side by side with the effects cache in the decodability battery",
     )
+    parser.add_argument(
+        "--win-rates", type=str, default="output/sealed/cards-win-rates.txt",
+        help="Per-card win-rate table the decodability battery reads",
+    )
 
 
 def run_evaluate_effect_model(args: argparse.Namespace) -> int:
@@ -1487,6 +1642,7 @@ def run_evaluate_effect_model(args: argparse.Namespace) -> int:
         corpus=Path(args.corpus) if args.corpus else None,
         abilities_root=Path(args.abilities_root),
         sealed_encoder_checkpoint=Path(args.sealed_encoder_checkpoint),
+        win_rates=Path(args.win_rates),
     )
     try:
         report = evaluate(config)
@@ -1498,6 +1654,55 @@ def run_evaluate_effect_model(args: argparse.Namespace) -> int:
         return 2
     print(report.render())
     return 0 if report.ships else 1
+
+
+# ── scorer-smoke-test ───────────────────────────────────────────────────
+
+
+def _scorer_smoke_test_parser(subparsers) -> None:
+    parser = subparsers.add_parser(
+        "scorer-smoke-test",
+        help=(
+            "Train the sealed scorer's Phase A on sealed vectors with pooled e "
+            "spliced in, entirely under --scratch-dir"
+        ),
+    )
+    parser.set_defaults(func=run_scorer_smoke_test)
+    parser.add_argument(
+        "--checkpoint", type=str, default=DEFAULT_CHECKPOINT,
+        help="Effect model whose cache's pooled e is written",
+    )
+    parser.add_argument(
+        "--sealed-encoder-checkpoint", type=str,
+        default="models/sealed/encoder/latest.pt",
+        help="Sealed encoder whose vectors pooled e is concatenated with",
+    )
+    parser.add_argument(
+        "--scratch-dir", type=str, required=True,
+        help="Where the vectors and the scorer checkpoint go; nothing is written elsewhere",
+    )
+
+
+def run_scorer_smoke_test(args: argparse.Namespace) -> int:
+    from effects.application.scorer_smoke_test import ScorerSmokeTestConfig
+    from effects.application.scorer_smoke_test import run as smoke_test
+
+    config = ScorerSmokeTestConfig(
+        scratch_dir=Path(args.scratch_dir),
+        checkpoint=Path(args.checkpoint),
+        sealed_encoder_checkpoint=Path(args.sealed_encoder_checkpoint),
+    )
+    try:
+        result = smoke_test(config)
+    except (FileNotFoundError, ValueError, RuntimeError) as exc:
+        logger.error("%s", exc)
+        return 2
+    print(
+        f"scorer smoke test: {result.cards_written} cards written "
+        f"({result.cards_without_e} without e); Phase A exited "
+        f"{result.scorer_exit_code}; scorer checkpoints under {config.scorer_dir}"
+    )
+    return result.scorer_exit_code
 
 
 # ── the table ───────────────────────────────────────────────────────────
@@ -1514,6 +1719,7 @@ _SUBCOMMAND_BUILDERS = (
     _train_effect_model_parser,
     _encode_abilities_parser,
     _evaluate_effect_model_parser,
+    _scorer_smoke_test_parser,
 )
 
 

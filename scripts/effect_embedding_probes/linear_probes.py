@@ -1,4 +1,4 @@
-"""Which properties are linearly decodable from the whole 64-d embedding.
+"""Which properties are linearly decodable from the whole embedding.
 
 Fits one cross-validated linear probe per property, from each of several
 input spaces, over every unique script-surface text (nothing is filtered to a
@@ -64,11 +64,13 @@ from common import (  # noqa: E402
     BINARY_SCRIPT,
     CARD,
     NUMERIC_SCRIPT,
-    OUT,
+    add_probe_arguments,
     design,
     group_means_residual,
+    has_taxonomy,
     matrix,
     prepared,
+    resolve_paths,
     winsorized,
     write_markdown,
 )
@@ -94,12 +96,12 @@ def standardize(X: np.ndarray) -> np.ndarray:
 def spaces_for(table: pd.DataFrame, key_columns: list[str],
                with_features: bool) -> dict[str, np.ndarray]:
     full = matrix(table, "e_full")
-    spaces = {
-        "full": standardize(full),
-        "taxonomy": standardize(matrix(table, "e_tax")),
-        "residual": standardize(group_means_residual(full, table["api"])),
-        "api one-hot": design(table, categorical=["api_c"]),
-    }
+    spaces = {"full": standardize(full)}
+    # The taxonomy column only where that baseline's cache exists (FR-072).
+    if has_taxonomy(table):
+        spaces["taxonomy"] = standardize(matrix(table, "e_tax"))
+    spaces["residual"] = standardize(group_means_residual(full, table["api"]))
+    spaces["api one-hot"] = design(table, categorical=["api_c"])
     if with_features:
         features = design(table, categorical=SCRIPT_CATS,
                           numeric=list(BINARY_SCRIPT) + list(NUMERIC_SCRIPT)
@@ -247,11 +249,14 @@ def profile_tasks(table: pd.DataFrame) -> list:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser = add_probe_arguments(
+        argparse.ArgumentParser(description=__doc__.splitlines()[0]),
+    )
     parser.add_argument("--targets", choices=("script", "profile"), default="script")
     parser.add_argument("--jobs", type=int, default=8)
     args = parser.parse_args()
-    table, key_columns = prepared()
+    paths = resolve_paths(args)
+    table, key_columns = prepared(paths)
     groups = table["group"].to_numpy()
     spaces = spaces_for(table, key_columns, with_features=args.targets == "profile")
     tasks = (script_tasks(table, key_columns) if args.targets == "script"
@@ -261,12 +266,13 @@ def main() -> None:
         delayed(run_one)(task, spaces, groups) for task in tasks)
     frame = pd.DataFrame(rows)
     if args.targets == "script":
-        frame["full - taxonomy"] = frame["full"] - frame["taxonomy"]
+        if "taxonomy" in frame:
+            frame["full - taxonomy"] = frame["full"] - frame["taxonomy"]
     else:
         frame["full - script features"] = frame["full"] - frame["script features"]
         frame["gain of adding e"] = (frame["full + script features"]
                                      - frame["script features"])
-    frame.to_csv(OUT / f"probes_{args.targets}.csv", index=False)
+    frame.to_csv(paths.out / f"probes_{args.targets}.csv", index=False)
     notes = {
         "script": "Out-of-fold, GroupKFold(5) by carrying card. AUC for 0/1 "
                   "targets, accuracy for multi-class (baseline = majority "
@@ -278,7 +284,7 @@ def main() -> None:
     for metric, part in frame.groupby("metric", sort=False):
         part = part.dropna(axis=1, how="all")
         slug = metric.replace("²", "2").replace(" ", "_")
-        write_markdown(part, OUT / f"probes_{args.targets}_{slug}.md",
+        write_markdown(part, paths.out / f"probes_{args.targets}_{slug}.md",
                        f"Linear probes, {args.targets} targets, {metric}",
                        notes[args.targets])
     print(frame.to_string(index=False, max_colwidth=30))

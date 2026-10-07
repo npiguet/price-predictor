@@ -16,6 +16,7 @@ import pytest
 
 from effects.application import build_corpus
 from effects.application.build_corpus import (
+    Cell,
     ShardSurvey,
     SurveyConfig,
     ability_key,
@@ -159,8 +160,13 @@ def a_shard_survey(
         records=records,
         key_games={key: set(games)},
         key_records=Counter({key: records}),
-        key_hashes={key: tuple(hashes)},
+        cell_key_records=Counter({(_CELL, key): records}),
+        cell_key_hashes={(_CELL, key): tuple(hashes)},
     )
+
+
+#: The one cell the merge tests put their records in.
+_CELL = Cell("rewrite", family="Moved")
 
 
 def test_ability_key_round_trips_through_its_rendering():
@@ -310,7 +316,8 @@ def test_merging_shard_surveys_unions_games_and_sums_records():
     ])
     assert merged.key_records["k"] == 2
     assert len(merged.key_games["k"]) == 2
-    assert sorted(merged.key_heaps["k"].values()) == [10, 20]
+    assert sorted(merged.cell_key_heaps[_CELL, "k"].values()) == [10, 20]
+    assert merged.cell_key_records[_CELL, "k"] == 2
 
 
 def test_merge_surveys_fails_loudly_when_the_worker_was_never_initialized(

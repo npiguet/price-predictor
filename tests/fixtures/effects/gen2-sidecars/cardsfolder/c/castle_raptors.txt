@@ -1,0 +1,6 @@
+name: castle raptors
+mana cost: {4}{W}
+types: creature bird soldier
+power toughness: 3/3
+static: flying
+static: as long as CARDNAME is untapped, it gets +0/+2.

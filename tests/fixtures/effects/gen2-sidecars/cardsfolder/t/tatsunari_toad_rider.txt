@@ -1,0 +1,6 @@
+name: tatsunari, toad rider
+mana cost: {2}{B}
+types: legendary creature human ninja
+power toughness: 3/3
+activated[1]: {1}{G/U}: CARDNAME and target frog you control can't be blocked this turn except by creatures with flying or reach.
+triggered: whenever you cast an enchantment spell, if you don't control a creature named keimi, create keimi, a legendary 3/3 black and green frog creature token with "whenever you cast an enchantment spell, each opponent loses 1 life and you gain 1 life."

@@ -1,0 +1,5 @@
+name: deflecting swat
+mana cost: {2}{R}
+types: instant
+spell[1]: you may choose new targets for target spell or ability.
+static: if you control a commander, you may cast this spell without paying its mana cost.

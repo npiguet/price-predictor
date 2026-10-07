@@ -272,7 +272,7 @@ class TestConfigDefaults:
         config = TrainEffectModelConfig()
         assert config.corpus is None
         assert config.e_dim == 64
-        assert config.e_noise == 0.05
+        assert config.e_noise == 0.1
         assert config.keyword_expand_p == 0.25
         assert config.context_dropout == 0.15
         assert (config.mlm_weight, config.mlm_mask_prob) == (0.1, 0.15)
@@ -559,7 +559,10 @@ class TestEmptyHoldoutIsAnExitCodeNotATraceback:
 
         monkeypatch.setattr(train_effect_model, "run", refuse)
         monkeypatch.setattr(cli, "train_config_from", lambda args: None)
-        args = argparse.Namespace(split_from=None, variant="full", corpus="x")
+        args = argparse.Namespace(
+            split_from=None, variant="full", corpus="x",
+            encoder_d_model=256, encoder_layers=4,
+        )
 
         with caplog.at_level(logging.ERROR):
             assert cli.run_train_effect_model(args) == 2

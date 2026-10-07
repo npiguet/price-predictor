@@ -149,3 +149,52 @@ class TestMetrics:
         assert metrics.affected_gate_f1 == 0.5
         assert metrics.zone_outcome_accuracy == 0.4
         assert metrics.mean_poisson_deviance == 1.2
+
+
+class TestPerRecordLosses:
+    """``measure``'s per-record rows sum the trainer's own loss terms (T104)."""
+
+    def test_a_record_s_total_is_the_per_entity_loss_of_that_record_alone(self):
+        import torch
+
+        from effects.application.breakdowns import TOTAL
+        from effects.application.gate_one import _record_losses
+        from effects.domain.effect_model import (
+            PER_ENTITY_FIELDS,
+            PER_ENTITY_WIDTH,
+            FieldType,
+            per_entity_loss,
+        )
+
+        torch.manual_seed(0)
+        fields = PER_ENTITY_FIELDS
+        outputs = torch.randn(2, 3, PER_ENTITY_WIDTH)
+        gate = torch.tensor([[1.0, 0.0, 1.0], [0.0, 0.0, 0.0]])
+        mask = torch.tensor([[1.0, 1.0, 1.0], [1.0, 1.0, 0.0]])
+        targets = {
+            spec.name: torch.zeros(
+                (2, 3, spec.arity) if spec.type is FieldType.MULTI_BINARY else (2, 3)
+            )
+            for spec in fields
+        }
+        for row in range(2):
+            expected, _ = per_entity_loss(
+                outputs[row : row + 1], gate[row : row + 1],
+                {k: v[row : row + 1] for k, v in targets.items()},
+                mask[row : row + 1], fields=fields,
+            )
+            losses = _record_losses(row, outputs, gate, targets, mask, fields)
+            assert losses[TOTAL] == pytest.approx(float(expected), rel=1e-5)
+
+    def test_a_record_with_nothing_affected_supervises_only_the_gate(self):
+        import torch
+
+        from effects.application.breakdowns import TOTAL
+        from effects.application.gate_one import _record_losses
+        from effects.domain.effect_model import PER_ENTITY_FIELDS, PER_ENTITY_WIDTH
+
+        outputs = torch.zeros(1, 2, PER_ENTITY_WIDTH)
+        losses = _record_losses(
+            0, outputs, torch.zeros(1, 2), {}, torch.ones(1, 2), PER_ENTITY_FIELDS,
+        )
+        assert set(losses) == {"gate", TOTAL}

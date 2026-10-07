@@ -1,39 +1,221 @@
 """Shared loaders and statistics for the effect-embedding probe battery.
 
 Measures nothing on its own. It builds the one table every other script in
-this directory reads: one row per unique ability text the shipping model
-encodes, with its 64-d ``e`` from the shipping cache, its ``e`` from the
-``taxonomy`` baseline's cache, and a set of hand-parsed features of the script
-and of the card that carries it.
+this directory reads: one row per unique ability text the checkpoint encodes,
+with its ``e`` from that checkpoint's cache, its ``e`` from the ``taxonomy``
+baseline's cache where one exists, and a set of hand-parsed features of the
+script and of the card that carries it.
 
-Unique means unique on the **script surface**: the text is
-``encoding_text(line, prose, "script")`` (the script, falling back to prose
-where a line has none), which is what the encoder actually reads. Two cards
-printing the same script share one row.
+Every script takes ``--checkpoint`` and ``--abilities-root`` (FR-072) and
+reads everything else from them through :func:`resolve_paths`: the
+vocabulary's encoding surface, the sidecar trees the checkpoint trained
+against, the curated corpus's manifest, and the width of ``e`` from the cache
+itself. Nothing is hardcoded to one run, so the battery runs unchanged on any
+sweep arm. Output goes under
+``output/effects/reports/embedding-probes-<checkpoint>-<date>/``.
+
+Unique means unique on the checkpoint's **encoding surface**: the text is
+``encoding_text(line, prose, surface)``, which is what the encoder actually
+reads. Two cards printing the same script share one row.
 
 Run nothing here directly; ``build_texts.py`` materialises the table.
 """
 
 from __future__ import annotations
 
+import argparse
+import datetime
 import json
 import re
 from collections import Counter
+from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 
 ROOT = Path(__file__).resolve().parents[2]
-OUT = ROOT / "output" / "effects" / "reports" / "embedding-probes-20260919"
-CACHE = OUT / "cache"
-ABILITIES = ROOT / "output" / "effects" / "abilities"
+REPORTS = ROOT / "output" / "effects" / "reports"
+DEFAULT_CHECKPOINT = ROOT / "models" / "effects" / "effect-model" / "latest.pt"
+DEFAULT_ABILITIES = ROOT / "output" / "effects" / "abilities"
+DEFAULT_CARDS_FOLDERS = (ROOT / "output" / "cardsfolder", ROOT / "output" / "tokenscripts")
+VARIANT_TREE = ROOT / "output" / "effects" / "variant-scripts"
 TREES = ("cardsfolder", "tokenscripts")
-MANIFEST = ROOT / "output" / "effects" / "corpus" / "manifest.json"
-TRAINING = ROOT / "output" / "effects" / "corpus" / "training"
-TEXT_TABLE = CACHE / "texts.pkl"
-PROFILE_TABLE = OUT / "effect_profiles.csv"
 SEED = 42
+
+
+def checkpoint_label(checkpoint: Path) -> str:
+    """The checkpoint's name in a report directory.
+
+    Its stem, except that every run's rolling checkpoint is ``latest.pt``, so
+    that one is named by its run directory as well and two arms' reports
+    never share a directory.
+    """
+    checkpoint = Path(checkpoint)
+    if checkpoint.stem == "latest":
+        return f"{checkpoint.parent.name}-{checkpoint.stem}"
+    return checkpoint.stem
+
+
+@dataclass(frozen=True)
+class ProbePaths:
+    """Everything one checkpoint's probe run reads and writes."""
+
+    checkpoint: Path
+    abilities_root: Path
+    out: Path
+    cards_folders: tuple[Path, ...]
+    surface: str
+    e_width: int
+    manifest: Path | None
+
+    @property
+    def label(self) -> str:
+        return checkpoint_label(self.checkpoint)
+
+    @property
+    def cache(self) -> Path:
+        return self.out / "cache"
+
+    @property
+    def text_table(self) -> Path:
+        return self.cache / "texts.pkl"
+
+    @property
+    def keymap(self) -> Path:
+        return self.cache / "keymap.pkl"
+
+    @property
+    def profile_table(self) -> Path:
+        return self.out / "effect_profiles.csv"
+
+    @property
+    def training(self) -> Path | None:
+        """The curated corpus's training shards, beside its manifest."""
+        return None if self.manifest is None else self.manifest.parent / "training"
+
+    def tree_root(self, tree: str) -> Path | None:
+        """The sidecar folder a source tree is read from, if this run has one."""
+        from effects.infrastructure.sidecar_io import tree_of_folder
+
+        for folder in self.cards_folders:
+            if tree_of_folder(folder) == tree:
+                return folder
+        return None
+
+    def reusable(self, relative: str) -> Path:
+        """``relative`` under this run's output, or the newest earlier run's.
+
+        ``build_texts.py`` and ``effect_profiles.py`` write the tables the
+        other scripts read; a probe run the next day finds them under the
+        previous day's directory for the same checkpoint rather than asking for
+        a rebuild.
+        """
+        mine = self.out / relative
+        if mine.exists():
+            return mine
+        earlier = sorted(
+            (path for path in self.out.parent.glob(
+                f"embedding-probes-{self.label}-*/{relative}"
+            )),
+            key=lambda path: path.parent.as_posix(),
+        )
+        return earlier[-1] if earlier else mine
+
+
+def add_probe_arguments(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
+    """The two flags every script takes (FR-072), plus the sidecar trees."""
+    parser.add_argument(
+        "--checkpoint", type=Path, default=DEFAULT_CHECKPOINT,
+        help="Effects checkpoint whose vocabulary and cache the probes read",
+    )
+    parser.add_argument(
+        "--abilities-root", type=Path, default=DEFAULT_ABILITIES,
+        help="The ability cache that checkpoint encoded",
+    )
+    parser.add_argument(
+        "--cards-folder", action="append", type=Path, dest="cards_folders",
+        default=None,
+        help=(
+            "Sidecar tree the cache rows align with (repeatable); defaults to "
+            "the trees the checkpoint recorded, else output/cardsfolder and "
+            "output/tokenscripts"
+        ),
+    )
+    return parser
+
+
+def cache_e_width(abilities_root: Path) -> int:
+    """The width of ``e``, read from the first shipping cache file found."""
+    from effects.domain.ability_cache_layout import ARRAY_KEY
+
+    for path in sorted(Path(abilities_root).rglob("*.npz")):
+        if "." in path.stem:
+            continue
+        with np.load(path) as data:
+            matrix = data[ARRAY_KEY]
+        if matrix.ndim == 2 and matrix.shape[1]:
+            return int(matrix.shape[1])
+    raise FileNotFoundError(
+        f"no ability cache under {abilities_root}; run encode-abilities first"
+    )
+
+
+def paths_for(
+    checkpoint: Path,
+    abilities_root: Path,
+    provenance,
+    *,
+    recorded_folders=(),
+    cards_folders=None,
+    today: datetime.date | None = None,
+) -> ProbePaths:
+    """The run's paths from a checkpoint's recorded provenance.
+
+    ``provenance`` is the checkpoint's ``SplitProvenance``: its vocabulary
+    fixes the encoding surface and its corpus path the manifest. Sidecar trees
+    come from ``cards_folders`` when given, else from what the checkpoint
+    recorded it trained against, else the converted defaults.
+    """
+    from effects.domain.ability_encoder import surface_of
+
+    checkpoint = Path(checkpoint)
+    date = (today or datetime.date.today()).strftime("%Y%m%d")
+    folders = tuple(Path(f) for f in (
+        cards_folders or recorded_folders or DEFAULT_CARDS_FOLDERS
+    ))
+    corpus = getattr(provenance, "corpus_path", "") or ""
+    manifest = Path(corpus) / "manifest.json" if corpus else None
+    return ProbePaths(
+        checkpoint=checkpoint,
+        abilities_root=Path(abilities_root),
+        out=REPORTS / f"embedding-probes-{checkpoint_label(checkpoint)}-{date}",
+        cards_folders=folders,
+        surface=surface_of(Path(provenance.vocab_path)),
+        e_width=cache_e_width(abilities_root),
+        manifest=manifest,
+    )
+
+
+def resolve_paths(args: argparse.Namespace) -> ProbePaths:
+    """Load ``--checkpoint`` and resolve the run's paths from it."""
+    from effects.infrastructure.effect_model_store import EffectModelStore
+
+    checkpoint = Path(args.checkpoint)
+    loaded = EffectModelStore(checkpoint.parent).load(checkpoint)
+    paths = paths_for(
+        checkpoint, args.abilities_root, loaded.provenance,
+        recorded_folders=getattr(loaded, "cards_folders", ()),
+        cards_folders=getattr(args, "cards_folders", None),
+    )
+    if loaded.encoder_config.e_dim != paths.e_width:
+        raise ValueError(
+            f"{args.abilities_root} holds {paths.e_width}-wide e but "
+            f"{checkpoint} encodes {loaded.encoder_config.e_dim}; point "
+            "--abilities-root at the cache this checkpoint wrote"
+        )
+    paths.out.mkdir(parents=True, exist_ok=True)
+    return paths
 
 # ── script parsing ──────────────────────────────────────────────────────
 
@@ -276,6 +458,19 @@ def weighted_corr(a: np.ndarray, b: np.ndarray, w: np.ndarray) -> float:
     return float(cov / np.sqrt(va * vb)) if va > 0 and vb > 0 else float("nan")
 
 
+def participation_ratio(share: np.ndarray) -> float:
+    """``(Σλ)² / Σλ²`` over the covariance eigenvalues (FR-073).
+
+    How many dimensions the space effectively uses: ``d`` when every
+    direction carries equal variance, 1 when one direction carries it all.
+    Scale-free, so it reads the same from variance shares as from eigenvalues.
+    """
+    share = np.asarray(share, dtype=np.float64)
+    total = float(share.sum())
+    squares = float((share ** 2).sum())
+    return total * total / squares if squares > 0 else float("nan")
+
+
 def pca(E: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """``(scores, components, variance share)`` of the centred matrix."""
     centred = E - E.mean(axis=0)
@@ -291,18 +486,35 @@ def pca(E: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     return scores, vt, share
 
 
-def load_texts() -> pd.DataFrame:
+def load_texts(paths: ProbePaths) -> pd.DataFrame:
     """The table ``build_texts.py`` wrote, with ``e_full`` / ``e_tax`` arrays."""
-    return pd.read_pickle(TEXT_TABLE)
+    return pd.read_pickle(paths.reusable("cache/texts.pkl"))
+
+
+def has_taxonomy(table: pd.DataFrame) -> bool:
+    """Whether every row carries a taxonomy-baseline ``e``.
+
+    A gen-2 arm need not have a taxonomy cache; ``build_texts.py`` then leaves
+    ``e_tax`` empty, and every column that reads it is omitted (FR-072).
+    """
+    return bool(len(table)) and all(
+        vector is not None and len(vector) for vector in table["e_tax"]
+    )
 
 
 def matrix(table: pd.DataFrame, column: str) -> np.ndarray:
     return np.stack(table[column].to_numpy()).astype(np.float64)
 
 
-def load_manifest_sets() -> tuple[set[str], dict[str, int]]:
-    """``(held-out texts, rarity table)`` from the curated corpus's manifest."""
-    manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
+def load_manifest_sets(paths: ProbePaths) -> tuple[set[str], dict[str, int]]:
+    """``(held-out texts, rarity table)`` from the curated corpus's manifest.
+
+    Empty for a checkpoint that names no curated corpus: every text then reads
+    as trained and unrated rather than the run failing.
+    """
+    if paths.manifest is None or not paths.manifest.exists():
+        return set(), {}
+    manifest = json.loads(paths.manifest.read_text(encoding="utf-8"))
     return set(manifest["held_out_texts"]), dict(manifest["rarity"])
 
 
@@ -358,24 +570,25 @@ def with_key_presence(table: pd.DataFrame) -> tuple[pd.DataFrame, list[str]]:
         [f"key_{k}" for k in keys]
 
 
-def with_profiles(table: pd.DataFrame) -> pd.DataFrame:
+def with_profiles(table: pd.DataFrame, paths: ProbePaths) -> pd.DataFrame:
     """Join the corpus effect profiles on the text, where they exist."""
-    if not PROFILE_TABLE.exists():
+    profile_table = paths.reusable("effect_profiles.csv")
+    if not profile_table.exists():
         table = table.copy()
         table["log_train_records"] = 0.0
         return table
-    profiles = pd.read_csv(PROFILE_TABLE)
+    profiles = pd.read_csv(profile_table)
     joined = table.merge(profiles, on="text", how="left")
     joined["n_records"] = joined["n_records"].fillna(0.0)
     joined["log_train_records"] = np.log1p(joined["n_records"])
     return joined
 
 
-def prepared() -> tuple[pd.DataFrame, list[str]]:
+def prepared(paths: ProbePaths) -> tuple[pd.DataFrame, list[str]]:
     """The text table with key-presence columns and effect profiles joined."""
-    table = load_texts()
+    table = load_texts(paths)
     table, key_columns = with_key_presence(table)
-    table = with_profiles(table)
+    table = with_profiles(table, paths)
     for column in CATEGORICAL:
         table[column] = table[column].astype(str)
     table["api_c"] = collapse_rare(table["api"])

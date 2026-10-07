@@ -22,6 +22,8 @@ from effects.domain.collection_caps import (
     DEFAULT_MANA_CAP,
     DEFAULT_PLAYABILITY_RATE,
     DEFAULT_PROBES_PER_GAME,
+    DEFAULT_RANDOM_SEAT_PROBABILITY,
+    DEFAULT_RANDOM_SEAT_SHARE,
     DEFAULT_SNAPSHOT_TIERS,
     CollectionCaps,
     parse_snapshot_tiers,
@@ -35,6 +37,8 @@ from sealed.infrastructure.cli import (
     EFFECT_PLAYABILITY_RATE,
     EFFECT_PROBE_KEYWORDS,
     EFFECT_PROBES_PER_GAME,
+    EFFECT_RANDOM_SEAT_PROBABILITY,
+    EFFECT_RANDOM_SEAT_SHARE,
     EFFECT_SNAPSHOT_TIERS,
     _effect_collection_caps,
 )
@@ -81,6 +85,8 @@ class TestTheTwoSidesAgree:
         assert EFFECT_PROBE_KEYWORDS == CollectionCaps().probe_keywords
         assert EFFECT_LEGALITY_RATE == DEFAULT_LEGALITY_RATE
         assert EFFECT_SNAPSHOT_TIERS == DEFAULT_SNAPSHOT_TIERS
+        assert EFFECT_RANDOM_SEAT_SHARE == DEFAULT_RANDOM_SEAT_SHARE
+        assert EFFECT_RANDOM_SEAT_PROBABILITY == DEFAULT_RANDOM_SEAT_PROBABILITY
 
     def test_the_property_names_match(self):
         """Both sides must spell the -D properties the worker reads identically."""
@@ -245,3 +251,34 @@ class TestTheLegalityRate:
     def test_it_reaches_the_property_the_worker_samples_from(self):
         properties = CollectionCaps(legality_rate=0.25).as_system_properties()
         assert properties["effect.legality.rate"] == "0.25"
+
+
+class TestTheRandomSeat:
+    """FR-021: both knobs travel to the worker like every other cap."""
+
+    def test_it_is_off_by_default(self):
+        caps = CollectionCaps()
+        assert caps.random_seat_share == 0.0
+        assert caps.random_seat_probability == 0.0
+
+    def test_both_reach_their_properties(self):
+        properties = CollectionCaps(
+            random_seat_share=0.125, random_seat_probability=0.25,
+        ).as_system_properties()
+        assert properties["effect.random.seat.share"] == "0.125"
+        assert properties["effect.random.seat.probability"] == "0.25"
+
+    def test_the_sealed_supervisor_writes_the_same_properties(self):
+        args = argparse.Namespace(
+            random_seat_share=0.125, random_seat_probability=0.25,
+        )
+        sealed_side = _effect_collection_caps(args)
+        assert sealed_side["effect.random.seat.share"] == "0.125"
+        assert sealed_side["effect.random.seat.probability"] == "0.25"
+
+    def test_an_unset_probability_travels_as_the_default(self):
+        """argparse leaves it None; the share is 0 whenever it is."""
+        args = argparse.Namespace(random_seat_probability=None)
+        assert _effect_collection_caps(args)["effect.random.seat.probability"] == (
+            str(DEFAULT_RANDOM_SEAT_PROBABILITY)
+        )

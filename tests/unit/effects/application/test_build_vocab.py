@@ -153,21 +153,24 @@ class TestTheKeywordScanFollowsTheSurface:
         # The reminder text is still scanned: it is what prose expands to.
         assert "blocked" in vocab
 
-    def test_the_script_surface_takes_both(self, scripted, tmp_path):
-        # Its own file, and the engine-coded keywords generate no script and
-        # keep their template — so the template is scanned on both surfaces.
+    def test_the_script_surface_does_not_take_the_script_either(
+        self, scripted, tmp_path,
+    ):
+        """No expansion substitutes the generated script, on either surface
+        (FR-020), so scanning it would only seed tokens nothing reads."""
         config = _config(
             scripted, tmp_path, surface=SURFACE_SCRIPT,
             vocab_path=tmp_path / "vocab-script.txt", target_size=5000,
         )
         run(config)
         vocab = load_vocabulary(config.vocab_path)
-        assert "activezones" in vocab
+        assert "activezones" not in vocab
+        assert "active" not in vocab and "zones" not in vocab
         assert "blocked" in vocab
 
 
 class TestSeededSpecials:
-    def test_the_five_specials_are_all_present(self, corpus, tmp_path):
+    def test_the_specials_are_all_present(self, corpus, tmp_path):
         config = _config(corpus, tmp_path)
         run(config)
         vocab = load_vocabulary(config.vocab_path)
@@ -189,7 +192,7 @@ class TestSeededSpecials:
         assert vocab["[CLS]"] < 8
 
     def test_the_specials_survive_an_aggressive_target_size(self, corpus, tmp_path):
-        config = _config(corpus, tmp_path, target_size=80)
+        config = _config(corpus, tmp_path, target_size=100)
         run(config)
         vocab = load_vocabulary(config.vocab_path)
         for token in SEEDED_SPECIALS:
@@ -244,14 +247,14 @@ class TestScanSources:
 
 class TestTargetSize:
     def test_target_size_caps_the_vocabulary(self, corpus, tmp_path):
-        config = _config(corpus, tmp_path, target_size=90)
+        config = _config(corpus, tmp_path, target_size=100)
         size = run(config)
-        assert size <= 90
+        assert size <= 100
         assert len(load_vocabulary(config.vocab_path)) == size
 
     def test_an_uncapped_build_keeps_everything(self, corpus, tmp_path):
         big = run(_config(corpus, tmp_path, target_size=10_000))
-        small = run(_config(corpus, tmp_path, target_size=90))
+        small = run(_config(corpus, tmp_path, target_size=100))
         assert big > small
 
     def test_a_target_below_the_seeded_count_is_rejected(self, corpus, tmp_path):
@@ -307,8 +310,10 @@ class TestSurfaces:
         )
         run(config)
         vocab = load_vocabulary(config.vocab_path)
-        assert "addkeyword" in vocab
-        assert "putcounter" in vocab
+        # Camel case splits on the script surface (FR-008), keys and API
+        # types alike.
+        assert {"add", "keyword", "put", "counter"} <= vocab.keys()
+        assert "addkeyword" not in vocab
 
     def test_building_the_script_surface_leaves_the_prose_file_untouched(
         self, corpus, tmp_path,
@@ -333,3 +338,123 @@ class TestOutput:
         config = _config(corpus, tmp_path)
         size = run(config)
         assert sorted(load_vocabulary(config.vocab_path).values()) == list(range(size))
+
+
+def _scripted_corpus(corpus, lines: list[str], copies: int = 2) -> None:
+    """Sidecars whose lines carry ``lines`` as script text, on ``copies`` cards."""
+    cards, _tokens, _keywords = corpus
+    for copy in range(copies):
+        stem = f"z/scripted_{copy}"
+        script_file = f"cardsfolder/{stem}.txt"
+        (cards / "z").mkdir(exist_ok=True)
+        (cards / f"{stem}.txt").write_text(
+            _CARD.replace("serra angel", f"scripted {copy}"), encoding="utf-8",
+        )
+        write_sidecar(
+            ProvenanceSidecar(
+                card=f"scripted {copy}", script_file=script_file,
+                lines=tuple(
+                    SidecarLine(
+                        line_index=4 + row, line_kind="triggered",
+                        provenance=(ProvenanceKey(script_file, 0, "trigger", row),),
+                        script_text=text,
+                    )
+                    for row, text in enumerate(lines)
+                ),
+            ),
+            sidecar_path_for(cards / f"{stem}.txt"),
+        )
+
+
+#: A gen-2 chained trigger text, rendered as the record-schema delta's example.
+_CHAIN = (
+    "Execute$ SV1 | Mode$ ChangesZone [SEG] SV1: DB$ Draw | NumCards$ 1 | "
+    "SubAbility$ SV2 [SEG] SV2: DB$ PutCounter | CounterType$ P1P1"
+)
+
+
+class TestScriptSurfaceSeeding:
+    """FR-002a, FR-009b, FR-019: what no ``--target-size`` may drop."""
+
+    def _script(self, corpus, tmp_path, **overrides) -> BuildVocabConfig:
+        return _config(
+            corpus, tmp_path, surface=SURFACE_SCRIPT,
+            vocab_path=tmp_path / "vocab-script.txt", **overrides,
+        )
+
+    def test_chain_labels_and_the_separator_are_seeded(self, corpus, tmp_path):
+        _scripted_corpus(corpus, [_CHAIN])
+        config = self._script(corpus, tmp_path)
+        run(config)
+        vocab = load_vocabulary(config.vocab_path)
+        assert {"[SEG]", "sv1", "sv2"} <= vocab.keys()
+        assert "sv3" not in vocab
+
+    def test_a_counter_type_is_one_token(self, corpus, tmp_path):
+        _scripted_corpus(corpus, [_CHAIN])
+        config = self._script(corpus, tmp_path)
+        run(config)
+        assert "p1p1" in load_vocabulary(config.vocab_path)
+
+    def test_a_key_used_once_survives_a_small_target_size(self, corpus, tmp_path):
+        """Seeded, not counted: a hapax key would fall under the threshold."""
+        _scripted_corpus(corpus, ["DB$ Pump | RarelyUsedParam$ 1"], copies=1)
+        config = self._script(corpus, tmp_path, target_size=140)
+        run(config)
+        vocab = load_vocabulary(config.vocab_path)
+        assert len(vocab) <= 140
+        assert {"rarely", "used", "param"} <= vocab.keys()
+
+    def test_every_template_word_survives_a_small_target_size(self, corpus, tmp_path):
+        config = _config(corpus, tmp_path, target_size=100)
+        run(config)
+        vocab = load_vocabulary(config.vocab_path)
+        for word in ("attacking", "doesn", "tap", "never", "block"):
+            assert word in vocab
+
+    def test_a_keyword_lines_filled_values_are_seeded(self, corpus, tmp_path):
+        """A line's own values, formatted, are what its expansion reads."""
+        _cards, _tokens, keywords = corpus
+        keywords.write_text(json.dumps({"Ward": {
+            "reminder_template": "Counter it unless that player %s.",
+            "generated_script": None, "formatter": "Ward",
+        }}), encoding="utf-8")
+        _scripted_corpus(corpus, ["Ward:PayLife<3>"], copies=1)
+        config = self._script(corpus, tmp_path, target_size=140)
+        run(config)
+        assert {"pays", "life"} <= load_vocabulary(config.vocab_path).keys()
+
+    def test_a_definition_that_would_expand_to_unk_fails_the_build(
+        self, corpus, tmp_path, monkeypatch,
+    ):
+        import effects.application.build_vocab as module
+
+        monkeypatch.setattr(
+            module, "seed_tokens",
+            lambda surface, definitions, staged: module.SeededTokens(),
+        )
+        with pytest.raises(module.KeywordExpansionUnknownError, match="Vigilance"):
+            run(_config(corpus, tmp_path, target_size=80))
+
+
+class TestScriptSurfaceReport:
+    """FR-006, FR-011: the numbers a script build prints."""
+
+    def test_the_report_lines_are_printed(self, corpus, tmp_path, caplog):
+        _scripted_corpus(corpus, [_CHAIN, "Description$ Some free prose. | DB$ Draw"])
+        config = _config(
+            corpus, tmp_path, surface=SURFACE_SCRIPT,
+            vocab_path=tmp_path / "vocab-script.txt",
+        )
+        with caplog.at_level("INFO"):
+            run(config)
+        assert "Script-line length in tokens" in caplog.text
+        assert "0 over 512" in caplog.text
+        assert "Unknown-token rate over script parameters" in caplog.text
+        assert "Camel-case split produces" in caplog.text
+        assert "chain labels" in caplog.text
+
+    def test_the_prose_surface_prints_no_script_numbers(self, corpus, tmp_path, caplog):
+        with caplog.at_level("INFO"):
+            run(_config(corpus, tmp_path))
+        assert "Script-line length" not in caplog.text

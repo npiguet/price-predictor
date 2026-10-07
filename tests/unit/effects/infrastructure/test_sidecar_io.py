@@ -473,3 +473,43 @@ class TestOptionKeys:
                 key.pop("option", None)
         sidecar = sidecar_from_dict(data)
         assert all(key.option is None for line in sidecar.lines for key in line.provenance)
+
+
+class TestSidecarRoots:
+    """``--cards-folder`` values to a cache's ``tree -> folder`` (FR-063b)."""
+
+    def test_a_folder_named_for_its_tree_is_that_tree(self):
+        from effects.infrastructure.sidecar_io import tree_of_folder
+
+        assert tree_of_folder(Path("output/cardsfolder/")) == "cardsfolder"
+        assert tree_of_folder(Path("output/tokenscripts")) == "tokenscripts"
+
+    def test_a_kept_aside_copy_keeps_its_original_tree(self):
+        from effects.infrastructure.sidecar_io import sidecar_roots
+
+        roots = sidecar_roots(
+            [Path("output/gen1-cardsfolder"), Path("output/gen1-tokenscripts")],
+            Path("output/effects/variant-scripts"),
+        )
+        assert roots == {
+            "cardsfolder": Path("output/gen1-cardsfolder"),
+            "tokenscripts": Path("output/gen1-tokenscripts"),
+            "variant-scripts": Path("output/effects/variant-scripts"),
+        }
+
+    def test_the_script_vocabularies_read_every_segment(self, tmp_path):
+        from effects.infrastructure.sidecar_io import script_vocabularies
+
+        key = ProvenanceKey("cardsfolder/a/a.txt", 0, "spell", 0)
+        write_sidecar(ProvenanceSidecar(
+            card="a", script_file="cardsfolder/a/a.txt",
+            lines=(SidecarLine(
+                0, "spell", (key,), script_api_type="Draw",
+                script_param_keys=("NumCards", "SP", "SubAbility"),
+                script_text="NumCards$ 1 | SP$ Draw | SubAbility$ SV1 "
+                            "[SEG] SV1: DB$ Pump | NumAtt$ +1",
+            ),),
+        ), tmp_path / "cardsfolder" / "a" / "a.provenance.json")
+        api_types, keys = script_vocabularies([tmp_path / "cardsfolder"])
+        assert api_types == ["Draw"]
+        assert {"DB", "NumAtt", "NumCards", "SP", "SubAbility"} <= set(keys)

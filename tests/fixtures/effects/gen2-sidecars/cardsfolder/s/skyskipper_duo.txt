@@ -1,0 +1,6 @@
+name: skyskipper duo
+mana cost: {4}{U}
+types: creature bird frog
+power toughness: 3/3
+static: flying
+triggered: when CARDNAME enters, exile up to one other target creature you control. return it to the battlefield under its owner's control at the beginning of the next end step. return the exiled card to the battlefield.

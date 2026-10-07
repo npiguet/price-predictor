@@ -44,6 +44,7 @@ import torch
 from effects.application.gate_one import measure
 from effects.application.surface_batching import (
     IDENTITY_TABLE_SIZE,
+    NoiseState,
     SurfaceBatcher,
 )
 from effects.application.train_effect_model import (
@@ -60,6 +61,7 @@ from effects.application.train_effect_model import (
     ability_text_of,
     batches_without_replacement,
     check_holdout,
+    effective_games,
     epoch_shards,
     fields_for_epoch,
     learning_rate_at,
@@ -74,9 +76,15 @@ from effects.application.train_effect_model import (
 from effects.domain.ability_encoder import (
     AbilityEncoder,
     AbilityEncoderConfig,
+    TruncationLog,
+    log_truncation,
     surface_of,
 )
-from effects.domain.ability_tokenizer import AbilityTokenizer
+from effects.domain.ability_tokenizer import (
+    INFERENCE_KEYWORD_EXPAND_P,
+    AbilityTokenizer,
+)
+from effects.domain.damage_step_keywords import KeywordResolver
 from effects.domain.effect_head_input import (
     SlotKind,
     act_features,
@@ -85,19 +93,34 @@ from effects.domain.effect_head_input import (
     player_features,
 )
 from effects.domain.effect_model import (
+    CREATED_OBJECTS_WIDTH,
     FLOOR_EPSILON,
     SAMPLING_CLASSES,
+    VERDICT_WIDTH,
     EffectModel,
     EffectModelConfig,
     EntityTargetBatch,
     FieldSpec,
     active_fields,
+    api_loss,
     constant_predictor_floor,
+    created_objects_loss,
     entity_target_tensors,
+    mlm_loss,
     per_entity_loss,
+    value_loss,
+    verdict_loss,
 )
-from effects.domain.effect_targets import derive_targets
+from effects.domain.effect_targets import (
+    created_objects_targets,
+    derive_targets,
+    supervises_created_objects,
+    verdict_targets,
+)
+from effects.domain.rarity import RARITY_BUCKETS, rarity_bucket
 from effects.domain.records import EffectRecord
+from effects.domain.rule_families import rule_family
+from effects.domain.value_targets import params, segments, value_targets
 from effects.infrastructure.effect_model_store import (
     EffectCheckpoint,
     EffectModelStore,
@@ -105,7 +128,11 @@ from effects.infrastructure.effect_model_store import (
     content_hash,
 )
 from effects.infrastructure.model_runner import IDENTITY_TABLE_KEY
-from effects.infrastructure.sidecar_io import SidecarCache
+from effects.infrastructure.sidecar_io import (
+    SidecarCache,
+    script_vocabularies,
+    sidecar_roots,
+)
 from price_predictor.infrastructure.tokenizer_store import load_vocabulary
 from price_predictor.infrastructure.torch_training import clip_per_group
 
@@ -242,6 +269,38 @@ def _format_floor(floor: Mapping[str, float]) -> str:
     return ", ".join(f"{name} {value:.3f}" for name, value in ranked)
 
 
+#: Rarity-bucket label for a record with no acting text (combat, legality).
+NO_TEXT_BUCKET = "no-text"
+
+#: The loss terms beside the per-entity loss (FR-060a, FR-058, FR-060b). The
+#: first two are shipped heads and enter the validation loss; the last three
+#: are training-only and enter the training loss at their flags' weights.
+SHIPPED_TERMS: tuple[str, ...] = ("verdict", "created_objects")
+TRAINING_TERMS: tuple[str, ...] = ("value", "mlm", "api")
+
+
+def format_shares(counts: Mapping[str, int], order: Sequence[str] = ()) -> str:
+    """``label share%`` per label, in ``order`` first and then largest first."""
+    total = sum(counts.values())
+    if not total:
+        return "none"
+    ordered = [label for label in order if label in counts] + sorted(
+        (label for label in counts if label not in order),
+        key=lambda label: -counts[label],
+    )
+    return ", ".join(
+        f"{label} {100.0 * counts[label] / total:.1f}%" for label in ordered
+    )
+
+
+def _format_terms(terms: Mapping[str, float]) -> str:
+    """The head terms of the loss, or nothing when there were none."""
+    if not terms:
+        return ""
+    body = ", ".join(f"{name} {value:.3f}" for name, value in terms.items())
+    return f"\n  heads: {body}"
+
+
 class FloorCache:
     """The constant-predictor floor, held across the epochs that share it.
 
@@ -328,6 +387,11 @@ class TrainingLoop:
         # ability is encoded from and the vocabulary it is tokenized against can
         # never disagree.
         self.surface = surface_of(config.vocab_path)
+        #: One per run, handed to every batcher, so a text the encoder's window
+        #: cuts short is reported once rather than every batch (FR-006).
+        self.truncations = TruncationLog(
+            log_truncation(logger, "train-effect-model"),
+        )
         self.identity_table = None
         #: Resolved once here rather than read from the config at each use, so
         #: the value logged at startup and written to the checkpoint is the one
@@ -356,6 +420,25 @@ class TrainingLoop:
         self.game_disjoint: list = []
         self.probe: list = []
         self.present: set[str] = set()
+        #: Noise on every training batch's ``e`` (FR-056), its ratio ramping
+        #: in over the first epoch's steps. Never handed to a scoring batcher.
+        self.noise = NoiseState(config.e_noise, config.steps_per_epoch)
+        #: The script-API head's classes (FR-060b), fixed before the model is
+        #: built and recorded on the checkpoint.
+        self.api_types: list[str] = []
+        self.param_keys: list[str] = []
+        self._api_targets: dict[str, tuple[int, tuple[int, ...]]] = {}
+        #: The last ``_loss_for``'s head terms, as device tensors.
+        self._last_terms: dict[str, torch.Tensor] = {}
+        #: This epoch's head terms, summed on the device and read once.
+        self._epoch_terms: dict[str, torch.Tensor] = {}
+        self._epoch_term_steps = 0
+        #: This epoch's trained records by rarity bucket and by rule family
+        #: (FR-055), counted on the host from each batch's plan.
+        self._bucket_counts: defaultdict[str, int] = defaultdict(int)
+        self._family_counts: defaultdict[str, int] = defaultdict(int)
+        self._resolver: KeywordResolver | None = None
+        self._resolver_for = None
 
     # ── setup ───────────────────────────────────────────────────────────
 
@@ -369,13 +452,24 @@ class TrainingLoop:
             )
 
             definitions = load_keyword_definitions(keyword_path)
-        return AbilityTokenizer(vocab, definitions)
+        return AbilityTokenizer(vocab, definitions, surface=self.surface)
 
     def _build_sidecars(self) -> SidecarCache:
-        roots = {Path(f).name: Path(f) for f in self.config.cards_folders}
+        return SidecarCache(sidecar_roots(
+            self.config.cards_folders, self.config.variant_scripts,
+        ))
+
+    def _script_vocabularies(self) -> tuple[list[str], list[str]]:
+        """The script-API head's two vocabularies, read off the sidecars.
+
+        Only when the head trains: the read is every sidecar of every tree.
+        """
+        if self.config.api_weight <= 0.0:
+            return [], []
+        folders = list(self.config.cards_folders)
         if self.config.variant_scripts:
-            roots["variant-scripts"] = Path(self.config.variant_scripts)
-        return SidecarCache(roots)
+            folders.append(Path(self.config.variant_scripts))
+        return script_vocabularies(folders)
 
     def _load_validation(self) -> None:
         """Read the corpus's fixed samples; nothing is drawn here (FR-089)."""
@@ -460,8 +554,12 @@ class TrainingLoop:
             widths=widths,
             device=self.device,
             withhold_keyword=self.config.withhold_keyword,
-            keyword_expand_p=self.config.keyword_expand_p if training else 0.0,
+            keyword_expand_p=(
+                self.config.keyword_expand_p if training
+                else INFERENCE_KEYWORD_EXPAND_P
+            ),
             context_dropout=self.config.context_dropout if training else 0.0,
+            noise=self.noise if training else None,
             # A dedicated stream for scoring: sharing the training generator
             # made how many validation batches ran decide which records the
             # next epoch's shuffle drew, so a run's training path moved with
@@ -471,6 +569,7 @@ class TrainingLoop:
                 else random.Random(f"{self.seed}:validation")
             ),
             identity_table=self.identity_table,
+            truncations=self.truncations,
         )
 
     # ── stepping ────────────────────────────────────────────────────────
@@ -510,9 +609,10 @@ class TrainingLoop:
         with torch.autocast(
             device_type="cuda", dtype=torch.bfloat16, enabled=self.autocast,
         ):
-            batch, surfaces = self._batcher(
+            batcher = self._batcher(
                 tokenizer, sidecars, widths, training=training,
-            ).build(records, encoder)
+            )
+            batch, surfaces = batcher.build(records, encoder)
             hidden = model(**batch)
             outputs = model.per_entity(hidden)
 
@@ -544,7 +644,125 @@ class TrainingLoop:
                 mask.to(self.device), fields=fields,
                 report_parts=report_parts,
             )
-        return loss, parts
+            terms = self._head_terms(
+                records, batcher, encoder, model, hidden, training=training,
+            )
+        self._last_terms = terms
+        # The shipped heads join the per-entity loss at unit weight (FR-060a)
+        # and are what validation scores; the training-only heads are added
+        # for the backward pass alone, so the train and validation numbers
+        # printed side by side measure one objective.
+        shipped = loss
+        for name in SHIPPED_TERMS:
+            if name in terms:
+                shipped = shipped + terms[name]
+        total = shipped
+        weights = {
+            "value": self.config.value_weight,
+            "mlm": self.config.mlm_weight,
+            "api": self.config.api_weight,
+        }
+        for name in TRAINING_TERMS:
+            if name in terms:
+                total = total + weights[name] * terms[name]
+        return total, parts, shipped
+
+    def _head_terms(
+        self, records, batcher, encoder, model, hidden, *, training: bool,
+    ) -> dict[str, torch.Tensor]:
+        """Every loss term beside the per-entity one, as device tensors.
+
+        The verdict head reads ``[ACT]`` — a decision's verdict bits, a cost
+        half's mana paid, a trigger's fired bit — and the created-objects head
+        reads ``[GLOBAL]`` on effect halves and in-place rewrites (FR-060a).
+        In training only, the value and script-API heads read the batch's
+        encoded ``e`` rows, one per unique text, and the MLM head a masked
+        second pass over the same texts (FR-058, FR-060b). A head whose weight
+        is zero is not computed at all.
+        """
+        terms: dict[str, torch.Tensor] = {}
+        verdicts = [verdict_targets(record) for record in records]
+        if any(v is not None for v in verdicts):
+            target = torch.tensor(
+                [v[0] if v else [0.0] * VERDICT_WIDTH for v in verdicts],
+            )
+            mask = torch.tensor(
+                [v[1] if v else [False] * VERDICT_WIDTH for v in verdicts],
+            )
+            terms["verdict"] = verdict_loss(
+                model.verdict(hidden).float(), target.to(self.device),
+                mask.to(self.device),
+            )
+        created = [supervises_created_objects(record) for record in records]
+        if any(created):
+            target = torch.tensor([
+                created_objects_targets(record) if wanted
+                else [0.0] * CREATED_OBJECTS_WIDTH
+                for record, wanted in zip(records, created)
+            ])
+            terms["created_objects"] = created_objects_loss(
+                model.created_objects(hidden).float(), target.to(self.device),
+                torch.tensor(created).to(self.device),
+            )
+        if not training:
+            return terms
+
+        encoded = getattr(batcher, "encoded", None)
+        if encoded is None or encoded.matrix is None:
+            return terms
+        matrix = encoded.matrix
+        if self.config.value_weight > 0.0:
+            rows = [value_targets(text) for text in encoded.texts]
+            terms["value"] = value_loss(
+                model.value_head(matrix).float(),
+                torch.tensor([row.values for row in rows]).to(self.device),
+                torch.tensor([row.mask for row in rows]).to(self.device),
+            )
+        if self.config.api_weight > 0.0 and model.api_type_head is not None:
+            types, keys = self._api_batch(encoded)
+            terms["api"] = api_loss(
+                model.api_type_head(matrix).float(), types.to(self.device),
+                model.param_key_head(matrix).float()
+                if model.param_key_head is not None else None,
+                keys.to(self.device) if model.param_key_head is not None else None,
+            )
+        if self.config.mlm_weight > 0.0 and model.mlm_head is not None:
+            masked = batcher.mlm_inputs(encoder, self.config.mlm_mask_prob)
+            if masked is not None:
+                token_hidden, token_targets, token_mask = masked
+                terms["mlm"] = mlm_loss(
+                    model.mlm_head(token_hidden).float(), token_targets, token_mask,
+                )
+        return terms
+
+    def _api_batch(self, encoded) -> tuple[torch.Tensor, torch.Tensor]:
+        """The script-API head's targets for the batch's texts.
+
+        The line's ``script_api_type`` (``-1`` where it has none or one outside
+        the vocabulary) and the multi-hot of its parameter keys over every
+        segment of its chained text, cached per text.
+        """
+        type_index = {name: i for i, name in enumerate(self.api_types)}
+        key_index = {name: i for i, name in enumerate(self.param_keys)}
+        types: list[int] = []
+        keys = torch.zeros(len(encoded.texts), max(len(self.param_keys), 1))
+        for row, text in enumerate(encoded.texts):
+            cached = self._api_targets.get(text)
+            if cached is None:
+                line = encoded.lines.get(text)
+                api = getattr(line, "script_api_type", None)
+                found = set(getattr(line, "script_param_keys", ()) or ())
+                for segment in segments(getattr(line, "script_text", None) or ""):
+                    found.update(params(segment))
+                cached = (
+                    type_index.get(api, -1),
+                    tuple(sorted(key_index[k] for k in found if k in key_index)),
+                )
+                self._api_targets[text] = cached
+            types.append(cached[0])
+            for column in cached[1]:
+                keys[row, column] = 1.0
+        return torch.tensor(types, dtype=torch.long), keys
 
     def _weighted(self, records: list, sidecars: SidecarCache) -> list[float]:
         """Rarity weights for a shard's records, from the manifest's table (FR-086)."""
@@ -561,7 +779,57 @@ class TrainingLoop:
                 "text(s) (%.1f%%); the rest weigh by this shard's own game count.",
                 found, distinct, share,
             )
-        return sample_weights(records, text_of, rarity=self.rarity)
+        return sample_weights(
+            records, text_of, rarity=self.rarity, class_of=sampling_class,
+        )
+
+    def _shard_labels(
+        self, records: list, sidecars: SidecarCache,
+    ) -> dict[str, tuple[str, str]]:
+        """``record_id -> (rarity bucket, rule family)`` for one shard's records.
+
+        Computed once per shard, so each step's count is a dict lookup per
+        planned record. The bucket reads the corpus-wide rarity table where it
+        names the text and the shard's own game count where it does not, the
+        same fallback the weights use.
+        """
+        def text_of(record: EffectRecord) -> str | None:
+            return ability_text_of(record, sidecars, self.surface)
+
+        texts = {record.record_id: text_of(record) for record in records}
+        shard_games = effective_games(records, lambda r: texts[r.record_id])
+        resolver = self._keyword_resolver(sidecars)
+        labels: dict[str, tuple[str, str]] = {}
+        for record in records:
+            text = texts[record.record_id]
+            if text is None:
+                bucket = NO_TEXT_BUCKET
+            else:
+                games = (self.rarity or {}).get(text, shard_games.get(text, 1))
+                bucket = rarity_bucket(games)
+            labels[record.record_id] = (
+                bucket, rule_family(record, sidecars, resolver=resolver),
+            )
+        return labels
+
+    def _keyword_resolver(self, sidecars) -> KeywordResolver:
+        """One resolver for the run, so its per-key memo outlives a shard."""
+        if self._resolver is None or self._resolver_for is not sidecars:
+            self._resolver = KeywordResolver(sidecars)
+            self._resolver_for = sidecars
+        return self._resolver
+
+    def _training_settings(self) -> dict:
+        """The flags a sweep arm differs by, and the script-API vocabularies (FR-063)."""
+        return {
+            "e_noise": self.config.e_noise,
+            "value_weight": self.config.value_weight,
+            "mlm_weight": self.config.mlm_weight,
+            "mlm_mask_prob": self.config.mlm_mask_prob,
+            "api_weight": self.config.api_weight,
+            "api_types": list(self.api_types),
+            "param_keys": list(self.param_keys),
+        }
 
     # ── the run ─────────────────────────────────────────────────────────
 
@@ -616,8 +884,15 @@ class TrainingLoop:
         encoder_config = AbilityEncoderConfig(
             vocab_size=tokenizer.vocab_size,
             e_dim=self.config.e_dim,
-            e_noise=self.config.e_noise,
+            d_model=self.config.encoder_d_model,
+            n_layers=self.config.encoder_layers,
         )
+        self.api_types, self.param_keys = self._script_vocabularies()
+        if self.api_types:
+            logger.info(
+                "Script-API head over %d API types and %d parameter keys.",
+                len(self.api_types), len(self.param_keys),
+            )
         model_config = EffectModelConfig(
             global_features=widths[SlotKind.GLOBAL],
             act_features=widths[SlotKind.ACT],
@@ -625,6 +900,9 @@ class TrainingLoop:
             card_features=widths[SlotKind.CARD],
             e_dim=self.config.e_dim,
             vocab_size=tokenizer.vocab_size,
+            n_api_types=len(self.api_types),
+            n_param_keys=len(self.param_keys),
+            encoder_d_model=encoder_config.d_model,
         )
         encoder = AbilityEncoder(encoder_config).to(self.device)
         model = EffectModel(model_config).to(self.device)
@@ -665,6 +943,10 @@ class TrainingLoop:
             # nothing looks at until the epoch closes.
             running = torch.zeros((), device=self.device)
             taken = 0
+            self._epoch_terms = {}
+            self._epoch_term_steps = 0
+            self._bucket_counts.clear()
+            self._family_counts.clear()
             fields = fields_for_epoch(
                 self.config, present=frozenset(self.present), epoch=epoch,
             )
@@ -803,6 +1085,19 @@ class TrainingLoop:
                 metrics.zone_outcome_accuracy, metrics.mean_poisson_deviance,
                 _format_parts(card_parts, self.floor.floor),
             )
+            # One read per term per epoch: summed on the device all epoch.
+            steps = max(self._epoch_term_steps, 1)
+            logger.info(
+                "epoch %d | trained records by rarity bucket: %s%s\n"
+                "  by rule family: %s",
+                epoch,
+                format_shares(self._bucket_counts, (*RARITY_BUCKETS, NO_TEXT_BUCKET)),
+                _format_terms({
+                    name: float(value) / steps
+                    for name, value in self._epoch_terms.items()
+                }),
+                format_shares(self._family_counts),
+            )
             if sidecars.unresolved:
                 worst = sorted(
                     sidecars.unresolved.items(), key=lambda kv: -kv[1],
@@ -836,6 +1131,10 @@ class TrainingLoop:
                         {IDENTITY_TABLE_KEY: self.identity_table.state_dict()}
                         if self.identity_table is not None else {}
                     ),
+                    cards_folders=tuple(
+                        str(folder) for folder in self.config.cards_folders
+                    ),
+                    training_settings=self._training_settings(),
                 ))
             if stopper.should_stop:
                 logger.info(
@@ -880,6 +1179,7 @@ class TrainingLoop:
             return step, taken
 
         weights = self._weighted(training, sidecars)
+        labels = self._shard_labels(training, sidecars)
         batches = batches_without_replacement(
             training, weights, batch_size=self.config.batch_size, rng=self.rng,
         )
@@ -891,6 +1191,7 @@ class TrainingLoop:
         shard_steps = 0
         parts: dict[str, float] = {}
         norms: dict[str, float] = {}
+        heads: dict[str, float] = {}
         learning_rate = 0.0
         for index in range(budget):
             for group in optimizer.param_groups:
@@ -898,6 +1199,12 @@ class TrainingLoop:
                     step, warmup=warmup,
                 )
             plan = next(batches)
+            # Counted from the plan, on the host: no device read (FR-055).
+            for record in plan.records:
+                bucket, family = labels[record.record_id]
+                self._bucket_counts[bucket] += 1
+                self._family_counts[family] += 1
+            self.noise.step = step
             # Decided before the forward pass: the decomposition has to be
             # asked for while the loss is being computed, not after.
             #
@@ -913,7 +1220,10 @@ class TrainingLoop:
             )
             if computed is None:
                 continue
-            loss, batch_parts = computed
+            loss, batch_parts, *rest = computed
+            # The objective validation scores; `loss` adds the training-only
+            # heads on top for the backward pass.
+            shipped = rest[0] if rest else loss
             (loss / self.config.grad_accum).backward()
             if (step + 1) % self.config.grad_accum == 0:
                 clipped = clip_per_group(optimizer, max_norm=MAX_GRAD_NORM)
@@ -921,8 +1231,18 @@ class TrainingLoop:
                     norms = clipped
                 optimizer.step()
                 optimizer.zero_grad(set_to_none=True)
-            running += loss.detach()
-            shard_loss += loss.detach()
+            running += shipped.detach()
+            shard_loss += shipped.detach()
+            for name, value in self._last_terms.items():
+                held = self._epoch_terms.get(name)
+                self._epoch_terms[name] = (
+                    value.detach() if held is None else held + value.detach()
+                )
+            self._epoch_term_steps += 1
+            if due:
+                heads = {
+                    name: float(value) for name, value in self._last_terms.items()
+                }
             shard_steps += 1
             step += 1
             taken += 1
@@ -935,13 +1255,14 @@ class TrainingLoop:
         logger.info(
             "epoch %d | shard %d/%d %s | %d records trainable, %d held back | "
             "%d steps | loss %.4f | lr %.2e | %.1f steps/s | "
-            "wait %.1fs, train %.1fs%s%s",
+            "wait %.1fs, train %.1fs%s%s%s",
             epoch, position, of, shard.name, len(training), held_back, budget,
             float(shard_loss) / shard_steps if shard_steps else float("nan"),
             learning_rate, budget / trained if trained > 0 else float("nan"),
             waited, trained, _format_norms(norms), _format_parts(parts),
+            _format_terms(heads),
         )
-        del training, weights, batches
+        del training, weights, batches, labels
         return step, taken
 
     def _validate(
@@ -1044,6 +1365,8 @@ class TrainingLoop:
             holdout_max_carriers=self.holdout_max_carriers,
             corpus_path=self.config.corpus or "",
             corpus_digest=self.corpus_digest,
+            # Resolved from the manifest at startup when the flag was absent.
+            holdout_unit=self.config.holdout_unit or "text",
         )
 
 

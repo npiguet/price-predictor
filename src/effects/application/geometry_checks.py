@@ -412,29 +412,50 @@ def check_variant_geometry(
 
 
 def write_scorer_smoke_cache(
-    cached: CachedVectors,
-    sealed_vectors: dict[str, np.ndarray],
-    scratch_folder: Path,
-    locator,
-) -> int:
-    """Write pooled ``e`` **concatenated** with the sealed vector, into scratch.
+    pooled_by_path: dict[str, np.ndarray],
+    scratch_cards: Path,
+    *,
+    e_width: int,
+) -> tuple[int, int]:
+    """Splice pooled ``e`` into every sealed vector of a scratch tree, in place.
+
+    ``scratch_cards`` is a scratch copy of the converted tree that
+    ``encode-cards`` has already written sealed vectors into; it is **never**
+    ``output/cardsfolder/``, which the sealed pipeline reads, so a run of this
+    check cannot change what the real scorer trains on. ``pooled_by_path``
+    keys each card's pooled ``e`` by its path under the tree
+    (``a/ajanis_pridemate``), the path its sealed vector sits at.
 
     Concatenated rather than replacing, so the test asks "does this add
-    anything" rather than "is this better than nothing". Written into a scratch
-    copy of the cards folder and **never** into ``output/cardsfolder/``: the
-    sealed pipeline reads that tree, and a run of this check must not change
-    what the scorer trains on.
+    anything" rather than "is this better than nothing". Spliced in *before*
+    the trailing block of deterministic features, because the sealed layout
+    reads that block from the end (``card_embedding_layout``) and an
+    appended ``e`` would put mana-cost and land flags where the scorer reads
+    something else.
+
+    Every card gets the same width: one with no ability line, and so no
+    pooled ``e``, gets ``e_width`` zeros, because the scorer stacks the vectors
+    of a deck and a tree of mixed widths would not load. Returns
+    ``(written, without_e)``.
     """
-    scratch_folder = Path(scratch_folder)
-    written = 0
-    for name, pooled_vector in cached.by_card.items():
-        base = sealed_vectors.get(name)
-        if base is None:
-            continue
-        combined = np.concatenate([base, pooled_vector]).astype(np.float32)
-        path = locator.expected_path(name, ".npz")
-        target = scratch_folder / path.relative_to(path.parents[1])
-        target.parent.mkdir(parents=True, exist_ok=True)
-        np.savez_compressed(target, embedding=combined)
+    from sealed.domain.card_embedding_layout import FEATURE_COUNT
+    from sealed.infrastructure.embedding_store import EmbeddingStore
+
+    store = EmbeddingStore()
+    root = Path(scratch_cards)
+    written = without_e = 0
+    zeros = np.zeros(e_width, dtype=np.float32)
+    for path in sorted(root.rglob("*.npz")):
+        relative = (path.parent.relative_to(root) / path.stem).as_posix()
+        with np.load(path) as data:
+            sealed = data["embedding"]
+        pooled = pooled_by_path.get(relative)
+        if pooled is None:
+            pooled = zeros
+            without_e += 1
+        combined = np.concatenate([
+            sealed[:-FEATURE_COUNT], pooled.astype(np.float32), sealed[-FEATURE_COUNT:],
+        ]).astype(np.float32)
+        store.save(path, combined)
         written += 1
-    return written
+    return written, without_e

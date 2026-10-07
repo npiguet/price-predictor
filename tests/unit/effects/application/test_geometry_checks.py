@@ -533,43 +533,60 @@ class TestVariantComparison:
 
 
 class TestScorerSmokeCache:
-    def test_it_concatenates_rather_than_replacing(self, tmp_path):
-        """The test asks "does this add anything", not "is this better than
-        nothing"."""
-        from sealed.infrastructure.converted_card_locator import ConvertedCardLocator
+    """Pooled ``e`` spliced into a scratch tree's sealed vectors (FR-071)."""
 
-        cached = CachedVectors(by_card={"Shock": np.array([1.0, 2.0], np.float32)})
-        sealed = {"Shock": np.array([9.0, 9.0, 9.0], np.float32)}
-        scratch = tmp_path / "scratch"
-        locator = ConvertedCardLocator(tmp_path / "cardsfolder")
-        assert write_scorer_smoke_cache(cached, sealed, scratch, locator) == 1
-        written = next(scratch.rglob("*.npz"))
-        with np.load(written) as data:
-            combined = data["embedding"]
-        np.testing.assert_allclose(combined, [9.0, 9.0, 9.0, 1.0, 2.0])
+    @staticmethod
+    def _sealed(tmp_path, stem: str, text: list[float]) -> Path:
+        from sealed.domain.card_embedding_layout import FEATURE_COUNT
 
-    def test_it_writes_only_into_the_scratch_tree(self, tmp_path):
-        """Never output/cardsfolder/: the sealed pipeline reads that tree."""
-        from sealed.infrastructure.converted_card_locator import ConvertedCardLocator
-
-        real = tmp_path / "cardsfolder"
-        real.mkdir()
-        scratch = tmp_path / "scratch"
-        write_scorer_smoke_cache(
-            CachedVectors(by_card={"Shock": np.array([1.0], np.float32)}),
-            {"Shock": np.array([9.0], np.float32)},
-            scratch, ConvertedCardLocator(real),
+        path = tmp_path / "scratch" / "cardsfolder" / f"{stem}.npz"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        features = np.arange(FEATURE_COUNT, dtype=np.float32)
+        np.savez_compressed(
+            path, embedding=np.concatenate([np.array(text, np.float32), features]),
         )
-        assert list(real.rglob("*.npz")) == []
-        assert list(scratch.rglob("*.npz"))
+        return path
 
-    def test_a_card_the_sealed_cache_lacks_is_skipped(self, tmp_path):
-        from sealed.infrastructure.converted_card_locator import ConvertedCardLocator
+    def test_it_splices_e_between_the_text_vector_and_the_features(self, tmp_path):
+        """Concatenated rather than replacing, and the trailing feature block
+        stays trailing, because the sealed layout reads it from the end."""
+        from sealed.domain.card_embedding_layout import FEATURE_COUNT, is_land_embedding
 
-        assert write_scorer_smoke_cache(
-            CachedVectors(by_card={"Shock": np.array([1.0], np.float32)}),
-            {}, tmp_path / "scratch", ConvertedCardLocator(tmp_path / "cards"),
-        ) == 0
+        path = self._sealed(tmp_path, "s/shock", [9.0, 9.0, 9.0])
+        written, without = write_scorer_smoke_cache(
+            {"s/shock": np.array([1.0, 2.0], np.float32)},
+            tmp_path / "scratch" / "cardsfolder", e_width=2,
+        )
+        assert (written, without) == (1, 0)
+        with np.load(path) as data:
+            combined = data["embedding"]
+        np.testing.assert_allclose(combined[:5], [9.0, 9.0, 9.0, 1.0, 2.0])
+        np.testing.assert_allclose(combined[-FEATURE_COUNT:], np.arange(FEATURE_COUNT))
+        assert not is_land_embedding(combined)
+
+    def test_a_card_with_no_ability_line_gets_zeros_of_the_same_width(self, tmp_path):
+        """The scorer stacks a deck's vectors, so every card must be as wide."""
+        from sealed.domain.card_embedding_layout import FEATURE_COUNT
+
+        path = self._sealed(tmp_path, "g/grizzly_bears", [5.0])
+        written, without = write_scorer_smoke_cache(
+            {}, tmp_path / "scratch" / "cardsfolder", e_width=3,
+        )
+        assert (written, without) == (1, 1)
+        with np.load(path) as data:
+            combined = data["embedding"]
+        assert combined.shape == (1 + 3 + FEATURE_COUNT,)
+        np.testing.assert_allclose(combined[1:4], 0.0)
+
+    def test_it_writes_the_key_the_sealed_store_reads(self, tmp_path):
+        """The sealed pipeline loads ``embedding``; any other key reads as nothing."""
+        path = self._sealed(tmp_path, "s/shock", [9.0])
+        write_scorer_smoke_cache(
+            {"s/shock": np.array([1.0], np.float32)},
+            tmp_path / "scratch" / "cardsfolder", e_width=1,
+        )
+        with np.load(path) as data:
+            assert list(data.keys()) == ["embedding"]
 
 
 class TestInferencePathsResolveFromTheCheckpoint:

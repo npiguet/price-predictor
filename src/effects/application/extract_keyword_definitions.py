@@ -27,15 +27,30 @@ class ExtractKeywordDefinitionsConfig:
 class KeywordDefinition:
     """One keyword's expandable definition.
 
-    ``reminder_template`` carries Forge's own ``%s`` placeholders; a
+    ``reminder_template`` carries Forge's own ``%s``/``%d`` placeholders; a
     parameterized keyword instantiates them with the instance's values at
     expansion time. ``generated_script`` is None until stage four, and stays
-    None for the engine-coded minority that generates no script.
+    None for the engine-coded minority that generates no script; no expansion
+    reads it (FR-020). ``formatter`` is the simple name of the keyword's Forge
+    ``Keyword.type`` class, which decides how an instance's values are written
+    into the template (FR-018); None in a file written before it was recorded,
+    which fills the raw values instead.
     """
 
     keyword: str
     reminder_template: str | None
     generated_script: str | None = None
+    formatter: str | None = None
+
+
+def _normalized(template: str | None) -> str | None:
+    """Forge's typographic apostrophe as the ASCII one the vocabulary spells.
+
+    A handful of templates write ``’`` where the rest of Forge writes ``'``, and
+    the tokenizer would read ``can’t`` as a different word from ``can't``
+    (FR-017). Normalized at load, never in the file.
+    """
+    return template.replace("’", "'") if template else template
 
 
 def load_keyword_definitions(path: Path) -> dict[str, KeywordDefinition]:
@@ -48,8 +63,9 @@ def load_keyword_definitions(path: Path) -> dict[str, KeywordDefinition]:
     return {
         keyword: KeywordDefinition(
             keyword=keyword,
-            reminder_template=entry.get("reminder_template"),
+            reminder_template=_normalized(entry.get("reminder_template")),
             generated_script=entry.get("generated_script"),
+            formatter=entry.get("formatter"),
         )
         for keyword, entry in data.items()
     }

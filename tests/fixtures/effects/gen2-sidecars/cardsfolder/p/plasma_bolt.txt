@@ -1,0 +1,4 @@
+name: plasma bolt
+mana cost: {R}
+types: sorcery
+spell[1]: CARDNAME deals 2 damage to any target. void — CARDNAME deals 3 damage instead if a nonland permanent left the battlefield this turn or a spell was warped this turn.

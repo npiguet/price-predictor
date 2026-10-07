@@ -43,6 +43,7 @@ from effects.domain.effect_head_input import (
     SlotKind,
 )
 from effects.domain.state_snapshot import COLORS
+from effects.domain.value_targets import VALUE_TARGETS, ValueKind
 
 # Hardcoded architecture (contracts/cli.md: "Hardcoded, not flags").
 TRUNK_D_MODEL = 256
@@ -242,6 +243,23 @@ CREATED_OBJECTS_WIDTH = CREATED_OBJECT_SLOTS * CREATED_SLOT_WIDTH + 1
 VERDICT_BITS: tuple[str, ...] = ("can_play", "affordable", "has_legal_target")
 VERDICT_WIDTH = len(VERDICT_BITS) + len(COLORS) + 1
 
+#: Value head (FR-058): one output per count or binary target, four per signed
+#: target (the direction-and-magnitude split every signed field uses).
+_VALUE_WIDTHS: dict[ValueKind, int] = {
+    ValueKind.COUNT: 1, ValueKind.BINARY: 1, ValueKind.SIGNED: 4,
+}
+#: ``target -> (start, end)`` into the value head's output.
+VALUE_SLICES: dict[str, tuple[int, int]] = {}
+_value_offset = 0
+for _name, _kind in VALUE_TARGETS:
+    VALUE_SLICES[_name] = (_value_offset, _value_offset + _VALUE_WIDTHS[_kind])
+    _value_offset += _VALUE_WIDTHS[_kind]
+VALUE_WIDTH = _value_offset
+
+#: Rows of the option-kind embedding: a root or ordinary ability row, and a row
+#: from a charm mode's ``option`` line (FR-063a).
+OPTION_KINDS = 2
+
 
 @dataclass(frozen=True, slots=True)
 class EffectModelConfig:
@@ -255,6 +273,9 @@ class EffectModelConfig:
     vocab_size: int = 0
     n_api_types: int = 0
     n_param_keys: int = 0
+    #: The ability encoder's width, which sizes the MLM head (FR-060b): it
+    #: reads the encoder's token outputs, not the trunk's.
+    encoder_d_model: int = ENCODER_D_MODEL
     d_model: int = TRUNK_D_MODEL
     n_layers: int = TRUNK_N_LAYERS
     n_heads: int = TRUNK_N_HEADS
@@ -286,6 +307,11 @@ class EffectModel(nn.Module):
         self.card_proj = nn.Linear(config.card_features, d)
         self.e_proj = nn.Linear(config.e_dim, d)
         self.slot_kind_embedding = nn.Embedding(len(SlotKind), d)
+        # Zero rows, so a checkpoint saved before option rows existed — which
+        # loads with ``strict=False`` and keeps this initial value — reads
+        # every row exactly as it trained (FR-063a).
+        self.option_kind_embedding = nn.Embedding(OPTION_KINDS, d)
+        nn.init.zeros_(self.option_kind_embedding.weight)
         self.position_embedding = nn.Embedding(config.max_position, d)
         self.dropout = nn.Dropout(config.dropout)
 
@@ -314,7 +340,7 @@ class EffectModel(nn.Module):
 
         # ── training-only auxiliaries (FR-063), filtered at save time ──
         self.mlm_head = (
-            nn.Linear(ENCODER_D_MODEL, config.vocab_size)
+            nn.Linear(config.encoder_d_model, config.vocab_size)
             if config.vocab_size else None
         )
         self.api_type_head = (
@@ -325,12 +351,14 @@ class EffectModel(nn.Module):
             nn.Linear(config.e_dim, config.n_param_keys)
             if config.n_param_keys else None
         )
-        # Stage four's paired-encoding projection; see `pairing_loss`.
-        self.pairing_proj = nn.Linear(config.e_dim, config.e_dim)
+        # Amounts and costs the script states, read from e alone (FR-058).
+        self.value_head = nn.Sequential(
+            nn.Linear(config.e_dim, d), nn.GELU(), nn.Linear(d, VALUE_WIDTH),
+        )
 
-    #: Head names filtered out of the saved artifact (FR-076).
+    #: Head names filtered out of the saved artifact (FR-076, FR-059).
     TRAINING_ONLY_HEADS: tuple[str, ...] = (
-        "mlm_head", "api_type_head", "param_key_head", "pairing_proj",
+        "mlm_head", "api_type_head", "param_key_head", "value_head",
     )
 
     def forward(
@@ -340,12 +368,15 @@ class EffectModel(nn.Module):
         positions: torch.Tensor,
         e_vectors: torch.Tensor,
         attention_mask: torch.Tensor,
+        option_kinds: torch.Tensor | None = None,
     ) -> torch.Tensor:
         """Run the trunk. Returns ``(batch, slots, d_model)``.
 
         ``slot_features`` maps each kind to a ``(batch, slots, width)`` tensor
         already zero-padded at the slots of other kinds, so one add assembles
-        the surface without a per-slot Python loop.
+        the surface without a per-slot Python loop. ``option_kinds`` marks the
+        ability rows that come from a charm mode's ``option`` line; absent,
+        every row reads as an ordinary one.
         """
         hidden = (
             self.global_proj(slot_features[SlotKind.GLOBAL])
@@ -356,6 +387,8 @@ class EffectModel(nn.Module):
             + self.slot_kind_embedding(slot_kinds)
             + self.position_embedding(positions)
         )
+        if option_kinds is not None:
+            hidden = hidden + self.option_kind_embedding(option_kinds)
         hidden = self.dropout(hidden)
         hidden = self.trunk(hidden, src_key_padding_mask=attention_mask == 0)
         return self.norm(hidden)
@@ -702,12 +735,25 @@ def constant_predictor_floor(
 
 def created_objects_loss(
     prediction: torch.Tensor, target: torch.Tensor,
+    mask: torch.Tensor | None = None,
 ) -> torch.Tensor:
     """Binary presence/flags plus count regression over the K slots.
 
     Slots are in canonical order (FR-078), so slot *i* means the same group on
-    both sides and the head is not asked to solve an assignment problem.
+    both sides and the head is not asked to solve an assignment problem. Count,
+    power and toughness are counts (FR-080); presence, the scripted flag and the
+    type and keyword flags are bits.
+
+    ``mask`` selects the records that supervise the head — effect halves and
+    rewrites with an outgoing event. The sum is normalized over every record of
+    the batch, like the per-entity loss, so a batch with few supervising
+    records does not weigh them up.
     """
+    records = max(int(prediction.shape[0]), 1)
+    if mask is not None:
+        if not mask.any():
+            return prediction.new_zeros(())
+        prediction, target = prediction[mask], target[mask]
     total = prediction.new_zeros(())
     for slot in range(CREATED_OBJECT_SLOTS):
         base = slot * CREATED_SLOT_WIDTH
@@ -716,36 +762,82 @@ def created_objects_loss(
             reduction="sum",
         )
         total = total + _poisson(
-            prediction[:, base + 2], target[:, base + 2],
+            prediction[:, base + 2:base + 5], target[:, base + 2:base + 5],
         )
-        rest = slice(base + 3, base + CREATED_SLOT_WIDTH)
+        rest = slice(base + 5, base + CREATED_SLOT_WIDTH)
         total = total + functional.binary_cross_entropy_with_logits(
             prediction[:, rest], target[:, rest], reduction="sum",
         )
     total = total + functional.binary_cross_entropy_with_logits(
         prediction[:, -1], target[:, -1], reduction="sum",
     )
-    return total / max(int(prediction.shape[0]), 1)
+    return total / records
 
 
 def verdict_loss(
     prediction: torch.Tensor, target: torch.Tensor, mask: torch.Tensor,
 ) -> torch.Tensor:
-    """Verdict bits and the trigger bit binary; cost paid Poisson per colour."""
+    """Verdict bits and the trigger bit binary; cost paid Poisson per colour.
+
+    ``mask`` is per record ``(batch,)`` — every output of a selected record is
+    scored — or per output ``(batch, VERDICT_WIDTH)``, which is what training
+    passes: a ``decision`` record supervises the three verdict bits, a cost half
+    the cost paid and a ``trigger`` record the fired bit, and none of them says
+    anything about the others' columns. Normalized over every record of the
+    batch, like the per-entity loss.
+    """
+    records = max(int(prediction.shape[0]), 1)
+    if mask.dim() == 1:
+        mask = mask.unsqueeze(-1).expand_as(prediction)
+    mask = mask.bool()
     if not mask.any():
         return prediction.new_zeros(())
-    prediction, target = prediction[mask], target[mask]
     bits = len(VERDICT_BITS)
-    total = functional.binary_cross_entropy_with_logits(
-        prediction[:, :bits], target[:, :bits], reduction="sum",
+    cost = slice(bits, bits + len(COLORS))
+    weights = mask.to(prediction.dtype)
+    binary = functional.binary_cross_entropy_with_logits(
+        prediction, target, reduction="none",
     )
-    total = total + _poisson(
-        prediction[:, bits:bits + len(COLORS)], target[:, bits:bits + len(COLORS)],
+    counts = functional.poisson_nll_loss(
+        prediction[:, cost], target[:, cost], log_input=True, full=True,
+        reduction="none",
     )
-    total = total + functional.binary_cross_entropy_with_logits(
-        prediction[:, -1], target[:, -1], reduction="sum",
-    )
-    return total / max(int(prediction.shape[0]), 1)
+    total = (binary[:, :bits] * weights[:, :bits]).sum()
+    total = total + (counts * weights[:, cost]).sum()
+    total = total + (binary[:, -1] * weights[:, -1]).sum()
+    return total / records
+
+
+def value_loss(
+    prediction: torch.Tensor, target: torch.Tensor, mask: torch.Tensor,
+) -> torch.Tensor:
+    """The value head's loss over the batch's encoded texts (FR-058).
+
+    One row per unique text. A count is Poisson, a signed amount the
+    direction-and-magnitude split, a cost flag binary — the same losses the
+    per-entity fields of those types use. A masked target contributes nothing,
+    and the sum is normalized over the texts.
+    """
+    rows = max(int(prediction.shape[0]), 1)
+    mask = mask.bool()
+    total = prediction.new_zeros(())
+    for index, (name, kind) in enumerate(VALUE_TARGETS):
+        selected = mask[:, index]
+        if not selected.any():
+            continue
+        start, end = VALUE_SLICES[name]
+        output = prediction[selected, start:end]
+        wanted = target[selected, index]
+        match kind:
+            case ValueKind.COUNT:
+                total = total + _poisson(output.squeeze(-1), wanted)
+            case ValueKind.SIGNED:
+                total = total + _signed_delta_loss(output, wanted)
+            case ValueKind.BINARY:
+                total = total + functional.binary_cross_entropy_with_logits(
+                    output.squeeze(-1), wanted, reduction="sum",
+                )
+    return total / rows
 
 
 def mlm_loss(
@@ -776,14 +868,23 @@ def api_loss(
     """
     total = None
     if type_logits is not None and type_targets is not None:
-        total = functional.cross_entropy(type_logits, type_targets)
+        # A line with no API type (a replacement, say) carries -1 and is
+        # skipped rather than scored against an invented class.
+        known = type_targets >= 0
+        if known.any():
+            total = functional.cross_entropy(
+                type_logits[known], type_targets[known],
+            )
     if key_logits is not None and key_targets is not None:
         keys = functional.binary_cross_entropy_with_logits(
             key_logits, key_targets.float(),
         )
         total = keys if total is None else total + keys
     if total is None:
-        raise ValueError("api_loss needs at least one of its two targets")
+        if type_targets is None and key_targets is None:
+            raise ValueError("api_loss needs at least one of its two targets")
+        logits = type_logits if type_logits is not None else key_logits
+        return logits.new_zeros(())
     return total
 
 
@@ -823,6 +924,7 @@ def collate_surfaces(
     e_vectors = np.zeros((batch, width, e_dim), dtype=np.float32)
     e_rows = np.full((batch, width), -1, dtype=np.int64)
     attention = np.zeros((batch, width), dtype=np.int64)
+    option_kinds = np.zeros((batch, width), dtype=np.int64)
 
     for row, surface in enumerate(surfaces):
         slots = surface.slots
@@ -832,6 +934,7 @@ def collate_surfaces(
         slot_kinds[row, :filled] = [int(slot.kind) for slot in slots]
         positions[row, :filled] = [slot.position for slot in slots]
         attention[row, :filled] = 1
+        option_kinds[row, :filled] = [int(slot.option) for slot in slots]
         for column, slot in enumerate(slots):
             if slot.features and slot.kind in features:
                 values = slot.features
@@ -850,6 +953,7 @@ def collate_surfaces(
         "e_vectors": torch.from_numpy(e_vectors),
         "e_rows": torch.from_numpy(e_rows),
         "attention_mask": torch.from_numpy(attention),
+        "option_kinds": torch.from_numpy(option_kinds),
     }
 
 
@@ -918,15 +1022,3 @@ def entity_target_tensors(
                 else:
                     collected[spec.name][row, column] = float(value)
     return gate, collected, mask, index
-
-
-def pairing_loss(
-    script_e: torch.Tensor, prose_e: torch.Tensor,
-) -> torch.Tensor:
-    """Stage four: pull the prose encoding toward the script encoding.
-
-    Asymmetric with a stop-gradient on the script side, so prose learns to agree
-    with the mechanism rather than the two meeting somewhere in between. A
-    synthetic variant has only the script surface and contributes nothing here.
-    """
-    return functional.mse_loss(prose_e, script_e.detach())

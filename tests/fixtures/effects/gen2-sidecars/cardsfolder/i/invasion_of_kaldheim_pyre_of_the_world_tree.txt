@@ -1,0 +1,15 @@
+layout: transform
+name: invasion of kaldheim
+mana cost: {3}{R}
+types: battle siege
+defense: 4
+triggered: when CARDNAME enters, exile all cards from your hand, then draw that many cards. until the end of your next turn, you may play cards exiled this way.
+triggered: when CARDNAME is defeated, exile it, then cast it transformed.
+replacement: CARDNAME enters with four defense counters on it.
+
+ALTERNATE
+
+name: pyre of the world tree
+types: enchantment
+activated[1]: discard a land card: CARDNAME deals 2 damage to any target.
+triggered: whenever you discard a land card, exile the top card of your library. you may play that card this turn.

@@ -1,0 +1,12 @@
+layout: split
+name: spiked corridor
+mana cost: {3}{R}
+types: enchantment room
+triggered: when you unlock this door, create three 1/1 red devil creature tokens with "when this token dies, it deals 1 damage to any target."
+
+ALTERNATE
+
+name: torture pit
+mana cost: {3}{R}
+types: enchantment room
+replacement: if a source you control would deal noncombat damage to an opponent, it deals that much damage plus 2 instead.

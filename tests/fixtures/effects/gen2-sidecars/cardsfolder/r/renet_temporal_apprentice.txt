@@ -1,0 +1,6 @@
+name: renet, temporal apprentice
+mana cost: {3}{U}{U}
+types: legendary creature human wizard
+power toughness: 4/3
+static: flash
+triggered: when CARDNAME enters, return each other nonland permanent that entered this turn to its owner's hand.

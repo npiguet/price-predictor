@@ -1,0 +1,5 @@
+name: luxknight breacher
+mana cost: {3}{W}
+types: creature human knight
+power toughness: 2/2
+replacement: this creature enters with a +1/+1 counter on it for each other creature and/or artifact you control.

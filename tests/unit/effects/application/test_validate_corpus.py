@@ -14,9 +14,13 @@ output takes.
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 import pytest
 
 from effects.application.validate_corpus import (
+    FieldPresence,
     Finding,
     Thresholds,
     event_type_coverage,
@@ -109,6 +113,13 @@ def _resolution(record_id: str, game_id: str = "run.0-L1.0", **overrides):
     }
     fields.update(overrides)
     return EffectRecord(**fields)
+
+
+def _mode(option: int) -> ProvenanceKey:
+    """A mode of the Lightning Bolt key's line, as a charm's mode key reads."""
+    return ProvenanceKey(
+        _KEY.script_file, _KEY.face, _KEY.trait_kind, _KEY.index_within_kind, option,
+    )
 
 
 def _activation(record_id: str, outcome=ResolutionOutcome.RESOLVED, **overrides):
@@ -386,14 +397,57 @@ class TestLinkHalvesPair:
         assert not finding.ok
         assert "unpaired" in finding.measured
 
-    def test_a_link_id_shared_by_three_halves_fails(self):
-        """A link id whose tail is a JVM-static counter collides like an id does."""
+    def test_a_link_id_shared_by_three_halves_on_one_line_fails(self):
+        """A link id whose tail is a JVM-static counter collides like an id does.
+
+        Three halves acting through a root key are a collision, not a modal
+        resolution: only effect halves acting through mode keys of one charm
+        may share a cost half (FR-029d).
+        """
         records = _healthy() + [
             _resolution("run.0-L1.910", link_id="link.0"),
         ]
         finding = _named(validate_corpus(records), "link_id")
         assert not finding.ok
         assert "3 half(s)" in " ".join(finding.detail)
+
+    def test_a_charms_cost_half_joins_one_effect_half_per_mode(self):
+        """FR-029d: the widened link_id, one cost record and N mode halves."""
+        records = _healthy() + [
+            _activation("run.0-L1.920", link_id="charm.0"),
+            _resolution("run.0-L1.921", link_id="charm.0", ability=(_mode(0),)),
+            _resolution("run.0-L1.922", link_id="charm.0", ability=(_mode(2),)),
+        ]
+        finding = _named(validate_corpus(records), "link_id")
+        assert finding.ok
+        assert "3 half(s)" in " ".join(finding.detail)
+
+    def test_mode_halves_of_two_different_charms_do_not_join(self):
+        other = ProvenanceKey("cardsfolder/c/cryptic_command.txt", 0, "spell", 0, 1)
+        records = _healthy() + [
+            _activation(f"run.0-L1.{930 + i}", link_id=f"charm.{i}") for i in range(10)
+        ] + [
+            half
+            for i in range(10)
+            for half in (
+                _resolution(f"run.0-L1.{950 + i}", link_id=f"charm.{i}", ability=(_mode(0),)),
+                _resolution(f"run.0-L1.{970 + i}", link_id=f"charm.{i}", ability=(other,)),
+            )
+        ]
+        assert not _named(validate_corpus(records), "link_id").ok
+
+    def test_two_root_effect_halves_on_one_cost_do_not_join(self):
+        records = _healthy() + [
+            _activation(f"run.0-L1.{930 + i}", link_id=f"pair.{i}") for i in range(10)
+        ] + [
+            half
+            for i in range(10)
+            for half in (
+                _resolution(f"run.0-L1.{950 + i}", link_id=f"pair.{i}"),
+                _resolution(f"run.0-L1.{970 + i}", link_id=f"pair.{i}"),
+            )
+        ]
+        assert not _named(validate_corpus(records), "link_id").ok
 
     def test_a_few_truncated_tails_stay_within_tolerance(self):
         """A killed worker loses its last block, so some halves have no partner."""
@@ -1854,3 +1908,58 @@ class TestEventTypeCoverage:
 def test_every_named_invariant_is_reported(fragment):
     """The list is the contract; a check silently dropped is a check that lies."""
     assert _named(validate_corpus(_healthy()), fragment)
+
+
+class TestGen2FieldPresence:
+    """FR-033: a shard carries each gen-2 field on all of its records or none."""
+
+    def _write(self, path: Path, rows: list[dict]) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8")
+
+    def _rows(self, *, seat: bool, what_if: bool | None) -> list[dict]:
+        from effects.infrastructure.record_io import record_to_dict
+
+        blockers = _resolution("run.0-L1.1")
+        rows = [record_to_dict(_resolution("run.0-L1.0")), record_to_dict(blockers)]
+        rows[1].update(kind="playability", moment=None, subkind="blockers",
+                       ability=None, payload={"anchor_attacker": "E1"})
+        for row in rows:
+            if not seat:
+                row.pop("random_seat", None)
+        if what_if is not None:
+            rows[1]["what_if"] = what_if
+        return rows
+
+    def _finding(self, tmp_path: Path):
+        presence = FieldPresence()
+        findings = validate_corpus(read_window(tmp_path, presence=presence), presence=presence)
+        return _named(findings, "gen-2 envelope")
+
+    def test_a_gen1_shard_passes(self, tmp_path):
+        self._write(tmp_path / "a.jsonl", self._rows(seat=False, what_if=None))
+        assert self._finding(tmp_path).ok
+
+    def test_a_gen2_shard_with_both_fields_passes(self, tmp_path):
+        self._write(tmp_path / "a.jsonl", self._rows(seat=True, what_if=False))
+        assert self._finding(tmp_path).ok
+
+    def test_random_seat_on_some_records_only_fails(self, tmp_path):
+        rows = self._rows(seat=True, what_if=False)
+        rows[0].pop("random_seat")
+        self._write(tmp_path / "a.jsonl", rows)
+        finding = self._finding(tmp_path)
+        assert not finding.ok
+        assert "random_seat on 1 of 2" in " ".join(finding.detail)
+
+    def test_a_gen2_legality_record_without_what_if_fails(self, tmp_path):
+        self._write(tmp_path / "a.jsonl", self._rows(seat=True, what_if=None))
+        assert not self._finding(tmp_path).ok
+
+    def test_what_if_on_another_kind_is_refused_by_the_reader(self, tmp_path):
+        """The record model rejects it outright, so it never reaches a tally."""
+        rows = self._rows(seat=True, what_if=True)
+        rows[0]["what_if"] = True
+        self._write(tmp_path / "a.jsonl", rows)
+        with pytest.raises(ValueError, match="what_if"):
+            self._finding(tmp_path)

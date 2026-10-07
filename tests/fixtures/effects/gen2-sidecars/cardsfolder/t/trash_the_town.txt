@@ -1,0 +1,8 @@
+name: trash the town
+mana cost: {G}
+types: instant
+additional cost: spree
+spell[1]: choose one or more
+option[2]: {2} — put two +1/+1 counters on target creature.
+option[3]: {1} — target creature gains trample until end of turn.
+option[4]: {1} — until end of turn, target creature gains "whenever this creature deals combat damage to a player, draw two cards."

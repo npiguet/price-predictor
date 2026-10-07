@@ -994,6 +994,8 @@ EFFECT_PROBES_PER_GAME = 2
 EFFECT_PROBE_KEYWORDS = ""
 EFFECT_LEGALITY_RATE = 0.1
 EFFECT_SNAPSHOT_TIERS = "1,2,3"
+EFFECT_RANDOM_SEAT_SHARE = 0.0
+EFFECT_RANDOM_SEAT_PROBABILITY = 0.0
 
 
 def _snapshot_tiers(text: str) -> str:
@@ -1027,6 +1029,11 @@ def _effect_collection_caps(args: argparse.Namespace) -> dict[str, str]:
     imports. The property names are the contract between the two sides and are
     pinned by a test that may see both.
     """
+    # Unset only where the share is 0, which run_match_outcomes enforces before
+    # any game; the worker then never reads it.
+    probability = getattr(args, "random_seat_probability", None)
+    if probability is None:
+        probability = EFFECT_RANDOM_SEAT_PROBABILITY
     return {
         "effect.mana.cap": str(getattr(args, "mana_cap", EFFECT_MANA_CAP)),
         "effect.playability.rate": str(
@@ -1047,6 +1054,10 @@ def _effect_collection_caps(args: argparse.Namespace) -> dict[str, str]:
         "effect.snapshot.tiers": str(
             getattr(args, "snapshot_tiers", EFFECT_SNAPSHOT_TIERS)
         ),
+        "effect.random.seat.share": str(
+            getattr(args, "random_seat_share", EFFECT_RANDOM_SEAT_SHARE)
+        ),
+        "effect.random.seat.probability": str(probability),
     }
 
 
@@ -1138,6 +1149,53 @@ def _add_effect_record_flags(parser: argparse.ArgumentParser) -> None:
             f" {EFFECT_SNAPSHOT_TIERS}."
         ),
     )
+    parser.add_argument(
+        "--random-seat-share",
+        type=float,
+        default=EFFECT_RANDOM_SEAT_SHARE,
+        help=(
+            "Share of matches in which one seat, chosen at random per match, is"
+            " a random seat: with probability --random-seat-probability it"
+            " plays, targets, attacks and blocks uniformly at random among the"
+            " legal options instead of as the Forge AI. A random-seat match"
+            " writes effect records only, never a match-outcome or cards-played"
+            f" row. Needs --effect-records. Default: {EFFECT_RANDOM_SEAT_SHARE}."
+        ),
+    )
+    parser.add_argument(
+        "--random-seat-probability",
+        type=float,
+        default=None,
+        help=(
+            "P, the chance the random seat draws at random at a decision point."
+            " Required when --random-seat-share is above 0; no default."
+        ),
+    )
+
+
+def check_random_seat_flags(args: argparse.Namespace) -> str | None:
+    """Why the random-seat flags cannot run, or None when they can (FR-026).
+
+    Checked before any game: a random-seat match writes effect records only, so
+    one with nowhere to write them plays for nothing, and a share with no ``P``
+    is a seat whose behaviour nobody chose.
+    """
+    share = getattr(args, "random_seat_share", EFFECT_RANDOM_SEAT_SHARE)
+    probability = getattr(args, "random_seat_probability", None)
+    if not 0.0 <= share <= 1.0:
+        return f"--random-seat-share must be between 0 and 1, got {share}"
+    if probability is not None and not 0.0 <= probability <= 1.0:
+        return (
+            f"--random-seat-probability must be between 0 and 1, got {probability}"
+        )
+    if share > 0 and probability is None:
+        return "--random-seat-share above 0 needs --random-seat-probability"
+    if share > 0 and not getattr(args, "effect_records", None):
+        return (
+            "--random-seat-share above 0 needs --effect-records: a random-seat"
+            " match writes effect records only"
+        )
+    return None
 
 
 def announce_probe_state(probe_keywords: str, probes_per_game: int) -> str:
@@ -1854,6 +1912,11 @@ def run_match_outcomes(args: argparse.Namespace) -> int:
             "Error: --side-b-decks-weight is only valid with --side-b-decks",
             file=sys.stderr,
         )
+        return 2
+
+    random_seat_error = check_random_seat_flags(args)
+    if random_seat_error is not None:
+        print(f"Error: {random_seat_error}", file=sys.stderr)
         return 2
 
     output_path = Path("output") / "sealed" / "match-outcomes.txt"

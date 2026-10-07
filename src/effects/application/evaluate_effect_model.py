@@ -662,6 +662,10 @@ class EvaluateEffectModelConfig:
     sealed_encoder_checkpoint: Path = field(
         default_factory=lambda: Path("models/sealed/encoder/latest.pt"),
     )
+    #: The per-card win-rate table the decodability battery reads (FR-070).
+    win_rates: Path = field(
+        default_factory=lambda: Path("output/sealed/cards-win-rates.txt"),
+    )
 
 
 def parse_variant_checkpoint(value: str) -> tuple[str, Path]:
@@ -786,6 +790,12 @@ def run(config: EvaluateEffectModelConfig) -> EvaluationReport:
 
         actual_corpus_digest = CorpusStore(corpus_path).load().digest()
     check_corpus(main.provenance, actual_digest=actual_corpus_digest)
+    if corpus_path is not None:
+        from effects.infrastructure.record_io import iter_shards, refuse_mixed_generations
+
+        # Before any record is read (FR-033): the two generations read
+        # actor_player on playability records differently.
+        refuse_mixed_generations(iter_shards(Path(corpus_path)))
 
     variants = {}
     for name, path in config.variant_checkpoints.items():
@@ -841,12 +851,19 @@ def run(config: EvaluateEffectModelConfig) -> EvaluationReport:
     report.keyword_verdicts = verdicts
     report.add(evaluate_gate_two(verdicts))
 
+    # ── breakdowns: per text, rarity, family, policy, decision (FR-064–068) ──
+    for check in run_breakdowns(
+        config, main, corpus_path,
+        vocab_path=vocab_path, keyword_path=keyword_path,
+    ):
+        report.add(check)
+
     # ── e-geometry checks, all reported ──
     report.add(check_ward(cached))
     report.add(check_nearest_neighbours(cached, NEIGHBOUR_QUERIES))
     report.add(check_umap(cached))
     report.add(check_decodability(
-        cached, {}, DEFAULT_WIN_RATES,
+        cached, {}, Path(config.win_rates),
         held_out_cards=main.provenance.held_out_cards,
     ))
     for name in ("no-state", "taxonomy"):
@@ -860,12 +877,7 @@ def run(config: EvaluateEffectModelConfig) -> EvaluationReport:
     for name in STAGE_GATED_CHECKS:
         report.add(skip_unavailable(name))
 
-    if main.provenance.withheld_keyword:
-        report.add(CheckResult(
-            "zero-shot-keyword", CheckStatus.REPORTED,
-            f"the checkpoint withheld {main.provenance.withheld_keyword!r}",
-        ))
-    else:
+    if not main.provenance.withheld_keyword:
         report.add(CheckResult(
             "zero-shot-keyword", CheckStatus.SKIPPED,
             "the checkpoint withheld no keyword; retrain with "
@@ -888,10 +900,202 @@ NEIGHBOUR_QUERIES: tuple[LineQuery, ...] = (
     ),
 )
 
-#: Where the sealed pipeline's per-card winnability labels live. The
-#: decodability battery skips when it is absent rather than failing: the labels
-#: are an operator's training data, not a repository artifact.
+#: Where the sealed pipeline's per-card winnability labels live by default;
+#: ``--win-rates`` names another table. The decodability battery skips when it
+#: is absent rather than failing: the labels are an operator's training data,
+#: not a repository artifact.
 DEFAULT_WIN_RATES = Path("output/sealed/cards-win-rates.txt")
+
+# ── breakdowns (FR-064 – FR-068) ────────────────────────────────────────
+#
+# The grouping lives in `effects.application.breakdowns` and the per-record
+# scoring in `gate_one.measure`; what is left here is which records are scored
+# and how each group becomes a report line.
+
+#: Records per stratum read from the raw corpus when the checkpoint names no
+#: curated dataset, whose fixed validation samples are otherwise the source.
+#: The curated samples are a few thousand records; reading every record of a
+#: thousand raw games would hold gigabytes for the same breakdown.
+BREAKDOWN_RAW_RECORDS = 4096
+
+CARD_DISJOINT, GAME_DISJOINT = "card-disjoint", "game-disjoint"
+
+
+def breakdown_records(config, main, corpus_path: Path | None) -> dict[str, list]:
+    """Both validation strata, as the breakdowns score them.
+
+    From the curated dataset's fixed samples when the checkpoint trained on
+    one: they are what best-checkpoint selection scored, and the card-disjoint
+    sample is filled round-robin over held-out texts (FR-051), so every text
+    shows up in the per-text mean. Otherwise from the raw corpus: the games
+    the checkpoint recorded for each stratum, up to a bound.
+    """
+    from effects.infrastructure.record_io import read_records, read_shard
+
+    if corpus_path is not None:
+        from effects.infrastructure.corpus_store import CorpusStore
+
+        store = CorpusStore(corpus_path)
+        out = {}
+        for stratum in (CARD_DISJOINT, GAME_DISJOINT):
+            path = store.sample_path(stratum)
+            out[stratum] = list(read_shard(path)) if path.exists() else []
+        return out
+
+    games = {
+        CARD_DISJOINT: frozenset(main.provenance.card_disjoint_games),
+        GAME_DISJOINT: frozenset(main.provenance.game_disjoint_games),
+    }
+    out = {stratum: [] for stratum in games}
+    if not any(games.values()):
+        return out
+    for record in read_records(Path(config.records_dir)):
+        for stratum, members in games.items():
+            if record.game_id in members and len(out[stratum]) < BREAKDOWN_RAW_RECORDS:
+                out[stratum].append(record)
+        if all(len(rows) >= BREAKDOWN_RAW_RECORDS for rows in out.values()):
+            break
+    return out
+
+
+def run_breakdowns(
+    config, main, corpus_path: Path | None, *, vocab_path: Path, keyword_path: Path,
+) -> list[CheckResult]:
+    """Score both validation strata once and report every breakdown."""
+    from effects.application.gate_one import measure
+    from effects.infrastructure.model_runner import load_runnable
+
+    strata = breakdown_records(config, main, corpus_path)
+    everything = [record for rows in strata.values() for record in rows]
+    if not everything:
+        return [CheckResult(
+            "breakdowns", CheckStatus.SKIPPED,
+            "neither validation stratum holds a record to score",
+        )]
+    encoder, model, batcher, fields = load_runnable(
+        config, main,
+        vocab_path=vocab_path, keyword_path=keyword_path, records=everything,
+    )
+    scored = {
+        stratum: (
+            list(measure(rows, encoder, model, batcher, fields=fields).records)
+            if rows else []
+        )
+        for stratum, rows in strata.items()
+    }
+    games_by_text: dict[str, float] = {}
+    if corpus_path is not None:
+        from effects.infrastructure.corpus_store import CorpusStore
+
+        games_by_text = dict(CorpusStore(corpus_path).load().rarity)
+    return breakdown_checks(
+        scored, games_by_text=games_by_text,
+        withheld_keyword=main.provenance.withheld_keyword,
+    )
+
+
+def breakdown_checks(
+    scored: dict[str, list],
+    *,
+    games_by_text: dict[str, float],
+    withheld_keyword: str | None,
+) -> list[CheckResult]:
+    """Every breakdown of the scored strata, one report line per group.
+
+    Pure: ``scored`` maps a stratum to its ``RecordResult`` rows, so the
+    report's shape is testable without a model.
+    """
+    from effects.application import breakdowns as bd
+
+    card = scored.get(CARD_DISJOINT, [])
+    game = scored.get(GAME_DISJOINT, [])
+    checks: list[CheckResult] = []
+    if card:
+        checks.append(_group_check(CARD_DISJOINT, bd.overall(card)))
+        for bucket, group in bd.by_rarity_bucket(card, games_by_text).items():
+            checks.append(_group_check(f"{CARD_DISJOINT} rarity {bucket}", group))
+        families = bd.by_family(card)
+        for family, group in families.items():
+            checks.append(_group_check(f"{CARD_DISJOINT} family {family}", group))
+        if families:
+            checks.append(_group_check(
+                f"{CARD_DISJOINT} mean over families",
+                bd.mean_over_families(families),
+                detail=f"{len(families)} families, each weighted once",
+            ))
+    else:
+        checks.append(CheckResult(
+            CARD_DISJOINT, CheckStatus.SKIPPED,
+            "the card-disjoint stratum holds no record to break down",
+        ))
+
+    gaps = bd.memorization_gap(bd.by_family(game), bd.by_family(card))
+    if gaps:
+        for family, values in gaps.items():
+            checks.append(CheckResult(
+                f"memorization-gap {family}", CheckStatus.REPORTED,
+                "game-disjoint minus card-disjoint loss, per field", values,
+            ))
+    else:
+        checks.append(CheckResult(
+            "memorization-gap", CheckStatus.SKIPPED,
+            "no family has records in both validation strata",
+        ))
+
+    for stratum, rows in ((CARD_DISJOINT, card), (GAME_DISJOINT, game)):
+        policy = bd.policy_slice(rows)
+        if bd.OFF_POLICY in policy:
+            for name, group in policy.items():
+                checks.append(_group_check(f"{stratum} policy {name}", group))
+        else:
+            checks.append(CheckResult(
+                f"{stratum} off-policy", CheckStatus.SKIPPED,
+                "no record in this stratum was acted by the random seat",
+            ))
+        decisions = bd.decision_slice(rows)
+        if bd.REAL in decisions:
+            for name, group in decisions.items():
+                checks.append(_group_check(f"{stratum} legality {name}", group))
+        else:
+            checks.append(CheckResult(
+                f"{stratum} real-decision legality", CheckStatus.SKIPPED,
+                "no legality record in this stratum is classed a real decision",
+            ))
+
+    if withheld_keyword:
+        groups = bd.keyword_slice([*card, *game], withheld_keyword)
+        if bd.WITHHELD in groups:
+            for name, group in groups.items():
+                checks.append(_group_check(
+                    f"zero-shot-keyword {withheld_keyword} {name}", group,
+                ))
+        else:
+            checks.append(CheckResult(
+                "zero-shot-keyword", CheckStatus.SKIPPED,
+                f"no validation record carries the withheld keyword "
+                f"{withheld_keyword!r}",
+            ))
+    return checks
+
+
+def _group_check(name: str, group, *, detail: str | None = None) -> CheckResult:
+    """One group's report line: per-record field means, then per-text ones.
+
+    Per-text means are prefixed ``text:``; the detail carries both counts, so a
+    mean over three records reads as one. A mean of group means passes its own
+    ``detail``, since its counts are groups rather than records.
+    """
+    from effects.application.breakdowns import TOTAL
+
+    values = {
+        **group.per_record.means,
+        **{f"text:{key}": value for key, value in group.per_text.means.items()},
+    }
+    texts = group.per_text.counts.get(TOTAL, 0)
+    return CheckResult(
+        name, CheckStatus.REPORTED,
+        detail or f"{group.per_record.records} records, {texts} texts", values,
+    )
 
 # ── gate 2: the damage-step keyword canary ──────────────────────────────
 #

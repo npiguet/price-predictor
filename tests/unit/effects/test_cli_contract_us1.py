@@ -78,7 +78,7 @@ class TestTrainEffectModel:
     def test_the_architecture_defaults_are_the_contracts(self):
         args = parse(*TRAIN)
         assert args.e_dim == 64
-        assert args.e_noise == 0.05
+        assert args.e_noise == 0.1
         assert args.keyword_expand_p == 0.25
         assert args.context_dropout == 0.15
 
@@ -332,7 +332,13 @@ class TestBuildCorpus:
         args = parse("build-corpus")
         assert args.text_cap == 200
         assert args.card_disjoint_text_cap == 50
-        assert args.game_disjoint_games == 1000
+        assert args.game_disjoint_share == 0.01
+        assert args.game_disjoint_keyword_share == 0.15
+        assert args.game_disjoint_keywords == (
+            "first strike", "deathtouch", "trample", "indestructible", "wither", "infect",
+        )
+        assert args.reuse_cap == 4
+        assert args.holdout_unit == "template"
         assert args.training_records == 0  # no ceiling
         assert args.class_mix is None  # the training mixture
         assert args.seed == 42
@@ -357,7 +363,12 @@ class TestBuildCorpus:
         assert config.holdout_max_carriers == args.holdout_max_carriers
         assert config.text_cap == args.text_cap
         assert config.card_disjoint_text_cap == args.card_disjoint_text_cap
-        assert config.game_disjoint_target == args.game_disjoint_games
+        assert config.game_disjoint_share == args.game_disjoint_share
+        assert config.game_disjoint_keyword_share == args.game_disjoint_keyword_share
+        assert config.game_disjoint_keywords == args.game_disjoint_keywords
+        assert config.reuse_cap == args.reuse_cap
+        assert config.holdout_unit == args.holdout_unit
+        assert config.keyword_definitions == Path(args.keyword_definitions)
         assert config.training_records == args.training_records
         assert config.class_mix == args.class_mix
         assert config.seed == args.seed

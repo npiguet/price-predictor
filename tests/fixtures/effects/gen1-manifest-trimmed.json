@@ -1,0 +1,193 @@
+{
+ "card_disjoint_games": [
+  "0cb91878-ce87-467e-aca3-270e9b114744.0-mtz1jhr2gwec.94",
+  "0cb91878-ce87-467e-aca3-270e9b114744.0-mtzfe4lmbw0i.27",
+  "0cb91878-ce87-467e-aca3-270e9b114744.0-mtzfe4lmbw0i.28",
+  "0cb91878-ce87-467e-aca3-270e9b114744.0-mtzkjqv9a7y6.12",
+  "0cb91878-ce87-467e-aca3-270e9b114744.0-mtzlih1yqyb1.12"
+ ],
+ "card_disjoint_text_cap": 50,
+ "class_mix": {
+  "combat": 0.2,
+  "continuous": 0.12,
+  "playability-decision": 0.1,
+  "playability-legality": 0.05,
+  "resolution-cost": 0.08,
+  "resolution-effect": 0.3,
+  "rewrite": 0.07,
+  "trigger": 0.08
+ },
+ "delivered_mix": {
+  "combat": 0.20259156717143545,
+  "continuous": 0.11771441584827254,
+  "playability-decision": 0.1041603762480617,
+  "playability-legality": 0.048913015665061434,
+  "resolution-cost": 0.07896373136543451,
+  "resolution-effect": 0.2985074435909377,
+  "rewrite": 0.06925431032276884,
+  "trigger": 0.07989513978802781
+ },
+ "forge_tokenscripts": "..\\forge\\forge-gui\\res\\tokenscripts",
+ "game_disjoint_games": [
+  "0cb91878-ce87-467e-aca3-270e9b114744.0-mtz0krntomrt.8",
+  "0cb91878-ce87-467e-aca3-270e9b114744.0-mtz17wyjcgij.12",
+  "0cb91878-ce87-467e-aca3-270e9b114744.0-mtz1v2hzebh6.19",
+  "0cb91878-ce87-467e-aca3-270e9b114744.0-mtz26n5p1uuk.34",
+  "0cb91878-ce87-467e-aca3-270e9b114744.0-mtz2tsjbykdk.9"
+ ],
+ "game_disjoint_target": 1000,
+ "games_by_source": {
+  "depleted": 68778,
+  "full-strength": 47135,
+  "variants": 4329
+ },
+ "held_out_cards": [
+  "a-moss-pit skeleton",
+  "a-rakish revelers",
+  "a-saheeli, filigree master",
+  "a-umara mystic",
+  "abyssal gorestalker"
+ ],
+ "held_out_games_by_source": {
+  "depleted": 195,
+  "full-strength": 13796,
+  "variants": 2
+ },
+ "held_out_texts": [
+  "AB$ Animate | Colors$ Blue,Black | Cost$ U B | Defined$ Self | OverwriteColors$ True | Power$ 2 | RemoveCreatureTypes$ True | SpellDescription$ CARDNAME becomes a 2/2 blue and black Horror artifact creature until end of turn and can't be blocked this turn. | SubAbility$ DBUnblockable | Toughness$ 2 | Types$ Artifact,Creature,Horror",
+  "AB$ Animate | Colors$ Red,White | Cost$ 2 R W | Defined$ Self | Keywords$ Double Strike | OverwriteColors$ True | Power$ 2 | SpellDescription$ Until end of turn, this land becomes a 2/1 red and white Elemental creature with double strike. It's still a land. | Toughness$ 1 | Types$ Creature,Elemental",
+  "AB$ Animate | ConditionPresent$ Card.Self+Detective | Cost$ 2 R | Duration$ Permanent | Keywords$ Double Strike | Power$ 3 | RemoveCreatureTypes$ True | SpellDescription$ If NICKNAME is a Detective, it becomes a 3/2 Human Faerie Rogue and gains double strike. | Toughness$ 2 | Types$ Human,Faerie,Rogue",
+  "AB$ Animate | Cost$ 1 R G | Power$ 4 | SpellDescription$ Target land you control becomes a 4/4 Elemental creature until end of turn. It's still a land. | TgtPrompt$ Select target land you control | Toughness$ 4 | Types$ Creature,Elemental | ValidTgts$ Land.YouCtrl",
+  "AB$ Animate | Cost$ GW | Duration$ Permanent | Power$ 2 | RemoveCreatureTypes$ True | SpellDescription$ This creature becomes a Kithkin Scout with base power and toughness 2/3. | Toughness$ 3 | Types$ Kithkin,Scout"
+ ],
+ "holdout_max_carriers": 8,
+ "holdout_permille": 20,
+ "max_events_per_record": 64,
+ "no_acting_text_scripts": {
+  "cardsfolder/a/aesthir_glider.txt": 1490,
+  "cardsfolder/a/air_elemental.txt": 1453,
+  "cardsfolder/a/apex_hawks.txt": 1198,
+  "cardsfolder/a/arcbound_stinger.txt": 1451,
+  "cardsfolder/a/arcbound_worker.txt": 1336
+ },
+ "per_class": {
+  "combat": {
+   "dropped_by_cap": 0,
+   "kept": 158348,
+   "read": 1066917,
+   "unique_texts": 0
+  },
+  "continuous": {
+   "dropped_by_cap": 875225,
+   "kept": 92007,
+   "read": 1354894,
+   "unique_texts": 2527
+  },
+  "playability-decision": {
+   "dropped_by_cap": 0,
+   "kept": 81413,
+   "read": 27524907,
+   "unique_texts": 0
+  },
+  "playability-legality": {
+   "dropped_by_cap": 0,
+   "kept": 38231,
+   "read": 1615151,
+   "unique_texts": 0
+  },
+  "resolution-cost": {
+   "dropped_by_cap": 943357,
+   "kept": 61719,
+   "read": 1832641,
+   "unique_texts": 17476
+  },
+  "resolution-effect": {
+   "dropped_by_cap": 1311253,
+   "kept": 233317,
+   "read": 2226674,
+   "unique_texts": 24099
+  },
+  "rewrite": {
+   "dropped_by_cap": 101220,
+   "kept": 54130,
+   "read": 187434,
+   "unique_texts": 1535
+  },
+  "trigger": {
+   "dropped_by_cap": 936613,
+   "kept": 62447,
+   "read": 1864406,
+   "unique_texts": 11453
+  }
+ },
+ "per_stratum": {
+  "card-disjoint": 1913731,
+  "dropped-held-out": 2316734,
+  "game-disjoint": 317932,
+  "gate-one": 17764,
+  "training": 781612
+ },
+ "quality_dropped": {
+  "event-flood": 61,
+  "no-ability": 145270,
+  "no-acting-text": 2805134
+ },
+ "rarity": {
+  "AB$ AddOrRemoveCounter | ConditionDefined$ Targeted | ConditionPresent$ Card.counters_GE1_TIME | Cost$ T | CounterNum$ 1 | CounterType$ TIME | SpellDescription$ Choose target permanent you control or suspended card you own. If that permanent or card has a time counter on it, you may remove a time counter from it or put another time counter on it. | TgtPrompt$ Choose target permanent you control or suspended card you own | TgtZone$ Battlefield,Exile | ValidTgts$ Permanent.inZoneBattlefield+YouCtrl,Card.suspended+YouOwn": 34,
+  "AB$ AddOrRemoveCounter | ConditionDefined$ Targeted | ConditionPresent$ Card.counters_GE1_TIME | Cost$ T | CounterNum$ 2 | CounterType$ TIME | SpellDescription$ Choose target permanent you control or suspended card you own. If that permanent or card has a time counter on it, you may remove a time counter from it or put another time counter on it. | TgtPrompt$ Choose target permanent you control or suspended card you own | TgtZone$ Battlefield,Exile | ValidTgts$ Permanent.inZoneBattlefield+YouCtrl,Card.suspended+YouOwn": 1,
+  "AB$ AddOrRemoveCounter | Cost$ 1 B G | CounterNum$ 1 | CounterType$ PLAGUE | Defined$ Self | SpellDescription$ Put a plague counter on CARDNAME or remove a plague counter from it.": 22,
+  "AB$ AddOrRemoveCounter | Cost$ T | CounterType$ DEFENSE | RemoveConditionSVar$ Targeted$Valid Battle.OppProtect | SorcerySpeed$ True | SpellDescription$ Choose target battle. If an opponent protects it, remove a defense counter from it. Otherwise, put a defense counter on it. Activate only as a sorcery. | StackDescription$ REP Choose target battle_{p:You} chooses {c:Targeted} & remove_{p:You} removes & put_{p:You} puts & . Activate only as a sorcery._. | ValidTgts$ Battle": 22,
+  "AB$ AddTurn | Activation$ Blessing | Cost$ 2 U U T PutCardToLibFromBattlefield<1/-1/CARDNAME> | NumTurns$ 1 | SpellDescription$ Take an extra turn after this one. Activate only if you have the city's blessing.": 9,
+  "AB$ AddTurn | Cost$ PayEnergy<8> Exile<1/CARDNAME> | NumTurns$ 1 | SpellDescription$ Take an extra turn after this one.": 3,
+  "AB$ AddTurn | Cost$ SubCounter<10/LOYALTY> | NumTurns$ 2 | Planeswalker$ True | SpellDescription$ Take two extra turns after this one. | Ultimate$ True": 2,
+  "AB$ AddTurn | Cost$ T Sac<5/Artifact> | NumTurns$ 1 | SpellDescription$ Take an extra turn after this one.": 1,
+  "AB$ AddTurn | Cost$ T SubCounter<3/CHARGE> | NumTurns$ 1 | SpellDescription$ Take an extra turn after this one.": 5,
+  "AB$ AlterAttribute | Attributes$ Prepared | Cost$ ExileFromGrave<1/Creature> | SorcerySpeed$ True | SpellDescription$ NICKNAME becomes prepared. Activate only as a sorcery.": 5
+ },
+ "seed": 42,
+ "shard_records": 2000,
+ "shortfall": {},
+ "sources": [
+  {
+   "name": "depleted/0cb91878-ce87-467e-aca3-270e9b114744.0-mtz0jh29ykay.jsonl.gz",
+   "size": 254101
+  },
+  {
+   "name": "depleted/0cb91878-ce87-467e-aca3-270e9b114744.0-mtz0krntomrt.jsonl.gz",
+   "size": 11481390
+  },
+  {
+   "name": "depleted/0cb91878-ce87-467e-aca3-270e9b114744.0-mtz0wcd8re5v.jsonl.gz",
+   "size": 3751057
+  },
+  {
+   "name": "depleted/0cb91878-ce87-467e-aca3-270e9b114744.0-mtz17wyjcgij.jsonl.gz",
+   "size": 6458147
+  },
+  {
+   "name": "depleted/0cb91878-ce87-467e-aca3-270e9b114744.0-mtz1jhr2gwec.jsonl.gz",
+   "size": 15891671
+  }
+ ],
+ "surface": "script",
+ "text_cap": 200,
+ "token_keys_ambiguous": {
+  "angel_token": 22,
+  "angel_warrior_token": 7,
+  "assassin_token": 10,
+  "avatar_token": 1,
+  "beast_token": 62
+ },
+ "token_keys_remapped": 9919,
+ "training_records": 0,
+ "unattributed_records": 1738150,
+ "unique_texts": {
+  "card-disjoint": 12439,
+  "game-disjoint": 5866,
+  "gate-one": 342,
+  "training": 29122
+ },
+ "validation_sample": 2048,
+ "variant_scripts": "output/effects/variant-scripts/",
+ "vocab_path": "models/effects/vocab-script.txt"
+}

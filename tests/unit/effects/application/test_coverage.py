@@ -997,3 +997,133 @@ class TestParallelCounting:
         counter.update(coverage, tmp_path, workers=2)
 
         assert coverage["alpha"].records == 4
+
+
+# ── the held-out coverage round (FR-035–FR-038; T044, T045) ──────────────
+
+
+_FIXTURES = Path(__file__).parents[3] / "fixtures" / "effects"
+
+
+class TestHeldOutTextUnit:
+    def test_a_held_out_text_is_one_only_listed_cards_carry(self):
+        from effects.application.collect_coverage import held_out_texts_of
+
+        texts = held_out_texts_of(frozenset({"alpha", "beta"}), {
+            "alpha": ["SP$ Rare | Thing$ 1", "SP$ Common"],
+            "beta": ["SP$ Rare  | Thing$ 1"],
+            "gamma": ["SP$ Common"],
+        })
+        assert texts == {"SP$ Rare | Thing$ 1": frozenset({"alpha", "beta"})}
+
+    def test_a_shard_counts_distinct_games_per_text(self):
+        from effects.application.collect_coverage import count_text_shard
+        from effects.domain.text_holdout import normalize_script_text
+        from effects.infrastructure.record_io import read_shard
+        from effects.infrastructure.sidecar_io import SidecarCache
+
+        roots = {
+            "cardsfolder": str(_FIXTURES / "gen1-sidecars" / "cardsfolder"),
+            "tokenscripts": str(_FIXTURES / "gen1-sidecars" / "tokenscripts"),
+        }
+        shard = _FIXTURES / "gen1-records.jsonl.gz"
+        cache = SidecarCache({k: Path(v) for k, v in roots.items()})
+        expected: dict[str, set[str]] = {}
+        for record in read_shard(shard):
+            for key in record.ability or ():
+                line = cache.line_for(key)
+                if line is not None and line.script_text:
+                    expected.setdefault(
+                        normalize_script_text(line.script_text), set(),
+                    ).add(record.game_id)
+        assert expected
+        counted = count_text_shard(shard, roots=roots, texts=frozenset(expected))
+        assert counted == expected
+
+    def test_satisfaction_is_distinct_games_at_the_floor(self):
+        from effects.application.collect_coverage import TextCoverage
+
+        unit = TextCoverage(text="t", games={"g1", "g2", "g3", "g4"})
+        assert not unit.satisfied(5)
+        unit.games.add("g5")
+        assert unit.satisfied(5) and unit.records == 5
+
+    def test_the_round_ends_without_waiting_on_uncastable_texts(self):
+        """FR-037 / spec Story 2 scenario 6."""
+        from effects.application.collect_coverage import (
+            TextCoverage,
+            is_text_round_complete,
+            text_residues,
+        )
+
+        coverage = {
+            "done": TextCoverage(text="done", games={f"g{i}" for i in range(5)}),
+            "retired": TextCoverage(text="retired", games={"g1"}, retired=True),
+            "stuck": TextCoverage(text="stuck", castable=False),
+        }
+        assert is_text_round_complete(coverage, 5)
+        residues = text_residues(coverage, 5)
+        assert residues.under_floor == {"retired": 1}
+        assert residues.uncastable == ("stuck",)
+        assert "stuck" in residues.render(5)
+
+    def test_decks_hold_only_listed_cards_plus_basics(self):
+        """Spec Story 2 scenario 5."""
+        import random
+
+        from effects.application.collect_coverage import (
+            TextCoverage,
+            build_coverage_decks,
+            text_deck_weights,
+        )
+
+        carriers = {"t1": frozenset({"alpha"}), "t2": frozenset({"beta"})}
+        coverage = {"t1": TextCoverage(text="t1"), "t2": TextCoverage(
+            text="t2", games={f"g{i}" for i in range(5)},
+        )}
+        weights = text_deck_weights(coverage, carriers, 5)
+        assert weights == {"alpha": 5.0}
+        texts = {"alpha": "name: alpha\nmana cost: {R}\n", "beta": "name: beta\n"}
+        decks = build_coverage_decks(weights, texts, 3, rng=random.Random(0))
+        basics = {"Plains", "Island", "Swamp", "Mountain", "Forest"}
+        assert all(set(deck) <= {"alpha"} | basics for deck in decks)
+
+
+class TestOnlyCardsRefusals:
+    """FR-038 / spec Story 2 scenario 7: refused before any worker starts."""
+
+    @pytest.mark.parametrize("extra", [
+        ("--exclude-cards", "holdout.txt"),
+        ("--split-from", "models/x/latest.pt"),
+    ])
+    def test_only_cards_beside_another_holdout_source_is_refused(self, extra):
+        from effects.infrastructure.cli import build_parser, coverage_config_from
+
+        args = build_parser().parse_args(
+            ["collect-coverage", "--only-cards", "holdout.txt", *extra],
+        )
+        with pytest.raises(ValueError, match="--only-cards"):
+            coverage_config_from(args)
+
+    def test_only_cards_beside_a_training_corpus_is_refused(self, tmp_path):
+        from effects.infrastructure.cli import build_parser, run_collect_coverage
+
+        corpus = tmp_path / "depleted"
+        corpus.mkdir()
+        (corpus / "holdout-cards.txt").write_text("Soul Echo\n", encoding="utf-8")
+        args = build_parser().parse_args([
+            "collect-coverage", "--only-cards", "holdout.txt",
+            "--training-corpus", str(corpus),
+        ])
+        with patch("effects.application.collect_coverage.run") as collect:
+            assert run_collect_coverage(args) == 1
+        collect.assert_not_called()
+
+    def test_alone_it_selects_the_text_unit(self):
+        from effects.infrastructure.cli import build_parser, coverage_config_from
+
+        config = coverage_config_from(build_parser().parse_args(
+            ["collect-coverage", "--only-cards", "holdout.txt", "--min-text-games", "7"],
+        ))
+        assert config.only_cards == Path("holdout.txt")
+        assert config.min_text_games == 7

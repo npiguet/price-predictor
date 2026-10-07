@@ -1,0 +1,7 @@
+name: urza's engine
+mana cost: {5}
+types: artifact creature juggernaut
+power toughness: 1/5
+static: trample
+activated[1]: {3}: CARDNAME gains banding until end of turn.
+activated[2]: {3}: attacking creatures banded with CARDNAME gain trample until end of turn.

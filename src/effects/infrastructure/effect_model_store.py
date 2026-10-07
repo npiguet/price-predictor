@@ -19,7 +19,7 @@ numbers mean anything:
   split, and `evaluate-effect-model` fails fast rather than scoring the gates
   partly on games the model trained on.
 
-Training-only heads (MLM, script-API, pairing) are filtered out at save time
+Training-only heads (MLM, script-API, value) are filtered out at save time
 (FR-076): they exist to shape the encoder and have no meaning at inference.
 """
 
@@ -116,9 +116,16 @@ class SplitProvenance:
     #: prevent, arriving through the corpus instead of the split.
     corpus_path: str = ""
     corpus_digest: str = ""
+    #: What the holdout keyed on (FR-042): ``template`` or ``text``. A
+    #: checkpoint that records none trained under ``text``, feature 023's
+    #: rule, and is written without the field so its payload is unchanged.
+    holdout_unit: str = "text"
 
     def as_dict(self) -> dict[str, Any]:
-        return asdict(self)
+        data = asdict(self)
+        if self.holdout_unit == "text":
+            del data["holdout_unit"]
+        return data
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> SplitProvenance:
@@ -135,6 +142,7 @@ class SplitProvenance:
             holdout_max_carriers=int(data.get("holdout_max_carriers", 0)),
             corpus_path=data.get("corpus_path", ""),
             corpus_digest=data.get("corpus_digest", ""),
+            holdout_unit=data.get("holdout_unit", "text"),
         )
 
     @property
@@ -184,6 +192,15 @@ class EffectCheckpoint:
     best_val_loss: float = float("inf")
     epoch: int = 0
     extra: dict[str, Any] = field(default_factory=dict)
+    #: The sidecar roots the run resolved keys against (FR-063b). Empty on a
+    #: checkpoint saved before the field existed.
+    cards_folders: tuple[str, ...] = ()
+    #: The training flags a sweep arm differs by and the script-API head's
+    #: vocabularies (FR-063): ``e_noise``, ``value_weight``, ``mlm_weight``,
+    #: ``mlm_mask_prob``, ``api_weight``, ``api_types``, ``param_keys``. The
+    #: encoder's size is in ``encoder_config`` and the holdout unit in the
+    #: provenance; neither is repeated here.
+    training_settings: dict[str, Any] = field(default_factory=dict)
 
 
 def filter_training_only(state: dict[str, Any]) -> dict[str, Any]:
@@ -205,7 +222,26 @@ def filter_training_only(state: dict[str, Any]) -> dict[str, Any]:
 _RESERVED_PAYLOAD_KEYS = frozenset({
     "encoder_state_dict", "model_state_dict", "encoder_config", "model_config",
     "provenance", "variant", "best_val_loss", "epoch", "config",
+    "cards_folders", "training_settings",
 })
+
+#: Encoder-config keys an older checkpoint may carry that the config no longer
+#: has. ``e_noise`` was the encoder's own fixed-σ noise, removed when noise on
+#: ``e`` moved to the batcher (FR-057); gen-1's checkpoint records it, and it
+#: has no bearing on inference, so it is dropped on load (FR-061).
+_REMOVED_ENCODER_KEYS = frozenset({"e_noise"})
+
+
+def encoder_config_from(data: dict[str, Any]) -> AbilityEncoderConfig:
+    """An encoder config from a checkpoint's dict, whatever it was saved by.
+
+    A config that records no size builds at the defaults, 4 layers and width
+    256, which is what every checkpoint before the size flags trained at.
+    """
+    return AbilityEncoderConfig(**{
+        key: value for key, value in data.items()
+        if key not in _REMOVED_ENCODER_KEYS
+    })
 
 
 class EffectModelStore:
@@ -233,6 +269,8 @@ class EffectModelStore:
             "variant": checkpoint.variant,
             "best_val_loss": checkpoint.best_val_loss,
             "epoch": checkpoint.epoch,
+            "cards_folders": list(checkpoint.cards_folders),
+            "training_settings": dict(checkpoint.training_settings),
             **checkpoint.extra,
         }
         stamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
@@ -254,7 +292,7 @@ class EffectModelStore:
             path, EffectModelConfig, weights_only=False,
         )
         return EffectCheckpoint(
-            encoder_config=AbilityEncoderConfig(**payload["encoder_config"]),
+            encoder_config=encoder_config_from(payload["encoder_config"]),
             model_config=model_config,
             encoder_state=payload["encoder_state_dict"],
             model_state=payload["model_state_dict"],
@@ -270,6 +308,8 @@ class EffectModelStore:
                 key: value for key, value in payload.items()
                 if key not in _RESERVED_PAYLOAD_KEYS
             },
+            cards_folders=tuple(payload.get("cards_folders", ())),
+            training_settings=dict(payload.get("training_settings", {})),
         )
 
 

@@ -1,0 +1,7 @@
+name: voidwing hybrid
+mana cost: {U}{B}
+types: creature phyrexian bat
+power toughness: 2/1
+static: flying
+static: toxic 1
+triggered: when you proliferate, return CARDNAME from your graveyard to your hand.

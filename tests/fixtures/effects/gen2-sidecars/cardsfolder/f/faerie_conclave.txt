@@ -1,0 +1,5 @@
+name: faerie conclave
+types: land
+activated[1]: {T}: add {U}.
+activated[2]: {1}{U}: CARDNAME becomes a 2/1 blue faerie creature with flying until end of turn. it's still a land.
+replacement: CARDNAME enters tapped.

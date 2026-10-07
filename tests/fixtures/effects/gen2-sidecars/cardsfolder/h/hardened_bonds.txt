@@ -1,0 +1,4 @@
+name: hardened bonds
+mana cost: {G}
+types: enchantment
+triggered: whenever a +1/+1 counter is put on a creature you control, seek a creature card. that card perpetually gets +1/+1. this ability triggers only once each turn.

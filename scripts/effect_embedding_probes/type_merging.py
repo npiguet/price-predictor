@@ -23,6 +23,7 @@ Writes ``api_confusion.md`` and ``amounts_within_type.md``.
 
 from __future__ import annotations
 
+import argparse
 import sys
 import warnings
 from pathlib import Path
@@ -38,10 +39,12 @@ from sklearn.preprocessing import StandardScaler
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from common import (  # noqa: E402
-    OUT,
+    add_probe_arguments,
     group_means_residual,
+    has_taxonomy,
     matrix,
     prepared,
+    resolve_paths,
     winsorized,
     write_markdown,
 )
@@ -71,8 +74,12 @@ def within_r2(X, y, api, groups) -> float:
 
 
 def main() -> None:
+    parser = add_probe_arguments(
+        argparse.ArgumentParser(description=__doc__.splitlines()[0]),
+    )
+    paths = resolve_paths(parser.parse_args())
     warnings.simplefilter("ignore", ConvergenceWarning)
-    table, _ = prepared()
+    table, _ = prepared(paths)
     groups = table["group"].to_numpy()
     X = StandardScaler().fit_transform(matrix(table, "e_full"))
     y = table["api_c"].to_numpy(object)
@@ -98,25 +105,29 @@ def main() -> None:
             f"Accuracy: linear {np.mean(linear == y):.3f}, 20-nearest-neighbour "
             f"{np.mean(knn == y):.3f}, majority class "
             f"{counts.iloc[0] / len(y):.3f}.")
-    write_markdown(pairs, OUT / "api_confusion.md",
+    write_markdown(pairs, paths.out / "api_confusion.md",
                    "API-type pairs the linear probe confuses most", note)
-    write_markdown(per_type, OUT / "api_recall.md",
+    write_markdown(per_type, paths.out / "api_recall.md",
                    "Per-type recall of the API-type probes (40 largest types)", note)
     print(note)
     print(pairs.head(15).to_string(index=False))
 
     rows = []
     api = table["api"].to_numpy(object)
+    # The taxonomy columns only where that baseline's cache exists (FR-072).
+    sources = [("full", "e_full")]
+    if has_taxonomy(table):
+        sources.append(("taxonomy", "e_tax"))
     for column in AMOUNTS:
         values = winsorized(table[column].to_numpy(float))
         row = {"amount": column,
                "texts with a nonzero value": int((np.nan_to_num(values) != 0).sum())}
-        for space, source in (("full", "e_full"), ("taxonomy", "e_tax")):
+        for space, source in sources:
             row[f"{space}, within type"] = within_r2(
                 matrix(table, source), values, api, groups)
         rows.append(row)
     frame = pd.DataFrame(rows)
-    write_markdown(frame, OUT / "amounts_within_type.md",
+    write_markdown(frame, paths.out / "amounts_within_type.md",
                    "Amounts read within an API type (out-of-fold R²)",
                    "Both the embedding and the amount have their API-type mean "
                    "subtracted; ridge alpha 10, GroupKFold(5) by carrying card.")

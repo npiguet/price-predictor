@@ -187,3 +187,87 @@ class TestTheTrainingCorpusFlag:
 
         assert config.effect_records == tmp_path / "records"
         assert config.exclude_cards is None
+
+
+# ── the template unit (FR-040, FR-043; T040, T042) ──────────────────────
+
+
+def test_the_report_counts_templates_texts_cards_and_the_depleted_share():
+    from effects.application.holdout_cards import holdout_report
+
+    card_files = {f"card {i}": f"cardsfolder/c/card_{i}.txt" for i in range(6)}
+    texts_by_card = {
+        "card 0": ["SP$ Bespoke | Weird$ 1"],
+        "card 1": ["SP$ Bespoke | Weird$ 2"],          # same template as card 0
+        "card 2": ["SP$ Other | Thing$ X"],
+        "card 3": ["SP$ Other | Thing$ X"],            # same text as card 2
+        "card 4": [], "card 5": [],
+    }
+    report = holdout_report(
+        card_files, texts_by_card, permille=1000, max_carriers=8, unit="template",
+    )
+
+    assert report.keys == 2
+    assert report.texts == 3
+    assert len(report.names) == 4
+    assert report.depleted_share == 4 / 6
+
+
+def test_number_only_variants_land_on_the_same_side_of_the_list():
+    from effects.domain.text_holdout import masked_template
+
+    card_files = {f"card {i}": f"cardsfolder/c/card_{i}.txt" for i in range(40)}
+    texts_by_card = {
+        f"card {i}": [f"SP$ DealDamage | NumDmg$ {i % 4} | ValidTgts$ Kind{i // 4}"]
+        for i in range(40)
+    }
+    listed = set(depletion_list(
+        card_files, texts_by_card, permille=500, max_carriers=8, unit="template",
+    ))
+    by_template: dict[str, set[bool]] = {}
+    for card, texts in texts_by_card.items():
+        by_template.setdefault(masked_template(texts[0]), set()).add(card in listed)
+    assert all(len(sides) == 1 for sides in by_template.values())
+
+
+def test_the_cli_defaults_to_the_template_unit():
+    from effects.infrastructure.cli import build_parser
+
+    args = build_parser().parse_args(["holdout-cards", "--out", "x.txt"])
+    assert args.holdout_unit == "template"
+    args = build_parser().parse_args(["build-corpus"])
+    assert args.holdout_unit == "template"
+    args = build_parser().parse_args(["train-effect-model", "--corpus", "c"])
+    assert args.holdout_unit is None
+
+
+def test_a_checkpoint_records_the_holdout_unit_and_reads_none_as_text():
+    from effects.infrastructure.effect_model_store import SplitProvenance
+
+    template = SplitProvenance(held_out_cards=("Alpha",), holdout_unit="template")
+    assert SplitProvenance.from_dict(template.as_dict()).holdout_unit == "template"
+
+    text = SplitProvenance(held_out_cards=("Alpha",))
+    assert "holdout_unit" not in text.as_dict()
+    assert SplitProvenance.from_dict(text.as_dict()).holdout_unit == "text"
+
+
+def test_a_real_gen1_checkpoint_split_reads_as_the_text_unit():
+    """The 09.17f checkpoint's recorded split, as written, carries no unit."""
+    from effects.infrastructure.effect_model_store import SplitProvenance
+
+    recorded = {
+        "held_out_cards": ["a-moss-pit skeleton"], "card_disjoint_games": [],
+        "game_disjoint_games": [], "vocab_path": "models/effects/vocab-script.txt",
+        "keyword_definitions_path": "output/effects/keyword-definitions.json",
+        "vocab_hash": "47c816e1", "keyword_definitions_hash": "93b710ba",
+        "withheld_keyword": None, "holdout_permille": 20, "holdout_max_carriers": 8,
+        "corpus_path": "output/effects/corpus/",
+        "corpus_digest": "e3c0c9bb913b9aeda0d07eb587b5445c",
+    }
+    provenance = SplitProvenance.from_dict(recorded)
+    assert provenance.holdout_unit == "text"
+    assert provenance.as_dict() == {
+        **recorded,
+        **{k: tuple(v) for k, v in recorded.items() if isinstance(v, list)},
+    }

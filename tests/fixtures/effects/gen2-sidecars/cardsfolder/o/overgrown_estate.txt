@@ -1,0 +1,4 @@
+name: overgrown estate
+mana cost: {W}{B}{G}
+types: enchantment
+activated[1]: sacrifice a land: you gain 3 life.

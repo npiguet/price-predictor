@@ -1,0 +1,5 @@
+name: ajani's pridemate
+mana cost: {1}{W}
+types: creature cat soldier
+power toughness: 2/2
+triggered: whenever you gain life, put a +1/+1 counter on CARDNAME.

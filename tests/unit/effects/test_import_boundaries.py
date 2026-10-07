@@ -34,6 +34,10 @@ _ALLOWED: dict[str, set[str] | None] = {
     "price_predictor.infrastructure.torch_training": {"clip_per_group"},
     "price_predictor.infrastructure.append_only": None,
     "price_predictor.infrastructure.card_filenames": {"sanitize_card_name"},
+    # Feature 024: the value head's cost targets parse a line's `Cost$` with
+    # the existing mana-cost parser rather than a second one (research.md §
+    # Adjacent prior art, FR-058a).
+    "price_predictor.domain.value_objects": {"ManaCost"},
     "sealed.domain.manabase": {"compute_basic_lands"},
     "sealed.domain.card_embedding_layout": None,
     "sealed.infrastructure.converted_card_locator": {"ConvertedCardLocator"},

@@ -82,8 +82,14 @@ HOLDOUT_MAX_CARRIERS = 8
 #: before gate 1's margins mean anything. A floor, not a rule: below it
 #: the run warns, at zero it stops.
 MIN_HOLDOUT_RECORDS = 2000
-#: Rarity weight ceiling, as a multiple of the most-observed text's weight.
+#: Rarity weight ceiling, as a multiple of the weight of the text at
+#: :data:`RARITY_PERCENTILE` of effective games (FR-054).
 RARITY_CAP = 20.0
+#: The percentile of effective games the ceiling is set against. The 99th
+#: rather than the maximum: one ubiquitous text (``Flying``) would otherwise
+#: set the ceiling for the whole class, and a corpus that gains one more game
+#: of it would move every rare text's weight.
+RARITY_PERCENTILE = 99.0
 RANDOM_SEED = 42
 
 #: Shards an epoch reads.
@@ -169,16 +175,26 @@ def effective_games(
     return {text: len(ids) for text, ids in games.items()}
 
 
+def _percentile(values: Sequence[float], percentile: float) -> float:
+    """Nearest-rank percentile of a non-empty sequence."""
+    ordered = sorted(values)
+    rank = max(1, -(-len(ordered) * percentile // 100))
+    return ordered[min(int(rank), len(ordered)) - 1]
+
+
 def rarity_weights(
     games_per_text: dict[str, int], *, cap: float = RARITY_CAP,
+    percentile: float = RARITY_PERCENTILE,
 ) -> dict[str, float]:
-    """``effective_games ** -0.5``, capped at ``cap`` times the smallest weight.
+    """``effective_games ** -0.5``, capped at ``cap`` times the p99 text's weight.
 
     The exponent flattens the corpus's long tail without erasing it: an ability
     seen in one game gets more weight than one seen in a hundred, but not a
     hundred times more. The cap stops a single-game ability from dominating a
-    batch, and is expressed against the *most-observed* text — the one with the
-    smallest weight — so it scales with the corpus rather than being absolute.
+    batch, and is expressed against the text at the ``percentile``-th
+    percentile of effective games (FR-054) — a common text, so the cap scales
+    with the corpus, but not the single most common one, whose count would set
+    every other text's ceiling on its own.
     """
     if not games_per_text:
         return {}
@@ -186,22 +202,29 @@ def rarity_weights(
         text: float(count) ** -0.5 if count > 0 else 0.0
         for text, count in games_per_text.items()
     }
-    positive = [w for w in raw.values() if w > 0]
-    if not positive:
+    counts = [float(count) for count in games_per_text.values() if count > 0]
+    if not counts:
         return raw
-    ceiling = min(positive) * cap
+    ceiling = cap * _percentile(counts, percentile) ** -0.5
     return {text: min(weight, ceiling) for text, weight in raw.items()}
 
 
 def sample_weights(
     records: Sequence[EffectRecord], text_of, *,
     rarity: Mapping[str, int] | None = None,
+    class_of=None,
 ) -> list[float]:
-    """Per-record sampling weight within its class.
+    """Per-record sampling weight within its class (FR-054).
 
-    A record with no acting ability text weighs 1: ``combat`` and
-    ``playability``/``attackers``/``blockers`` sample uniformly, because there
-    is no ability text for rarity to key on (FR-087).
+    A record with no acting ability text weighs 1 before normalization:
+    ``combat`` and ``playability``/``attackers``/``blockers`` sample uniformly,
+    because there is no ability text for rarity to key on (FR-087).
+
+    The ceiling is set and the weights normalized **within each sampling
+    class**: each class's weights are capped against its own p99 text and
+    scaled to a mean of one, so rarity reorders records inside a class without
+    moving mass between classes — the class mixture is the corpus's, fixed by
+    ``build-corpus --class-mix``.
 
     Args:
         rarity: a corpus-wide ``text -> games`` table from a curated dataset's
@@ -209,17 +232,31 @@ def sample_weights(
             text the table does not name falls back to the shard's count for
             it rather than to zero, so a shard collected after the dataset was
             built still weights sanely instead of dominating every batch.
+        class_of: ``record -> class``; absent, the records are one class.
     """
+    texts = [text_of(record) for record in records]
     shard_counts = effective_games(records, text_of)
-    games_per_text = (
-        shard_counts if rarity is None
-        else {text: rarity.get(text, count) for text, count in shard_counts.items()}
-    )
-    weights = rarity_weights(games_per_text)
-    out: list[float] = []
-    for record in records:
-        text = text_of(record)
-        out.append(1.0 if text is None else weights.get(text, 1.0))
+    classes = [
+        class_of(record) if class_of is not None else "" for record in records
+    ]
+    out = [1.0] * len(records)
+    for name in set(classes):
+        members = [i for i, value in enumerate(classes) if value == name]
+        present = {texts[i] for i in members if texts[i] is not None}
+        weights = rarity_weights({
+            text: (
+                shard_counts[text] if rarity is None
+                else rarity.get(text, shard_counts[text])
+            )
+            for text in present
+        })
+        for i in members:
+            if texts[i] is not None:
+                out[i] = weights.get(texts[i], 1.0)
+        mean = sum(out[i] for i in members) / len(members)
+        if mean > 0:
+            for i in members:
+                out[i] /= mean
     return out
 
 
@@ -282,8 +319,15 @@ def text_keyed_holdout(
     *,
     permille: int = HOLDOUT_PERMILLE,
     max_carriers: int = HOLDOUT_MAX_CARRIERS,
+    unit: str = "text",
 ) -> HeldOutCards:
     """Hold out ability texts, and with them every card carrying one (FR-088).
+
+    ``unit`` selects what is counted and hashed (FR-040, FR-041): ``template``
+    holds out every text sharing a masked template together, ``text`` is
+    feature 023's rule. ``holdout-cards``, ``build-corpus`` and
+    ``train-effect-model`` all go through here, so the three agree by
+    construction rather than by three implementations kept in step.
 
     Args:
         card_files: ``card name -> script file``, one entry per converted card
@@ -300,7 +344,7 @@ def text_keyed_holdout(
     from effects.domain.text_holdout import select_holdout
 
     chosen = select_holdout(
-        texts_by_card, permille=permille, max_carriers=max_carriers,
+        texts_by_card, permille=permille, max_carriers=max_carriers, unit=unit,
     )
     names = frozenset(chosen.cards & card_files.keys())
     return HeldOutCards(
@@ -737,6 +781,8 @@ class TrainEffectModelConfig:
     )
     variant_scripts: Path | None = None
     split_from: Path | None = None
+    #: ``--holdout-unit``: None takes the manifest's recorded unit (FR-041).
+    holdout_unit: str | None = None
     vocab_path: Path = field(default_factory=lambda: Path("models/effects/vocab.txt"))
     #: Seeds weight init, batch planning and each epoch's shard draw.
     #:
@@ -753,7 +799,14 @@ class TrainEffectModelConfig:
     model_output: Path | None = None
     variant: str = VARIANT_FULL
     e_dim: int = 64
-    e_noise: float = 0.05
+    #: The noise ratio ``r`` on ``e``, relative to the running covariance of
+    #: ``e`` itself (FR-056) — no longer a fixed σ.
+    e_noise: float = 0.1
+    #: The value head's loss weight (FR-058).
+    value_weight: float = 0.05
+    #: The ability encoder's size (FR-061); the checkpoint records both.
+    encoder_layers: int = 4
+    encoder_d_model: int = 256
     keyword_expand_p: float = 0.25
     context_dropout: float = 0.15
     mlm_weight: float = 0.1
@@ -1036,6 +1089,61 @@ def corpus_shards(records_dir: Path) -> list[Path]:
     return iter_shards(Path(records_dir))
 
 
+class HoldoutMismatchError(ValueError):
+    """The trainer's own holdout disagrees with the one its corpus recorded."""
+
+
+def check_manifest_holdout(manifest, config: TrainEffectModelConfig) -> None:
+    """Refuse a holdout unit or a held-out text set the manifest does not record.
+
+    FR-041: ``--holdout-unit`` defaults to the manifest's unit and is refused
+    when it names the other one. The holdout is then recomputed here, with the
+    same function ``holdout-cards`` and ``build-corpus`` call, over this run's
+    sidecar roots; a run whose sidecars hold out different texts than the
+    corpus was built against would train on texts it believes are held out,
+    so it is refused before any step rather than discovered at evaluation.
+    """
+    from effects.domain.text_holdout import normalize_script_text
+    from effects.infrastructure.sidecar_io import SidecarCache, sidecar_roots
+
+    unit = manifest.holdout_unit
+    if config.holdout_unit is not None and config.holdout_unit != unit:
+        raise HoldoutMismatchError(
+            f"--holdout-unit {config.holdout_unit} differs from the unit the "
+            f"corpus at {config.corpus} was built under ({unit}). The split is "
+            "the corpus's; rebuild it with build-corpus --holdout-unit "
+            f"{config.holdout_unit}, or drop the flag."
+        )
+    roots = sidecar_roots(config.cards_folders)
+    cards_folder = roots.get("cardsfolder")
+    if cards_folder is None or not cards_folder.is_dir():
+        raise HoldoutMismatchError(
+            "the holdout cannot be recomputed: no converted card tree among "
+            f"--cards-folder {', '.join(str(f) for f in config.cards_folders)}"
+        )
+    card_files = load_card_files(cards_folder)
+    recomputed = text_keyed_holdout(
+        card_files, load_card_texts(card_files, SidecarCache(roots)),
+        permille=manifest.holdout_permille,
+        max_carriers=manifest.holdout_max_carriers,
+        unit=unit,
+    )
+    recorded = {normalize_script_text(text) for text in manifest.held_out_texts}
+    if recomputed.texts != recorded:
+        missing = sorted(recorded - recomputed.texts)
+        extra = sorted(recomputed.texts - recorded)
+        raise HoldoutMismatchError(
+            f"the holdout recomputed under {unit} over {cards_folder} holds "
+            f"{len(recomputed.texts)} text(s), the corpus recorded "
+            f"{len(recorded)}: {len(missing)} recorded text(s) not held out "
+            f"now, {len(extra)} held out now and not recorded. The sidecars "
+            "were reconverted since the corpus was built, or --cards-folder "
+            "names a different tree; point it at the sidecars the corpus was "
+            "built against. First difference: "
+            f"{(missing or extra)[0]!r}"
+        )
+
+
 def run(config: TrainEffectModelConfig) -> int:
     """Train the encoder and effect head jointly. Returns an exit code.
 
@@ -1086,6 +1194,22 @@ def run(config: TrainEffectModelConfig) -> int:
             "build-corpus that writes validation/samples/.", config.corpus, ", ".join(missing),
         )
         return 1
+    from effects.infrastructure.record_io import (
+        MixedGenerationsError,
+        iter_shards,
+        refuse_mixed_generations,
+    )
+
+    try:
+        # Before any record is read (FR-033).
+        refuse_mixed_generations(iter_shards(Path(config.corpus)))
+        check_manifest_holdout(manifest, config)
+    except (HoldoutMismatchError, MixedGenerationsError) as exc:
+        logger.error("%s", exc)
+        return 1
+    # Copied into the checkpoint's split (FR-042), so evaluation knows the
+    # unit without re-reading the manifest.
+    config.holdout_unit = manifest.holdout_unit
     held_out = HeldOutCards(
         names=frozenset(manifest.held_out_cards), script_files=frozenset(),
         texts=frozenset(manifest.held_out_texts),

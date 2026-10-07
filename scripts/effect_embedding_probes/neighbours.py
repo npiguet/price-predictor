@@ -22,6 +22,7 @@ Writes ``neighbours.md`` and ``clusters.md``.
 
 from __future__ import annotations
 
+import argparse
 import sys
 from pathlib import Path
 
@@ -33,17 +34,19 @@ from sklearn.metrics import normalized_mutual_info_score
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from common import (  # noqa: E402
-    OUT,
-    ROOT,
     SEED,
+    ProbePaths,
+    add_probe_arguments,
     group_means_residual,
+    has_taxonomy,
     load_texts,
     matrix,
+    resolve_paths,
     to_markdown,
     write_markdown,
 )
 
-from effects.domain.ability_encoder import SURFACE_SCRIPT, encoding_text  # noqa: E402
+from effects.domain.ability_encoder import encoding_text  # noqa: E402
 from effects.infrastructure.sidecar_io import (  # noqa: E402
     converted_text_path,
     prose_for,
@@ -57,13 +60,18 @@ CARDS = ("lightning bolt", "llanowar elves", "giant growth", "wrath of god",
 K = 40
 
 
-def card_texts(card: str) -> list[str]:
-    """The script-surface texts of one card, read from its own sidecar."""
+def card_texts(card: str, paths: ProbePaths) -> list[str]:
+    """One card's texts on the checkpoint's surface, read from its own sidecar."""
     stem = card.replace(" ", "_").replace("'", "")
-    path = ROOT / "output" / "cardsfolder" / stem[0] / f"{stem}.provenance.json"
+    root = paths.tree_root("cardsfolder")
+    if root is None:
+        return []
+    path = root / stem[0] / f"{stem}.provenance.json"
+    if not path.exists():
+        return []
     sidecar = read_sidecar(path)
     rendered = prose_lines(converted_text_path(path))
-    return [encoding_text(line, prose_for(line, rendered), SURFACE_SCRIPT)
+    return [encoding_text(line, prose_for(line, rendered), paths.surface)
             for line in sidecar.lines]
 
 
@@ -73,13 +81,17 @@ def unit(E: np.ndarray) -> np.ndarray:
 
 
 def main() -> None:
-    table = load_texts()
+    parser = add_probe_arguments(
+        argparse.ArgumentParser(description=__doc__.splitlines()[0]),
+    )
+    paths = resolve_paths(parser.parse_args())
+    table = load_texts(paths)
     full = matrix(table, "e_full")
     U = unit(full)
     lines = ["# Nearest neighbours of well-known abilities (centred cosine)", ""]
     index = {text: i for i, text in enumerate(table.text)}
     for card in CARDS:
-        rows = [index[t] for t in card_texts(card) if t in index]
+        rows = [index[t] for t in card_texts(card, paths) if t in index]
         if not rows:
             lines.append(f"*{card}: no encoded line*\n")
             continue
@@ -95,13 +107,15 @@ def main() -> None:
                 lines.append(f"| {sims[j]:.3f} | {table.card.iloc[j]} | "
                              f"{table.api.iloc[j]} | {prose.replace('|', '/')} |")
             lines.append("")
-    (OUT / "neighbours.md").write_text("\n".join(lines), encoding="utf-8")
+    (paths.out / "neighbours.md").write_text("\n".join(lines), encoding="utf-8")
 
     spaces = {
         "full": full,
         "residual": group_means_residual(full, table["api"]),
-        "taxonomy": matrix(table, "e_tax"),
     }
+    # The taxonomy row only where that baseline's cache exists (FR-072).
+    if has_taxonomy(table):
+        spaces["taxonomy"] = matrix(table, "e_tax")
     nmi_rows = []
     labels = {}
     for name, E in spaces.items():
@@ -135,8 +149,8 @@ def main() -> None:
             for i in near)
         api_text = ", ".join(f"{a} {s:.0%}" for a, s in apis.items())
         out.append(f"| {c} | {len(members)} | {api_text} | {examples} |")
-    (OUT / "clusters.md").write_text("\n".join(out) + "\n", encoding="utf-8")
-    write_markdown(nmi, OUT / "clusters_nmi.md", "Cluster / category agreement")
+    (paths.out / "clusters.md").write_text("\n".join(out) + "\n", encoding="utf-8")
+    write_markdown(nmi, paths.out / "clusters_nmi.md", "Cluster / category agreement")
     print(nmi.to_string(index=False))
 
 

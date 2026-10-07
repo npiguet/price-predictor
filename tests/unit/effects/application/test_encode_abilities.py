@@ -381,6 +381,103 @@ class TestTheRealEncoder:
         ).read("cardsfolder/s/serra_angel.txt")
         np.testing.assert_array_equal(first, second)
 
+    def test_a_line_past_the_window_is_reported_by_its_key(self, trained, caplog):
+        """Spec Story 1 scenario 9 (FR-006)."""
+        text = trained.cards_folders[0] / "s" / "serra_angel.txt"
+        rows = text.read_text(encoding="utf-8").splitlines()
+        rows[5] = "static[4]: " + " ".join(["flying"] * 600)
+        text.write_text("\n".join(rows) + "\n", encoding="utf-8")
+        with caplog.at_level("WARNING"):
+            run(trained)
+        reported = [r.getMessage() for r in caplog.records if "truncated" in r.getMessage()]
+        assert len(reported) == 1
+        assert "cardsfolder/s/serra_angel.txt face 0 static[1]" in reported[0]
+        assert "512" in reported[0]
+
+    def test_no_line_inside_the_window_is_reported(self, trained, caplog):
+        with caplog.at_level("WARNING"):
+            run(trained)
+        assert "truncated" not in caplog.text
+
+
+class TestTruncation:
+    """``prepare_line`` says when it cut a line, and a run says so once."""
+
+    @pytest.fixture
+    def tokenizer(self):
+        from effects.domain.ability_tokenizer import AbilityTokenizer
+
+        return AbilityTokenizer({"[PAD]": 0, "[UNK]": 1, "[CLS]": 2, "[MASK]": 3})
+
+    def test_a_line_inside_the_window_is_not_truncated(self, tokenizer):
+        from effects.domain.ability_encoder import prepare_line
+
+        tokens = tokenizer.tokenize(" ".join(["x"] * 511))
+        assert prepare_line(tokenizer, tokens).truncated is False
+
+    def test_a_line_past_the_window_is_truncated(self, tokenizer):
+        from effects.domain.ability_encoder import MAX_ABILITY_TOKENS, prepare_line
+
+        tokens = tokenizer.tokenize(" ".join(["x"] * 512))
+        line = prepare_line(tokenizer, tokens)
+        assert line.truncated is True
+        assert len(line) == MAX_ABILITY_TOKENS
+
+    def test_training_batchers_sharing_a_log_report_a_text_once(self, tokenizer):
+        """The trainer hands one log to every per-batch batcher."""
+        from effects.application.surface_batching import SurfaceBatcher
+        from effects.application.train_effect_model import VariantMasks
+        from effects.domain.ability_encoder import TruncationLog
+
+        reported = []
+        log = TruncationLog(lambda text, keys: reported.append(text))
+        long_text = " ".join(["x"] * 600)
+        for _batch in range(3):
+            batcher = SurfaceBatcher(
+                tokenizer=tokenizer, sidecars=None, masks=VariantMasks(),
+                surface="script", e_dim=4, widths={},
+                device=torch.device("cpu"), truncations=log,
+            )
+            batcher.prepare_texts([long_text, "x x"])
+        assert reported == [long_text]
+
+    def test_a_text_is_reported_once_per_run(self):
+        from effects.domain.ability_encoder import TruncationLog
+
+        reported = []
+        log = TruncationLog(lambda text, keys: reported.append((text, keys)))
+        key = ProvenanceKey("cardsfolder/a/a.txt", 0, "spell", 0)
+        log.note("long", (key,))
+        log.note("long", (key,))
+        log.note("other")
+        assert reported == [("long", (key,)), ("other", ())]
+
+
+class TestEncodingText:
+    """FR-005: prose only for a line with no script, on the script surface."""
+
+    def _line(self, script_text):
+        return SidecarLine(
+            line_index=0, line_kind="static", provenance=(),
+            script_text=script_text,
+        )
+
+    def test_a_scripted_line_encodes_its_script(self):
+        from effects.domain.ability_encoder import encoding_text
+
+        chained = "Execute$ SV1 | Mode$ Attacks [SEG] SV1: DB$ Draw"
+        assert encoding_text(self._line(chained), "draw a card.", "script") == chained
+
+    def test_a_keyword_derived_line_encodes_its_prose(self):
+        from effects.domain.ability_encoder import encoding_text
+
+        assert encoding_text(self._line(None), "flying", "script") == "flying"
+
+    def test_a_synthetic_land_mana_line_encodes_its_prose(self):
+        from effects.domain.ability_encoder import encoding_text
+
+        assert encoding_text(self._line(""), "{T}: add {G}.", "script") == "{T}: add {G}."
+
 
 class TestHashCheck:
     def test_a_moved_vocabulary_stops_the_run_before_writing(

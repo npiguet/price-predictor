@@ -1,0 +1,6 @@
+name: wildfire emissary
+mana cost: {3}{R}
+types: creature efreet
+power toughness: 2/4
+static: protection from white
+activated[1]: {1}{R}: CARDNAME gets +1/+0 until end of turn.

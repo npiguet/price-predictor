@@ -151,7 +151,12 @@ class _CardEncoderBlock(nn.Module):
             dropout=config.dropout,
             batch_first=True,
         )
-        self.encoder = nn.TransformerEncoder(encoder_layer, num_layers=config.n_layers)
+        # The nested-tensor fast path is a prototype PyTorch API that warns on
+        # every eval-mode forward with a padding mask; it changes speed, not
+        # outputs.
+        self.encoder = nn.TransformerEncoder(
+            encoder_layer, num_layers=config.n_layers, enable_nested_tensor=False,
+        )
         self.attn_pool = _MultiQueryAttentionPool(
             config.d_model, config.n_pool_queries, config.dropout,
         )

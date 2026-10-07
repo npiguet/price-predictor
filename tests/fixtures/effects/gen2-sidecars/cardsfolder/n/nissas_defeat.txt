@@ -1,0 +1,4 @@
+name: nissa's defeat
+mana cost: {2}{G}
+types: sorcery
+spell[1]: destroy target forest, green enchantment, or green planeswalker. if that permanent was a nissa planeswalker, draw a card.

@@ -1,0 +1,7 @@
+name: bifur, melodic rider
+mana cost: {4}{R/W}{R/W}
+types: legendary creature dwarf bard
+power toughness: 4/5
+triggered: storied
+triggered: whenever CARDNAME enters or attacks, put a +1/+1 counter on target creature.
+static: as long as you have an enduring story, if an ability of a dwarf you control triggers, that ability triggers an additional time.

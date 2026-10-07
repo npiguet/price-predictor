@@ -1,0 +1,6 @@
+name: thieving amalgam
+mana cost: {5}{B}{B}
+types: creature ape snake
+power toughness: 6/7
+triggered: at the beginning of each opponent's upkeep, you manifest the top card of that player's library.
+triggered: whenever a creature you control but don't own dies, its owner loses 2 life and you gain 2 life.

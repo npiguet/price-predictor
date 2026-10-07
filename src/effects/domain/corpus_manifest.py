@@ -43,6 +43,10 @@ class ClassCounts:
     unique_texts: int
 
 
+def _optional_float(value) -> float | None:
+    return None if value is None else float(value)
+
+
 @dataclass(frozen=True, slots=True)
 class CorpusManifest:
     """Every decision ``build-corpus`` made, and what it made them from."""
@@ -61,7 +65,6 @@ class CorpusManifest:
     holdout_max_carriers: int
     text_cap: int
     card_disjoint_text_cap: int
-    game_disjoint_target: int
     training_records: int
     class_mix: dict[str, float]
     #: The class proportions the training output actually holds, counted from
@@ -150,6 +153,54 @@ class CorpusManifest:
     #: keys resolved, so two datasets built against different Forge checkouts
     #: are different datasets.
     forge_tokenscripts: str = ""
+    #: ``--game-disjoint-games``, the sampled-count rule gen-2 replaced with a
+    #: per-game threshold (FR-044). No longer written; a manifest that carries
+    #: it is still read, and keeps its digest.
+    game_disjoint_target: int | None = None
+
+    # ── gen-2 (feature 024). Each is omitted from ``as_dict`` while it holds
+    # the value a gen-1 manifest implies, so a gen-1 manifest re-serializes to
+    # the same digest and every checkpoint pinned to it stays evaluable. ──
+
+    #: ``template`` or ``text`` (FR-042); absent reads as ``text``.
+    holdout_unit: str = "text"
+    #: ``class -> family -> {available, share, written, repeats, shortfall}``.
+    families: dict[str, dict[str, dict[str, int]]] = field(default_factory=dict)
+    #: ``class -> family -> {outcome signature: records written}``.
+    signatures: dict[str, dict[str, dict[str, int]]] = field(default_factory=dict)
+    #: ``class -> {on_policy, off_policy}`` training records, by ``random_seat``.
+    policy_counts: dict[str, dict[str, int]] = field(default_factory=dict)
+    #: ``legality subkind -> {real, what_if, unknown}`` training records.
+    legality_counts: dict[str, dict[str, int]] = field(default_factory=dict)
+    #: Game-disjoint games placed only under ``--game-disjoint-keyword-share``.
+    keyword_threshold_games: tuple[str, ...] = ()
+    #: Held-out texts with no gate-one resolution record.
+    held_out_texts_without_resolution: tuple[str, ...] = ()
+    #: ``held-out text -> games`` for the texts recorded in fewer than five.
+    held_out_texts_under_five_games: dict[str, int] = field(default_factory=dict)
+    #: The game-disjoint and reuse flags as run; None on a gen-1 manifest.
+    game_disjoint_share: float | None = None
+    game_disjoint_keyword_share: float | None = None
+    game_disjoint_keywords: tuple[str, ...] = ()
+    reuse_cap: int | None = None
+
+    #: Every gen-2 field and the value at which it is left out of ``as_dict``,
+    #: plus the one gen-1 field gen-2 stopped writing.
+    _GEN1_DEFAULTS = {
+        "game_disjoint_target": None,
+        "holdout_unit": "text",
+        "families": {},
+        "signatures": {},
+        "policy_counts": {},
+        "legality_counts": {},
+        "keyword_threshold_games": (),
+        "held_out_texts_without_resolution": (),
+        "held_out_texts_under_five_games": {},
+        "game_disjoint_share": None,
+        "game_disjoint_keyword_share": None,
+        "game_disjoint_keywords": (),
+        "reuse_cap": None,
+    }
 
     def as_dict(self) -> dict[str, Any]:
         data = asdict(self)
@@ -157,6 +208,9 @@ class CorpusManifest:
         data["per_class"] = {
             name: asdict(counts) for name, counts in self.per_class.items()
         }
+        for name, default in self._GEN1_DEFAULTS.items():
+            if getattr(self, name) == default:
+                data.pop(name, None)
         return data
 
     @classmethod
@@ -170,7 +224,6 @@ class CorpusManifest:
             holdout_max_carriers=int(data["holdout_max_carriers"]),
             text_cap=int(data["text_cap"]),
             card_disjoint_text_cap=int(data["card_disjoint_text_cap"]),
-            game_disjoint_target=int(data["game_disjoint_target"]),
             training_records=int(data["training_records"]),
             class_mix={k: float(v) for k, v in data["class_mix"].items()},
             delivered_mix={k: float(v) for k, v in data["delivered_mix"].items()},
@@ -207,6 +260,44 @@ class CorpusManifest:
                 k: int(v) for k, v in data.get("no_acting_text_scripts", {}).items()
             },
             forge_tokenscripts=str(data.get("forge_tokenscripts", "")),
+            game_disjoint_target=(
+                int(data["game_disjoint_target"])
+                if data.get("game_disjoint_target") is not None else None
+            ),
+            holdout_unit=str(data.get("holdout_unit", "text")),
+            families={
+                klass: {family: {k: int(v) for k, v in row.items()}
+                        for family, row in per_family.items()}
+                for klass, per_family in data.get("families", {}).items()
+            },
+            signatures={
+                klass: {family: {sig: int(n) for sig, n in per_sig.items()}
+                        for family, per_sig in per_family.items()}
+                for klass, per_family in data.get("signatures", {}).items()
+            },
+            policy_counts={
+                klass: {k: int(v) for k, v in counts.items()}
+                for klass, counts in data.get("policy_counts", {}).items()
+            },
+            legality_counts={
+                subkind: {k: int(v) for k, v in counts.items()}
+                for subkind, counts in data.get("legality_counts", {}).items()
+            },
+            keyword_threshold_games=tuple(data.get("keyword_threshold_games", ())),
+            held_out_texts_without_resolution=tuple(
+                data.get("held_out_texts_without_resolution", ())
+            ),
+            held_out_texts_under_five_games={
+                k: int(v) for k, v in data.get("held_out_texts_under_five_games", {}).items()
+            },
+            game_disjoint_share=_optional_float(data.get("game_disjoint_share")),
+            game_disjoint_keyword_share=_optional_float(
+                data.get("game_disjoint_keyword_share")
+            ),
+            game_disjoint_keywords=tuple(data.get("game_disjoint_keywords", ())),
+            reuse_cap=(
+                int(data["reuse_cap"]) if data.get("reuse_cap") is not None else None
+            ),
         )
 
     #: Fields the digest leaves out: operator-facing tallies that say nothing

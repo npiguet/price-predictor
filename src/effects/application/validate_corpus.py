@@ -206,6 +206,7 @@ def validate_corpus(
     records: Iterable[EffectRecord],
     thresholds: Thresholds | None = None,
     sidecars=None,
+    presence: FieldPresence | None = None,
 ) -> list[Finding]:
     """Every invariant, measured over one pass of ``records``.
 
@@ -214,25 +215,127 @@ def validate_corpus(
     check possible at all. ``None`` reports that check as *unchecked* rather
     than as holding: a converted tree that is not on this machine is not
     evidence that the corpus joins.
+
+    ``presence`` is the per-shard envelope tally :func:`read_window` fills
+    while it yields ``records`` (FR-033). A parsed record cannot say whether a
+    field was on the wire — an absent ``random_seat`` reads as False — so the
+    check is made on the raw lines, during the same read.
     """
     tally = _Tally()
     for record in records:
         tally.add(record)
-    return tally.findings(thresholds or Thresholds(), sidecars)
+    findings = tally.findings(thresholds or Thresholds(), sidecars)
+    if presence is not None:
+        findings.append(presence.finding())
+    return findings
 
 
-def read_window(directory: Path, limit: int = 0) -> Iterator[EffectRecord]:
+#: The legality subkinds that must carry ``what_if`` on a gen-2 shard.
+_WHAT_IF_SUBKINDS = frozenset({"attackers", "blockers"})
+
+
+@dataclass
+class FieldPresence:
+    """Which gen-2 envelope fields each shard's raw lines carry (FR-033).
+
+    Per shard, because a shard is one worker lifetime and so one collector
+    build: a shard in which some records carry ``random_seat`` and others do
+    not was written by a collector that stamps it on some paths only, which is
+    the defect, and mixing whole gen-1 and gen-2 shards is refused elsewhere.
+    """
+
+    #: shard -> [records, with random_seat, legality records, with what_if,
+    #: other records with what_if]
+    shards: dict[str, list[int]] = field(default_factory=dict)
+
+    def observe(self, shard: str, data: dict) -> None:
+        counts = self.shards.setdefault(shard, [0, 0, 0, 0, 0])
+        counts[0] += 1
+        counts[1] += "random_seat" in data
+        legality = data.get("kind") == "playability" and data.get("subkind") in _WHAT_IF_SUBKINDS
+        if legality:
+            counts[2] += 1
+            counts[3] += "what_if" in data
+        else:
+            counts[4] += "what_if" in data
+
+    def finding(self) -> Finding:
+        partial_seat, partial_what_if, stray = [], [], []
+        for shard, (records, seats, legality, what_ifs, others) in sorted(self.shards.items()):
+            if 0 < seats < records:
+                partial_seat.append(f"{shard}: random_seat on {seats} of {records} records")
+            # A gen-2 shard owes what_if on every legality record; a gen-1 one
+            # on none, so only a partial set is wrong there.
+            if what_ifs < legality and (seats or what_ifs):
+                partial_what_if.append(
+                    f"{shard}: what_if on {what_ifs} of {legality} legality records"
+                )
+            if others:
+                stray.append(f"{shard}: what_if on {others} non-legality record(s)")
+        gen2 = sum(1 for counts in self.shards.values() if counts[1])
+        bad = partial_seat + partial_what_if + stray
+        return Finding(
+            name="gen-2 envelope fields are on every record of the kinds that carry them",
+            ok=not bad,
+            measured=(
+                f"{len(self.shards)} shard(s), {gen2} carrying random_seat; "
+                f"{len(partial_seat)} with random_seat on some records only, "
+                f"{len(partial_what_if)} with what_if on some legality records "
+                f"only, {len(stray)} with what_if on another kind"
+            ),
+            detail=tuple(bad[:_EXAMPLES]),
+        )
+
+
+def _joined(halves: list[tuple[str, tuple[ProvenanceKey, ...]]]) -> bool:
+    """Whether one link's halves form a valid resolution (FR-029d).
+
+    One cost half and at least one effect half. Several effect halves are
+    valid only for a modal resolution: every one of them acts through a mode
+    key (one carrying ``option``) and all of them share one root, the charm the
+    cost half was paid for.
+    """
+    costs = [keys for moment, keys in halves if moment == Moment.ACTIVATION.value]
+    effects = [keys for moment, keys in halves if moment == Moment.RESOLUTION.value]
+    if len(costs) != 1 or not effects or len(costs) + len(effects) != len(halves):
+        return False
+    if len(effects) == 1:
+        return True
+    roots = set()
+    for keys in effects:
+        if not keys or any(key.option is None for key in keys):
+            return False
+        roots |= {key.root for key in keys}
+    return len(roots) == 1
+
+
+def read_window(
+    directory: Path, limit: int = 0, presence: FieldPresence | None = None,
+) -> Iterator[EffectRecord]:
     """The first ``limit`` records under ``directory``; 0 reads all of them.
 
     Imported lazily, like the rest of the application layer's infrastructure
-    reach, so the domain tests do not pay for the reader.
+    reach, so the domain tests do not pay for the reader. ``presence``, when
+    given, is filled from each raw line before it is parsed.
     """
-    from effects.infrastructure.record_io import iter_shards, read_shard
+    from effects.infrastructure.record_io import (
+        iter_shard_lines,
+        iter_shards,
+        record_from_dict,
+    )
 
+    root = Path(directory)
     seen = 0
-    for shard in iter_shards(Path(directory)):
-        for record in read_shard(shard):
-            yield record
+    for shard in iter_shards(root):
+        name = shard.relative_to(root).as_posix() if shard.is_relative_to(root) else str(shard)
+        for line in iter_shard_lines(shard):
+            stripped = line.strip()
+            if not stripped:
+                continue
+            data = json.loads(stripped)
+            if presence is not None:
+                presence.observe(name, data)
+            yield record_from_dict(data)
             seen += 1
             if limit and seen >= limit:
                 return
@@ -484,7 +587,8 @@ class _Tally:
         self.by_kind: Counter[str] = Counter()
         self.duplicates_by_kind: Counter[str] = Counter()
         self.tiers_by_kind: dict[str, Counter[tuple[int, ...]]] = defaultdict(Counter)
-        self.links: dict[str, list[str]] = defaultdict(list)
+        #: link_id -> [(moment, acting keys)] for every half carrying it.
+        self.links: dict[str, list[tuple[str, tuple[ProvenanceKey, ...]]]] = defaultdict(list)
         self.outcomes: Counter[str] = Counter()
         self.activations = 0
         self.cost_fields: Counter[str] = Counter()
@@ -580,9 +684,10 @@ class _Tally:
         ] += 1
 
         if record.link_id is not None:
-            self.links[record.link_id].append(
-                record.moment.value if record.moment else "?"
-            )
+            self.links[record.link_id].append((
+                record.moment.value if record.moment else "?",
+                tuple(record.ability or ()),
+            ))
 
         if record.kind not in KINDS_WITHOUT_ACTING_ABILITY:
             counts = self.acting[label]
@@ -767,16 +872,16 @@ class _Tally:
         )
 
     def _links_pair(self, limits: Thresholds) -> Finding:
-        want = sorted((Moment.ACTIVATION.value, Moment.RESOLUTION.value))
-        paired = sum(
-            1 for halves in self.links.values() if sorted(halves) == want
-        )
+        paired = sum(1 for halves in self.links.values() if _joined(halves))
         total = len(self.links)
         unpaired = total - paired
         rate = unpaired / total if total else 0.0
         sizes = Counter(len(halves) for halves in self.links.values())
         return Finding(
-            name="every link_id joins one activation to one resolution",
+            name=(
+                "every link_id joins one activation to its resolution(s): one, "
+                "or one per chosen mode of a charm"
+            ),
             ok=rate <= limits.max_unpaired_link_rate,
             measured=(
                 f"{paired}/{total} link ids paired, {unpaired} unpaired "

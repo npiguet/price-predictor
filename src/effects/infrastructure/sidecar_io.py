@@ -32,6 +32,7 @@ import time
 from pathlib import Path
 
 from effects.domain.provenance import (
+    SOURCE_TREES,
     KeyResolution,
     ProvenanceKey,
     ProvenanceSidecar,
@@ -49,6 +50,66 @@ SIDECAR_SUFFIX = ".provenance.json"
 VARIANT_SCRIPTS_TREE = "variant-scripts"
 
 _JSON_SEPARATORS = (",", ":")
+
+
+def tree_of_folder(folder: Path) -> str:
+    """The source tree a converted folder holds, read from its name.
+
+    A folder named for its tree is the tree (``output/cardsfolder``), and so is
+    one whose name ends in ``-<tree>``: stage 0 reads gen-1's sidecars from a
+    kept-aside copy, ``output/gen1-cardsfolder``, while stage 1 reconverts the
+    original (FR-063b), and the copy's keys still name ``cardsfolder/…``.
+    """
+    name = Path(folder).name
+    for tree in SOURCE_TREES:
+        if name == tree or name.endswith(f"-{tree}"):
+            return tree
+    return name or "cardsfolder"
+
+
+def sidecar_roots(
+    folders, variant_scripts: Path | None = None,
+) -> dict[str, Path]:
+    """``tree -> folder`` for a ``SidecarCache``, from ``--cards-folder`` values."""
+    roots = {tree_of_folder(folder): Path(folder) for folder in folders}
+    if variant_scripts:
+        roots[VARIANT_SCRIPTS_TREE] = Path(variant_scripts)
+    return roots
+
+
+def script_vocabularies(folders) -> tuple[list[str], list[str]]:
+    """Every ``script_api_type`` and script parameter key the sidecars carry.
+
+    The script-API head's two vocabularies (FR-060b): its classes have to be
+    fixed when the model is built, before any record is read, so they come from
+    the converted trees themselves. Parameter keys are read from every segment
+    of a line's chained ``script_text``, which is what the head predicts.
+    """
+    from concurrent.futures import ThreadPoolExecutor
+
+    from effects.domain.value_targets import params, segments
+
+    paths = [
+        path for folder in folders
+        for path in sorted(Path(folder).rglob(f"*{SIDECAR_SUFFIX}"))
+    ]
+    api_types: set[str] = set()
+    param_keys: set[str] = set()
+    # Read on a thread pool: the cost is tens of thousands of file opens, which
+    # release the interpreter lock, and not the parse.
+    with ThreadPoolExecutor(max_workers=_SCAN_THREADS) as pool:
+        for raw in pool.map(lambda p: p.read_bytes(), paths, chunksize=64):
+            for line in json.loads(raw).get("lines", ()):
+                if line.get("script_api_type"):
+                    api_types.add(line["script_api_type"])
+                param_keys.update(line.get("script_param_keys") or ())
+                for segment in segments(line.get("script_text") or ""):
+                    param_keys.update(params(segment))
+    return sorted(api_types), sorted(param_keys)
+
+
+#: Threads reading sidecars for :func:`script_vocabularies`.
+_SCAN_THREADS = 16
 
 
 def sidecar_path_for(converted_txt: Path) -> Path:

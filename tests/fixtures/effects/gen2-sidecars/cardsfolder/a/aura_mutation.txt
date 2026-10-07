@@ -1,0 +1,4 @@
+name: aura mutation
+mana cost: {G}{W}
+types: instant
+spell[1]: destroy target enchantment. create X 1/1 green saproling creature tokens, where X is that enchantment's mana value.

@@ -26,17 +26,22 @@ from dataclasses import dataclass
 
 import numpy as np
 import torch
+from torch.nn import functional
 
+from effects.application.breakdowns import TOTAL, RecordResult, normalize_keyword
 from effects.application.surface_batching import SurfaceBatcher
+from effects.domain.damage_step_keywords import KeywordResolver, keyword_of_line
 from effects.domain.effect_model import (
     FIELD_SLICES,
     FIELDS_BY_NAME,
     GATE_INDEX,
     FieldType,
     entity_target_tensors,
+    field_loss,
 )
 from effects.domain.effect_targets import derive_targets
 from effects.domain.records import RecordKind
+from effects.domain.rule_families import rule_family
 
 logger = logging.getLogger(__name__)
 
@@ -50,11 +55,17 @@ BATCH_RECORDS = 32
 
 @dataclass(frozen=True, slots=True)
 class GateOneMetrics:
-    """One model's scores on the card-disjoint split's unique-text stratum."""
+    """One model's scores on the card-disjoint split's unique-text stratum.
+
+    ``records`` holds every scored record's own losses beside the pooled
+    margins, for the evaluator's per-text, per-family and per-policy
+    breakdowns (``application.breakdowns``). The margins never read it.
+    """
 
     affected_gate_f1: float
     zone_outcome_accuracy: float
     mean_poisson_deviance: float
+    records: tuple[RecordResult, ...] = ()
 
 
 def acting_text(record, batcher: SurfaceBatcher) -> str | None:
@@ -110,6 +121,10 @@ def measure(
 
     zone_spec = FIELDS_BY_NAME.get("zone_outcome")
     count_specs = [spec for spec in fields if spec.type in _COUNT_TYPES]
+    results: list[RecordResult] = []
+    # One resolver for the whole pass: it memoizes each provenance key's
+    # keyword, and the stratum repeats the same few hundred cards.
+    resolver = KeywordResolver(batcher.sidecars)
 
     encoder.eval()
     model.eval()
@@ -125,7 +140,12 @@ def measure(
             index = index.to(outputs.device)
             gathered = outputs.gather(
                 1, index.unsqueeze(-1).expand(-1, -1, outputs.shape[-1]),
-            ).cpu()
+            ).float().cpu()
+            for row, record in enumerate(chunk):
+                results.append(_record_result(
+                    record, batcher, resolver,
+                    _record_losses(row, gathered, gate, field_targets, mask, fields),
+                ))
 
             real = mask.bool()
             gate_pred.append(
@@ -160,7 +180,87 @@ def measure(
         affected_gate_f1=_f1(gate_pred, gate_true),
         zone_outcome_accuracy=_accuracy(zone_pred, zone_true),
         mean_poisson_deviance=_deviance(count_pred, count_true),
+        records=tuple(results),
     )
+
+
+def _record_losses(
+    row: int, gathered: torch.Tensor, gate: torch.Tensor,
+    field_targets: dict[str, torch.Tensor], mask: torch.Tensor, fields,
+) -> dict[str, float]:
+    """One record's per-entity loss by field, as ``per_entity_loss`` sums it.
+
+    The same terms the trainer's loss adds for this record alone: the gate over
+    every real entity, then each field over the entities the gate's *target*
+    marks affected. A field with no affected entity is not supervised here and
+    is left out rather than reported as zero. Read on the host, where the batch
+    already is, so scoring a record costs no device synchronization.
+    """
+    real = mask[row].bool()
+    gate_loss = functional.binary_cross_entropy_with_logits(
+        gathered[row, :, GATE_INDEX][real], gate[row][real].float(), reduction="sum",
+    )
+    losses = {"gate": float(gate_loss)}
+    affected = real & gate[row].bool()
+    if bool(affected.any()):
+        for spec in fields:
+            target = field_targets.get(spec.name)
+            if target is None:
+                continue
+            start, end = FIELD_SLICES[spec.name]
+            losses[spec.name] = float(field_loss(
+                spec, gathered[row, :, start:end][affected], target[row][affected],
+            ))
+    losses[TOTAL] = sum(losses.values())
+    return losses
+
+
+def _record_result(
+    record, batcher: SurfaceBatcher, resolver: KeywordResolver,
+    losses: dict[str, float],
+) -> RecordResult:
+    """The grouping keys of one scored record, beside its losses."""
+    try:
+        family = rule_family(record, batcher.sidecars, resolver=resolver)
+    except KeyError:
+        # The sidecar does not describe the card the record names; the record
+        # still scored, it just cannot be placed in a family.
+        family = None
+    return RecordResult(
+        record_id=record.record_id,
+        game_id=record.game_id,
+        kind=record.kind.value,
+        subkind=record.subkind.value if record.subkind else None,
+        text=acting_text(record, batcher),
+        family=family,
+        random_seat=record.random_seat,
+        what_if=record.what_if,
+        keywords=record_keywords(record, batcher, resolver),
+        losses=losses,
+    )
+
+
+def record_keywords(
+    record, batcher: SurfaceBatcher, resolver: KeywordResolver,
+) -> frozenset[str]:
+    """Every keyword on the acting line or carried by a board entity.
+
+    The acting line is a keyword when the record is that keyword's own
+    resolution (a ward trigger, say); the board's entities carry theirs through
+    both channels the resolver reads.
+    """
+    found: set[str] = set()
+    for key in record.ability or ():
+        try:
+            line = batcher.sidecars.line_for(key)
+        except KeyError:
+            line = None
+        keyword = keyword_of_line(line) if line is not None else None
+        if keyword is not None:
+            found.add(normalize_keyword(keyword))
+    for entity in record.state.entities:
+        found.update(normalize_keyword(k) for k in resolver.keywords_of(entity))
+    return frozenset(found)
 
 
 def _cat(chunks: list[np.ndarray]) -> np.ndarray:

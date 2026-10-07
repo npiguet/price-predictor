@@ -864,3 +864,55 @@ def count_records(directory: Path, *, ceiling: int = 0) -> int:
         if ceiling and total >= ceiling:
             return ceiling
     return total
+
+
+# ── shard generation (FR-033) ───────────────────────────────────────────
+
+#: The two record generations a shard can hold. A gen-2 record always carries
+#: ``random_seat``; a gen-1 one never does, and on gen-1 ``playability``
+#: records ``actor_player`` keeps feature 023's meaning rather than naming the
+#: deciding player (FR-030a).
+GEN_1, GEN_2 = "gen-1", "gen-2"
+
+
+class MixedGenerationsError(ValueError):
+    """A records set holds both gen-1 and gen-2 shards."""
+
+
+def shard_generation(path: Path) -> str | None:
+    """``gen-1`` or ``gen-2`` by the shard's first complete record; None if empty.
+
+    The first record is enough: ``validate-corpus`` fails a shard whose
+    records disagree about carrying the field, so one record speaks for its
+    shard. Only the first line is decoded.
+    """
+    for line in iter_shard_lines(Path(path)):
+        stripped = line.strip()
+        if not stripped:
+            continue
+        return GEN_2 if "random_seat" in json.loads(stripped) else GEN_1
+    return None
+
+
+def refuse_mixed_generations(paths: Iterable[Path]) -> str | None:
+    """The one generation ``paths`` hold, or raise when they hold both.
+
+    Every reader of a records set calls this before reading a record
+    (FR-033): the redefined ``actor_player`` has no version field of its own,
+    so a set mixing the two generations would read half its legality records
+    under the wrong meaning with nothing to say so. Returns None for a set of
+    empty shards.
+    """
+    seen: dict[str, Path] = {}
+    for path in paths:
+        generation = shard_generation(path)
+        if generation is not None:
+            seen.setdefault(generation, Path(path))
+    if len(seen) > 1:
+        raise MixedGenerationsError(
+            "this records set mixes gen-1 shards (no random_seat field) with "
+            f"gen-2 shards, e.g. {seen[GEN_1]} and {seen[GEN_2]}. The two read "
+            "actor_player on playability records differently (FR-030a); keep "
+            "them in separate directories and read one at a time."
+        )
+    return next(iter(seen), None)

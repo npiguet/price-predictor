@@ -1,0 +1,9 @@
+name: kaya, spirits' justice
+mana cost: {2}{W}{B}
+types: legendary planeswalker kaya
+loyalty: 3
+planeswalker[1]: [+2]: surveil 2, then exile a card from a graveyard.
+planeswalker[2]: [+1]: create a 1/1 white and black spirit creature token with flying.
+planeswalker[3]: [-2]: exile target creature you control. for each other player, exile up to one target creature that player controls.
+triggered: whenever one or more creatures you control and/or creature cards in your graveyard are put into exile, you may choose a creature card from among them. until end of turn, target token you control becomes a copy of it, except it has flying.
+replacement: CARDNAME enters with three loyalty counters on it.

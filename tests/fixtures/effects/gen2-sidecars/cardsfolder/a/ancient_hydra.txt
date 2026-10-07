@@ -1,0 +1,6 @@
+name: ancient hydra
+mana cost: {4}{R}
+types: creature hydra
+power toughness: 5/1
+triggered: fading 5
+activated[1]: {1}, remove a fade counter from CARDNAME: it deals 1 damage to any target.

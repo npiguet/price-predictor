@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import hashlib
+import json
+from pathlib import Path
+
 import pytest
 
 from effects.domain.corpus_manifest import ClassCounts, CorpusManifest, SourceShard
@@ -167,3 +171,72 @@ def test_a_different_held_out_text_still_moves_the_digest():
     assert manifest().digest() != manifest(
         held_out_texts=("gains 4 life",),
     ).digest()
+
+
+# ── gen-2 fields (FR-053, FR-042; T082, T084) ───────────────────────────
+
+_FIXTURE = Path(__file__).parents[3] / "fixtures" / "effects" / "gen1-manifest-trimmed.json"
+_REAL_GEN1 = Path("output/effects/corpus/manifest.json")
+#: The digest the gen-1 checkpoint (run 09.17f) recorded for that manifest.
+_GEN1_RECORDED_DIGEST = "e3c0c9bb913b9aeda0d07eb587b5445c"
+
+
+def _canonical_digest(raw: dict) -> str:
+    """The digest of a manifest's JSON as written, by the rule feature 023 used."""
+    payload = {k: v for k, v in raw.items() if k not in CorpusManifest._OUTSIDE_THE_DIGEST}
+    payload["sources"] = sorted(payload["sources"], key=lambda s: s["name"])
+    canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+    return hashlib.blake2b(canonical.encode("utf-8"), digest_size=16).hexdigest()
+
+
+def test_a_real_gen1_manifest_keeps_its_digest():
+    """Every checkpoint pinned to a gen-1 corpus must stay evaluable (FR-042)."""
+    raw = json.loads(_FIXTURE.read_text(encoding="utf-8"))
+    loaded = CorpusManifest.from_dict(raw)
+
+    assert loaded.holdout_unit == "text"
+    assert loaded.game_disjoint_target == 1000
+    assert loaded.digest() == _canonical_digest(raw)
+    assert set(loaded.as_dict()) == set(raw)
+
+
+@pytest.mark.skipif(not _REAL_GEN1.exists(), reason="the gen-1 corpus is not on this machine")
+def test_the_gen1_corpus_still_matches_the_digest_its_checkpoint_recorded():
+    raw = json.loads(_REAL_GEN1.read_text(encoding="utf-8"))
+    assert CorpusManifest.from_dict(raw).digest() == _GEN1_RECORDED_DIGEST
+
+
+def test_gen2_fields_are_left_out_at_their_gen1_values(manifest_dict):
+    for name in CorpusManifest._GEN1_DEFAULTS:
+        if name != "game_disjoint_target":
+            assert name not in manifest_dict
+
+
+def test_a_manifest_without_the_retired_count_omits_it():
+    data = manifest(game_disjoint_target=None).as_dict()
+    assert "game_disjoint_target" not in data
+    assert CorpusManifest.from_dict(data).game_disjoint_target is None
+
+
+def test_the_gen2_fields_round_trip_and_move_the_digest():
+    gen2 = manifest(
+        game_disjoint_target=None,
+        holdout_unit="template",
+        families={"rewrite": {"Moved": {
+            "available": 10, "share": 5, "written": 8, "repeats": 3, "shortfall": 0,
+        }}},
+        signatures={"rewrite": {"Moved": {"died:changed": 8}}},
+        policy_counts={"rewrite": {"on_policy": 6, "off_policy": 2}},
+        legality_counts={"blockers": {"real": 4, "what_if": 9}},
+        keyword_threshold_games=("run.0-a.9",),
+        held_out_texts_without_resolution=("deals 3 damage",),
+        held_out_texts_under_five_games={"deals 3 damage": 2},
+        game_disjoint_share=0.01,
+        game_disjoint_keyword_share=0.15,
+        game_disjoint_keywords=("trample",),
+        reuse_cap=4,
+    )
+    restored = CorpusManifest.from_dict(json.loads(json.dumps(gen2.as_dict())))
+
+    assert restored == gen2
+    assert gen2.digest() != manifest(game_disjoint_target=None).digest()

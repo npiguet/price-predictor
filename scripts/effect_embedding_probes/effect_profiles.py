@@ -1,7 +1,7 @@
 """Aggregate what each ability text was observed to do in the training corpus.
 
-Streams every shard of the curated training corpus
-(``output/effects/corpus/training/``, 781,612 records) and accumulates, per
+Streams every shard of the checkpoint's curated training corpus (its
+manifest's ``training/``) and accumulates, per
 acting ability text, an **effect profile**: how often the text resolved, and
 across its effect-half resolutions the share that had each kind of outcome
 (a creature died, a card was drawn, a token was made, ...), the mean amounts
@@ -12,7 +12,7 @@ share.
 
 The acting text follows ``effects.application.gate_one.acting_text``: the
 first key of ``record.ability`` that resolves to a sidecar line, encoded on
-the script surface. The key → text map comes from ``cache/keymap.pkl``
+the checkpoint's surface. The key → text map comes from ``cache/keymap.pkl``
 (written by ``build_texts.py``), so no worker builds a ``SidecarCache``.
 Records are parsed as raw JSON and never held: each worker folds one shard
 into sums and returns them.
@@ -22,7 +22,8 @@ record's pre-resolution snapshot; "opponent side" the other player or their
 permanents. A subject the snapshot does not hold (a token created by the
 resolution, a card in a hidden zone) counts toward neither.
 
-Run: ``python scripts/effect_embedding_probes/effect_profiles.py [--workers 8]``
+Run: ``python scripts/effect_embedding_probes/effect_profiles.py --checkpoint PATH
+--abilities-root DIR [--workers 8]``
 (CPU, a few minutes). Writes ``effect_profiles.csv`` to the report directory.
 """
 
@@ -42,7 +43,7 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from common import CACHE, PROFILE_TABLE, TRAINING  # noqa: E402
+from common import add_probe_arguments, resolve_paths  # noqa: E402
 
 _KEYMAP: dict | None = None
 
@@ -249,14 +250,23 @@ def fold_shard(path: str) -> dict[str, dict]:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser = add_probe_arguments(
+        argparse.ArgumentParser(description=__doc__.splitlines()[0]),
+    )
     parser.add_argument("--workers", type=int, default=8)
     args = parser.parse_args()
-    shards = sorted(str(p) for p in TRAINING.glob("*.jsonl*"))
+    paths = resolve_paths(args)
+    if paths.training is None:
+        raise SystemExit(
+            f"{paths.checkpoint} names no curated corpus, so there are no "
+            "training shards to profile"
+        )
+    shards = sorted(str(p) for p in paths.training.glob("*.jsonl*"))
+    keymap = paths.reusable("cache/keymap.pkl")
     totals: dict[str, dict] = defaultdict(lambda: defaultdict(float))
     games: dict[str, set] = defaultdict(set)
     with Pool(args.workers, initializer=_init,
-              initargs=(str(CACHE / "keymap.pkl"),)) as pool:
+              initargs=(str(keymap),)) as pool:
         for done, part in enumerate(pool.imap_unordered(fold_shard, shards), 1):
             for text, (acc, text_games) in part.items():
                 target = totals[text]
@@ -272,10 +282,10 @@ def main() -> None:
         rows.append(row)
     frame = pd.DataFrame(rows).fillna(0.0)
     frame = derive(frame)
-    PROFILE_TABLE.parent.mkdir(parents=True, exist_ok=True)
-    frame.to_csv(PROFILE_TABLE, index=False)
+    paths.profile_table.parent.mkdir(parents=True, exist_ok=True)
+    frame.to_csv(paths.profile_table, index=False)
     print(f"{len(frame)} acting texts, {int(frame.n_records.sum())} records "
-          f"-> {PROFILE_TABLE}")
+          f"-> {paths.profile_table}")
 
 
 def derive(frame: pd.DataFrame) -> pd.DataFrame:

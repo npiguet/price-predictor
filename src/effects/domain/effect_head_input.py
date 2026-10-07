@@ -210,6 +210,10 @@ class Slot:
     subtype_tokens: tuple[int, ...] = ()
     entity_id: str | None = None
     player_id: str | None = None
+    #: ``ABILITY`` slots read from a charm mode's ``option`` line (FR-063a).
+    #: They follow their root's slot inside the card's block, and the flag plus
+    #: that adjacency is the whole link between a mode and its charm.
+    option: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -446,6 +450,7 @@ def build_effect_head_input(
     masked_keywords: dict[str, frozenset[str]] | None = None,
     stripped_keywords: dict[str, frozenset[str]] | None = None,
     keyword_of=None,
+    options_for=None,
 ) -> EffectHeadInput:
     """Lay one record out as the token surface.
 
@@ -485,6 +490,12 @@ def build_effect_head_input(
         keyword_of: ``ProvenanceKey -> str | None``, which keyword a line *is*.
             Required for ``stripped_keywords`` to reach the ability channel;
             without it only the overlay is stripped.
+        options_for: ``ProvenanceKey -> tuple[ProvenanceKey, ...]``, the keys of
+            the charm-mode ``option`` lines that follow the key's line in its
+            sidecar (FR-063a). A snapshot names an entity's abilities by root
+            key only, so each such line gets its own ``ABILITY`` slot right
+            after its root's, flagged ``option`` and continuing the block's
+            positions. None adds none, which is every gen-1 sidecar anyway.
     """
     rng = rng or random.Random()
     masked = masked_keywords or {}
@@ -559,6 +570,14 @@ def build_effect_head_input(
                 entity_id=entity.id,
             ))
             position += 1
+            for mode in (options_for(key) if options_for is not None else ()):
+                resolved = e_for(mode)
+                slots.append(Slot(
+                    kind=SlotKind.ABILITY, position=position,
+                    e=zero if resolved is None else resolved,
+                    entity_id=entity.id, option=True,
+                ))
+                position += 1
 
     return EffectHeadInput(
         slots=tuple(slots),

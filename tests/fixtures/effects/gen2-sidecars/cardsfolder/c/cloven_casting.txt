@@ -1,0 +1,4 @@
+name: cloven casting
+mana cost: {5}{U}{R}
+types: enchantment
+triggered: whenever you cast a multicolored instant or sorcery spell, you may pay {1}. if you do, copy that spell. you may choose new targets for the copy.

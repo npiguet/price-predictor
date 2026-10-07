@@ -27,7 +27,10 @@ from effects.domain.ability_encoder import (
     prepare_line,
     surface_of,
 )
-from effects.domain.ability_tokenizer import AbilityTokenizer
+from effects.domain.ability_tokenizer import (
+    INFERENCE_KEYWORD_EXPAND_P,
+    AbilityTokenizer,
+)
 from effects.domain.provenance import ProvenanceSidecar, SidecarLine
 
 logger = logging.getLogger(__name__)
@@ -60,8 +63,9 @@ class AbilityEncoderRunner:
         )
         self.encoder = AbilityEncoder(config).to(self.device)
         self.encoder.load_state_dict(state)
-        # eval() matters beyond dropout here: the encoder adds noise to e while
-        # training, and a cache built with it would not be reproducible.
+        # eval() turns dropout off, without which a cache would not be
+        # reproducible. The encoder carries no noise of its own: noise on e is
+        # a training-batch concern (FR-056) and never reaches this path.
         self.encoder.eval()
         self.tokenizer = tokenizer
         self.surface = surface
@@ -88,9 +92,10 @@ class AbilityEncoderRunner:
     def encode_texts(self, texts: list[str]) -> np.ndarray:
         """``(len(texts), e_dim)``, one row per text, in order.
 
-        Keywords are expanded deterministically here (probability 1.0, no RNG):
-        the cache is an artifact, and a sampled expansion would make two runs of
-        the same command disagree.
+        A known keyword stays the token it trained as and only an unknown one
+        expands (FR-012): the shared inference probability is zero, and the
+        cache is an artifact, so a sampled expansion would make two runs of the
+        same command disagree.
         """
         if not texts:
             return np.zeros((0, self.e_dim), dtype=np.float32)
@@ -102,7 +107,8 @@ class AbilityEncoderRunner:
                     prepare_line(
                         self.tokenizer,
                         self.tokenizer.expand_keywords(
-                            self.tokenizer.tokenize(text), probability=1.0,
+                            self.tokenizer.tokenize(text),
+                            probability=INFERENCE_KEYWORD_EXPAND_P,
                         ),
                     )
                     for text in chunk

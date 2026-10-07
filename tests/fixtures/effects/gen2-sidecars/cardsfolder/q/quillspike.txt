@@ -1,0 +1,5 @@
+name: quillspike
+mana cost: {2}{B/G}
+types: creature beast
+power toughness: 1/1
+activated[1]: {B/G}, remove a -1/-1 counter from a creature you control: CARDNAME gets +3/+3 until end of turn.

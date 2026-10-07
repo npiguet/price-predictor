@@ -20,18 +20,28 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from effects.domain.effect_head_input import COUNTER_TYPES
+from effects.domain.effect_head_input import CARD_TYPES, COUNTER_TYPES, OVERLAY_KEYWORDS
 from effects.domain.effect_model import (
+    CREATED_OBJECT_SLOTS,
+    CREATED_OBJECTS_WIDTH,
+    CREATED_SLOT_WIDTH,
     LIBRARY_EVENTS,
+    VERDICT_BITS,
+    VERDICT_WIDTH,
     ZONE_OUTCOMES,
     FieldSpec,
 )
 from effects.domain.event_schema import Event, EventType
 from effects.domain.records import (
+    ActivationPayload,
     EffectRecord,
+    Moment,
     PlayabilityAttackersPayload,
     PlayabilityBlockersPayload,
     PlayabilityDecisionPayload,
+    RecordKind,
+    RewritePayload,
+    TriggerPayload,
     events_of,
 )
 from effects.domain.state_snapshot import COLORS
@@ -342,3 +352,125 @@ def target_for(
 ) -> float | int | list[float] | None:
     """One field's target, or None where the record says nothing about it."""
     return targets.fields.get(spec.name)
+
+
+# ── the [ACT] and [GLOBAL] heads (FR-060a) ──────────────────────────────
+
+
+def verdict_targets(
+    record: EffectRecord,
+) -> tuple[list[float], list[bool]] | None:
+    """The verdict head's targets at ``[ACT]`` and which of them this record sets.
+
+    Three kinds supervise it, each a different slice: a ``decision`` record its
+    candidate's three verdict bits (Java writes one candidate per record, so the
+    candidate is the payload's first), a cost half the mana it paid by colour,
+    and a ``trigger`` record whether it fired. None for every other record, and
+    each column the record says nothing about is left out of its mask — a cost
+    half is no evidence that the ability was playable.
+    """
+    target = [0.0] * VERDICT_WIDTH
+    mask = [False] * VERDICT_WIDTH
+    payload = record.payload
+    bits = len(VERDICT_BITS)
+    if isinstance(payload, PlayabilityDecisionPayload):
+        if not payload.candidates:
+            return None
+        candidate = payload.candidates[0]
+        for index, value in enumerate(
+            (candidate.can_play, candidate.affordable, candidate.has_legal_target)
+        ):
+            target[index] = 1.0 if value else 0.0
+            mask[index] = True
+        return target, mask
+    if record.moment is Moment.ACTIVATION and isinstance(payload, ActivationPayload):
+        paid = payload.costs.mana_by_color
+        for offset, color in enumerate(COLORS):
+            target[bits + offset] = float(paid.get(color, 0))
+            mask[bits + offset] = True
+        return target, mask
+    if isinstance(payload, TriggerPayload):
+        target[-1] = 1.0 if payload.fired else 0.0
+        mask[-1] = True
+        return target, mask
+    return None
+
+
+def supervises_created_objects(record: EffectRecord) -> bool:
+    """Effect halves and in-place rewrites carry created-objects targets.
+
+    A rewrite only where ``outgoing`` is non-null: every other result was
+    carried out by running another ability, whose own effect half supervises
+    what it made (base spec § Output heads).
+    """
+    if record.kind is RecordKind.RESOLUTION:
+        return record.moment is Moment.RESOLUTION
+    if record.kind is RecordKind.REWRITE:
+        return isinstance(record.payload, RewritePayload) and (
+            record.payload.outgoing is not None
+        )
+    return False
+
+
+def created_objects_targets(record: EffectRecord) -> list[float]:
+    """The created-objects head's targets at ``[GLOBAL]`` (FR-078).
+
+    One group per distinct token: by token-script id where the event names one
+    (scripted), otherwise by its characteristics. Slots are in canonical order —
+    scripted groups sorted by id, characteristics-only groups after them by
+    descending count — and the flag past the last slot marks more than K
+    groups. Every slot carries the group's count, power, toughness and type and
+    keyword flags, read from the event's ``characteristics``.
+    """
+    groups: dict[tuple, dict] = {}
+    for event in events_of(record):
+        if event.type is not EventType.TOKEN_CREATED:
+            continue
+        params = event.params
+        script = params.get("token_script_id") or None
+        traits = params.get("characteristics") or {}
+        keywords = traits.get("keywords") or ()
+        if isinstance(keywords, str):
+            keywords = (keywords,)
+        key = (
+            ("script", str(script)) if script is not None
+            else ("traits", str(traits.get("types", "")), traits.get("power"),
+                  traits.get("toughness"), tuple(sorted(map(str, keywords))))
+        )
+        group = groups.setdefault(key, {
+            "scripted": script is not None, "id": str(script or ""), "count": 0,
+            "power": traits.get("power") or 0, "toughness": traits.get("toughness") or 0,
+            "types": str(traits.get("types", "")), "keywords": tuple(keywords),
+        })
+        group["count"] += int(params.get("count", 1) or 1)
+
+    ordered = sorted(
+        (g for g in groups.values() if g["scripted"]), key=lambda g: g["id"],
+    ) + sorted(
+        (g for g in groups.values() if not g["scripted"]), key=lambda g: -g["count"],
+    )
+    target = [0.0] * CREATED_OBJECTS_WIDTH
+    for slot, group in enumerate(ordered[:CREATED_OBJECT_SLOTS]):
+        base = slot * CREATED_SLOT_WIDTH
+        target[base] = 1.0
+        target[base + 1] = 1.0 if group["scripted"] else 0.0
+        target[base + 2] = float(group["count"])
+        target[base + 3] = max(float(_number(group["power"])), 0.0)
+        target[base + 4] = max(float(_number(group["toughness"])), 0.0)
+        card_types = group["types"].split(" - ", 1)[0].lower().split()
+        for index, card_type in enumerate(CARD_TYPES):
+            if card_type in card_types:
+                target[base + 5 + index] = 1.0
+        for keyword in group["keywords"]:
+            normalized = str(keyword).strip().lower().replace(" ", "_")
+            if normalized in OVERLAY_KEYWORDS:
+                target[base + 5 + len(CARD_TYPES) + OVERLAY_KEYWORDS.index(normalized)] = 1.0
+    target[-1] = 1.0 if len(ordered) > CREATED_OBJECT_SLOTS else 0.0
+    return target
+
+
+def _number(value) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return 0.0

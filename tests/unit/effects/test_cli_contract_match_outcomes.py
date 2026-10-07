@@ -22,6 +22,8 @@ from sealed.infrastructure.cli import (
     EFFECT_SNAPSHOT_TIERS,
     announce_probe_state,
     build_parser,
+    check_random_seat_flags,
+    run_match_outcomes,
 )
 
 
@@ -153,3 +155,50 @@ class TestOtherSealedCommandsAreUnaffected:
 
     def test_train_scorer_gains_no_effect_flags(self):
         assert not hasattr(parse("train-scorer"), "effect_records")
+
+
+class TestRandomSeatFlags:
+    """FR-021 and FR-026 (spec Story 3 scenario 11)."""
+
+    def test_the_share_defaults_to_off_and_p_has_no_default(self):
+        args = parse("match-outcomes")
+        assert args.random_seat_share == 0.0
+        assert args.random_seat_probability is None
+        assert check_random_seat_flags(args) is None
+
+    def test_a_complete_request_is_accepted(self):
+        args = parse(
+            "match-outcomes", "--effect-records", "out/",
+            "--random-seat-share", "0.125", "--random-seat-probability", "0.25",
+        )
+        assert check_random_seat_flags(args) is None
+
+    @pytest.mark.parametrize(
+        ("argv", "complaint"),
+        [
+            (("--effect-records", "out/", "--random-seat-share", "0.125"),
+             "needs --random-seat-probability"),
+            (("--random-seat-share", "0.125", "--random-seat-probability", "0.5"),
+             "needs --effect-records"),
+            (("--effect-records", "out/", "--random-seat-share", "1.5",
+              "--random-seat-probability", "0.5"), "between 0 and 1"),
+            (("--effect-records", "out/", "--random-seat-share", "-0.1",
+              "--random-seat-probability", "0.5"), "between 0 and 1"),
+            (("--effect-records", "out/", "--random-seat-share", "0.5",
+              "--random-seat-probability", "1.2"), "between 0 and 1"),
+        ],
+    )
+    def test_an_incomplete_or_out_of_range_request_is_refused(self, argv, complaint):
+        assert complaint in check_random_seat_flags(parse("match-outcomes", *argv))
+
+    def test_the_refusal_happens_before_any_game(self, monkeypatch, capsys):
+        """No supervisor is constructed, so no worker spawns."""
+        import sealed.application.match_outcomes as module
+
+        def no_supervisor(*args, **kwargs):
+            raise AssertionError("a refused run must not start a supervisor")
+
+        monkeypatch.setattr(module, "MatchOutcomeSupervisor", no_supervisor)
+        args = parse("match-outcomes", "--random-seat-share", "0.125")
+        assert run_match_outcomes(args) == 2
+        assert "--random-seat-probability" in capsys.readouterr().err

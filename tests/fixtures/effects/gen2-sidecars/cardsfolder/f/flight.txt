@@ -1,0 +1,5 @@
+name: flight
+mana cost: {U}
+types: enchantment aura
+static: enchant creature
+static: enchanted creature has flying.

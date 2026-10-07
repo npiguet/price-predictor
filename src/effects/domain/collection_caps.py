@@ -31,6 +31,12 @@ DEFAULT_INTERVENTIONS_PER_GAME = 2
 DEFAULT_PROBES_PER_GAME = 2
 DEFAULT_LEGALITY_RATE = 0.1
 DEFAULT_SNAPSHOT_TIERS = "1,2,3"
+#: Share of matches with one random seat (FR-021). Off unless a run asks.
+DEFAULT_RANDOM_SEAT_SHARE = 0.0
+#: The random seat's ``P``. No default a run could rely on: a share above zero
+#: without it is refused before any game (FR-026), so the 0 here only ever
+#: travels beside a share of 0.
+DEFAULT_RANDOM_SEAT_PROBABILITY = 0.0
 
 #: The four inclusion depths, in the order they widen: 1 referenced objects
 #: (target, affected, source), 2 core — global, battlefield and command-zone
@@ -102,6 +108,13 @@ class CollectionCaps:
     #: model to see. Stage three wants ``1,2,3,4``, which is hands and
     #: graveyards.
     snapshot_tiers: str = DEFAULT_SNAPSHOT_TIERS
+    #: Share of matches in which one seat, chosen at random per match, is the
+    #: random seat (FR-021). Per worker for the same reason as every cap: the
+    #: match draw happens in the JVM.
+    random_seat_share: float = DEFAULT_RANDOM_SEAT_SHARE
+    #: ``P``: the chance the random seat draws uniformly from the legal
+    #: options at a decision point instead of taking the Forge AI's choice.
+    random_seat_probability: float = DEFAULT_RANDOM_SEAT_PROBABILITY
 
     def __post_init__(self) -> None:
         # The one cap whose value the JVM can reject: parse it here so a

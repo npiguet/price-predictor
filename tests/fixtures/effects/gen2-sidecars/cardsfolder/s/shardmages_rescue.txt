@@ -1,0 +1,7 @@
+name: shardmage's rescue
+mana cost: {W}
+types: enchantment aura
+static: flash
+static: enchant creature you control
+static: as long as CARDNAME entered this turn, enchanted creature has hexproof.
+static: enchanted creature gets +1/+1.

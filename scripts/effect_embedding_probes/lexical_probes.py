@@ -29,6 +29,7 @@ minutes). Writes ``lexical_probes.md``.
 
 from __future__ import annotations
 
+import argparse
 import re
 import sys
 from pathlib import Path
@@ -41,7 +42,14 @@ from sklearn.model_selection import GroupKFold
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from common import OUT, load_texts, matrix, pca, write_markdown  # noqa: E402
+from common import (  # noqa: E402
+    add_probe_arguments,
+    load_texts,
+    matrix,
+    pca,
+    resolve_paths,
+    write_markdown,
+)
 
 DESCRIPTION_KEYS = ("SpellDescription", "TriggerDescription", "Description",
                     "StackDescription", "PrecostDesc", "CostDesc", "TgtPrompt",
@@ -77,7 +85,11 @@ def cv_r2(X, Y, groups) -> np.ndarray:
 
 
 def main() -> None:
-    table = load_texts()
+    parser = add_probe_arguments(
+        argparse.ArgumentParser(description=__doc__.splitlines()[0]),
+    )
+    paths = resolve_paths(parser.parse_args())
+    table = load_texts(paths)
     scores, _, share = pca(matrix(table, "e_full"))
     Y = scores[:, :N_PCS]
     groups = table["group"].to_numpy()
@@ -103,7 +115,7 @@ def main() -> None:
         print(row, flush=True)
     frame = pd.DataFrame(rows)
     has_description = (parts.map(lambda p: p[1]) != "").mean()
-    write_markdown(frame, OUT / "lexical_probes.md",
+    write_markdown(frame, paths.out / "lexical_probes.md",
                    "Bag-of-words ridge probes onto the top nine components",
                    f"Out-of-fold R², GroupKFold(5) by carrying card, ridge "
                    f"alpha 3 on binary word presence (min 5 texts). "

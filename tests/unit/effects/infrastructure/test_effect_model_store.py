@@ -353,3 +353,81 @@ class TestInferencePathResolution:
             provenance.verify_hashes(
                 vocab_path=vocab_path, keyword_path=keyword_path,
             )
+
+
+_GEN1_CHECKPOINT = (
+    __import__("pathlib").Path(__file__).parents[4]
+    / "models" / "effects" / "runs" / "2026-09-17-full-textless-corpus" / "latest.pt"
+)
+
+
+class TestGen2Checkpoint:
+    """What a gen-2 checkpoint records and drops (T101, FR-059, FR-061, FR-063)."""
+
+    def test_every_training_only_head_is_absent_after_save(self, tmp_path, files):
+        store = EffectModelStore(tmp_path)
+        store.save(_checkpoint(files))
+        loaded = store.load()
+        for name in EffectModel.TRAINING_ONLY_HEADS:
+            assert not any(key.startswith(f"{name}.") for key in loaded.model_state)
+        assert "value_head" in EffectModel.TRAINING_ONLY_HEADS
+        assert not hasattr(EffectModel(_MODEL_CONFIG), "pairing_proj")
+
+    def test_the_sweep_flags_and_roots_round_trip(self, tmp_path, files):
+        """Spec Story 5 scenario 6: unit, size, noise ratio, value weight."""
+        encoder = AbilityEncoderConfig(vocab_size=32, e_dim=4, d_model=32, n_layers=2)
+        settings = {"e_noise": 0.2, "value_weight": 0.05, "mlm_weight": 0.1,
+                    "mlm_mask_prob": 0.15, "api_weight": 0.05,
+                    "api_types": ["Draw"], "param_keys": ["NumCards"]}
+        store = EffectModelStore(tmp_path)
+        store.save(_checkpoint(
+            files, encoder_config=encoder,
+            encoder_state={},
+            provenance=_provenance(files, holdout_unit="template"),
+            cards_folders=("output/gen1-cardsfolder", "output/gen1-tokenscripts"),
+            training_settings=settings,
+        ))
+        loaded = store.load()
+        assert (loaded.encoder_config.n_layers, loaded.encoder_config.d_model) == (2, 32)
+        assert loaded.encoder_config.ff_dim == 128  # follows d_model x 4
+        assert loaded.provenance.holdout_unit == "template"
+        assert loaded.training_settings == settings
+        assert loaded.cards_folders == (
+            "output/gen1-cardsfolder", "output/gen1-tokenscripts",
+        )
+
+    def test_an_encoder_config_recording_e_noise_loads_with_it_ignored(self, tmp_path, files):
+        store = EffectModelStore(tmp_path)
+        store.save(_checkpoint(files))
+        path = store.latest_path()
+        payload = torch.load(path, weights_only=False)
+        payload["encoder_config"]["e_noise"] = 0.05
+        torch.save(payload, path)
+        assert store.load().encoder_config == _ENCODER_CONFIG
+
+    def test_a_config_recording_no_size_builds_at_four_layers_and_256(self):
+        from effects.infrastructure.effect_model_store import encoder_config_from
+
+        config = encoder_config_from({"vocab_size": 32, "e_dim": 64, "e_noise": 0.05})
+        assert (config.n_layers, config.d_model, config.ff_dim) == (4, 256, 1024)
+
+    @pytest.mark.skipif(not _GEN1_CHECKPOINT.exists(), reason="gen-1 checkpoint absent")
+    def test_the_gen1_checkpoint_loads_at_its_recorded_size(self):
+        """Spec Story 5 scenario 8, on the real gen-1 payload."""
+        from effects.domain.ability_encoder import AbilityEncoder
+
+        checkpoint = EffectModelStore(_GEN1_CHECKPOINT.parent).load(_GEN1_CHECKPOINT)
+        config = checkpoint.encoder_config
+        assert (config.n_layers, config.d_model) == (4, 256)
+        encoder = AbilityEncoder(config)
+        encoder.load_state_dict(checkpoint.encoder_state)
+        model = EffectModel(checkpoint.model_config)
+        missing, unexpected = model.load_state_dict(checkpoint.model_state, strict=False)
+        assert not unexpected
+        assert set(missing) <= {
+            key for key in model.state_dict()
+            if key.startswith(("option_kind_embedding.", *(
+                f"{name}." for name in EffectModel.TRAINING_ONLY_HEADS
+            )))
+        }
+        assert checkpoint.training_settings == {} and checkpoint.cards_folders == ()
