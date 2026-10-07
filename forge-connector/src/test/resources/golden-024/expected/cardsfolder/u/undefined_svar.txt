@@ -1,0 +1,5 @@
+name: undefined svar
+mana cost: {1}{U}
+types: creature human wizard
+power toughness: 1/1
+triggered: when CARDNAME enters, draw a card, then exile it.

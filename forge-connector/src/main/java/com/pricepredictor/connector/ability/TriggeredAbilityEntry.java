@@ -54,7 +54,7 @@ public record TriggeredAbilityEntry(AbilityType type, String descriptionText, Li
             if (charmHeader == null) charmHeader = "choose one";
             String expanded = rawDesc.replace("ABILITY", charmHeader);
             normalized = AbilityDescription.normalize(expanded);
-            List<Ability> options = CharmAbility.optionsFrom(execute);
+            List<Ability> options = CharmAbility.optionsFrom(execute, trigger);
             return new TriggeredAbilityEntry(effectiveType, normalized, options);
         }
 
@@ -68,7 +68,7 @@ public record TriggeredAbilityEntry(AbilityType type, String descriptionText, Li
                 if (charmHeader == null) charmHeader = "choose one";
                 String expanded = rawDesc.replace("ABILITY", charmHeader);
                 normalized = AbilityDescription.normalize(expanded);
-                List<Ability> options = CharmAbility.optionsFrom(nestedCharm);
+                List<Ability> options = CharmAbility.optionsFrom(nestedCharm, trigger);
                 return new TriggeredAbilityEntry(effectiveType, normalized, options);
             }
         }

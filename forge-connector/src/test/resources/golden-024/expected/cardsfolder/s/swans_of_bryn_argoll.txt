@@ -1,0 +1,6 @@
+name: swans of bryn argoll
+mana cost: {2}{W/U}{W/U}
+types: creature bird spirit
+power toughness: 4/3
+static: flying
+replacement: if a source would deal damage to CARDNAME, prevent that damage. the source's controller draws cards equal to the damage prevented this way.

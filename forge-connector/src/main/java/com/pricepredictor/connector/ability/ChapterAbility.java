@@ -50,7 +50,10 @@ public record ChapterAbility(String descriptionText, List<Ability> subAbilities)
                     String charmHeader = CharmAbility.synthesizeCharmHeader(execute);
                     if (charmHeader == null) charmHeader = "choose one";
                     stripped = stripped.replace("ABILITY", charmHeader);
-                    List<Ability> options = CharmAbility.optionsFrom(execute);
+                    // Owned by the trigger: two chapters naming one charm SVar
+                    // share the charm object, and only the trigger tells
+                    // chapter I's option lines from chapter II's.
+                    List<Ability> options = CharmAbility.optionsFrom(execute, trigger);
                     String normalized = AbilityDescription.normalize(stripped);
                     if (normalized == null) continue;
                     abilities.add(new ChapterAbility(AbilityType.CHAPTER.formatDescription(normalized), options));

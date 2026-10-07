@@ -40,12 +40,21 @@ import java.util.Set;
  *
  * <p>{@code indexWithinKind} indexes that kind's slice of the face's raw trait
  * list, not a global ordinal.
+ *
+ * <p>{@code option} names one mode of a modal trait: the mode's 0-based
+ * position in the root's {@code Choices$}. Forge gives a mode no identity of
+ * its own — a chosen mode is a clone with no back-reference, keyed to the
+ * charm it came from — so the position is the only stable name, and a key
+ * carrying it is a different key from the root's. It is null on every other
+ * trait, and absent from the JSON then, which is what keeps a gen-1 key
+ * readable unchanged.
  */
 public record ProvenanceKey(
         String scriptFile,
         int face,
         String traitKind,
-        int indexWithinKind
+        int indexWithinKind,
+        Integer option
 ) {
 
     public static final String KIND_KEYWORD = "keyword";
@@ -57,6 +66,24 @@ public record ProvenanceKey(
     public ProvenanceKey {
         Objects.requireNonNull(scriptFile, "scriptFile");
         Objects.requireNonNull(traitKind, "traitKind");
+        if (option != null && option < 0) {
+            throw new IllegalArgumentException("option must be a Choices$ position: " + option);
+        }
+    }
+
+    /** A root key: the trait itself rather than one of its modes. */
+    public ProvenanceKey(String scriptFile, int face, String traitKind, int indexWithinKind) {
+        this(scriptFile, face, traitKind, indexWithinKind, null);
+    }
+
+    /** This key's mode at {@code option}, the 0-based {@code Choices$} position. */
+    public ProvenanceKey withOption(int option) {
+        return new ProvenanceKey(scriptFile, face, traitKind, indexWithinKind, option);
+    }
+
+    /** The root this key names: itself, or the charm a mode key belongs to. */
+    public ProvenanceKey root() {
+        return option == null ? this : new ProvenanceKey(scriptFile, face, traitKind, indexWithinKind);
     }
 
     /** The trait kind a runtime object belongs to, or null if it is none of them. */
@@ -742,13 +769,24 @@ public record ProvenanceKey(
         return "{\"script_file\":" + Json.string(scriptFile)
                 + ",\"face\":" + face
                 + ",\"trait_kind\":" + Json.string(traitKind)
-                + ",\"index_within_kind\":" + indexWithinKind + "}";
+                + ",\"index_within_kind\":" + indexWithinKind
+                + optionJson() + "}";
     }
 
     /** The JSON object form used inside a sidecar, where the file is in the header. */
     public String toSidecarJson() {
         return "{\"face\":" + face
                 + ",\"trait_kind\":" + Json.string(traitKind)
-                + ",\"index_within_kind\":" + indexWithinKind + "}";
+                + ",\"index_within_kind\":" + indexWithinKind
+                + optionJson() + "}";
+    }
+
+    /**
+     * The {@code option} member, written only on a mode key: the Python reader
+     * spells the member the same way and omits it on a root key, so a gen-1
+     * sidecar and a gen-2 root key serialize byte for byte alike.
+     */
+    private String optionJson() {
+        return option == null ? "" : ",\"option\":" + option;
     }
 }

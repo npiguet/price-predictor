@@ -3,6 +3,7 @@ package com.pricepredictor.connector.ability;
 import com.pricepredictor.connector.Ability;
 import com.pricepredictor.connector.AbilityDescription;
 import com.pricepredictor.connector.AbilityType;
+import forge.game.CardTraitBase;
 import forge.game.spellability.SpellAbility;
 
 import java.util.ArrayList;
@@ -56,7 +57,8 @@ public record CharmAbility(String descriptionText, List<Ability> subAbilities) i
         List<Ability> choiceSubs = new ArrayList<>();
         var choices = sa.getAdditionalAbilityList("Choices");
         if (choices != null) {
-            for (var choice : choices) {
+            for (int modeIndex = 0; modeIndex < choices.size(); modeIndex++) {
+                var choice = choices.get(modeIndex);
                 String choiceDesc = SpellAbilityUtils.findParamInChain(choice, "SpellDescription");
                 if (choiceDesc != null) {
                     choiceDesc = AbilityDescription.stripReminderText(choiceDesc);
@@ -81,8 +83,8 @@ public record CharmAbility(String descriptionText, List<Ability> subAbilities) i
                     choiceDesc = "{P}".repeat(Integer.parseInt(pawprint))
                             + " \u2014 " + choiceDesc;
                 }
-                choiceSubs.add(new TextAbility(AbilityType.OPTION,
-                        AbilityDescription.applyCasing(choiceDesc)));
+                choiceSubs.add(new OptionAbility(
+                        AbilityDescription.applyCasing(choiceDesc), modeIndex, sa, null));
             }
         }
 
@@ -174,17 +176,28 @@ public record CharmAbility(String descriptionText, List<Ability> subAbilities) i
     /**
      * Return only the OPTION sub-abilities for a charm SA (no wrapper).
      * Used when the parent description already exists (e.g. triggered charm).
+     *
+     * @param owner the trait that executes the charm, so each option can be
+     *              attributed to that trait's line rather than to whichever
+     *              trigger last claimed a charm SVar two chapters share
      */
-    public static List<Ability> optionsFrom(SpellAbility sa) {
+    public static List<Ability> optionsFrom(SpellAbility sa, CardTraitBase owner) {
         List<Ability> options = new ArrayList<>();
         var choices = sa.getAdditionalAbilityList("Choices");
         if (choices == null) return options;
-        for (var choice : choices) {
+        for (int modeIndex = 0; modeIndex < choices.size(); modeIndex++) {
+            var choice = choices.get(modeIndex);
             String desc = SpellAbilityUtils.findParamInChain(choice, "SpellDescription");
             if (desc != null) desc = AbilityDescription.stripReminderText(desc);
             if (desc == null || desc.isEmpty()) continue;
-            options.add(new TextAbility(AbilityType.OPTION, AbilityDescription.applyCasing(desc)));
+            options.add(new OptionAbility(
+                    AbilityDescription.applyCasing(desc), modeIndex, sa, owner));
         }
         return options;
+    }
+
+    /** {@link #optionsFrom(SpellAbility, CardTraitBase)} with the owner unknown. */
+    public static List<Ability> optionsFrom(SpellAbility sa) {
+        return optionsFrom(sa, null);
     }
 }

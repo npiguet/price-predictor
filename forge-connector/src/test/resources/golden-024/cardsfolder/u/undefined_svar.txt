@@ -1,0 +1,7 @@
+Name:Undefined SVar
+ManaCost:1 U
+Types:Creature Human Wizard
+PT:1/1
+T:Mode$ ChangesZone | Origin$ Any | Destination$ Battlefield | ValidCard$ Card.Self | Execute$ TrigDraw | TriggerDescription$ When CARDNAME enters, draw a card, then exile it.
+SVar:TrigDraw:DB$ Draw | Defined$ You | NumCards$ 1 | SubAbility$ DBMissing
+Oracle:When Undefined SVar enters, draw a card, then exile it.

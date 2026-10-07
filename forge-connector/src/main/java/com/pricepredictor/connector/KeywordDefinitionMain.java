@@ -11,6 +11,7 @@ import forge.game.trigger.Trigger;
 import forge.util.Lang;
 
 import java.io.IOException;
+import java.lang.reflect.Field;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -76,9 +77,11 @@ public class KeywordDefinitionMain {
      * The keyword-definition document.
      *
      * <p>{@code {"<display name>": {"reminder_template": "…",
-     * "generated_script": null}}} — one entry per {@code Keyword} enum member,
-     * keyed by display name because that is what a card's keyword line and the
-     * converted text both spell.
+     * "generated_script": null, "formatter": "SimpleKeyword"}}} — one entry per
+     * {@code Keyword} enum member, keyed by display name because that is what a
+     * card's keyword line and the converted text both spell. {@code formatter}
+     * is the simple name of the keyword's {@code Keyword.type} class, which is
+     * how Forge formats the keyword's values into its template.
      */
     static String render() {
         List<String> entries = new ArrayList<>();
@@ -92,9 +95,32 @@ public class KeywordDefinitionMain {
                     + "\"reminder_template\":"
                     + Json.string(emptyToNull(expandPlurals(keyword.getReminderText())))
                     + ",\"generated_script\":" + Json.string(generatedScript(keyword))
+                    + ",\"formatter\":" + Json.string(formatterOf(keyword))
                     + "}");
         }
         return "{" + String.join(",", entries) + "}";
+    }
+
+    /**
+     * How Forge formats a keyword's instance values into its template.
+     *
+     * <p>A template's {@code %s} is filled by the keyword's own class —
+     * {@code KeywordWithCost} renders a mana cost as symbols,
+     * {@code KeywordWithAmount} an integer, {@code KeywordWithType} a type name
+     * — so an expansion done in Python has to know which class that is, and
+     * {@code Keyword.type} is the one place Forge records it. The field is
+     * protected and has no accessor, hence the reflective read; the enum is on
+     * the plain classpath, so nothing stands in its way.
+     */
+    static String formatterOf(Keyword keyword) {
+        try {
+            Field type = Keyword.class.getDeclaredField("type");
+            type.setAccessible(true);
+            Object value = type.get(keyword);
+            return value instanceof Class<?> c ? c.getSimpleName() : null;
+        } catch (ReflectiveOperationException | RuntimeException e) {
+            return null;
+        }
     }
 
     /**

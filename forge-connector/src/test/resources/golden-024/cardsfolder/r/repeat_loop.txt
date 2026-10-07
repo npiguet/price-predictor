@@ -1,0 +1,9 @@
+Name:Repeat Loop
+ManaCost:2 R
+Types:Sorcery
+A:SP$ Repeat | RepeatCheckSVar$ X | RepeatSVarCompare$ LT3 | RepeatSubAbility$ DBDamage | SubAbility$ DBCleanup | SpellDescription$ CARDNAME deals 1 damage to each opponent three times.
+SVar:DBDamage:DB$ DealDamage | Defined$ Player.Opponent | NumDmg$ 1 | SubAbility$ DBCount
+SVar:DBCount:DB$ StoreSVar | SVar$ X | Type$ CountSVar | Expression$ X/Plus.1 | SubAbility$ DBCleanup
+SVar:DBCleanup:DB$ Cleanup | ClearRemembered$ True
+SVar:X:Number$0
+Oracle:Repeat Loop deals 1 damage to each opponent three times.

@@ -1,0 +1,6 @@
+name: lonely end
+mana cost: {1}{B}
+types: instant
+spell[1]: choose one
+option[2]: target creature gets -3/-3 until end of turn.
+option[3]: remove three loyalty counters from target planeswalker.

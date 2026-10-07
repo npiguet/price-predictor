@@ -1,0 +1,9 @@
+name: blast from the past
+mana cost: {2}{R}
+types: instant
+alternate cost: madness {R}
+additional cost: kicker {2}{R}
+alternate cost: flashback {3}{R}
+additional cost: buyback {4}{R}
+activated[1]: cycling {1}{R}
+spell[2]: CARDNAME deals 2 damage to target creature or player.

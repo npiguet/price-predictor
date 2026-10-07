@@ -740,7 +740,9 @@ def _audit_correlation(train_scores: np.ndarray, audit_scores: np.ndarray) -> fl
     """Spearman rank correlation between two scorers on the val decks (FR-030)."""
     from scipy.stats import spearmanr
 
-    if len(train_scores) < 2:
+    # A constant input has no ranks to correlate; say so rather than letting
+    # scipy warn and return the same nan.
+    if len(train_scores) < 2 or np.ptp(train_scores) == 0 or np.ptp(audit_scores) == 0:
         return float("nan")
     corr, _ = spearmanr(train_scores, audit_scores)
     return float(corr)

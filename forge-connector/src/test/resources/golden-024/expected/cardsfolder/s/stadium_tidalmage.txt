@@ -1,0 +1,5 @@
+name: stadium tidalmage
+mana cost: {2}{U}{R}
+types: creature djinn sorcerer
+power toughness: 4/4
+triggered: whenever this creature enters or attacks, you may draw a card. if you do, discard a card.

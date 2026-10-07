@@ -1,0 +1,15 @@
+layout: transform
+name: daybreak ranger
+mana cost: {2}{G}
+types: creature human archer ranger werewolf
+power toughness: 2/2
+activated[1]: {T}: CARDNAME deals 2 damage to target creature with flying.
+triggered: at the beginning of each upkeep, if no spells were cast last turn, transform CARDNAME.
+
+ALTERNATE
+
+name: nightfall predator
+types: creature werewolf
+power toughness: 4/4
+activated[1]: {R}, {T}: CARDNAME fights target creature.
+triggered: at the beginning of each upkeep, if a player cast two or more spells last turn, transform CARDNAME.

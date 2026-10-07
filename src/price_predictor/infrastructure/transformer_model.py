@@ -30,7 +30,12 @@ class CardPriceTransformerModel(nn.Module):
             dropout=config.dropout,
             batch_first=True,
         )
-        self.encoder = nn.TransformerEncoder(encoder_layer, num_layers=config.n_layers)
+        # The nested-tensor fast path is a prototype PyTorch API that warns on
+        # every eval-mode forward with a padding mask; it changes speed, not
+        # outputs, and the dense path is what training already runs.
+        self.encoder = nn.TransformerEncoder(
+            encoder_layer, num_layers=config.n_layers, enable_nested_tensor=False,
+        )
 
         self.output_dropout = nn.Dropout(config.dropout)
         head_input_dim = 2 * config.d_model + config.meta_dim

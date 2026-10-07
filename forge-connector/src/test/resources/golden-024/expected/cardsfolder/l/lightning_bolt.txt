@@ -1,0 +1,4 @@
+name: lightning bolt
+mana cost: {R}
+types: instant
+spell[1]: CARDNAME deals 3 damage to any target.

@@ -16,6 +16,7 @@ import com.pricepredictor.connector.ability.StandardKeyword;
 import com.pricepredictor.connector.ability.StaticAbilityEntry;
 import com.pricepredictor.connector.ability.TextAbility;
 import com.pricepredictor.connector.ability.TriggeredAbilityEntry;
+import com.pricepredictor.connector.effects.MissingSVarReport;
 import com.pricepredictor.connector.effects.ProvenanceKey;
 import com.pricepredictor.connector.effects.ProvenanceRecorder;
 import forge.card.CardRarity;
@@ -58,6 +59,17 @@ public class RulesParser {
 
     private final CardRules.Reader reader = new CardRules.Reader();
     private int nextCardId = 1;
+    /**
+     * The undefined SVars every recorder of this parser reports into: a run's
+     * worth, drained by whoever converts a tree, so the operator sees one block
+     * rather than a line per card.
+     */
+    private final MissingSVarReport missingSVars = new MissingSVarReport();
+
+    /** The undefined-SVar report the recorded faces have filled so far. */
+    public MissingSVarReport missingSVars() {
+        return missingSVars;
+    }
 
     /**
      * Parse a card script and build domain objects for all faces.
@@ -197,9 +209,9 @@ public class RulesParser {
     }
 
     /** Append and return a fresh recorder, or null when recording is off. */
-    private static ProvenanceRecorder nextRecorder(List<ProvenanceRecorder> recorders) {
+    private ProvenanceRecorder nextRecorder(List<ProvenanceRecorder> recorders) {
         if (recorders == null) return null;
-        ProvenanceRecorder recorder = new ProvenanceRecorder();
+        ProvenanceRecorder recorder = new ProvenanceRecorder(missingSVars);
         recorders.add(recorder);
         return recorder;
     }
@@ -495,7 +507,7 @@ public class RulesParser {
                     int nl = tDesc.indexOf('\n');
                     if (nl >= 0) tDesc = tDesc.substring(0, nl);
                     header = AbilityDescription.normalize(tDesc);
-                    children = CharmAbility.optionsFrom(overriding);
+                    children = CharmAbility.optionsFrom(overriding, t);
                 } else {
                     String spellDesc = overriding != null ? overriding.getParam("SpellDescription") : null;
                     if (spellDesc == null || spellDesc.isEmpty()) {
@@ -657,17 +669,24 @@ public class RulesParser {
         return CardFactory.getCard(paperCard, null, nextCardId++, DummyGameHolder.INSTANCE);
     }
 
-    private static final Map<String, String> LAND_TYPE_MANA = Map.of(
-            "Plains",   "{W}",
-            "Island",   "{U}",
-            "Swamp",    "{B}",
-            "Mountain", "{R}",
-            "Forest",   "{G}"
+    /**
+     * Basic land types in colour-wheel order, which is the order the symbols
+     * are rendered in. A list rather than a {@code Map.of}: that map's
+     * iteration order is salted per JVM, so a dual land rendered
+     * {@code {W} or {U}} in one run and {@code {U} or {W}} in the next, and a
+     * converted corpus could not be reproduced byte for byte.
+     */
+    private static final List<Map.Entry<String, String>> LAND_TYPE_MANA = List.of(
+            Map.entry("Plains",   "{W}"),
+            Map.entry("Island",   "{U}"),
+            Map.entry("Swamp",    "{B}"),
+            Map.entry("Mountain", "{R}"),
+            Map.entry("Forest",   "{G}")
     );
 
     static String buildLandManaDescription(ICardFace face) {
         List<String> symbols = new ArrayList<>();
-        for (Map.Entry<String, String> entry : LAND_TYPE_MANA.entrySet()) {
+        for (Map.Entry<String, String> entry : LAND_TYPE_MANA) {
             if (face.getType().hasSubtype(entry.getKey())) {
                 symbols.add(entry.getValue());
             }

@@ -1,0 +1,3 @@
+name: mountain
+types: basic land mountain
+activated[1]: {T}: add {R}

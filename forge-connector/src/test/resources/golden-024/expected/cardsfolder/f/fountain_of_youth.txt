@@ -1,0 +1,4 @@
+name: fountain of youth
+mana cost: {0}
+types: artifact
+activated[1]: {2}, {T}: you gain 1 life.

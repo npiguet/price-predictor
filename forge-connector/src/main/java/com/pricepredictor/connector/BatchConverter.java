@@ -1,6 +1,7 @@
 package com.pricepredictor.connector;
 
 import com.esotericsoftware.minlog.Log;
+import com.pricepredictor.connector.effects.MissingSVarReport;
 import com.pricepredictor.connector.effects.ProvenanceRecorder;
 import com.pricepredictor.connector.effects.ProvenanceSidecar;
 import com.pricepredictor.connector.effects.SourceTree;
@@ -122,7 +123,10 @@ public class BatchConverter {
             }
         }
 
-        return new BatchResult(totalFiles, succeeded, warnings);
+        // Drained per tree, so the token tree's block never repeats the
+        // card tree's entries.
+        return new BatchResult(totalFiles, succeeded, warnings,
+                converter.missingSVars().drain());
     }
 
     /** The sidecar beside a converted {@code .txt}, the pairing {@code .npz} uses. */
@@ -133,7 +137,21 @@ public class BatchConverter {
         return convertedTxt.resolveSibling(stem + ".provenance.json");
     }
 
-    public record BatchResult(int totalFiles, int succeeded, List<String> warnings) {
+    /**
+     * What one tree's conversion produced.
+     *
+     * @param missingSVars every chain reference to an SVar the script never
+     *                     defines (FR-003): the segment was left out of the
+     *                     sidecar's {@code script_text}, and the operator is
+     *                     told once, as a block, rather than per card
+     */
+    public record BatchResult(int totalFiles, int succeeded, List<String> warnings,
+                              List<MissingSVarReport.Entry> missingSVars) {
+
+        public BatchResult(int totalFiles, int succeeded, List<String> warnings) {
+            this(totalFiles, succeeded, warnings, List.of());
+        }
+
         public int warningCount() {
             return warnings.size();
         }

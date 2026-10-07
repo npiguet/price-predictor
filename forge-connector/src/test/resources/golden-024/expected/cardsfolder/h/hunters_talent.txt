@@ -1,0 +1,6 @@
+name: hunter's talent
+mana cost: {1}{G}
+types: enchantment class
+level[1]: when CARDNAME enters, target creature you control deals damage equal to its power to target creature you don't control.
+level[2]: {1}{G}: whenever you attack, target attacking creature gets +1/+0 and gains trample until end of turn.
+level[3]: {3}{G}: at the beginning of your end step, if you control a creature with power 4 or greater, draw a card.

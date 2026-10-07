@@ -1,0 +1,4 @@
+name: repeat loop
+mana cost: {2}{R}
+types: sorcery
+spell[1]: CARDNAME deals 1 damage to each opponent three times.

@@ -1,0 +1,6 @@
+name: anticausal vestige
+mana cost: {6}
+types: creature eldrazi
+power toughness: 7/5
+activated[1]: warp {4}
+triggered: when this creature leaves the battlefield, draw a card, then you may put a permanent card with mana value less than or equal to the number of lands you control from your hand onto the battlefield tapped.

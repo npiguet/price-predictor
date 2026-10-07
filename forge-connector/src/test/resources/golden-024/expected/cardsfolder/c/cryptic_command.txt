@@ -1,0 +1,8 @@
+name: cryptic command
+mana cost: {1}{U}{U}{U}
+types: instant
+spell[1]: choose two
+option[2]: counter target spell.
+option[3]: return target permanent to its owner's hand.
+option[4]: tap all creatures your opponents control.
+option[5]: draw a card.

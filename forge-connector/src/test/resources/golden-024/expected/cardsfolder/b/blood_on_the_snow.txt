@@ -1,0 +1,6 @@
+name: blood on the snow
+mana cost: {4}{B}{B}
+types: snow sorcery
+spell[1]: choose one
+option[2]: destroy all creatures.
+option[3]: destroy all planeswalkers.

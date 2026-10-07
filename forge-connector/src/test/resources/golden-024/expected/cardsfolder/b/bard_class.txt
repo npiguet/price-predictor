@@ -1,0 +1,6 @@
+name: bard class
+mana cost: {R}{G}
+types: enchantment class
+level[1]: legendary creatures you control enter with an additional +1/+1 counter on them.
+level[2]: {R}{G}: legendary spells you cast cost {R}{G} less to cast. this effect reduces only the amount of colored mana you pay.
+level[3]: {3}{R}{G}: whenever you cast a legendary spell, exile the top two cards of your library. you may play them this turn.

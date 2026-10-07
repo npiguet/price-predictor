@@ -1,9 +1,12 @@
 package com.pricepredictor.connector;
 
+import com.pricepredictor.connector.effects.MissingSVarReport;
 import com.pricepredictor.connector.effects.SourceTree;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * CLI entry point for batch card script conversion.
@@ -55,6 +58,8 @@ public class ConvertMain {
 
             System.out.println("Conversion complete:");
             report("cardsfolder", cards);
+            List<MissingSVarReport.Entry> missingSVars =
+                    new ArrayList<>(cards.missingSVars());
 
             Path tokensSource = Path.of(tokensPath);
             if (Files.isDirectory(tokensSource)) {
@@ -63,9 +68,21 @@ public class ConvertMain {
                         SourceTree.TOKENSCRIPTS);
                 report("tokenscripts", tokens);
                 System.out.println("  Token output: " + tokensOutputPath);
+                missingSVars.addAll(tokens.missingSVars());
             } else {
                 System.out.println("  tokenscripts: skipped, no such directory ("
                         + tokensPath + ")");
+            }
+
+            // One block, on stderr, after both trees: the Python supervisor
+            // leaves the JVM's stderr attached to the operator's terminal, so
+            // this is what they read — and it is not a warning, because the
+            // card converted; only its chain has a hole the script wrote.
+            String block = MissingSVarReport.formatBlock(missingSVars);
+            if (block != null) {
+                System.out.flush();
+                System.err.print(block);
+                System.err.flush();
             }
 
             System.exit(0);

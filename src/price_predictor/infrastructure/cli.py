@@ -344,6 +344,13 @@ def run_convert(args: argparse.Namespace) -> int:
     ``<name>.provenance.json`` sidecar beside each of them joining every
     rendered line back to the runtime traits that produced it, and the
     converted token scripts under their own tree.
+
+    The JVM's stdout and stderr are deliberately left attached to the
+    operator's terminal rather than captured: ``ConvertMain`` prints its
+    undefined-SVar report — every chain parameter that named an SVar its
+    script never defines, whose segment was left out of ``script_text`` —
+    as one block on stderr at the end of the run, and the operator is the
+    one who has to read it.
     """
     import subprocess
 

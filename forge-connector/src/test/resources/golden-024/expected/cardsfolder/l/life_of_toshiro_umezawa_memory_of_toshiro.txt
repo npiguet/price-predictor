@@ -1,0 +1,17 @@
+layout: transform
+name: life of toshiro umezawa
+mana cost: {1}{B}
+types: enchantment saga
+chapter: I, II — choose one
+option[1]: target creature gets +2/+2 until end of turn.
+option[2]: target creature gets -1/-1 until end of turn.
+option[3]: you gain 2 life.
+chapter: III — exile this saga, then return it to the battlefield transformed under your control.
+replacement: CARDNAME enters with a lore counter on it.
+
+ALTERNATE
+
+name: memory of toshiro
+types: enchantment creature human samurai
+power toughness: 2/3
+activated[1]: {T}, pay 1 life: add {B}. spend this mana only to cast an instant or sorcery spell.

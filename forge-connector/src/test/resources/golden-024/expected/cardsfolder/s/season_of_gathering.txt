@@ -1,0 +1,7 @@
+name: season of gathering
+mana cost: {4}{G}{G}
+types: sorcery
+spell[1]: choose up to 5 {P} worth of modes. you may choose the same mode more than once.
+option[2]: {P} — put a +1/+1 counter on a creature you control. it gains vigilance and trample until end of turn.
+option[3]: {P}{P} — choose artifact or enchantment. destroy all permanents of the chosen type.
+option[4]: {P}{P}{P} — draw cards equal to the greatest power among creatures you control.

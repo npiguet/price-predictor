@@ -1,0 +1,4 @@
+name: glorious anthem
+mana cost: {1}{W}{W}
+types: enchantment
+static: creatures you control get +1/+1.

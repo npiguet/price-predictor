@@ -1,5 +1,6 @@
 package com.pricepredictor.connector;
 
+import forge.game.keyword.Keyword;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.io.TempDir;
@@ -97,6 +98,31 @@ class KeywordDefinitionMainTest {
                 "no keyword captured a generated script: createTraits was "
                         + "probably not called, and the script surface reads "
                         + "nothing");
+    }
+
+    /**
+     * The formatter is the class Forge fills the keyword's template with, read
+     * straight off the enum, so the Python expansion can format a value the way
+     * Forge does rather than pasting it raw (FR-018).
+     */
+    @Test
+    void everyKeywordRecordsHowForgeFormatsItsValues(@TempDir Path dir) throws IOException {
+        String json = write(dir);
+        assertFalse(json.contains("\"formatter\":null"),
+                "a keyword reports no formatter: the reflective read of Keyword.type failed");
+        assertEquals("SimpleKeyword", KeywordDefinitionMain.formatterOf(Keyword.FLYING));
+        assertEquals("KeywordWithCost", KeywordDefinitionMain.formatterOf(Keyword.CYCLING));
+        assertEquals("KeywordWithType", KeywordDefinitionMain.formatterOf(Keyword.ENCHANT));
+        assertEquals("Ward", KeywordDefinitionMain.formatterOf(Keyword.WARD));
+    }
+
+    @Test
+    void theFormatterIsWrittenIntoEachEntry(@TempDir Path dir) throws IOException {
+        String json = write(dir);
+        int at = json.indexOf("\"Flying\"");
+        assertTrue(at >= 0, "Flying is missing");
+        String entry = json.substring(at, json.indexOf('}', at) + 1);
+        assertTrue(entry.contains("\"formatter\":\"SimpleKeyword\""), entry);
     }
 
     @Test

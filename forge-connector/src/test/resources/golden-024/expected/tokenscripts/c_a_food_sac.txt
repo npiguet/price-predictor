@@ -1,0 +1,3 @@
+name: food token
+types: artifact food
+activated[1]: {2}, {T}, sacrifice this token: you gain 3 life.

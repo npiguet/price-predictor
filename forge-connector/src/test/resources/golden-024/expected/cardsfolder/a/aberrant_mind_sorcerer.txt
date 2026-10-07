@@ -1,0 +1,7 @@
+name: aberrant mind sorcerer
+mana cost: {4}{U}
+types: creature human elf shaman sorcerer
+power toughness: 3/4
+triggered: psionic spells — when CARDNAME enters, choose target instant or sorcery card in your graveyard, then roll a d20. roll a d20.
+option[1]: 1—9 | you may put that card on top of your library.
+option[2]: 10—20 | return that card to your hand.

@@ -1,0 +1,6 @@
+name: wall of omens
+mana cost: {1}{W}
+types: creature wall
+power toughness: 0/4
+static: defender
+triggered: when CARDNAME enters, draw a card.

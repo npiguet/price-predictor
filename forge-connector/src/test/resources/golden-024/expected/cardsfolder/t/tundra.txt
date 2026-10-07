@@ -1,0 +1,3 @@
+name: tundra
+types: land plains island
+activated[1]: {T}: add {W} or {U}

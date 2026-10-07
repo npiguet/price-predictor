@@ -1,0 +1,7 @@
+name: aboleth spawn
+mana cost: {2}{U}
+types: creature fish horror
+power toughness: 2/3
+static: flash
+static: ward {2}
+triggered: probing telepathy — whenever a creature entering under an opponent's control causes a triggered ability of that creature to trigger, you may copy that ability. you may choose new targets for the copy.

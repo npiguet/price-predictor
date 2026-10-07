@@ -1,0 +1,6 @@
+name: abiding grace
+mana cost: {2}{W}
+types: enchantment
+triggered: at the beginning of your end step, choose one
+option[1]: you gain 1 life.
+option[2]: return target creature card with mana value 1 from your graveyard to the battlefield.

@@ -1,6 +1,7 @@
 package com.pricepredictor.connector.effects;
 
 import com.pricepredictor.connector.Ability;
+import com.pricepredictor.connector.ability.OptionAbility;
 import forge.game.CardTraitBase;
 
 import java.util.ArrayList;
@@ -24,10 +25,12 @@ import java.util.Set;
  *
  * <p>A recorder is per face. Keys declared but attached to no surviving ability
  * end up in the sidecar's {@code dropped_keys}, which holds only traits with no
- * text of their own — a permanent's implicit cast spell, say. A trait the
- * converter deduplicated, merged or derived from a keyword keeps its
- * attribution on the line that carries its text, because it is still live at
- * runtime and a record naming it must reach the words it produced.
+ * text of their own — a permanent's implicit cast spell, say, or a charm whose
+ * modes are its only lines. A trait the converter deduplicated, merged or
+ * derived from a keyword keeps its attribution on the line that carries its
+ * text, because it is still live at runtime and a record naming it must reach
+ * the words it produced. A mode key is never declared: it is claimed by the
+ * mode's line or it does not exist, so it can never be dropped.
  */
 public final class ProvenanceRecorder {
 
@@ -43,6 +46,16 @@ public final class ProvenanceRecorder {
      * is walked long after the keyword loop has moved on.
      */
     private final Map<String, List<Ability>> byKeyword = new LinkedHashMap<>();
+    /** Where a chain's undefined SVars go; shared across every face of a run. */
+    private final MissingSVarReport missingSVars;
+
+    public ProvenanceRecorder() {
+        this(new MissingSVarReport());
+    }
+
+    public ProvenanceRecorder(MissingSVarReport missingSVars) {
+        this.missingSVars = missingSVars;
+    }
 
     /**
      * Note that a trait exists on this face, whether or not it produced a line.
@@ -54,24 +67,56 @@ public final class ProvenanceRecorder {
         if (key != null) declared.add(key);
     }
 
-    /** Attribute one or more parsed abilities to the trait that produced them. */
+    /**
+     * Attribute one or more parsed abilities to the trait that produced them.
+     *
+     * <p>A charm's mode lines are attributed here too, to the trait's key
+     * extended by the mode's {@code Choices$} position and to the mode's own
+     * chain: they arrive either as the charm line's children or, for a charm
+     * with no description of its own, as top-level lines in this list. The
+     * root key is then claimed by nobody and lands in {@code dropped_keys},
+     * which is the honest answer for a line the file does not show. A mode
+     * belonging to some other trait — a chapter's options being attributed to
+     * a sibling chapter's trigger — is left alone, so it keys to its own.
+     */
     public void attribute(List<Ability> abilities, ProvenanceKey key,
                           CardTraitBase trait) {
         if (key == null) return;
         declare(key);
-        TraitScript script = TraitScript.of(trait);
+        TraitScript script = TraitScript.of(trait, key, missingSVars);
         for (Ability ability : abilities) {
             if (ability == null) continue;
-            Source existing = byAbility.get(ability);
-            if (existing == null) {
-                List<ProvenanceKey> keys = new ArrayList<>();
-                keys.add(key);
-                byAbility.put(ability, new Source(keys, script));
-            } else if (!existing.keys().contains(key)) {
-                // A line merged from several traits carries several keys, so
-                // the join is many-to-one and never assumed one-to-one.
-                existing.keys().add(key);
+            if (ability instanceof OptionAbility option) {
+                attributeMode(option, key, trait);
+                continue;
             }
+            claim(ability, key, script);
+            for (Ability sub : ability.subAbilities()) {
+                if (sub instanceof OptionAbility option) {
+                    attributeMode(option, key, trait);
+                }
+            }
+        }
+    }
+
+    private void attributeMode(OptionAbility option, ProvenanceKey rootKey,
+                               CardTraitBase trait) {
+        if (!option.belongsTo(trait)) return;
+        ProvenanceKey modeKey = rootKey.withOption(option.modeIndex());
+        claim(option, modeKey, TraitScript.ofMode(
+                option.mode(), option.label(), modeKey, missingSVars));
+    }
+
+    private void claim(Ability ability, ProvenanceKey key, TraitScript script) {
+        Source existing = byAbility.get(ability);
+        if (existing == null) {
+            List<ProvenanceKey> keys = new ArrayList<>();
+            keys.add(key);
+            byAbility.put(ability, new Source(keys, script));
+        } else if (!existing.keys().contains(key)) {
+            // A line merged from several traits carries several keys, so
+            // the join is many-to-one and never assumed one-to-one.
+            existing.keys().add(key);
         }
     }
 

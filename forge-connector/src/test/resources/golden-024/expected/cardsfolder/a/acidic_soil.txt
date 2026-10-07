@@ -1,0 +1,4 @@
+name: acidic soil
+mana cost: {2}{R}
+types: sorcery
+spell[1]: CARDNAME deals damage to each player equal to the number of lands they control.
