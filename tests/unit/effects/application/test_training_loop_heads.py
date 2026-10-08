@@ -244,3 +244,6 @@ class TestTheBatchersTheLoopBuilds:
         settings = loop._training_settings()
         assert settings["e_noise"] == 0.05 and settings["value_weight"] == 0.1
         assert settings["api_types"] == ["Draw"]
+        # Every new run reads the gen-2 script rules and says so, so a loader
+        # never confuses it with a gen-1 checkpoint that recorded none.
+        assert settings["tokenizer_rules"] == "gen-2"

@@ -82,6 +82,8 @@ from effects.domain.ability_encoder import (
 )
 from effects.domain.ability_tokenizer import (
     INFERENCE_KEYWORD_EXPAND_P,
+    TOKENIZER_RULES,
+    TOKENIZER_RULES_KEY,
     AbilityTokenizer,
 )
 from effects.domain.damage_step_keywords import KeywordResolver
@@ -829,6 +831,7 @@ class TrainingLoop:
             "api_weight": self.config.api_weight,
             "api_types": list(self.api_types),
             "param_keys": list(self.param_keys),
+            TOKENIZER_RULES_KEY: TOKENIZER_RULES,
         }
 
     # ── the run ─────────────────────────────────────────────────────────

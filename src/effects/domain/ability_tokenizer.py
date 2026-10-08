@@ -108,6 +108,27 @@ HOST_BODIED_KEYWORDS: frozenset[str] = frozenset({
 #: still expands at any probability. Training keeps ``--keyword-expand-p``.
 INFERENCE_KEYWORD_EXPAND_P = 0.0
 
+#: The tokenization rules a checkpoint trained under, recorded in its
+#: ``training_settings`` under :data:`TOKENIZER_RULES_KEY`. Every training run
+#: of this feature records :data:`TOKENIZER_RULES`; a checkpoint recording none
+#: (gen-1, feature 023) tokenized every surface with the prose grammar, and the
+#: script-surface rules would hand it camel-case parts its vocabulary never
+#: held — about one script token in thirty reads as ``[UNK]`` that way, and
+#: nearly three texts in four change their token sequence.
+TOKENIZER_RULES_KEY = "tokenizer_rules"
+TOKENIZER_RULES = "gen-2"
+
+
+def tokenizer_surface(vocab_surface: str, training_settings) -> str:
+    """The surface whose rules a loaded checkpoint's tokenizer applies.
+
+    The vocabulary's surface (FR-010) for a checkpoint trained under the gen-2
+    rules; the prose grammar for one that records no rules, because that is
+    what it read in training whichever surface its vocabulary was.
+    """
+    rules = (training_settings or {}).get(TOKENIZER_RULES_KEY)
+    return vocab_surface if rules == TOKENIZER_RULES else SURFACE_PROSE
+
 
 def keyword_token(display_name: str) -> str:
     """Forge's display name as the token form the vocabulary carries."""

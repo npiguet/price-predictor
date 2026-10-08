@@ -76,6 +76,7 @@ from effects.domain.ability_encoder import (  # noqa: E402
 from effects.domain.ability_tokenizer import (  # noqa: E402
     HOST_BODIED_KEYWORDS,
     AbilityTokenizer,
+    tokenizer_surface,
 )
 from effects.infrastructure.effect_model_store import (  # noqa: E402
     EffectModelStore,
@@ -188,7 +189,8 @@ SHOWCASE = (
 
 
 def load_encoder(checkpoint_path: Path):
-    """The checkpoint's encoder, at the size it recorded, and its vocabulary."""
+    """The checkpoint's encoder, at the size it recorded, its vocabulary, and
+    the training settings that name the tokenization rules it read."""
     checkpoint = EffectModelStore(checkpoint_path.parent).load(checkpoint_path)
     provenance = checkpoint.provenance
     vocab_path = ROOT / provenance.vocab_path
@@ -197,7 +199,10 @@ def load_encoder(checkpoint_path: Path):
     encoder = AbilityEncoder(checkpoint.encoder_config)
     encoder.load_state_dict(checkpoint.encoder_state)
     encoder.eval()
-    return encoder, load_vocabulary(vocab_path), provenance, keyword_path
+    return (
+        encoder, load_vocabulary(vocab_path), provenance, keyword_path,
+        checkpoint.training_settings,
+    )
 
 
 def corpus_lines(trees) -> list[dict]:
@@ -300,11 +305,14 @@ def report(paths: ProbePaths) -> None:  # noqa: C901, PLR0912, PLR0915 — one l
     CACHE_ROOT = paths.abilities_root / "cardsfolder"  # noqa: N806
     OUT.mkdir(parents=True, exist_ok=True)
     torch.set_num_threads(max(1, torch.get_num_threads()))
-    encoder, vocab, provenance, keyword_path = load_encoder(paths.checkpoint)
+    encoder, vocab, provenance, keyword_path, settings = load_encoder(paths.checkpoint)
     definitions = load_keyword_definitions(keyword_path)
     # The checkpoint's own surface, so every sequence below is what that
     # encoder read; ``script_tok`` shows the script surface's rules beside it.
-    tok = AbilityTokenizer(vocab, definitions, surface=paths.surface)
+    tok = AbilityTokenizer(
+        vocab, definitions,
+        surface=tokenizer_surface(paths.surface, settings),
+    )
     script_tok = AbilityTokenizer(vocab, definitions, surface="script")
     UNK_ID = tok.unk_id
     summary: list[str] = [

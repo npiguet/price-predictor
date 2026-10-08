@@ -40,6 +40,7 @@ from effects.domain.ability_encoder import (
 from effects.domain.ability_tokenizer import (
     INFERENCE_KEYWORD_EXPAND_P,
     AbilityTokenizer,
+    tokenizer_surface,
 )
 from effects.domain.effect_head_input import (
     SlotKind,
@@ -114,9 +115,13 @@ def load_runnable(
         load_keyword_definitions(keyword_path) if Path(keyword_path).exists()
         else {}
     )
+    # The grammar the checkpoint trained under, which for gen-1 is the prose
+    # grammar even on its script vocabulary.
     tokenizer = AbilityTokenizer(
         load_vocabulary(Path(vocab_path)), definitions,
-        surface=surface_of(vocab_path),
+        surface=tokenizer_surface(
+            surface_of(vocab_path), checkpoint.training_settings,
+        ),
     )
 
     # Built at the size the checkpoint recorded (FR-061): a non-default arm

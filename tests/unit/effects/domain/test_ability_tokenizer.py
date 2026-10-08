@@ -758,3 +758,36 @@ def test_no_definition_expands_to_a_percent_or_unk(surface, source):
         tokens = tokenizer.tokenize(text)
         assert "%" not in [t.text for t in tokens], text
         assert all(t.token_id != tokenizer.unk_id for t in tokens), text
+
+
+class TestTokenizerRulesByCheckpoint:
+    """A loaded checkpoint is read with the grammar it trained under.
+
+    Gen-1 tokenized its script vocabulary with the prose grammar; reading it
+    with the gen-2 script rules turns camel-case parts it never saw into
+    ``[UNK]``. The text below is a real gen-1 sidecar line.
+    """
+
+    _GEN1_TEXT = "Defined$ TriggeredCard | ValidTgts$ Creature.YouCtrl | DB$ Pump"
+
+    def test_a_checkpoint_recording_no_rules_reads_the_prose_grammar(self):
+        from effects.domain.ability_tokenizer import tokenizer_surface
+
+        assert tokenizer_surface("script", {}) == "prose"
+        assert tokenizer_surface("script", None) == "prose"
+
+    def test_a_gen2_checkpoint_reads_its_vocabularys_surface(self):
+        from effects.domain.ability_tokenizer import tokenizer_surface
+
+        settings = {"tokenizer_rules": "gen-2"}
+        assert tokenizer_surface("script", settings) == "script"
+        assert tokenizer_surface("prose", settings) == "prose"
+
+    def test_the_two_grammars_differ_on_a_gen1_line(self):
+        vocab = _vocab(("validtgts", "creature", "youctrl", "defined"))
+        legacy = [t.text for t in AbilityTokenizer(vocab, surface="prose").tokenize(
+            self._GEN1_TEXT)]
+        script = [t.text for t in AbilityTokenizer(vocab, surface="script").tokenize(
+            self._GEN1_TEXT)]
+        assert "youctrl" in legacy and "validtgts" in legacy
+        assert "youctrl" not in script and "ctrl" in script

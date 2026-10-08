@@ -223,7 +223,7 @@ def build_encode_lines(config: EncodeAbilitiesConfig):
         log_truncation,
         surface_of,
     )
-    from effects.domain.ability_tokenizer import AbilityTokenizer
+    from effects.domain.ability_tokenizer import AbilityTokenizer, tokenizer_surface
     from effects.infrastructure.ability_encoder_runner import (
         AbilityEncoderRunner,
     )
@@ -245,7 +245,8 @@ def build_encode_lines(config: EncodeAbilitiesConfig):
     )
     surface = surface_of(vocab_path)
     tokenizer = AbilityTokenizer(
-        load_vocabulary(vocab_path), definitions, surface=surface,
+        load_vocabulary(vocab_path), definitions,
+        surface=tokenizer_surface(surface, checkpoint.training_settings),
     )
     runner = AbilityEncoderRunner.from_checkpoint(
         checkpoint, tokenizer, vocab_path=vocab_path,
