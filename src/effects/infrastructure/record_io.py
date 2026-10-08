@@ -39,7 +39,9 @@ records that cannot be recollected.
 from __future__ import annotations
 
 import json
-from collections.abc import Iterable, Iterator, Sequence
+import logging
+import re
+from collections.abc import Collection, Iterable, Iterator, Sequence
 from dataclasses import replace
 from pathlib import Path
 from typing import IO, Any
@@ -86,6 +88,8 @@ from price_predictor.infrastructure.append_only import (
     count_complete_lines,
     iter_complete_lines,
 )
+
+logger = logging.getLogger(__name__)
 
 _JSON_SEPARATORS = (",", ":")  # compact, newline-free
 
@@ -839,6 +843,54 @@ def read_records(directory: Path) -> Iterator[EffectRecord]:
     """
     for shard in iter_shards(directory):
         yield from read_shard(shard)
+
+
+#: ``game_id`` and ``kind`` as both writers lay out the envelope's head: the
+#: Java ``EffectRecord.toJson`` and :func:`record_to_dict` emit ``record_id``,
+#: ``run_id``, ``timestamp``, ``game_id`` and ``kind`` first, in that order.
+_ENVELOPE_HEAD = re.compile(r'"game_id":"([^"]*)","kind":"([a-z_]+)"')
+
+#: How far into a line the head is looked for. The four leading fields are a
+#: few hundred characters; the state snapshot that follows is the bulk.
+_ENVELOPE_HEAD_SPAN = 512
+
+
+def read_records_matching(
+    directory: Path,
+    *,
+    game_ids: Collection[str] | None = None,
+    kinds: Collection[str] | None = None,
+) -> Iterator[EffectRecord]:
+    """The records under ``directory`` of the named games and kinds.
+
+    The same records a filter over :func:`read_records` keeps, without parsing
+    the rest. A record costs a full JSON parse of its state snapshot, and a
+    scan for a thousand games' combat records otherwise parses every one of the
+    corpus's millions to throw nearly all of them away. A line whose head does
+    not have the expected shape is parsed and filtered the slow way, so a
+    writer that reorders the envelope costs speed, never records.
+    """
+    shards = iter_shards(directory)
+    for done, shard in enumerate(shards):
+        if done and done % 250 == 0:
+            logger.info("scanned %d of %d shards under %s", done, len(shards), directory)
+        for line in iter_shard_lines(shard):
+            head = _ENVELOPE_HEAD.search(line, 0, _ENVELOPE_HEAD_SPAN)
+            if head is not None:
+                game_id, kind = head.groups()
+                if game_ids is not None and game_id not in game_ids:
+                    continue
+                if kinds is not None and kind not in kinds:
+                    continue
+            stripped = line.strip()
+            if not stripped:
+                continue
+            record = record_from_dict(json.loads(stripped))
+            if game_ids is not None and record.game_id not in game_ids:
+                continue
+            if kinds is not None and record.kind.value not in kinds:
+                continue
+            yield record
 
 
 def count_records(directory: Path, *, ceiling: int = 0) -> int:

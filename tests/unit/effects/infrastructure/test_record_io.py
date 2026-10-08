@@ -832,3 +832,52 @@ class TestShardGeneration:
         gen2 = self._gen2_shard(tmp_path / "g2.jsonl.gz")
         assert refuse_mixed_generations([gen2, gen2]) == GEN_2
         assert refuse_mixed_generations([]) is None
+
+
+class TestReadRecordsMatching:
+    """The envelope-head filter keeps exactly what the full parse would."""
+
+    def _copy(self, tmp_path: Path) -> Path:
+        target = tmp_path / "records"
+        target.mkdir()
+        (target / _GEN1_FIXTURE.name).write_bytes(_GEN1_FIXTURE.read_bytes())
+        return target
+
+    def test_it_matches_a_filter_over_every_parsed_record(self, tmp_path):
+        from effects.infrastructure.record_io import read_records_matching
+
+        directory = self._copy(tmp_path)
+        everything = list(read_records(directory))
+        games = {everything[0].game_id, everything[-1].game_id}
+        expected = [
+            r.record_id for r in everything
+            if r.game_id in games and r.kind is RecordKind.COMBAT
+        ]
+        got = [
+            r.record_id for r in read_records_matching(
+                directory, game_ids=games, kinds={"combat"},
+            )
+        ]
+        assert got == expected and expected
+
+    def test_no_filter_reads_everything(self, tmp_path):
+        from effects.infrastructure.record_io import read_records_matching
+
+        directory = self._copy(tmp_path)
+        assert len(list(read_records_matching(directory))) == len(
+            list(read_records(directory))
+        )
+
+    def test_a_line_with_an_unexpected_head_is_parsed_not_dropped(self, tmp_path):
+        from effects.infrastructure.record_io import read_records_matching
+
+        record = _record(**ALL_KINDS["playability-blockers"])
+        data = record_to_dict(record)
+        # A writer that put kind before game_id: the fast path cannot read it.
+        reordered = {"kind": data["kind"], **data}
+        path = tmp_path / "x.jsonl"
+        path.write_text(json.dumps(reordered) + "\n", encoding="utf-8")
+        got = list(read_records_matching(
+            tmp_path, game_ids={record.game_id}, kinds={"playability"},
+        ))
+        assert [r.record_id for r in got] == [record.record_id]

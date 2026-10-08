@@ -935,7 +935,7 @@ def breakdown_records(config, main, corpus_path: Path | None) -> dict[str, list]
     shows up in the per-text mean. Otherwise from the raw corpus: the games
     the checkpoint recorded for each stratum, up to a bound.
     """
-    from effects.infrastructure.record_io import read_records, read_shard
+    from effects.infrastructure.record_io import read_records_matching, read_shard
 
     if corpus_path is not None:
         from effects.infrastructure.corpus_store import CorpusStore
@@ -954,7 +954,8 @@ def breakdown_records(config, main, corpus_path: Path | None) -> dict[str, list]
     out = {stratum: [] for stratum in games}
     if not any(games.values()):
         return out
-    for record in read_records(Path(config.records_dir)):
+    wanted = games[CARD_DISJOINT] | games[GAME_DISJOINT]
+    for record in read_records_matching(Path(config.records_dir), game_ids=wanted):
         for stratum, members in games.items():
             if record.game_id in members and len(out[stratum]) < BREAKDOWN_RAW_RECORDS:
                 out[stratum].append(record)
@@ -1121,14 +1122,13 @@ def _gate_two_records(config, provenance):
     costs about 45 KB, so the scorer reads it a chunk at a time.
     """
     from effects.domain.records import RecordKind
-    from effects.infrastructure.record_io import read_records
+    from effects.infrastructure.record_io import read_records_matching
 
     games = frozenset(provenance.game_disjoint_games)
     if not games:
         return iter(())
-    return (
-        record for record in read_records(Path(config.records_dir))
-        if record.kind is RecordKind.COMBAT and record.game_id in games
+    return read_records_matching(
+        Path(config.records_dir), game_ids=games, kinds={RecordKind.COMBAT.value},
     )
 
 
