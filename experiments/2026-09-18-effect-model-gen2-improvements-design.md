@@ -1233,4 +1233,39 @@ The arms are then compared by hand, and the Outcome section records the comparis
 
 ## Outcome
 
+### Stage 0 (2026-10-08): the sweep trains with a noise ratio of 0.1
+
+The noise ratio for every sweep arm is 0.1. The three pilots cannot be told apart on validation loss, but their ability caches can: at 0.1 the top principal component takes the smallest share of the variance and `e` spreads over the most dimensions, while at 0.2 one direction dominates and the cache fails gate 3's top-component canary.
+
+Each pilot trained for three epochs on gen-1's curated corpus with the same seed (7), so the three runs saw the same batches in the same order and differed only in the ratio. Every gen-2 training term was on: the value head at weight 0.05, and the verdict, created-objects, MLM and script-API losses. The script vocabulary was rebuilt with gen-2's tokenization rules over gen-1's sidecars, whose texts are the root line alone.
+
+#### Validation loss moves by about 2% across the three ratios
+
+At the end of epoch 3, the first epoch that trains the sparse fields, card-disjoint loss falls as the ratio rises and game-disjoint loss rises slightly. That is the direction noise is meant to push, from texts seen in training towards held-out ones, but the spread is small for a single seed and the ordering of the first two epochs was not the same. The value head, which reads `e` alone, gets worse as the noise grows.
+
+| epoch 3 | 0.05 | 0.1 | 0.2 |
+|---|---:|---:|---:|
+| card-disjoint loss | 4.566 | 4.509 | 4.459 |
+| game-disjoint loss | 4.479 | 4.510 | 4.511 |
+| gate F1 | 0.774 | 0.775 | 0.769 |
+| zone accuracy | 0.938 | 0.947 | 0.949 |
+| value-head loss (training) | 1.71 | 1.82 | 2.06 |
+
+#### The ability caches separate the ratios, and 0.1 uses `e` best
+
+Each pilot's cache was encoded over gen-1's sidecars and measured with gate 3's two collapse canaries and the participation ratio, the number of dimensions the variance effectively spreads over. At 0.1 the top component's share is the lowest and the participation ratio the highest. At 0.2 the mean pairwise cosine is lowest, yet a single direction carries more of the variance than gate 3 allows. One reading is that under heavy noise the encoder moves its signal onto a single high-variance axis the noise cannot swamp; the pilots do not test it.
+
+| cache | mean pairwise cosine | top component share | participation ratio |
+|---|---:|---:|---:|
+| ratio 0.05 | 0.475 | 28.5% | 6.57 |
+| ratio 0.1 | 0.482 | 25.7% | 7.07 |
+| ratio 0.2 | 0.333 | 31.5% | 5.72 |
+| gen-1, 40 epochs | 0.152 | 40.0% | 3.93 |
+
+Gate 3 requires a mean pairwise cosine of at most 0.5 and a top component of at most 30%. The gen-1 row is the shipped checkpoint after forty epochs, not a three-epoch run, so it shows where training this long ends rather than a fourth pilot.
+
+The knowledge probes' first run, on the gen-1 checkpoint, is recorded in [`2026-09-19-effect-knowledge-probes-design.md`](2026-09-19-effect-knowledge-probes-design.md#gen-1-2026-10-08).
+
+### The sweep
+
 To be filled in after the gen-2 sweep.

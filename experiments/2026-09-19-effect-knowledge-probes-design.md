@@ -221,4 +221,88 @@ Method C stays off unless a family's results call for it.
 
 ## Outcome / Result
 
-To be filled in after the gen-1 run and after the gen-2 arms, with each family's ladder, controls and headline share, the ablation's loss increases per field, the four board sweeps, the state-dependence probe, and the join rate of the interaction labels.
+### Gen-1 (2026-10-08)
+
+The first run probed the gen-1 checkpoint (`models/effects/runs/2026-09-17-full-textless-corpus/latest.pt`) against a probe set frozen over gen-1's curated corpus and read through a kept-aside copy of gen-1's sidecars. The scorecard is `output/effects/reports/knowledge-probes-2026-09-17-full-textless-corpus-20261008/scorecard.json`, probe-set digest `361fc75ce1cc`. Unless a table says otherwise, scores are the MLP probe's: AUC for yes/no targets, R² for amounts.
+
+#### The suite fits its budget with room to spare
+
+A full probing run took 17 minutes of wall time and peaked at 0.58 GiB of GPU memory, against a budget of two hours and 8 GB. Freezing the probe set took a few minutes more and needs no GPU.
+
+| item | value |
+|---|---|
+| line items | 34,802 |
+| record items | 33,329 |
+| interaction pairs | 1,792 |
+| interaction join rate | 6.8% |
+| wall time, probing run | 1,022 s |
+| peak GPU memory | 0.58 GiB |
+
+The join rate is low because the join can pair a trigger only with a resolution record that names the ability behind its event. Most fired triggers are entering-the-battlefield or cast triggers. Their cause is a permanent spell's own cast, which has no ability line, and a spell-cast event has no resolution record at all. The script-mined pairs supply the interactions the join cannot reach.
+
+#### `e` carries what kind of ability a line is, and little of its amounts
+
+A probe reading `e` alone recognises most line properties far above the width control, the same probe fitted on a fixed random vector per text. Amounts are the exception: `e` explains a third of the variance in damage, little of the mana cost and none of the toughness change. This is the gap the value head is meant to close.
+
+| line property | `e` | width control | trunk at `[ACT]` |
+|---|---:|---:|---:|
+| lasts as a counter (`as_counter`) | 0.998 | 0.512 | 0.994 |
+| lasts until end of turn | 0.990 | 0.510 | 0.987 |
+| produces colourless mana | 0.996 | 0.524 | 0.992 |
+| repeatable | 0.863 | 0.501 | 0.964 |
+| affects each player or permanent | 0.894 | 0.497 | 0.929 |
+| damage amount (R²) | 0.348 | −0.102 | 0.682 |
+| power change (R²) | 0.523 | −0.326 | 0.638 |
+| toughness change (R²) | −0.011 | −0.192 | 0.507 |
+| total mana cost (R²) | 0.142 | −0.517 | 0.048 |
+
+These are trained lines. On held-out lines, damage and counters placed read lower, and power change and toughness change fall to near zero.
+
+#### Affordability lives in `e`; blocking legality does not
+
+On the board-dependent targets, rung 0 reads the board with every `e` zeroed and rung 1 adds the acting line's `e`. Affordability rises from 0.74 to 0.95 when `e` is added, far above the width control, so the vector carries the cost the verdict turns on. Whether a creature may block barely moves between the two rungs, so `e` adds nothing the board does not already say.
+
+| target, card-disjoint | rung 0 | rung 1 | 1w | 1o | rung 2 | rung 3 | share |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| affordable | 0.736 | 0.953 | 0.798 | 0.965 | 0.947 | 0.899 | 1.33 |
+| may block | 0.671 | 0.674 | 0.670 | 0.677 | 0.711 | 0.748 | 0.03 |
+| entity affected | 0.893 | 0.919 | 0.867 | 0.899 | 0.995 | 0.997 | 0.25 |
+| trigger fires | 0.781 | 0.831 | 0.799 | 0.818 | 0.851 | 0.511 | — |
+| legal target | 0.929 | 0.948 | 0.907 | 0.936 | 0.980 | 0.251 | — |
+
+Rung 1w replaces each `e` with its width control, rung 1o adds the parsed script values instead of `e`, rung 2 is the trunk's output and rung 3 the model's own prediction. Affordability's share exceeds 1 because its rung 3 sits below rung 1: the probe on `e` decodes the answer better than the model's own head does. Affordability and blocking show the same pattern on the game-disjoint stratum.
+
+#### The model's own prediction falls below the trunk's on trigger firing and target legality
+
+Rung 3 for trigger firing is 0.51 and for target legality 0.25, while the trunk's output at rung 2 reaches 0.85 and 0.98 on the same items. The information is in the trunk; the model's read-out of it is not. No share is reported for either target, because rung 3 falls below rung 0.
+
+The two causes differ. Trigger firing is read from the verdict head's fired bit, which gen-1 never trained: its loss had no caller, so the head sits at its initial weights. Target legality is read from the per-entity `target_legal` field, which gen-1 did train, and an AUC of 0.25 ranks the two classes in reverse. That points at the probe's read-out of this field or at a mismatch between its label and the field's meaning, and it needs checking before the number is read as the model's knowledge. Affordability is read from the same untrained verdict head as trigger firing and still scores 0.90 at rung 3; why is not yet understood.
+
+#### No death is ever predicted from damage, because the corpus never records one
+
+Every `dies` label is zero, and the toughness and damage sweeps read 0.000 at every value. A creature dealt lethal damage dies to state-based actions after the resolution's record has closed, so no resolution record carries the death, and the model has learned that damage kills nothing. The board-size sweep shows the model does predict deaths when the record itself carries them: predicted deaths summed over the board rise steadily from 0.003 with no opposing creature to 0.154 with eight.
+
+| sweep | 1 or 0 | 4 | 8 |
+|---|---:|---:|---:|
+| toughness of the target, its predicted death | 0.000 | 0.000 | 0.000 |
+| `NumDmg$` on a spell, toughness-4 target's death | 0.000 | 0.000 | 0.000 |
+| opposing creatures, deaths summed over the board | 0.003 | 0.089 | 0.154 |
+| untapped production, predicted affordable | 0.491 | 0.494 | 0.509 |
+
+The affordability sweep is flat at 0.49: the untrained verdict head does not respond to the acting player's untapped mana.
+
+#### The trunk reads `e` almost only at `[ACT]`, and any nearby text's `e` does as well
+
+Replacing `e` with matched noise raises the loss most on keywords gained, the gate and damage taken. Applied to `[ACT]` alone the increase is almost the same as applied everywhere, and applied to the card slots alone it is near zero, so the trunk barely uses the vectors of the abilities on the board. Replacing `e` with the nearest other text's vector costs almost nothing on any field.
+
+| field | base loss | noise, every slot | noise, `[ACT]` | noise, card slots | API-type mean | nearest text |
+|---|---:|---:|---:|---:|---:|---:|
+| gate | 1.010 | +1.190 | +1.082 | +0.044 | +0.318 | +0.017 |
+| keywords gained | 0.066 | +1.122 | +1.080 | +0.020 | +0.694 | +0.015 |
+| damage taken | 0.543 | +0.280 | +0.250 | +0.002 | +0.062 | +0.000 |
+| life change | 0.363 | +0.295 | +0.258 | +0.003 | +0.087 | +0.006 |
+| colours gained | 0.025 | +0.182 | +0.188 | −0.001 | +0.114 | +0.019 |
+
+### Gen-2 arms
+
+To be filled in after the gen-2 sweep, with each arm read against gen-1 by direction.

@@ -277,12 +277,12 @@ before this phase is complete.
 - [X] T124 [P] Update `README.md`'s effects workflow with the gen-2 commands and flags (contracts/cli.md) and the stage order of quickstart.md
 - [X] T125 [P] Confirm the import-direction test (`tests/unit/effects/test_import_boundaries.py`) passes unchanged, `scorer_smoke_test.py` included (FR-090)
 - [X] T126 [P] Regression: gate 2, gate 3 and the baseline variants are unchanged — `tests/unit/effects/application/test_gate_two.py`, `test_gates.py`, `test_geometry_checks.py` pass, and `evaluate-effect-model` on the gen-1 checkpoint gives the same gate-2 and gate-3 verdicts as before this feature (FR-091)
-- [ ] T127 Performance review against plan.md § Performance Review: confirm value targets and families are cached per text, noise adds no host transfer, what-if snapshots are built after the rate draw, and probe features are extracted once per stratum; profile one training epoch before and after T088–T094 and record the step time
-- [ ] T128 Full verification: `pytest -m "not integration"`, `pytest -m integration` (needs the JAR), `cd forge-connector && mvn install -DskipTests && mvn test`, `ruff check`, and IDE type diagnostics on every touched file; fix every failure and warning found, whoever's code it is
+- [X] T127 Performance review against plan.md § Performance Review: confirm value targets and families are cached per text, noise adds no host transfer, what-if snapshots are built after the rate draw, and probe features are extracted once per stratum; profile one training epoch before and after T088–T094 and record the step time
+- [X] T128 Full verification: `pytest -m "not integration"`, `pytest -m integration` (needs the JAR), `cd forge-connector && mvn install -DskipTests && mvn test`, `ruff check`, and IDE type diagnostics on every touched file; fix every failure and warning found, whoever's code it is
 - [ ] T129 Walk quickstart.md stages 1 and 2 end to end on the real Forge checkout (conversion, vocabulary, holdout, pilot collection, validation, scratch build) and fix whatever breaks
-- [ ] T130 Run stage 0 on gen-1 (quickstart.md): the knowledge probes and the three noise-pilot runs; check the scorecard's recorded wall time and peak GPU memory against SC-011 (≤ 2 GPU hours, within 8 GB); hand the epoch lines and scorecard to the user for the noise-ratio decision
+- [X] T130 Run stage 0 on gen-1 (quickstart.md): the knowledge probes and the three noise-pilot runs; check the scorecard's recorded wall time and peak GPU memory against SC-011 (≤ 2 GPU hours, within 8 GB); hand the epoch lines and scorecard to the user for the noise-ratio decision
 - [ ] T131 After the sweep runs, fill the Outcome sections of `experiments/2026-09-18-effect-model-gen2-improvements-design.md` and `experiments/2026-09-19-effect-knowledge-probes-design.md` with the user — load the feature-workflow skill before each edit
-- [ ] T132 If implementation changes any contract in `specs/024-ability-effect-model-gen2/` or the root spec, update it in the same change — load the feature-workflow skill before each edit
+- [X] T132 If implementation changes any contract in `specs/024-ability-effect-model-gen2/` or the root spec, update it in the same change — load the feature-workflow skill before each edit
 
 ---
 
