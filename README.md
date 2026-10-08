@@ -1056,8 +1056,16 @@ records afterwards:
 # 0. gen-1 artifacts, before stage 1 reconverts the sidecars
 cp -r output/cardsfolder output/gen1-cardsfolder
 cp -r output/tokenscripts output/gen1-tokenscripts
-python scripts/effect_knowledge_probes/run.py --checkpoint <gen-1>.pt     --cards-folder output/gen1-cardsfolder --cards-folder output/gen1-tokenscripts     --freeze-probe-set
-python -m effects train-effect-model --corpus output/effects/corpus/     --cards-folder output/gen1-cardsfolder --cards-folder output/gen1-tokenscripts     --e-noise 0.1 --value-weight 0.05 --epochs 3      # noise pilot, one per ratio
+python scripts/effect_knowledge_probes/run.py --checkpoint <gen-1>.pt \
+    --cards-folder output/gen1-cardsfolder --cards-folder output/gen1-tokenscripts \
+    --freeze-probe-set
+python -m effects build-vocab --surface script \
+    --cards-folder output/gen1-cardsfolder --cards-folder output/gen1-tokenscripts \
+    --vocab-path models/effects/vocab-script-gen1-sidecars.txt
+python -m effects train-effect-model --corpus output/effects/corpus/ \
+    --vocab-path models/effects/vocab-script-gen1-sidecars.txt \
+    --cards-folder output/gen1-cardsfolder --cards-folder output/gen1-tokenscripts \
+    --e-noise 0.1 --value-weight 0.05 --epochs 3      # noise pilot, one per ratio
 
 # 1. chained, label-renamed script text; template holdout
 python -m effects extract-keyword-definitions
@@ -1066,14 +1074,18 @@ python -m effects build-vocab --surface script
 python -m effects holdout-cards --holdout-unit template --out output/effects/holdout-cards.txt
 
 # 2-3. collection with the random seat (records only for its matches)
-python -m sealed match-outcomes --effect-records output/effects/records/     --exclude-cards output/effects/holdout-cards.txt     --random-seat-share 0.125 --random-seat-probability P
+python -m sealed match-outcomes --effect-records output/effects/records/ \
+    --exclude-cards output/effects/holdout-cards.txt \
+    --random-seat-share 0.125 --random-seat-probability P
 python -m effects collect-coverage --only-cards output/effects/holdout-cards.txt --min-text-games 5
 
 # 4. one curated dataset, balanced across rule families and outcome signatures
-python -m effects build-corpus --records-dir output/effects/records/     --output output/effects/corpus-gen2/ --vocab-path models/effects/vocab-script.txt
+python -m effects build-corpus --records-dir output/effects/records/ \
+    --output output/effects/corpus-gen2/ --vocab-path models/effects/vocab-script.txt
 
 # 5. per sweep arm: train, encode, evaluate, probe
-python -m effects train-effect-model --corpus output/effects/corpus-gen2/     --e-dim D --encoder-layers L --encoder-d-model W --e-noise R
+python -m effects train-effect-model --corpus output/effects/corpus-gen2/ \
+    --e-dim D --encoder-layers L --encoder-d-model W --e-noise R
 python -m effects encode-abilities --checkpoint <arm>/latest.pt
 python -m effects evaluate-effect-model --checkpoint <arm>/latest.pt
 python scripts/effect_knowledge_probes/run.py --checkpoint <arm>/latest.pt

@@ -36,11 +36,17 @@ python scripts/effect_knowledge_probes/run.py \
 ```
 
 Noise pilot, three short runs on gen-1's curated corpus (value, verdict, created-objects, MLM and API
-heads on, one-segment chains):
+heads on, one-segment chains). A pilot trains from scratch under the gen-2 tokenizer rules, so it
+reads a script vocabulary rebuilt with those rules over gen-1's sidecars; gen-1's own
+`vocab-script.txt` stays as the gen-1 checkpoint recorded it:
 
 ```bash
+python -m effects build-vocab --surface script \
+    --cards-folder output/gen1-cardsfolder --cards-folder output/gen1-tokenscripts \
+    --vocab-path models/effects/vocab-script-gen1-sidecars.txt
 for r in 0.05 0.1 0.2; do
   python -m effects train-effect-model --corpus output/effects/corpus/ \
+      --vocab-path models/effects/vocab-script-gen1-sidecars.txt \
       --cards-folder output/gen1-cardsfolder --cards-folder output/gen1-tokenscripts \
       --e-noise $r --value-weight 0.05 --epochs 3 \
       --model-output models/effects/runs/2026-10-noise-pilot-$r/
