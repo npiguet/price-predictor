@@ -14,7 +14,7 @@ from pathlib import Path
 import pytest
 import torch
 
-from effects.application.surface_batching import EncodedBatch
+from effects.application.surface_batching import EncodedBatch, PreparedBatch
 from effects.application.train_effect_model import HeldOutCards, TrainEffectModelConfig
 from effects.application.training_loop import (
     NO_TEXT_BUCKET,
@@ -79,7 +79,8 @@ def _model(**overrides) -> EffectModel:
 
 
 class _Batcher:
-    """The two things ``_head_terms`` reads off a batcher after ``build``."""
+    """What the two halves of a step read off a batcher: the MLM draw on the
+    host, then ``encoded`` and the MLM pass on the device."""
 
     def __init__(self, texts: list[str], lines: dict) -> None:
         self.encoded = EncodedBatch(
@@ -87,13 +88,35 @@ class _Batcher:
         )
         self.mlm_calls = 0
 
-    def mlm_inputs(self, encoder, mask_prob):
+    def prepared(self) -> PreparedBatch:
+        """The host half ``build`` would have produced for these texts."""
+        texts = self.encoded.texts
+        return PreparedBatch(
+            texts=dict(self.encoded.lines),
+            rows={text: row for row, text in enumerate(texts)},
+            prepared=[object()] * len(texts), encoder_inputs=None,
+            stand_in=None, surfaces=[], inputs={},
+        )
+
+    def draw_mlm_mask(self, prepared, mask_prob):
         self.mlm_calls += 1
+        return "masked"
+
+    def mlm_forward(self, encoder, masked):
         hidden = torch.randn(len(self.encoded.texts), 3, 8)
         targets = torch.zeros(len(self.encoded.texts), 3, dtype=torch.long)
         mask = torch.zeros(len(self.encoded.texts), 3, dtype=torch.bool)
         mask[:, 1] = True
         return hidden, targets, mask
+
+
+def _terms(loop, records, batcher, model, hidden, *, training):
+    """Both halves of the head terms: targets on the host, losses after."""
+    targets = loop._head_targets(
+        records, batcher, batcher.prepared(), training=training,
+        heads=loop._training_heads(model) if training else frozenset(),
+    )
+    return loop._head_terms(targets, batcher, None, model, hidden)
 
 
 def _kinds(records):
@@ -164,7 +187,7 @@ class TestTheHeadTerms:
         model = _model()
         hidden = torch.randn(len(batch), 6, 8)
         batcher = _Batcher(["NumDmg$ 2 | SP$ DealDamage", "SP$ Draw | NumCards$ 1"], {})
-        terms = loop._head_terms(batch, batcher, None, model, hidden, training=True)
+        terms = _terms(loop, batch, batcher, model, hidden, training=True)
         assert {"verdict", "value", "api", "mlm"} <= set(terms)
         assert all(torch.isfinite(value) for value in terms.values())
         assert terms["verdict"] > 0
@@ -173,8 +196,8 @@ class TestTheHeadTerms:
         loop = _loop(monkeypatch, mlm_weight=0.0, api_weight=0.0)
         batch = _kinds(records)
         batcher = _Batcher(["SP$ Draw | NumCards$ 1"], {})
-        terms = loop._head_terms(
-            batch, batcher, None, _model(), torch.randn(len(batch), 6, 8),
+        terms = _terms(
+            loop, batch, batcher, _model(), torch.randn(len(batch), 6, 8),
             training=True,
         )
         assert "mlm" not in terms and "api" not in terms
@@ -183,8 +206,8 @@ class TestTheHeadTerms:
     def test_scoring_computes_only_the_shipped_heads(self, monkeypatch, records):
         loop = _loop(monkeypatch)
         batch = _kinds(records)
-        terms = loop._head_terms(
-            batch, _Batcher(["SP$ Draw"], {}), None, _model(),
+        terms = _terms(
+            loop, batch, _Batcher(["SP$ Draw"], {}), _model(),
             torch.randn(len(batch), 6, 8), training=False,
         )
         assert set(terms) <= {"verdict", "created_objects"}

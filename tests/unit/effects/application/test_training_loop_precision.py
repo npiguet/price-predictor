@@ -105,26 +105,24 @@ def _run_loss_for(monkeypatch, loop, *, autocast: bool):
     loop.autocast = autocast
     _AutocastSpy.calls = []
     monkeypatch.setattr(loop_module.torch, "autocast", _AutocastSpy)
-    monkeypatch.setattr(TrainingLoop, "_batcher", lambda self, *a, **k: (
-        type("B", (), {"build": staticmethod(lambda records, encoder: ({}, []))})()
-    ))
-    monkeypatch.setattr(loop_module, "derive_targets", lambda record: None)
-
-    index = torch.zeros((1, 1), dtype=torch.long)
-    gate = torch.zeros((1, 1))
-    mask = torch.zeros((1, 1))
-    monkeypatch.setattr(
-        loop_module, "entity_target_tensors",
-        lambda surfaces, targets, fields: (gate, {}, mask, index),
-    )
     monkeypatch.setattr(
         loop_module, "per_entity_loss",
         lambda *a, **k: (torch.tensor(0.0), {}),
     )
     monkeypatch.setattr(TrainingLoop, "_head_terms", lambda self, *a, **k: {})
 
-    class _Plan:
-        records = [object()]
+    class _Batcher:
+        def materialize(self, prepared, encoder):
+            return {}, []
+
+    # The host half, as training hands it over: it holds no device work, so
+    # whether autocast encloses it is not the question.
+    prepared = loop_module.PreparedStep(
+        batcher=_Batcher(), batch=None, fields=("dummy",),
+        gate=torch.zeros((1, 1)), field_targets={}, mask=torch.zeros((1, 1)),
+        index=torch.zeros((1, 1), dtype=torch.long),
+        heads=loop_module.HeadTargets(),
+    )
 
     class _Model:
         def __call__(self, **batch):
@@ -134,8 +132,8 @@ def _run_loss_for(monkeypatch, loop, *, autocast: bool):
             return torch.zeros((1, 1, 3))
 
     result = loop._loss_for(
-        _Plan(), encoder=None, model=_Model(), tokenizer=None, sidecars=None,
-        widths={}, step=0, fields=("dummy",),
+        None, encoder=None, model=_Model(), tokenizer=None, sidecars=None,
+        widths={}, step=0, fields=("dummy",), prepared=prepared,
     )
     assert result is not None
     return _AutocastSpy.calls
@@ -207,6 +205,10 @@ def _run_execute(monkeypatch, tmp_path, make_record, *, cuda: bool):  # noqa: F8
         TrainingLoop, "_loss_for",
         lambda self, plan, *a, **k: (model.p.sum(), {}),
     )
+    # The step's host half would pin its tensors on this fake device; the plan
+    # stands in for what it would have prepared.
+    monkeypatch.setattr(TrainingLoop, "_training_heads", lambda self, model: frozenset())
+    monkeypatch.setattr(TrainingLoop, "_prepare_step", lambda self, plan, *a, **k: plan)
     monkeypatch.setattr(
         TrainingLoop, "_validate", lambda self, records, *a, **k: 1.0,
     )

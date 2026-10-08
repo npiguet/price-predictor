@@ -36,7 +36,7 @@ import time
 from collections import defaultdict
 from collections.abc import Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import asdict
+from dataclasses import asdict, dataclass
 from pathlib import Path
 
 import torch
@@ -44,8 +44,11 @@ import torch
 from effects.application.gate_one import measure
 from effects.application.surface_batching import (
     IDENTITY_TABLE_SIZE,
+    MaskedTokens,
     NoiseState,
+    PreparedBatch,
     SurfaceBatcher,
+    pinned,
 )
 from effects.application.train_effect_model import (
     LEARNING_RATE,
@@ -328,6 +331,58 @@ class FloorCache:
         self.floor = dict(floor)
 
 
+@dataclass
+class HeadTargets:
+    """The targets of every loss term beside the per-entity one, on the host.
+
+    Each is None where its head is not computed for this batch. Built with the
+    step's other targets, so the device half reads them rather than deriving
+    them between two pieces of GPU work.
+    """
+
+    #: ``(target, mask)`` for the verdict head (FR-060a).
+    verdict: tuple[torch.Tensor, torch.Tensor] | None = None
+    #: ``(target, mask)`` for the created-objects head (FR-060a).
+    created: tuple[torch.Tensor, torch.Tensor] | None = None
+    #: ``(target, mask)`` for the value head, one row per text (FR-058).
+    value: tuple[torch.Tensor, torch.Tensor] | None = None
+    #: ``(types, keys)`` for the script-API head, one row per text (FR-060b).
+    api: tuple[torch.Tensor, torch.Tensor] | None = None
+    #: The MLM pass's masked tokens (FR-060b).
+    mlm: MaskedTokens | None = None
+
+    def pin(self) -> None:
+        """Every target in page-locked memory; see ``pinned``."""
+        self.verdict = pinned(self.verdict)
+        self.created = pinned(self.created)
+        self.value = pinned(self.value)
+        self.api = pinned(self.api)
+        if self.mlm is not None:
+            self.mlm.pin()
+
+
+@dataclass
+class PreparedStep:
+    """One step's host half: what ``_loss_for`` needs besides the model.
+
+    Everything here is a function of the planned records, the sidecars, the
+    tokenizer and the training generator, and nothing of the weights, which
+    is what lets the next step's be built on another thread while this one's
+    runs on the device. ``e`` is not among it: the encoder runs in the device
+    half, so the effect loss still reaches it.
+    """
+
+    batcher: SurfaceBatcher
+    batch: PreparedBatch
+    fields: tuple[FieldSpec, ...]
+    #: ``entity_target_tensors``' four outputs.
+    gate: torch.Tensor
+    field_targets: dict[str, torch.Tensor]
+    mask: torch.Tensor
+    index: torch.Tensor
+    heads: HeadTargets
+
+
 class TrainingLoop:
     """Owns one training run end to end.
 
@@ -349,8 +404,14 @@ class TrainingLoop:
         gate_one_records: int = 0,
         rarity: Mapping[str, int] | None = None,
         corpus_digest: str = "",
+        prefetch_batches: bool = True,
     ) -> None:
         self.config = config
+        #: Whether each step's host half is prepared on a background thread
+        #: one step ahead. Off, the same function runs in place; the two take
+        #: the same draws in the same order, so this changes the speed of a
+        #: run and nothing it computes.
+        self.prefetch_batches = prefetch_batches
         self.held_out = held_out
         self.training_shards = list(training_shards)
         #: The corpus's fixed validation samples, one file per stratum
@@ -576,10 +637,69 @@ class TrainingLoop:
 
     # ── stepping ────────────────────────────────────────────────────────
 
+    def _training_heads(self, model) -> frozenset[str]:
+        """The training-only heads a step computes; a zero weight computes none."""
+        heads = set()
+        if self.config.value_weight > 0.0:
+            heads.add("value")
+        if self.config.api_weight > 0.0 and model.api_type_head is not None:
+            heads.add("api")
+        if self.config.mlm_weight > 0.0 and model.mlm_head is not None:
+            heads.add("mlm")
+        return frozenset(heads)
+
+    def _prepare_step(
+        self, plan, tokenizer, sidecars, widths, step, *, fields=None,
+        training: bool = True, heads: frozenset[str] = frozenset(),
+        pin: bool = False,
+    ) -> PreparedStep | None:
+        """One step's host half, or ``None`` when the plan holds no records.
+
+        Pure CPU: no model, no device, nothing that reads the weights. The
+        training loop runs it one step ahead on a thread of its own, so it has
+        to take every draw the step takes from the batcher's generator — the
+        keyword expansion, the context dropout and the MLM mask, in that order
+        — and nothing else may draw from that generator while it runs.
+
+        ``heads`` names the training-only heads to build targets for, read off
+        the model by ``_training_heads`` on the thread that owns it. ``pin``
+        moves the tensors the device half copies into page-locked memory,
+        which is what lets those copies run without holding the host.
+        """
+        records = plan.records
+        if not records:
+            return None
+        if fields is None:
+            present = {sampling_class(record) for record in records}
+            fields = active_fields(
+                present_classes=frozenset(present), step=step,
+                curriculum_step=self.config.curriculum_step,
+            )
+        batcher = self._batcher(tokenizer, sidecars, widths, training=training)
+        batch = batcher.prepare(records)
+        targets = [derive_targets(record) for record in records]
+        gate, field_targets, mask, index = entity_target_tensors(
+            batch.surfaces, targets, fields,
+        )
+        head_targets = self._head_targets(
+            records, batcher, batch, training=training, heads=heads,
+        )
+        if pin:
+            batch.pin()
+            field_targets = pinned(field_targets)
+            index = index.pin_memory()
+            head_targets.pin()
+        return PreparedStep(
+            batcher=batcher, batch=batch, fields=fields, gate=gate,
+            field_targets=field_targets, mask=mask, index=index,
+            heads=head_targets,
+        )
+
     def _loss_for(
         self, plan, encoder, model, tokenizer, sidecars, widths, step,
         *, report_parts: bool = False, fields=None, training: bool = True,
         collect: list[EntityTargetBatch] | None = None,
+        prepared: PreparedStep | None = None,
     ):
         """``(loss, parts)`` for one planned batch, or ``None`` when empty.
 
@@ -598,45 +718,44 @@ class TrainingLoop:
         constant-predictor floor is scored over exactly the entities the loss
         was. The targets do not depend on the weights, so the pass that reads
         the loss hands them over rather than a second pass re-deriving them.
+
+        ``prepared`` is the step's host half when the caller built it ahead of
+        time, as training does; without it the host half runs here first,
+        which is what validation does. Either way this is the device half.
         """
-        records = plan.records
-        if not records:
-            return None
+        if prepared is None:
+            prepared = self._prepare_step(
+                plan, tokenizer, sidecars, widths, step, fields=fields,
+                training=training,
+                heads=self._training_heads(model) if training else frozenset(),
+            )
+            if prepared is None:
+                return None
+        if collect is not None:
+            # Kept on the host: the floor is scored once per field set, and a
+            # copy of every validation target on the device would sit beside
+            # the model for the rest of the run.
+            collect.append(EntityTargetBatch(
+                prepared.gate, prepared.field_targets, prepared.mask,
+            ))
         # Both training and validation go through here, so both run under
         # autocast. Backward and the optimizer step stay outside this context
         # (bf16 needs no grad scaler); the encoder's own forward happens
-        # inside `.build(...)` (`SurfaceBatcher.encode_texts` calls
+        # inside `.materialize(...)` (`SurfaceBatcher._encode_staged` calls
         # `encoder(**batch)`), which is why the context has to enclose the
-        # batch build and not just `model(**batch)`.
+        # batch's device half and not just `model(**batch)`.
         with torch.autocast(
             device_type="cuda", dtype=torch.bfloat16, enabled=self.autocast,
         ):
-            batcher = self._batcher(
-                tokenizer, sidecars, widths, training=training,
+            batch, _surfaces = prepared.batcher.materialize(
+                prepared.batch, encoder,
             )
-            batch, surfaces = batcher.build(records, encoder)
             hidden = model(**batch)
             outputs = model.per_entity(hidden)
-
-            if fields is None:
-                present = {sampling_class(record) for record in records}
-                fields = active_fields(
-                    present_classes=frozenset(present), step=step,
-                    curriculum_step=self.config.curriculum_step,
-                )
-            targets = [derive_targets(record) for record in records]
-            gate, field_targets, mask, index = entity_target_tensors(
-                surfaces, targets, fields,
-            )
-            if collect is not None:
-                # Kept on the host: the floor is scored once per field set,
-                # and a copy of every validation target on the device would
-                # sit beside the model for the rest of the run.
-                collect.append(EntityTargetBatch(gate, field_targets, mask))
             # One batched gather rather than a slice per row: `index` selects
             # each surface's [CARD] and [PLAYER] columns, and the rows are
             # independent.
-            index = index.to(self.device)
+            index = prepared.index.to(self.device, non_blocking=True)
             gathered = outputs.gather(
                 1, index.unsqueeze(-1).expand(-1, -1, outputs.shape[-1]),
             )
@@ -644,13 +763,16 @@ class TrainingLoop:
             # built: the loss picks its rows there, so the step never waits
             # for the device to say which entities were real or affected.
             loss, parts = per_entity_loss(
-                gathered, gate,
-                {k: v.to(self.device) for k, v in field_targets.items()},
-                mask, fields=fields,
+                gathered, prepared.gate,
+                {
+                    k: v.to(self.device, non_blocking=True)
+                    for k, v in prepared.field_targets.items()
+                },
+                prepared.mask, fields=prepared.fields,
                 report_parts=report_parts,
             )
             terms = self._head_terms(
-                records, batcher, encoder, model, hidden, training=training,
+                prepared.heads, prepared.batcher, encoder, model, hidden,
             )
         self._last_terms = terms
         # The shipped heads join the per-entity loss at unit weight (FR-060a)
@@ -672,89 +794,131 @@ class TrainingLoop:
                 total = total + weights[name] * terms[name]
         return total, parts, shipped
 
-    def _head_terms(
-        self, records, batcher, encoder, model, hidden, *, training: bool,
-    ) -> dict[str, torch.Tensor]:
-        """Every loss term beside the per-entity one, as device tensors.
+    def _head_targets(
+        self, records, batcher, batch: PreparedBatch, *, training: bool,
+        heads: frozenset[str],
+    ) -> HeadTargets:
+        """The targets ``_head_terms`` scores, built on the host.
 
         The verdict head reads ``[ACT]`` — a decision's verdict bits, a cost
         half's mana paid, a trigger's fired bit — and the created-objects head
         reads ``[GLOBAL]`` on effect halves and in-place rewrites (FR-060a).
         In training only, the value and script-API heads read the batch's
         encoded ``e`` rows, one per unique text, and the MLM head a masked
-        second pass over the same texts (FR-058, FR-060b). A head whose weight
-        is zero is not computed at all.
+        second pass over the same texts (FR-058, FR-060b); ``heads`` names the
+        ones whose weight is not zero, and no other is prepared. The MLM mask
+        is the step's last draw from the batcher's generator.
         """
-        terms: dict[str, torch.Tensor] = {}
+        targets = HeadTargets()
         verdicts = [verdict_targets(record) for record in records]
         if any(v is not None for v in verdicts):
-            target = torch.tensor(
-                [v[0] if v else [0.0] * VERDICT_WIDTH for v in verdicts],
-            )
-            mask = torch.tensor(
-                [v[1] if v else [False] * VERDICT_WIDTH for v in verdicts],
-            )
-            terms["verdict"] = verdict_loss(
-                model.verdict(hidden).float(), target.to(self.device), mask,
+            targets.verdict = (
+                torch.tensor(
+                    [v[0] if v else [0.0] * VERDICT_WIDTH for v in verdicts],
+                ),
+                torch.tensor(
+                    [v[1] if v else [False] * VERDICT_WIDTH for v in verdicts],
+                ),
             )
         created = [supervises_created_objects(record) for record in records]
         if any(created):
-            target = torch.tensor([
-                created_objects_targets(record) if wanted
-                else [0.0] * CREATED_OBJECTS_WIDTH
-                for record, wanted in zip(records, created)
-            ])
-            terms["created_objects"] = created_objects_loss(
-                model.created_objects(hidden).float(), target.to(self.device),
+            targets.created = (
+                torch.tensor([
+                    created_objects_targets(record) if wanted
+                    else [0.0] * CREATED_OBJECTS_WIDTH
+                    for record, wanted in zip(records, created)
+                ]),
                 torch.tensor(created),
             )
-        if not training:
-            return terms
+        # No text, no matrix: the device half then has nothing to score
+        # these heads on.
+        if not training or not batch.rows:
+            return targets
+        texts = sorted(batch.rows, key=batch.rows.__getitem__)
+        if "value" in heads:
+            rows = [value_targets(text) for text in texts]
+            targets.value = (
+                torch.tensor([row.values for row in rows]),
+                torch.tensor([row.mask for row in rows]),
+            )
+        if "api" in heads:
+            targets.api = self._api_batch(texts, batch.texts)
+        if "mlm" in heads:
+            targets.mlm = batcher.draw_mlm_mask(
+                batch.prepared, self.config.mlm_mask_prob,
+            )
+        return targets
 
+    def _head_terms(
+        self, targets: HeadTargets, batcher, encoder, model, hidden,
+    ) -> dict[str, torch.Tensor]:
+        """Every loss term beside the per-entity one, as device tensors.
+
+        Scores what ``_head_targets`` prepared: a head with no targets there is
+        not computed at all, which is how a zero weight and a scoring pass both
+        reach this.
+        """
+        terms: dict[str, torch.Tensor] = {}
+        if targets.verdict is not None:
+            target, mask = targets.verdict
+            terms["verdict"] = verdict_loss(
+                model.verdict(hidden).float(),
+                target.to(self.device, non_blocking=True), mask,
+            )
+        if targets.created is not None:
+            target, mask = targets.created
+            terms["created_objects"] = created_objects_loss(
+                model.created_objects(hidden).float(),
+                target.to(self.device, non_blocking=True), mask,
+            )
         encoded = getattr(batcher, "encoded", None)
         if encoded is None or encoded.matrix is None:
             return terms
         matrix = encoded.matrix
-        if self.config.value_weight > 0.0:
-            rows = [value_targets(text) for text in encoded.texts]
+        if targets.value is not None:
+            values, mask = targets.value
             terms["value"] = value_loss(
                 model.value_head(matrix).float(),
-                torch.tensor([row.values for row in rows]).to(self.device),
+                values.to(self.device, non_blocking=True),
                 # Kept on the host: the loss decides which rows it scores there.
-                torch.tensor([row.mask for row in rows]),
+                mask,
             )
-        if self.config.api_weight > 0.0 and model.api_type_head is not None:
-            types, keys = self._api_batch(encoded)
+        if targets.api is not None:
+            types, keys = targets.api
             terms["api"] = api_loss(
                 model.api_type_head(matrix).float(), types,
                 model.param_key_head(matrix).float()
                 if model.param_key_head is not None else None,
-                keys.to(self.device) if model.param_key_head is not None else None,
+                keys.to(self.device, non_blocking=True)
+                if model.param_key_head is not None else None,
             )
-        if self.config.mlm_weight > 0.0 and model.mlm_head is not None:
-            masked = batcher.mlm_inputs(encoder, self.config.mlm_mask_prob)
-            if masked is not None:
-                token_hidden, token_targets, token_mask = masked
-                terms["mlm"] = mlm_loss(
-                    model.mlm_head(token_hidden).float(), token_targets, token_mask,
-                )
+        if targets.mlm is not None:
+            token_hidden, token_targets, token_mask = batcher.mlm_forward(
+                encoder, targets.mlm,
+            )
+            terms["mlm"] = mlm_loss(
+                model.mlm_head(token_hidden).float(), token_targets, token_mask,
+            )
         return terms
 
-    def _api_batch(self, encoded) -> tuple[torch.Tensor, torch.Tensor]:
-        """The script-API head's targets for the batch's texts.
+    def _api_batch(
+        self, texts: Sequence[str], lines: Mapping[str, object],
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """The script-API head's targets for the batch's texts, in row order.
 
         The line's ``script_api_type`` (``-1`` where it has none or one outside
         the vocabulary) and the multi-hot of its parameter keys over every
-        segment of its chained text, cached per text.
+        segment of its chained text, cached per text. The cache is touched
+        only by whichever thread prepares training steps.
         """
         type_index = {name: i for i, name in enumerate(self.api_types)}
         key_index = {name: i for i, name in enumerate(self.param_keys)}
         types: list[int] = []
-        keys = torch.zeros(len(encoded.texts), max(len(self.param_keys), 1))
-        for row, text in enumerate(encoded.texts):
+        keys = torch.zeros(len(texts), max(len(self.param_keys), 1))
+        for row, text in enumerate(texts):
             cached = self._api_targets.get(text)
             if cached is None:
-                line = encoded.lines.get(text)
+                line = lines.get(text)
                 api = getattr(line, "script_api_type", None)
                 found = set(getattr(line, "script_param_keys", ()) or ())
                 for segment in segments(getattr(line, "script_text", None) or ""):
@@ -1168,6 +1332,14 @@ class TrainingLoop:
         the steps covered the read, and what is left when it does not is the
         part of the read the training did not hide.
 
+        Each step's host half — the plan, the surfaces, every target, the MLM
+        mask — is prepared one step ahead on a one-thread pool of the shard's
+        own while the main thread runs the step before it on the device, whose
+        calls release the interpreter lock. ``batch wait`` on the line is how
+        long the steps waited for that preparation: near nothing when the
+        device half covers it, and the host half's whole cost when
+        ``prefetch_batches`` is off and it runs in place.
+
         Returns the advanced ``(step, taken)`` counters.
         """
         started = time.perf_counter()
@@ -1189,8 +1361,22 @@ class TrainingLoop:
         batches = batches_without_replacement(
             training, weights, batch_size=self.config.batch_size, rng=self.rng,
         )
-        # Accumulated on the device like the epoch's own running loss, and read
-        # back once per progress line rather than once per step.
+        training_heads = self._training_heads(model)
+        pin = self.device.type == "cuda"
+
+        def prepare_next():
+            # The plan is drawn here rather than on the main thread: the
+            # shuffle and the batcher read the one generator, and drawing both
+            # on one thread, a whole step at a time and in step order, takes
+            # exactly the draws a serial loop takes. Nothing on the main
+            # thread draws from it while a shard trains. `fields` is the
+            # epoch's, so no step number is needed to derive them.
+            plan = next(batches)
+            return plan, self._prepare_step(
+                plan, tokenizer, sidecars, widths, None, fields=fields,
+                training=True, heads=training_heads, pin=pin,
+            )
+
         # Accumulated on the device like the epoch's own running loss, and read
         # back once, on the line this shard logs when it ends.
         shard_loss = torch.zeros((), device=self.device)
@@ -1199,80 +1385,117 @@ class TrainingLoop:
         norms: dict[str, float] = {}
         heads: dict[str, float] = {}
         learning_rate = 0.0
-        for index in range(budget):
-            for group in optimizer.param_groups:
-                group["lr"] = learning_rate = learning_rate_at(
-                    step, warmup=warmup,
-                )
-            plan = next(batches)
-            # Counted from the plan, on the host: no device read (FR-055).
-            for record in plan.records:
-                bucket, family = labels[record.record_id]
-                self._bucket_counts[bucket] += 1
-                self._family_counts[family] += 1
-            self.noise.step = step
-            # Decided before the forward pass: the decomposition has to be
-            # asked for while the loss is being computed, not after.
-            #
-            # The last step of every shard reports, whatever the clock says, so
-            # the shard's own line always carries a decomposition. A wall-clock
-            # interval alone was silent here: it was written when a shard took
-            # 278 steps over three minutes, and a shard now takes twenty over
-            # seconds, so the window never elapsed and no shard ever reported.
-            due = reports_now(index=index, budget=budget)
-            computed = self._loss_for(
-                plan, encoder, model, tokenizer, sidecars, widths, step,
-                report_parts=due, fields=fields,
+        batch_waited = 0.0
+        # One worker, one step ahead: steps are prepared in order, and at most
+        # one prepared step waits beside the one training. It is submitted for
+        # exactly the steps the budget takes and never one more, because a
+        # step prepared and thrown away would still have drawn from the
+        # generator the next shard's plans come from.
+        pool = (
+            ThreadPoolExecutor(max_workers=1, thread_name_prefix="batch-prefetch")
+            if self.prefetch_batches else None
+        )
+        try:
+            pending = (
+                pool.submit(prepare_next) if pool is not None and budget > 0
+                else None
             )
-            if computed is None:
-                continue
-            loss, batch_parts, *rest = computed
-            # The objective validation scores; `loss` adds the training-only
-            # heads on top for the backward pass.
-            shipped = rest[0] if rest else loss
-            (loss / self.config.grad_accum).backward()
-            if (step + 1) % self.config.grad_accum == 0:
-                # Read back only on the step that logs them: each read stalls
-                # the step until the GPU drains.
-                clipped = clip_per_group(
-                    optimizer, max_norm=MAX_GRAD_NORM, read=False,
+            for index in range(budget):
+                for group in optimizer.param_groups:
+                    group["lr"] = learning_rate = learning_rate_at(
+                        step, warmup=warmup,
+                    )
+                waiting = time.perf_counter()
+                if pool is None:
+                    plan, prepared = prepare_next()
+                else:
+                    # Re-raises whatever the preparation raised, here, on the
+                    # step it belongs to.
+                    plan, prepared = pending.result()
+                    pending = (
+                        pool.submit(prepare_next) if index + 1 < budget else None
+                    )
+                batch_waited += time.perf_counter() - waiting
+                # Counted from the plan, on the host: no device read (FR-055).
+                for record in plan.records:
+                    bucket, family = labels[record.record_id]
+                    self._bucket_counts[bucket] += 1
+                    self._family_counts[family] += 1
+                if prepared is None:
+                    continue
+                self.noise.step = step
+                # Decided before the forward pass: the decomposition has to be
+                # asked for while the loss is being computed, not after.
+                #
+                # The last step of every shard reports, whatever the clock
+                # says, so the shard's own line always carries a
+                # decomposition. A wall-clock interval alone was silent here:
+                # it was written when a shard took 278 steps over three
+                # minutes, and a shard now takes twenty over seconds, so the
+                # window never elapsed and no shard ever reported.
+                due = reports_now(index=index, budget=budget)
+                computed = self._loss_for(
+                    plan, encoder, model, tokenizer, sidecars, widths, step,
+                    report_parts=due, fields=fields, prepared=prepared,
                 )
+                if computed is None:
+                    continue
+                loss, batch_parts, *rest = computed
+                # The objective validation scores; `loss` adds the
+                # training-only heads on top for the backward pass.
+                shipped = rest[0] if rest else loss
+                (loss / self.config.grad_accum).backward()
+                if (step + 1) % self.config.grad_accum == 0:
+                    # Read back only on the step that logs them: each read
+                    # stalls the step until the GPU drains.
+                    clipped = clip_per_group(
+                        optimizer, max_norm=MAX_GRAD_NORM, read=False,
+                    )
+                    if due:
+                        norms = {
+                            name: float(value) for name, value in clipped.items()
+                        }
+                    optimizer.step()
+                    optimizer.zero_grad(set_to_none=True)
+                running += shipped.detach()
+                shard_loss += shipped.detach()
+                for name, value in self._last_terms.items():
+                    held = self._epoch_terms.get(name)
+                    self._epoch_terms[name] = (
+                        value.detach() if held is None else held + value.detach()
+                    )
+                self._epoch_term_steps += 1
                 if due:
-                    norms = {name: float(value) for name, value in clipped.items()}
-                optimizer.step()
-                optimizer.zero_grad(set_to_none=True)
-            running += shipped.detach()
-            shard_loss += shipped.detach()
-            for name, value in self._last_terms.items():
-                held = self._epoch_terms.get(name)
-                self._epoch_terms[name] = (
-                    value.detach() if held is None else held + value.detach()
-                )
-            self._epoch_term_steps += 1
-            if due:
-                heads = {
-                    name: float(value) for name, value in self._last_terms.items()
-                }
-            shard_steps += 1
-            step += 1
-            taken += 1
-            if batch_parts:
-                parts = batch_parts
-            if self.context_cache is not None:
-                self.context_cache.note_batch()
+                    heads = {
+                        name: float(value.detach())
+                        for name, value in self._last_terms.items()
+                    }
+                shard_steps += 1
+                step += 1
+                taken += 1
+                if batch_parts:
+                    parts = batch_parts
+                if self.context_cache is not None:
+                    self.context_cache.note_batch()
+        finally:
+            # Including on the way out of an exception, where the pool may
+            # still be preparing a step nobody will take.
+            if pool is not None:
+                pool.shutdown(wait=True, cancel_futures=True)
 
         trained = time.perf_counter() - started
         logger.info(
             "epoch %d | shard %d/%d %s | %d records trainable, %d held back | "
             "%d steps | loss %.4f | lr %.2e | %.1f steps/s | "
-            "wait %.1fs, train %.1fs%s%s%s",
+            "wait %.1fs, batch wait %.1fs, train %.1fs%s%s%s",
             epoch, position, of, shard.name, len(training), held_back, budget,
             float(shard_loss) / shard_steps if shard_steps else float("nan"),
             learning_rate, budget / trained if trained > 0 else float("nan"),
-            waited, trained, _format_norms(norms), _format_parts(parts),
-            _format_terms(heads),
+            waited, batch_waited, trained, _format_norms(norms),
+            _format_parts(parts), _format_terms(heads),
         )
-        del training, weights, batches, labels
+        # `batches` goes with `prepare_next`, the closure that holds it.
+        del training, weights, labels, prepare_next
         return step, taken
 
     def _validate(

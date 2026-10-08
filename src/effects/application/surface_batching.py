@@ -166,6 +166,78 @@ class EncodedBatch:
     prepared: list = field(default_factory=list)
 
 
+@dataclass
+class MaskedTokens:
+    """The MLM pass's inputs, drawn on the host (FR-060b).
+
+    ``inputs`` are the encoder's keyword arguments with the picked tokens
+    replaced by ``[MASK]``, ``positions`` the flattened indices of those
+    tokens, and ``targets`` the ids that stood there.
+    """
+
+    inputs: dict[str, torch.Tensor]
+    positions: torch.Tensor
+    targets: torch.Tensor
+
+    def pin(self) -> None:
+        """Every tensor in page-locked memory; see ``pinned``."""
+        self.inputs = pinned(self.inputs)
+        self.positions = pinned(self.positions)
+        self.targets = pinned(self.targets)
+
+
+@dataclass
+class PreparedBatch:
+    """The host half of one ``build``: everything that does not need the model.
+
+    CPU tensors and plain structures only, so it can be assembled on a thread
+    other than the one driving the device. What is left for ``materialize`` is
+    the part the model has to be present for: moving these to the device,
+    encoding the texts and scattering the rows. ``e`` is never computed here —
+    the head's loss reaches the encoder only through the rows ``materialize``
+    scatters, so a vector produced ahead of the step would carry no gradient.
+    """
+
+    #: Each unique ability text to its sidecar line.
+    texts: dict[str, object]
+    #: Each text's row of the batch's ``e`` matrix.
+    rows: dict[str, int]
+    #: ``EncodedLine`` per text in row order; empty for the two baselines
+    #: that never reach the encoder.
+    prepared: list
+    #: ``collate_lines`` over ``prepared``, or None when the encoder is not
+    #: called.
+    encoder_inputs: dict[str, torch.Tensor] | None
+    #: The baselines' stand-in for the encoder: the ``identity`` table's rows
+    #: to look up, or the ``taxonomy`` vectors themselves.
+    stand_in: torch.Tensor | None
+    surfaces: list
+    #: ``collate_surfaces``' output, the variant's state mask applied.
+    inputs: dict
+
+    def pin(self) -> None:
+        """Every tensor ``materialize`` copies, in page-locked memory."""
+        self.encoder_inputs = pinned(self.encoder_inputs)
+        self.stand_in = pinned(self.stand_in)
+        self.inputs = pinned(self.inputs)
+
+
+def pinned(value):
+    """``value`` with every tensor in it copied to page-locked host memory.
+
+    A copy from pageable memory holds the host until the device has the bytes;
+    from pinned memory a ``non_blocking`` copy lets it go on queueing work.
+    Walks the dicts, lists and tuples a prepared batch is built from.
+    """
+    if isinstance(value, torch.Tensor):
+        return value.pin_memory()
+    if isinstance(value, dict):
+        return {key: pinned(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return type(value)(pinned(item) for item in value)
+    return value
+
+
 def text_slot(text: str, size: int) -> int:
     """A stable table row for an ability text.
 
@@ -366,21 +438,54 @@ class SurfaceBatcher:
         sidecar's API type and parameter keys, the control for "is it reading
         more than the script's shape".
         """
+        rows, prepared, inputs, stand_in = self._stage_texts(texts)
+        self._prepared = prepared
+        return rows, self._encode_staged(inputs, stand_in, encoder)
+
+    def _stage_texts(self, texts: dict[str, object]):
+        """``encode_texts``' host half: ``(rows, prepared, inputs, stand_in)``.
+
+        Tokenizing draws from the batcher's generator (keyword expansion), so
+        it runs wherever the batch is prepared, and in the order batches are.
+        """
         if not texts:
-            return {}, None
+            return {}, [], None, None
         ordered = sorted(texts)
         rows = {text: row for row, text in enumerate(ordered)}
         if self.masks.identity_embedding:
-            return rows, self._identity_vectors(ordered)
+            # The table's rows, keyed by hash rather than by a corpus-wide
+            # text list, so the baseline needs no pass over the corpus to
+            # number its texts and a text unseen at that pass cannot break
+            # it. Collisions cost the baseline a little, and the baseline is
+            # what the real model must beat.
+            return rows, [], None, torch.tensor(
+                [text_slot(text, IDENTITY_TABLE_SIZE) for text in ordered],
+                dtype=torch.long,
+            )
         if self.masks.taxonomy_embedding:
-            return rows, self._taxonomy_vectors(ordered, texts)
+            return rows, [], None, self._taxonomy_vectors(ordered, texts)
+        prepared = self.prepare_texts(ordered)
+        return rows, prepared, collate_lines(prepared, self.tokenizer.pad_id), None
 
-        lines = self.prepare_texts(ordered)
-        self._prepared = lines
-        batch = collate_lines(lines, self.tokenizer.pad_id)
-        batch = {k: v.to(self.device) for k, v in batch.items()}
+    def _encode_staged(
+        self, inputs: dict[str, torch.Tensor] | None,
+        stand_in: torch.Tensor | None, encoder: AbilityEncoder,
+    ) -> torch.Tensor | None:
+        """``encode_texts``' device half: the batch's ``e`` matrix, or None."""
+        if stand_in is not None and self.masks.identity_embedding:
+            if self.identity_table is None:
+                raise ValueError(
+                    "the identity baseline needs its embedding table; construct "
+                    "the batcher with identity_table="
+                )
+            return self.identity_table(stand_in.to(self.device, non_blocking=True))
+        if stand_in is not None:
+            return stand_in.to(self.device, non_blocking=True)
+        if inputs is None:
+            return None
+        batch = {k: v.to(self.device, non_blocking=True) for k, v in inputs.items()}
         vectors, _hidden = encoder(**batch)
-        return rows, vectors
+        return vectors
 
     def prepare_texts(self, ordered: list[str]) -> list:
         """Each text tokenized, withheld keyword hidden, keywords expanded."""
@@ -419,9 +524,21 @@ class SurfaceBatcher:
         which at a few hundred texts was half a gigabyte of logits to score a
         seventh of them.
         """
-        if not self._prepared or mask_prob <= 0.0:
+        masked = self.draw_mlm_mask(self._prepared, mask_prob)
+        return None if masked is None else self.mlm_forward(encoder, masked)
+
+    def draw_mlm_mask(
+        self, prepared: list, mask_prob: float,
+    ) -> MaskedTokens | None:
+        """``mlm_inputs``' host half: which tokens the pass masks.
+
+        Draws from the batcher's generator after the build's own draws, so a
+        step prepared ahead of its turn takes the same draws as one prepared
+        in place.
+        """
+        if not prepared or mask_prob <= 0.0:
             return None
-        batch = collate_lines(self._prepared, self.tokenizer.pad_id)
+        batch = collate_lines(prepared, self.tokenizer.pad_id)
         ids = batch["token_ids"]
         generator = torch.Generator().manual_seed(self.rng.getrandbits(63))
         picks = (torch.rand(ids.shape, generator=generator) < mask_prob)
@@ -432,31 +549,19 @@ class SurfaceBatcher:
             return None
         targets = ids.flatten().index_select(0, positions)
         batch["token_ids"] = ids.masked_fill(picks, self.tokenizer.mask_id)
-        batch = {k: v.to(self.device) for k, v in batch.items()}
+        return MaskedTokens(inputs=batch, positions=positions, targets=targets)
+
+    def mlm_forward(self, encoder: AbilityEncoder, masked: MaskedTokens):
+        """``mlm_inputs``' device half: the encoder's outputs at the masks."""
+        batch = {
+            k: v.to(self.device, non_blocking=True)
+            for k, v in masked.inputs.items()
+        }
         _e, hidden = encoder(**batch)
         selected = hidden.reshape(-1, hidden.shape[-1]).index_select(
-            0, positions.to(self.device, non_blocking=True),
+            0, masked.positions.to(self.device, non_blocking=True),
         )
-        return selected, targets.to(self.device, non_blocking=True), None
-
-    def _identity_vectors(self, ordered: list[str]) -> torch.Tensor:
-        """A free learned vector per ability text, keyed by hash.
-
-        Hashed into a fixed table rather than indexed by a corpus-wide text
-        list, so the baseline needs no pass over the corpus to number its texts
-        and a text unseen at that pass cannot break it. Collisions cost the
-        baseline a little, and the baseline is what the real model must beat.
-        """
-        if self.identity_table is None:
-            raise ValueError(
-                "the identity baseline needs its embedding table; construct "
-                "the batcher with identity_table="
-            )
-        index = torch.tensor(
-            [text_slot(text, IDENTITY_TABLE_SIZE) for text in ordered],
-            dtype=torch.long, device=self.device,
-        )
-        return self.identity_table(index)
+        return selected, masked.targets.to(self.device, non_blocking=True), None
 
     def _taxonomy_vectors(
         self, ordered: list[str], lines: dict[str, object],
@@ -471,7 +576,7 @@ class SurfaceBatcher:
         rows = np.stack([
             taxonomy_vector(lines[text], self.e_dim) for text in ordered
         ])
-        return torch.from_numpy(rows).to(self.device)
+        return torch.from_numpy(rows)
 
     # ── the surface ─────────────────────────────────────────────────────
 
@@ -537,23 +642,28 @@ class SurfaceBatcher:
         map for the batch because gate 2 puts a record and its perturbed twin in
         the same batch: they share every encoded ability text, and one map would
         strip both.
+
+        ``prepare`` then ``materialize``, back to back. The trainer calls the
+        two apart, so the next batch's host half overlaps this one's device
+        half; every other caller wants both at once.
+        """
+        return self.materialize(self.prepare(records, strip_per_record), encoder)
+
+    def prepare(self, records, strip_per_record=None) -> PreparedBatch:
+        """``build``'s host half: no model, no device, only CPU tensors.
+
+        Draws from the batcher's generator twice — keyword expansion while
+        tokenizing, then context dropout while building each surface — in the
+        order ``build`` has always taken them.
         """
         texts = self.batch_texts(records)
-        self._prepared = []
-        rows, matrix = self.encode_texts(texts, encoder)
-        if self.noise is not None and matrix is not None:
-            # Every e of the batch, whichever variant produced it (FR-056).
-            matrix = self.noise.apply(matrix)
-        self.encoded = EncodedBatch(
-            texts=sorted(rows, key=rows.__getitem__), lines=texts,
-            matrix=matrix, prepared=self._prepared,
-        )
+        rows, prepared, encoder_inputs, stand_in = self._stage_texts(texts)
         strips = strip_per_record or [None] * len(records)
         surfaces = [
             self.surface_for(record, rows, strip)
             for record, strip in zip(records, strips)
         ]
-        batch = collate_surfaces(
+        inputs = collate_surfaces(
             surfaces, e_dim=self.e_dim, widths=self.widths,
         )
         if self.masks.zero_state:
@@ -561,16 +671,43 @@ class SurfaceBatcher:
             # than left out of the surface so the slots, and therefore the
             # per-entity targets, keep their shape.
             for kind in (SlotKind.PLAYER, SlotKind.CARD):
-                batch["slot_features"][kind] = torch.zeros_like(
-                    batch["slot_features"][kind]
+                inputs["slot_features"][kind] = torch.zeros_like(
+                    inputs["slot_features"][kind]
                 )
+        return PreparedBatch(
+            texts=texts, rows=rows, prepared=prepared,
+            encoder_inputs=encoder_inputs, stand_in=stand_in,
+            surfaces=surfaces, inputs=inputs,
+        )
+
+    def materialize(self, prepared: PreparedBatch, encoder: AbilityEncoder):
+        """``build``'s device half: ``(model_kwargs, surfaces)``.
+
+        The encoder runs here, on the thread that runs the model, so ``e`` is
+        part of the step's graph; and so does the noise, whose draw reads the
+        device's generator and has to take it in step order.
+        """
+        self._prepared = prepared.prepared
+        rows = prepared.rows
+        matrix = self._encode_staged(
+            prepared.encoder_inputs, prepared.stand_in, encoder,
+        )
+        if self.noise is not None and matrix is not None:
+            # Every e of the batch, whichever variant produced it (FR-056).
+            matrix = self.noise.apply(matrix)
+        self.encoded = EncodedBatch(
+            texts=sorted(rows, key=rows.__getitem__), lines=prepared.texts,
+            matrix=matrix, prepared=self._prepared,
+        )
+        inputs = prepared.inputs
         batch = {
             "slot_features": {
-                k: v.to(self.device) for k, v in batch["slot_features"].items()
+                k: v.to(self.device, non_blocking=True)
+                for k, v in inputs["slot_features"].items()
             },
             **{
-                k: v.to(self.device)
-                for k, v in batch.items() if k != "slot_features"
+                k: v.to(self.device, non_blocking=True)
+                for k, v in inputs.items() if k != "slot_features"
             },
         }
         e_rows = batch.pop("e_rows")
@@ -581,4 +718,4 @@ class SurfaceBatcher:
             batch["e_vectors"] = scatter_e_rows(
                 batch["e_vectors"], e_rows, matrix,
             )
-        return batch, surfaces
+        return batch, prepared.surfaces

@@ -90,6 +90,10 @@ def run(tmp_path, make_record, monkeypatch):  # noqa: F811
         return _Metrics()
 
     monkeypatch.setattr(TrainingLoop, "_loss_for", loss_for)
+    # The step's host half reads real surfaces off real records; the plan
+    # stands in for what it would have prepared.
+    monkeypatch.setattr(TrainingLoop, "_training_heads", lambda self, model: frozenset())
+    monkeypatch.setattr(TrainingLoop, "_prepare_step", lambda self, plan, *a, **k: plan)
     monkeypatch.setattr(TrainingLoop, "_validate", validate)
     monkeypatch.setattr(loop_module, "measure", measure)
 
