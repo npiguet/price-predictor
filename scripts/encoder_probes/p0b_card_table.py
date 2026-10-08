@@ -24,7 +24,8 @@ import pandas as pd
 
 REPO = Path(__file__).resolve().parents[2]
 CARDS = REPO / "output" / "cardsfolder-512"
-WIN_RATES = Path(r"Y:\Nicolas\mtg\mtg-models-data\sealed\training-data\matches-bo1\cards-win-rates.txt")
+WIN_RATES = Path(
+    r"Y:\Nicolas\mtg\mtg-models-data\sealed\training-data\matches-bo1\cards-win-rates.txt")
 OUT = REPO / "output" / "encoder-probes"
 
 sys.path.insert(0, str(REPO / "src"))
@@ -91,7 +92,8 @@ PHRASES = {
     "ph_destroy_target_creature": [r"destroy target (?:\w+ )*creature"],
     "ph_exile_target_creature": [r"exile target (?:\w+ )*creature"],
     "ph_uncond_removal": [r"destroy target creature\b", r"exile target creature\b"],
-    "ph_cond_removal": [r"destroy target (?:attacking|blocking|tapped|nonblack|nonwhite|artifact|enchantment) creature",
+    "ph_cond_removal": [r"destroy target (?:attacking|blocking|tapped|nonblack|nonwhite|"
+                        r"artifact|enchantment) creature",
                         r"target creature with (?:flying|power|toughness)",
                         r"destroy target creature with"],
     "ph_damage_any_target": [r"damage to any target"],
@@ -134,7 +136,8 @@ PHRASES = {
     "ph_modal": [r"choose one"],
     "ph_sacrifice_self": [r"sacrifice cardname"],
     "ph_damage_to_you": [r"deals \d+ damage to you", r"you lose \d+ life"],
-    "ph_echo_upkeep": [r"\becho\b", r"cumulative upkeep", r"at the beginning of your upkeep, sacrifice"],
+    "ph_echo_upkeep": [r"\becho\b", r"cumulative upkeep",
+                       r"at the beginning of your upkeep, sacrifice"],
     "ph_enters_tapped": [r"enters tapped"],
     "ph_loyalty": [r"loyalty"],
 }
@@ -251,7 +254,8 @@ def main() -> None:
     df.to_pickle(OUT / "card_table.pkl")
     print("wrote", OUT / "card_table.pkl")
     # prevalence sanity check
-    flags = [c for c in df.columns if c.startswith(("kw_", "ph_", "is_")) and not c.endswith("_anywhere")]
+    flags = [c for c in df.columns
+             if c.startswith(("kw_", "ph_", "is_")) and not c.endswith("_anywhere")]
     prev = df.loc[df.found, flags].mean().sort_values(ascending=False)
     print("\nflag prevalence (found cards, n=%d):" % df.found.sum())
     print(prev.to_string())

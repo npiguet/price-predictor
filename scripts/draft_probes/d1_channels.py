@@ -175,11 +175,11 @@ def main() -> None:
         model, _ = load_agent(ckpt)
         runner = PolicyRunner(model, table, batch_size=args.batch)
         base = runner.logits(samples)
-        base_p = [softmax(l) for l in base]
-        base_arg = np.array([int(np.argmax(l)) for l in base])
+        base_p = [softmax(ln) for ln in base]
+        base_arg = np.array([int(np.argmax(ln)) for ln in base])
         fidelity = float(np.mean([
-            int(np.argmax(l) == s.target)
-            for s, l in zip(samples, base) if s.target >= 0]))
+            int(np.argmax(ln) == s.target)
+            for s, ln in zip(samples, base) if s.target >= 0]))
 
         rows = []
         for name, interv in arms:

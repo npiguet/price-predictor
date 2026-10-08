@@ -6,10 +6,9 @@ import json
 
 import numpy as np
 import pandas as pd
-from sklearn.ensemble import HistGradientBoostingRegressor
-
 import probe_lib as pl
 import s_common as S
+from sklearn.ensemble import HistGradientBoostingRegressor
 
 d = S.load_all()
 join, emb = d["join"], d["emb"]
@@ -111,8 +110,10 @@ out = {"curve": curve.to_dict("records")}
 # reconciliation numbers
 out["reference"] = {
     "equivalence_class_text_explainable_vs_members": 0.515,
-    "honest_val_r2_score_play": pl.load_probes("honest", True).probes["score_play"].metrics["val_r2"],
-    "honest_val_r2_played_rate": pl.load_probes("honest", True).probes["played_rate"].metrics["val_r2"],
+    "honest_val_r2_score_play":
+        pl.load_probes("honest", True).probes["score_play"].metrics["val_r2"],
+    "honest_val_r2_played_rate":
+        pl.load_probes("honest", True).probes["played_rate"].metrics["val_r2"],
     "fidelity_insample_r2_score_play": pf.probes["score_play"].metrics["in_sample_r2"],
     "fidelity_insample_r2_played_rate": pf.probes["played_rate"].metrics["in_sample_r2"],
 }

@@ -12,6 +12,7 @@ import re
 from pathlib import Path
 
 import matplotlib
+
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
@@ -384,7 +385,7 @@ def fig_land_adds():
     labels = [g[0] for g in groups][::-1]
     vals = [g[1].delta_add.mean() for g in groups][::-1]
     shares = [(g[1].delta_add > 0).mean() for g in groups][::-1]
-    cols = [BLUE if "land" in l else ORANGE for l in labels]
+    cols = [BLUE if "land" in ln else ORANGE for ln in labels]
 
     fig, ax = plt.subplots(figsize=(6.8, 3.4))
     ax.barh(labels, vals, color=cols, height=0.6)
@@ -394,7 +395,8 @@ def fig_land_adds():
     ax.axvline(0, color=GRAY, lw=0.8)
     ax.set_xlim(-0.75, 0.1)
     ax.set_xlabel("mean Δscore from adding the card to a built deck (400 contexts)")
-    ax.set_title("Lands are the least-refused addition, and land classes are\npriced correctly inside the size prior")
+    ax.set_title("Lands are the least-refused addition, and land classes are\n"
+                 "priced correctly inside the size prior")
     save(fig, "land-adds")
 
 

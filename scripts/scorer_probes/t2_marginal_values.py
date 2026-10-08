@@ -29,7 +29,6 @@ from collections import defaultdict
 from pathlib import Path
 
 import numpy as np
-
 import probe_lib as pl
 
 OUT_DEFAULT = pl.SCRATCH / "t2_card_values.csv"
@@ -288,8 +287,8 @@ def build_universe(probe: pl.Probe, wr: dict, min_obs: int, limit: int | None):
     scored = []
     for name, rec in wr.items():
         w = rec.get("wins_when_in_deck") or 0.0
-        l = rec.get("losses_when_in_deck") or 0.0
-        n_obs = w + l
+        ln = rec.get("losses_when_in_deck") or 0.0
+        n_obs = w + ln
         if n_obs >= min_obs:
             scored.append((-n_obs, name))
     scored.sort()
@@ -470,8 +469,8 @@ def write_rows(out: Path, probe: pl.Probe, loo_acc, names, v_sum, v_cnt, wr, rar
             for k in LABEL_KEYS:
                 row[k] = num(rec.get(k))
             w = rec.get("wins_when_in_deck") or 0.0
-            l = rec.get("losses_when_in_deck") or 0.0
-            row["n_obs"] = int(w + l)
+            ln = rec.get("losses_when_in_deck") or 0.0
+            row["n_obs"] = int(w + ln)
 
         pdata = rarity.get(name)
         if pdata is not None:

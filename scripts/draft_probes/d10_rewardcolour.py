@@ -143,7 +143,8 @@ def main() -> None:
             rows.append((s["agent"], s["score"] - (total - s["score"]) / (k - 1),
                          s["frac"], s["q"], s["v"]))
     print(f"{len(rows)} scored seats in {sum(1 for v in pods.values() if len(v) >= 2)}"
-          f" pods, mean pod size {len(rows) / max(1, sum(1 for v in pods.values() if len(v) >= 2)):.1f}")
+          f" pods, mean pod size "
+          f"{len(rows) / max(1, sum(1 for v in pods.values() if len(v) >= 2)):.1f}")
 
     y = np.array([r[1] for r in rows])
     C = np.stack([np.array(r[2]) for r in rows])
@@ -215,9 +216,10 @@ def main() -> None:
                 per.append(float(np.mean(vals)) if vals else float("nan"))
             per = np.array(per)
             ordering[gen] = [COLOURS[i] for i in np.argsort(-per)]
+            rank_corr = np.corrcoef(np.argsort(np.argsort(-per)),
+                                    np.argsort(np.argsort(-beta)))[0, 1]
             print(f"  {gen:12s} " + " > ".join(ordering[gen])
-                  + f"    (rank corr with reward "
-                  f"{np.corrcoef(np.argsort(np.argsort(-per)), np.argsort(np.argsort(-beta)))[0, 1]:+.2f})")
+                  + f"    (rank corr with reward {rank_corr:+.2f})")
 
     (OUT / "d10_rewardcolour.json").write_text(
         json.dumps({"n_seats": len(rows), "reward_sd": float(y.std()),

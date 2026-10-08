@@ -6,7 +6,6 @@ import json
 
 import numpy as np
 import pandas as pd
-
 import probe_lib as pl
 import s_common as S
 
@@ -210,6 +209,6 @@ for c, v in sorted(rare.items(), key=lambda kv: -kv[1].sum()):
                     f"{np.nanmean(nb_mean - y[m]) / S.SD['score_play']:+.3f}"])
 out["r17_rare_class_rows"] = rows_rc
 
-with open(S.OUT / "s_r17.json", "w") as f:
-    json.dump(out, f, indent=1, default=float)
+with open(S.OUT / "s_r17.json", "w") as fh:
+    json.dump(out, fh, indent=1, default=float)
 print(json.dumps(out, indent=1, default=float)[:12000])

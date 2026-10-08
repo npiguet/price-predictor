@@ -14,7 +14,6 @@ from collections import Counter
 from pathlib import Path
 
 import numpy as np
-
 import probe_lib as pl
 import s_common as S
 
@@ -35,7 +34,7 @@ else:
     seqs = []
     for p in join["txt_path"]:
         text = Path(p).read_text(encoding="utf-8", errors="replace")
-        stripped = "\n".join(l for l in text.splitlines() if not l.startswith("name:"))
+        stripped = "\n".join(ln for ln in text.splitlines() if not ln.startswith("name:"))
         seqs.append(tok.tokenize_to_ids(stripped))
     vocab = sorted({t for s in seqs for t in s})
     index = {t: i for i, t in enumerate(vocab)}

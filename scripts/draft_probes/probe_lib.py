@@ -34,7 +34,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 
 from draft.application.draft_pick_states import (  # noqa: E402
     RawPickState,
-    iter_seat_pick_states,
 )
 from draft.domain.draft_geometry import DraftGeometry, DraftRecord  # noqa: E402
 from draft.domain.draft_state import (  # noqa: E402

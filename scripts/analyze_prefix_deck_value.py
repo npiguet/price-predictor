@@ -156,7 +156,6 @@ def build_missing(corpus: Path, raw_path: Path, args) -> None:
 
     labeler, scorer, locator = make_models(args)
     raw_path.parent.mkdir(parents=True, exist_ok=True)
-    start = time.time()
     with raw_path.open("a", encoding="utf-8") as out:
         def flush(chunk, scores):
             for (draft_id, seat, agent, t, _), score in zip(chunk, scores):

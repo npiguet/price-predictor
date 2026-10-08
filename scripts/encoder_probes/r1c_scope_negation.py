@@ -46,8 +46,8 @@ OPPONENT = re.compile(r"target opponent", re.I)
 
 def card_text(path: str) -> str:
     text = Path(path).read_text(encoding="utf-8", errors="replace")
-    return "\n".join(l for l in text.splitlines()
-                     if l.strip() and not l.startswith("name:"))
+    return "\n".join(ln for ln in text.splitlines()
+                     if ln.strip() and not ln.startswith("name:"))
 
 
 def edit_lockdown(t: str) -> str | None:

@@ -154,14 +154,14 @@ def main() -> None:
     member_names = {n for c in classes for n in c["names"]}
 
     def card_stats(path: str) -> dict:
-        lines = [l for l in Path(path).read_text(encoding="utf-8", errors="replace")
-                 .splitlines() if l.strip() and not l.startswith("name:")]
-        cost = next((l for l in lines if l.startswith("mana cost:")), "")
+        lines = [ln for ln in Path(path).read_text(encoding="utf-8", errors="replace")
+                 .splitlines() if ln.strip() and not ln.startswith("name:")]
+        cost = next((ln for ln in lines if ln.startswith("mana cost:")), "")
         mv = 0.0
         for sym in re.findall(r"\{([^}]*)\}", cost):
             mv += int(sym) if sym.isdigit() else (0 if sym.upper() == "X" else 1)
-        types = next((l for l in lines if l.startswith("types:")), "")
-        ab = [l for l in lines if l.startswith(("static:", "spell[", "activated[",
+        types = next((ln for ln in lines if ln.startswith("types:")), "")
+        ab = [ln for ln in lines if ln.startswith(("static:", "spell[", "activated[",
                                                 "triggered", "replacement"))]
         return {"mv": mv, "n_lines": len(lines), "n_ability_lines": len(ab),
                 "is_creature": "creature" in types, "is_land": "land" in types,

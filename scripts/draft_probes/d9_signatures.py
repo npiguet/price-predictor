@@ -174,7 +174,7 @@ def main() -> None:
                 continue
             hit += int(int(np.argmax(sc)) == int(np.argmax(lg)))
             tot += 1
-        base_arg = np.array([int(np.argmax(l)) for l in base])
+        base_arg = np.array([int(np.argmax(ln)) for ln in base])
 
         def flip(interv) -> float:
             alt = runner.logits(states, interv)

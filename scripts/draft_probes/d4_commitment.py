@@ -92,7 +92,7 @@ def main() -> None:
     print("states per clock: "
           + ", ".join(f"{k}:{len(v)}" for k, v in sorted(by_clock.items())))
 
-    mat = table.matrix()
+    table.matrix()
     colour_of_row = [colours(n) for n in table.names]
 
     def pool_fraction(state) -> dict[str, float]:

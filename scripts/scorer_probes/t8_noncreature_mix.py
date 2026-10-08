@@ -36,7 +36,6 @@ import re
 from collections import Counter, defaultdict
 
 import numpy as np
-
 import probe_lib as pl
 
 POOLS = pl.YDATA / "pools" / "pools-gen4-512.txt"
@@ -413,14 +412,13 @@ def main():
     mean_nc = np.mean([n for _, n in shape])
     total_slots = sum(slots.values())
 
-    fams = sorted({r["family"] for r in rows})
     fam_slots = Counter()
     for d, k in slots.items():
         fam_slots[DETAIL_TO_FAMILY[d]] += k
 
     nc_av = sum(r["avail"] for r in rows)
     nc_tk = sum(r["taken"] for r in rows)
-    md = [f"# T8: what fills the noncreature slots\n",
+    md = ["# T8: what fills the noncreature slots\n",
           f"{n_decks} gen4-512 decks, {len(rows)} (deck, eligible card) choices.",
           f"Mean deck: {mean_cr:.1f} creatures, {mean_nc:.1f} noncreature spells.",
           f"On-color take rate: creatures {100 * creatures[1] / creatures[0]:.1f}% "

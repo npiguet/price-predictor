@@ -20,7 +20,6 @@ from collections import Counter, defaultdict
 
 import numpy as np
 import pandas as pd
-
 import probe_lib as pl
 
 OUT = pl.SCRATCH
@@ -46,7 +45,8 @@ def sec_t0():
     s = df[df.method == "forge-best"].groupby("set_code")["score"].agg(["mean", "count"])
     s = s[s["count"] >= 20].sort_values("mean")
     print("\n=== forge-best mean score by set (n>=20): bottom/top 5 ===")
-    print(s.head(5).round(2)); print(s.tail(5).round(2))
+    print(s.head(5).round(2))
+    print(s.tail(5).round(2))
     print("spread of set means:", round(s["mean"].max() - s["mean"].min(), 2),
           "| within-set std:",
           round(df[df.method == "forge-best"].groupby("set_code")["score"].std().mean(), 2))
@@ -75,9 +75,9 @@ def _colors_of_deck(cards, loc, cache):
             cache[c] = None if e is None else (e[-32:][1:6] > 0)
         v = cache[c]
         if v is not None:
-            for i, l in enumerate("WUBRG"):
+            for i, colour in enumerate("WUBRG"):
                 if v[i]:
-                    pres.add(l)
+                    pres.add(colour)
     return len(pres)
 
 
@@ -99,18 +99,22 @@ def sec_decks():
 
     for fname in ["generated-decks-gen4-512.txt", "generated-decks-gen4-256.txt",
                   "generated-decks-gen5.txt"]:
-        counts: Counter = Counter(); tot = 0
+        counts: Counter = Counter()
+        tot = 0
         for _lbl, _sc, cards in pl.read_generated_decks(pl.YDATA / "decks" / fname, limit=3000):
             nb = sum(1 for c in cards
                      if c.lower() not in pl.BASIC_LAND_NAMES and is_nonbasic_land(c))
-            counts[nb] += 1; tot += 1
+            counts[nb] += 1
+            tot += 1
         dist = " ".join(f"{k}:{100 * v / tot:.0f}%" for k, v in sorted(counts.items()))
         print(f"{fname}: nonbasic lands/deck -> {dist}")
 
     pipcache: dict = {}
-    cnt: Counter = Counter(); snow = wastes = tot = 0
+    cnt: Counter = Counter()
+    snow = wastes = tot = 0
     per_set = defaultdict(list)
-    for _lbl, sc, cards in pl.read_generated_decks(pl.YDATA / "decks" / "generated-decks-gen4-512.txt"):
+    for _lbl, sc, cards in pl.read_generated_decks(
+            pl.YDATA / "decks" / "generated-decks-gen4-512.txt"):
         tot += 1
         if any("snow-covered" in c.lower() for c in cards):
             snow += 1
@@ -271,7 +275,8 @@ def sec_addrobust():
             d.append(scores[idx + 1 + j] - base)
             qv.append(q)
         idx += 1 + len(adds[i])
-    d = np.array(d); qv = np.array(qv)
+    d = np.array(d)
+    qv = np.array(qv)
     print(f"forge-best contexts: {len(base_mats)}, adds: {len(d)}")
     print(f"delta_add mean={d.mean():+.3f} sd={d.std():.3f}"
           f" frac>0={100 * (d > 0).mean():.1f}%")

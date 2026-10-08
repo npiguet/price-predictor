@@ -28,7 +28,6 @@ import random
 from collections import Counter
 
 import numpy as np
-
 import probe_lib as pl
 
 OUT = pl.SCRATCH / "t3_ladders.csv"

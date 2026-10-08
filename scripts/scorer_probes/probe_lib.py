@@ -27,13 +27,13 @@ SCRATCH.mkdir(parents=True, exist_ok=True)
 
 sys.path.insert(0, str(REPO / "src"))
 
+from sealed.domain import card_embedding_layout as layout  # noqa: E402
 from sealed.domain.scorer_model import SetTransformerScorer  # noqa: E402
-from sealed.infrastructure.scorer_store import ScorerStore  # noqa: E402
 from sealed.infrastructure.converted_card_locator import (  # noqa: E402
     BASIC_LAND_NAMES,
     ConvertedCardLocator,
 )
-from sealed.domain import card_embedding_layout as layout  # noqa: E402
+from sealed.infrastructure.scorer_store import ScorerStore  # noqa: E402
 
 
 class Probe:

@@ -12,7 +12,6 @@
 from __future__ import annotations
 
 import json
-import re
 import sys
 from pathlib import Path
 
@@ -42,10 +41,10 @@ def main() -> None:
 
     # ── (i) tribal pairwise matrix ──────────────────────────────────────
     def tribe_of(s: str) -> tuple[int, str] | None:
-        for i, l in enumerate(cc.lines(s)):
-            if not l.startswith("types:"):
+        for i, ln in enumerate(cc.lines(s)):
+            if not ln.startswith("types:"):
                 continue
-            words = l[6:].split()
+            words = ln[6:].split()
             if "creature" not in words:
                 return None
             subs = [w for w in words if w not in pl._TYPE_WORDS
@@ -204,8 +203,8 @@ def main() -> None:
     # ── (iii) taplands ──────────────────────────────────────────────────
     is_land = j["is_land"].fillna(False).astype(bool).to_numpy()
     tap_i = np.array([
-        next((i for i, l in enumerate(cc.lines(s))
-              if l == "replacement: CARDNAME enters tapped."), -1)
+        next((i for i, ln in enumerate(cc.lines(s))
+              if ln == "replacement: CARDNAME enters tapped."), -1)
         for s in stripped])
     sel = np.flatnonzero(is_land & (tap_i >= 0))
     print(f"[C5] taplands: {len(sel)}", flush=True)

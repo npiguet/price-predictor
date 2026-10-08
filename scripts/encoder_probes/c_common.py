@@ -113,24 +113,24 @@ ABILITY_PREFIXES = ("static:", "spell[", "activated[", "triggered", "replacement
 
 
 def strip_name(text: str) -> str:
-    return "\n".join(l for l in text.splitlines() if not l.startswith("name:"))
+    return "\n".join(ln for ln in text.splitlines() if not ln.startswith("name:"))
 
 
 def lines(text: str) -> list[str]:
-    return [l for l in text.splitlines() if l.strip()]
+    return [ln for ln in text.splitlines() if ln.strip()]
 
 
 def find_line(ls: Sequence[str], prefix: str) -> int:
-    for i, l in enumerate(ls):
-        if l.startswith(prefix):
+    for i, ln in enumerate(ls):
+        if ln.startswith(prefix):
             return i
     return -1
 
 
 def get_field(text: str, prefix: str) -> str | None:
-    for l in lines(text):
-        if l.startswith(prefix):
-            return l[len(prefix):].strip()
+    for ln in lines(text):
+        if ln.startswith(prefix):
+            return ln[len(prefix):].strip()
     return None
 
 
@@ -144,11 +144,11 @@ def set_field(text: str, prefix: str, value: str) -> str:
 
 
 def static_lines(text: str) -> list[int]:
-    return [i for i, l in enumerate(lines(text)) if l.startswith("static:")]
+    return [i for i, ln in enumerate(lines(text)) if ln.startswith("static:")]
 
 
 def ability_lines(text: str) -> list[int]:
-    return [i for i, l in enumerate(lines(text)) if l.startswith(ABILITY_PREFIXES)]
+    return [i for i, ln in enumerate(lines(text)) if ln.startswith(ABILITY_PREFIXES)]
 
 
 def replace_in_line(text: str, index: int, new_line: str) -> str:
@@ -160,7 +160,7 @@ def replace_in_line(text: str, index: int, new_line: str) -> str:
 def _insert_slot(ls: Sequence[str], new_line: str) -> int:
     """Canonical insertion index for ``new_line`` (keeps field order)."""
     if new_line.startswith("static:"):
-        st = [i for i, l in enumerate(ls) if l.startswith("static:")]
+        st = [i for i, ln in enumerate(ls) if ln.startswith("static:")]
         if st:
             return st[-1] + 1
         # after power toughness / types
@@ -188,13 +188,13 @@ def renumber(text: str) -> str:
     """Renumber ``spell[k]`` / ``triggered[k]`` / ``activated[k]`` indices."""
     counts: dict[str, int] = {}
     out = []
-    for l in lines(text):
-        m = re.match(r"^(static|spell|activated|triggered|replacement)\[(\d+)\]:", l)
+    for ln in lines(text):
+        m = re.match(r"^(static|spell|activated|triggered|replacement)\[(\d+)\]:", ln)
         if m:
             kind = m.group(1)
             counts[kind] = counts.get(kind, 0) + 1
-            l = re.sub(r"^(\w+)\[\d+\]:", rf"\1[{counts[kind]}]:", l)
-        out.append(l)
+            ln = re.sub(r"^(\w+)\[\d+\]:", rf"\1[{counts[kind]}]:", ln)
+        out.append(ln)
     return "\n".join(out)
 
 

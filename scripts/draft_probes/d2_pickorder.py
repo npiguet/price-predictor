@@ -62,6 +62,7 @@ from scipy import stats
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from draft_corpus_common import WUBRG, ColourResolver  # noqa: E402
 from probe_lib import (  # noqa: E402
     CardTable,
     PickSample,
@@ -71,7 +72,7 @@ from probe_lib import (  # noqa: E402
     iter_corpus_states,
     load_agent,
 )
-from draft_corpus_common import WUBRG, ColourResolver  # noqa: E402
+
 from draft.domain.draft_geometry import DraftGeometry  # noqa: E402
 from draft.domain.draft_state import build_state  # noqa: E402
 from sealed.infrastructure.converted_card_locator import (  # noqa: E402
@@ -152,7 +153,7 @@ def p1p1_samples(table: CardTable, limit_drafts: int | None) -> list[PickSample]
 
 def centred(logits: list[np.ndarray]) -> list[np.ndarray]:
     """Subtract each state's own mean: the only behavioural part of a logit."""
-    return [l - l.mean() for l in logits]
+    return [ln - ln.mean() for ln in logits]
 
 
 def card_scalars(samples, cent) -> tuple[dict[str, float], Counter]:
@@ -260,10 +261,10 @@ def main() -> None:
         p1_cent[gen] = centred(runner.logits(p1))
         scalar[gen], appear = card_scalars(p1, p1_cent[gen])
         lg = runner.logits(allpicks)
-        ap_arg[gen] = np.array([int(np.argmax(l)) for l in lg])
+        ap_arg[gen] = np.array([int(np.argmax(ln)) for ln in lg])
         replay[gen] = float(np.mean([
-            int(np.argmax(l) == s.target)
-            for s, l in zip(allpicks, lg) if s.target >= 0]))
+            int(np.argmax(ln) == s.target)
+            for s, ln in zip(allpicks, lg) if s.target >= 0]))
         print(f"  {gen}: P1P1 done, all-picks done "
               f"(self-replay on {args.seat_label} seats {replay[gen]:.4f})")
         del model, runner

@@ -6,10 +6,9 @@ import json
 
 import numpy as np
 import pandas as pd
-from sklearn.linear_model import LogisticRegression
-
 import probe_lib as pl
 import s_common as S
+from sklearn.linear_model import LogisticRegression
 
 d = S.load_all()
 join, emb = d["join"], d["emb"]

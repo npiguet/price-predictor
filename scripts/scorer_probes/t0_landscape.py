@@ -13,7 +13,6 @@ from collections import Counter
 from pathlib import Path
 
 import numpy as np
-
 import probe_lib as pl
 
 OUT = pl.SCRATCH / "t0_decks.csv"

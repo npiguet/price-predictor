@@ -60,11 +60,9 @@ def main() -> None:
     j["label_sp"] = pd.to_numeric(j["shrunk_score_play"], errors="coerce") / cc.SD["score_play"]
     j["label_pr"] = pd.to_numeric(j["shrunk_played_rate"], errors="coerce") / cc.SD["played_rate"]
 
-    mv = pd.to_numeric(j["mv"], errors="coerce").fillna(0).to_numpy(float)
     crea = j["is_creature"].fillna(False).astype(bool).to_numpy()
     power = pd.to_numeric(j["power"], errors="coerce").to_numpy(float)
     tough = pd.to_numeric(j["toughness"], errors="coerce").to_numpy(float)
-    base_ctrl = [mv, mv ** 2, crea.astype(float)]
 
     rows = []
 
@@ -134,9 +132,9 @@ def main() -> None:
               "spirit", "beast", "wall", "rat"]
 
     def tribe_of(text: str) -> str | None:
-        for l in cc.lines(text):
-            if l.startswith("types:"):
-                words = l[6:].split()
+        for ln in cc.lines(text):
+            if ln.startswith("types:"):
+                words = ln[6:].split()
                 if "creature" not in words:
                     return None
                 subs = [w for w in words if w not in pl._TYPE_WORDS

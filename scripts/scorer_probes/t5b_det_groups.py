@@ -113,7 +113,8 @@ def main():
     print(f"\nfull model acc = {full_c.mean():.4f}  (n={n})\n", flush=True)
 
     rows = []
-    print(f"{'group erased':32s} {'d-acc':>8s} {'paired SE':>9s} {'z':>6s} {'flip%':>6s} {'rho':>6s}")
+    print(f"{'group erased':32s} {'d-acc':>8s} {'paired SE':>9s} {'z':>6s} "
+          f"{'flip%':>6s} {'rho':>6s}")
     for name, idx in GROUPS.items():
         sc = run(idx)
         d = per_match_correct(sc) - full_c

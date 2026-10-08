@@ -41,12 +41,12 @@ BATCH = 96
 
 
 def strip_name(text: str) -> str:
-    return "\n".join(l for l in text.splitlines() if not l.startswith("name:"))
+    return "\n".join(ln for ln in text.splitlines() if not ln.startswith("name:"))
 
 
 def degrade(text: str, condition: str, rng: np.random.Generator) -> str:
     """One degraded variant of a name-stripped card text."""
-    lines = [l for l in text.splitlines() if l.strip()]
+    lines = [ln for ln in text.splitlines() if ln.strip()]
     if condition == "none":
         return "\n".join(lines)
     if condition == "full":

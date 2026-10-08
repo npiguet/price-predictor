@@ -46,12 +46,12 @@ SD_SCORE_PLAY = 0.06181
 
 def card_lines(path: str) -> list[str]:
     text = Path(path).read_text(encoding="utf-8", errors="replace")
-    return [l for l in text.splitlines() if l.strip() and not l.startswith("name:")]
+    return [ln for ln in text.splitlines() if ln.strip() and not ln.startswith("name:")]
 
 
 def mana_value(lines: list[str]) -> float:
-    cost = next((l[len("mana cost:"):].strip() for l in lines
-                 if l.startswith("mana cost:")), "")
+    cost = next((ln[len("mana cost:"):].strip() for ln in lines
+                 if ln.startswith("mana cost:")), "")
     total = 0.0
     for sym in re.findall(r"\{([^}]*)\}", cost):
         if sym.isdigit():
@@ -64,8 +64,8 @@ def mana_value(lines: list[str]) -> float:
 
 
 def power_toughness(lines: list[str]) -> tuple[float, float]:
-    pt = next((l[len("power toughness:"):].strip() for l in lines
-               if l.startswith("power toughness:")), "")
+    pt = next((ln[len("power toughness:"):].strip() for ln in lines
+               if ln.startswith("power toughness:")), "")
     m = re.match(r"(-?\d+)\s*/\s*(-?\d+)", pt)
     if not m:
         return (np.nan, np.nan)
@@ -73,7 +73,7 @@ def power_toughness(lines: list[str]) -> tuple[float, float]:
 
 
 def drop_line(lines: list[str], target: str) -> list[str]:
-    return [l for l in lines if l.strip() != target]
+    return [ln for ln in lines if ln.strip() != target]
 
 
 def boot_ci(values: np.ndarray, stat=np.mean, n: int = 4000, seed: int = 0):
@@ -99,11 +99,11 @@ def main() -> None:
 
     singles, multi, nonfly = [], [], []
     for i, lines in lines_by_idx.items():
-        types = next((l for l in lines if l.startswith("types:")), "")
+        types = next((ln for ln in lines if ln.startswith("types:")), "")
         if "creature" not in types:
             continue
-        ab = [l for l in lines if l.startswith(ABILITY_PREFIXES)]
-        has_fly = any(l.strip() == FLY_LINE for l in ab)
+        ab = [ln for ln in lines if ln.startswith(ABILITY_PREFIXES)]
+        has_fly = any(ln.strip() == FLY_LINE for ln in ab)
         text_low = "\n".join(lines).lower()
         if has_fly and len(ab) == 1:
             singles.append(i)

@@ -53,8 +53,8 @@ def main() -> None:
     out: dict = {}
 
     # ── (i) riders appended inside the spell line ───────────────────────
-    sl = np.array([next((i for i, l in enumerate(cc.lines(s))
-                         if l.startswith("spell[1]:")), -1) for s in stripped])
+    sl = np.array([next((i for i, ln in enumerate(cc.lines(s))
+                         if ln.startswith("spell[1]:")), -1) for s in stripped])
     ends_dot = np.array([sl[i] >= 0 and cc.lines(stripped[i])[sl[i]].rstrip().endswith(".")
                          for i in range(len(stripped))])
     sel = np.flatnonzero(is_sp & (sl >= 0) & (n_ab == 1) & ends_dot)
@@ -133,8 +133,8 @@ def main() -> None:
 
     # ── (iv) dies -> enters on real death triggers ──────────────────────
     die_i = np.array([
-        next((i for i, l in enumerate(cc.lines(s))
-              if l.startswith("triggered: when CARDNAME dies,")), -1)
+        next((i for i, ln in enumerate(cc.lines(s))
+              if ln.startswith("triggered: when CARDNAME dies,")), -1)
         for s in stripped])
     dsel = np.flatnonzero(is_crea & (die_i >= 0))
     print(f"[C6] death-trigger creatures: {len(dsel)}", flush=True)

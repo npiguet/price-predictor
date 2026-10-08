@@ -53,9 +53,9 @@ def main() -> None:
     out: dict = {}
 
     # the literal "N/M" form only (skip */1+*, X/X, etc.)
-    lit_pt = np.array([bool(PT_RE.match(l))
+    lit_pt = np.array([bool(PT_RE.match(ln))
                        for s in stripped
-                       for l in [next((x for x in cc.lines(s)
+                       for ln in [next((x for x in cc.lines(s)
                                        if x.startswith("power toughness:")), "")]])
 
     # ── (i) P vs T at fixed total ───────────────────────────────────────

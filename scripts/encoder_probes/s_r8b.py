@@ -11,9 +11,8 @@ from __future__ import annotations
 import json
 
 import numpy as np
-from sklearn.linear_model import LogisticRegression
-
 import s_common as S
+from sklearn.linear_model import LogisticRegression
 
 d = S.load_all()
 join, emb = d["join"], d["emb"]
@@ -50,8 +49,10 @@ for n in names:
     idx = np.where(classes[n])[0]
     perm = rng.permutation(len(idx))
     h1, h2 = idx[perm[: len(idx) // 2]], idx[perm[len(idx) // 2:]]
-    m1 = np.zeros(len(join), bool); m1[h1] = True
-    m2 = np.zeros(len(join), bool); m2[h2] = True
+    m1 = np.zeros(len(join), bool)
+    m1[h1] = True
+    m2 = np.zeros(len(join), bool)
+    m2[h2] = True
     v1, _ = direction(m1)
     v2, _ = direction(m2)
     halves[n] = (v1, v2)
@@ -62,8 +63,10 @@ out["split_half_cosine"] = rows_rel
 null = []
 for n in names:
     k = int(classes[n].sum())
-    a = np.zeros(len(join), bool); a[rng.choice(len(join), k, replace=False)] = True
-    b = np.zeros(len(join), bool); b[rng.choice(len(join), k, replace=False)] = True
+    a = np.zeros(len(join), bool)
+    a[rng.choice(len(join), k, replace=False)] = True
+    b = np.zeros(len(join), bool)
+    b[rng.choice(len(join), k, replace=False)] = True
     va, _ = direction(a)
     vb, _ = direction(b)
     null.append([n, k, f"{float(va @ vb):+.3f}"])

@@ -39,8 +39,8 @@ def main() -> None:
     stripped = [cc.strip_name(t) for t in spells["text"]]
 
     def is_sole(s: str) -> bool:
-        body = [l for l in cc.lines(s)
-                if not l.startswith(("mana cost:", "types:"))]
+        body = [ln for ln in cc.lines(s)
+                if not ln.startswith(("mana cost:", "types:"))]
         return len(body) == 1 and bool(SOLE_RE.fullmatch(body[0]))
 
     gain = spells["ph_gain_life"].fillna(False).astype(bool).to_numpy()

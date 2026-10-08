@@ -246,8 +246,8 @@ def main() -> None:
         seq = " > ".join(COLOURS[i] for i in np.argsort(-np.array(v)))
         print(f"  {label:22s} {seq}    (rank corr with the games {rho(v, ref):+.2f})")
     if "reward" in order:
-        print(f"  the games and the reward agree on the top of the order and "
-              f"swap U and R at the bottom.")
+        print("  the games and the reward agree on the top of the order and "
+              "swap U and R at the bottom.")
     results["chain"] = {"values": order,
                         "rho_with_games": {k: rho(v, ref)
                                            for k, v in order.items()}}

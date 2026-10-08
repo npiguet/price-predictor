@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import json
 import sys
-from collections import Counter, defaultdict
+from collections import Counter
 from pathlib import Path
 
 import numpy as np
@@ -33,8 +33,8 @@ BUCKETS = ("cost", "types", "pt", "keyword", "body", "label")
 
 def normalize_text(raw: str) -> str:
     """Name-stripped text with the tokenizer's implicit ``mana cost: none``."""
-    lines = [l for l in raw.splitlines() if not l.startswith("name:") and l.strip()]
-    if not any(l.startswith("mana cost:") for l in lines):
+    lines = [ln for ln in raw.splitlines() if not ln.startswith("name:") and ln.strip()]
+    if not any(ln.startswith("mana cost:") for ln in lines):
         lines.append("mana cost: none")
     return "\n".join(lines)
 

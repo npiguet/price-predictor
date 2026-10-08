@@ -12,10 +12,9 @@ import json
 
 import numpy as np
 import pandas as pd
-from sklearn.ensemble import HistGradientBoostingRegressor
-
 import probe_lib as pl
 import s_common as S
+from sklearn.ensemble import HistGradientBoostingRegressor
 
 d = S.load_all()
 join, emb = d["join"], d["emb"]
@@ -34,7 +33,8 @@ year = pd.to_numeric(join["first_year"], errors="coerce").to_numpy(float)
 year = np.where(np.isfinite(year), year, np.nanmedian(year))
 ERA = [("first_year", year),
        ("first_rarity", pd.Categorical(join["first_rarity"].fillna("unknown")).codes.astype(float)),
-       ("first_set_code", pd.Categorical(join["first_set_code"].fillna("unknown")).codes.astype(float))]
+       ("first_set_code",
+        pd.Categorical(join["first_set_code"].fillna("unknown")).codes.astype(float))]
 BLOCKS = [
     ("MV", [("mv", mv), ("mv2", mv**2)]),
     ("+ type class", [(c, col(c)) for c in

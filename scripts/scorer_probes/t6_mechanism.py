@@ -60,10 +60,9 @@ import time
 from pathlib import Path
 
 import numpy as np
+import probe_lib as pl
 import torch
 from scipy.stats import pearsonr, spearmanr
-
-import probe_lib as pl
 
 MATCH_FILE = pl.YDATA / "matches-b07" / "match-outcomes-gen5-vs-gen4-forge.txt"
 PCA_PATH = pl.SCRATCH / "text_pca_512.npz"
@@ -336,7 +335,7 @@ def probe1(ctx, sample: list[int], full_scores: np.ndarray,
           f"orthonormality err={np.abs(comps @ comps.T - np.eye(comps.shape[0])).max():.2e}")
 
     win = np.array([w for w, _ in matches], dtype=np.int64)
-    lose = np.array([l for _, l in matches], dtype=np.int64)
+    lose = np.array([ln for _, ln in matches], dtype=np.int64)
     match_decks = sorted({int(i) for i in np.concatenate([win, lose])}) if matches else []
     pos = {d: j for j, d in enumerate(match_decks)}
     print(f"score fidelity on {len(sample)} real decks; "
@@ -381,7 +380,8 @@ def probe1(ctx, sample: list[int], full_scores: np.ndarray,
     full_acc = full_row.get("match_acc")
 
     print("\n### P1a -- score fidelity vs full model\n")
-    print("| k | cum. explained var | pearson r | spearman rho | mean abs dScore | max abs dScore |")
+    print("| k | cum. explained var | pearson r | spearman rho | mean abs dScore "
+          "| max abs dScore |")
     print("|---|---|---|---|---|---|")
     for row in rows:
         print(f"| {row['k']} | {fmt(row['explained_var'], 4)} | "
@@ -814,7 +814,7 @@ def probe5(ctx, sample: list[int], full_scores: np.ndarray,
         r = ctx.table.row(name)
         families[f"23x_{name}"] = score_mats(ctx, [np.repeat(emb[r][None, :], 23, axis=0)])
 
-    print(f"\n### P5b-d -- degenerate families vs the real-deck band\n")
+    print("\n### P5b-d -- degenerate families vs the real-deck band\n")
     print(f"nonbasic-land pool: {len(land_rows)} distinct lands among the "
           f"{len(sample_rows)} distinct cards of the deck sample"
           f"{' (sampled WITH replacement: pool < 23)' if replace else ''}; "

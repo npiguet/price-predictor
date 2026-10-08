@@ -12,6 +12,7 @@ import re
 from pathlib import Path
 
 import matplotlib
+
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
@@ -399,6 +400,7 @@ def _hue_scale():
     middle; a pure hue sweep stays colorful throughout.
     """
     import colorsys
+
     from matplotlib.colors import ListedColormap
     hues = np.linspace(240 / 360, 0.0, 256)
     return ListedColormap([colorsys.hsv_to_rgb(h, 0.45, 0.88) for h in hues])

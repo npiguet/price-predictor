@@ -130,7 +130,7 @@ keyword's worth **relative to the average of the sixteen**.
     comp["gap"] = comp["value_sp"] - comp["label_c"]
     comp = comp.sort_values("gap")
     comp["flag"] = np.where(comp["gap"].abs() > 0.15, "**yes**", "")
-    A(f"""
+    A("""
 
 ### Encoder-counterfactual vs label-correlational
 
@@ -908,7 +908,7 @@ are worth as much:
 `c5_type_swaps.csv`, `c5_taplands.csv`, `c5_summary.json`, `c6_riders.csv`,
 `c6_end_triggers.csv`, `c6_timing.csv`, `c7_labelside.csv`,
 `c7_labelside.json` — all under `output/encoder-probes/`.
-""")
+""")  # noqa: E501
 
     (S / "c_report.md").write_text("\n".join(out), encoding="utf-8")
     print(f"wrote {S / 'c_report.md'}")

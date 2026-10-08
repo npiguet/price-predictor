@@ -129,7 +129,7 @@ def build(panels, geom, xdom, xticks, xlabel, title, subtitle, marks,
     Defaults to the categorical agent palette used by the by-pick views.
     """
     if palette is None:
-        palette = {f'a{n}': (l, d) for l, d, n in COLOR.values()}
+        palette = {f'a{n}': (lt, d) for lt, d, n in COLOR.values()}
     if legend is None:
         legend = [(f'a{COLOR[e][2]}', e) for e in ORDER]
     height_total = geom[-1][0] + geom[-1][1] + 78
@@ -170,8 +170,8 @@ def build(panels, geom, xdom, xticks, xlabel, title, subtitle, marks,
         pad = (hi - lo) * 0.08
         lo = lo if (base0 and lo == 0.0) else lo - pad
         hi = hi if (base0 and hi == 0.0) else hi + pad
-        ys = lambda v, top=top, height=height, lo=lo, hi=hi: (
-            top + height - (v - lo) / (hi - lo) * height)
+        def ys(v, top=top, height=height, lo=lo, hi=hi):
+            return top + height - (v - lo) / (hi - lo) * height
 
         for r_lo, r_hi, r_label in regions:
             x0 = xs(max(r_lo, x_lo)) if r_lo is not None else ML
@@ -210,7 +210,7 @@ def build(panels, geom, xdom, xticks, xlabel, title, subtitle, marks,
             if not pts:
                 continue
             light, slot = palette[cls][0], cls
-            add(f'<path d="M' + " L".join(f"{x:.1f},{y:.1f}" for x, y in pts)
+            add('<path d="M' + " L".join(f"{x:.1f},{y:.1f}" for x, y in pts)
                 + f'" class="ln s{slot}" stroke="{light}"/>')
             ends.append([pts[-1][1], pts[-1][0], slot, text, light, pts[-1][1]])
             for (k, x), y in data.items():
@@ -277,7 +277,6 @@ def view_by_pick(rows_f, ag_f, rows_g, ag_g, cap):
               ("gen-4's lead over each reference", gap, gaps, True, True)]
     geom = [(98, 250), (416, 144), (682, 152)]
     ticks = [(t, str(t)) for t in (1, 5, 10, 15, 20, 25, 30, 35, 40, 45) if t <= cap]
-    n = len(rows_f) + len(rows_g)
     return (panels, geom, (1, cap), ticks, "picks taken",
             "The deck the builder makes from the first t picks", [],
             [(16, "pack 2"), (DECK, "deck size"), (31, "pack 3")])

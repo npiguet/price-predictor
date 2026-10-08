@@ -217,8 +217,8 @@ def run_policies(table: CardTable, samples: list, batch: int) -> dict[str, dict]
         logits: list = [None] * len(samples)
         for pos, i in enumerate(order):
             logits[i] = got[pos]
-        probs = [_softmax(l) for l in logits]
-        arg = np.array([int(np.argmax(l)) for l in logits])
+        probs = [_softmax(ln) for ln in logits]
+        arg = np.array([int(np.argmax(ln)) for ln in logits])
         res[name] = {"probs": probs, "argmax": arg}
         del model, runner
         try:

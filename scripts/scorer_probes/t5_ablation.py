@@ -35,9 +35,8 @@ from collections import Counter, defaultdict
 from pathlib import Path
 
 import numpy as np
-from scipy.stats import pearsonr, spearmanr
-
 import probe_lib as pl
+from scipy.stats import pearsonr, spearmanr
 
 MATCH_FILE = pl.YDATA / "matches-b07" / "match-outcomes-gen5-vs-gen4-forge.txt"
 DEFAULT_OUT = pl.SCRATCH / "t5_ablation.json"
@@ -366,11 +365,11 @@ def main() -> None:
     for p, n in pair_counts.most_common():
         print(f"  {p:<28} {n}")
 
-    used = {i for w, l, _ in matches for i in (w, l)}
+    used = {i for w, ln, _ in matches for i in (w, ln)}
     order = sorted(used)
     pos = {d: k for k, d in enumerate(order)}
     win_idx = np.array([pos[w] for w, _, _ in matches])
-    lose_idx = np.array([pos[l] for _, l, _ in matches])
+    lose_idx = np.array([pos[ln] for _, ln, _ in matches])
     pairs = [p for _, _, p in matches]
 
     mean_text, mean_det, n_mean_cards = corpus_means(reg, used, text_dim)

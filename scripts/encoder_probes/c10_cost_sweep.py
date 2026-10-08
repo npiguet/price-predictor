@@ -270,7 +270,7 @@ def main() -> None:
     print(taps.to_string(index=False), flush=True)
 
     # ── (iv) label-side same-text families ──────────────────────────────
-    key = ["\n".join(l for l in cc.lines(s) if not l.startswith("mana cost:"))
+    key = ["\n".join(ln for ln in cc.lines(s) if not ln.startswith("mana cost:"))
            for s in stripped]
     mv = np.array([(p[0] + p[1].count("{")) if p else np.nan for p in parsed])
     fam = pd.DataFrame({

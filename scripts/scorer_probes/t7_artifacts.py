@@ -45,9 +45,8 @@ from collections import Counter, defaultdict
 from pathlib import Path
 
 import numpy as np
-from scipy.stats import spearmanr
-
 import probe_lib as pl
+from scipy.stats import spearmanr
 
 SEED = 42
 
@@ -361,7 +360,6 @@ def probe_a(rows: list[dict]) -> dict:
         print("\n(too few complete rows for the fingerprint fit)")
         return {"per_method": per_method, "n_rows": len(keep)}
 
-    X_raw = np.array([[float(r[c]) for c in FP_FEATURES] for r in keep])
     y = np.array([1.0 if r["method"] in GEN_FAMILY else 0.0 for r in keep])
     score = np.array([float(r["score"]) for r in keep])
     msp = np.array([float(r["mean_score_play"]) for r in keep])
@@ -878,7 +876,8 @@ def probe_d_swaps(probes: dict[str, pl.Probe], cache: dict, pairs: list[dict],
             rec = {"pair": f"{a} vs {b}", "deck_spearman": deck_rho,
                    "swap_spearman_mean": float(ok.mean()) if len(ok) else float("nan"),
                    "swap_spearman_median": float(np.median(ok)) if len(ok) else float("nan"),
-                   "swap_spearman_share_negative": float((ok < 0).mean()) if len(ok) else float("nan"),
+                   "swap_spearman_share_negative":
+                       float((ok < 0).mean()) if len(ok) else float("nan"),
                    "n_decks_with_rho": int(len(ok)),
                    "delta_sign_agreement": sign,
                    "top1_swap_agreement": top1}
@@ -1099,7 +1098,8 @@ def main() -> None:
                    d_decks if "D" in sections else 0)
         pairs, pstats = load_aligned_pairs(probe, cache, want, label_of)
         print(f"aligned gen4-256 pairs: kept {len(pairs)} of {want} requested; "
-              f"skips {dict((k, v) for k, v in pstats.items() if 'line' not in k and k != 'pairs_used')}")
+              "skips " + str(dict((k, v) for k, v in pstats.items()
+                                  if 'line' not in k and k != 'pairs_used')))
         results["meta"]["pair_stats"] = dict(pstats)
 
     if "B" in sections:

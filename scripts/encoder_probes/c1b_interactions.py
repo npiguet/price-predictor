@@ -27,7 +27,6 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import c_common as cc  # noqa: E402
-from c1_keywords import KEYWORDS, keyword_statics  # noqa: E402
 
 CONTROL_A, CONTROL_B = "vigilance", "reach"
 LADDER_STRONG = ["flying", "deathtouch", "haste", "lifelink"]

@@ -271,7 +271,8 @@ def report_leave_lane(w) -> None:
 def report_quality(w) -> None:
     print("\n3. the off-lane card taken: mean score, and how often it was the pack's best\n")
     print(f"{'agent':<14}" + "".join(f"{k:>34}" for k in ("chosen", "forced")))
-    print(f"{'':<14}" + "".join(f"{'score':>13}{'took best':>11}{'per draft':>10}" for _ in range(2)))
+    print(f"{'':<14}"
+          + "".join(f"{'score':>13}{'took best':>11}{'per draft':>10}" for _ in range(2)))
     for a in AGENTS:
         row = ""
         for k in ("chosen", "forced"):
@@ -291,7 +292,8 @@ def report_conversion(w) -> None:
 
 def report_forced_deck(w) -> None:
     print("\n5. pod-relative deck_score by how many forced picks the seat played\n")
-    print(f"{'agent':<14}" + "".join(f"{k:>16}" for k in ("played none", "played one", "two or more")))
+    print(f"{'agent':<14}"
+          + "".join(f"{k:>16}" for k in ("played none", "played one", "two or more")))
     for a in AGENTS:
         print(f"{a:<14}" + "".join(
             f"{st.fmean(w.by_forced[a][k]):>+16.3f}" if w.by_forced[a][k] else f"{'-':>16}"

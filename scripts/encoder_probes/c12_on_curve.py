@@ -30,8 +30,8 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import c_common as cc  # noqa: E402
-from c10_cost_sweep import parse_cost, set_cost  # noqa: E402
 from c2_statlines import PT_RE, set_pt  # noqa: E402
+from c10_cost_sweep import parse_cost, set_cost  # noqa: E402
 
 SEED = 17
 N_BASES = 100
@@ -47,13 +47,13 @@ def main() -> None:
     is_crea = j["is_creature"].fillna(False).astype(bool).to_numpy()
     cost = [cc.get_field(s, "mana cost:") for s in stripped]
     parsed = [parse_cost(c) if c else None for c in cost]
-    lit_pt = np.array([bool(PT_RE.match(l))
+    lit_pt = np.array([bool(PT_RE.match(ln))
                        for s in stripped
-                       for l in [next((x for x in cc.lines(s)
+                       for ln in [next((x for x in cc.lines(s)
                                        if x.startswith("power toughness:")), "")]])
     strict_vanilla = np.array([
         len(ls := cc.lines(s)) == 3
-        and all(any(l.startswith(p) for l in ls) for p in CORE)
+        and all(any(ln.startswith(p) for ln in ls) for p in CORE)
         for s in stripped]) & is_crea & lit_pt
     loose = is_crea & lit_pt & np.array(
         [len(cc.ability_lines(s)) == 0 for s in stripped])

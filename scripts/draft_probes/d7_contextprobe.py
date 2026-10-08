@@ -133,7 +133,7 @@ def main() -> None:
     ]
     print(f"{len(samples)} states, {len(final_colours)} seats")
 
-    mat = table.matrix()
+    table.matrix()
     colour_of_row = [colours(n) for n in table.names]
     pool_frac = np.zeros((len(samples), 5), dtype=np.float32)
     for k, s in enumerate(samples):

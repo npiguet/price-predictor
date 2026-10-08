@@ -357,7 +357,7 @@ def main():
     if not args.csv.exists():
         sys.exit(f"missing input: {args.csv}")
 
-    print(f"# T2 -- marginal card value under the scorer\n")
+    print("# T2 -- marginal card value under the scorer\n")
     print(f"_source: `{args.csv.name}`_\n")
     df = prepare(args.csv)
     if len(df) < 10:

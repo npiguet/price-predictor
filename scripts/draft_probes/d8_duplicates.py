@@ -39,7 +39,6 @@ import copy
 import json
 import random
 import sys
-from collections import defaultdict
 from dataclasses import replace
 from pathlib import Path
 

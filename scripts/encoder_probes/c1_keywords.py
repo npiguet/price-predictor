@@ -39,9 +39,9 @@ SEED = 0
 
 def keyword_statics(stripped: str) -> list[tuple[int, str]]:
     out = []
-    for i, l in enumerate(cc.lines(stripped)):
-        if l.startswith("static: "):
-            body = l[len("static: "):].strip()
+    for i, ln in enumerate(cc.lines(stripped)):
+        if ln.startswith("static: "):
+            body = ln[len("static: "):].strip()
             if body in KEYWORDS:
                 out.append((i, body))
     return out

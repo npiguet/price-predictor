@@ -1,12 +1,15 @@
 """Human draft pick-order (Forge .rnk) vs Forge-AI empirical labels (read-only)."""
-import os, glob
+import glob
+import os
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
 from scipy import stats
 
-from pathlib import Path
 SP = str(Path(__file__).resolve().parents[2] / "output" / "scorer-probes")
-RNK = str(Path(__file__).resolve().parents[2].parent / "forge" / "forge-gui" / "res" / "draft" / "rankings")
+RNK = str(Path(__file__).resolve().parents[2].parent
+          / "forge" / "forge-gui" / "res" / "draft" / "rankings")
 
 lab = pd.read_csv(os.path.join(SP, "labels_joined.csv"))
 lab["key"] = lab.name.str.lower()
@@ -15,12 +18,13 @@ lmap = lab.set_index("key")
 rows = []
 for path in glob.glob(os.path.join(RNK, "*.rnk")):
     setc = os.path.basename(path)[:-4].upper()
-    lines = [l.strip() for l in open(path, encoding="utf-8", errors="replace") if l.strip() and not l.startswith("//")]
+    lines = [ln.strip() for ln in open(path, encoding="utf-8", errors="replace")
+             if ln.strip() and not ln.startswith("//")]
     n = len(lines)
     if n < 100:
         continue
-    for l in lines:
-        parts = l.split("|")
+    for ln in lines:
+        parts = ln.split("|")
         if len(parts) < 3:
             continue
         try:
@@ -49,9 +53,12 @@ for col in ["sp", "pr", "cl"]:
           f"{np.percentile(rs,25):+.3f}..{np.percentile(rs,75):+.3f})")
 
 print("\n--- human top-decile vs bottom-half labels ---")
-top = j[j.pct >= 0.9]; bot = j[j.pct <= 0.5]
-print(f"human top 10%: n={len(top):5d} sp={top.sp.mean():+.4f} creature={top.creature.mean():.2f} mv={top.mv.mean():.2f}")
-print(f"human bot 50%: n={len(bot):5d} sp={bot.sp.mean():+.4f} creature={bot.creature.mean():.2f} mv={bot.mv.mean():.2f}")
+top = j[j.pct >= 0.9]
+bot = j[j.pct <= 0.5]
+print(f"human top 10%: n={len(top):5d} sp={top.sp.mean():+.4f} "
+      f"creature={top.creature.mean():.2f} mv={top.mv.mean():.2f}")
+print(f"human bot 50%: n={len(bot):5d} sp={bot.sp.mean():+.4f} "
+      f"creature={bot.creature.mean():.2f} mv={bot.mv.mean():.2f}")
 
 print("\n--- residual: which categories does the AI meta over/under-rate vs human rank? ---")
 # regress sp on human pct within set (z-scored per set), inspect category residual means
@@ -60,7 +67,8 @@ j["sp_z"] = j.groupby("set").sp.transform(lambda x: (x - x.mean()) / (x.std() + 
 j["pct_z"] = j.groupby("set").pct.transform(lambda x: (x - x.mean()) / (x.std() + 1e-9))
 b = np.polyfit(j.pct_z, j.sp_z, 1)
 j["resid"] = j.sp_z - np.polyval(b, j.pct_z)
-print(f"slope(sp_z ~ human pct_z) = {b[0]:+.3f}   (r = {stats.pearsonr(j.pct_z, j.sp_z).statistic:+.3f})")
+print(f"slope(sp_z ~ human pct_z) = {b[0]:+.3f}   "
+      f"(r = {stats.pearsonr(j.pct_z, j.sp_z).statistic:+.3f})")
 cats = {
     "creature": j.creature == 1,
     "noncreature spell": (j.creature == 0) & (j.land == 0),

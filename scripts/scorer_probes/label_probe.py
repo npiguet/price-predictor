@@ -1,11 +1,14 @@
 """Join per-card empirical labels to converted card text properties (read-only)."""
-import os, re, math, sys
+import os
+import re
 from pathlib import Path
+
+import numpy as np
+import pandas as pd
 
 _REPO = Path(__file__).resolve().parents[2]
 _OUT = _REPO / "output" / "scorer-probes"
 _OUT.mkdir(parents=True, exist_ok=True)
-import numpy as np
 
 CF = str(_REPO / "output" / "cardsfolder-512")
 LAB = r"Y:\Nicolas\mtg\mtg-models-data\sealed\training-data\matches-bo1\cards-win-rates.txt"
@@ -52,7 +55,8 @@ def props(txt):
     pt = re.search(r"^power toughness:\s*(-?\d+|\*)/(-?\d+|\*)", txt, re.M)
     if pt:
         try:
-            d["power"] = int(pt.group(1)); d["tough"] = int(pt.group(2))
+            d["power"] = int(pt.group(1))
+            d["tough"] = int(pt.group(2))
         except ValueError:
             d["power"] = d["tough"] = np.nan
     else:
@@ -63,8 +67,9 @@ def props(txt):
         d["kw_" + kw.replace(" ", "_")] = 1 if kw in body else 0
     d["evasive"] = 1 if ("flying" in body or "menace" in body or "can't be blocked" in body
                          or "fear" in body or "intimidate" in body or "shadow" in body) else 0
-    d["removal"] = 1 if re.search(r"destroy target (creature|permanent)|exile target (creature|permanent)"
-                                  r"|deals \d+ damage to (target|any target)|target creature gets -", body) else 0
+    d["removal"] = 1 if re.search(
+        r"destroy target (creature|permanent)|exile target (creature|permanent)"
+        r"|deals \d+ damage to (target|any target)|target creature gets -", body) else 0
     d["counter"] = 1 if "counter target spell" in body else 0
     d["draw"] = 1 if re.search(r"draw (a|one|two|three|\w+) card", body) else 0
     d["lifegain"] = 1 if re.search(r"gain \d+ life|gains? \d+ life", body) else 0
@@ -100,7 +105,6 @@ with open(LAB, encoding="utf-8", errors="replace") as fh:
         r.update(props(txt))
         rows.append(r)
 
-import pandas as pd
 df = pd.DataFrame(rows)
 print("joined:", len(df), " with n>=200:", (df.n >= 200).sum(), " n>=1000:", (df.n >= 1000).sum())
 print("n_in_deck quantiles:", df.n.quantile([.1, .25, .5, .75, .9]).round(0).to_dict())
@@ -126,7 +130,8 @@ print("\n--- group means (n>=200) ---")
 def grp(mask, label):
     s = d[mask]
     if len(s) < 15:
-        print(f"{label:28s} n={len(s):5d}  (too few)"); return
+        print(f"{label:28s} n={len(s):5d}  (too few)")
+        return
     print(f"{label:28s} n={len(s):5d}  sp={s.sp.mean():+.4f} sd={s.sd.mean():+.4f} "
           f"pr={s.pr.mean():.3f} cl={s.cl.mean():+.4f} mv={s.mv.mean():.2f}")
 grp(d.creature == 1, "creature")
@@ -156,7 +161,8 @@ for mv in range(1, 8):
     a = d[(d.creature == 1) & (d.mv == mv)]
     b = d[(d.creature == 0) & (d.land == 0) & (d.mv == mv)]
     if len(a) > 20 and len(b) > 20:
-        print(f"MV {mv}: creature sp={a.sp.mean():+.4f} (n={len(a):4d})  noncreature sp={b.sp.mean():+.4f} (n={len(b):4d})"
+        print(f"MV {mv}: creature sp={a.sp.mean():+.4f} (n={len(a):4d})  "
+              f"noncreature sp={b.sp.mean():+.4f} (n={len(b):4d})"
               f"   pr: {a.pr.mean():.3f} vs {b.pr.mean():.3f}")
 
 print("\n--- by MV: played_rate & score_play (creatures only) ---")
@@ -164,12 +170,14 @@ c = d[d.creature == 1]
 for mv in range(0, 9):
     s = c[c.mv == mv]
     if len(s) > 20:
-        print(f"MV {mv}: n={len(s):4d} sp={s.sp.mean():+.4f} pr={s.pr.mean():.3f} cl={s.cl.mean():+.4f}")
+        print(f"MV {mv}: n={len(s):4d} sp={s.sp.mean():+.4f} pr={s.pr.mean():.3f} "
+              f"cl={s.cl.mean():+.4f}")
 
 print("\n--- by color (nonland) ---")
 for col in "wubrg":
     mask = d.apply(lambda r: False, axis=1)
-    # recompute color membership from name lookup is costly; approximate via colors count is not enough
+    # recompute color membership from name lookup is costly; approximate via colors count
+    # is not enough
 print("\n--- rarity join skipped (see separate step) ---")
 d.to_csv(str(_OUT / "labels_joined.csv"), index=False)
 print("wrote labels_joined.csv")

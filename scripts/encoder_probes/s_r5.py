@@ -5,11 +5,10 @@ from __future__ import annotations
 import json
 
 import numpy as np
-from sklearn.ensemble import HistGradientBoostingRegressor
-from sklearn.linear_model import LogisticRegression
-
 import probe_lib as pl
 import s_common as S
+from sklearn.ensemble import HistGradientBoostingRegressor
+from sklearn.linear_model import LogisticRegression
 
 d = S.load_all()
 join, emb = d["join"], d["emb"]
@@ -63,7 +62,8 @@ out["a_reference_heads"] = rows_a2
 off = ~own
 n_off = off.sum(1)
 with np.errstate(invalid="ignore"):
-    mean_off_pred = np.where(n_off > 0, np.nansum(np.where(off, prd, 0), 1) / np.maximum(n_off, 1), np.nan)
+    mean_off_pred = np.where(
+        n_off > 0, np.nansum(np.where(off, prd, 0), 1) / np.maximum(n_off, 1), np.nan)
     lab_off = np.where(off, lab, np.nan)
     mean_off_lab = np.nanmean(lab_off, 1)
 sel = np.isfinite(mean_off_lab) & np.isfinite(mean_off_pred)

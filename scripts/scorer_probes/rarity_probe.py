@@ -1,15 +1,18 @@
 """Join rarity (MTGJSON) onto the label table and test rarity gradients (read-only)."""
-import json, os
+import json
+import os
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
 
-from pathlib import Path
 SP = str(Path(__file__).resolve().parents[2] / "output" / "scorer-probes")
 df = pd.read_csv(os.path.join(SP, "labels_joined.csv"))
 
 RANK = {"common": 0, "uncommon": 1, "rare": 2, "mythic": 3}
 best = {}
-with open(str(Path(__file__).resolve().parents[2] / "resources" / "AllPrintings.json"), encoding="utf-8") as f:
+with open(str(Path(__file__).resolve().parents[2] / "resources" / "AllPrintings.json"),
+          encoding="utf-8") as f:
     data = json.load(f)
 for _set, info in data.get("data", {}).items():
     cards = info if isinstance(info, list) else info.get("cards", [])
@@ -23,7 +26,8 @@ for _set, info in data.get("data", {}).items():
         if prev is None:
             best[n] = [RANK[r], RANK[r]]
         else:
-            prev[0] = min(prev[0], RANK[r]); prev[1] = max(prev[1], RANK[r])
+            prev[0] = min(prev[0], RANK[r])
+            prev[1] = max(prev[1], RANK[r])
 del data
 print("mtgjson names:", len(best))
 
@@ -36,7 +40,8 @@ print("\n--- by min-rarity (all nonland cards, n>=200) ---")
 for r, lab in [(0, "common"), (1, "uncommon"), (2, "rare"), (3, "mythic")]:
     s = d[(d.rar_min == r) & (d.land == 0)]
     if len(s) > 20:
-        print(f"{lab:9s} n={len(s):5d} sp={s.sp.mean():+.4f} pr={s.pr.mean():.3f} cl={s.cl.mean():+.4f} mv={s.mv.mean():.2f} creat={s.creature.mean():.2f}")
+        print(f"{lab:9s} n={len(s):5d} sp={s.sp.mean():+.4f} pr={s.pr.mean():.3f} "
+              f"cl={s.cl.mean():+.4f} mv={s.mv.mean():.2f} creat={s.creature.mean():.2f}")
 
 print("\n--- rarity gradient within creature x MV cells ---")
 for mv in [2, 3, 4, 5, 6]:
@@ -54,9 +59,11 @@ for mv in [2, 3, 4]:
         cells.append(f"{lab}:{s.sp.mean():+.4f}(n={len(s)})" if len(s) > 20 else f"{lab}:--")
     print(f"noncreature MV{mv}: " + "  ".join(cells))
 
-print("\n--- OLS: sp ~ mv + power + tough + creature + rarity + flying + removal (n>=200, nonland) ---")
+print("\n--- OLS: sp ~ mv + power + tough + creature + rarity + flying + removal "
+      "(n>=200, nonland) ---")
 sub = d[(d.land == 0)].dropna(subset=["sp", "mv", "creature", "rar_min"]).copy()
-sub["power"] = sub.power.fillna(0); sub["tough"] = sub.tough.fillna(0)
+sub["power"] = sub.power.fillna(0)
+sub["tough"] = sub.tough.fillna(0)
 X = sub[["mv", "power", "tough", "creature", "rar_min", "kw_flying", "removal", "counter", "draw",
          "artifact", "instant", "sorcery", "pips", "colors"]].to_numpy(float)
 X = np.column_stack([np.ones(len(X)), X])
@@ -82,6 +89,7 @@ for n_, b, s_ in zip(names, beta2, se2):
 print("\n--- split-half style: label reliability by observation count ---")
 for lo, hi in [(200, 500), (500, 1000), (1000, 3000), (3000, 100000)]:
     s = d[(d.n >= lo) & (d.n < hi)]
-    print(f"n in [{lo},{hi}): cards={len(s):5d} sd(sp)={s.sp.std():.4f} mean|sp|={s.sp.abs().mean():.4f}")
+    print(f"n in [{lo},{hi}): cards={len(s):5d} sd(sp)={s.sp.std():.4f} "
+          f"mean|sp|={s.sp.abs().mean():.4f}")
 s = df[(df.n < 200) & df.sp.notna()]
 print(f"n<200 (excluded above): cards={len(s):5d} sd(sp)={s.sp.std():.4f}")

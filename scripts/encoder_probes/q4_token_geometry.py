@@ -29,9 +29,9 @@ REPO = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO / "src"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from price_predictor.infrastructure.tokenizer_store import load_tokenizer  # noqa: E402
-
 import probe_lib as pl  # noqa: E402
+
+from price_predictor.infrastructure.tokenizer_store import load_tokenizer  # noqa: E402
 
 OUT = REPO / "output" / "encoder-probes"
 
@@ -39,7 +39,8 @@ OUT = REPO / "output" / "encoder-probes"
 def token_projections(max_n: int = 15) -> pd.DataFrame:
     tok = load_tokenizer(REPO / "models/sealed/encoder/vocab.txt")
     ck = torch.load(pl.ENCODER_CKPT if hasattr(pl, "ENCODER_CKPT") else
-                    REPO / "models/sealed/encoder/full-20260517-014759-attn-6l-8h-8q-0.1mlm-512d.pt",
+                    REPO / "models/sealed/encoder"
+                    / "full-20260517-014759-attn-6l-8h-8q-0.1mlm-512d.pt",
                     map_location="cpu", weights_only=False)
     emb = ck["model_state_dict"]["token_encoder.token_embedding.weight"].numpy()
 

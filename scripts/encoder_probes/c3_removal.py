@@ -59,8 +59,8 @@ def main() -> None:
     out: dict = {}
 
     def spell_line(s: str) -> int:
-        for i, l in enumerate(cc.lines(s)):
-            if l.startswith("spell[1]:"):
+        for i, ln in enumerate(cc.lines(s)):
+            if ln.startswith("spell[1]:"):
                 return i
         return -1
 
@@ -119,7 +119,7 @@ def main() -> None:
     is_aura = j["is_aura"].fillna(False).astype(bool).to_numpy()
 
     def second_static(s: str) -> int:
-        st = [i for i, l in enumerate(cc.lines(s)) if l.startswith("static: ")]
+        st = [i for i, ln in enumerate(cc.lines(s)) if ln.startswith("static: ")]
         return st[1] if len(st) >= 2 else -1
 
     ss = np.array([second_static(s) for s in stripped])

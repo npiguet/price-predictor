@@ -33,8 +33,8 @@ SD_PLAYED_RATE = 0.1247
 
 
 def card_text(path: str) -> str:
-    return "\n".join(l for l in Path(path).read_text(encoding="utf-8", errors="replace")
-                     .splitlines() if l.strip() and not l.startswith("name:"))
+    return "\n".join(ln for ln in Path(path).read_text(encoding="utf-8", errors="replace")
+                     .splitlines() if ln.strip() and not ln.startswith("name:"))
 
 
 def main() -> None:
@@ -47,7 +47,7 @@ def main() -> None:
         lines = t.splitlines()
         texts.append(t)
         n_lines.append(len(lines))
-        n_ab.append(sum(1 for l in lines if l.startswith(ABILITY_PREFIXES)))
+        n_ab.append(sum(1 for ln in lines if ln.startswith(ABILITY_PREFIXES)))
     join["n_lines"], join["n_ability_lines"] = n_lines, n_ab
 
     ok = (join["n_ability_lines"] >= 2).to_numpy()

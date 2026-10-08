@@ -69,7 +69,7 @@ REPO = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO / "src"))
 sys.path.insert(0, str(REPO / "scripts"))
 
-from draft.domain.draft_geometry import DraftGeometry, DraftRecord  # noqa: E402
+from draft.domain.draft_geometry import DraftGeometry  # noqa: E402
 from draft.infrastructure.draft_record_io import read_records  # noqa: E402
 
 G4 = REPO / "models" / "draft" / "agent" / "gen4"
@@ -297,7 +297,7 @@ def build_tables(flagged: set[str]) -> tuple[list[SeatRow], dict[str, PickStats]
 # ------------------------------------------------------------------ analysis 1
 
 def dummies(values: list[str], base: str, levels: tuple[str, ...]) -> np.ndarray:
-    cols = [l for l in levels if l != base]
+    cols = [ln for ln in levels if ln != base]
     return np.array(
         [[1.0 if v == c else 0.0 for c in cols] for v in values], dtype=float
     ), cols
@@ -319,8 +319,8 @@ def regress(
         blocks.append(D)
         names += [f"{nb}={c}" for c in cols]
     if with_own:
-        O, ocols = dummies([r.agent for r in rows], "forge-full", LABELS)
-        blocks.append(O)
+        opp, ocols = dummies([r.agent for r in rows], "forge-full", LABELS)
+        blocks.append(opp)
         names += [f"own={c}" for c in ocols]
     if control_crowding:
         blocks.append(np.array([[float(r.pod_gen4)] for r in rows]))
@@ -645,13 +645,13 @@ def report(a1: dict, a2: dict, a3: dict) -> None:
         print(f"\n  -- (c) within fixed pod gen-4 count: gen-4 seat mean loo by "
               f"{which} label --")
         print(f"    {'pod g4':>6} {'n':>5} | " +
-              " | ".join(f"{l:>22}" for l in LABELS))
+              " | ".join(f"{ln:>22}" for ln in LABELS))
         for cell in a1[key]:
             if cell["n"] < 40:
                 continue
             parts = []
-            for l in LABELS:
-                v = cell[l]
+            for ln in LABELS:
+                v = cell[ln]
                 parts.append("                  n/a" if not v else
                              f"{v['mean']:+.3f}+-{v['se']:.3f} (n={v['n']:>4})")
             print(f"    {cell['pod_gen4_count']:>6} {cell['n']:>5} | " +
@@ -665,21 +665,21 @@ def report(a1: dict, a2: dict, a3: dict) -> None:
     pa = a2["per_agent"]
     print(f"    {'agent':<12} {'picks':>9} {'flagged avail':>14} {'take%':>8} "
           f"{'real-choice take%':>19} {'unflagged-alt take%':>21}")
-    for l in LABELS:
-        d = pa[l]
+    for ln in LABELS:
+        d = pa[ln]
         a, b, cc = (d["take_rate_when_available"], d["take_rate_real_choice"],
                     d["take_rate_unflagged_alt"])
-        print(f"    {l:<12} {d['picks']:>9} {a['n']:>14} "
+        print(f"    {ln:<12} {d['picks']:>9} {a['n']:>14} "
               f"{100*a['rate']:>7.2f}% "
               f"{100*b['rate']:>10.2f}% (n={b['n']:>6}) "
               f"{100*cc['rate']:>11.2f}% (n={cc['n']:>6})")
     print()
     print(f"    {'agent':<12} {'flagged taken':>14} {'ended in 40-card deck':>23} "
           f"{'mean flagged/seat':>19}")
-    for l in LABELS:
-        d, bb = pa[l], a2["by_flagged_count"][l]
+    for ln in LABELS:
+        d, bb = pa[ln], a2["by_flagged_count"][ln]
         p = d["flagged_taken_played"]
-        print(f"    {l:<12} {d['flagged_taken']:>14} "
+        print(f"    {ln:<12} {d['flagged_taken']:>14} "
               f"{100*p['rate']:>16.2f}% +-{100*p['se']:.2f} "
               f"{bb['mean_flagged_drafted']:>19.3f}")
     print("\n  -- contrasts (gen-1 is the distillation-of-Forge control) --")
@@ -687,13 +687,13 @@ def report(a1: dict, a2: dict, a3: dict) -> None:
         print(f"    {k:<48} {100*v['diff']:+7.2f} pp  +-{100*v['se']:.2f}  "
               f"z={v['z']:+.2f} {stars(v['diff'], v['se'])}")
     print("\n  -- mean pod-relative deck_score by flagged cards drafted --")
-    for l in LABELS:
-        bb = a2["by_flagged_count"][l]
+    for ln in LABELS:
+        bb = a2["by_flagged_count"][ln]
         cells = " | ".join(
             f"{c['flagged_drafted']}: {c['mean']:+.3f}+-{c['se']:.3f} (n={c['n']})"
             for c in bb["cells"])
         s = bb["slope_per_flagged_card"]
-        print(f"    {l:<12} {cells}")
+        print(f"    {ln:<12} {cells}")
         print(f"    {'':<12} slope per flagged card (net of crowding): "
               f"{s['beta']:+.4f} +- {s['se']:.4f} {stars(s['beta'], s['se'])}")
 

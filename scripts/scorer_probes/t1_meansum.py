@@ -26,9 +26,8 @@ import random
 from collections import Counter
 
 import numpy as np
-from scipy import stats
-
 import probe_lib as pl
+from scipy import stats
 
 OUT = pl.SCRATCH / "t1_add_deltas.csv"
 POOLS = pl.YDATA / "pools" / "pools-gen4-256.txt"

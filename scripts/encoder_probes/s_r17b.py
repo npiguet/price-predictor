@@ -11,7 +11,6 @@ from __future__ import annotations
 import json
 
 import numpy as np
-
 import probe_lib as pl
 import s_common as S
 

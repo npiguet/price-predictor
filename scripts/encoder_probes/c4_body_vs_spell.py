@@ -37,7 +37,8 @@ EFFECTS: list[tuple[str, str]] = [
     ("scry 2.", "U"),
     ("return target creature to its owner's hand.", "U"),
     ("destroy target artifact.", "G"),
-    ("search your library for a basic land card, put it onto the battlefield tapped, then shuffle.", "G"),
+    ("search your library for a basic land card, put it onto the battlefield tapped, "
+     "then shuffle.", "G"),
     ("put a +1/+1 counter on target creature.", "G"),
     ("target creature gets +2/+2 until end of turn.", "G"),
     ("each opponent loses 2 life.", "B"),
@@ -181,12 +182,14 @@ def main() -> None:
     mv = pd.to_numeric(j["mv"], errors="coerce")
     f = lambda c: j[c].fillna(False).astype(bool)  # noqa: E731
     classes = {
-        "mana rock (noncreature artifact, add mana)": f("ph_add_mana") & f("is_artifact") & ~f("is_creature"),
+        "mana rock (noncreature artifact, add mana)":
+            f("ph_add_mana") & f("is_artifact") & ~f("is_creature"),
         "mana dork (creature, add mana)": f("ph_add_mana") & f("is_creature"),
         "ramp sorcery (search basic land)": f("ph_search_basic_land") & ~f("is_creature"),
         "token creature (creature that makes tokens)": f("ph_create_token") & f("is_creature"),
         "token spell (noncreature token maker)": f("ph_create_token") & ~f("is_creature"),
-        "vanilla-ish creature": f("is_creature") & (pd.to_numeric(j["n_abilities"], errors="coerce").fillna(9) == 0),
+        "vanilla-ish creature": f("is_creature") & (
+            pd.to_numeric(j["n_abilities"], errors="coerce").fillna(9) == 0),
         "all creatures": f("is_creature"),
         "all noncreature spells": f("is_instant") | f("is_sorcery"),
         "corpus": pd.Series(True, index=j.index),

@@ -64,9 +64,8 @@ from collections import Counter, defaultdict
 from pathlib import Path
 
 import numpy as np
-from scipy import stats
-
 import probe_lib as pl
+from scipy import stats
 
 SEED = 42
 FC = pl.layout.FEATURE_COUNT
@@ -959,7 +958,8 @@ def report_a(res: dict) -> None:
     print("| arm | Delta-dose | payoff dose |")
     print("|---|---|---|")
     print(f"| matched enablers | {fmt(m['matched_ddose'])} | {fmt(m['matched_payoff_dose'])} |")
-    print(f"| mismatched enablers | {fmt(m['mismatched_ddose'])} | {fmt(m['mismatched_payoff_dose'])} |")
+    print(f"| mismatched enablers | {fmt(m['mismatched_ddose'])} | "
+          f"{fmt(m['mismatched_payoff_dose'])} |")
     print(f"| paired difference | {fmt(m['paired_diff'])} | {fmt(m['payoff_dose_paired_diff'])} |")
     print(f"| paired diff (cell level) | {fmt(m['cell_level_paired_diff'])} | |")
     print("  [matched ~ mismatched => generic deck-quality / color drift, "
