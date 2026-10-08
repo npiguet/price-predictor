@@ -321,6 +321,7 @@ def read_window(
     from effects.infrastructure.record_io import (
         iter_shard_lines,
         iter_shards,
+        parse_record_line,
         record_from_dict,
     )
 
@@ -332,7 +333,7 @@ def read_window(
             stripped = line.strip()
             if not stripped:
                 continue
-            data = json.loads(stripped)
+            data = parse_record_line(stripped)
             if presence is not None:
                 presence.observe(name, data)
             yield record_from_dict(data)

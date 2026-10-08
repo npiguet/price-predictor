@@ -46,6 +46,8 @@ from dataclasses import replace
 from pathlib import Path
 from typing import IO, Any
 
+import orjson
+
 from effects.domain.event_schema import Event
 from effects.domain.provenance import ProvenanceKey
 from effects.domain.records import (
@@ -754,6 +756,19 @@ def repack_shards(
     return written
 
 
+def parse_record_line(text: str) -> dict:
+    """One shard line as the dict ``record_from_dict`` reads.
+
+    ``orjson`` rather than ``json``: a record carries its whole state snapshot,
+    and the trainer parses a fresh shard every few dozen steps on a thread that
+    shares the interpreter lock with the training step, so the parse is what
+    the step waits on. The two parsers give equal dicts — floats round-trip
+    exactly in both — and ``orjson``'s decode error subclasses
+    ``json.JSONDecodeError``, so a caller's handler for a torn line still works.
+    """
+    return orjson.loads(text)
+
+
 #: Both shard spellings. `.jsonl.gz` is what the writer produces; plain
 #: `.jsonl` is read so a corpus collected before compression keeps working,
 #: because the corpus is append-only and cannot be regenerated.
@@ -803,7 +818,7 @@ def read_shard(path: Path) -> Iterator[EffectRecord]:
         stripped = line.strip()
         if not stripped:
             continue
-        yield record_from_dict(json.loads(stripped))
+        yield record_from_dict(parse_record_line(stripped))
 
 
 def iter_shards(directory: Path) -> list[Path]:
@@ -885,7 +900,7 @@ def read_records_matching(
             stripped = line.strip()
             if not stripped:
                 continue
-            record = record_from_dict(json.loads(stripped))
+            record = record_from_dict(parse_record_line(stripped))
             if game_ids is not None and record.game_id not in game_ids:
                 continue
             if kinds is not None and record.kind.value not in kinds:
@@ -942,7 +957,7 @@ def shard_generation(path: Path) -> str | None:
         stripped = line.strip()
         if not stripped:
             continue
-        return GEN_2 if "random_seat" in json.loads(stripped) else GEN_1
+        return GEN_2 if "random_seat" in parse_record_line(stripped) else GEN_1
     return None
 
 

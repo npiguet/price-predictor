@@ -131,15 +131,18 @@ def read_shard_remapped(
     ``remapper is None`` (``--no-remap-token-keys``) is a plain read, and
     ``counts`` is then left alone.
     """
-    import json
 
-    from effects.infrastructure.record_io import iter_shard_lines, record_from_dict
+    from effects.infrastructure.record_io import (
+        iter_shard_lines,
+        parse_record_line,
+        record_from_dict,
+    )
 
     for line in iter_shard_lines(Path(path)):
         stripped = line.strip()
         if not stripped:
             continue
-        data = json.loads(stripped)
+        data = parse_record_line(stripped)
         if remapper is not None:
             remap_record_dict(data, remapper, counts)
         yield record_from_dict(data)
