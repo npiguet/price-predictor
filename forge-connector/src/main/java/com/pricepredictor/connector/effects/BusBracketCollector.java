@@ -87,6 +87,43 @@ public final class BusBracketCollector {
     private final Set<String> bracketEventKeys = new LinkedHashSet<>();
 
     /**
+     * One chosen mode of the open modal resolution, once its first clause has
+     * resolved (FR-029a).
+     *
+     * <p>The snapshot is taken at that clause, so a later mode's board shows
+     * the earlier modes' effects (FR-029b); the events are what landed in the
+     * bracket between this mode's first clause and the next mode's, or the
+     * end of the resolution. {@code option} is the mode's {@code Choices$}
+     * position, or null for a mode nothing could place, whose half keeps the
+     * root key.
+     */
+    private static final class ModeHalf {
+        private final Integer option;
+        private final String state;
+        private final List<EffectEvent> events = new ArrayList<>();
+
+        private ModeHalf(Integer option, String state) {
+            this.option = option;
+            this.state = state;
+        }
+    }
+
+    /** The modes of the open resolution whose halves are complete, in order. */
+    private final List<ModeHalf> modeHalves = new ArrayList<>();
+    /** The mode whose clauses are resolving now, or null outside one. */
+    private ModeHalf openMode;
+
+    /**
+     * The match's random seat, as a player id, or null when it has none.
+     *
+     * <p>Every record this collector writes is stamped {@code random_seat}
+     * against it at the write (FR-030). Set after the game is created and
+     * before the first event, because the seat is decided per match and the
+     * collector per game.
+     */
+    private String randomSeatPlayerId;
+
+    /**
      * Casts whose outcome is not known yet, oldest first.
      *
      * <p>A list rather than a map because it is the stack: two spells can be
@@ -202,6 +239,11 @@ public final class BusBracketCollector {
         return recordsWritten;
     }
 
+    /** Name the match's random seat, so every record can say whether it acted. */
+    public void setRandomSeatPlayerId(String playerId) {
+        this.randomSeatPlayerId = playerId;
+    }
+
     /** The depth this collector's snapshots are built at — the run's, not its own. */
     int[] snapshotTiers() {
         return snapshots.tiers();
@@ -305,7 +347,13 @@ public final class BusBracketCollector {
                                         bracketIsThisAbility ? resolving : null),
                 writesEffectHalf);
 
-        if (writesEffectHalf) {
+        if (bracketIsThisAbility) {
+            // The last mode's half closes with the resolution, since no next
+            // mode's first clause comes to close it.
+            closeOpenMode();
+        }
+
+        if (writesEffectHalf && modeHalves.isEmpty()) {
             emit(new EffectRecord(
                     writer.nextRecordId(), writer.runId(), RecordShardWriter.timestamp(),
                     gameId, EffectRecord.KIND_RESOLUTION, mode)
@@ -319,6 +367,27 @@ public final class BusBracketCollector {
                     .state(SnapshotBuilder.spliceRefs(
                             openBracketState, snapshots.refsJson(resolving)))
                     .payload(EffectRecord.eventsPayload(bracketEvents)));
+        } else if (writesEffectHalf) {
+            // A modal resolution on a patched worker: one effect half per
+            // chosen mode, each through the mode's own option line, every one
+            // of them under the cost half's link (FR-029a, FR-029d). The
+            // events a mode produced are its own and nothing else's; a mode
+            // that fizzled on its own carries an empty list under its key,
+            // which is what the schema says of any resolution that did
+            // nothing observable.
+            String refs = snapshots.refsJson(resolving);
+            for (ModeHalf half : modeHalves) {
+                emit(new EffectRecord(
+                        writer.nextRecordId(), writer.runId(),
+                        RecordShardWriter.timestamp(),
+                        gameId, EffectRecord.KIND_RESOLUTION, mode)
+                        .moment(EffectRecord.MOMENT_RESOLUTION)
+                        .actor(resolvingActor)
+                        .ability(modeKeys(half.option))
+                        .linkId(link)
+                        .state(SnapshotBuilder.spliceRefs(half.state, refs))
+                        .payload(EffectRecord.eventsPayload(half.events)));
+            }
         }
 
         if (bracketIsThisAbility) {
@@ -704,6 +773,64 @@ public final class BusBracketCollector {
         this.openBracketState = null;
         this.bracketEvents.clear();
         this.bracketEventKeys.clear();
+        this.modeHalves.clear();
+        this.openMode = null;
+    }
+
+    // ── the modes of a modal resolution ─────────────────────────────────
+
+    /**
+     * A chosen mode's first clause is resolving: close the previous mode's
+     * half and open this one's, with a snapshot taken now (FR-029a, FR-029b).
+     *
+     * <p>Called by the clause hook, which is to say only on a patched worker:
+     * a degraded one never reaches here and writes the one root half it
+     * always wrote, with every mode's events in it (FR-029e). The clause's
+     * host is checked against the open bracket's because the hook is a JVM
+     * static that sees every resolution in the process, and the bracket is
+     * one slot: a mode of some other charm — a copy resolving on a fork, a
+     * nested resolution this slot does not hold — must not cut this one.
+     *
+     * <p>Events filed before the first mode's clause, between the cast and
+     * the resolution, fall into the first mode's half rather than vanishing:
+     * {@link #bracketEvents} is not cleared when the first mode opens.
+     *
+     * @param option the mode's {@code Choices$} position, or null for a mode
+     *               {@link CharmModes} could not place
+     */
+    void beginMode(SpellAbility clause, Integer option) {
+        if (resolving == null || clause == null
+                || clause.getHostCard() != resolving.getHostCard()) {
+            return;
+        }
+        closeOpenMode();
+        openMode = new ModeHalf(
+                option, snapshots.toJson(resolving, referencedOf(resolving)));
+    }
+
+    /** Move the bracket's events into the open mode's half and file it. */
+    private void closeOpenMode() {
+        if (openMode == null) {
+            return;
+        }
+        openMode.events.addAll(bracketEvents);
+        bracketEvents.clear();
+        bracketEventKeys.clear();
+        modeHalves.add(openMode);
+        openMode = null;
+    }
+
+    /** The resolving line's key with the mode's option, or the root key. */
+    private ProvenanceKey.Resolved modeKeys(Integer option) {
+        if (option == null || resolvingKeys.key() == null) {
+            return resolvingKeys;
+        }
+        return new ProvenanceKey.Resolved(resolvingKeys.key().withOption(option), null);
+    }
+
+    /** How many mode halves the open resolution has closed so far, for a test. */
+    int modeHalvesOpen() {
+        return modeHalves.size() + (openMode == null ? 0 : 1);
     }
 
     private static String actorOf(SpellAbility ability) {
@@ -1040,7 +1167,16 @@ public final class BusBracketCollector {
      * describes: offered, turned down, and nothing happened.
      */
     private boolean wasDeclined() {
-        return bracketDeclined && bracketEvents.isEmpty();
+        if (!bracketDeclined || !bracketEvents.isEmpty()) {
+            return false;
+        }
+        // The events of an earlier mode have already moved into its half.
+        for (ModeHalf half : modeHalves) {
+            if (!half.events.isEmpty()) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /**
@@ -1225,6 +1361,11 @@ public final class BusBracketCollector {
     }
 
     private void emit(EffectRecord record) {
+        // Stamped at the write rather than where the record was built: a held
+        // cost half has its actor long before this, and the seat is fixed for
+        // the whole game, so the answer is the same at either moment.
+        record.randomSeat(
+                randomSeatPlayerId != null && randomSeatPlayerId.equals(record.actorPlayer()));
         writer.write(record.toJson());
         recordsWritten++;
     }

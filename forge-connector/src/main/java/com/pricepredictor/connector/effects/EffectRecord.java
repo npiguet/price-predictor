@@ -70,6 +70,23 @@ public final class EffectRecord {
     private boolean interventional;
     private boolean fork;
     private boolean synthetic;
+    /**
+     * Whether {@code actor_player} is the match's random seat (FR-030).
+     *
+     * <p>Collection metadata, like the three flags above it: it says how the
+     * decision behind this record was made, never what the board was, and the
+     * reader keeps it out of the model. Written on every record, so a shard
+     * that carries it on one record carries it on all — that presence is what
+     * names a gen-2 shard to a reader (FR-033).
+     */
+    private boolean randomSeat;
+    /**
+     * Real decision or what-if query, on the two legality subkinds only
+     * (FR-031): {@code false} is a declaration the engine acted on, {@code
+     * true} an answer the AI computed while weighing a combat and discarded.
+     * Null everywhere else, and absent from the JSON then.
+     */
+    private Boolean whatIf;
     private String actorPlayer;
     private List<ProvenanceKey> ability;
     private String abilityUnresolved;
@@ -97,7 +114,14 @@ public final class EffectRecord {
         return this;
     }
 
-    /** Joins the two halves of a resolution pair; absent where there is no partner. */
+    /**
+     * Joins a cost half to its effect halves; absent where there is no partner.
+     *
+     * <p>One effect half ordinarily, and one per chosen mode of a modal
+     * resolution on a patched worker (FR-029d), all carrying the cost half's
+     * id — the link widened from a pair to a fan without changing its type
+     * or spelling.
+     */
     public EffectRecord linkId(String value) {
         this.linkId = value;
         return this;
@@ -128,9 +152,29 @@ public final class EffectRecord {
         return this;
     }
 
+    public EffectRecord randomSeat(boolean value) {
+        this.randomSeat = value;
+        return this;
+    }
+
+    /** Only the {@code attackers} and {@code blockers} subkinds set this. */
+    public EffectRecord whatIf(Boolean value) {
+        this.whatIf = value;
+        return this;
+    }
+
     public EffectRecord actor(String playerId) {
         this.actorPlayer = playerId;
         return this;
+    }
+
+    /**
+     * The player this record is about, for the collector that stamps
+     * {@link #randomSeat} at the moment it writes: the actor is set where
+     * the record is built, which for a held record is long before the write.
+     */
+    public String actorPlayer() {
+        return actorPlayer;
     }
 
     /**
@@ -219,6 +263,12 @@ public final class EffectRecord {
                 + ",\"interventional\":" + interventional
                 + ",\"fork\":" + fork
                 + ",\"synthetic\":" + synthetic
+                // Right after synthetic on every record, and what_if right
+                // after it on the two subkinds alone: the order is part of the
+                // contract (record-schema-delta.md), and the reader names a
+                // shard's generation by the first field's presence.
+                + ",\"random_seat\":" + randomSeat
+                + (whatIf == null ? "" : ",\"what_if\":" + whatIf)
                 + ",\"actor_player\":" + Json.string(actorPlayer)
                 + ",\"ability\":" + abilityJson()
                 + ",\"ability_unresolved\":" + Json.string(abilityUnresolved)

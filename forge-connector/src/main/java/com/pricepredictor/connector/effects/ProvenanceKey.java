@@ -236,8 +236,24 @@ public record ProvenanceKey(
      * <em>recipient</em>, not the donor, so keying by it would attribute an
      * anthem's effect to the creature that received it. That is the reason the
      * grantor step reads {@code getGrantorStatic()} instead.
+     *
+     * <p>A clause resolving inside a chosen mode of a charm keys to the
+     * charm's line <em>plus</em> that mode's {@code Choices$} position
+     * (FR-029a): the chain climbs to the root as for any sub-ability, and the
+     * option is read off the clause before the climb, because the root knows
+     * nothing of which clone is resolving. A mode {@link CharmModes} cannot
+     * place keeps the root key.
      */
     public static Resolved resolve(CardTraitBase trait) {
+        Resolved root = resolveRoot(trait);
+        if (root.key() == null) {
+            return root;
+        }
+        Integer option = CharmModes.optionOf(trait);
+        return option == null ? root : new Resolved(root.key().withOption(option), null);
+    }
+
+    private static Resolved resolveRoot(CardTraitBase trait) {
         if (trait == null) {
             // Not a resolver failure: a hook whose signature drifted hands the
             // collector something that is not a trait at all, and nothing that

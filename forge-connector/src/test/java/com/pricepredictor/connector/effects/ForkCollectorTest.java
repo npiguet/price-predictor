@@ -124,11 +124,14 @@ class ForkCollectorTest {
                 "forceResolution",
                 forge.game.Game.class,
                 forge.game.spellability.SpellAbility.class,
-                forge.game.player.Player.class);
+                forge.game.player.Player.class,
+                SnapshotBuilder.class);
         assertTrue(method != null, "no resolution step on the intervention path");
         // Returns the events it observed, so an empty payload can only mean the
-        // ability genuinely did nothing observable.
-        assertEquals(List.class, method.getReturnType());
+        // ability genuinely did nothing observable -- carried beside where each
+        // chosen mode began, which is what splits a modal one per mode (FR-029f).
+        var events = method.getReturnType().getDeclaredMethod("events");
+        assertEquals(List.class, events.getReturnType());
     }
 
     // ── the probe switch ────────────────────────────────────────────────

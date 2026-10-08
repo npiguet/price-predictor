@@ -55,6 +55,14 @@ import java.util.function.IntPredicate;
  *       read it. Parsed by {@code PatchedCollectors.CollectionCaps} along with the
  *       rest of the {@code effect.*} caps, which that record documents; echoed at
  *       startup because it is also the largest single lever on shard size.</li>
+ *   <li>{@code -Deffect.random.seat.share=<F>} and
+ *       {@code -Deffect.random.seat.probability=<P>} — in a share {@code F} of
+ *       matches, one seat chosen per match is a {@link RandomSeatController}
+ *       that draws uniformly from the legal options with probability {@code P}
+ *       at each decision point (FR-021). Such a match writes effect records
+ *       and its progress line, never a sealed row (FR-025). Read with the
+ *       other {@code effect.*} caps; echoed at startup when the share is
+ *       above zero.</li>
  *   <li>{@code -Dsealed.progress.file=<path>} — when set, one line is appended
  *       to this file per completed match via {@link ProgressWriter}, so a
  *       caller that never touches {@code output.file} (records-only mode) can
@@ -281,6 +289,16 @@ public class MatchWorkerMain {
             // reads "patched" while a channel this run meant to collect is
             // quietly empty. This is what names that.
             System.out.println(PatchHooks.report());
+            PatchedCollectors.CollectionCaps caps =
+                    PatchedCollectors.CollectionCaps.fromSystemProperties();
+            if (caps.randomSeatEnabled()) {
+                // Named at startup the way the probe state is: a run whose
+                // random-seat matches wrote no sealed rows is a run someone
+                // asked for, and the log is where that is checked.
+                System.out.println("Random seat: share=" + caps.randomSeatShare()
+                        + ", probability=" + caps.randomSeatProbability()
+                        + " (random-seat matches write effect records only)");
+            }
             // The worker loops until the supervisor terminates it, so close()
             // is never reached on the normal path. Without this the block in
             // flight — up to a few hundred records — is lost on every stop.
@@ -391,10 +409,16 @@ public class MatchWorkerMain {
             MatchResultWriter writer,
             CardsPlayedWriter cardsPlayedWriter,
             ProgressWriter progressWriter) {
-        if (writer != null) {
+        // Records-only per match (FR-025), beside the per-worker mode the
+        // writers' nulls express: a random-seat match had one seat playing
+        // at random, so its outcome says nothing about either deck and
+        // neither sealed corpus may take a row from it. Its effect records
+        // were written as the games ran; only the progress line is left.
+        boolean sealedRows = !result.randomSeat();
+        if (writer != null && sealedRows) {
             writer.write(result.matchResult());
         }
-        if (cardsPlayedWriter != null) {
+        if (cardsPlayedWriter != null && sealedRows) {
             for (CardsPlayedRow row : result.cardsPlayedRows()) {
                 cardsPlayedWriter.write(row);
             }

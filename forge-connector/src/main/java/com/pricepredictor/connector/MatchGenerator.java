@@ -251,7 +251,7 @@ public class MatchGenerator {
         for (GamePlayer.GameOutcome g : played.games()) {
             rows.add(buildRow(timestamp, matchResult, g, deckASet, deckBSet));
         }
-        return new MatchGenerationResult(matchResult, rows);
+        return new MatchGenerationResult(matchResult, rows, played.randomSeat());
     }
 
     private CardsPlayedRow buildRow(

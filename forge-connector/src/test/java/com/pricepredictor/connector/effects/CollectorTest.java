@@ -154,10 +154,36 @@ class CollectorTest {
         for (String key : List.of(
                 "record_id", "run_id", "timestamp", "game_id", "kind", "moment",
                 "subkind", "link_id", "mirror_of", "variant_of", "mode",
-                "interventional", "fork", "synthetic", "actor_player", "ability",
-                "state", "payload")) {
+                "interventional", "fork", "synthetic", "random_seat", "actor_player",
+                "ability", "state", "payload")) {
             assertTrue(json.contains("\"" + key + "\":"), key + " missing from " + json);
         }
+    }
+
+    /**
+     * {@code random_seat} follows {@code synthetic} on every record, and
+     * {@code what_if} follows it on the two legality subkinds alone
+     * (record-schema-delta.md): the order is the contract, and the first
+     * field's presence is how a reader names a gen-2 shard.
+     */
+    @Test
+    void randomSeatFollowsSyntheticOnEveryRecordAndWhatIfOnlyWhereSet() {
+        String plain = record(EffectRecord.KIND_RESOLUTION).toJson();
+        assertTrue(plain.contains("\"synthetic\":false,\"random_seat\":false,\"actor_player\":"),
+                plain);
+        assertFalse(plain.contains("what_if"), plain);
+
+        String legality = record(EffectRecord.KIND_PLAYABILITY)
+                .subkind("attackers").randomSeat(true).whatIf(false).actor("P1").toJson();
+        assertTrue(legality.contains(
+                "\"synthetic\":false,\"random_seat\":true,\"what_if\":false,\"actor_player\":\"P1\""),
+                legality);
+    }
+
+    @Test
+    void theActorIsReadableForTheStampAtTheWrite() {
+        EffectRecord record = record(EffectRecord.KIND_COMBAT).actor("P0");
+        assertEquals("P0", record.actorPlayer());
     }
 
     @Test

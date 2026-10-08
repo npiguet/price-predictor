@@ -1,21 +1,14 @@
 package com.pricepredictor.connector.effects;
 
-import forge.ai.ComputerUtil;
 import forge.ai.simulation.GameCopier;
 import forge.ai.simulation.GameSimulator;
 import forge.ai.simulation.GameStateEvaluator;
 import forge.game.Game;
-import forge.game.GameEntity;
-import forge.game.ability.AbilityUtils;
-import forge.game.ability.ApiType;
-import forge.game.ability.effects.CharmEffect;
 import forge.game.card.Card;
 import forge.game.player.Player;
-import forge.game.spellability.AbilitySub;
 import forge.game.spellability.SpellAbility;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -135,6 +128,29 @@ public final class ForkCollector {
         }
     }
 
+    /**
+     * Where a forced resolution's clauses report in, while one is running.
+     *
+     * <p>The clause hook is a JVM static that {@code PatchedCollectors} owns,
+     * and the live collector drops a fork's clauses on game identity — rightly,
+     * for its own bracket. A fork that splits a modal resolution into per-mode
+     * halves (FR-029f) needs those same clauses, so the live handler hands a
+     * clause it is not keeping to whatever fork is running on its thread, and
+     * {@link #forceResolution} installs the consumer for exactly the span of
+     * its own resolution. Thread-local like {@link #FORK_RUNNING}, and for the
+     * same reason: the engine runs games on more than one thread.
+     */
+    private static final ThreadLocal<java.util.function.Consumer<SpellAbility>> CLAUSE_LISTENER =
+            new ThreadLocal<>();
+
+    /** A clause of some other game is resolving; the running fork may want it. */
+    static void noteClauseResolving(SpellAbility clause) {
+        java.util.function.Consumer<SpellAbility> listener = CLAUSE_LISTENER.get();
+        if (listener != null) {
+            listener.accept(clause);
+        }
+    }
+
     private final Game game;
     private final RecordShardWriter writer;
     private final String gameId;
@@ -145,6 +161,10 @@ public final class ForkCollector {
     /** The run's snapshot depth, the same on every record this writes. */
     private final int[] snapshotTiers;
     private final Random random;
+    /** The draws a forced resolution makes, over the same seeded source. */
+    private final RandomChoices choices;
+    /** The match's random seat, for the {@code random_seat} stamp, or null. */
+    private String randomSeatPlayerId;
 
     private int interventionsUsed;
     private int probesUsed;
@@ -171,11 +191,20 @@ public final class ForkCollector {
         this.snapshotTiers = caps.snapshotTierArray();
         // Seeded so both branches of a probe see the same shuffles: a
         // difference between them has to be the keyword, not the draw.
-        this.random = new Random(seed);
+        // Scrambled as the sampler's seed is: games are seeded consecutively,
+        // and the first draw here is now a mode or target count, which an
+        // unscrambled seed would make nearly the same in every game.
+        this.random = new Random(PatchedCollectors.scramble(seed));
+        this.choices = new RandomChoices(random);
     }
 
     public long recordsWritten() {
         return recordsWritten;
+    }
+
+    /** Name the match's random seat; every record this writes is stamped against it. */
+    public void setRandomSeatPlayerId(String playerId) {
+        this.randomSeatPlayerId = playerId;
     }
 
     /** Forks created and thrown away rather than written: a copy the score
@@ -331,8 +360,8 @@ public final class ForkCollector {
             SnapshotBuilder snapshots = new SnapshotBuilder(fork, snapshotTiers);
             String state = snapshots.toJson(forked, referencedOf(forked));
 
-            List<EffectEvent> events = forceResolution(fork, forked, actor);
-            if (events == null || events.isEmpty()) {
+            ForcedResolution resolution = forceResolution(fork, forked, actor, snapshots);
+            if (resolution == null || resolution.events().isEmpty()) {
                 // An empty event list is not an observation. "The ability resolved
                 // and did nothing" and "the ability never got to act" render the
                 // same record, and the first corpus could not tell them apart —
@@ -344,27 +373,71 @@ public final class ForkCollector {
                 return false;
             }
 
-            emit(new EffectRecord(
-                    writer.nextRecordId(), writer.runId(),
-                    RecordShardWriter.timestamp(), gameId,
-                    EffectRecord.KIND_RESOLUTION, mode)
-                    .moment(EffectRecord.MOMENT_RESOLUTION)
-                    .interventional(true)
-                    .fork(true)
-                    // No link_id: the effect half is written alone, because there
-                    // was no real activation to pair it with.
-                    .actor(SnapshotBuilder.playerId(perspective))
-                    // The *live* ability's keys, not the fork's. A provenance key
-                    // names a printed line, which the copy shares — but keying off
-                    // the copy would make the record's identity depend on a game
-                    // that no longer exists.
-                    .ability(keysOf(ability))
-                    .state(state)
-                    .payload(EffectRecord.eventsPayload(events)));
+            // The *live* ability's keys, not the fork's. A provenance key
+            // names a printed line, which the copy shares — but keying off
+            // the copy would make the record's identity depend on a game
+            // that no longer exists.
+            ProvenanceKey.Resolved keys = keysOf(ability);
+            String actorId = SnapshotBuilder.playerId(perspective);
+            if (resolution.modes().isEmpty()) {
+                emit(forkedHalf(actorId, keys, state, resolution.events()));
+                return true;
+            }
+            // A modal resolution: one effect half per chosen mode, by the same
+            // rule the live bracket applies (FR-029f), each through the mode's
+            // option line and with the board as it stood when that mode's
+            // first clause began. Events before the first mode's clause — the
+            // charm's own, of which there are none — ride with the first.
+            List<EffectEvent> events = resolution.events();
+            List<ModeBoundary> modes = resolution.modes();
+            for (int i = 0; i < modes.size(); i++) {
+                ModeBoundary boundary = modes.get(i);
+                int from = i == 0 ? 0 : boundary.firstEvent();
+                int to = i + 1 < modes.size() ? modes.get(i + 1).firstEvent() : events.size();
+                ProvenanceKey.Resolved modeKeys = boundary.option() == null || keys.key() == null
+                        ? keys
+                        : new ProvenanceKey.Resolved(keys.key().withOption(boundary.option()), null);
+                emit(forkedHalf(actorId, modeKeys, boundary.state(), events.subList(from, to)));
+            }
             return true;
         } finally {
             FORK_RUNNING.set(wasForkRunning);
         }
+    }
+
+    /**
+     * One interventional effect half. No {@code link_id}: it is written alone,
+     * because there was no real activation to pair it with.
+     */
+    private EffectRecord forkedHalf(
+            String actorId, ProvenanceKey.Resolved keys, String state,
+            List<EffectEvent> events) {
+        return new EffectRecord(
+                writer.nextRecordId(), writer.runId(),
+                RecordShardWriter.timestamp(), gameId,
+                EffectRecord.KIND_RESOLUTION, mode)
+                .moment(EffectRecord.MOMENT_RESOLUTION)
+                .interventional(true)
+                .fork(true)
+                .actor(actorId)
+                .ability(keys)
+                .state(state)
+                .payload(EffectRecord.eventsPayload(events));
+    }
+
+    /**
+     * Where one chosen mode began in a forced resolution's event stream.
+     *
+     * @param option     the mode's {@code Choices$} position, or null
+     * @param firstEvent the index of the first event filed after its first
+     *                   clause began resolving
+     * @param state      the fork's board at that clause (FR-029b)
+     */
+    private record ModeBoundary(Integer option, int firstEvent, String state) {
+    }
+
+    /** What a forced resolution produced, and where its modes began. */
+    private record ForcedResolution(List<EffectEvent> events, List<ModeBoundary> modes) {
     }
 
     /**
@@ -381,122 +454,85 @@ public final class ForkCollector {
      * <p>Resolution drains the whole stack, so a trigger the effect put there
      * is part of what the effect did.
      *
-     * @return the events, empty if the ability resolved and did nothing
-     *         observable, or null if it could not be resolved at all
+     * <p>The modes, targets and X are drawn at random from the legal options,
+     * out of the fork's own seeded source, rather than through the AI. That
+     * is the same decision the cost bypass makes and for the same reason: the
+     * corpus wants what the effect <b>does</b>, and asking the AI which mode
+     * is good would reproduce exactly the selection bias the intervention
+     * exists to escape. Seeded so both branches of a probe and a rerun of a
+     * game make the same choice. The first implementation chose neither
+     * targets nor modes — it set the activating player, pushed the ability
+     * and resolved it — and every one of the 88 sampled interventional
+     * records had an empty {@code refs.targets}, the empty ones being Lava
+     * Axe, Disintegrate, Drain Life, Mind Control and their like.
+     *
+     * @return what resolved and where its modes began; events empty if the
+     *         ability resolved and did nothing observable; null if it could
+     *         not be resolved at all
      */
-    private List<EffectEvent> forceResolution(
-            Game fork, SpellAbility ability, Player actor) {
+    private ForcedResolution forceResolution(
+            Game fork, SpellAbility ability, Player actor, SnapshotBuilder snapshots) {
         // The forked line is the sink's root: an event's attributed_to is read
         // against the ability the bracket belongs to, and a fork's bracket is
         // exactly this one forced resolution.
         ForkEventSink sink = new ForkEventSink(fork, ability);
         fork.subscribeToEvents(sink);
+        List<ModeBoundary> modes = new ArrayList<>();
+        java.util.function.Consumer<SpellAbility> previousListener = CLAUSE_LISTENER.get();
+        // A mode's first clause is the boundary between per-mode halves, and
+        // the moment its snapshot is taken (FR-029b, FR-029f). Only this
+        // ability's own modes count: the live clause handler forwards every
+        // clause it drops, and a trigger the forced resolution put on the
+        // fork's stack may be modal too.
+        CLAUSE_LISTENER.set(clause -> {
+            CharmModes.ModeStart start = CharmModes.modeStartOf(clause);
+            if (start != null && clause.getHostCard() == ability.getHostCard()) {
+                modes.add(new ModeBoundary(
+                        start.option(), sink.events().size(),
+                        snapshots.toJson(ability, referencedOf(ability))));
+            }
+        });
         try {
             ability.setActivatingPlayer(actor);
-            chooseModes(ability);
-            if (!chooseTargets(ability)) {
+            if (!choices.chooseModes(ability) || !choices.chooseTargets(ability)) {
                 return null;
             }
-            announceX(ability);
+            // Floor one, for the reason the first version announced exactly
+            // one: an X of zero resolves into the same silence a missing
+            // target does, and the fork never pays, so the leftover mana of
+            // the forked actor is what bounds the draw above it.
+            choices.announceX(ability, actor, 1);
             fork.copyLastState();
             fork.getStack().add(ability);
             GameSimulator.resolveStack(fork, actor.getWeakestOpponent());
-            return sink.events();
+            return new ForcedResolution(sink.events(), List.copyOf(modes));
         } catch (RuntimeException | StackOverflowError e) {
             // A forced resolution reaches states ordinary play does not — an
             // ability resolving with no legal target, a cost that was never
             // paid — and a card that throws is one this fork cannot describe.
             // Discarding is right; failing the worker is not.
             return null;
+        } finally {
+            CLAUSE_LISTENER.set(previousListener);
         }
     }
 
-
-    /**
-     * Pick this fork's modes, where the line is modal.
-     *
-     * <p>At random from the legal options, out of the fork's own seeded source,
-     * rather than through the AI. That is the same decision the cost bypass
-     * above makes and for the same reason: the corpus wants what the effect
-     * <b>does</b>, and asking the AI which mode is good would reproduce exactly
-     * the selection bias the intervention exists to escape. Seeded so both
-     * branches of a probe and a rerun of a game make the same choice.
-     */
-    void chooseModes(SpellAbility ability) {
-        if (ability.getApi() != ApiType.Charm || ability.getChosenList() != null) {
-            return;
-        }
-        List<AbilitySub> options = CharmEffect.makePossibleOptions(ability);
-        if (options == null || options.isEmpty()) {
-            return;
-        }
-        int wanted = AbilityUtils.calculateAmount(
-                ability.getHostCard(),
-                ability.getParamOrDefault("CharmNum", "1"), ability);
-        wanted = Math.max(1, Math.min(wanted, options.size()));
-        List<AbilitySub> shuffled = new ArrayList<>(options);
-        Collections.shuffle(shuffled, random);
-        List<AbilitySub> chosen = new ArrayList<>(shuffled.subList(0, wanted));
-        ability.setChosenList(chosen);
-        CharmEffect.chainAbilities(ability, chosen);
+    /** The fork's mode draw, for a test of the draw alone. */
+    boolean chooseModes(SpellAbility ability) {
+        return choices.chooseModes(ability);
     }
 
-    /**
-     * Give every targeting clause of the chain legal targets.
-     *
-     * <p>The feature spec says an intervention resolves "with chosen targets and
-     * modes" and the first implementation chose neither: it set the activating
-     * player, pushed the ability and resolved it. A "deal 5 damage to target
-     * player" that resolves with no target does nothing, which is why every one
-     * of the 88 sampled interventional records had an empty {@code refs.targets}
-     * and why the empty ones were Lava Axe, Disintegrate, Drain Life, Mind
-     * Control and their like.
-     *
-     * <p>The whole {@code getSubAbility()} chain, not just the root: a sub-ability
-     * targets independently, and a chain whose second clause has no target
-     * resolves into the same silence.
-     *
-     * @return false when some clause has no legal target at all, which is an
-     *         intervention with no counterfactual to record rather than one
-     *         that did nothing
-     */
+    /** The fork's target draw, for a test of the draw alone. */
     boolean chooseTargets(SpellAbility ability) {
-        for (SpellAbility clause = ability; clause != null;
-                clause = clause.getSubAbility()) {
-            if (!clause.usesTargeting()) {
-                continue;
-            }
-            clause.resetTargets();
-            List<GameEntity> candidates =
-                    clause.getTargetRestrictions().getAllCandidates(clause);
-            List<GameEntity> shuffled = new ArrayList<>(candidates);
-            Collections.shuffle(shuffled, random);
-            for (GameEntity candidate : shuffled) {
-                if (!clause.canAddMoreTarget()) {
-                    break;
-                }
-                clause.getTargets().add(candidate);
-            }
-            if (!clause.isMinTargetChosen()) {
-                return false;
-            }
-        }
-        return true;
+        return choices.chooseTargets(ability);
     }
 
     /**
-     * Announce an X the fork never paid.
-     *
-     * <p>An X spell whose X is null resolves as an X of zero, which is the same
-     * silence a missing target produces. One is the smallest value that makes
-     * the effect happen at all; what value the corpus actually wants is an open
-     * question, and a bigger one would have to be justified against mana the
-     * fork deliberately never paid.
+     * The fork's X, for a test of the draw alone: nobody pays, so the floor
+     * of one is the whole answer.
      */
     void announceX(SpellAbility ability) {
-        if (ability.costHasX() && ability.getXManaCostPaid() == null) {
-            ability.setXManaCostPaid(1);
-        }
+        choices.announceX(ability, null, 1);
     }
 
     /**
@@ -843,6 +879,8 @@ public final class ForkCollector {
     }
 
     private void emit(EffectRecord record) {
+        record.randomSeat(
+                randomSeatPlayerId != null && randomSeatPlayerId.equals(record.actorPlayer()));
         writer.write(record.toJson());
         recordsWritten++;
     }

@@ -143,6 +143,40 @@ class MatchWorkerMainTest {
         assertEquals(1, Files.readAllLines(progressFile).size());
     }
 
+    /**
+     * FR-025: a match with a random seat writes its progress line and nothing
+     * to either sealed corpus, even with both writers wired (spec Story 3
+     * scenario 5). Its effect records were written as the games ran; the
+     * outcome of a game one seat played at random says nothing about a deck.
+     */
+    @Test
+    void aRandomSeatMatchAddsNoOutcomeOrCardsPlayedRow(@TempDir Path tmp) throws IOException {
+        Path outcomesFile = tmp.resolve("match-outcomes.txt");
+        Path cardsPlayedFile = tmp.resolve("cards-played.txt");
+        Path progressFile = tmp.resolve("run.progress.txt");
+        MatchResultWriter writer = new MatchResultWriter(outcomesFile);
+        CardsPlayedWriter cardsPlayedWriter = new CardsPlayedWriter(cardsPlayedFile);
+        ProgressWriter progressWriter = new ProgressWriter(progressFile);
+        MatchGenerationResult ordinary = twoGameResult();
+        MatchGenerationResult randomSeat = new MatchGenerationResult(
+                ordinary.matchResult(), ordinary.cardsPlayedRows(), true);
+
+        MatchWorkerMain.recordMatch(randomSeat, writer, cardsPlayedWriter, progressWriter);
+
+        assertFalse(Files.exists(outcomesFile), "no match-outcomes row for a random-seat match");
+        assertFalse(Files.exists(cardsPlayedFile), "no cards-played row either");
+        assertEquals(1, Files.readAllLines(progressFile).size(), "the progress line is written");
+    }
+
+    /** The result still validates its rows for an ordinary match, and tolerates none for a random-seat one. */
+    @Test
+    void aRandomSeatResultMayCarryNoRows() {
+        MatchResult matchResult = twoGameResult().matchResult();
+        assertDoesNotThrow(() -> new MatchGenerationResult(matchResult, List.of(), true));
+        assertThrows(IllegalArgumentException.class,
+                () -> new MatchGenerationResult(matchResult, List.of(), false));
+    }
+
     @Test
     void noProgressWriterMeansNoProgressFileCreated(@TempDir Path tmp) {
         // The unset case (plain `sealed match-outcomes` today, no
