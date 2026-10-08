@@ -718,12 +718,13 @@ class TrainingLoop:
             terms["value"] = value_loss(
                 model.value_head(matrix).float(),
                 torch.tensor([row.values for row in rows]).to(self.device),
-                torch.tensor([row.mask for row in rows]).to(self.device),
+                # Kept on the host: the loss decides which rows it scores there.
+                torch.tensor([row.mask for row in rows]),
             )
         if self.config.api_weight > 0.0 and model.api_type_head is not None:
             types, keys = self._api_batch(encoded)
             terms["api"] = api_loss(
-                model.api_type_head(matrix).float(), types.to(self.device),
+                model.api_type_head(matrix).float(), types,
                 model.param_key_head(matrix).float()
                 if model.param_key_head is not None else None,
                 keys.to(self.device) if model.param_key_head is not None else None,

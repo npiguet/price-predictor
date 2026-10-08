@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import hashlib
 import random
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 
 import numpy as np
 import torch
@@ -51,6 +51,13 @@ IDENTITY_TABLE_SIZE = 1 << 17
 #: Running-covariance decay for the noise on ``e`` (FR-056).
 NOISE_DECAY = 0.99
 
+#: Steps between two factorizations of the running covariance. A GPU
+#: eigendecomposition stalls the step on the host, which cost about a tenth of
+#: a training step when taken every step. ``Σ`` itself still updates every
+#: step; at decay 0.99 ten steps move it by about a tenth of the way towards
+#: the recent batches, so the factor drawn from lags it by at most that much.
+NOISE_REFACTOR_EVERY = 10
+
 
 class NoiseState:
     """Gaussian noise on ``e`` scaled to the spread of ``e`` itself (FR-056).
@@ -78,6 +85,7 @@ class NoiseState:
     def __init__(
         self, ratio: float, ramp_steps: int, *,
         decay: float = NOISE_DECAY,
+        refactor_every: int = NOISE_REFACTOR_EVERY,
     ) -> None:
         self.ratio = ratio
         self.ramp_steps = max(int(ramp_steps), 1)
@@ -86,6 +94,10 @@ class NoiseState:
         self.sigma: torch.Tensor | None = None
         #: Optimizer steps taken; set by the training loop before each batch.
         self.step = 0
+        self.refactor_every = max(int(refactor_every), 1)
+        #: ``V √Λ`` of the last factorized ``Σ`` and the draw it was taken at.
+        self._factor: torch.Tensor | None = None
+        self._draws_since_factor = 0
 
     def scale(self) -> float:
         """``r`` at the current step."""
@@ -119,8 +131,12 @@ class NoiseState:
         if r <= 0.0 or self.sigma is None:
             return matrix
         with torch.no_grad(), _exact(matrix):
-            values, vectors = torch.linalg.eigh(self.sigma)
-            factor = vectors * (r * values.clamp(min=0.0).sqrt())
+            if self._factor is None or self._draws_since_factor >= self.refactor_every:
+                values, vectors = torch.linalg.eigh(self.sigma)
+                self._factor = vectors * values.clamp(min=0.0).sqrt()
+                self._draws_since_factor = 0
+            self._draws_since_factor += 1
+            factor = r * self._factor
             draw = torch.randn(
                 matrix.shape[0], factor.shape[0],
                 device=matrix.device, dtype=factor.dtype,
@@ -393,36 +409,35 @@ class SurfaceBatcher:
         ``mask_prob`` of their tokens replaced by ``[MASK]`` — never ``[CLS]``,
         never padding — so the effect head keeps reading the unmasked ``e`` and
         the corruption shapes only what the encoder's token outputs must
-        recover. Returns ``(hidden, targets, mask)`` on the device, or None
-        when nothing was masked.
+        recover.
+
+        Returns ``(hidden, targets, None)`` on the device, already reduced to the
+        masked positions, or None when nothing was masked. The mask is drawn and
+        the positions picked on the host, so the device never has to report
+        which they were; and the vocabulary projection then runs over the
+        masked positions alone rather than over every position of the batch,
+        which at a few hundred texts was half a gigabyte of logits to score a
+        seventh of them.
         """
         if not self._prepared or mask_prob <= 0.0:
             return None
-        masked_lines, targets, chosen = [], [], []
-        for line in self._prepared:
-            ids = list(line.token_ids)
-            picks = [0] * len(ids)
-            for position in range(1, len(ids)):
-                if self.rng.random() < mask_prob:
-                    picks[position] = 1
-                    ids[position] = self.tokenizer.mask_id
-            masked_lines.append(replace(line, token_ids=ids))
-            targets.append(list(line.token_ids))
-            chosen.append(picks)
-        if not any(any(row) for row in chosen):
+        batch = collate_lines(self._prepared, self.tokenizer.pad_id)
+        ids = batch["token_ids"]
+        generator = torch.Generator().manual_seed(self.rng.getrandbits(63))
+        picks = (torch.rand(ids.shape, generator=generator) < mask_prob)
+        picks &= batch["attention_mask"].bool()
+        picks[:, 0] = False  # never [CLS]
+        positions = picks.flatten().nonzero().squeeze(1)
+        if positions.numel() == 0:
             return None
-        width = max(len(row) for row in targets)
-        target = torch.tensor(
-            [row + [self.tokenizer.pad_id] * (width - len(row)) for row in targets],
-            dtype=torch.long,
-        )
-        mask = torch.tensor(
-            [row + [0] * (width - len(row)) for row in chosen], dtype=torch.bool,
-        )
-        batch = collate_lines(masked_lines, self.tokenizer.pad_id)
+        targets = ids.flatten().index_select(0, positions)
+        batch["token_ids"] = ids.masked_fill(picks, self.tokenizer.mask_id)
         batch = {k: v.to(self.device) for k, v in batch.items()}
         _e, hidden = encoder(**batch)
-        return hidden, target.to(self.device), mask.to(self.device)
+        selected = hidden.reshape(-1, hidden.shape[-1]).index_select(
+            0, positions.to(self.device, non_blocking=True),
+        )
+        return selected, targets.to(self.device, non_blocking=True), None
 
     def _identity_vectors(self, ordered: list[str]) -> torch.Tensor:
         """A free learned vector per ability text, keyed by hash.

@@ -819,15 +819,18 @@ def value_loss(
     and the sum is normalized over the texts.
     """
     rows = max(int(prediction.shape[0]), 1)
-    mask = mask.bool()
+    # The mask is decided on the host, where the targets were built: testing a
+    # device mask and indexing by it would stall the step once per target.
+    mask = mask.detach().bool().cpu()
     total = prediction.new_zeros(())
     for index, (name, kind) in enumerate(VALUE_TARGETS):
-        selected = mask[:, index]
-        if not selected.any():
+        selected = mask[:, index].nonzero().squeeze(1)
+        if selected.numel() == 0:
             continue
+        selected = selected.to(prediction.device, non_blocking=True)
         start, end = VALUE_SLICES[name]
-        output = prediction[selected, start:end]
-        wanted = target[selected, index]
+        output = prediction.index_select(0, selected)[:, start:end]
+        wanted = target.to(prediction.device).index_select(0, selected)[:, index]
         match kind:
             case ValueKind.COUNT:
                 total = total + _poisson(output.squeeze(-1), wanted)
@@ -841,14 +844,17 @@ def value_loss(
 
 
 def mlm_loss(
-    logits: torch.Tensor, targets: torch.Tensor, mask: torch.Tensor,
+    logits: torch.Tensor, targets: torch.Tensor, mask: torch.Tensor | None,
 ) -> torch.Tensor:
     """Cross-entropy at the masked positions only.
 
     Training-only: it teaches the encoder the language of card text, which the
     effect objective alone would only reach through whichever words happened to
-    change an outcome.
+    change an outcome. ``mask`` None means the rows are already the masked
+    positions, which is how the batcher hands them over.
     """
+    if mask is None:
+        return functional.cross_entropy(logits, targets)
     if not mask.any():
         return logits.new_zeros(())
     return functional.cross_entropy(logits[mask], targets[mask])
@@ -869,11 +875,14 @@ def api_loss(
     total = None
     if type_logits is not None and type_targets is not None:
         # A line with no API type (a replacement, say) carries -1 and is
-        # skipped rather than scored against an invented class.
-        known = type_targets >= 0
-        if known.any():
+        # skipped rather than scored against an invented class. The test runs
+        # on the host, where the targets were built, so it costs no sync.
+        known = (type_targets.detach().cpu() >= 0).nonzero().squeeze(1)
+        if known.numel():
+            known = known.to(type_logits.device, non_blocking=True)
             total = functional.cross_entropy(
-                type_logits[known], type_targets[known],
+                type_logits.index_select(0, known),
+                type_targets.to(type_logits.device).index_select(0, known),
             )
     if key_logits is not None and key_targets is not None:
         keys = functional.binary_cross_entropy_with_logits(

@@ -296,3 +296,47 @@ def test_a_rank_deficient_batch_under_bf16_autocast_still_draws_noise():
     assert torch.isfinite(out).all()
     assert out.dtype == matrix.dtype
     assert torch.allclose(noise.sigma, noise.sigma.T)
+
+
+# ── the MLM pass (FR-060b) ───────────────────────────────────────────────
+
+class _MaskTokens:
+    pad_id, mask_id = 0, 1
+
+
+class _EchoEncoder:
+    """Returns each position's (masked) token id as its hidden state."""
+
+    def __call__(self, token_ids, **_rest):
+        return None, token_ids.unsqueeze(-1).float().repeat(1, 1, 2)
+
+
+def _mlm_batcher(lengths) -> SurfaceBatcher:
+    from effects.domain.ability_encoder import EncodedLine
+
+    batcher = _batcher()
+    batcher.tokenizer = _MaskTokens()
+    batcher._prepared = [
+        EncodedLine(
+            token_ids=[2] + list(range(10, 10 + n - 1)), role_ids=[0] * n,
+            numbers=[0.0] * n, number_mask=[0] * n,
+        )
+        for n in lengths
+    ]
+    return batcher
+
+
+def test_the_mlm_pass_returns_only_the_masked_positions():
+    batcher = _mlm_batcher([6, 3, 9])
+    hidden, targets, mask = batcher.mlm_inputs(_EchoEncoder(), 0.5)
+    assert mask is None
+    # Every gathered row is a position the pass replaced with [MASK]...
+    assert torch.all(hidden[:, 0] == _MaskTokens.mask_id)
+    # ...and its target is the token that stood there: never [CLS] (id 2),
+    # never padding (id 0).
+    assert targets.numel() == hidden.shape[0] > 0
+    assert torch.all(targets >= 10)
+
+
+def test_the_mlm_pass_masks_nothing_at_probability_zero():
+    assert _mlm_batcher([5, 5]).mlm_inputs(_EchoEncoder(), 0.0) is None

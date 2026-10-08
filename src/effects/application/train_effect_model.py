@@ -1121,12 +1121,23 @@ def check_manifest_holdout(manifest, config: TrainEffectModelConfig) -> None:
             "the holdout cannot be recomputed: no converted card tree among "
             f"--cards-folder {', '.join(str(f) for f in config.cards_folders)}"
         )
+    import time
+
+    started = time.monotonic()
     card_files = load_card_files(cards_folder)
+    logger.info(
+        "Recomputing the %s holdout over %d cards' sidecars under %s.",
+        unit, len(card_files), cards_folder,
+    )
     recomputed = text_keyed_holdout(
         card_files, load_card_texts(card_files, SidecarCache(roots)),
         permille=manifest.holdout_permille,
         max_carriers=manifest.holdout_max_carriers,
         unit=unit,
+    )
+    logger.info(
+        "Holdout recomputed in %.0fs: %d held-out text(s).",
+        time.monotonic() - started, len(recomputed.texts),
     )
     recorded = {normalize_script_text(text) for text in manifest.held_out_texts}
     if recomputed.texts != recorded:
