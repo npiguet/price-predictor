@@ -140,6 +140,7 @@ def _train(monkeypatch, records, definitions, *, prefetch: bool):
     threads: list[str] = []
     real_prepare = TrainingLoop._prepare_step
     real_loss = TrainingLoop._loss_for
+    real_mlm = TrainingLoop._mlm_backward
 
     def prepare(self, *args, **kwargs):
         threads.append(threading.current_thread().name)
@@ -148,13 +149,19 @@ def _train(monkeypatch, records, definitions, *, prefetch: bool):
     def loss_for(self, *args, **kwargs):
         total, parts, shipped = real_loss(self, *args, **kwargs)
         losses.append((float(total.detach()), float(shipped.detach())))
+        return total, parts, shipped
+
+    def mlm_backward(self, *args, **kwargs):
+        # Captured after the MLM pass, which runs after the main backward, so
+        # the step's terms include it.
+        real_mlm(self, *args, **kwargs)
         terms.append({
             name: float(value.detach()) for name, value in self._last_terms.items()
         })
-        return total, parts, shipped
 
     monkeypatch.setattr(TrainingLoop, "_prepare_step", prepare)
     monkeypatch.setattr(TrainingLoop, "_loss_for", loss_for)
+    monkeypatch.setattr(TrainingLoop, "_mlm_backward", mlm_backward)
     fields = fields_for_epoch(
         loop.config, present=frozenset(sampling_class(r) for r in records), epoch=1,
     )

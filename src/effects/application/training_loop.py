@@ -493,6 +493,8 @@ class TrainingLoop:
         self._api_targets: dict[str, tuple[int, tuple[int, ...]]] = {}
         #: The last ``_loss_for``'s head terms, as device tensors.
         self._last_terms: dict[str, torch.Tensor] = {}
+        #: The step's masked tokens and batcher, for `_mlm_backward`.
+        self._pending_mlm = None
         #: This epoch's head terms, summed on the device and read once.
         self._epoch_terms: dict[str, torch.Tensor] = {}
         self._epoch_term_steps = 0
@@ -892,14 +894,38 @@ class TrainingLoop:
                 keys.to(self.device, non_blocking=True)
                 if model.param_key_head is not None else None,
             )
-        if targets.mlm is not None:
+        # The MLM pass is a second encoder forward over the batch's texts. It is
+        # left for `_mlm_backward`, which runs it after the main loss's backward
+        # has freed the first pass's activations: run here, both passes' graphs
+        # were alive at once and a batch of long texts overflowed 8 GB. The
+        # gradient is the same sum either way.
+        self._pending_mlm = (
+            (targets.mlm, batcher) if targets.mlm is not None else None
+        )
+        return terms
+
+    def _mlm_backward(self, encoder, model) -> None:
+        """The MLM term's forward and backward, after the main loss's backward.
+
+        Its weighted gradient adds to the one already accumulated, which is the
+        gradient of the summed objective; the term is recorded with the step's
+        other heads for the epoch line.
+        """
+        pending, self._pending_mlm = self._pending_mlm, None
+        if pending is None:
+            return
+        masked, batcher = pending
+        with torch.autocast(
+            device_type="cuda", dtype=torch.bfloat16, enabled=self.autocast,
+        ):
             token_hidden, token_targets, token_mask = batcher.mlm_forward(
-                encoder, targets.mlm,
+                encoder, masked,
             )
-            terms["mlm"] = mlm_loss(
+            term = mlm_loss(
                 model.mlm_head(token_hidden).float(), token_targets, token_mask,
             )
-        return terms
+        (self.config.mlm_weight * term / self.config.grad_accum).backward()
+        self._last_terms = {**self._last_terms, "mlm": term.detach()}
 
     def _api_batch(
         self, texts: Sequence[str], lines: Mapping[str, object],
@@ -1445,6 +1471,7 @@ class TrainingLoop:
                 # training-only heads on top for the backward pass.
                 shipped = rest[0] if rest else loss
                 (loss / self.config.grad_accum).backward()
+                self._mlm_backward(encoder, model)
                 if (step + 1) % self.config.grad_accum == 0:
                     # Read back only on the step that logs them: each read
                     # stalls the step until the GPU drains.

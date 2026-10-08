@@ -111,12 +111,18 @@ class _Batcher:
 
 
 def _terms(loop, records, batcher, model, hidden, *, training):
-    """Both halves of the head terms: targets on the host, losses after."""
+    """Both halves of the head terms: targets on the host, losses after.
+
+    The MLM term is computed after the main backward in training, so the step
+    is finished here the way the loop finishes it.
+    """
     targets = loop._head_targets(
         records, batcher, batcher.prepared(), training=training,
         heads=loop._training_heads(model) if training else frozenset(),
     )
-    return loop._head_terms(targets, batcher, None, model, hidden)
+    loop._last_terms = loop._head_terms(targets, batcher, None, model, hidden)
+    loop._mlm_backward(None, model)
+    return loop._last_terms
 
 
 def _kinds(records):
