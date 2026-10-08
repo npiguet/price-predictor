@@ -26,6 +26,8 @@ two populations behind them would make that line unreadable.
 
 from __future__ import annotations
 
+import logging
+import time
 from dataclasses import dataclass, field
 
 import torch
@@ -45,6 +47,12 @@ from effects.domain.effect_model import (
     FieldSpec,
     FieldType,
 )
+
+logger = logging.getLogger(__name__)
+
+#: Records read between two progress lines. The game-disjoint stratum streams
+#: from the raw corpus and runs for many minutes with nothing else to say.
+PROGRESS_EVERY_RECORDS = 50_000
 
 #: Observations per forward pass. Half of gate 1's record batch, because every
 #: observation is built twice — as collected and perturbed — in one batch.
@@ -215,12 +223,21 @@ def score_keywords(
 
     encoder.eval()
     model.eval()
+    started = time.monotonic()
+    read = observed = 0
     with torch.no_grad():
         for record in records:
+            read += 1
+            if read % PROGRESS_EVERY_RECORDS == 0:
+                logger.info(
+                    "gate 2: %d records read, %d observations scored (%.0fs)",
+                    read, observed, time.monotonic() - started,
+                )
             for row, participant in qualifying_observations(
                 record, rows, resolver,
             ):
                 pending.append((record, row, participant))
+                observed += 1
                 if len(pending) == BATCH_OBSERVATIONS:
                     _score_chunk(
                         pending, encoder, model, batcher, totals,
@@ -232,6 +249,10 @@ def score_keywords(
                 pending, encoder, model, batcher, totals,
                 fields=fields, keywords_of=resolver.keywords_of,
             )
+    logger.info(
+        "gate 2: %d records read, %d observations scored (%.0fs)",
+        read, observed, time.monotonic() - started,
+    )
 
     return {
         keyword: KeywordScore(

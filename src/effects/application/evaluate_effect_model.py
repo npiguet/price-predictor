@@ -815,12 +815,14 @@ def run(config: EvaluateEffectModelConfig) -> EvaluationReport:
     from effects.domain.ability_encoder import surface_of
 
     report = EvaluationReport()
+    logger.info("loading the ability cache under %s", config.abilities_root)
     # The surface the checkpoint encoded from, so every geometry check keys
     # the cache on the texts its vectors actually encode.
     surface = surface_of(vocab_path)
     cached = load_shipping_cache(config, surface=surface)
 
     # ── gate 3: geometry, read off the cache ──
+    logger.info("gate 3: geometry over %d unique cached texts", len(cached.by_text))
     vectors = cached.matrix()
     if vectors.shape[0] < 2:
         report.add(CheckResult(
@@ -845,6 +847,7 @@ def run(config: EvaluateEffectModelConfig) -> EvaluationReport:
         ))
 
     # ── gate 2: per keyword, routing only ──
+    logger.info("gate 2: scoring the damage-step keywords on the game-disjoint stratum")
     verdicts = run_gate_two(
         config, main, vocab_path=vocab_path, keyword_path=keyword_path,
     )
@@ -852,6 +855,7 @@ def run(config: EvaluateEffectModelConfig) -> EvaluationReport:
     report.add(evaluate_gate_two(verdicts))
 
     # ── breakdowns: per text, rarity, family, policy, decision (FR-064–068) ──
+    logger.info("breakdowns: scoring both validation strata")
     for check in run_breakdowns(
         config, main, corpus_path,
         vocab_path=vocab_path, keyword_path=keyword_path,
@@ -859,6 +863,7 @@ def run(config: EvaluateEffectModelConfig) -> EvaluationReport:
         report.add(check)
 
     # ── e-geometry checks, all reported ──
+    logger.info("reported checks: ward, neighbours, UMAP, decodability, baselines")
     report.add(check_ward(cached))
     report.add(check_nearest_neighbours(cached, NEIGHBOUR_QUERIES))
     report.add(check_umap(cached))
