@@ -130,15 +130,21 @@ keyword zero-shot, beside trained keywords; "gate 1 skipped" when no identity va
 | `--sealed-encoder-checkpoint` | `models/sealed/encoder/latest.pt` | sealed vectors to concatenate |
 | `--scratch-dir` | required | where the vectors and the scorer checkpoint go |
 
-Runs `python -m sealed train-scorer` Phase A on `--scratch-dir` as a subprocess, with its checkpoint
-directory under `--scratch-dir`. Writes nothing under `output/cardsfolder/`. Imports nothing from
-`sealed.application`.
+Copies the converted `.txt` files under `--scratch-dir`, runs `python -m sealed encode-cards` there with
+`--sealed-encoder-checkpoint` and the `vocab.txt` beside it, inserts each card's pooled `e` before the
+trailing deterministic-feature block of its vector (zeros for a card with no ability line), and runs
+`python -m sealed train-scorer` Phase A (`--embedding-lr 0`) on that directory as a subprocess, with
+its checkpoint directory under `--scratch-dir`. Writes nothing under `output/cardsfolder/`. Imports
+nothing from `sealed.application`.
 
 ## `scripts/effect_embedding_probes/*.py` (existing)
 
-Every script takes `--checkpoint` (default `models/effects/effect-model/latest.pt`) and
-`--abilities-root` (default `output/effects/abilities`), and reads vocabulary, cache and width of `e`
-from them. Output goes under `output/effects/reports/embedding-probes-<checkpoint stem>-<date>/`.
+Every script takes `--checkpoint` (default `models/effects/effect-model/latest.pt`),
+`--abilities-root` (default `output/effects/abilities`) and a repeatable `--cards-folder` (default: the
+trees the checkpoint recorded, else `output/cardsfolder/` and `output/tokenscripts/`), and reads
+vocabulary, cache and width of `e` from them. Output goes under
+`output/effects/reports/embedding-probes-<label>-<date>/`, the label being the checkpoint stem, or
+`<run dir>-latest` for a `latest.pt`.
 `taxonomy` columns are omitted when that cache is absent. `pca_directions.py` adds the participation
 ratio.
 
@@ -148,16 +154,25 @@ ratio.
 |---|---|---|
 | `--checkpoint` | required | any effects checkpoint, gen-1 included |
 | `--corpus` | the checkpoint's recorded corpus | curated corpus the probe set belongs to |
-| `--records-dir` | `output/effects/records/` | raw shards holding the probe games |
+| `--records-dir` | none | override: read the probe games from these raw shards instead of the corpus's `validation/{card-disjoint,game-disjoint}/` shards, which the probe set lists |
 | `--cards-folder` | `output/cardsfolder/`, `output/tokenscripts/` | sidecar trees (gen-1: the kept-aside copy) |
 | `--abilities-root` | `output/effects/abilities` | cache |
 | `--freeze-probe-set` | off | enumerate and write the probe set for `--corpus`, then exit |
 | `--families` | all | comma list of family names |
 | `--per-layer` | off | probe every trunk layer through forward hooks |
 | `--method-c` | off | shallow trunk on frozen `e` |
+| `--method-c-layers`, `--method-c-steps` | 1, fixed in code | the shallow trunk's depth (0 or 1) and training steps |
+| `--games-per-stratum` | 300 | probe games enumerated per validation stratum at freeze time |
+| `--items-per-target` | 3,000 | line-level probe items per target at freeze time |
+| `--ablation-records` | fixed in code | records the ablation scores |
+| `--no-sweeps`, `--no-ablation` | off | skip those sections |
+| `--profile-shards` | fixed in code | corpus shards read to profile the interaction join |
+| `--reports-dir` | `output/effects/reports/` | parent of the probe-set file and the output directory |
+| `--vocab-path`, `--keyword-definitions` | the checkpoint's recorded paths | overrides |
 
 Refuses to probe when no frozen set exists for `--corpus`, or when the set's corpus digest does not
-match. Output: `output/effects/reports/knowledge-probes-<checkpoint stem>-<date>/` with tables and
+match. The probe set stores line items grouped per key (`{key, labels: {target: value}, weights}`);
+each ablation entry carries the field's `base_loss` beside the increases. Output: `output/effects/reports/knowledge-probes-<checkpoint stem>-<date>/` with tables and
 `scorecard.json`.
 
 ## `scripts/effect_knowledge_probes/compare.py` (new)
