@@ -534,25 +534,39 @@ def per_entity_loss(
     ability, whatever the board size.
     """
     parts: dict[str, float] = {}
-    mask = entity_mask.bool()
-    gate_logits = outputs[..., GATE_INDEX]
+    device = outputs.device
+    # The rows are picked on the host, where the masks were built, and gathered
+    # by index: a device mask tested or indexed by stalls the step until the GPU
+    # drains, which is what kept the CPU from preparing the next batch while
+    # the GPU worked. A mask already on the device is read back once here.
+    real_mask = entity_mask.detach().bool().cpu()
+    gate_host = gate_target.detach().cpu()
+    real = real_mask.flatten().nonzero().squeeze(1)
+    hit = (real_mask & gate_host.bool()).flatten().nonzero().squeeze(1)
+    flat_outputs = outputs.reshape(-1, outputs.shape[-1])
     gate = functional.binary_cross_entropy_with_logits(
-        gate_logits[mask], gate_target[mask].float(), reduction="sum",
+        flat_outputs.index_select(0, real.to(device, non_blocking=True))[:, GATE_INDEX],
+        gate_host.flatten().index_select(0, real).float().to(device, non_blocking=True),
+        reduction="sum",
     )
     if report_parts:
         parts["gate"] = float(gate.detach())
     total = gate
 
-    affected = mask & gate_target.bool()
-    # Read once rather than per field: the mask does not change inside the
-    # loop, and each read stalls on the device.
-    any_affected = bool(affected.any())
+    any_affected = hit.numel() > 0
+    hit_device = hit.to(device, non_blocking=True)
+    affected_outputs = flat_outputs.index_select(0, hit_device) if any_affected else None
     for spec in fields:
         target = field_targets.get(spec.name)
         if target is None or not any_affected:
             continue
         start, end = FIELD_SLICES[spec.name]
-        loss = field_loss(spec, outputs[..., start:end][affected], target[affected])
+        flat_target = target.reshape(-1, *target.shape[2:])
+        rows = hit if flat_target.device.type == "cpu" else hit_device
+        loss = field_loss(
+            spec, affected_outputs[:, start:end],
+            flat_target.index_select(0, rows).to(device, non_blocking=True),
+        )
         if report_parts:
             parts[spec.name] = float(loss.detach())
         total = total + loss
@@ -751,9 +765,13 @@ def created_objects_loss(
     """
     records = max(int(prediction.shape[0]), 1)
     if mask is not None:
-        if not mask.any():
+        # Decided on the host, where the mask was built: no device read.
+        rows = mask.detach().bool().cpu().nonzero().squeeze(1)
+        if rows.numel() == 0:
             return prediction.new_zeros(())
-        prediction, target = prediction[mask], target[mask]
+        rows = rows.to(prediction.device, non_blocking=True)
+        prediction = prediction.index_select(0, rows)
+        target = target.to(prediction.device).index_select(0, rows)
     total = prediction.new_zeros(())
     for slot in range(CREATED_OBJECT_SLOTS):
         base = slot * CREATED_SLOT_WIDTH
@@ -787,14 +805,15 @@ def verdict_loss(
     batch, like the per-entity loss.
     """
     records = max(int(prediction.shape[0]), 1)
+    # Tested on the host, where the mask was built: no device read.
+    mask = mask.detach().bool().cpu()
     if mask.dim() == 1:
-        mask = mask.unsqueeze(-1).expand_as(prediction)
-    mask = mask.bool()
+        mask = mask.unsqueeze(-1).expand(-1, prediction.shape[-1])
     if not mask.any():
         return prediction.new_zeros(())
     bits = len(VERDICT_BITS)
     cost = slice(bits, bits + len(COLORS))
-    weights = mask.to(prediction.dtype)
+    weights = mask.to(prediction.dtype).to(prediction.device, non_blocking=True)
     binary = functional.binary_cross_entropy_with_logits(
         prediction, target, reduction="none",
     )

@@ -640,10 +640,13 @@ class TrainingLoop:
             gathered = outputs.gather(
                 1, index.unsqueeze(-1).expand(-1, -1, outputs.shape[-1]),
             )
+            # The gate and the entity mask stay on the host, where they were
+            # built: the loss picks its rows there, so the step never waits
+            # for the device to say which entities were real or affected.
             loss, parts = per_entity_loss(
-                gathered, gate.to(self.device),
+                gathered, gate,
                 {k: v.to(self.device) for k, v in field_targets.items()},
-                mask.to(self.device), fields=fields,
+                mask, fields=fields,
                 report_parts=report_parts,
             )
             terms = self._head_terms(
@@ -692,8 +695,7 @@ class TrainingLoop:
                 [v[1] if v else [False] * VERDICT_WIDTH for v in verdicts],
             )
             terms["verdict"] = verdict_loss(
-                model.verdict(hidden).float(), target.to(self.device),
-                mask.to(self.device),
+                model.verdict(hidden).float(), target.to(self.device), mask,
             )
         created = [supervises_created_objects(record) for record in records]
         if any(created):
@@ -704,7 +706,7 @@ class TrainingLoop:
             ])
             terms["created_objects"] = created_objects_loss(
                 model.created_objects(hidden).float(), target.to(self.device),
-                torch.tensor(created).to(self.device),
+                torch.tensor(created),
             )
         if not training:
             return terms
@@ -1230,9 +1232,13 @@ class TrainingLoop:
             shipped = rest[0] if rest else loss
             (loss / self.config.grad_accum).backward()
             if (step + 1) % self.config.grad_accum == 0:
-                clipped = clip_per_group(optimizer, max_norm=MAX_GRAD_NORM)
+                # Read back only on the step that logs them: each read stalls
+                # the step until the GPU drains.
+                clipped = clip_per_group(
+                    optimizer, max_norm=MAX_GRAD_NORM, read=False,
+                )
                 if due:
-                    norms = clipped
+                    norms = {name: float(value) for name, value in clipped.items()}
                 optimizer.step()
                 optimizer.zero_grad(set_to_none=True)
             running += shipped.detach()

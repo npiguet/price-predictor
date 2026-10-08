@@ -49,17 +49,22 @@ def kl_divergence(
 
 
 def clip_per_group(
-    optimizer: torch.optim.Optimizer, *, max_norm: float,
-) -> dict[str, float]:
+    optimizer: torch.optim.Optimizer, *, max_norm: float, read: bool = True,
+) -> dict[str, float] | dict[str, torch.Tensor]:
     """Clip each parameter group at ``max_norm``; return the **pre-clip** L2 norms.
 
     Keyed by each group's ``"name"`` (``"group"`` when unnamed). The pre-clip
     values are the diagnostic signal — post-clip norms are bounded by ``max_norm``
     and carry no shape information.
+
+    ``read=False`` returns the norms as device tensors instead of floats. Reading
+    one back is a device synchronization, and a caller that logs the norms only
+    occasionally would otherwise stall every step for numbers it discards — the
+    CPU then cannot prepare the next batch while the GPU finishes this one.
     """
-    norms: dict[str, float] = {}
+    norms: dict = {}
     for group in optimizer.param_groups:
         name = group.get("name", "group")
         pre_clip = torch.nn.utils.clip_grad_norm_(group["params"], max_norm=max_norm)
-        norms[name] = float(pre_clip)
+        norms[name] = float(pre_clip) if read else pre_clip.detach()
     return norms

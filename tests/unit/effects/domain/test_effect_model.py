@@ -932,3 +932,94 @@ def test_a_gen1_checkpoint_reads_option_rows_as_it_trained():
         flagged = model(**kwargs, option_kinds=torch.ones(2, slots, dtype=torch.long))
         absent = model(**kwargs)
     assert torch.equal(plain, flagged) and torch.equal(plain, absent)
+
+
+class TestHostPickedRowsMatchBooleanMasks:
+    """The per-entity, verdict and created-objects losses pick their rows on the
+    host and gather by index, so the step never waits on the device. That must
+    be exactly the loss the boolean-mask selection gave."""
+
+    def _targets(self, generator, batch, entities):
+        from effects.domain.effect_model import FIELD_SLICES, PER_ENTITY_FIELDS, FieldType
+
+        out = {}
+        for spec in PER_ENTITY_FIELDS:
+            start, end = FIELD_SLICES[spec.name]
+            width = end - start
+            match spec.type:
+                case FieldType.BINARY:
+                    out[spec.name] = torch.randint(0, 2, (batch, entities), generator=generator)
+                case FieldType.MULTI_BINARY:
+                    out[spec.name] = torch.randint(
+                        0, 2, (batch, entities, width), generator=generator)
+                case FieldType.COUNT:
+                    out[spec.name] = torch.randint(0, 5, (batch, entities), generator=generator)
+                case FieldType.SIGNED_DELTA:
+                    out[spec.name] = torch.randint(-3, 4, (batch, entities), generator=generator)
+                case FieldType.CATEGORICAL:
+                    out[spec.name] = torch.randint(
+                        0, spec.arity, (batch, entities), generator=generator)
+        return PER_ENTITY_FIELDS, out
+
+    def _reference(self, outputs, gate_target, field_targets, entity_mask, fields):
+        from effects.domain.effect_model import FIELD_SLICES, GATE_INDEX, field_loss
+
+        mask = entity_mask.bool()
+        total = torch.nn.functional.binary_cross_entropy_with_logits(
+            outputs[..., GATE_INDEX][mask], gate_target[mask].float(), reduction="sum",
+        )
+        affected = mask & gate_target.bool()
+        for spec in fields:
+            start, end = FIELD_SLICES[spec.name]
+            if affected.any():
+                total = total + field_loss(
+                    spec, outputs[..., start:end][affected],
+                    field_targets[spec.name][affected],
+                )
+        return total / outputs.shape[0]
+
+    def test_the_per_entity_loss_is_unchanged(self):
+        generator = torch.Generator().manual_seed(11)
+        batch, entities = 6, 9
+        outputs = torch.randn(batch, entities, PER_ENTITY_WIDTH, generator=generator)
+        entity_mask = torch.randint(0, 2, (batch, entities), generator=generator)
+        gate = torch.randint(0, 2, (batch, entities), generator=generator)
+        fields, targets = self._targets(generator, batch, entities)
+        expected = self._reference(outputs, gate, targets, entity_mask, fields)
+        got, _ = per_entity_loss(outputs, gate, targets, entity_mask, fields=fields)
+        assert torch.allclose(got, expected, rtol=1e-6, atol=1e-6)
+
+    def test_a_batch_with_nothing_affected_scores_the_gate_alone(self):
+        generator = torch.Generator().manual_seed(12)
+        outputs = torch.randn(3, 4, PER_ENTITY_WIDTH, generator=generator)
+        fields, targets = self._targets(generator, 3, 4)
+        gate = torch.zeros(3, 4)
+        got, _ = per_entity_loss(outputs, gate, targets, torch.ones(3, 4), fields=fields)
+        expected = self._reference(outputs, gate, targets, torch.ones(3, 4), fields)
+        assert torch.allclose(got, expected)
+
+    def test_created_objects_and_verdict_losses_are_unchanged(self):
+        from effects.domain.effect_model import (
+            CREATED_OBJECTS_WIDTH,
+            VERDICT_WIDTH,
+            created_objects_loss,
+            verdict_loss,
+        )
+
+        generator = torch.Generator().manual_seed(13)
+        prediction = torch.randn(5, CREATED_OBJECTS_WIDTH, generator=generator)
+        target = torch.rand(5, CREATED_OBJECTS_WIDTH, generator=generator).round()
+        mask = torch.tensor([True, False, True, True, False])
+        picked = created_objects_loss(prediction, target, mask)
+        # Selecting the rows first and scoring them unmasked is the same sum.
+        whole = created_objects_loss(prediction[mask], target[mask], None)
+        assert torch.allclose(picked, whole * mask.sum() / mask.numel())
+
+        verdict = torch.randn(4, VERDICT_WIDTH, generator=generator)
+        verdict_target = torch.rand(4, VERDICT_WIDTH, generator=generator).round()
+        per_output = torch.rand(4, VERDICT_WIDTH, generator=generator) > 0.5
+        assert torch.allclose(
+            verdict_loss(verdict, verdict_target, per_output),
+            verdict_loss(verdict, verdict_target, per_output.float()),
+        )
+        assert float(verdict_loss(verdict, verdict_target, torch.zeros(4, VERDICT_WIDTH))) == 0.0
