@@ -42,6 +42,12 @@ import numpy as np
 _HERE = Path(__file__).resolve().parent
 
 
+def progress(message: str) -> None:
+    """One timestamped line, flushed: a probing run takes the better part of an
+    hour, and without these nothing says whether it is alive or where it is."""
+    print(f"{datetime.now().strftime('%H:%M:%S')} {message}", flush=True)
+
+
 def sibling(name: str):
     """A module of this suite, loaded by path under a name of its own.
 
@@ -540,13 +546,16 @@ def probe(args, checkpoint, corpus: Path, probe_set: dict) -> dict:
 
     records_by_stratum: dict[str, list] = {}
     for stratum, game_ids in probe_set["games"].items():
+        progress(f"reading {len(game_ids)} {stratum} probe games")
         records_by_stratum[stratum] = [
             record for _, record in common.read_games(
                 shards_for(stratum), set(game_ids), wanted[stratum] | sweep_ids)
         ]
+        progress(f"  {len(records_by_stratum[stratum])} records")
     every = [r for rows in records_by_stratum.values() for r in rows]
     if not every:
         raise SystemExit("no probe records were found in the probe set's sources")
+    progress(f"loading {args.checkpoint}")
     probe_model = common.load_probe_model(
         args.checkpoint, args.cards_folder, every, checkpoint=checkpoint,
         vocab_path=args.vocab_path, keyword_path=args.keyword_definitions)
@@ -572,11 +581,14 @@ def probe(args, checkpoint, corpus: Path, probe_set: dict) -> dict:
     for stratum, records in records_by_stratum.items():
         items = items_by_stratum[stratum]
         chosen = [r for r in records if r.record_id in items]
+        progress(f"{stratum}: extracting rung features over {len(chosen)} records")
         extracted = ladder.extract_features(
             probe_model, chosen, items, per_layer=args.per_layer, act_hidden=act_hidden)
-        for name, data in ladder.ladder_inputs(extracted, kinds).items():
+        inputs = ladder.ladder_inputs(extracted, kinds)
+        for position, (name, data) in enumerate(inputs.items(), start=1):
             if len(data.y) < 20:
                 continue
+            progress(f"{stratum}: ladder {position}/{len(inputs)} {name} (n={len(data.y)})")
             spec = labels.TARGETS_BY_NAME[name]
             entry = scorecard["families"][spec.family]["targets"].setdefault(
                 name, {"scope": spec.scope, "kind": spec.kind, "strata": {}})
@@ -586,6 +598,7 @@ def probe(args, checkpoint, corpus: Path, probe_set: dict) -> dict:
                 entry["strata"][stratum]["per_layer"] = entry["strata"][stratum].pop(
                     "per_layer", [])
 
+    progress("line-level probes over the ability cache")
     text_by_key: dict = {}
     cache = (common.line_items(args.cards_folder, probe_model.surface, args.abilities_root,
                                text_by_key=text_by_key), text_by_key)
@@ -597,6 +610,7 @@ def probe(args, checkpoint, corpus: Path, probe_set: dict) -> dict:
         put("fires_pair", pair_ladder(probe_set, probe_model, cache, mlp_options, bootstrap))
 
     if not args.no_sweeps:
+        progress("board sweeps")
         by_id = {r.record_id: r for r in every}
         scorecard["sweeps"] = {}
         for name, rows in probe_set["sweeps"].items():
@@ -621,9 +635,11 @@ def probe(args, checkpoint, corpus: Path, probe_set: dict) -> dict:
                     break
                 samples.append(record)
     if not args.no_ablation and samples:
+        progress(f"ablation over {len(samples)} records")
         stats = ablation.cache_statistics(cache[0])
         scorecard["ablation"] = ablation.run_ablation(probe_model, samples, stats)
     if args.method_c and samples:
+        progress("method C: a shallow trunk on frozen e")
         scorecard["method_c"] = method_c(args, probe_model, corpus, samples)
 
     scorecard["runtime"] = {

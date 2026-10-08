@@ -5,27 +5,23 @@ from __future__ import annotations
 import shutil
 import subprocess
 import sys
-from pathlib import Path
 
 import pytest
 
 
 def _convert_environment_available() -> bool:
-    """Return True iff Java + connector JAR + Forge dependency JARs are present."""
+    """Return True iff Java and the classpath ``convert`` itself builds exist.
+
+    Asks the same builder ``run_convert`` uses rather than naming JAR versions,
+    which went stale with every Forge upgrade and silently skipped this test.
+    """
     if shutil.which("java") is None:
         return False
-    project_root = Path(__file__).resolve().parent.parent.parent
-    connector_jar = (
-        project_root / "forge-connector" / "target"
-        / "forge-connector-1.0.0-SNAPSHOT-jar-with-dependencies.jar"
-    )
-    forge_dir = project_root.parent / "forge"
-    forge_game_jar = forge_dir / "forge-game" / "target" / "forge-game-2.0.10-SNAPSHOT.jar"
-    forge_core_jar = forge_dir / "forge-core" / "target" / "forge-core-2.0.10-SNAPSHOT.jar"
-    forge_deps_dir = forge_dir / "forge-game" / "target" / "dependency"
-    if not connector_jar.exists() or not forge_game_jar.exists() or not forge_core_jar.exists():
-        return False
-    if not forge_deps_dir.is_dir() or not any(forge_deps_dir.glob("*.jar")):
+    from price_predictor.infrastructure.forge_jvm import build_forge_classpath
+
+    try:
+        build_forge_classpath(include_full_runtime=True, include_dependency_glob=True)
+    except FileNotFoundError:
         return False
     return True
 
@@ -69,12 +65,19 @@ def test_convert_produces_output(tmp_path):
         "Name:Test Bear\nManaCost:1 G\nTypes:Creature Bear\nPT:2/2\nOracle:\n"
     )
     output_dir = tmp_path / "output"
+    tokens_dir = tmp_path / "tokenscripts"
+    tokens_dir.mkdir()
 
     result = subprocess.run(
         [
             sys.executable, "-m", "price_predictor", "convert",
             "--cards-path", str(fixture_dir.parent),
             "--output-path", str(output_dir),
+            # Both token paths too: their defaults are the real Forge token
+            # scripts and the real converted tree, which this test must not
+            # overwrite.
+            "--tokens-path", str(tokens_dir),
+            "--tokens-output-path", str(tmp_path / "tokens-output"),
         ],
         capture_output=True,
         text=True,
