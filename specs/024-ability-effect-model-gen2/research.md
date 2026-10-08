@@ -326,9 +326,15 @@ for a game naming a held-out card. `has_keyword_combat` comes from the survey pa
 
 **Decision**: a `NoiseState` (running Σ as a `d×d` tensor on the device, a step counter) is owned by
 `TrainingLoop` and passed to each per-batch `SurfaceBatcher` (built per batch at
-`training_loop.py:442-474`). `SurfaceBatcher.build` adds `L z` to every scattered `e` row, `L` the
-Cholesky factor of `r²Σ + εI`, with `ε = 1e-6`. Σ is the batch covariance about the batch mean under
-`torch.no_grad()`, decayed at 0.99.
+`training_loop.py:442-474`). `SurfaceBatcher.build` adds `L z` to every scattered `e` row, with
+`L = r V √Λ` from the eigendecomposition `Σ = V Λ Vᵀ`, eigenvalues clamped at zero, so `L Lᵀ = r²Σ`.
+Σ is the batch covariance about the batch mean under `torch.no_grad()`, symmetrized, decayed at 0.99.
+The update and the draw run in float64 with autocast disabled.
+
+**Rationale**: training runs under bf16 autocast, which would compute the covariance in bf16, and a
+batch often holds fewer unique texts than `e` has dimensions, so Σ is singular. A jittered Cholesky
+factor of that matrix failed within the first steps of a real run; the clamped eigendecomposition is
+exact on a singular Σ and never fails. `e_dim` is small, so the double-precision work is negligible.
 
 ### Verdict and created-objects losses join the per-entity loss at unit weight
 
@@ -375,7 +381,6 @@ Readers use `.get(field, default)`.
 | Folds | 5, grouped by text (by card for pooled items), seed 42 | `ladder.py` |
 | Share confidence interval | 1,000 bootstrap resamples over texts, 95% percentile | `ladder.py` |
 | State-dependence weight | n / (n + 5), n = the text's resolutions | `labels.py` |
-| Noise jitter ε | 1e-6 | `E/application/training_loop.py` |
 | Verdict and created-objects loss weights | 1.0 | `training_loop.py` |
 
 ## Technology notes

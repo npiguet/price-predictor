@@ -50,10 +50,6 @@ IDENTITY_TABLE_SIZE = 1 << 17
 
 #: Running-covariance decay for the noise on ``e`` (FR-056).
 NOISE_DECAY = 0.99
-#: Diagonal jitter added before the Cholesky factor, so a covariance that is
-#: singular along some direction — a batch with fewer texts than ``e_dim`` —
-#: still factors.
-NOISE_JITTER = 1e-6
 
 
 class NoiseState:
@@ -69,18 +65,23 @@ class NoiseState:
     Owned by the training loop and handed to each training batch's batcher;
     validation, evaluation and encoding build their batchers without one, so
     nothing outside training is ever perturbed. Everything stays on the device:
-    the update is one covariance, the draw one Cholesky factor and one matmul,
-    and nothing is read back to the host.
+    the update is one covariance, the draw one eigendecomposition and one
+    matmul, and nothing is read back to the host.
+
+    Both run outside autocast and in float64. Training runs under bf16
+    autocast, which would otherwise compute the covariance in bf16: the result
+    is neither symmetric nor positive semi-definite, and its factorization
+    fails within the first steps. ``e_dim`` is small (64 by default), so the
+    double-precision work is negligible next to a forward pass.
     """
 
     def __init__(
         self, ratio: float, ramp_steps: int, *,
-        decay: float = NOISE_DECAY, jitter: float = NOISE_JITTER,
+        decay: float = NOISE_DECAY,
     ) -> None:
         self.ratio = ratio
         self.ramp_steps = max(int(ramp_steps), 1)
         self.decay = decay
-        self.jitter = jitter
         #: The running covariance, seeded from the first batch.
         self.sigma: torch.Tensor | None = None
         #: Optimizer steps taken; set by the training loop before each batch.
@@ -94,10 +95,11 @@ class NoiseState:
         """Fold one batch's covariance into ``Σ``. No gradient flows here."""
         if matrix.shape[0] < 2:
             return
-        with torch.no_grad():
-            vectors = matrix.detach().float()
+        with torch.no_grad(), _exact(matrix):
+            vectors = matrix.detach().double()
             centred = vectors - vectors.mean(dim=0, keepdim=True)
             covariance = centred.T @ centred / (vectors.shape[0] - 1)
+            covariance = (covariance + covariance.T) / 2
             if self.sigma is None:
                 self.sigma = covariance
             else:
@@ -106,21 +108,29 @@ class NoiseState:
                 )
 
     def apply(self, matrix: torch.Tensor) -> torch.Tensor:
-        """``matrix`` plus ``L z``, ``L`` the Cholesky factor of ``r²Σ + εI``."""
+        """``matrix`` plus ``L z``, where ``L Lᵀ = r²Σ``.
+
+        ``L = V √Λ`` from the eigendecomposition of ``Σ``, eigenvalues clamped
+        at zero: exact on a singular ``Σ``, which a batch narrower than
+        ``e_dim`` produces, and never a factorization failure.
+        """
         self.update(matrix)
         r = self.scale()
         if r <= 0.0 or self.sigma is None:
             return matrix
-        with torch.no_grad():
-            dim = self.sigma.shape[0]
-            factor = torch.linalg.cholesky(
-                r * r * self.sigma
-                + self.jitter * torch.eye(dim, device=self.sigma.device)
-            )
+        with torch.no_grad(), _exact(matrix):
+            values, vectors = torch.linalg.eigh(self.sigma)
+            factor = vectors * (r * values.clamp(min=0.0).sqrt())
             draw = torch.randn(
-                matrix.shape[0], dim, device=matrix.device,
+                matrix.shape[0], factor.shape[0],
+                device=matrix.device, dtype=factor.dtype,
             ) @ factor.T
         return matrix + draw.to(matrix.dtype)
+
+
+def _exact(matrix: torch.Tensor):
+    """A region where autocast does not lower the noise arithmetic's precision."""
+    return torch.autocast(device_type=matrix.device.type, enabled=False)
 
 
 @dataclass

@@ -107,7 +107,7 @@ evaluation, probes).
   keyword-combat flags in its existing single pass over each shard, and sidecars are read through the
   existing `SidecarCache`. The probe suite extracts rung features once per stratum and fits every probe
   on the cached arrays.
-- **GPU placement**: *Addressed.* The noise covariance, its Cholesky factor and the sampled noise live
+- **GPU placement**: *Addressed.* The noise covariance, its eigendecomposition and the sampled noise live
   on the training device. The value, verdict, created-objects, MLM and API heads run with the model.
   The MLP probes train on the GPU.
 - **GPU batching**: *Addressed.* Noise is one batched matmul per step. Covariance updates use

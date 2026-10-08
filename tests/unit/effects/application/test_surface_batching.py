@@ -151,7 +151,8 @@ def test_the_added_noise_has_covariance_r_squared_sigma():
     noise = NoiseState(ratio=0.5, ramp_steps=10)
     noise.step = 10
     added = noise.apply(matrix) - matrix
-    expected = 0.25 * noise.sigma
+    # Sigma is held in float64 so the factorization stays exact.
+    expected = 0.25 * noise.sigma.float()
     observed = torch.cov(added.T)
     assert torch.allclose(observed, expected, atol=0.05 * expected.abs().max())
 
@@ -160,11 +161,11 @@ def test_sigma_starts_from_the_first_batch_and_decays_at_0_99():
     noise = NoiseState(ratio=0.1, ramp_steps=1)
     first = _spread_matrix()
     noise.update(first)
-    assert torch.allclose(noise.sigma, torch.cov(first.T), atol=1e-4)
+    assert torch.allclose(noise.sigma.float(), torch.cov(first.T), atol=1e-4)
     second = first * 2.0
     noise.update(second)
     expected = 0.99 * torch.cov(first.T) + 0.01 * torch.cov(second.T)
-    assert torch.allclose(noise.sigma, expected, atol=1e-4)
+    assert torch.allclose(noise.sigma.float(), expected, atol=1e-4)
 
 
 def test_no_gradient_flows_through_sigma():
@@ -273,3 +274,25 @@ def test_a_real_gen2_charm_gets_its_four_mode_rows_after_its_root():
     assert [slot.e for slot in abilities[1:]] == [
         rows[batcher.text_of(mode)] for mode in modes
     ]
+
+
+def test_a_rank_deficient_batch_under_bf16_autocast_still_draws_noise():
+    """The training condition that broke the Cholesky factor.
+
+    Training runs under bf16 autocast, and a batch often carries fewer unique
+    texts than ``e`` has dimensions, so the batch covariance is singular. The
+    covariance and the draw must leave autocast and stay exact, or the factor
+    sees a matrix that is not positive semi-definite.
+    """
+    generator = torch.Generator().manual_seed(5)
+    dim = 64
+    # Twelve texts in a 64-wide space, at the scale a trained e reaches.
+    matrix = torch.randn(12, dim, generator=generator) * 40.0
+    noise = NoiseState(ratio=0.1, ramp_steps=1)
+    noise.step = 1
+    with torch.autocast(device_type="cpu", dtype=torch.bfloat16):
+        for _ in range(20):
+            out = noise.apply(matrix)
+    assert torch.isfinite(out).all()
+    assert out.dtype == matrix.dtype
+    assert torch.allclose(noise.sigma, noise.sigma.T)
