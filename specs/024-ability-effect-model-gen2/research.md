@@ -251,6 +251,20 @@ longer scanned (FR-020; `build_vocab.py:111`); `HOST_BODIED_KEYWORDS` compares d
 fixes `level up` and `read ahead` never matching (FR-016); `encode-abilities` stops expanding at 1.0
 (`ability_encoder_runner.py:103-106`) and reads the shared constant (FR-012).
 
+### Tokenizer rules are versioned by checkpoint
+
+**Decision**: every training run records `tokenizer_rules = gen-2` in the checkpoint's
+`training_settings`, and every loader picks the tokenizer's grammar with
+`tokenizer_surface(surface_of(vocab_path), checkpoint.training_settings)`: the vocabulary's surface
+for a gen-2 checkpoint, the prose grammar for one that records no rules.
+
+**Rationale**: gen-1 tokenized its script vocabulary with the prose grammar, so `surface_of` alone
+hands it the gen-2 script rules it never trained on. Read that way, its `[UNK]` rate over script
+text rises from 0.4% to 3.2% and 73% of texts change their token sequence, which would distort gate 2,
+the knowledge probes and the noise pilots of stage 0. The prose grammar reproduces gen-1's tokens
+exactly. A noise pilot trains from scratch under the gen-2 rules, so it reads a script vocabulary
+rebuilt with them over gen-1's sidecars (`models/effects/vocab-script-gen1-sidecars.txt`).
+
 ### Keyword expansion by display name
 
 **Decision**: `_keyword_token` keeps its token-path role (FR-014). A new `display_name_of(line)`

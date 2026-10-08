@@ -572,8 +572,11 @@ the sweeps, the ablation, and the recorded digest. Run `compare.py` over two sco
   lines it stages, as it seeds the special tokens, so `--target-size` cannot drop a rare key's part
   to `[UNK]`.
 - **FR-010**: `tokenize` MUST apply the script-surface rules exactly when the loaded vocabulary is a
-  script vocabulary, as `surface_of` determines from its path. `MtgTokenizer` in `price_predictor`
-  MUST NOT change.
+  script vocabulary, as `surface_of` determines from its path, and the checkpoint being trained or
+  loaded uses the gen-2 rules. Every training run MUST record `tokenizer_rules = gen-2` in its
+  checkpoint's training settings; a loaded checkpoint that records no rules (gen-1) MUST be
+  tokenized with the prose grammar on either surface, which is what it trained on. `MtgTokenizer` in
+  `price_predictor` MUST NOT change.
 - **FR-011**: `build-vocab --surface script` MUST apply the same rules to the script lines it stages
   for the shared builder. It MUST report the unknown-token rate over script parameters with every
   `*Description$` value removed, and the number of distinct parts the camel-case split produces.
