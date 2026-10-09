@@ -169,7 +169,7 @@ no shards.
 |---|---|---|
 | `--mana-cap` | 1 | resolution records per unique (mana ability, mana produced) pair, per game |
 | `--playability-rate` | 0.1 | fraction of `decision`-subkind logging points sampled; `attackers`/`blockers` are sampled at `--legality-rate` instead |
-| `--legality-rate` | 0.1 | fraction of `legality`-subkind logging points kept, sampled after the dedup |
+| `--legality-rate` | 0 | fraction of the AI's what-if legality queries kept; real attack and block declarations are always written |
 | `--interventions-per-game` | 2 | interventional resolutions per game |
 | `--probes-per-game` | 2 | damage-step probe forks per game — a budget, not a switch |
 | `--probe-keywords` | none (**probes disabled**) | comma-separated canary-failing keywords; required for any probe at all |

@@ -53,6 +53,7 @@ records, a records set holding both gen-1 shards (no `random_seat`) and gen-2 sh
 |---|---|---|
 | `--random-seat-share` | 0 | share of matches with one random seat |
 | `--random-seat-probability` | none | `P`, the chance the random seat draws at random at a decision point |
+| `--legality-rate` | 0 | share of what-if legality queries kept; every real decision is written |
 
 Refuses: `--random-seat-share` > 0 without `--random-seat-probability`; > 0 without
 `--effect-records`; either value outside [0, 1]. Passed to workers as `-Deffect.random.seat.share`

@@ -36,7 +36,7 @@ import random
 from collections import Counter, defaultdict
 from collections.abc import Collection, Iterable
 from concurrent.futures import ProcessPoolExecutor
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 from effects.domain.collection_caps import CollectionCaps
@@ -845,9 +845,19 @@ def is_text_round_complete(coverage: dict[str, TextCoverage], floor: int) -> boo
     return all(unit.done(floor) for unit in coverage.values() if unit.castable)
 
 
+def held_out_round_caps(caps: CollectionCaps) -> CollectionCaps:
+    """Full strength (FR-035): every record the held-out cards produce is kept,
+    because these are the only games that will ever see them.
+
+    What-if legality queries stay at the run's rate: they are the AI's
+    planning, not observations of the card, and real declarations are
+    written whatever the rate.
+    """
+    return replace(caps, playability_rate=1.0)
+
+
 def run_text_coverage(config: CollectCoverageConfig) -> int:
     """The held-out coverage round: listed cards only, keyed by held-out text."""
-    from dataclasses import replace
 
     from effects.application.train_effect_model import (
         load_card_files,
@@ -905,9 +915,7 @@ def run_text_coverage(config: CollectCoverageConfig) -> int:
     }
     decks_file = Path(config.effect_records) / "coverage-decks.txt"
     rng = random.Random(RANDOM_SEED)
-    # Full strength (FR-035): every record the held-out cards produce is kept,
-    # because these are the only games that will ever see them.
-    caps = replace(config.caps, playability_rate=1.0, legality_rate=1.0)
+    caps = held_out_round_caps(config.caps)
     supervisor = CollectorSupervisor(
         worker_count=config.workers, effect_records=config.effect_records, caps=caps,
     )

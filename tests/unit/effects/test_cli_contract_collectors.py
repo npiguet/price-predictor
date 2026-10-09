@@ -59,7 +59,7 @@ class TestSharedCapFlags:
         assert args.interventions_per_game == 2
         assert args.probes_per_game == 2
         assert args.probe_keywords == ""
-        assert args.legality_rate == 0.1
+        assert args.legality_rate == 0.0
         assert args.snapshot_tiers == "1,2,3"
 
     def test_the_constants_and_the_parsed_defaults_agree(self):

@@ -134,7 +134,7 @@ public final class PatchedCollectors implements AutoCloseable {
 
         public static CollectionCaps defaults() {
             return new CollectionCaps(
-                    1, 0.1, 2, 2, List.of(), List.of(1, 2, 3), 0.1, 0.0, 0.0);
+                    1, 0.1, 2, 2, List.of(), List.of(1, 2, 3), 0.0, 0.0, 0.0);
         }
 
         /**
@@ -1237,7 +1237,9 @@ public final class PatchedCollectors implements AutoCloseable {
         String payload = "{\"legal_attackers\":" + attackers
                 + ",\"forbidden\":" + forbidden + "}";
         boolean real = whatIf != null ? !whatIf : isRealAttackDeclaration(decider);
-        if (!real && sampler.nextDouble() > caps.legalityRate()) {
+        // A what-if is kept when the draw falls below the rate, so the
+        // default rate of 0 keeps none, not one in 2^53.
+        if (!real && sampler.nextDouble() >= caps.legalityRate()) {
             return;
         }
         String state = snapshots.toJson(null, List.of());
@@ -1289,7 +1291,7 @@ public final class PatchedCollectors implements AutoCloseable {
                 + ",\"forbidden\":" + forbidden
                 + ",\"min_blockers\":" + minBlockers + "}";
         boolean real = whatIf != null ? !whatIf : isRealBlockDeclaration(attacker);
-        if (!real && sampler.nextDouble() > caps.legalityRate()) {
+        if (!real && sampler.nextDouble() >= caps.legalityRate()) {
             return;
         }
         String state = snapshots.toJson(null, List.of());

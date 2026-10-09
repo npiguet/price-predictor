@@ -1076,7 +1076,7 @@ python -m effects holdout-cards --holdout-unit template --out output/effects/hol
 # 2-3. collection with the random seat (records only for its matches)
 python -m sealed match-outcomes --effect-records output/effects/records/ \
     --exclude-cards output/effects/holdout-cards.txt \
-    --random-seat-share 0.125 --random-seat-probability P
+    --random-seat-share 0.25 --random-seat-probability 0.5
 python -m effects collect-coverage --only-cards output/effects/holdout-cards.txt --min-text-games 5
 
 # 4. one curated dataset, balanced across rule families and outcome signatures

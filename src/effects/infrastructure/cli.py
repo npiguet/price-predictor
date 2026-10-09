@@ -160,10 +160,8 @@ def _add_cap_flags(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--legality-rate", type=float, default=CAP_DEFAULTS["legality_rate"],
         help=(
-            "Fraction of legality-subkind logging points kept, sampled after "
-            "the dedup (default: 0.1). Separate from --playability-rate "
-            "because the two subkinds arrive at very different volumes from "
-            "the same priority pass."
+            "Fraction of the AI's what-if legality queries kept (default: 0, "
+            "none). Real attack and block declarations are always written."
         ),
     )
     parser.add_argument(

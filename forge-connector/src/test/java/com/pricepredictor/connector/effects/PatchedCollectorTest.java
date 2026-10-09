@@ -109,9 +109,9 @@ class PatchedCollectorTest {
         // and on nothing else -- which is collection metadata the schema keeps
         // out of the model's inputs.
         assertEquals(List.of(1, 2, 3), defaults.snapshotTiers());
-        // The one class with no rate at all was 34.4% of the first corpus
-        // against a 5% training share.
-        assertEquals(0.1, defaults.legalityRate());
+        // What-if legality queries are off: real decisions are written
+        // whatever the rate, and they alone fill the legality class.
+        assertEquals(0.0, defaults.legalityRate());
     }
 
     /**
@@ -3066,6 +3066,34 @@ class PatchedCollectorTest {
         List<String> records = recordsOf(path);
         assertEquals(1, records.size(), records.toString());
         assertTrue(records.get(0).contains("\"what_if\":true"), records.get(0));
+    }
+
+    /**
+     * What-if queries are not collected by default. The AI re-asks one combat
+     * many times while planning, so a query survives sampling in proportion
+     * to how long the AI deliberated, not how often its board occurs.
+     */
+    @Test
+    void aWhatIfIsNotWrittenAtTheDefaultLegalityRate() throws Throwable {
+        Game game = twoPlayerGameIn(PhaseType.MAIN1);
+        Player active = game.getPlayers().get(0);
+        Card mine = creatureOf(game, active, "Grizzly Bears");
+
+        RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1");
+        Path path = writer.path();
+        try (PatchedCollectors collectors = new PatchedCollectors(
+                game, writer, "run.0-l1.0", CollectionCaps.defaults(), 1L)) {
+            for (int turn = 0; turn < 20; turn++) {
+                active.setLife(20 - turn, null);
+                collectors.combatLegalityHandler().invoke(null,
+                        methodNamed(CombatLegalityListenerShape.class, "onAttackersComputed"),
+                        new Object[]{game.getPlayers().get(1), List.of(mine), List.of(mine)});
+            }
+        } finally {
+            writer.close();
+        }
+
+        assertEquals(List.of(), recordsOf(path));
     }
 
     /**

@@ -29,7 +29,10 @@ DEFAULT_MANA_CAP = 1
 DEFAULT_PLAYABILITY_RATE = 0.1
 DEFAULT_INTERVENTIONS_PER_GAME = 2
 DEFAULT_PROBES_PER_GAME = 2
-DEFAULT_LEGALITY_RATE = 0.1
+#: Share of what-if legality queries kept; real decisions are always written.
+#: Off: the AI re-asks one combat many times while planning, so a query is
+#: kept in proportion to how long the AI deliberated over its board.
+DEFAULT_LEGALITY_RATE = 0.0
 DEFAULT_SNAPSHOT_TIERS = "1,2,3"
 #: Share of matches with one random seat (FR-021). Off unless a run asks.
 DEFAULT_RANDOM_SEAT_SHARE = 0.0

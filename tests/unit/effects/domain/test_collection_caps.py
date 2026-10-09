@@ -242,11 +242,10 @@ class TestTheSnapshotTierVector:
 
 
 class TestTheLegalityRate:
-    def test_it_defaults_to_the_playability_rate(self):
-        """Same number, different channel: the two subkinds arrive at very
-        different volumes from the same priority pass, so the rates are
-        separate knobs that happen to start equal."""
-        assert CollectionCaps().legality_rate == DEFAULT_LEGALITY_RATE
+    def test_what_if_queries_are_off_by_default(self):
+        """Real declarations are written whatever the rate; the rate keeps
+        only what-ifs, which are oversampled by how often the AI re-asks."""
+        assert CollectionCaps().legality_rate == DEFAULT_LEGALITY_RATE == 0.0
 
     def test_it_reaches_the_property_the_worker_samples_from(self):
         properties = CollectionCaps(legality_rate=0.25).as_system_properties()

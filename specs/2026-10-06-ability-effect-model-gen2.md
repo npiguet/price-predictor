@@ -283,7 +283,8 @@ Base-spec sections this spec amends
   real decision when its snapshot phase is `combat_declare_blockers` and its anchored
   attacker is attacking. Every other legality record is a what-if.
 - The legality de-duplication key is the subkind, the payload and the snapshot.
-- `--legality-rate` samples what-if records only. Every real decision is written.
+- `--legality-rate` samples what-if records only. Its default is 0, which collects no what-if.
+  Every real decision is written.
 
 ## 6.3 Envelope fields
 

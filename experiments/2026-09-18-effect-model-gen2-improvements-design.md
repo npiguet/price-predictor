@@ -239,7 +239,7 @@ off-policy play adds are the ones the corpus lacks:
 - "Tap target creature" on a creature that is already tapped. A resolution that changes nothing,
   which the corpus has never recorded.
 
-### Gen-2 collects one game in eight with a seat that sometimes takes a random legal action
+### Gen-2 collects one match in four with a seat that takes a random legal action at half its decisions
 
 The random seat is Forge's AI with its choices overridden at the decision points that matter: the
 spell or ability to play, its targets, the attackers to declare, and the blocks to assign. At each
@@ -279,8 +279,13 @@ Four details are fixed in this design rather than left to the collection run.
 2. **Playability decision records are unaffected.** The `decision` subkind records the rules'
    verdict on every candidate, not the action the seat took, so a random seat produces the same
    decision records a Forge seat does. Nothing in that class needs the flag.
-3. **One game in eight has a random seat.** The random seat produces rare outcomes for common texts,
-   and on-policy games supply everything else, so the two share one corpus.
+3. **One match in four has a random seat, and it acts at random at half its decision points.** The
+   random seat produces rare outcomes for common texts, and the attacks Forge's AI would not make,
+   which are the only source of block decisions against such attacks once what-if queries are not
+   collected (section on what-if queries). On-policy games supply everything else, so the two share
+   one corpus. The two settings multiply to one eighth, the expected share of one seat's decisions
+   taken at random per match played. A seat that acted at random at every point would lose most games early, and its boards would say
+   little about the boards the model is asked about.
 4. **Random-seat games are played in both collections.** They appear in the training collection,
    played from pools depleted of every card that carries a held-out text, and in the full-strength
    collection, played from complete pools, that supplies the card-disjoint stratum. The off-policy
@@ -289,9 +294,9 @@ Four details are fixed in this design rather than left to the collection run.
 Two limits are accepted. Random targets on a wide board mostly produce uninformative no-ops, so the
 share of useful records per game is lower than under Forge's play. And random attacks and blocks
 cost the random seat life and creatures, so its games run shorter and its boards are thinner than
-Forge's. The probability of acting at random sets how far both go. The pilot measures how many
-minority outcomes it yields per rule family, the outcomes the corpus build balances on (section on
-the rarity weight). The probability is raised only if the corpus falls short of them.
+Forge's. The probability of acting at random sets how far both go. The stage 2 pilot, at one match
+in eight and a quarter of the decisions, yielded too few block decisions against random attacks
+to replace the what-if queries, which is what sets the values above (Outcome, stage 2).
 
 ## The rarity weight is flat for 97% of texts and nothing balances rule families, so rare texts and rare rules train least
 
@@ -1030,18 +1035,25 @@ run. If the snapshot carries the attack declarations the AI is simulating, each 
 of its own. The legality class then grows back toward the four fifths of the corpus it held before
 the collector de-duplicated legality records.
 
-### Gen-2 records every real decision and fills the legality class from them first
+### Gen-2 records every real decision and collects no what-if queries
 
 The real decisions are exempt from `--legality-rate`, and the rate applies to what-if queries only.
 Real decisions happen only at the two declare steps of each turn, so exempting them adds little
 volume. They are also the only legality records that join to the combat that follows, which is what
 a measurement of Forge's attack and block choices needs.
 
-Curation keeps what-if records rather than dropping them, because their verdicts are true and they
-show the legality rules on boards and phases the real decisions never reach. It fills the legality
-class from real decisions first, up to half its share, and the remainder from what-ifs. The manifest
-records the real and what-if counts per subkind, and the evaluation reports the legality fields on
-real decisions separately.
+The rate defaults to 0, so no what-if query is collected. A what-if's verdict is true, but which
+queries reach the corpus is not representative of play. The AI asks about one combat many times
+while it plans an attack. The rate is drawn for each query before de-duplication, so a query asked
+`K` times survives with probability `1 − (1 − rate)^K`. The kept queries are therefore weighted by
+how long the AI deliberated over a board, which favours the wide boards it plans longest. The one
+thing they hold that real decisions lack is blocks against attacks the AI considered and rejected.
+Those blocks reach the corpus instead as real block decisions against the random seat's attacks, on boards the
+game actually reached.
+
+Curation splits the legality class equally over the halves the corpus holds, so a corpus without
+what-ifs fills the class from real decisions. The manifest records the real and what-if counts per
+subkind, and the evaluation reports the legality fields on real decisions separately.
 
 ## Gen-2 collects its corpus from scratch, because the holdout and the random seat both act at collection time
 
@@ -1265,6 +1277,57 @@ Each pilot's cache was encoded over gen-1's sidecars and measured with gate 3's 
 Gate 3 requires a mean pairwise cosine of at most 0.5 and a top component of at most 30%. The gen-1 row is the shipped checkpoint after forty epochs, not a three-epoch run, so it shows where training this long ends rather than a fourth pilot.
 
 The knowledge probes' first run, on the gen-1 checkpoint, is recorded in [`2026-09-19-effect-knowledge-probes-design.md`](2026-09-19-effect-knowledge-probes-design.md#gen-1-2026-10-08).
+
+### Stage 2 (2026-10-09): the pilot collection writes every gen-2 field, and one fork bug surfaced
+
+The pilot shows each gen-2 collection mechanism at work, and `validate-corpus` holds all twenty of
+its judged invariants. The pilot played 133 matches, 833 games and 321,792 records, with a random
+seat in one match in eight acting at random at a quarter of its decision points.
+
+| what the records show | pilot |
+|---|---:|
+| games holding a random-seat record | 80 of 833 |
+| real attack declarations | 10,950 |
+| real block declarations | 15,296 |
+| what-if block queries | 70,010 |
+| charm mode halves acting through an `option` key, spells / triggers | 158 / 79 |
+| real resolutions that dealt damage | 1,249 |
+| of those, the damaged creature dies in the same record | 684 |
+
+Gen-1 wrote none of those deaths: on a sample of its shards, none of 565 lethal-looking resolution
+damage events carried the death (knowledge probes record). Gen-2 holds a resolution's record
+through the state-based check that follows it, so the record carries the deaths its own damage
+causes.
+
+#### A fork split a creature spell by its own enters trigger's modes
+
+A fork that forces a creature spell also resolves the creature's modal enters trigger, on the same
+card. The fork counted the trigger's modes as the spell's and wrote keys naming `spell[0]` with an
+option, a line no sidecar carries. `build-corpus` refuses such a key, and the pilot holds four. A
+fork now counts a mode only when its charm resolves to the forced ability's own provenance key. The
+trial build below read the pilot with those four records removed.
+
+#### The trial corpus delivers its class mix, and the rule families are short as a pilot's must be
+
+`build-corpus` over the pilot wrote 15,243 training records, with every class within 3% of its
+requested share. 199 cells of the family split came up short of their share, which is the volume a
+full collection supplies. One game names a held-out card, though the decks excluded every held-out
+card: Brazen Boarding, an Alchemy card, creates Staunch Crewmate during play. The build places any
+game naming a held-out card in the card-disjoint stratum, so the card reaches no training record.
+
+#### Block decisions against random attacks were too few to replace the what-if queries
+
+The random seat attacks at random at only a quarter of its decisions, so few of the AI's real block
+decisions face an attack the AI would not have made. The legality class therefore stops collecting
+what-if queries and the random seat runs at one match in four and half its decisions instead, which
+quadruples the random decisions per match played.
+
+| block legality records | pilot |
+|---|---:|
+| real, the AI blocking the random seat's attacks | 361 |
+| of those, against an attack drawn at random (expected) | about 90 |
+| real, both seats Forge's AI | 14,194 |
+| what-if queries, all games | 70,010 |
 
 ### The sweep
 

@@ -1127,3 +1127,22 @@ class TestOnlyCardsRefusals:
         ))
         assert config.only_cards == Path("holdout.txt")
         assert config.min_text_games == 7
+
+
+class TestHeldOutRoundCaps:
+    """FR-035: full strength for the card's own records, not for the AI's planning."""
+
+    def test_every_playability_record_is_kept(self):
+        from effects.application.collect_coverage import held_out_round_caps
+        from effects.domain.collection_caps import CollectionCaps
+
+        assert held_out_round_caps(CollectionCaps()).playability_rate == 1.0
+
+    def test_what_if_legality_queries_stay_at_the_runs_rate(self):
+        from effects.application.collect_coverage import held_out_round_caps
+        from effects.domain.collection_caps import CollectionCaps
+
+        assert held_out_round_caps(CollectionCaps()).legality_rate == 0.0
+        assert held_out_round_caps(
+            CollectionCaps(legality_rate=0.3)
+        ).legality_rate == 0.3

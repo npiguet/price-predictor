@@ -276,7 +276,7 @@ accept all seven: `match-outcomes`, `collect-coverage` and `collect-variants`.
 | `--interventions-per-game` | 2 | Forced resolutions per game. On at the default — pass `0` to stop them, since omitting the flag leaves them running. |
 | `--probes-per-game` | 2 | Damage-step probes per game. A budget, not a switch. |
 | `--probe-keywords` | *(empty)* | Which keywords a probe may strip. Empty means **no probe is ever taken**, whatever the budget — the state each collecting command announces at startup. |
-| `--legality-rate` | 0.1 | Share of legality points kept, sampled *after* the coalescing above. Its own knob because the two playability subkinds arrive at very different volumes from one priority pass. |
+| `--legality-rate` | 0 | Share of the AI's what-if legality queries kept. Real attack and block declarations are always written. The command above reproduces gen-1, which kept a tenth of every legality point. |
 | `--snapshot-tiers` | `1,2,3` | How deep every snapshot reaches: a prefix of `1,2,3,4` — 1 referenced objects, 2 core, 3 the unreferenced stack, 4 unreferenced hands and graveyards. Run-level, never per collector — a depth that varies by kind turns `state.tiers` into a proxy for how a record was collected. A run taking forks wants `1,2,3,4`. |
 
 ## 3b. Collect the validation corpus at full strength

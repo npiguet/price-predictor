@@ -165,11 +165,11 @@ for a short session and read its report of texts under the floor.
 
 ### User Story 3 - Off-policy outcomes and real legality decisions (Priority: P3)
 
-The operator collects with `--random-seat-share 0.125 --random-seat-probability P`. In one match
-in eight, one seat sometimes plays a random legal spell or ability, picks random targets, and
+The operator collects with `--random-seat-share 0.25 --random-seat-probability 0.5`. In one match
+in four, one seat sometimes plays a random legal spell or ability, picks random targets, and
 declares random attacks and blocks. Its records are marked `random_seat = true`. Legality records
-are marked as real decisions or what-if queries. Every real decision is written, and only what-ifs
-are sampled. Each chosen mode of a charm is recorded as its own effect half, acting through that
+are marked as real decisions or what-if queries. Every real decision is written, and what-ifs are
+collected only at a `--legality-rate` above its default of 0. Each chosen mode of a charm is recorded as its own effect half, acting through that
 mode's `option` line.
 
 **Why this priority**: Every gen-1 outcome is one Forge chose, so the model never saw what happens
@@ -685,8 +685,9 @@ the sweeps, the ablation, and the recorded digest. Run `compare.py` over two sco
   classed a real decision when its snapshot phase is `combat_declare_blockers` and its anchored
   attacker is attacking. Every other legality record MUST be classed a what-if.
 - **FR-028**: The legality de-duplication key MUST be the subkind, the payload and the snapshot.
-- **FR-029**: `--legality-rate` MUST sample what-if records only. Every real decision MUST be
-  written.
+- **FR-029**: `--legality-rate` MUST sample what-if records only, keeping one when its draw falls
+  below the rate. Its default MUST be 0, which collects no what-if record. Every real decision MUST
+  be written.
 
 #### Modal resolutions (root spec § 6.5)
 
@@ -824,7 +825,8 @@ the sweeps, the ablation, and the recorded digest. Run `compare.py` over two sco
      outcome, changed or not) pairs over its affected entities: how many entities share a pair does
      not enter it, so a wipe that kills three creatures and one that kills seven share a signature.
   3. In `playability-legality`, real decisions fill up to half the class budget before what-if
-     records fill the rest. Family balancing applies within each half.
+     records fill the rest. Family balancing applies within each half. A corpus with no what-if
+     records fills the class from real decisions alone.
   4. Within each cell the steps above define, `--text-cap` bounds the written records per ability
      text, repeats included. A text with more distinct records than the cap contributes a random
      cap's worth under `--seed`, unrepeated. A text whose repeats would pass the cap spreads the
@@ -1082,8 +1084,8 @@ the sweeps, the ablation, and the recorded digest. Run `compare.py` over two sco
   gen-1 corpus with one-segment chains.
 - The random seat's probability, the noise ratio, the withheld keyword, the sweep arms' sizes and
   the holdout fraction are run-time decisions recorded in the gen-2 record, not defaults this
-  feature fixes. `--random-seat-share 0.125` is the run plan's setting, and the flag's default
-  stays 0.
+  feature fixes. `--random-seat-share 0.25` with `--random-seat-probability 0.5` is the run plan's
+  setting, and the share's default stays 0.
 - The minimum gap for the share, the probes' hyperparameters, and the number of records per text in
   the card-disjoint sample are constants set in code and recorded in the plan, not flags.
 - An SVar is emitted once per chain, and a missing SVar is reported and skipped (FR-003). The root

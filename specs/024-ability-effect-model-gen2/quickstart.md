@@ -89,18 +89,20 @@ except where an ordering fix changed a line's or a face's order;
 ```bash
 python -m sealed match-outcomes --effect-records output/effects/records-pilot/ \
     --exclude-cards output/effects/holdout-cards.txt \
-    --random-seat-share 0.125 --random-seat-probability 0.25
+    --random-seat-share 0.25 --random-seat-probability 0.5
 # stop it (Ctrl-C) once the progress line shows a few hundred games
-python -m effects validate-corpus --records-dir output/effects/records-pilot/
-python -m effects field-coverage --records-dir output/effects/records-pilot/
+python -m effects validate-corpus --effect-records output/effects/records-pilot/
+python -m effects field-coverage --effect-records output/effects/records-pilot/
 python -m effects build-corpus --records-dir output/effects/records-pilot/ \
     --output scratch/corpus-pilot/ --vocab-path models/effects/vocab-script.txt
 ```
 
 Check: both envelope fields vary; `match-outcomes.txt` and `cards-played.txt` gained rows only for
 matches without a random seat; every real legality decision is present; a charm resolution has one
-effect half per chosen mode; the manifest's per-family shortfalls, signatures, policy and
-real/what-if counts look as intended. Raise `--random-seat-probability` only if minority outcomes
+effect half per chosen mode; the legality class holds real decisions only, since what-if queries
+are not collected at the default `--legality-rate` of 0; the manifest's per-family shortfalls,
+signatures and on/off-policy counts look as intended. The real block decisions against the random
+seat's attacks are what replaces the what-if queries, so raise `--random-seat-probability` if they
 are too few.
 
 ## Stage 3 — full collection
@@ -109,10 +111,10 @@ are too few.
 # depleted self-play with the random seat, for training
 python -m sealed match-outcomes --effect-records output/effects/records/ \
     --exclude-cards output/effects/holdout-cards.txt \
-    --random-seat-share 0.125 --random-seat-probability P
+    --random-seat-share 0.25 --random-seat-probability 0.5
 # full strength with the random seat, for the card-disjoint stratum
 python -m sealed match-outcomes --effect-records output/effects/records/ \
-    --random-seat-share 0.125 --random-seat-probability P
+    --random-seat-share 0.25 --random-seat-probability 0.5
 # coverage of uncovered training cards
 python -m effects collect-coverage --training-corpus …
 # held-out texts to their floor

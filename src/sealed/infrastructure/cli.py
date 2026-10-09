@@ -992,7 +992,7 @@ EFFECT_PLAYABILITY_RATE = 0.1
 EFFECT_INTERVENTIONS_PER_GAME = 2
 EFFECT_PROBES_PER_GAME = 2
 EFFECT_PROBE_KEYWORDS = ""
-EFFECT_LEGALITY_RATE = 0.1
+EFFECT_LEGALITY_RATE = 0.0
 EFFECT_SNAPSHOT_TIERS = "1,2,3"
 EFFECT_RANDOM_SEAT_SHARE = 0.0
 EFFECT_RANDOM_SEAT_PROBABILITY = 0.0
@@ -1130,10 +1130,10 @@ def _add_effect_record_flags(parser: argparse.ArgumentParser) -> None:
         type=float,
         default=EFFECT_LEGALITY_RATE,
         help=(
-            "Fraction of legality-subkind playability logging points kept,"
-            " sampled after the dedup. Separate from --playability-rate: the"
-            " two subkinds arrive at very different volumes from the same"
-            f" priority pass. Default: {EFFECT_LEGALITY_RATE}."
+            "Fraction of the AI's what-if legality queries kept. Real attack"
+            " and block declarations are always written. Default:"
+            f" {EFFECT_LEGALITY_RATE}, none: a query the AI re-asks while"
+            " planning is kept in proportion to how often it asked."
         ),
     )
     parser.add_argument(
