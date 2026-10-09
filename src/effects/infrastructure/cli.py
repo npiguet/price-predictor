@@ -1684,6 +1684,13 @@ def _scorer_smoke_test_parser(subparsers) -> None:
         help="Sealed encoder whose vectors pooled e is concatenated with",
     )
     parser.add_argument(
+        "--abilities-root", type=str, default="output/effects/abilities",
+        help=(
+            "Ability cache whose pooled e is spliced in: the one encode-abilities "
+            "wrote from --checkpoint (default: output/effects/abilities)"
+        ),
+    )
+    parser.add_argument(
         "--scratch-dir", type=str, required=True,
         help="Where the vectors and the scorer checkpoint go; nothing is written elsewhere",
     )
@@ -1697,6 +1704,7 @@ def run_scorer_smoke_test(args: argparse.Namespace) -> int:
         scratch_dir=Path(args.scratch_dir),
         checkpoint=Path(args.checkpoint),
         sealed_encoder_checkpoint=Path(args.sealed_encoder_checkpoint),
+        abilities_root=Path(args.abilities_root),
     )
     try:
         result = smoke_test(config)

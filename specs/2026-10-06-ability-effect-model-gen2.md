@@ -654,6 +654,7 @@ python -m effects evaluate-effect-model
 python -m effects scorer-smoke-test
     [--checkpoint PATH]                  default models/effects/effect-model/latest.pt
     [--sealed-encoder-checkpoint PATH]   default models/sealed/encoder/latest.pt
+    [--abilities-root DIR]               default output/effects/abilities
     --scratch-dir DIR
 
 python scripts/effect_knowledge_probes/run.py

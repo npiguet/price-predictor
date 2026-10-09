@@ -129,6 +129,7 @@ keyword zero-shot, beside trained keywords; "gate 1 skipped" when no identity va
 |---|---|---|
 | `--checkpoint` | `models/effects/effect-model/latest.pt` | effect model whose pooled `e` is written |
 | `--sealed-encoder-checkpoint` | `models/sealed/encoder/latest.pt` | sealed vectors to concatenate |
+| `--abilities-root` | `output/effects/abilities` | ability cache whose pooled `e` is spliced in; the one `encode-abilities` wrote from `--checkpoint` |
 | `--scratch-dir` | required | where the vectors and the scorer checkpoint go |
 
 Copies the converted `.txt` files under `--scratch-dir`, runs `python -m sealed encode-cards` there with
