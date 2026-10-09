@@ -61,6 +61,21 @@ class TraitScriptChainTest {
         return new Converted(lines, sidecar, parser.missingSVars());
     }
 
+    private static Converted convertInline(String relativePath, String script) {
+        RulesParser parser = new RulesParser();
+        String scriptFile = SourceTree.CARDSFOLDER + "/" + relativePath;
+        RulesParser.ParsedCard parsed = parser.parseScript(
+                List.of(script.split("\n")), Path.of(relativePath).getFileName().toString(),
+                scriptFile);
+        List<Ability> owners = new ArrayList<>();
+        List<Integer> faceOfLine = new ArrayList<>();
+        List<String> lines = parsed.card().renderLines(owners, faceOfLine);
+        ProvenanceSidecar sidecar = ProvenanceSidecar.build(
+                parsed.card().faces().get(0).name(), scriptFile, parsed.card(),
+                lines, owners, faceOfLine, parsed.recorders());
+        return new Converted(lines, sidecar, parser.missingSVars());
+    }
+
     private static List<ProvenanceSidecar.Line> linesOfKind(Converted converted, String kind) {
         return converted.sidecar().lines().stream()
                 .filter(line -> line.lineKind().equals(kind)).toList();
@@ -338,14 +353,17 @@ class TraitScriptChainTest {
         assertEquals(3, options.size(), saga.lines().toString());
         List<String> apis = List.of("Pump", "Pump", "GainLife");
 
-        ProvenanceKey root = null;
+        // Each mode is claimed under every key of the chapter line: the
+        // chapter's trigger and the Chapter keyword that generated it, since
+        // a chapter's mode resolves through either.
+        String file = "cardsfolder/l/life_of_toshiro_umezawa_memory_of_toshiro.txt";
         for (int i = 0; i < options.size(); i++) {
             List<ProvenanceKey> keys = options.get(i).provenance();
-            assertEquals(1, keys.size(), "mode " + i + ": " + keys);
-            assertEquals(ProvenanceKey.KIND_TRIGGER, keys.get(0).traitKind());
-            assertEquals(Integer.valueOf(i), keys.get(0).option());
-            if (root == null) root = keys.get(0).root();
-            assertEquals(root, keys.get(0).root(), "every mode names the same chapter");
+            for (ProvenanceKey key : keys) {
+                assertEquals(Integer.valueOf(i), key.option(), "mode " + i + ": " + keys);
+            }
+            assertTrue(keys.contains(new ProvenanceKey(file, 0, ProvenanceKey.KIND_TRIGGER, 0, i)), keys.toString());
+            assertTrue(keys.contains(new ProvenanceKey(file, 0, ProvenanceKey.KIND_KEYWORD, 0, i)), keys.toString());
             assertEquals(apis.get(i), options.get(i).script().apiType());
         }
     }
@@ -433,5 +451,36 @@ class TraitScriptChainTest {
     void aLineWithNoParametersHasNoText() {
         assertNull(TraitScript.of(null).scriptText());
         assertEquals(List.of(), TraitScript.of(null).paramKeys());
+    }
+
+    // ── a charm line carrying several roots ─────────────────────────────
+
+    /**
+     * Two triggers sharing one charm render one line that carries both keys,
+     * and Forge resolves a mode through whichever trigger fired: each mode
+     * line has to carry the mode under both.
+     */
+    @Test
+    void aModeLineCarriesTheModeUnderEveryTriggerItsCharmLineMerged() {
+        Converted appa = convertInline("a/appa_loyal_sky_bison.txt", String.join("\n",
+                "Name:Appa, Loyal Sky Bison",
+                "ManaCost:4 W W",
+                "Types:Legendary Creature Bison Ally",
+                "PT:4/4",
+                "K:Flying",
+                "T:Mode$ ChangesZone | Origin$ Any | Destination$ Battlefield | ValidCard$ Card.Self | Execute$ TrigCharm | TriggerDescription$ Whenever NICKNAME enters or attacks, ABILITY",
+                "T:Mode$ Attacks | ValidCard$ Card.Self | Execute$ TrigCharm | TriggerZones$ Battlefield | Secondary$ True | TriggerDescription$ Whenever NICKNAME enters or attacks, ABILITY",
+                "SVar:TrigCharm:DB$ Charm | Choices$ DBPump,DBAirbend",
+                "SVar:DBPump:DB$ Pump | ValidTgts$ Creature.YouCtrl | KW$ Flying | SpellDescription$ Target creature you control gains flying until end of turn.",
+                "SVar:DBAirbend:DB$ Airbend | ValidTgts$ Permanent.Other+nonLand+YouCtrl | SpellDescription$ Airbend another target nonland permanent you control.",
+                "Oracle:Flying"));
+        List<ProvenanceSidecar.Line> options = linesOfKind(appa, "option");
+        assertEquals(2, options.size(), appa.lines().toString());
+        for (int i = 0; i < options.size(); i++) {
+            String file = "cardsfolder/a/appa_loyal_sky_bison.txt";
+            List<ProvenanceKey> keys = options.get(i).provenance();
+            assertTrue(keys.contains(new ProvenanceKey(file, 0, ProvenanceKey.KIND_TRIGGER, 0, i)), keys.toString());
+            assertTrue(keys.contains(new ProvenanceKey(file, 0, ProvenanceKey.KIND_TRIGGER, 1, i)), keys.toString());
+        }
     }
 }

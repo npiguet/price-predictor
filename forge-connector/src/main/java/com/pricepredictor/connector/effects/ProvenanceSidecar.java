@@ -81,6 +81,9 @@ public record ProvenanceSidecar(
             List<Integer> faceOfLine,
             List<ProvenanceRecorder> recorders
     ) {
+        for (ProvenanceRecorder recorder : recorders) {
+            recorder.claimModesUnderEveryRoot(owners);
+        }
         List<Line> lines = new ArrayList<>();
         Set<Ability> seen = new LinkedHashSet<>();
         for (int i = 0; i < renderedLines.size(); i++) {

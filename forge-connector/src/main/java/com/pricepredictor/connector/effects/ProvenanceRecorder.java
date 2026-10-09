@@ -204,6 +204,39 @@ public final class ProvenanceRecorder {
         if (source != null && to != null) byAbility.put(to, source);
     }
 
+    /**
+     * Give each mode line its mode under every root key its charm line carries.
+     *
+     * <p>A charm line can carry several keys: two triggers sharing one charm,
+     * which the converter merged, or the triggers a keyword generated. Forge
+     * resolves a mode through whichever of them fired, so a mode line keyed
+     * under one root alone leaves the others' records with no line. Run once
+     * every merge and keyword attribution has landed, which no single
+     * attribution site can know.
+     */
+    public void claimModesUnderEveryRoot(Iterable<Ability> surviving) {
+        for (Ability ability : surviving) {
+            Source root = ability == null ? null : byAbility.get(ability);
+            if (root != null) claimModesBelow(ability, root.keys());
+        }
+    }
+
+    private void claimModesBelow(Ability parent, List<ProvenanceKey> rootKeys) {
+        for (Ability sub : parent.subAbilities()) {
+            Source mode = byAbility.get(sub);
+            if (sub instanceof OptionAbility option && mode != null) {
+                for (ProvenanceKey key : rootKeys) {
+                    if (key.option() != null) continue;
+                    ProvenanceKey modeKey = key.withOption(option.modeIndex());
+                    if (!mode.keys().contains(modeKey)) mode.keys().add(modeKey);
+                }
+            } else if (mode == null) {
+                // A line of the charm's own rendering, between root and modes.
+                claimModesBelow(sub, rootKeys);
+            }
+        }
+    }
+
     /** What produced this ability, or null if it came from no runtime trait. */
     public Source sourceOf(Ability ability) {
         return byAbility.get(ability);
