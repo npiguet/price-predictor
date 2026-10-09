@@ -108,6 +108,9 @@ def run(tmp_path, make_record, monkeypatch):  # noqa: F811
         corpus=str(tmp_path), epochs=2, curriculum_epoch=2, steps_per_epoch=2,
         shards_per_epoch=1, batch_size=2, seed=7, keyword_expand_p=0.25,
         model_output=tmp_path / "out",
+        # The stubbed halves live in this process; a worker would run the
+        # real ones.
+        prefetch_workers=0,
     )
     code = TrainingLoop(
         config, held_out=HeldOutCards(names=frozenset(), script_files=frozenset()),

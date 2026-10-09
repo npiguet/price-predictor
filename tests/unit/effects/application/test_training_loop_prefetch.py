@@ -105,13 +105,13 @@ def run(tmp_path, make_record, monkeypatch):  # noqa: F811
             mark("load", path.name, "finish")
             return [f"{path.name} records"]
 
-        def train_on_shard(self, shard, budget, records, waited, *,
+        def train_on_shard(self, task, steps, waited, *,
                            step, taken, **kwargs):
-            mark("train", shard.name, "start")
+            mark("train", task.shard.name, "start")
             time.sleep(PAUSE)
-            trained.append((shard.name, records))
-            mark("train", shard.name, "finish")
-            return step + budget, taken + budget
+            trained.append((task.shard.name, steps))
+            mark("train", task.shard.name, "finish")
+            return step + task.budget, taken + task.budget
 
         def pool(*args, **kwargs):
             pools.append(_SpyPool(*args, **kwargs))
@@ -131,6 +131,14 @@ def run(tmp_path, make_record, monkeypatch):  # noqa: F811
         monkeypatch.setattr(loop_module, "AbilityEncoder", lambda config: encoder)
         monkeypatch.setattr(loop_module, "EffectModel", lambda config: model)
         monkeypatch.setattr(TrainingLoop, "_train_on_shard", train_on_shard)
+        monkeypatch.setattr(
+            TrainingLoop, "_training_heads", lambda self, model: frozenset(),
+        )
+        # The shard's records stand in for the steps they would prepare.
+        monkeypatch.setattr(
+            TrainingLoop, "_local_steps",
+            lambda self, task, records, *args, **kwargs: records,
+        )
         monkeypatch.setattr(
             TrainingLoop, "_validate",
             lambda self, records, *args, **kwargs: 1.0,
@@ -152,6 +160,8 @@ def run(tmp_path, make_record, monkeypatch):  # noqa: F811
             corpus=str(tmp_path), epochs=1, steps_per_epoch=SHARDS,
             shards_per_epoch=SHARDS, batch_size=2, seed=SEED,
             model_output=tmp_path / "out",
+            # The in-process path is the one with a loader thread.
+            prefetch_workers=0,
         )
         return TrainingLoop(
             config,

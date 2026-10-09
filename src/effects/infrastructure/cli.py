@@ -1277,7 +1277,10 @@ def run_collect_variants(args: argparse.Namespace) -> int:
 
 
 def _train_effect_model_parser(subparsers) -> None:
-    from effects.application.train_effect_model import DEFAULT_SHARDS_PER_EPOCH
+    from effects.application.train_effect_model import (
+        DEFAULT_PREFETCH_WORKERS,
+        DEFAULT_SHARDS_PER_EPOCH,
+    )
 
     parser = subparsers.add_parser(
         "train-effect-model",
@@ -1375,6 +1378,16 @@ def _train_effect_model_parser(subparsers) -> None:
             "random across the whole corpus. --steps-per-epoch fixes how long "
             "an epoch takes; this fixes how many different shards those steps "
             f"are spread over (default: {DEFAULT_SHARDS_PER_EPOCH})"
+        ),
+    )
+    parser.add_argument(
+        "--prefetch-workers", type=int, default=DEFAULT_PREFETCH_WORKERS,
+        help=(
+            "Worker processes that read shards and prepare each step's host "
+            "half (tokenizing, surfaces, targets) while this process trains; "
+            "0 prepares them in the training process on a thread. Changes "
+            "how fast a run goes, never what it computes "
+            f"(default: {DEFAULT_PREFETCH_WORKERS})"
         ),
     )
     parser.add_argument(
@@ -1481,6 +1494,7 @@ def train_config_from(args: argparse.Namespace):
         cache_refresh=args.cache_refresh,
         steps_per_epoch=args.steps_per_epoch,
         shards_per_epoch=args.shards_per_epoch,
+        prefetch_workers=args.prefetch_workers,
         seed=args.seed,
         epochs=args.epochs,
         patience=args.patience,

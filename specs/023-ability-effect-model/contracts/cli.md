@@ -295,6 +295,7 @@ The full flag table is the root spec's § Training. Contract highlights:
 | `--context-cache` / `--cache-refresh` | off / 500. Not implemented in the trainer: the batcher has no cache, so `--context-cache` is accepted, warns at startup and is otherwise ignored, and context abilities are re-encoded live |
 | `--steps-per-epoch` / `--epochs` / `--patience` | 5000 / 40 / 5 |
 | `--shards-per-epoch` | 256 — training shards an epoch reads, one resident at a time, drawn at random across the whole corpus. `--steps-per-epoch` fixes how long an epoch takes; this fixes how many different shards those steps are spread over |
+| `--prefetch-workers` | 3 — worker processes that read shards and prepare each step's host half (tokenizing, surfaces, targets) while the training process runs the device half; 0 prepares them in the training process on a thread. Each step's draws are seeded by `(seed, epoch, shard position, step)`, so the value changes speed only, never results, and is not recorded on the checkpoint |
 | `--seed` | drawn from the OS — seeds weight init, batch planning and each epoch's shard draw. Reported at startup and recorded on the checkpoint, so a run repeats by passing back the seed it logged |
 | `--withhold-keyword` | none — withholds one implemented keyword's token from training so the zero-shot check has something to measure; its occurrences are always expanded |
 

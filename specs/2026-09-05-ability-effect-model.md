@@ -406,6 +406,7 @@ Flags:
 | `--cache-refresh` | 500 | batches between momentum-cache refreshes |
 | `--steps-per-epoch` | 5000 | optimizer steps per epoch |
 | `--shards-per-epoch` | 256 | training shards an epoch draws, one resident at a time |
+| `--prefetch-workers` | 3 | processes preparing each step's host half; 0 prepares it in the training process. Changes speed only, never results |
 | `--seed` | _(drawn from the OS)_ | weight init, batch planning and the shard draw |
 | `--workers` | _(CPU count)_ | processes the pre-training validation sweep reads shards across |
 | `--epochs` | 40 | epoch bound |

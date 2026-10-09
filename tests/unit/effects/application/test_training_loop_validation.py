@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import random
 
 import pytest
 import torch
@@ -106,17 +107,18 @@ def test_validation_batches_drop_the_augmentations_but_keep_the_withholding():
         gate_one_records=0, rarity={}, corpus_digest="",
     )
 
-    training = loop._batcher(None, None, {})
+    stream = random.Random(3)
+    training = loop._batcher(None, None, {}, rng=stream)
     assert (training.keyword_expand_p, training.context_dropout) == (0.5, 0.3)
 
     scoring = loop._batcher(None, None, {}, training=False)
     assert (scoring.keyword_expand_p, scoring.context_dropout) == (0.0, 0.0)
     assert scoring.withhold_keyword == "lifelink"
-    # A validation pass must not advance the training stream: the batcher
-    # draws from its own generator, so how many validation batches ran
-    # cannot change which training records the next epoch sees.
-    assert scoring.rng is not loop.rng
-    assert training.rng is loop.rng
+    # A training batcher draws from the step's own generator, and a scoring
+    # one from a stream of its own, so how many validation batches ran
+    # cannot change what any training step sees.
+    assert training.rng is stream
+    assert scoring.rng is not stream
 
 
 def test_a_sample_missing_a_class_says_so(tmp_path, make_record, caplog):  # noqa: F811

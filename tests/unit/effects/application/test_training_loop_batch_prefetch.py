@@ -3,10 +3,10 @@
 The equivalence test trains real steps on the gen-1 fixture records, with every
 draw the host half takes switched on — keyword expansion, context dropout, the
 MLM mask, and a shard short enough that its plans cross into a second shuffle —
-and asserts the run with the prefetch is the run without it, bit for bit. The
-host half and the batch planner share one generator, so a prefetch that took a
-draw out of order would change which records a later step trains on, and the
-parameters would show it.
+and asserts the run with the prefetch is the run without it, bit for bit. Each
+step draws from a generator seeded by its place in the run, so a prefetch that
+handed one step's draws to another would change what a later step trains on,
+and the parameters would show it.
 
 The rest stub the halves and read a clock, like the shard prefetch's suite: an
 implementation that submitted the next step and then waited for it before
@@ -24,6 +24,7 @@ import pytest
 import torch
 
 from effects.application.extract_keyword_definitions import load_keyword_definitions
+from effects.application.step_preparation import ShardTask
 from effects.application.surface_batching import SurfaceBatcher
 from effects.application.train_effect_model import (
     HeldOutCards,
@@ -88,6 +89,17 @@ def _loop(monkeypatch, *, prefetch: bool, **overrides) -> TrainingLoop:
         holdout_permille=20, holdout_max_carriers=8,
         gate_one_records=0, rarity={}, corpus_digest="",
         prefetch_batches=prefetch,
+    )
+
+
+def _shard(loop, records, tokenizer, sidecars, widths, budget, fields, *, heads):
+    """One shard's prepared steps, in this process, and the task they are for."""
+    task = ShardTask(
+        shard=Path("gen1-records.jsonl.gz"), epoch=1, position=1,
+        budget=budget, fields=fields,
+    )
+    return task, loop._local_steps(
+        task, records, tokenizer, sidecars, widths, heads=heads,
     )
 
 
@@ -166,11 +178,15 @@ def _train(monkeypatch, records, definitions, *, prefetch: bool):
         loop.config, present=frozenset(sampling_class(r) for r in records), epoch=1,
     )
     running = torch.zeros(())
+    task, steps = _shard(
+        loop, records, tokenizer, sidecars, widths, STEPS, fields,
+        heads=loop._training_heads(model),
+    )
     step, taken = loop._train_on_shard(
-        Path("gen1-records.jsonl.gz"), STEPS, records, 0.0,
+        task, steps, 0.0,
         encoder=encoder, model=model, tokenizer=tokenizer, sidecars=sidecars,
         widths=widths, optimizer=optimizer, warmup=1, running=running,
-        step=0, taken=0, epoch=1, position=1, of=1, fields=fields,
+        step=0, taken=0, of=1,
     )
     monkeypatch.undo()
     parameters = {
@@ -181,7 +197,7 @@ def _train(monkeypatch, records, definitions, *, prefetch: bool):
     return {
         "losses": losses, "terms": terms, "threads": threads,
         "parameters": parameters, "running": float(running),
-        "counters": (step, taken), "after": loop.rng.random(),
+        "counters": (step, taken),
     }
 
 
@@ -206,10 +222,6 @@ def test_the_prefetch_trains_exactly_what_the_serial_loop_trains(
     assert serial["parameters"].keys() == ahead["parameters"].keys()
     for name, value in serial["parameters"].items():
         assert torch.equal(value, ahead["parameters"][name]), name
-    # And the generator was left where the serial loop left it, so the next
-    # shard's plans would be the same ones too: no step was prepared twice
-    # and none past the budget.
-    assert serial["after"] == ahead["after"]
 
 
 # ── the overlap, with both halves stubbed ───────────────────────────────
@@ -251,15 +263,14 @@ def _stubbed(monkeypatch, records, *, failing_at: int | None = None):
 
     monkeypatch.setattr(TrainingLoop, "_prepare_step", prepare)
     monkeypatch.setattr(TrainingLoop, "_loss_for", loss_for)
-    monkeypatch.setattr(TrainingLoop, "_training_heads", lambda self, m: frozenset())
     loop = _loop(monkeypatch, prefetch=True)
     sidecars = SidecarCache(dict(_SIDECAR_ROOTS))
+    task, steps = _shard(loop, records, None, sidecars, {}, 4, (), heads=frozenset())
     loop._train_on_shard(
-        Path("gen1-records.jsonl.gz"), 4, records, 0.0,
+        task, steps, 0.0,
         encoder=_Stub(), model=model, tokenizer=None, sidecars=sidecars,
         widths={}, optimizer=torch.optim.SGD(model.parameters(), lr=0.1),
-        warmup=1, running=torch.zeros(()), step=0, taken=0, epoch=1,
-        position=1, of=1, fields=(),
+        warmup=1, running=torch.zeros(()), step=0, taken=0, of=1,
     )
     return marks, prepared
 

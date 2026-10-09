@@ -107,6 +107,13 @@ RANDOM_SEED = 42
 #: that, and a run that early-stops at epoch 9 has seen 5% of it.
 DEFAULT_SHARDS_PER_EPOCH = 256
 
+#: Worker processes preparing training steps (``--prefetch-workers``). Three,
+#: because a step's host half costs about as much CPU as its device half does
+#: wall time, and a worker also spends a shard's first seconds parsing it: two
+#: workers keep up with no margin, three keep up with one parsing. More buy
+#: nothing once the device is the bottleneck and cost each a shard of memory.
+DEFAULT_PREFETCH_WORKERS = 3
+
 
 # ── sampling classes ────────────────────────────────────────────────────
 
@@ -455,11 +462,21 @@ class SplitAccumulator:
     ) -> tuple[frozenset[str], frozenset[str]]:
         """Record one shard's games and return its ``(tainted, clean)`` sets."""
         tainted, clean = shard_games(records, held_out)
-        if self._inherited is None:
-            self._card_disjoint |= tainted
-            if reserved:
-                self._game_disjoint |= clean
+        self.note_games(tainted, clean, reserved=reserved)
         return tainted, clean
+
+    def note_games(
+        self, tainted: Iterable[str], clean: Iterable[str], *, reserved: bool,
+    ) -> None:
+        """Record one shard's games, already split where the shard was read.
+
+        What the training loop calls when a worker process read the shard:
+        the game ids cross back to it, the records never do.
+        """
+        if self._inherited is None:
+            self._card_disjoint |= set(tainted)
+            if reserved:
+                self._game_disjoint |= set(clean)
 
     def split(self) -> CorpusSplit:
         if self._inherited is not None:
@@ -824,6 +841,10 @@ class TrainEffectModelConfig:
     cache_refresh: int = 500
     steps_per_epoch: int = 5_000
     shards_per_epoch: int = DEFAULT_SHARDS_PER_EPOCH
+    #: Worker processes preparing each step's host half (``--prefetch-workers``);
+    #: 0 prepares it in the training process. Where a step is prepared never
+    #: changes what it holds, so this is not recorded among the settings.
+    prefetch_workers: int = DEFAULT_PREFETCH_WORKERS
     epochs: int = 40
     patience: int = 5
     withhold_keyword: str | None = None
