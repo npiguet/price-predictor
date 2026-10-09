@@ -158,8 +158,12 @@ def poisson_deviance(predicted: np.ndarray, observed: np.ndarray) -> float:
     where "how much damage" and "how many cards" live — the numbers a model that
     is not reading the text can only predict at the corpus average.
     """
+    from effects.domain.effect_model import MAGNITUDE_CAP
+
     predicted = np.asarray(predicted, dtype=np.float64)
-    observed = np.asarray(observed, dtype=np.float64)
+    # Capped as the training loss caps it, so one runaway amount cannot
+    # dominate the mean the model was never asked to fit.
+    observed = np.minimum(np.asarray(observed, dtype=np.float64), MAGNITUDE_CAP)
     if predicted.size == 0:
         return float("nan")
     safe_predicted = np.clip(predicted, 1e-9, None)
@@ -982,18 +986,23 @@ def run_breakdowns(
         config, main,
         vocab_path=vocab_path, keyword_path=keyword_path, records=everything,
     )
+    manifest = None
+    if corpus_path is not None:
+        from effects.infrastructure.corpus_store import CorpusStore
+
+        manifest = CorpusStore(corpus_path).load()
+    mode_counts = (manifest.legality_mode_counts or None) if manifest else None
     scored = {
         stratum: (
-            list(measure(rows, encoder, model, batcher, fields=fields).records)
+            list(measure(
+                rows, encoder, model, batcher, fields=fields,
+                legality_mode_counts=mode_counts,
+            ).records)
             if rows else []
         )
         for stratum, rows in strata.items()
     }
-    games_by_text: dict[str, float] = {}
-    if corpus_path is not None:
-        from effects.infrastructure.corpus_store import CorpusStore
-
-        games_by_text = dict(CorpusStore(corpus_path).load().rarity)
+    games_by_text: dict[str, float] = dict(manifest.rarity) if manifest else {}
     return breakdown_checks(
         scored, games_by_text=games_by_text,
         withheld_keyword=main.provenance.withheld_keyword,

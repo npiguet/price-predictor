@@ -443,6 +443,20 @@ def active_fields(
     )
 
 
+#: The largest magnitude a count or a signed delta is scored at. Above about
+#: forty an amount is the game state compounding — a counter doubling run to two
+#: million in one long game — not what the ability's text says, and one such
+#: target under the Poisson loss pulls a step a million times harder than an
+#: ordinary one. Every consumer of the magnitudes caps them here: the field
+#: losses, the constant-predictor floor and the evaluation's deviance.
+MAGNITUDE_CAP = 40.0
+
+
+def capped(target: torch.Tensor) -> torch.Tensor:
+    """``target`` with every magnitude above :data:`MAGNITUDE_CAP` at the cap, sign kept."""
+    return target.clamp(min=-MAGNITUDE_CAP, max=MAGNITUDE_CAP)
+
+
 def _poisson(prediction: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
     """Poisson NLL on a log-rate prediction, summed.
 
@@ -488,9 +502,9 @@ def field_loss(
                 prediction, target.float(), reduction="sum",
             )
         case FieldType.COUNT:
-            return _poisson(prediction.squeeze(-1), target.float())
+            return _poisson(prediction.squeeze(-1), capped(target.float()))
         case FieldType.SIGNED_DELTA:
-            return _signed_delta_loss(prediction, target.float())
+            return _signed_delta_loss(prediction, capped(target.float()))
         case FieldType.CATEGORICAL:
             return functional.cross_entropy(
                 prediction.reshape(-1, spec.arity), target.reshape(-1).long(),
@@ -689,9 +703,10 @@ def constant_predictor_outputs(
                 vector[start:end] = _logit(target.mean(dim=0))
             case FieldType.COUNT:
                 vector[start:end] = torch.log(
-                    _mean(target).clamp(min=_RATE_FLOOR)
+                    _mean(capped(target)).clamp(min=_RATE_FLOOR)
                 )
             case FieldType.SIGNED_DELTA:
+                target = capped(target)
                 direction = torch.sign(target).long().reshape(-1) + 1
                 vector[start:start + 3] = _log_frequencies(
                     torch.bincount(direction, minlength=3).float()
@@ -780,7 +795,7 @@ def created_objects_loss(
             reduction="sum",
         )
         total = total + _poisson(
-            prediction[:, base + 2:base + 5], target[:, base + 2:base + 5],
+            prediction[:, base + 2:base + 5], capped(target[:, base + 2:base + 5]),
         )
         rest = slice(base + 5, base + CREATED_SLOT_WIDTH)
         total = total + functional.binary_cross_entropy_with_logits(

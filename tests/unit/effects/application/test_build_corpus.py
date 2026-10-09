@@ -1729,3 +1729,47 @@ def test_a_short_family_is_repeated_up_to_the_reuse_cap(tmp_path, a_corpus):
     what_if = families["what-if:none"]["written"]
     assert 8 <= what_if <= 20
     assert manifest.legality_counts["blockers"] == {"real": 8, "what_if": what_if}
+
+
+class TestLegalityFamilies:
+    """A legality record is placed in its rarest mode's family (FR-047a)."""
+
+    def _survey(self, keyless):
+        from collections import Counter
+
+        from effects.application.build_corpus import Survey
+
+        return Survey(
+            shards=(), records=sum(keyless.values()), key_games={}, key_records=Counter(),
+            class_records=Counter(), cell_key_records=Counter(), cell_key_heaps={},
+            cell_keyless=Counter(keyless), keyword_combat_games=frozenset(),
+            held_out_text_games={}, held_out_games=frozenset(), games=frozenset(),
+        )
+
+    def test_combination_cells_fold_into_their_rarest_mode(self):
+        from effects.application.build_corpus import (
+            Cell,
+            legality_mode_counts,
+            resolve_legality_families,
+        )
+        from effects.domain.effect_model import CLASS_PLAYABILITY_LEGALITY as LEGALITY
+
+        survey = self._survey({
+            Cell(LEGALITY, "real", "none"): 500,
+            Cell(LEGALITY, "real", "CantAttack"): 30,
+            Cell(LEGALITY, "real", "CantAttack+CantBlock"): 5,
+            Cell(LEGALITY, "real", "CantBlock+Defender"): 2,
+            Cell(LEGALITY, "real", "Defender"): 40,
+            Cell("combat", "", "none"): 9,
+        })
+        counts = legality_mode_counts(survey)
+        assert counts == {"CantAttack": 35, "CantBlock": 7, "Defender": 42}
+
+        folded = resolve_legality_families(survey, counts).cell_keyless
+        assert folded == {
+            Cell(LEGALITY, "real", "none"): 500,
+            Cell(LEGALITY, "real", "CantAttack"): 30,
+            Cell(LEGALITY, "real", "CantBlock"): 7,
+            Cell(LEGALITY, "real", "Defender"): 40,
+            Cell("combat", "", "none"): 9,
+        }

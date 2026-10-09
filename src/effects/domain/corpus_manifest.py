@@ -172,6 +172,10 @@ class CorpusManifest:
     policy_counts: dict[str, dict[str, int]] = field(default_factory=dict)
     #: ``legality subkind -> {real, what_if, unknown}`` training records.
     legality_counts: dict[str, dict[str, int]] = field(default_factory=dict)
+    #: Surveyed records per legality mode. A legality record's family is its
+    #: rarest mode, so every reader placing records in families — the build's
+    #: write pass, the trainer's epoch line, the evaluator — reads it here.
+    legality_mode_counts: dict[str, int] = field(default_factory=dict)
     #: Game-disjoint games placed only under ``--game-disjoint-keyword-share``.
     keyword_threshold_games: tuple[str, ...] = ()
     #: Held-out texts with no gate-one resolution record.
@@ -193,6 +197,7 @@ class CorpusManifest:
         "signatures": {},
         "policy_counts": {},
         "legality_counts": {},
+        "legality_mode_counts": {},
         "keyword_threshold_games": (),
         "held_out_texts_without_resolution": (),
         "held_out_texts_under_five_games": {},
@@ -282,6 +287,9 @@ class CorpusManifest:
             legality_counts={
                 subkind: {k: int(v) for k, v in counts.items()}
                 for subkind, counts in data.get("legality_counts", {}).items()
+            },
+            legality_mode_counts={
+                mode: int(n) for mode, n in data.get("legality_mode_counts", {}).items()
             },
             keyword_threshold_games=tuple(data.get("keyword_threshold_games", ())),
             held_out_texts_without_resolution=tuple(

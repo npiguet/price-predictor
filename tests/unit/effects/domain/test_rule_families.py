@@ -22,6 +22,7 @@ from effects.domain.rule_families import (
     NONE,
     UNAFFORDABLE,
     candidate_family,
+    legality_modes,
     root_param,
     rule_family,
 )
@@ -166,24 +167,43 @@ def test_a_blockers_record_restricted_by_flying_is_flying(records, sidecars):
     assert rule_family(record, sidecars) == "Flying"
 
 
-def test_a_blockers_record_names_both_static_modes_sorted(records):
-    first = ProvenanceKey("cardsfolder/x/a.txt", 0, "static", 0)
-    second = ProvenanceKey("cardsfolder/x/b.txt", 0, "static", 0)
+def _restricted(records, *statics):
+    """A real blockers record whose forbidden creatures name ``statics``' keys."""
+    keys = [ProvenanceKey(f"cardsfolder/x/s{i}.txt", 0, "static", 0)
+            for i in range(len(statics))]
     lines = _Lines({
-        first: SidecarLine(line_index=0, line_kind="static", provenance=(first,),
-                           script_api_type="CantBlockBy", script_text="Mode$ CantBlockBy"),
-        second: SidecarLine(line_index=0, line_kind="static", provenance=(second,),
-                            script_api_type="CantBlock", script_text="Mode$ CantBlock"),
+        key: SidecarLine(line_index=0, line_kind="static", provenance=(key,),
+                         script_api_type=mode, script_text=f"Mode$ {mode}")
+        for key, mode in zip(keys, statics)
     })
     record = _first(records, RecordKind.PLAYABILITY, "blockers")
-    payload = dataclasses.replace(record.payload, forbidden=(
-        ForbiddenEntity(entity="E1", responsible_static=(first,)),
-        ForbiddenEntity(entity="E2", responsible_static=(second,)),
-        ForbiddenEntity(entity="E3", responsible_static=(first,)),
+    payload = dataclasses.replace(record.payload, forbidden=tuple(
+        ForbiddenEntity(entity=f"E{i}", responsible_static=(key,))
+        for i, key in enumerate(keys)
     ))
-    assert rule_family(dataclasses.replace(record, payload=payload), lines) == (
-        "CantBlock,CantBlockBy"
-    )
+    return dataclasses.replace(record, payload=payload), lines
+
+
+def test_a_legality_record_is_in_its_rarest_modes_family(records):
+    record, lines = _restricted(records, "CantBlockBy", "CantBlock")
+    counts = {"CantBlockBy": 3, "CantBlock": 900}
+    assert rule_family(record, lines, legality_mode_counts=counts) == "CantBlockBy"
+
+
+def test_a_multi_mode_static_counts_each_of_its_modes(records):
+    """Pacifism declares ``Mode$ CantAttack,CantBlock`` in one field; it
+    restricts two rules, not one rule named after both."""
+    record, lines = _restricted(records, "CantAttack,CantBlock", "CantAttack")
+    assert legality_modes(record, lines) == frozenset({"CantAttack", "CantBlock"})
+    counts = {"CantAttack": 40, "CantBlock": 7}
+    assert rule_family(record, lines, legality_mode_counts=counts) == "CantBlock"
+
+
+def test_without_mode_counts_the_family_is_still_one_mode(records):
+    """A dataset built before the counts existed still gets a single-rule
+    family, the first mode by name, rather than the combination."""
+    record, lines = _restricted(records, "CantBlockBy", "CantBlock")
+    assert rule_family(record, lines) == "CantBlock"
 
 
 def test_a_legality_record_with_no_static_is_none(records, sidecars):

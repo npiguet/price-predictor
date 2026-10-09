@@ -106,11 +106,13 @@ def unique_text_records(records, batcher: SurfaceBatcher, *, seen) -> list:
 
 def measure(
     records, encoder, model, batcher: SurfaceBatcher, *, fields,
+    legality_mode_counts=None,
 ) -> GateOneMetrics:
     """Run the model over ``records`` and score the three margins.
 
     ``fields`` is the active-field tuple the run trains with, so the gate reads
-    the same heads the loss shaped.
+    the same heads the loss shaped. ``legality_mode_counts`` is the dataset
+    manifest's, so each record's family is the one the build placed it in.
     """
     gate_pred: list[np.ndarray] = []
     gate_true: list[np.ndarray] = []
@@ -145,6 +147,7 @@ def measure(
                 results.append(_record_result(
                     record, batcher, resolver,
                     _record_losses(row, gathered, gate, field_targets, mask, fields),
+                    legality_mode_counts,
                 ))
 
             real = mask.bool()
@@ -217,11 +220,14 @@ def _record_losses(
 
 def _record_result(
     record, batcher: SurfaceBatcher, resolver: KeywordResolver,
-    losses: dict[str, float],
+    losses: dict[str, float], legality_mode_counts=None,
 ) -> RecordResult:
     """The grouping keys of one scored record, beside its losses."""
     try:
-        family = rule_family(record, batcher.sidecars, resolver=resolver)
+        family = rule_family(
+            record, batcher.sidecars, resolver=resolver,
+            legality_mode_counts=legality_mode_counts,
+        )
     except KeyError:
         # The sidecar does not describe the card the record names; the record
         # still scored, it just cannot be placed in a family.

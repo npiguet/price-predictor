@@ -1270,5 +1270,6 @@ def run(config: TrainEffectModelConfig) -> int:
         holdout_max_carriers=manifest.holdout_max_carriers,
         gate_one_records=manifest.per_stratum.get("gate-one", 0),
         rarity=manifest.rarity,
+        legality_mode_counts=manifest.legality_mode_counts or None,
         corpus_digest=manifest.digest(),
     ).execute()

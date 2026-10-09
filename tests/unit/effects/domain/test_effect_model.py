@@ -1023,3 +1023,52 @@ class TestHostPickedRowsMatchBooleanMasks:
             verdict_loss(verdict, verdict_target, per_output.float()),
         )
         assert float(verdict_loss(verdict, verdict_target, torch.zeros(4, VERDICT_WIDTH))) == 0.0
+
+
+class TestMagnitudeCap:
+    """A magnitude above the cap scores as the cap.
+
+    Above about forty, an amount is the game state compounding — a counter
+    doubling run to two million — not what the ability's text says, and one
+    such target under a Poisson loss pulls a step a million times harder than
+    an ordinary one.
+    """
+
+    def test_a_count_above_the_cap_scores_as_the_cap(self):
+        from effects.domain.effect_model import MAGNITUDE_CAP
+        spec = FIELDS_BY_NAME["damage_taken"]
+        prediction = torch.zeros(1, 1)
+        assert field_loss(spec, prediction, torch.tensor([2_000_000.0])) == \
+            field_loss(spec, prediction, torch.tensor([MAGNITUDE_CAP]))
+
+    def test_a_signed_delta_keeps_its_direction_and_caps_its_size(self):
+        from effects.domain.effect_model import MAGNITUDE_CAP
+        spec = FIELDS_BY_NAME["power_delta"]
+        prediction = torch.zeros(1, 4)
+        for sign in (1.0, -1.0):
+            assert field_loss(spec, prediction, torch.tensor([sign * 2_098_760.0])) == \
+                field_loss(spec, prediction, torch.tensor([sign * MAGNITUDE_CAP]))
+
+    def test_the_floor_is_computed_over_capped_targets(self):
+        from effects.domain.effect_model import MAGNITUDE_CAP
+
+        def floor(value):
+            batch = EntityTargetBatch(
+                gate=torch.ones(1, 2),
+                fields={"damage_taken": torch.tensor([[2.0, value]])},
+                mask=torch.ones(1, 2),
+            )
+            return constant_predictor_outputs(
+                [batch], fields=(FIELDS_BY_NAME["damage_taken"],),
+            )
+
+        assert torch.equal(floor(2_000_000.0), floor(MAGNITUDE_CAP))
+
+    def test_the_evaluation_deviance_caps_the_observed_amount(self):
+        import numpy as np
+
+        from effects.application.evaluate_effect_model import poisson_deviance
+        from effects.domain.effect_model import MAGNITUDE_CAP
+        predicted = np.array([3.0, 5.0])
+        assert poisson_deviance(predicted, np.array([1.0, 2_000_000.0])) == \
+            poisson_deviance(predicted, np.array([1.0, MAGNITUDE_CAP]))

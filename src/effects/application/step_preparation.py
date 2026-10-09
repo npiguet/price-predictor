@@ -263,6 +263,9 @@ class StepPreparation:
     held_out: HeldOutCards
     inherited: CorpusSplit | None
     rarity: Mapping[str, int] | None
+    #: The manifest's records per legality mode, which places a legality
+    #: record in the family the build placed it in; None without one.
+    legality_mode_counts: Mapping[str, int] | None = None
     api_types: list[str]
     param_keys: list[str]
     truncations: TruncationLog | None
@@ -523,7 +526,10 @@ class StepPreparation:
                 games = (self.rarity or {}).get(text, own_games.get(text, 1))
                 bucket = rarity_bucket(games)
             labels[record.record_id] = (
-                bucket, rule_family(record, sidecars, resolver=resolver),
+                bucket, rule_family(
+                    record, sidecars, resolver=resolver,
+                    legality_mode_counts=self.legality_mode_counts,
+                ),
             )
         return labels
 
@@ -610,6 +616,7 @@ class PreparerSettings:
     param_keys: tuple[str, ...]
     widths: dict[SlotKind, int]
     heads: frozenset[str]
+    legality_mode_counts: Mapping[str, int] | None = None
 
 
 class StepPreparer(StepPreparation):
@@ -631,6 +638,7 @@ class StepPreparer(StepPreparation):
         self.held_out = settings.held_out
         self.inherited = settings.inherited
         self.rarity = settings.rarity
+        self.legality_mode_counts = settings.legality_mode_counts
         self.api_types = list(settings.api_types)
         self.param_keys = list(settings.param_keys)
         self.widths = settings.widths

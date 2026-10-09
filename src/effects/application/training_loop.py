@@ -349,6 +349,7 @@ class TrainingLoop(StepPreparation):
         holdout_max_carriers: int,
         gate_one_records: int = 0,
         rarity: Mapping[str, int] | None = None,
+        legality_mode_counts: Mapping[str, int] | None = None,
         corpus_digest: str = "",
         prefetch_batches: bool = True,
     ) -> None:
@@ -386,6 +387,9 @@ class TrainingLoop(StepPreparation):
         #: The curated dataset's corpus-wide ``text -> games`` table (FR-146),
         #: threaded into every ``sample_weights`` call this run makes.
         self.rarity = rarity
+        #: The manifest's records per legality mode, so the epoch line places
+        #: a legality record in the family the build balanced it in.
+        self.legality_mode_counts = legality_mode_counts
         #: Whether this run has already said how much of a shard the
         #: rarity table names. Once per run rather than once per shard:
         #: a table matching nothing is otherwise invisible, since every
@@ -1087,7 +1091,7 @@ class TrainingLoop(StepPreparation):
                 inherited=self.inherited, rarity=self.rarity,
                 api_types=tuple(self.api_types),
                 param_keys=tuple(self.param_keys), widths=dict(widths),
-                heads=heads,
+                heads=heads, legality_mode_counts=self.legality_mode_counts,
             ),
             workers=self.prefetch_workers, depth=max(depth, 1),
             pin=self.device.type == "cuda",

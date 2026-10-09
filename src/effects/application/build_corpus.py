@@ -19,11 +19,12 @@ name the same ability.
 
 from __future__ import annotations
 
+import dataclasses
 import logging
 import time
 import zlib
 from collections import Counter, defaultdict
-from collections.abc import Iterable, Iterator
+from collections.abc import Iterable, Iterator, Mapping
 from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -206,21 +207,44 @@ def selection_half(record: EffectRecord, klass: str) -> str:
     return REAL if record.what_if is False else WHAT_IF
 
 
-def cell_of(record: EffectRecord, sidecars, resolver) -> Cell:
+#: Joins a legality record's modes into its survey-time family, the set the
+#: write pass later resolves to the rarest one. No mode name contains it.
+MODE_SET_SEPARATOR = "+"
+
+
+def cell_of(
+    record: EffectRecord, sidecars, resolver,
+    legality_mode_counts: Mapping[str, int] | None = None,
+) -> Cell:
     """The cell a record is selected in. Both passes call this one function.
 
     ``random_seat`` is deliberately not a component (FR-050): off-policy
     records compete for the same share as on-policy ones, and the manifest
     reports how many of each were written instead.
+
+    A legality record's family is its rarest mode, which only the whole
+    corpus can say. The survey therefore passes no ``legality_mode_counts``
+    and gets the record's mode set as a provisional family, which
+    :func:`resolve_legality_families` folds once the counts exist; the write
+    pass passes the counts and gets the final family directly.
     """
     from effects.application.train_effect_model import sampling_class
-    from effects.domain.rule_families import rule_family
+    from effects.domain.effect_model import CLASS_PLAYABILITY_LEGALITY
+    from effects.domain.rule_families import NONE, legality_modes, rule_family
 
     klass = sampling_class(record)
+    if klass == CLASS_PLAYABILITY_LEGALITY and legality_mode_counts is None:
+        modes = legality_modes(record, sidecars)
+        family = MODE_SET_SEPARATOR.join(sorted(modes)) if modes else NONE
+    else:
+        family = rule_family(
+            record, sidecars, resolver=resolver,
+            legality_mode_counts=legality_mode_counts,
+        )
     return Cell(
         klass=klass,
         half=selection_half(record, klass),
-        family=rule_family(record, sidecars, resolver=resolver),
+        family=family,
         signature=(
             signature_label(outcome_signature(record))
             if klass in SIGNATURE_CLASSES else ""
@@ -453,6 +477,63 @@ def survey_shard(relative: str) -> ShardSurvey:
 
     out.cell_key_hashes = {slot: heap.values() for slot, heap in heaps.items()}
     return out
+
+
+def _modes_of(family: str) -> frozenset[str]:
+    from effects.domain.rule_families import NONE
+
+    return frozenset() if family == NONE else frozenset(family.split(MODE_SET_SEPARATOR))
+
+
+def legality_mode_counts(survey: Survey) -> dict[str, int]:
+    """Survey records per legality mode, over the provisional mode-set cells."""
+    from effects.domain.effect_model import CLASS_PLAYABILITY_LEGALITY
+
+    counts: Counter[str] = Counter()
+    cells = list(survey.cell_keyless.items()) + [
+        (cell, n) for (cell, _key), n in survey.cell_key_records.items()
+    ]
+    for cell, n in cells:
+        if cell.klass == CLASS_PLAYABILITY_LEGALITY:
+            for mode in _modes_of(cell.family):
+                counts[mode] += n
+    return dict(sorted(counts.items()))
+
+
+def resolve_legality_families(survey: Survey, counts: Mapping[str, int]) -> Survey:
+    """Fold every provisional legality cell into its rarest mode's family.
+
+    Cells whose mode sets share a rarest mode merge: their counts add and their
+    capped hash heaps merge, which is what the write pass will place their
+    records in.
+    """
+    from effects.domain.effect_model import CLASS_PLAYABILITY_LEGALITY
+    from effects.domain.rule_families import legality_family
+
+    def final(cell: Cell) -> Cell:
+        if cell.klass != CLASS_PLAYABILITY_LEGALITY:
+            return cell
+        return dataclasses.replace(
+            cell, family=legality_family(_modes_of(cell.family), counts),
+        )
+
+    keyless: Counter[Cell] = Counter()
+    for cell, n in survey.cell_keyless.items():
+        keyless[final(cell)] += n
+    key_records: Counter[tuple[Cell, str]] = Counter()
+    for (cell, key), n in survey.cell_key_records.items():
+        key_records[final(cell), key] += n
+    heaps: dict[tuple[Cell, str], CapHeap] = {}
+    for (cell, key), heap in survey.cell_key_heaps.items():
+        slot = (final(cell), key)
+        if slot in heaps:
+            heaps[slot].merge(heap)
+        else:
+            heaps[slot] = heap
+    return dataclasses.replace(
+        survey, cell_keyless=keyless, cell_key_records=key_records,
+        cell_key_heaps=heaps,
+    )
 
 
 def source_of(relative: str) -> str:
@@ -1239,6 +1320,9 @@ class WriteConfig:
     #: The same remapper the survey read through, so both passes see one
     #: corpus (FR-151); None when ``--no-remap-token-keys``.
     remapper: TokenKeyRemapper | None = None
+    #: Survey records per legality mode, which places a legality record in its
+    #: rarest mode's family exactly as the fold placed its cell.
+    legality_mode_counts: dict[str, int] = field(default_factory=dict)
 
 
 @dataclass(slots=True)
@@ -1414,7 +1498,7 @@ def write_shard_pass(relative: str) -> WriteResult:
                 # stratum_keys -- only an output in OUTPUTS does.
                 out.stratum["dropped-held-out"] += 1
                 continue
-            cell = cell_of(record, sidecars, resolver)
+            cell = cell_of(record, sidecars, resolver, config.legality_mode_counts)
             plan = config.plans.get((cell, key)) if key is not None else None
             if plan is None:
                 plan = config.keyless_plans.get(cell, _NO_COPIES)
@@ -1876,6 +1960,8 @@ def build(config: BuildCorpusConfig) -> int:
         "Surveyed %d record(s) in %d game(s); %d game(s) name a held-out card.",
         survey.records, len(survey.games), len(survey.held_out_games),
     )
+    mode_counts = legality_mode_counts(survey)
+    survey = resolve_legality_families(survey, mode_counts)
 
     decisions = decide(
         survey, sidecars=sidecars, surface=surface,
@@ -1917,6 +2003,7 @@ def build(config: BuildCorpusConfig) -> int:
             seed=config.seed,
             sidecar_roots={name: str(path) for name, path in roots.items()},
             remapper=remapper,
+            legality_mode_counts=mode_counts,
         ),
         workers=config.workers,
     )
@@ -2043,6 +2130,7 @@ def build(config: BuildCorpusConfig) -> int:
         signatures=signatures,
         policy_counts=_nested(written.policy),
         legality_counts=_nested(written.legality),
+        legality_mode_counts=mode_counts,
         keyword_threshold_games=tuple(sorted(decisions.keyword_threshold_games)),
         held_out_texts_without_resolution=held_out_report[0],
         held_out_texts_under_five_games=held_out_report[1],

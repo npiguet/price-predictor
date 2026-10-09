@@ -21,8 +21,8 @@ rewrite         ``Event$`` of the replacement line's root segment
 combat          the sorted set of damage-step keywords on the participants,
                 ``none`` when they carry none
 playability     FR-047a: the responsible static's ``Mode$``, else the first
-                failing verdict bit (``decision``), or the sorted set of
-                static modes across ``forbidden`` (``attackers``/``blockers``)
+                failing verdict bit (``decision``), or the rarest single
+                static mode across ``forbidden`` (``attackers``/``blockers``)
 ==============  ===========================================================
 
 Whatever the kind, a record acting through a keyword line belongs to that
@@ -35,7 +35,7 @@ gate 2's :class:`KeywordResolver`.
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 
 from effects.domain.ability_tokenizer import display_name_of
 from effects.domain.damage_step_keywords import KEYWORDS_BY_NAME, KeywordResolver
@@ -140,14 +140,46 @@ def candidate_family(candidate: Candidate, sidecars) -> str:
     return NONE
 
 
-def _legality_family(record: EffectRecord, sidecars) -> str:
-    modes = {
-        mode
-        for entry in record.payload.forbidden
-        if entry.responsible_static
-        and (mode := static_mode(entry.responsible_static, sidecars)) is not None
-    }
-    return ",".join(sorted(modes)) if modes else NONE
+def legality_modes(record: EffectRecord, sidecars) -> frozenset[str]:
+    """Every single static mode restricting a creature on a legality record.
+
+    A static's ``Mode$`` may list several modes — Pacifism's is
+    ``CantAttack,CantBlock`` — and each is a rule of its own, so the list is
+    split. A keyword family (``Protection from black``) is taken whole, since
+    its name is not a mode list.
+    """
+    modes: set[str] = set()
+    for entry in record.payload.forbidden:
+        if not entry.responsible_static:
+            continue
+        line = _line(sidecars, entry.responsible_static)
+        if line is None:
+            continue
+        keyword = _keyword_family(line)
+        if keyword is not None:
+            modes.add(keyword)
+            continue
+        declared = root_param(line.script_text, "Mode") or line.script_api_type
+        if declared:
+            modes.update(part.strip() for part in declared.split(",") if part.strip())
+    return frozenset(modes)
+
+
+def legality_family(
+    modes: frozenset[str], mode_counts: Mapping[str, int] | None = None,
+) -> str:
+    """The family of a legality record restricted by ``modes``.
+
+    The rarest of them by the corpus-wide ``mode_counts``, so a board stacking
+    several restrictions counts toward the rule the corpus holds least of,
+    rather than founding a family of its own for the combination. Ties and a
+    missing table (a dataset built before the counts existed) fall to the
+    first mode by name, which keeps the family a single rule either way.
+    """
+    if not modes:
+        return NONE
+    counts = mode_counts or {}
+    return min(modes, key=lambda mode: (counts.get(mode, 0), mode))
 
 
 def combat_family(record: EffectRecord, resolver: KeywordResolver) -> str:
@@ -162,12 +194,16 @@ def combat_family(record: EffectRecord, resolver: KeywordResolver) -> str:
 
 def rule_family(
     record: EffectRecord, sidecars, *, resolver: KeywordResolver | None = None,
+    legality_mode_counts: Mapping[str, int] | None = None,
 ) -> str:
     """The rules category ``record`` belongs to (module docstring).
 
     ``sidecars`` answers ``line_for(key)``; ``resolver`` is the combat
     keyword resolver, passed in so a caller walking many records shares its
-    memo, and built over ``sidecars`` when omitted.
+    memo, and built over ``sidecars`` when omitted. ``legality_mode_counts``
+    is the dataset's corpus-wide count of records per legality mode, which
+    picks a legality record's rarest mode; every caller placing records of
+    one dataset passes the same table, from its manifest.
 
     A ``decision`` record's family is its first candidate's: Java writes one
     candidate per record, which is the unit feature 023 already trains on.
@@ -181,7 +217,9 @@ def rule_family(
                 if not payload.candidates:
                     return NONE
                 return candidate_family(payload.candidates[0], sidecars)
-            return _legality_family(record, sidecars)
+            return legality_family(
+                legality_modes(record, sidecars), legality_mode_counts,
+            )
 
     line = _line(sidecars, record.ability or ())
     if line is None:
