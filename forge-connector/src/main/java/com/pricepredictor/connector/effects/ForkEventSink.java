@@ -26,7 +26,9 @@ import forge.game.spellability.SpellAbility;
 import forge.game.zone.ZoneType;
 
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * Everything a forked resolution did, in order.
@@ -73,6 +75,8 @@ final class ForkEventSink {
     private final SpellAbility acting;
     private final StatDiffer stats = new StatDiffer();
     private final List<EffectEvent> events = new ArrayList<>();
+    /** Positions in {@link #events} of moves off the battlefield during a state-based check. */
+    private final Set<Integer> stateBasedLeaves = new LinkedHashSet<>();
 
     ForkEventSink(Game fork, SpellAbility acting) {
         this.fork = fork;
@@ -81,6 +85,15 @@ final class ForkEventSink {
 
     List<EffectEvent> events() {
         return List.copyOf(events);
+    }
+
+    /**
+     * Where in {@link #events()} a permanent left the battlefield while a
+     * state-based check was running, read as the fork's view tracker being
+     * frozen, the way {@code BusBracketCollector.holdAsConsequence} reads it.
+     */
+    Set<Integer> stateBasedLeaves() {
+        return Set.copyOf(stateBasedLeaves);
     }
 
     boolean isEmpty() {
@@ -203,7 +216,16 @@ final class ForkEventSink {
      */
     @Subscribe
     public void onCardChangeZone(GameEventCardChangeZone event) {
-        file(BusEvents.cardMoved(event));
+        EffectEvent moved = BusEvents.cardMoved(event);
+        if (moved != null && event.from() != null
+                && event.from().zoneType() == ZoneType.Battlefield
+                && fork != null && fork.getTracker().isFrozen()) {
+            // A state-based check is running -- the same reading the live
+            // collector takes -- so this is a death the forced resolution
+            // left behind, which a modal fork files by the live rule.
+            stateBasedLeaves.add(events.size());
+        }
+        file(moved);
         file(BusEvents.libraryMovement(event));
         if (event.card() != null && event.from() != null
                 && event.from().zoneType() == ZoneType.Battlefield) {

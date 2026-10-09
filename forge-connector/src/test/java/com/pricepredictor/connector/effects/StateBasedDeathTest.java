@@ -373,9 +373,14 @@ class StateBasedDeathTest {
         assertFalse(halves.get(0).contains(deathOf(giant)), halves.get(0));
     }
 
-    /** A death of something the resolution never touched is not its consequence. */
+    /**
+     * Forge checks state-based actions before every priority, so the check
+     * right after a resolution finds only what that resolution left behind:
+     * a creature that dies in it joins the record whether or not one of the
+     * resolution's own events named it.
+     */
     @Test
-    void aDeathTheResolutionDidNotTouchDoesNotJoin() throws IOException {
+    void aDeathInTheFollowingCheckJoinsEvenUntouched() throws IOException {
         Game game = game();
         Player caster = game.getPlayers().get(0);
         Player opponent = game.getPlayers().get(1);
@@ -390,7 +395,8 @@ class StateBasedDeathTest {
         try {
             game.getStack().add(shock);
             game.getStack().resolveStack();
-            // Lethal damage from somewhere the bracket never saw.
+            // Lethal damage the bracket never saw, standing in for what a
+            // static the resolution brought does to a creature it never named.
             bystander.setDamage(2);
             game.getAction().checkStateEffects(false);
             nextStep(game);
@@ -400,7 +406,218 @@ class StateBasedDeathTest {
 
         List<String> halves = effectHalves(readShard(writer.path()));
         assertEquals(1, halves.size(), halves.toString());
-        assertFalse(halves.get(0).contains(deathOf(bystander)), halves.get(0));
+        assertTrue(halves.get(0).contains(deathOf(bystander)), halves.get(0));
+    }
+
+    /**
+     * A check after the next action is that action's: once a land is played
+     * the held half is written, and a death in the check that follows the
+     * land joins nothing.
+     */
+    @Test
+    void aDeathInACheckAfterTheNextActionDoesNotJoin() throws IOException {
+        Game game = game();
+        Player caster = game.getPlayers().get(0);
+        Player opponent = game.getPlayers().get(1);
+        Card giant = onBattlefield(game, "Hill Giant", opponent);
+        Card bystander = onBattlefield(game, "Grizzly Bears", opponent);
+        SpellAbility shock = targeting(spellOf(inHand(game, "Shock", caster), caster), giant);
+        Card mountain = inHand(game, "Mountain", caster);
+
+        RecordShardWriter writer = writer();
+        BusBracketCollector collector = new BusBracketCollector(
+                game, writer, "run.0-l1.0", CollectionCaps.defaults());
+        game.subscribeToEvents(collector);
+        try {
+            castAndResolve(game, shock);
+            caster.playLand(mountain, null);
+            bystander.setDamage(2);
+            game.getAction().checkStateEffects(false);
+            nextStep(game);
+        } finally {
+            writer.close();
+        }
+
+        for (String record : readShard(writer.path())) {
+            assertFalse(record.contains(deathOf(bystander)), record);
+        }
+    }
+
+    /**
+     * Dead Weight resolves onto a 2/2, its static shrinks the creature to 0/0
+     * once the resolution is over, and the check that follows kills it and
+     * sends the Aura after it. Both are the Aura spell's doing; the static's
+     * own stat change is not an event of the spell's, and belongs to the
+     * static's continuous record.
+     */
+    @Test
+    void aMinusAuraKillJoinsTheAuraSpellsRecord() throws IOException {
+        Game game = game();
+        Player caster = game.getPlayers().get(0);
+        Card bears = onBattlefield(game, "Grizzly Bears", game.getPlayers().get(1));
+        Card aura = inHand(game, "Dead Weight", caster);
+        SpellAbility deadWeight = targeting(spellOf(aura, caster), bears);
+
+        RecordShardWriter writer = writer();
+        BusBracketCollector collector = new BusBracketCollector(
+                game, writer, "run.0-l1.0", CollectionCaps.defaults());
+        game.subscribeToEvents(collector);
+        try {
+            castAndResolve(game, deadWeight);
+            assertTrue(game.getCardsIn(ZoneType.Graveyard).stream()
+                    .anyMatch(c -> c.getId() == bears.getId()), "the bears died");
+            nextStep(game);
+        } finally {
+            writer.close();
+        }
+
+        List<String> halves = effectHalves(readShard(writer.path()));
+        assertEquals(1, halves.size(), halves.toString());
+        String effect = halves.get(0);
+        assertTrue(effect.contains(deathOf(bears)), effect);
+        assertTrue(effect.contains(deathOf(aura)), "the Aura fell off: " + effect);
+        assertFalse(effect.contains("\"type\":\"pt_change\",\"subjects\":[\"E" + bears.getId()),
+                "the static's shrink is not the spell's event: " + effect);
+    }
+
+    /** A static that shrinks on entry kills in the check after its creature resolves. */
+    @Test
+    void aStaticThatKillsOnEntryJoinsTheCreatureSpellsRecord() throws IOException {
+        Game game = game();
+        Player caster = game.getPlayers().get(0);
+        Card bears = onBattlefield(game, "Grizzly Bears", game.getPlayers().get(1));
+        SpellAbility norn = spellOf(inHand(game, "Elesh Norn, Grand Cenobite", caster), caster);
+
+        RecordShardWriter writer = writer();
+        BusBracketCollector collector = new BusBracketCollector(
+                game, writer, "run.0-l1.0", CollectionCaps.defaults());
+        game.subscribeToEvents(collector);
+        try {
+            castAndResolve(game, norn);
+            nextStep(game);
+        } finally {
+            writer.close();
+        }
+
+        List<String> halves = effectHalves(readShard(writer.path()));
+        assertEquals(1, halves.size(), halves.toString());
+        assertTrue(halves.get(0).contains(deathOf(bears)), halves.get(0));
+    }
+
+    /** The legend rule is a state-based action too, and its loser joins the record. */
+    @Test
+    void theLegendRulesLoserJoinsTheSecondLegendsRecord() throws IOException {
+        Game game = game();
+        Player caster = game.getPlayers().get(0);
+        Card first = onBattlefield(game, "Isamaru, Hound of Konda", caster);
+        Card secondCard = inHand(game, "Isamaru, Hound of Konda", caster);
+        SpellAbility second = spellOf(secondCard, caster);
+
+        RecordShardWriter writer = writer();
+        BusBracketCollector collector = new BusBracketCollector(
+                game, writer, "run.0-l1.0", CollectionCaps.defaults());
+        game.subscribeToEvents(collector);
+        try {
+            castAndResolve(game, second);
+            nextStep(game);
+        } finally {
+            writer.close();
+        }
+
+        List<String> halves = effectHalves(readShard(writer.path()));
+        assertEquals(1, halves.size(), halves.toString());
+        assertTrue(halves.get(0).contains(deathOf(first))
+                        || halves.get(0).contains(deathOf(secondCard)),
+                "one Isamaru went to the graveyard: " + halves.get(0));
+    }
+
+    /** An Aura falls off when the creature it enchanted dies, in the same check. */
+    @Test
+    void anAuraFallingOffItsDeadHostJoinsTheRecord() throws IOException {
+        Game game = game();
+        Player caster = game.getPlayers().get(0);
+        Player opponent = game.getPlayers().get(1);
+        Card bears = onBattlefield(game, "Grizzly Bears", opponent);
+        Card pacifism = onBattlefield(game, "Pacifism", caster);
+        pacifism.attachToEntity(bears, null);
+        SpellAbility bolt = targeting(
+                spellOf(inHand(game, "Lightning Bolt", caster), caster), bears);
+
+        RecordShardWriter writer = writer();
+        BusBracketCollector collector = new BusBracketCollector(
+                game, writer, "run.0-l1.0", CollectionCaps.defaults());
+        game.subscribeToEvents(collector);
+        try {
+            castAndResolve(game, bolt);
+            nextStep(game);
+        } finally {
+            writer.close();
+        }
+
+        List<String> halves = effectHalves(readShard(writer.path()));
+        assertEquals(1, halves.size(), halves.toString());
+        assertTrue(halves.get(0).contains(deathOf(bears)), halves.get(0));
+        assertTrue(halves.get(0).contains(deathOf(pacifism)), halves.get(0));
+    }
+
+    /**
+     * On a modal fork, a state-based death joins the mode half that touched
+     * the creature, as the live collector files it. Fiery Confluence's
+     * "1 damage to each creature" kills the elf; when the last chosen mode is
+     * "2 damage to each opponent", that last half never saw the elf.
+     */
+    @Test
+    void aModalForkFilesTheDeathInTheModeThatTouchedTheCreature() throws IOException {
+        int checked = 0;
+        for (long seed = 0; seed < 40 && checked == 0; seed++) {
+            Game game = game();
+            Player caster = game.getPlayers().get(0);
+            Card elves = onBattlefield(game, "Llanowar Elves", game.getPlayers().get(1));
+            SpellAbility charm = null;
+            for (SpellAbility sa : inHand(game, "Fiery Confluence", caster).getSpellAbilities()) {
+                if (sa.getApi() == ApiType.Charm) {
+                    charm = sa;
+                }
+            }
+            assertNotNull(charm);
+            charm.setActivatingPlayer(caster);
+            CollectionCaps caps = new CollectionCaps(
+                    2000, 0.1, 2, 0, List.of(), List.of(1, 2, 3), 0.1);
+
+            Path dir = tempDir.resolve("fork-" + seed);
+            RecordShardWriter writer = new RecordShardWriter(dir, "run", 0, "l1");
+            try (PatchedCollectors patched = new PatchedCollectors(
+                    game, writer, "run.0-l1.0", caps, 1L)) {
+                Assumptions.assumeTrue(
+                        patched.install() > 0 && patched.installedHooks().contains("clause-events"),
+                        "../forge has no clause hook to split a fork's modes");
+                ForkCollector forks = new ForkCollector(game, writer, "run.0-l1.0", caps, seed);
+                patched.withForks(forks);
+                forks.intervene(charm, 1);
+            } finally {
+                writer.close();
+            }
+
+            List<String> halves = readShard(writer.path());
+            if (halves.size() < 2 || !halves.get(halves.size() - 1).contains("\"option\":1}")) {
+                continue;
+            }
+            int lastTouching = -1;
+            for (int i = 0; i < halves.size(); i++) {
+                if (halves.get(i).contains("\"option\":0}")) {
+                    lastTouching = i;
+                }
+            }
+            if (lastTouching < 0) {
+                continue;
+            }
+            checked++;
+            for (int i = 0; i < halves.size(); i++) {
+                assertEquals(i == lastTouching ? 1 : 0, count(halves.get(i), deathOf(elves)),
+                        "half " + i + " of " + halves);
+            }
+        }
+        assertTrue(checked > 0, "no seed drew a creature mode followed by a last opponent mode");
     }
 
     // ── the end of the game ─────────────────────────────────────────────
@@ -542,6 +759,15 @@ class StateBasedDeathTest {
         assertFalse(halves.get(0).contains(deathOf(bears)), halves.get(0));
         assertEquals(1, count(halves.get(1), deathOf(bears)), halves.get(1));
         assertFalse(halves.get(2).contains(deathOf(bears)), halves.get(2));
+    }
+
+    /** The half rule alone: the last half that named the permanent, else the last half. */
+    @Test
+    void aDeathNoModeNamedJoinsTheLastHalf() {
+        List<Set<String>> touched = List.of(Set.of("E1", "E2"), Set.of("E2"), Set.of("P0"));
+        assertEquals(0, BusBracketCollector.halfForDeath(touched, "E1"));
+        assertEquals(1, BusBracketCollector.halfForDeath(touched, "E2"));
+        assertEquals(2, BusBracketCollector.halfForDeath(touched, "E9"));
     }
 
     // ── forks ───────────────────────────────────────────────────────────

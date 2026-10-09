@@ -14,6 +14,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
+import java.util.Set;
 import java.util.StringJoiner;
 
 /**
@@ -388,16 +389,15 @@ public final class ForkCollector {
             // option line and with the board as it stood when that mode's
             // first clause began. Events before the first mode's clause — the
             // charm's own, of which there are none — ride with the first.
-            List<EffectEvent> events = resolution.events();
             List<ModeBoundary> modes = resolution.modes();
+            List<List<EffectEvent>> halves = splitByMode(
+                    resolution.events(), modes, resolution.stateBasedLeaves());
             for (int i = 0; i < modes.size(); i++) {
                 ModeBoundary boundary = modes.get(i);
-                int from = i == 0 ? 0 : boundary.firstEvent();
-                int to = i + 1 < modes.size() ? modes.get(i + 1).firstEvent() : events.size();
                 ProvenanceKey.Resolved modeKeys = boundary.option() == null || keys.key() == null
                         ? keys
                         : new ProvenanceKey.Resolved(keys.key().withOption(boundary.option()), null);
-                emit(forkedHalf(actorId, modeKeys, boundary.state(), events.subList(from, to)));
+                emit(forkedHalf(actorId, modeKeys, boundary.state(), halves.get(i)));
             }
             return true;
         } finally {
@@ -436,8 +436,61 @@ public final class ForkCollector {
     private record ModeBoundary(Integer option, int firstEvent, String state) {
     }
 
-    /** What a forced resolution produced, and where its modes began. */
-    private record ForcedResolution(List<EffectEvent> events, List<ModeBoundary> modes) {
+    /**
+     * What a forced resolution produced, where its modes began, and which of
+     * its events are permanents leaving the battlefield in a state-based check.
+     */
+    private record ForcedResolution(
+            List<EffectEvent> events, List<ModeBoundary> modes, Set<Integer> stateBasedLeaves) {
+    }
+
+    /**
+     * A modal fork's events, one list per chosen mode.
+     *
+     * <p>Every event belongs to the mode in whose span it was filed, except a
+     * state-based death. {@code GameSimulator.resolveStack} runs the check
+     * only after the whole charm has resolved, so by position every death
+     * would fall into the last mode's half, whichever mode killed. Those are
+     * filed by the live collector's rule instead ({@link
+     * BusBracketCollector#halfForDeath}): the last half whose own events named
+     * the permanent, or the last half when none did. Order is kept within each
+     * half, so a death still follows the events that caused it.
+     *
+     * @param stateBasedLeaves positions in {@code events} of moves off the
+     *                         battlefield during a state-based check
+     */
+    private static List<List<EffectEvent>> splitByMode(
+            List<EffectEvent> events, List<ModeBoundary> modes, Set<Integer> stateBasedLeaves) {
+        int[] spanOf = new int[events.size()];
+        List<List<EffectEvent>> own = new ArrayList<>();
+        for (int i = 0; i < modes.size(); i++) {
+            int from = i == 0 ? 0 : modes.get(i).firstEvent();
+            int to = i + 1 < modes.size() ? modes.get(i + 1).firstEvent() : events.size();
+            List<EffectEvent> span = new ArrayList<>();
+            for (int at = from; at < to; at++) {
+                spanOf[at] = i;
+                if (!stateBasedLeaves.contains(at)) {
+                    span.add(events.get(at));
+                }
+            }
+            own.add(span);
+        }
+        List<Set<String>> touched = new ArrayList<>();
+        for (List<EffectEvent> span : own) {
+            touched.add(BusBracketCollector.touchedBy(span));
+        }
+        List<List<EffectEvent>> halves = new ArrayList<>();
+        for (int i = 0; i < modes.size(); i++) {
+            halves.add(new ArrayList<>());
+        }
+        for (int at = 0; at < events.size(); at++) {
+            EffectEvent event = events.get(at);
+            int half = stateBasedLeaves.contains(at) && !event.subjects().isEmpty()
+                    ? BusBracketCollector.halfForDeath(touched, event.subjects().get(0))
+                    : spanOf[at];
+            halves.get(half).add(event);
+        }
+        return halves;
     }
 
     /**
@@ -505,7 +558,8 @@ public final class ForkCollector {
             fork.copyLastState();
             fork.getStack().add(ability);
             GameSimulator.resolveStack(fork, actor.getWeakestOpponent());
-            return new ForcedResolution(sink.events(), List.copyOf(modes));
+            return new ForcedResolution(
+                    sink.events(), List.copyOf(modes), sink.stateBasedLeaves());
         } catch (RuntimeException | StackOverflowError e) {
             // A forced resolution reaches states ordinary play does not — an
             // ability resolving with no legal target, a cost that was never

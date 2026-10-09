@@ -122,9 +122,8 @@ public final class BusBracketCollector {
      * resolution as it always was. The events can still grow, by the deaths
      * the resolution's own effects cause; see {@link HeldResolution}.
      *
-     * @param touched the entity refs this half's own events name as subjects:
-     *                what it damaged, pumped, shrank, countered, animated or
-     *                moved, and therefore what it can have killed
+     * @param touched the entity refs this half's own events name as subjects,
+     *                which choose the half a death joins on a modal resolution
      */
     private record HeldHalf(
             String recordId,
@@ -140,19 +139,14 @@ public final class BusBracketCollector {
                 List<EffectEvent> events) {
             List<EffectEvent> own = new ArrayList<>(events);
             Set<String> seen = new LinkedHashSet<>();
-            Set<String> touched = new LinkedHashSet<>();
             for (EffectEvent event : own) {
                 if (IDEMPOTENT_EVENTS.contains(event.type())) {
                     seen.add(event.toJson());
                 }
-                for (String subject : event.subjects()) {
-                    if (subject.startsWith("E")) {
-                        touched.add(subject);
-                    }
-                }
             }
             return new HeldHalf(
-                    recordId, RecordShardWriter.timestamp(), keys, state, own, seen, touched);
+                    recordId, RecordShardWriter.timestamp(), keys, state, own, seen,
+                    touchedBy(own));
         }
     }
 
@@ -499,9 +493,9 @@ public final class BusBracketCollector {
      * the held resolution's consequences are over by the time a player acts.
      *
      * <p>Needed even though the land's own arrival would never join the held
-     * record — it touches nothing the resolution touched — because a land is
-     * followed by another state-based check, and what that one kills is the
-     * land's doing (a static it brought), not the held resolution's.
+     * record — it arrives rather than leaves — because a land is followed by
+     * another state-based check, and what that one kills is the land's doing
+     * (a static it brought), not the held resolution's.
      */
     @Subscribe
     public void onLandPlayed(GameEventLandPlayed event) {
@@ -660,14 +654,11 @@ public final class BusBracketCollector {
     /**
      * File a permanent's leaving into the held resolution that killed it.
      *
-     * <p>Three conditions, each closing a way an unrelated move could join:
+     * <p>Two conditions, each closing a way an unrelated move could join:
      * <ul>
      *   <li>it leaves the <b>battlefield</b> — a death, an exile instead of a
-     *   death, a token ceasing to exist; a card arriving anywhere is not a
-     *   consequence of this kind;</li>
-     *   <li>one of the held halves' own events named it as a subject, so the
-     *   resolution did something to it; a creature that dies of damage the
-     *   bracket never saw is not this resolution's doing; and</li>
+     *   death, a token ceasing to exist, an Aura falling off; a card arriving
+     *   anywhere is not a consequence of this kind; and</li>
      *   <li>a state-based check is running, read as the game's view tracker
      *   being frozen, which {@code GameAction.checkStateEffects} holds for
      *   its whole loop. Between the check and the next cast event the player
@@ -678,9 +669,21 @@ public final class BusBracketCollector {
      *   resolution nothing else freezes the tracker while a card moves.</li>
      * </ul>
      *
-     * <p>A modal resolution files the death into the half whose events
-     * touched the creature, the last of them when several did: that is the
-     * mode whose effect was the last to change it before it died. The cost
+     * <p>Which permanent it is does not matter. Forge checks state-based
+     * actions before every priority, so the check that runs while the half
+     * is held is the first since the resolution began, and everything it
+     * finds is something the resolution left behind — including what a
+     * static it brought does: a 2/2 under the Dead Weight that just resolved,
+     * the creatures an entering Elesh Norn shrinks to nothing, the loser of
+     * the legend rule, the Aura that falls off a creature the resolution
+     * killed. The static's own stat change stays out; it is the static's
+     * continuous record, and only the move it causes is the resolution's.
+     * The window closes at the next action ({@link HeldResolution}), so a
+     * check after a land or a new cast is not this resolution's.
+     *
+     * <p>A modal resolution files the move into the half whose events named
+     * the permanent, the last of them when several did — the mode that was
+     * the last to change it — and into the last half when none did. The cost
      * half and the link are the resolution's and do not move.
      *
      * <p><b>Stamped against the resolved ability, with no clause.</b> The
@@ -702,19 +705,51 @@ public final class BusBracketCollector {
                 || !game.getTracker().isFrozen()) {
             return false;
         }
-        String subject = "E" + event.card().getId();
-        HeldHalf into = null;
+        List<Set<String>> touched = new ArrayList<>();
         for (HeldHalf half : held.halves()) {
-            if (half.touched().contains(subject)) {
-                into = half;
-            }
+            touched.add(half.touched());
         }
-        if (into == null) {
-            return false;
-        }
+        HeldHalf into = held.halves().get(
+                halfForDeath(touched, "E" + event.card().getId()));
         fileEvent(EventAttribution.stamp(moved, held.root(), null, null),
                 into.events(), into.seen());
         return true;
+    }
+
+    /**
+     * The entity refs a half's own events name as subjects: what it damaged,
+     * pumped, shrank, countered, animated or moved.
+     */
+    static Set<String> touchedBy(List<EffectEvent> events) {
+        Set<String> touched = new LinkedHashSet<>();
+        for (EffectEvent event : events) {
+            for (String subject : event.subjects()) {
+                if (subject.startsWith("E")) {
+                    touched.add(subject);
+                }
+            }
+        }
+        return touched;
+    }
+
+    /**
+     * Which of a resolution's halves a state-based death belongs to: the last
+     * whose events named the permanent, or the last half when none did.
+     *
+     * <p>One rule for the live collector and for a modal fork, so an observed
+     * and a forced resolution of the same charm file the same death the same
+     * way.
+     *
+     * @param touchedPerHalf each half's {@link #touchedBy} set, in order;
+     *                       never empty
+     */
+    static int halfForDeath(List<Set<String>> touchedPerHalf, String subject) {
+        for (int i = touchedPerHalf.size() - 1; i >= 0; i--) {
+            if (touchedPerHalf.get(i).contains(subject)) {
+                return i;
+            }
+        }
+        return touchedPerHalf.size() - 1;
     }
 
     /**
@@ -1238,9 +1273,9 @@ public final class BusBracketCollector {
     long finishGame(Set<Integer> onStack) {
         // First, because it is the oldest: the resolution it describes ended
         // before anything the two below hold. The winner is not one of its
-        // consequences -- player_won names a player, not a permanent the
-        // resolution touched -- so it stays where flushOrphanedEvents has
-        // always put it, in a record of its own after this one.
+        // consequences -- player_won is not a permanent leaving the
+        // battlefield -- so it stays where flushOrphanedEvents has always put
+        // it, in a record of its own after this one.
         flushHeldResolution();
         flushCombat();
         flushOrphanedEvents();
