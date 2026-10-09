@@ -881,3 +881,36 @@ class TestReadRecordsMatching:
             tmp_path, game_ids={record.game_id}, kinds={"playability"},
         ))
         assert [r.record_id for r in got] == [record.record_id]
+
+
+class TestInternedProvenanceKeys:
+    """A shard repeats the same few hundred keys tens of thousands of times."""
+
+    def test_an_equal_key_parses_to_the_same_object(self, tmp_path):
+        directory = tmp_path / "records"
+        directory.mkdir()
+        (directory / _GEN1_FIXTURE.name).write_bytes(_GEN1_FIXTURE.read_bytes())
+        seen: dict[ProvenanceKey, ProvenanceKey] = {}
+        repeats = 0
+        for record in read_records(directory):
+            for entity in record.state.entities:
+                for key in entity.printed:
+                    first = seen.setdefault(key, key)
+                    assert first is key
+                    repeats += 1
+        assert repeats > len(seen) > 1
+
+    def test_an_option_keeps_the_mode_key_apart_from_its_root(self):
+        from effects.infrastructure.record_io import _keys_from_json
+
+        root = {"script_file": "cardsfolder/c/charm.txt", "face": 0,
+                "trait_kind": "spell", "index_within_kind": 0}
+        (a, b, c) = _keys_from_json([root, {**root, "option": 1}, dict(root)])
+        assert a is c
+        assert a != b and b.option == 1 and b.root == a
+
+    def test_interned_records_equal_freshly_built_ones(self):
+        record = _record(**ALL_KINDS["resolution-activation"])
+        data = record_to_dict(record)
+        assert record_from_dict(data) == record
+        assert record_from_dict(data) == record_from_dict(json.loads(json.dumps(data)))

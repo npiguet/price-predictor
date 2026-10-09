@@ -112,8 +112,26 @@ def _keys_to_json(keys: tuple[ProvenanceKey, ...]) -> list[dict]:
     return [key.as_dict() for key in keys]
 
 
+#: Every key parsed so far, by its raw JSON fields. A record carries about 56
+#: keys and a shard repeats the same few hundred thousands of times, so building
+#: each one afresh was the costliest part of parsing a record. The table is
+#: bounded by the number of traits in the card pool, not by the corpus size.
+_INTERNED_KEYS: dict[tuple, ProvenanceKey] = {}
+
+
+def _key_from_json(item: dict) -> ProvenanceKey:
+    raw = (
+        item.get("script_file"), item.get("face"), item.get("trait_kind"),
+        item.get("index_within_kind"), item.get("option"),
+    )
+    key = _INTERNED_KEYS.get(raw)
+    if key is None:
+        key = _INTERNED_KEYS[raw] = ProvenanceKey.from_dict(item)
+    return key
+
+
 def _keys_from_json(data: Any) -> tuple[ProvenanceKey, ...]:
-    return tuple(ProvenanceKey.from_dict(item) for item in data or ())
+    return tuple(_key_from_json(item) for item in data or ())
 
 
 # ── events ──────────────────────────────────────────────────────────────
