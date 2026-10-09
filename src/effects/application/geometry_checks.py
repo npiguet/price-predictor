@@ -340,7 +340,11 @@ def check_decodability(
             "decodability", CheckStatus.SKIPPED,
             f"no win-rate table at {win_rates_path}",
         )
-    from price_predictor.application.ridge_probes import build_label_table, fit_probes
+    from price_predictor.application.ridge_probes import (
+        build_label_table,
+        fit_probes,
+        load_labels,
+    )
 
     shared = sorted(set(cached.by_card) & set(sealed_vectors)) if sealed_vectors \
         else sorted(cached.by_card)
@@ -349,8 +353,15 @@ def check_decodability(
             "decodability", CheckStatus.SKIPPED,
             f"only {len(shared)} cards in both caches; too few to fit probes",
         )
+    # A sidecar names its card in lowercase and the win-rate table in Forge's
+    # canonical case, so an exact join labels no card and every probe reads
+    # nan. Joined case-insensitively, in the cache's order, so label row i
+    # still describes embedding row i.
+    canonical = {name.casefold(): name for name in load_labels(Path(win_rates_path))}
     table = build_label_table(
-        shared, win_rates_path=Path(win_rates_path), val_names=set(held_out_cards),
+        [canonical.get(name.casefold(), name) for name in shared],
+        win_rates_path=Path(win_rates_path),
+        val_names={canonical.get(name.casefold(), name) for name in held_out_cards},
     )
     effects_matrix = np.stack([cached.by_card[name] for name in shared])
     effects_probes = fit_probes(table, effects_matrix, mode="honest")

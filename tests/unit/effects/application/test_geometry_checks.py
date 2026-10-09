@@ -510,6 +510,35 @@ class TestDecodability:
         assert "too few" in result.detail
 
 
+    def test_the_cache_s_lowercase_names_join_the_canonical_win_rate_names(self, tmp_path):
+        """A sidecar names its card in lowercase; the win-rate table in Forge's
+        canonical case. A case-sensitive join labels no card at all, and every
+        probe reads nan."""
+        header = (
+            "card_name;wins_when_played;wins_when_in_deck;losses_when_played;"
+            "losses_when_in_deck;raw_score_play;shrunk_score_play;raw_score_draw;"
+            "shrunk_score_draw;raw_played_rate;shrunk_played_rate;raw_cast_lift;"
+            "shrunk_cast_lift;raw_color_lift_W;shrunk_color_lift_W;raw_color_lift_U;"
+            "shrunk_color_lift_U;raw_color_lift_B;shrunk_color_lift_B;raw_color_lift_R;"
+            "shrunk_color_lift_R;raw_color_lift_G;shrunk_color_lift_G"
+        )
+        rng = np.random.default_rng(3)
+        by_card, rows = {}, [header]
+        for i in range(80):
+            score = float(rng.uniform(0.2, 0.8))
+            by_card[f"storm crow {i}"] = np.array([score, *rng.normal(size=3)])
+            cells = [f"Storm Crow {i}", "40", "60", "40", "60"] + [f"{score:.5f}"] * 18
+            rows.append(";".join(cells))
+        win_rates = tmp_path / "cards-win-rates.txt"
+        win_rates.write_text("\n".join(rows) + "\n", encoding="utf-8")
+
+        result = check_decodability(
+            CachedVectors(by_card=by_card), {}, win_rates,
+            held_out_cards=tuple(f"storm crow {i}" for i in range(20)),
+        )
+        assert result.status is CheckStatus.REPORTED
+        assert "score_play nan" not in result.detail, result.detail
+
 class TestVariantComparison:
     def test_it_skips_without_the_variant_cache(self, cache):
         cards, abilities = cache
