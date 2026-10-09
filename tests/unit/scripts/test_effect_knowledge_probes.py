@@ -542,7 +542,13 @@ class TestExtraction:
             zero = rows[0].features["0"].shape[0]
             assert rows[0].features["1"].shape[0] == zero + 3 * e_dim
             assert rows[0].features["1w"].shape == rows[0].features["1"].shape
-            assert all(np.isfinite(r.rung3) for r in rows)
+            # Gen-1 never trained its verdict head, so the targets that read it
+            # carry no rung 3; every other target reads a trained output.
+            trained = ladder.verdict_head_trained(probe_model.checkpoint)
+            if target in ladder.VERDICT_TARGETS and not trained:
+                assert all(np.isnan(r.rung3) for r in rows)
+            else:
+                assert all(np.isfinite(r.rung3) for r in rows)
 
     def test_a_toughness_sweep_reads_one_prediction_per_value(self, probe_model, records,
                                                              sidecars):
@@ -580,3 +586,63 @@ class TestExtraction:
         assert result["steps"] == 2 and result["layers"] == 0
         assert set(result["shallow"]) == set(result["full"])
         assert all(np.isfinite(v) for v in result["shallow"].values())
+
+
+class TestRung3ReadsTheRightOutput:
+    """Rung 3 is the model's own prediction, read from the output that learned it."""
+
+    def _outputs(self, gate_logit: float, legal_logit: float):
+        import torch
+
+        from effects.domain.effect_model import FIELD_SLICES, GATE_INDEX, PER_ENTITY_WIDTH
+
+        vector = torch.zeros(1, 1, PER_ENTITY_WIDTH)
+        vector[0, 0, GATE_INDEX] = gate_logit
+        vector[0, 0, FIELD_SLICES["target_legal"][0]] = legal_logit
+        return vector
+
+    def test_target_legality_reads_the_gate_not_the_field(self):
+        """Training sets `target_legal` only on legal targets, always to 1, so
+        its output on an illegal entity was never supervised; the gate is what
+        a decision record raises on its legal targets."""
+        import torch
+
+        outputs = self._outputs(gate_logit=-3.0, legal_logit=5.0)
+        value = ladder._readout("legal_target", outputs, None, 0, 0)
+        assert value == pytest.approx(float(torch.sigmoid(torch.tensor(-3.0))))
+
+    def test_an_untrained_verdict_head_gives_no_rung_3(self):
+        assert np.isnan(ladder._readout("affordable", None, None, 0, 0,
+                                        verdict_trained=False))
+        assert np.isnan(ladder._readout("fires", None, None, 0, 0,
+                                        verdict_trained=False))
+
+    def test_a_checkpoint_without_training_settings_never_trained_the_verdict_head(self):
+        class Gen1:
+            training_settings: dict = {}
+
+        class Gen2:
+            training_settings = {"tokenizer_rules": "gen-2", "value_weight": 0.05}
+
+        assert not ladder.verdict_head_trained(Gen1())
+        assert ladder.verdict_head_trained(Gen2())
+
+    def test_the_ladder_reports_why_rung_3_is_missing_and_gives_no_share(self):
+        rng = np.random.default_rng(4)
+        n = 200
+        y = rng.integers(0, 2, n).astype(float)
+        items = [
+            ladder.ExtractedItem(
+                target="affordable", label=float(label), group=f"g{i}",
+                features={rung: rng.normal(size=3) for rung in ladder.PROBED_RUNGS},
+                rung3=float("nan"),
+            )
+            for i, label in enumerate(y)
+        ]
+        data = ladder.ladder_inputs(items, {"affordable": "binary"})["affordable"]
+        assert data.rung3 is None and data.rung3_note == ladder.UNTRAINED_VERDICT_NOTE
+        result = ladder.run_ladder(data, rungs=("0", "1"),
+                                   mlp_options={"hidden": 8, "epochs": 2, "device": "cpu"},
+                                   bootstrap=0)
+        assert "3" not in result["rungs"] and result["share"] is None
+        assert result["rung3_unavailable"] == ladder.UNTRAINED_VERDICT_NOTE

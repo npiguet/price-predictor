@@ -613,7 +613,13 @@ def probe(args, checkpoint, corpus: Path, probe_set: dict) -> dict:
         progress("board sweeps")
         by_id = {r.record_id: r for r in every}
         scorecard["sweeps"] = {}
+        verdict_trained = ladder.verdict_head_trained(checkpoint)
         for name, rows in probe_set["sweeps"].items():
+            if name == "affordability" and not verdict_trained:
+                # It reads the verdict head, which this checkpoint never
+                # trained: a curve from random weights says nothing.
+                scorecard["sweeps"][name] = {"unavailable": ladder.UNTRAINED_VERDICT_NOTE}
+                continue
             curves: dict[str, list] = defaultdict(list)
             for row in rows:
                 record = by_id.get(row["record_id"])
@@ -689,6 +695,9 @@ def write_tables(out_dir: Path, scorecard: dict) -> None:
     if scorecard.get("sweeps"):
         lines = ["# Board sweeps", ""]
         for name, body in scorecard["sweeps"].items():
+            if "unavailable" in body:
+                lines += [f"## {name}", "", f"Not run: {body['unavailable']}.", ""]
+                continue
             lines += [f"## {name}", "", "| value | mean prediction | n |", "|---:|---:|---:|"]
             lines += [f"| {p['value']} | {_fmt(p['prediction'])} | {p['n']} |"
                       for p in body["mean"]]
