@@ -177,6 +177,7 @@ class ClauseContractTest {
             handler.invoke(null, methodNamed(ListenerShape.class, "onClauseResolved"),
                     new Object[]{Boolean.FALSE, sa});
             bracket.endBracket(sa.getId(), false);
+            bracket.flushHeldResolution();
         } finally {
             writer.close();
         }
@@ -239,6 +240,7 @@ class ClauseContractTest {
             handler.invoke(null, methodNamed(ListenerShape.class, "onClauseResolved"),
                     new Object[]{outer, false});
             bracket.endBracket(outer.getId(), false);
+            bracket.flushHeldResolution();
         } finally {
             writer.close();
         }
@@ -296,6 +298,7 @@ class ClauseContractTest {
                 handler.invoke(null, methodNamed(ListenerShape.class, "onClauseResolved"),
                         new Object[]{forkAbility, false});
                 bracket.endBracket(forkAbility.getId(), false);
+                bracket.flushHeldResolution();
             }
         } finally {
             writer.close();
@@ -380,6 +383,7 @@ class ClauseContractTest {
                 handler.invoke(null, methodNamed(ListenerShape.class, "onClauseResolved"),
                         new Object[]{outer, false});
                 bracket.endBracket(outer.getId(), false);
+                bracket.flushHeldResolution();
             } finally {
                 System.setErr(originalErr);
             }
@@ -440,6 +444,7 @@ class ClauseContractTest {
             handler.invoke(null, methodNamed(ListenerShape.class, "onClauseResolved"),
                     new Object[]{sa, threw});
             bracket.endBracket(sa.getId(), false);
+            bracket.flushHeldResolution();
         } finally {
             writer.close();
         }

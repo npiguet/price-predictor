@@ -140,6 +140,7 @@ class BusBracketCollectorTest {
 
         collector.beginBracket(bolt);
         collector.endBracket(bolt.getId(), false);
+        collector.flushHeldResolution();
 
         List<String> records = written();
         assertEquals(2, records.size(), records.toString());
@@ -169,6 +170,7 @@ class BusBracketCollectorTest {
 
         collector.beginBracket(bolt);
         collector.endBracket(bolt.getId(), true);
+        collector.flushHeldResolution();
 
         List<String> records = written();
         assertEquals(1, records.size(), records.toString());
@@ -383,6 +385,7 @@ class BusBracketCollectorTest {
         bolt.resetTargets();
         bolt.getTargets().add(victim);
         collector.endBracket(bolt.getId(), false);
+        collector.flushHeldResolution();
 
         List<String> records = written();
         assertEquals(2, records.size(), records.toString());
@@ -414,6 +417,7 @@ class BusBracketCollectorTest {
                 victim.getView(), attacker.getView(), 2,
                 GameEventCardDamaged.DamageType.Normal));
         collector.endBracket(bolt.getId(), false);
+        collector.flushHeldResolution();
 
         String effectHalf = written().get(1);
         assertTrue(effectHalf.contains("\"cause\":\"E" + attacker.getId() + "\""),
@@ -443,6 +447,7 @@ class BusBracketCollectorTest {
                 TestCards.build("Grizzly Bears"),
                 zone(ZoneType.Battlefield), zone(ZoneType.Graveyard)));
         collector.endBracket(bolt.getId(), false);
+        collector.flushHeldResolution();
 
         String effectHalf = written().get(1);
         assertTrue(
@@ -461,6 +466,7 @@ class BusBracketCollectorTest {
                 TestCards.build("Runeclaw Bear").getView(), null, 1,
                 GameEventCardDamaged.DamageType.Normal));
         collector.endBracket(bolt.getId(), false);
+        collector.flushHeldResolution();
 
         String effectHalf = written().get(1);
         assertTrue(
@@ -488,6 +494,7 @@ class BusBracketCollectorTest {
         collector.beginBracket(bolt);
         collector.onRadiation(new GameEventPlayerRadiation(receiver, source, 3));
         collector.endBracket(bolt.getId(), false);
+        collector.flushHeldResolution();
 
         String effectHalf = written().get(1);
         assertTrue(effectHalf.contains("\"cause\":\"P" + source.getId() + "\""),
@@ -546,6 +553,7 @@ class BusBracketCollectorTest {
         outcomeCollector.onGameOutcome(new GameEventGameOutcome(
                 4, List.of("p1 has won"), "p1", "p1: 1 p2: 0 "));
         outcomeCollector.endBracket(bolt.getId(), false);
+        outcomeCollector.flushHeldResolution();
 
         String effectHalf = written().get(1);
         assertTrue(effectHalf.contains("\"type\":\"player_won\""), effectHalf);
@@ -561,6 +569,7 @@ class BusBracketCollectorTest {
         collector.beginBracket(bolt);
         collector.onGameOutcome(new GameEventGameOutcome(4, List.of("Draw"), null, ""));
         collector.endBracket(bolt.getId(), false);
+        collector.flushHeldResolution();
 
         String effectHalf = written().get(1);
         assertFalse(effectHalf.contains("player_won"), effectHalf);
@@ -784,6 +793,7 @@ class BusBracketCollectorTest {
         collector.beginBracket(bolt);
         collector.noteDeclined();
         collector.endBracket(bolt.getId(), false);
+        collector.flushHeldResolution();
 
         List<String> records = written();
         assertEquals(1, records.size(), records.toString());
@@ -811,6 +821,7 @@ class BusBracketCollectorTest {
                 TestCards.build("Grizzly Bears"),
                 zone(ZoneType.Battlefield), zone(ZoneType.Graveyard)));
         collector.endBracket(bolt.getId(), false);
+        collector.flushHeldResolution();
 
         List<String> records = written();
         assertEquals(2, records.size(), records.toString());
@@ -829,6 +840,7 @@ class BusBracketCollectorTest {
         // A spell cast in response takes the bracket over.
         collector.beginBracket(answer);
         collector.endBracket(answer.getId(), false);
+        collector.flushHeldResolution();
 
         // The refused spell is still held: nothing ever settled it. The
         // records are the answer's own two halves, and its cost half is first.
@@ -846,6 +858,7 @@ class BusBracketCollectorTest {
         collector.noteDeclined();
         collector.beginBracket(bolt);
         collector.endBracket(bolt.getId(), false);
+        collector.flushHeldResolution();
 
         assertTrue(written().get(0).contains("\"outcome\":\"resolved\""));
     }
@@ -871,6 +884,7 @@ class BusBracketCollectorTest {
         collector.beginBracket(bolt);
         listener.onConfirm(bolt, true);
         collector.endBracket(bolt.getId(), false);
+        collector.flushHeldResolution();
 
         assertTrue(written().get(0).contains("\"outcome\":\"resolved\""),
                 "an offer taken is described by what it did, not by an outcome");
@@ -889,6 +903,7 @@ class BusBracketCollectorTest {
         collector.beginBracket(bolt);
         listener.onConfirm(bolt, false);
         collector.endBracket(bolt.getId(), false);
+        collector.flushHeldResolution();
 
         assertTrue(written().get(0).contains("\"outcome\":\"declined\""));
     }
@@ -935,6 +950,7 @@ class BusBracketCollectorTest {
         // A fork's own confirmation, declined -- must not touch this bracket.
         listener.onConfirm(forkAbility, false);
         collector.endBracket(bolt.getId(), false);
+        collector.flushHeldResolution();
 
         assertTrue(written().get(0).contains("\"outcome\":\"resolved\""),
                 "a fork's own declined confirmation must not mark the live "

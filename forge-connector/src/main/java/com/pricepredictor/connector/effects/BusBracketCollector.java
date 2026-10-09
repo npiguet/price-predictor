@@ -18,6 +18,7 @@ import forge.game.event.GameEventCombatEnded;
 import forge.game.event.GameEventDayTimeChanged;
 import forge.game.event.GameEventGameFinished;
 import forge.game.event.GameEventGameOutcome;
+import forge.game.event.GameEventLandPlayed;
 import forge.game.event.GameEventScry;
 import forge.game.event.GameEventShuffle;
 import forge.game.event.GameEventSurveil;
@@ -112,6 +113,76 @@ public final class BusBracketCollector {
     private final List<ModeHalf> modeHalves = new ArrayList<>();
     /** The mode whose clauses are resolving now, or null outside one. */
     private ModeHalf openMode;
+
+    /**
+     * One effect half that has finished resolving and is not written yet.
+     *
+     * <p>Everything but the events is fixed at the resolution — the id, the
+     * timestamp, the key and the board, which is the one taken before the
+     * resolution as it always was. The events can still grow, by the deaths
+     * the resolution's own effects cause; see {@link HeldResolution}.
+     *
+     * @param touched the entity refs this half's own events name as subjects:
+     *                what it damaged, pumped, shrank, countered, animated or
+     *                moved, and therefore what it can have killed
+     */
+    private record HeldHalf(
+            String recordId,
+            String timestamp,
+            ProvenanceKey.Resolved keys,
+            String state,
+            List<EffectEvent> events,
+            Set<String> seen,
+            Set<String> touched) {
+
+        static HeldHalf of(
+                String recordId, ProvenanceKey.Resolved keys, String state,
+                List<EffectEvent> events) {
+            List<EffectEvent> own = new ArrayList<>(events);
+            Set<String> seen = new LinkedHashSet<>();
+            Set<String> touched = new LinkedHashSet<>();
+            for (EffectEvent event : own) {
+                if (IDEMPOTENT_EVENTS.contains(event.type())) {
+                    seen.add(event.toJson());
+                }
+                for (String subject : event.subjects()) {
+                    if (subject.startsWith("E")) {
+                        touched.add(subject);
+                    }
+                }
+            }
+            return new HeldHalf(
+                    recordId, RecordShardWriter.timestamp(), keys, state, own, seen, touched);
+        }
+    }
+
+    /**
+     * A resolution whose effect halves wait for its state-based consequences.
+     *
+     * <p>Forge does not check state-based actions when an ability finishes:
+     * {@code MagicStack.resolveStack} publishes {@code GameEventSpellResolved}
+     * and returns, and the creature a Lightning Bolt left with lethal damage
+     * dies at the next priority, inside {@code GameAction.checkStateEffects} —
+     * after {@code GameEventPlayerPriority}, so not even that event is a
+     * boundary. Written at the resolved event, as it used to be, the effect
+     * half held the damage and never the death: across twelve real shards,
+     * none of 515 lethal-looking resolution damage events had its death in
+     * the same record, while combat records, whose bracket stays open until
+     * the step ends, held it 61% of the time.
+     *
+     * <p>So the halves are held from the resolution until the next real
+     * action begins — a bracket opening for a cast or a trigger, another
+     * resolution ending, a combat bracket opening, a step or phase boundary,
+     * a land played, the end of the game — and written then, exactly once.
+     *
+     * @param root the resolved ability, which the deaths are stamped against
+     */
+    private record HeldResolution(
+            SpellAbility root, String actor, String linkId, List<HeldHalf> halves) {
+    }
+
+    /** The resolution waiting for its consequences, or null when none is. */
+    private HeldResolution held;
 
     /**
      * The match's random seat, as a player id, or null when it has none.
@@ -285,6 +356,9 @@ public final class BusBracketCollector {
      * they were missing while the outcome was a literal.
      */
     void beginBracket(SpellAbility ability) {
+        // A cast, an activation or a trigger reaching the stack is the next
+        // action: whatever the held resolution killed has died by now.
+        flushHeldResolution();
         openBracket(ability);
         if (ability == null) {
             return;
@@ -297,8 +371,9 @@ public final class BusBracketCollector {
     }
 
     /**
-     * A resolution closes the bracket, stamps the cost half and writes the
-     * effect half.
+     * A resolution closes the bracket, stamps the cost half and holds the
+     * effect half until the deaths it causes have happened ({@link
+     * HeldResolution}).
      *
      * <p>A fizzle writes no effect half at all. {@code MagicStack.resolveStack}
      * skips resolution entirely when the targets are gone, so the alternative is
@@ -328,6 +403,10 @@ public final class BusBracketCollector {
      *                  in which case it never ran at all
      */
     void endBracket(int abilityId, boolean fizzled) {
+        // Another resolution has run since the held one ended, so the held
+        // one's state-based check is over: what dies after this is this
+        // resolution's doing, or a mix nobody can untangle.
+        flushHeldResolution();
         // The bracket is a single slot, so a spell cast in response to another
         // takes it over: when the outer one finally resolves the events that
         // belong to it were never gathered. The cost half is still stamped with
@@ -353,20 +432,17 @@ public final class BusBracketCollector {
             closeOpenMode();
         }
 
+        // The effect halves are held rather than written: the deaths this
+        // resolution causes have not happened yet. See HeldResolution.
         if (writesEffectHalf && modeHalves.isEmpty()) {
-            emit(new EffectRecord(
-                    writer.nextRecordId(), writer.runId(), RecordShardWriter.timestamp(),
-                    gameId, EffectRecord.KIND_RESOLUTION, mode)
-                    .moment(EffectRecord.MOMENT_RESOLUTION)
-                    .actor(resolvingActor)
-                    .ability(resolvingKeys)
-                    .linkId(link)
+            held = new HeldResolution(resolving, resolvingActor, link, List.of(HeldHalf.of(
+                    writer.nextRecordId(), resolvingKeys,
                     // Modes, X and the named card are set while the ability
                     // resolves, so the block that carries them is re-read here
                     // and spliced into the board captured at the cast.
-                    .state(SnapshotBuilder.spliceRefs(
-                            openBracketState, snapshots.refsJson(resolving)))
-                    .payload(EffectRecord.eventsPayload(bracketEvents)));
+                    SnapshotBuilder.spliceRefs(
+                            openBracketState, snapshots.refsJson(resolving)),
+                    bracketEvents)));
         } else if (writesEffectHalf) {
             // A modal resolution on a patched worker: one effect half per
             // chosen mode, each through the mode's own option line, every one
@@ -376,18 +452,13 @@ public final class BusBracketCollector {
             // which is what the schema says of any resolution that did
             // nothing observable.
             String refs = snapshots.refsJson(resolving);
+            List<HeldHalf> halves = new ArrayList<>();
             for (ModeHalf half : modeHalves) {
-                emit(new EffectRecord(
-                        writer.nextRecordId(), writer.runId(),
-                        RecordShardWriter.timestamp(),
-                        gameId, EffectRecord.KIND_RESOLUTION, mode)
-                        .moment(EffectRecord.MOMENT_RESOLUTION)
-                        .actor(resolvingActor)
-                        .ability(modeKeys(half.option))
-                        .linkId(link)
-                        .state(SnapshotBuilder.spliceRefs(half.state, refs))
-                        .payload(EffectRecord.eventsPayload(half.events)));
+                halves.add(HeldHalf.of(
+                        writer.nextRecordId(), modeKeys(half.option),
+                        SnapshotBuilder.spliceRefs(half.state, refs), half.events));
             }
+            held = new HeldResolution(resolving, resolvingActor, link, List.copyOf(halves));
         }
 
         if (bracketIsThisAbility) {
@@ -406,6 +477,7 @@ public final class BusBracketCollector {
      */
     @Subscribe
     public void onPhase(GameEventTurnPhase event) {
+        flushHeldResolution();
         flushCombat();
         // An effect that empties the stack -- ending the turn, ending combat --
         // resolves nothing afterwards, so a phase boundary is the last chance
@@ -415,10 +487,25 @@ public final class BusBracketCollector {
 
     @Subscribe
     public void onCombatEnded(GameEventCombatEnded event) {
+        flushHeldResolution();
         flushCombat();
         // The next combat's assignment table starts empty, so what this one
         // wrote must stop suppressing entries in it.
         assignmentsSeen.clear();
+    }
+
+    /**
+     * A land played is an action of its own, with no stack and so no bracket:
+     * the held resolution's consequences are over by the time a player acts.
+     *
+     * <p>Needed even though the land's own arrival would never join the held
+     * record — it touches nothing the resolution touched — because a land is
+     * followed by another state-based check, and what that one kills is the
+     * land's doing (a static it brought), not the held resolution's.
+     */
+    @Subscribe
+    public void onLandPlayed(GameEventLandPlayed event) {
+        flushHeldResolution();
     }
 
     // ── outcome events ──────────────────────────────────────────────────
@@ -555,7 +642,7 @@ public final class BusBracketCollector {
     @Subscribe
     public void onCardChangeZone(GameEventCardChangeZone event) {
         EffectEvent moved = BusEvents.cardMoved(event);
-        if (moved != null) {
+        if (moved != null && !holdAsConsequence(event, moved)) {
             record(moved);
         }
         EffectEvent named = BusEvents.libraryMovement(event);
@@ -567,6 +654,91 @@ public final class BusBracketCollector {
             // Off the battlefield a card's computed characteristics stop
             // meaning anything, and one that returns is a new object.
             stats.forget(event.card().getId());
+        }
+    }
+
+    /**
+     * File a permanent's leaving into the held resolution that killed it.
+     *
+     * <p>Three conditions, each closing a way an unrelated move could join:
+     * <ul>
+     *   <li>it leaves the <b>battlefield</b> — a death, an exile instead of a
+     *   death, a token ceasing to exist; a card arriving anywhere is not a
+     *   consequence of this kind;</li>
+     *   <li>one of the held halves' own events named it as a subject, so the
+     *   resolution did something to it; a creature that dies of damage the
+     *   bracket never saw is not this resolution's doing; and</li>
+     *   <li>a state-based check is running, read as the game's view tracker
+     *   being frozen, which {@code GameAction.checkStateEffects} holds for
+     *   its whole loop. Between the check and the next cast event the player
+     *   acts, and the costs of that action are paid before the cast is
+     *   announced: a Treasure the resolution made, sacrificed for mana to
+     *   cast the next spell, leaves the battlefield in this same window and
+     *   is that spell's cost, not this resolution's consequence. Outside a
+     *   resolution nothing else freezes the tracker while a card moves.</li>
+     * </ul>
+     *
+     * <p>A modal resolution files the death into the half whose events
+     * touched the creature, the last of them when several did: that is the
+     * mode whose effect was the last to change it before it died. The cost
+     * half and the link are the resolution's and do not move.
+     *
+     * <p><b>Stamped against the resolved ability, with no clause.</b> The
+     * death is a state-based action rather than anything a clause did, so
+     * {@code attributed_to} is {@link EventAttribution#UNRESOLVED}, which is
+     * what a combat record's state-based deaths carry too, while {@code
+     * cause} is the resolved line's host card: the death is filed because
+     * that line caused it, and it is what an interventional fork writes for
+     * the same death, since its sink is still listening when
+     * {@code GameSimulator.resolveStack} runs the check against the forced
+     * ability. One death, one rendering, observed or forced.
+     *
+     * @return whether the move was filed into the held resolution, in which
+     *         case it goes nowhere else
+     */
+    private boolean holdAsConsequence(GameEventCardChangeZone event, EffectEvent moved) {
+        if (held == null || event.from() == null
+                || event.from().zoneType() != ZoneType.Battlefield
+                || !game.getTracker().isFrozen()) {
+            return false;
+        }
+        String subject = "E" + event.card().getId();
+        HeldHalf into = null;
+        for (HeldHalf half : held.halves()) {
+            if (half.touched().contains(subject)) {
+                into = half;
+            }
+        }
+        if (into == null) {
+            return false;
+        }
+        fileEvent(EventAttribution.stamp(moved, held.root(), null, null),
+                into.events(), into.seen());
+        return true;
+    }
+
+    /**
+     * Write the held resolution's effect halves, if one is held.
+     *
+     * <p>Package-private so a test that ends a resolution by hand can close
+     * the window the way the next action in a real game would.
+     */
+    void flushHeldResolution() {
+        if (held == null) {
+            return;
+        }
+        HeldResolution writing = held;
+        held = null;
+        for (HeldHalf half : writing.halves()) {
+            emit(new EffectRecord(
+                    half.recordId(), writer.runId(), half.timestamp(),
+                    gameId, EffectRecord.KIND_RESOLUTION, mode)
+                    .moment(EffectRecord.MOMENT_RESOLUTION)
+                    .actor(writing.actor())
+                    .ability(half.keys())
+                    .linkId(writing.linkId())
+                    .state(half.state())
+                    .payload(EffectRecord.eventsPayload(half.events())));
         }
     }
 
@@ -639,8 +811,11 @@ public final class BusBracketCollector {
     /**
      * Route an event into whichever bracket is open.
      *
-     * <p>State-based-action deaths arrive with no ability resolving; they
-     * attribute to the bracket they follow, which is the one that caused them.
+     * <p>State-based-action deaths arrive with no ability resolving, after the
+     * bracket that caused them has closed. The ones it caused never reach
+     * here: {@link #holdAsConsequence} files them into its held effect half.
+     * The rest land in the emptied bracket like any other event that arrives
+     * with nothing resolving.
      */
     private void record(EffectEvent event) {
         record(event, null);
@@ -1061,6 +1236,12 @@ public final class BusBracketCollector {
      * @return how many held casts were abandoned rather than written
      */
     long finishGame(Set<Integer> onStack) {
+        // First, because it is the oldest: the resolution it describes ended
+        // before anything the two below hold. The winner is not one of its
+        // consequences -- player_won names a player, not a permanent the
+        // resolution touched -- so it stays where flushOrphanedEvents has
+        // always put it, in a record of its own after this one.
+        flushHeldResolution();
         flushCombat();
         flushOrphanedEvents();
         writeOffRemoved(onStack);
@@ -1233,6 +1414,9 @@ public final class BusBracketCollector {
         if (combatState != null) {
             return;
         }
+        // Combat damage is the next action. Ordinarily the step boundary
+        // before it has written the held resolution already.
+        flushHeldResolution();
         var phase = game.getPhaseHandler();
         combatSubstep = phase != null && phase.getPhase() != null
                 && phase.getPhase().toString().contains("FIRST_STRIKE")
@@ -1289,9 +1473,10 @@ public final class BusBracketCollector {
      * <p>Reachable by the most ordinary kind of win. {@code MagicStack} fires
      * {@code GameEventSpellResolved} immediately after a resolving ability's
      * own effect returns, with no game-over check between, so {@link
-     * #endBracket} runs -- writing and clearing that ability's own effect half
-     * -- before {@code checkStateBasedEffects} ever asks whether anyone lost
-     * (CR 704.3, checked at the start of the next main-loop iteration). A
+     * #endBracket} runs -- holding that ability's own effect half and clearing
+     * the bracket -- before {@code checkStateBasedEffects} ever asks whether
+     * anyone lost (CR 704.3, checked at the start of the next main-loop
+     * iteration). A
      * burn spell that leaves its target at 0 life closes its own bracket first
      * and only then is the game discovered to be over: {@code
      * GameEventGameOutcome} fires with no bracket open, {@link #record} has

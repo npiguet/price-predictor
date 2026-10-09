@@ -2076,6 +2076,7 @@ class PatchedCollectorTest {
                 assertEquals("vote_taken", collectors.lastClauseEvent().type());
 
                 bracket.endBracket(liveAbility.getId(), false);
+                bracket.flushHeldResolution();
             }
         } finally {
             writer.close();
@@ -2117,6 +2118,7 @@ class PatchedCollectorTest {
                                 Map.of("subjects", List.of(counteredCard))});
 
                 bracket.endBracket(liveAbility.getId(), false);
+                bracket.flushHeldResolution();
             }
         } finally {
             writer.close();
@@ -2162,6 +2164,7 @@ class PatchedCollectorTest {
                                 Map.of("subjects", List.of(activePlayer))});
 
                 bracket.endBracket(liveAbility.getId(), false);
+                bracket.flushHeldResolution();
             }
         } finally {
             writer.close();
@@ -2194,6 +2197,7 @@ class PatchedCollectorTest {
                                 Map.of("subjects", List.of(c1, c2))});
 
                 bracket.endBracket(liveAbility.getId(), false);
+                bracket.flushHeldResolution();
             }
         } finally {
             writer.close();
@@ -2228,6 +2232,7 @@ class PatchedCollectorTest {
                                 "count", 4)});
 
                 bracket.endBracket(liveAbility.getId(), false);
+                bracket.flushHeldResolution();
             }
         } finally {
             writer.close();
@@ -2259,6 +2264,7 @@ class PatchedCollectorTest {
                                 "results", List.of(Map.of("natural", 3, "final", 5)))});
 
                 bracket.endBracket(liveAbility.getId(), false);
+                bracket.flushHeldResolution();
             }
         } finally {
             writer.close();
@@ -2307,6 +2313,7 @@ class PatchedCollectorTest {
                                 + "the live bracket is gated");
 
                 bracket.endBracket(liveAbility.getId(), false);
+                bracket.flushHeldResolution();
             }
         } finally {
             writer.close();
@@ -2487,6 +2494,7 @@ class PatchedCollectorTest {
                     PatchHooks.uninstall(PatchHooks.ABILITY_UTILS, "setEffectRecordClauseListener");
                 }
                 bracket.endBracket(flushAbility.getId(), false);
+                bracket.flushHeldResolution();
             }
         } finally {
             writer.close();
@@ -2549,6 +2557,7 @@ class PatchedCollectorTest {
                     PatchHooks.uninstall(PatchHooks.ABILITY_UTILS, "setEffectRecordClauseListener");
                 }
                 bracket.endBracket(liveAbility.getId(), false);
+                bracket.flushHeldResolution();
             }
         } finally {
             writer.close();

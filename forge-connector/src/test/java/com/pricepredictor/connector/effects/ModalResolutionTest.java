@@ -212,6 +212,7 @@ class ModalResolutionTest {
             collectors.clauseHandler().invoke(null, resolving(), new Object[]{clones.get(1)});
             bracket.recordClauseEvent(new EffectEvent(EffectEvent.KEYWORD_CHANGE));
             bracket.endBracket(charm.getId(), false);
+            bracket.flushHeldResolution();
         } finally {
             writer.close();
         }
@@ -258,6 +259,7 @@ class ModalResolutionTest {
                 collectors.clauseHandler().invoke(null, resolving(), new Object[]{clone});
             }
             bracket.endBracket(charm.getId(), false);
+            bracket.flushHeldResolution();
         } finally {
             writer.close();
         }
@@ -292,6 +294,7 @@ class ModalResolutionTest {
             collectors.clauseHandler().invoke(null, resolving(), new Object[]{clones.get(1)});
             bracket.recordClauseEvent(new EffectEvent(EffectEvent.KEYWORD_CHANGE));
             bracket.endBracket(charm.getId(), false);
+            bracket.flushHeldResolution();
         } finally {
             writer.close();
         }
@@ -325,6 +328,7 @@ class ModalResolutionTest {
             bracket.recordClauseEvent(new EffectEvent(EffectEvent.DAMAGE_DEALT).param("amount", 4));
             bracket.recordClauseEvent(new EffectEvent(EffectEvent.KEYWORD_CHANGE));
             bracket.endBracket(charm.getId(), false);
+            bracket.flushHeldResolution();
         } finally {
             writer.close();
         }
@@ -424,6 +428,7 @@ class ModalResolutionTest {
             collectors.clauseHandler().invoke(null, resolving(), new Object[]{otherClones.get(0)});
             assertEquals(0, bracket.modeHalvesOpen());
             bracket.endBracket(charm.getId(), false);
+            bracket.flushHeldResolution();
         } finally {
             writer.close();
         }
