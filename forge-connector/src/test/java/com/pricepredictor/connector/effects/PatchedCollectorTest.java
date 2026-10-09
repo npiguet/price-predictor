@@ -785,6 +785,31 @@ class PatchedCollectorTest {
                 EventAttribution.duration(root, root));
     }
 
+    /**
+     * An undeclared duration means what Forge does with it. A pump with no
+     * {@code Duration$} ends at end of turn — Giant Growth — and a counter
+     * lasts; only an outcome with no lasting state is instant.
+     */
+    @Test
+    void anUndeclaredDurationIsTheOneForgeApplies() {
+        Card host = TestCards.build("Grizzly Bears");
+        SpellAbility pump = AbilityFactory.getAbility(
+                "SP$ Pump | ValidTgts$ Creature | NumAtt$ +3 | NumDef$ +3", host);
+        SpellAbility counter = AbilityFactory.getAbility(
+                "SP$ PutCounter | Defined$ Self | CounterType$ P1P1 | CounterNum$ 1", host);
+
+        assertEquals(EventAttribution.END_OF_TURN,
+                EventAttribution.duration(pump, pump, EffectEvent.PT_CHANGE));
+        assertEquals(EventAttribution.PERMANENT,
+                EventAttribution.duration(counter, counter, EffectEvent.PT_CHANGE));
+        assertEquals(EventAttribution.INSTANT,
+                EventAttribution.duration(pump, pump, EffectEvent.DAMAGE_DEALT));
+
+        String json = EventAttribution.stamp(
+                new EffectEvent(EffectEvent.PT_CHANGE).subject("E1"), pump, pump).toJson();
+        assertTrue(json.contains("\"duration\":\"end_of_turn\""), json);
+    }
+
 
     // ── what a run parameter map says ──────────────────────────────────
 

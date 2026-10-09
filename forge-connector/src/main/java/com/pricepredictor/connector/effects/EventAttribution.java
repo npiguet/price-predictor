@@ -46,6 +46,28 @@ final class EventAttribution {
             "permanent", "perpetual", "aslongascontrol", "untilhostleavesplay");
 
     /**
+     * Events that describe a state lasting past their own instant.
+     *
+     * <p>A damage or a draw is over when it happens; a changed power, keyword,
+     * type or colour persists, so an undeclared duration on one of these says
+     * how long it does rather than that it does not.
+     */
+    private static final Set<String> LASTING_STATE = Set.of(
+            EffectEvent.PT_CHANGE, EffectEvent.KEYWORD_CHANGE,
+            EffectEvent.TYPE_CHANGE, EffectEvent.COLOR_CHANGE);
+
+    /**
+     * APIs whose effect Forge ends at end of turn unless the script says
+     * {@code Duration$ Permanent} — a Giant Growth declares no duration at
+     * all. Read from each effect class's own handling of an absent
+     * {@code Duration$}; any other API changing a lasting state does so
+     * permanently, as a counter or a permanent's own static does.
+     */
+    private static final Set<String> END_OF_TURN_BY_DEFAULT = Set.of(
+            "Pump", "PumpAll", "Animate", "AnimateAll", "Debuff", "Protection",
+            "ProtectionAll", "Effect", "ChangeText", "ExchangePower");
+
+    /**
      * The acting line's own top-level clause produced this event.
      *
      * <p>A literal rather than {@code null}, because "the root did it" and "no
@@ -136,9 +158,25 @@ final class EventAttribution {
     }
 
     static String duration(SpellAbility root, Object pointer) {
+        return duration(root, pointer, null);
+    }
+
+    /**
+     * The duration of an event of {@code eventType}, from the script.
+     *
+     * <p>A declared {@code Duration$} is bucketed as it says. An undeclared one
+     * is instant for an event with no lasting state, and otherwise whatever
+     * Forge applies to the resolving clause's API: end of turn for a pump,
+     * permanent for a counter.
+     */
+    static String duration(SpellAbility root, Object pointer, String eventType) {
         String declared = declaredDuration(root, pointer);
         if (declared == null) {
-            return INSTANT;
+            if (eventType == null || !LASTING_STATE.contains(eventType)) {
+                return INSTANT;
+            }
+            String api = apiOf(pointer instanceof SpellAbility resolving ? resolving : root);
+            return api != null && END_OF_TURN_BY_DEFAULT.contains(api) ? END_OF_TURN : PERMANENT;
         }
         String key = declared.toLowerCase(Locale.ROOT);
         if (LASTING.contains(key)) {
@@ -178,6 +216,10 @@ final class EventAttribution {
 
     private static Card hostOf(SpellAbility ability) {
         return ability == null ? null : ability.getHostCard();
+    }
+
+    private static String apiOf(SpellAbility ability) {
+        return ability == null || ability.getApi() == null ? null : ability.getApi().name();
     }
 
     private static String declaredDuration(SpellAbility root, Object pointer) {
@@ -231,7 +273,7 @@ final class EventAttribution {
             return null;
         }
         return event
-                .duration(duration(root, pointer))
+                .duration(duration(root, pointer, event.type()))
                 .attributedTo(attributedTo(root, pointer))
                 .cause(namedCause != null ? namedCause : cause(root, pointer));
     }
