@@ -60,6 +60,11 @@ class ScorerSmokeTestConfig:
         default_factory=lambda: Path("output/effects/abilities"),
     )
     cards_path: Path = DEFAULT_CARDS_PATH
+    #: The match outcomes Phase A trains on. Read, never written; the sealed
+    #: corpus lives wherever the operator keeps its training data.
+    outcomes_path: Path = field(
+        default_factory=lambda: Path("output/sealed/match-outcomes.txt"),
+    )
 
     @property
     def scratch_cards(self) -> Path:
@@ -98,6 +103,7 @@ def train_scorer_command(config: ScorerSmokeTestConfig) -> list[str]:
         sys.executable, "-m", "sealed", "train-scorer",
         "--cards-path", str(config.scratch_cards),
         "--checkpoint-dir", str(config.scorer_dir),
+        "--outcomes-path", str(config.outcomes_path),
         "--embedding-lr", "0",
     ]
 

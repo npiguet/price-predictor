@@ -105,6 +105,7 @@ class TestTheRun:
         assert train[train.index("--cards-path") + 1] == str(config.scratch_cards)
         assert train[train.index("--checkpoint-dir") + 1] == str(config.scorer_dir)
         assert train[train.index("--embedding-lr") + 1] == "0"
+        assert train[train.index("--outcomes-path") + 1] == str(config.outcomes_path)
         assert (result.cards_written, result.cards_without_e) == (2, 1)
 
     def test_nothing_is_written_outside_the_scratch_dir(self, tree):

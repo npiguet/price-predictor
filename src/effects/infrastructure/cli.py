@@ -1685,6 +1685,10 @@ def _scorer_smoke_test_parser(subparsers) -> None:
         ),
     )
     parser.add_argument(
+        "--outcomes-path", type=str, default="output/sealed/match-outcomes.txt",
+        help="Match outcomes Phase A trains on (default: output/sealed/match-outcomes.txt)",
+    )
+    parser.add_argument(
         "--scratch-dir", type=str, required=True,
         help="Where the vectors and the scorer checkpoint go; nothing is written elsewhere",
     )
@@ -1699,6 +1703,7 @@ def run_scorer_smoke_test(args: argparse.Namespace) -> int:
         checkpoint=Path(args.checkpoint),
         sealed_encoder_checkpoint=Path(args.sealed_encoder_checkpoint),
         abilities_root=Path(args.abilities_root),
+        outcomes_path=Path(args.outcomes_path),
     )
     try:
         result = smoke_test(config)

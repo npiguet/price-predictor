@@ -662,6 +662,7 @@ python -m effects scorer-smoke-test
     [--checkpoint PATH]                  default models/effects/effect-model/latest.pt
     [--sealed-encoder-checkpoint PATH]   default models/sealed/encoder/latest.pt
     [--abilities-root DIR]               default output/effects/abilities
+    [--outcomes-path PATH]               default output/sealed/match-outcomes.txt
     --scratch-dir DIR
 
 python scripts/effect_knowledge_probes/run.py
