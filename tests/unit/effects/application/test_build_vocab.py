@@ -98,7 +98,6 @@ def _config(corpus, tmp_path, **overrides) -> BuildVocabConfig:
         "cards_folders": (cards, tokens),
         "keyword_definitions": keywords,
         "vocab_path": tmp_path / "vocab.txt",
-        "printings_path": tmp_path / "absent-printings.json",
     }
     defaults.update(overrides)
     return BuildVocabConfig(**defaults)
@@ -458,3 +457,27 @@ class TestScriptSurfaceReport:
         with caplog.at_level("INFO"):
             run(_config(corpus, tmp_path))
         assert "Script-line length" not in caplog.text
+
+
+class TestNoSetCodes:
+    def test_the_shared_builder_is_never_given_a_printings_file(
+        self, corpus, tmp_path, monkeypatch,
+    ):
+        """The effect model encodes one ability line, which never names a set.
+
+        The shared builder seeds every set code from a printings file for the
+        price model's enriched card texts; handed one here, it put 472 set-code
+        tokens in each effects vocabulary that no ability text ever reaches.
+        """
+        import effects.application.build_vocab as module
+
+        seen = []
+        real = module.build_vocabulary
+
+        def spy(**kwargs):
+            seen.append(kwargs.get("printings_path"))
+            return real(**kwargs)
+
+        monkeypatch.setattr(module, "build_vocabulary", spy)
+        run(_config(corpus, tmp_path))
+        assert seen and all(path is None for path in seen)

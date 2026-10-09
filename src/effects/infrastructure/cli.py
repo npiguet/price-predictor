@@ -47,7 +47,6 @@ DEFAULT_ABILITIES_ROOT = "output/effects/abilities/"
 HOLDOUT_PERMILLE = 20
 HOLDOUT_MAX_CARRIERS = 8
 DEFAULT_CHECKPOINT = "models/effects/effect-model/latest.pt"
-DEFAULT_PRINTINGS = "resources/AllPrintings.json"
 
 #: Thresholds `validate-corpus` holds a fresh shard directory to. Set from the
 #: first collected corpus's measurements, so a run reproducing any of its
@@ -243,10 +242,6 @@ def _build_vocab_parser(subparsers) -> None:
         "--target-size", type=int, default=5000,
         help="Post-truncate the corpus-frequency vocabulary (default: 5000)",
     )
-    parser.add_argument(
-        "--printings-path", type=str, default=DEFAULT_PRINTINGS,
-        help=f"MTGJSON dump for set-code seeding (default: {DEFAULT_PRINTINGS})",
-    )
 
 
 def run_build_vocab(args: argparse.Namespace) -> int:
@@ -262,7 +257,6 @@ def run_build_vocab(args: argparse.Namespace) -> int:
         vocab_path=Path(args.vocab_path) if args.vocab_path else None,
         keyword_definitions=Path(args.keyword_definitions),
         target_size=args.target_size,
-        printings_path=Path(args.printings_path),
     )
     try:
         build_vocab(config)

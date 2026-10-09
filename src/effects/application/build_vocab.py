@@ -91,9 +91,6 @@ class BuildVocabConfig:
         default_factory=lambda: DEFAULT_KEYWORD_DEFINITIONS,
     )
     target_size: int = DEFAULT_TARGET_SIZE
-    printings_path: Path = field(
-        default_factory=lambda: Path("resources/AllPrintings.json"),
-    )
 
     def resolved_vocab_path(self) -> Path:
         """``--vocab-path``, defaulting per surface so the two never collide."""
@@ -240,11 +237,6 @@ def run(config: BuildVocabConfig) -> int:
             f"got {config.surface!r}"
         )
     folders = _scan_sources(config)
-    printings = (
-        Path(config.printings_path)
-        if Path(config.printings_path).exists()
-        else None
-    )
     definitions = _load_definitions(Path(config.keyword_definitions))
     staged = script_lines(folders) if config.surface == SURFACE_SCRIPT else []
     stager = staging_tokenizer(config.surface, definitions)
@@ -262,10 +254,15 @@ def run(config: BuildVocabConfig) -> int:
                 _keyword_corpus_text(definitions), encoding="utf-8",
             )
         results = [
+            # No printings file: the shared builder seeds every set code from
+            # it for the price model, whose enriched card texts carry
+            # `set: MH3`. The effect model encodes one ability line, which
+            # never names a set, so those would be hundreds of rows no text
+            # ever reaches.
             build_vocabulary(
                 cards_path=source,
                 freq_threshold=_FREQ_THRESHOLD,
-                printings_path=printings,
+                printings_path=None,
             )
             for source in [*folders, extra]
         ]
