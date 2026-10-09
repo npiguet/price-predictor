@@ -289,7 +289,7 @@ A head with random weights can still score far from 0.5, which is why rung 3 is 
 
 Every `dies` label is zero, and the toughness and damage sweeps read 0.000 at every value. Gen-1's collectors wrote a resolution's record before Forge ran its state-based actions, and discarded the deaths those actions then produced. A creature killed by a burn spell therefore appears in the record with its damage and without its death, and the model has learned that damage kills nothing. On a sample of twelve real shards, none of 565 lethal-looking resolution damage events carries the death, while combat records, written after the check, carry most of theirs.
 
-The board-size sweep shows the model does predict deaths when the record itself carries them: predicted deaths summed over the board rise steadily from 0.003 with no opposing creature to 0.154 with eight. The collectors now hold a resolution's record through the state-based check and add the deaths of the creatures its own events touched, so gen-2's corpus carries them; a twelve-match pilot keeps fourteen of fourteen.
+The board-size sweep shows the model does predict deaths when the record itself carries them: predicted deaths summed over the board rise steadily from 0.003 with no opposing creature to 0.154 with eight. The collectors now hold a resolution's record through the state-based check that follows it and add every permanent that leaves the battlefield there, so gen-2's corpus carries these deaths; a twelve-match pilot keeps twenty-three of twenty-three.
 
 | sweep | 1 or 0 | 4 | 8 |
 |---|---:|---:|---:|
