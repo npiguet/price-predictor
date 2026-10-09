@@ -16,12 +16,19 @@ Commands below are the ones this feature adds or changes. Paths are the defaults
 
 ## Stage 0 — gen-1 artifacts (can run beside stages 1–3)
 
-Keep gen-1's sidecars before stage 1 reconverts them:
+Keep gen-1's sidecars, keyword definitions and script vocabulary before stage 1 overwrites them:
 
 ```bash
 cp -r output/cardsfolder output/gen1-cardsfolder
 cp -r output/tokenscripts output/gen1-tokenscripts
+cp output/effects/keyword-definitions.json output/effects/gen1-keyword-definitions.json
+cp models/effects/vocab-script.txt models/effects/gen1-vocab-script.txt
 ```
+
+A checkpoint records its vocabulary and keyword-definition paths with their content hashes, and every
+loader re-hashes them. After stage 1 rewrites the originals, gen-1 and the noise-pilot checkpoints
+load only with `--vocab-path models/effects/gen1-vocab-script.txt` (gen-1) and
+`--keyword-definitions output/effects/gen1-keyword-definitions.json` (both).
 
 Knowledge probes on gen-1:
 
@@ -67,10 +74,13 @@ python -m effects extract-keyword-definitions
 python -m price_predictor convert
 python -m effects build-vocab --surface script
 python -m effects holdout-cards --holdout-unit template --out output/effects/holdout-cards.txt
-python -m sealed generate-pools --exclude-cards output/effects/holdout-cards.txt
 ```
 
-Check: `convert` reports missing SVars; `.txt` files diff clean against the previous conversion;
+No pools file is generated: each `match-outcomes` worker opens its own pool per match and applies
+`--exclude-cards` there.
+
+Check: `convert` reports missing SVars; `.txt` files diff clean against the previous conversion
+except where an ordering fix changed a line's or a face's order;
 `build-vocab` prints the length distribution and seeded counts and does not fail on `[UNK]`;
 `holdout-cards` prints templates, texts, cards and the depleted share.
 
