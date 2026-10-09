@@ -1463,6 +1463,22 @@ class RulesParserTest {
     }
 
     @Test
+    void specializeFacesFollowTheStateEnumOrderTheCollectorsUse() {
+        // A specialize card's faces were emitted in the iteration order of
+        // CardRules' HashMap, which varies between JVM runs, while the
+        // collectors number faces in the EnumMap order of the live card's
+        // states (ProvenanceKey.faceOrder). The two must agree, or a record's
+        // face index resolves to another face's lines.
+        MultiCard card = convertFromFile("a/alora_rogue_companion.txt");
+        assertEquals(
+                List.of("alora, rogue companion", "alora, cheerful mastermind",
+                        "alora, cheerful thief", "alora, cheerful assassin",
+                        "alora, cheerful swashbuckler", "alora, cheerful scout"),
+                card.faces().stream().map(CardFace::name).toList(),
+                "faces must follow Original, then SpecializeW, U, B, R, G");
+    }
+
+    @Test
     void specializeReduceCostAppendsText() {
         // Imoen, Trickster Friend: K:Specialize:5::This ability costs {3} less…:ReduceCost$ X
         CardFace card = face("i/imoen_trickster_friend.txt");

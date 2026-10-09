@@ -189,10 +189,18 @@ public class RulesParser {
                 nextRecorder(recorders), 0, scriptFile));
 
         if (splitType == CardSplitType.Specialize) {
-            for (Map.Entry<CardStateName, ICardFace> e : rules.getSpecializeParts().entrySet()) {
-                if (e.getValue() != null) {
-                    card.setState(e.getKey(), false);
-                    faces.add(parseFace(card, e.getValue(),
+            // In the state enum's order, not the parts map's: CardRules holds
+            // them in a HashMap keyed by enum constants, whose order changes
+            // from one JVM to the next, while the collectors number faces in
+            // the live card's EnumMap order (ProvenanceKey.faceOrder). A face
+            // index taken from the map's order resolved a record to another
+            // face's lines, and the converted text came out reordered.
+            Map<CardStateName, ICardFace> parts = rules.getSpecializeParts();
+            for (CardStateName state : CardStateName.values()) {
+                ICardFace part = parts.get(state);
+                if (part != null) {
+                    card.setState(state, false);
+                    faces.add(parseFace(card, part,
                             nextRecorder(recorders), faces.size(), scriptFile));
                 }
             }
