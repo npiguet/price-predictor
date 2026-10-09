@@ -409,6 +409,53 @@ class ModalResolutionTest {
         }
     }
 
+    /**
+     * A fork forcing a creature spell resolves the creature's own modal
+     * enters trigger too, on the same host card. Those modes belong to the
+     * trigger's line, not the spell's: split under the spell's key they would
+     * name {@code spell[0]} with an option, a key no sidecar line carries.
+     */
+    @Test
+    void aForkedSpellIsNotSplitByItsOwnTriggersModes() throws IOException {
+        Game game = twoPlayerGame();
+        Player caster = game.getPlayers().get(0);
+        Card barbarian = game.getAction().moveTo(
+                forge.game.zone.ZoneType.Hand,
+                CardFactory.getCard(StaticData.instance().getCommonCards()
+                        .getCard("Plundering Barbarian"), caster, game),
+                null, null);
+        SpellAbility creatureSpell = barbarian.getFirstSpellAbility();
+        assertNotNull(creatureSpell);
+        creatureSpell.setActivatingPlayer(caster);
+        game.setAge(forge.game.GameStage.Play);
+        CollectionCaps caps = new CollectionCaps(
+                2000, 0.1, 2, 0, List.of(), List.of(1, 2, 3), 0.1);
+
+        RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1");
+        Path path = writer.path();
+        boolean wrote;
+        try (PatchedCollectors collectors = new PatchedCollectors(
+                game, writer, "run.0-l1.0", caps, 1L)) {
+            org.junit.jupiter.api.Assumptions.assumeTrue(
+                    collectors.install() > 0 && collectors.installedHooks().contains("clause-events"),
+                    "../forge has no clause hook; a stock fork writes one root half");
+            ForkCollector forks = new ForkCollector(game, writer, "run.0-l1.0", caps, 5L);
+            collectors.withForks(forks);
+            wrote = forks.intervene(creatureSpell, 1);
+        } finally {
+            writer.close();
+        }
+
+        assertTrue(wrote, "the forced resolution observed something");
+        List<String> records = readShard(path);
+        assertEquals(1, records.size(), records.toString());
+        String record = records.get(0);
+        assertTrue(record.contains("\"trait_kind\":\"spell\""), record);
+        assertFalse(record.contains("\"option\""), record);
+        assertEquals(2, record.split("\"zone_change\"", -1).length - 1,
+                "the trigger's Treasure still rides in the spell's half: " + record);
+    }
+
     /** A mode of some other resolution cannot cut the open bracket. */
     @Test
     void anotherCharmsModeDoesNotCutTheOpenBracket() throws Throwable {

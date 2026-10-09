@@ -536,10 +536,15 @@ public final class ForkCollector {
         // the moment its snapshot is taken (FR-029b, FR-029f). Only this
         // ability's own modes count: the live clause handler forwards every
         // clause it drops, and a trigger the forced resolution put on the
-        // fork's stack may be modal too.
+        // fork's stack may be modal too. The host card cannot tell them
+        // apart: a creature spell's own modal enters trigger shares its host,
+        // and its modes filed under the spell's key would name spell[0] with
+        // an option, a line no sidecar has. The charm's own key can.
+        ProvenanceKey forcedKey = ProvenanceKey.resolve(ability).key();
         CLAUSE_LISTENER.set(clause -> {
             CharmModes.ModeStart start = CharmModes.modeStartOf(clause);
-            if (start != null && clause.getHostCard() == ability.getHostCard()) {
+            if (start != null && forcedKey != null
+                    && forcedKey.equals(ProvenanceKey.resolve(start.charm()).key())) {
                 modes.add(new ModeBoundary(
                         start.option(), sink.events().size(),
                         snapshots.toJson(ability, referencedOf(ability))));
