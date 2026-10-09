@@ -458,8 +458,8 @@ Prediction checks run the loaded checkpoints against records from `--records-dir
 - scaling calibration: predicted sweeper deaths as a function of board size
 - matched real-vs-fork prediction agreement: pairs are the same ability resolved for real and forked in the same game, joined by `mirror_of`
 - the `identity` variant on the game-disjoint split: the in-distribution memorization ceiling
-- linear-decodability battery on pooled per-card `e` (concatenated mean and max over the card's ability rows), reported side by side with the sealed encoder at `models/sealed/encoder/latest.pt` on the same feature table (ridge harness from [`experiments/2026-08-28-encoder-preferences.md`](../experiments/2026-08-28-encoder-preferences.md))
-- pooled-`e` scorer smoke test: the same pooled `e` concatenated with that sealed encoder's vector, written into a scratch copy of the cards folder — never `output/cardsfolder/`, which the sealed pipeline ships from — and `train-scorer` Phase A re-run against it; informational
+- linear-decodability battery on pooled per-card `e` (concatenated mean and max over the card's ability rows), validated on the checkpoint's held-out cards (ridge harness from [`experiments/2026-08-28-encoder-preferences.md`](../experiments/2026-08-28-encoder-preferences.md))
+- pooled-`e` scorer smoke test: the same pooled `e` concatenated with the vector of the sealed encoder at `models/sealed/encoder/latest.pt`, written into a scratch copy of the cards folder — never `output/cardsfolder/`, which the sealed pipeline ships from — and `train-scorer` Phase A re-run against it; informational
 - `taxonomy` variant comparison: what the full encoding surfaces add over the script API taxonomy alone, on held-out effect prediction and the decodability battery
 - average-effect control: the `no-state` variant compared on the decodability battery, the scorer smoke test, the ward canary, and scaling calibration
 - probe-diff re-check (probed keywords only): gate 2's canary re-run over the real-and-fork combat pairs joined by `mirror_of`

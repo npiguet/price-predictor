@@ -663,9 +663,6 @@ class EvaluateEffectModelConfig:
     abilities_root: Path = field(
         default_factory=lambda: Path("output/effects/abilities"),
     )
-    sealed_encoder_checkpoint: Path = field(
-        default_factory=lambda: Path("models/sealed/encoder/latest.pt"),
-    )
     #: The per-card win-rate table the decodability battery reads (FR-070).
     win_rates: Path = field(
         default_factory=lambda: Path("output/sealed/cards-win-rates.txt"),
@@ -872,7 +869,7 @@ def run(config: EvaluateEffectModelConfig) -> EvaluationReport:
     report.add(check_nearest_neighbours(cached, NEIGHBOUR_QUERIES))
     report.add(check_umap(cached))
     report.add(check_decodability(
-        cached, {}, Path(config.win_rates),
+        cached, Path(config.win_rates),
         held_out_cards=main.provenance.held_out_cards,
     ))
     for name in ("no-state", "taxonomy"):

@@ -412,8 +412,11 @@ Playability families are read from payload fields:
   names one; otherwise the first false verdict bit in the order `can_play`, `affordable`,
   `has_legal_target`, as `cannot-play`, `unaffordable` or `no-legal-target`; otherwise
   `none`.
-- `attackers` and `blockers`: the sorted set of distinct `Mode$` values of the
-  `responsible_static` keys across `forbidden`, or `none` when `forbidden` names no static.
+- `attackers` and `blockers`: one single mode, the rarest of those the `responsible_static`
+  keys across `forbidden` name, by the build's count of surveyed legality records per mode
+  (ties by name); `none` when `forbidden` names no static. A `Mode$` listing several modes
+  counts as each of them. The manifest records the counts, and every reader placing legality
+  records in families uses them.
 - A static's `Mode$` is read through its provenance key from the sidecar, the lookup that
   gives `continuous` records their family.
 
@@ -488,6 +491,10 @@ the text, until the class quota is met.
   read from its `Cost$`. A charm's root line states no amounts, so its amount targets are
   empty.
 - No pairing term. The encoder has no paired-encoding loss and no pairing head.
+- Magnitude cap. Every count and signed-delta magnitude is scored at no more than 40, its
+  sign kept: in the per-entity field losses, the created-objects counts, the
+  constant-predictor floor and the evaluation's Poisson deviance. The value head's
+  script-stated amounts are not capped.
 - Verdict and created-objects heads. Training applies both heads' losses as the base spec
   defines them, beside the per-entity loss: the verdict bits on `decision` records, the cost
   paid on cost halves, the trigger-fired bit on `trigger` records, and the created-objects

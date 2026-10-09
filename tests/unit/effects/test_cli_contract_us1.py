@@ -241,7 +241,7 @@ class TestEvaluateEffectModel:
         assert args.checkpoint == "models/effects/effect-model/latest.pt"
         assert args.records_dir == "output/effects/records/"
         assert args.variant_checkpoints is None
-        assert args.sealed_encoder_checkpoint == "models/sealed/encoder/latest.pt"
+        assert not hasattr(args, "sealed_encoder_checkpoint")
 
     def test_variant_checkpoint_is_repeatable(self):
         args = parse(

@@ -826,7 +826,7 @@ loss.
 - **FR-110**: The command MUST report the root spec's twelve checks: nearest-neighbor inspection and
   UMAP colored by effect category; the ward canary; zero-shot keyword; role-polarity probe; scaling
   calibration; matched real-vs-fork agreement; the `identity` variant on the game-disjoint split; the
-  linear-decodability battery against the sealed encoder at `models/sealed/encoder/latest.pt`; the
+  linear-decodability battery; the
   pooled-`e` scorer smoke test; the `taxonomy` comparison; the average-effect control (the `no-state`
   variant); and the probe-diff re-check.
 - **FR-111**: Checks whose records do not yet exist MUST be skipped rather than failing: matched
@@ -849,7 +849,8 @@ loss.
 - **FR-114**: Pooled per-card `e` MUST be the concatenation of the mean and the max over the card's
   ability rows. The linear-decodability battery MUST run that pooled vector through the ridge harness
   of [`experiments/2026-08-28-encoder-preferences.md`](../../experiments/2026-08-28-encoder-preferences.md),
-  reported side by side with the sealed encoder on the same feature table.
+  validated on the checkpoint's held-out cards and joined to the win-rate table by card name,
+  ignoring case.
 - **FR-115**: The pooled-`e` scorer smoke test MUST concatenate that pooled `e` with the sealed
   encoder's vector rather than replacing it, write the result into a scratch copy of the cards folder
   — never `output/cardsfolder/` — and re-run `train-scorer` Phase A against it. It is informational

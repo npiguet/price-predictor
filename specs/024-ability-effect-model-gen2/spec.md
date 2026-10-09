@@ -34,7 +34,7 @@ Generations:
 - Q: A spell's script line carries no `Cost$` (its mana cost sits on the card's `ManaCost` line), so where do the value head's mana-cost targets come from on spell lines? → A: From `Cost$` only, and never from the card's mana cost (FR-058a): the card cost covers the whole card, so no line's encoding text gains it, and spell lines mask their mana-cost targets even when an additional cost puts mana in `Cost$`; the trunk relates the card cost to its abilities. Colours stay unmasked in the holdout template (FR-039).
 - Q: How are charms exposed to the model and recorded? → A: As separate abilities (FR-001, FR-005a, FR-063a, FR-029a–f): the root line encodes only its own script line (choices, count, repeatability) and no mode; each `option` line encodes its mode's chain; option rows carry a learned option-kind embedding and follow their root row; a patched worker records each chosen mode, Pawprint and repeated modes included, as its own effect half acting through its `option` line, sharing the root cost record's `link_id`.
 - Q: SVar labels are free author names (3,488 distinct in Forge's card scripts, 2,355 used once), so texts differing only in a label get different templates and most labels fall out of the vocabulary. How are they handled? → A: Renamed by position inside `script_text` itself (FR-002a): each line's chain labels become `SV1`, `SV2`, … in order of first appearance, at the reference and at the segment opening alike, so the encoding text, the rarity table and the masked template never see an author's label name.
-- Q: Playability payloads carry verdict bits and `responsible_static` keys but no "reason" field, so how is a playability record's rule family derived? → A: From the responsible static's `Mode$` where one is named, otherwise from the first failing verdict bit (FR-047a): a `decision` candidate with no static takes `cannot-play`, `unaffordable` or `no-legal-target`, and `none` only when every bit is true; a legality record takes the sorted set of distinct static modes across `forbidden`, or `none`.
+- Q: Playability payloads carry verdict bits and `responsible_static` keys but no "reason" field, so how is a playability record's rule family derived? → A: From the responsible static's `Mode$` where one is named, otherwise from the first failing verdict bit (FR-047a): a `decision` candidate with no static takes `cannot-play`, `unaffordable` or `no-legal-target`, and `none` only when every bit is true; a legality record takes the rarest single static mode across `forbidden`, or `none`.
 - Q: Is an outcome signature a multiset (counts matter) or a set? → A: A set (FR-049 step 2): the distinct (zone outcome, changed or not) pairs over the affected entities, so mass effects are not split into thin cells by board size.
 - Q: Are mana abilities candidates for the random seat's uniform play draw? → A: No (FR-022a): mana abilities are excluded, and a seat whose only playable abilities are mana abilities counts as having nothing playable and passes.
 - Q: What happens with `--random-seat-share` above 0 but no `--effect-records`, where a random-seat match would write nothing? → A: `match-outcomes` refuses before any game (FR-026).
@@ -805,9 +805,11 @@ the sweeps, the ablation, and the recorded digest. Run `compare.py` over two sco
   record is assigned per candidate, the unit feature 023 already trains on: the `Mode$` of the
   candidate's `responsible_static` when it names one; otherwise the first false verdict bit in the
   order `can_play`, `affordable`, `has_legal_target`, as the family `cannot-play`, `unaffordable` or
-  `no-legal-target`; otherwise `none`. An `attackers` or `blockers` record takes the sorted set of
-  distinct `Mode$` values of the `responsible_static` keys across its `forbidden` entries, or
-  `none` when `forbidden` is empty or names no static. A static's `Mode$` is read through its
+  `no-legal-target`; otherwise `none`. An `attackers` or `blockers` record takes one mode: of the
+  single modes its `forbidden` entries' `responsible_static` keys name, the one with the fewest
+  surveyed legality records, ties and a manifest without counts broken by name; `none` when
+  `forbidden` is empty or names no static. A `Mode$` listing several modes (`CantAttack,CantBlock`)
+  counts as each of them; a keyword family is one mode. A static's `Mode$` is read through its
   provenance key from the sidecar, the same lookup that gives `continuous` records their family.
 - **FR-048**: A record whose acting line is a keyword line MUST belong to that keyword's family,
   whatever its kind.
@@ -844,7 +846,8 @@ the sweeps, the ablation, and the recorded digest. Run `compare.py` over two sco
   per class, on-policy and off-policy (`random_seat`) record counts; per legality subkind,
   real-decision and what-if counts; the games admitted to the game-disjoint stratum under the
   keyword threshold; the held-out texts with no gate-one resolution record, and those recorded in
-  fewer than five games; the holdout unit.
+  fewer than five games; the holdout unit; surveyed legality records per single mode
+  (`legality_mode_counts`), which every reader placing legality records in families uses.
 
 #### Training (root spec § 9)
 
@@ -883,6 +886,9 @@ the sweeps, the ablation, and the recorded digest. Run `compare.py` over two sco
   as feature 023's FR-063 defines them: the script-API head predicts the line's `script_api_type`
   and its parameter-key set, the keys of every segment of its `script_text`. The MLM head MUST be
   sized from `--encoder-d-model`. Both heads stay training-only and are filtered at save time.
+- **FR-060c**: Every count and signed-delta magnitude MUST be scored at no more than 40, its sign
+  kept: in the per-entity field losses, the created-objects counts, the constant-predictor floor
+  and the evaluation's Poisson deviance. The value head's script-stated amounts are not capped.
 - **FR-061**: `--encoder-layers` (default 4) and `--encoder-d-model` (default 256) MUST replace the
   hardcoded encoder constants. The checkpoint MUST record both, and every command that loads a
   checkpoint MUST build the encoder from them. A checkpoint that records neither MUST load at 4

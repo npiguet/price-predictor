@@ -488,13 +488,13 @@ class TestWardCanary:
 
 class TestDecodability:
     def test_it_skips_on_an_empty_cache(self, tmp_path):
-        result = check_decodability(CachedVectors(), {}, tmp_path / "wr.txt")
+        result = check_decodability(CachedVectors(), tmp_path / "wr.txt")
         assert result.status is CheckStatus.SKIPPED
 
     def test_it_skips_without_a_win_rate_table(self, cache):
         cards, abilities = cache
         result = check_decodability(
-            load_cache(abilities, cards, surface="script"), {}, cards / "absent.txt",
+            load_cache(abilities, cards, surface="script"), cards / "absent.txt",
         )
         assert result.status is CheckStatus.SKIPPED
         assert "win-rate table" in result.detail
@@ -504,7 +504,7 @@ class TestDecodability:
         win_rates = tmp_path / "cards-win-rates.txt"
         win_rates.write_text("card_name;a\n", encoding="utf-8")
         result = check_decodability(
-            load_cache(abilities, cards, surface="script"), {}, win_rates,
+            load_cache(abilities, cards, surface="script"), win_rates,
         )
         assert result.status is CheckStatus.SKIPPED
         assert "too few" in result.detail
@@ -533,7 +533,7 @@ class TestDecodability:
         win_rates.write_text("\n".join(rows) + "\n", encoding="utf-8")
 
         result = check_decodability(
-            CachedVectors(by_card=by_card), {}, win_rates,
+            CachedVectors(by_card=by_card), win_rates,
             held_out_cards=tuple(f"storm crow {i}" for i in range(20)),
         )
         assert result.status is CheckStatus.REPORTED

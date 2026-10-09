@@ -1602,11 +1602,6 @@ def _evaluate_effect_model_parser(subparsers) -> None:
     )
     parser.add_argument("--abilities-root", type=str, default=DEFAULT_ABILITIES_ROOT)
     parser.add_argument(
-        "--sealed-encoder-checkpoint", type=str,
-        default="models/sealed/encoder/latest.pt",
-        help="Read side by side with the effects cache in the decodability battery",
-    )
-    parser.add_argument(
         "--win-rates", type=str, default="output/sealed/cards-win-rates.txt",
         help="Per-card win-rate table the decodability battery reads",
     )
@@ -1647,7 +1642,6 @@ def run_evaluate_effect_model(args: argparse.Namespace) -> int:
         ),
         corpus=Path(args.corpus) if args.corpus else None,
         abilities_root=Path(args.abilities_root),
-        sealed_encoder_checkpoint=Path(args.sealed_encoder_checkpoint),
         win_rates=Path(args.win_rates),
     )
     try:

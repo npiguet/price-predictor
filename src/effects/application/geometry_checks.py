@@ -319,16 +319,14 @@ def check_ward(cached: CachedVectors) -> CheckResult:
 
 def check_decodability(
     cached: CachedVectors,
-    sealed_vectors: dict[str, np.ndarray],
     win_rates_path: Path,
     *,
     held_out_cards: tuple[str, ...] = (),
 ) -> CheckResult:
     """How much of each winnability label is linearly readable from pooled ``e``.
 
-    Run side by side with the sealed encoder on the **same** feature table, so
-    the comparison is between two representations of the same cards rather than
-    between two studies.
+    Validated on the checkpoint's held-out cards, so a text the model trained
+    on cannot carry its own label into the score.
     """
     if not cached.by_card:
         return CheckResult(
@@ -346,31 +344,28 @@ def check_decodability(
         load_labels,
     )
 
-    shared = sorted(set(cached.by_card) & set(sealed_vectors)) if sealed_vectors \
-        else sorted(cached.by_card)
-    if len(shared) < 50:
-        return CheckResult(
-            "decodability", CheckStatus.SKIPPED,
-            f"only {len(shared)} cards in both caches; too few to fit probes",
-        )
+    shared = sorted(cached.by_card)
     # A sidecar names its card in lowercase and the win-rate table in Forge's
     # canonical case, so an exact join labels no card and every probe reads
     # nan. Joined case-insensitively, in the cache's order, so label row i
     # still describes embedding row i.
     canonical = {name.casefold(): name for name in load_labels(Path(win_rates_path))}
+    labelled = [canonical.get(name.casefold(), name) for name in shared]
+    if sum(name in canonical.values() for name in labelled) < 50:
+        return CheckResult(
+            "decodability", CheckStatus.SKIPPED,
+            f"only {len(shared)} cached cards, too few with a win rate to fit probes",
+        )
     table = build_label_table(
-        [canonical.get(name.casefold(), name) for name in shared],
+        labelled,
         win_rates_path=Path(win_rates_path),
         val_names={canonical.get(name.casefold(), name) for name in held_out_cards},
     )
     effects_matrix = np.stack([cached.by_card[name] for name in shared])
     effects_probes = fit_probes(table, effects_matrix, mode="honest")
-    detail = _probe_summary("effects", effects_probes)
-    if sealed_vectors:
-        sealed_matrix = np.stack([sealed_vectors[name] for name in shared])
-        sealed_probes = fit_probes(table, sealed_matrix, mode="honest")
-        detail += " | " + _probe_summary("sealed", sealed_probes)
-    return CheckResult("decodability", CheckStatus.REPORTED, detail)
+    return CheckResult(
+        "decodability", CheckStatus.REPORTED, _probe_summary("effects", effects_probes),
+    )
 
 
 def _probe_summary(label: str, probes) -> str:

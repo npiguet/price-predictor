@@ -1329,6 +1329,53 @@ quadruples the random decisions per match played.
 | real, both seats Forge's AI | 14,194 |
 | what-if queries, all games | 70,010 |
 
+### Stage 2, second pilot (2026-10-09): every gen-2 command runs on gen-2 records, and five defects surfaced before the full collection
+
+The second pilot collected at the settings the first one led to and then ran every downstream command on its records. Curation, training, encoding, evaluation and both probe suites completed. Along the way five defects surfaced, two of them in what the collector and the converter write, and all five are fixed. The pilot ran for 30 minutes on 12 workers and wrote 2,698 games and 812,800 records. No what-if query was collected, and a random seat sat in one match in four, acting at random at half its decision points.
+
+The training run in this smoke test took 300 steps on a 46,000-record corpus. Its scores test that the commands run, not what the model learns, and none of them is recorded here.
+
+#### The random seat at the new settings supplies the block decisions the what-if queries carried
+
+Block decisions against attacks the random seat drew at random grew about twentyfold over the first pilot, in a collection about three times as long. The random seat's games kept the shape they had at a quarter of the decisions: they run as long as games between two Forge AIs and hold about a fifth fewer creatures on the battlefield. Matches with a random seat wrote no sealed rows: the 1,998 cards-played rows stay below the 2,125 games between two Forge AIs, the difference being games a worker restart cut short.
+
+| | first pilot | second pilot |
+|---|---:|---:|
+| share of matches with a random seat × chance it acts at random | 1/8 × 1/4 | 1/4 × 1/2 |
+| games, of them with a random seat | 833, 80 | 2,698, 573 |
+| real AI block decisions against the random seat's attacks | 361 | 3,491 |
+| of those, against an attack drawn at random (expected) | about 90 | about 1,750 |
+| median last turn, random-seat games against AI-only games | 18 against 19 | 18 against 19 |
+| creatures on the battlefield per record, same split | 4.67 against 6.42 | 4.40 against 5.62 |
+
+#### Pumps were recorded as instant, in gen-1 and gen-2 alike
+
+The collector wrote `instant` for every event whose script declared no `Duration$`. Forge ends a pump, an animation, a debuff, a protection grant and an effect card at end of turn unless the script says `Duration$ Permanent`, so Giant Growth was recorded as instant. In the second pilot's corpus 1,963 P/T changes read instant, 94 permanent and 13 end of turn. Gen-1's corpus carries the same labels, so its `pt_duration` field never saw a pump as lasting until end of turn. An undeclared duration is now the one Forge applies: end of turn for a P/T, keyword, type or colour change by one of those effects, permanent for any other such change, such as a counter, and instant only for an outcome with no lasting state.
+
+#### A charm line carrying several roots keyed its modes under the first one alone
+
+Two triggers that share one charm, such as Appa's enters and attacks triggers, render as one line carrying both keys, and a Saga's chapter line carries the Chapter keyword's key beside its triggers'. Forge resolves a mode through whichever root fired, but each mode line carried the first root's key alone, so a mode resolved through another named no line and `validate-corpus` failed on it. Each mode line now carries the mode under every key of its charm line. Twenty of the 789 charm root lines changed, and no converted text did.
+
+#### One runaway game produced magnitudes in the millions
+
+A Bristly Bill game doubled every creature's +1/+1 counters until a single resolution added 2,098,760 power. Under the Poisson loss on that magnitude, the shard holding it trained at a loss of 169,297 against about 15 for the shards beside it. Above about forty, an amount is the game state compounding rather than what the ability's text says, so every count and signed-delta magnitude is now scored at no more than 40. The cap applies in the field losses, the created-objects counts, the constant-predictor floor and the evaluation's deviance, and leaves the records unchanged.
+
+| records reaching a magnitude of at least | second pilot's corpus | of them from Bristly Bill |
+|---|---:|---:|
+| 20 | 213 | 56 |
+| 100 | 47 | 45 |
+| 1,000 | 32 | 30 |
+
+#### Legality families were combinations of rules rather than rules
+
+A legality record's family was the set of restricting static modes on its board, joined into one name, and each family took an equal share of the legality budget. A static declaring several modes, as Pacifism's `CantAttack,CantBlock` does, counted as one mode named after both, and every stacked combination founded a family of its own. The board where nothing restricts anyone, 71,576 records, received the same share as a combination seen five times and written four times over. A legality record now belongs to the rarest single mode on its board, counted over the whole survey, and the second pilot's 45 legality families become 28 single rules.
+
+A few families still carry a trigger's mode, such as `Attacks` or `SpellCastOrCopy`. Their restriction was created by a trigger, and the family is read from the trigger's line rather than from the restriction it imposed. They hold 30 of the pilot's legality records.
+
+#### Two evaluation tools read the wrong input
+
+The decodability battery joined the cache's lowercase card names to the win-rate table's canonical ones, matched no card and scored every target as not a number; it had never run against a real table before. It now joins ignoring case and reads pooled `e` alone, without the side-by-side with the sealed encoder. `scorer-smoke-test` had no `--abilities-root`, so it spliced in the shipping cache whatever `--checkpoint` named, and it now takes the flag.
+
 ### The sweep
 
 To be filled in after the gen-2 sweep.
