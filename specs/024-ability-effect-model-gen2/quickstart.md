@@ -108,19 +108,41 @@ are too few.
 ## Stage 3 — full collection
 
 ```bash
-# depleted self-play with the random seat, for training
-python -m sealed match-outcomes --effect-records output/effects/records/ \
+# depleted self-play with the random seat, for training; stop at 9,860 match rows
+python -m sealed match-outcomes --effect-records output/effects/records/depleted/ \
     --exclude-cards output/effects/holdout-cards.txt \
-    --random-seat-share 0.25 --random-seat-probability 0.5
-# full strength with the random seat, for the card-disjoint stratum
-python -m sealed match-outcomes --effect-records output/effects/records/ \
+    --random-seat-share 0.25 --random-seat-probability 0.5 \
+    --interventions-per-game 4 --probes-per-game 4
+# full strength with the random seat, for the card-disjoint stratum; stop at 3,150 match rows
+python -m sealed match-outcomes --effect-records output/effects/records/full-strength/ \
     --random-seat-share 0.25 --random-seat-probability 0.5
 # coverage of uncovered training cards
-python -m effects collect-coverage --training-corpus …
+python -m effects collect-coverage --training-corpus output/effects/records/depleted/ \
+    --interventions-per-game 4 --probes-per-game 4
 # held-out texts to their floor
-python -m effects collect-coverage --only-cards output/effects/holdout-cards.txt --min-text-games 5
-python -m effects collect-variants
+python -m effects collect-coverage --only-cards output/effects/holdout-cards.txt --min-text-games 5 \
+    --interventions-per-game 4 --probes-per-game 4 \
+    --effect-records output/effects/records/held-out-coverage/
+# synthetic variants, one round
+python -m effects collect-variants --effect-records output/effects/records/variants/ \
+    --exclude-cards output/effects/holdout-cards.txt \
+    --corpus-records output/effects/records/depleted/ --decks-per-round 4000
 ```
+
+- **Run order.** As listed. `collect-coverage --training-corpus` reads `records/depleted/holdout-cards.txt`, so
+  copy the holdout list there before the first run.
+- **Stopping the self-play runs.** `match-outcomes` plays until interrupted. Count rows in
+  `output/sealed/match-outcomes.txt` and stop at the target. After each run, append
+  `output/sealed/match-outcomes.txt` and `cards-played.txt` to the same-named files in that run's
+  records directory and delete the originals, so the next run counts from zero and the sealed corpus
+  never receives these rows.
+- **Fork budgets.** The training-side runs (depleted self-play, both coverage passes) take 4
+  interventions and 4 probes per game. Full-strength keeps the defaults of 2 and 2.
+- **Flags left at their defaults.** Every record carries snapshot tiers 1–4, and the probes cover all
+  eight damage-step keywords, with no flag needed for either. `--legality-rate` stays at 0.
+- **Variant round size.** One `collect-variants` invocation plays one round of `--decks-per-round`
+  decks, 23 variant slots each, drawn evenly over about 16,000 variants. At the default of 500 about
+  half the variants reach no deck and yield no record; 4000 puts nearly every variant in several decks.
 
 ## Stage 4 — curated dataset
 
