@@ -64,8 +64,9 @@ The unit of training. One observed game event or decision point.
   snapshot has the acting static's own contributions removed from every layer channel it wrote.
 - Inclusion tiers apply in order — (1) referenced objects, each in whatever zone it sits with that zone
   recorded; (2) core (global, battlefield, command-zone effect cards); (3) unreferenced stack;
-  (4) unreferenced hand and graveyard. Tiers 1–2 from stage one, 3 from stage two, 4 from stage three.
-  A reader treats an absent tier as uncollected, never as empty.
+  (4) unreferenced hand and graveyard. A collector writes all four on every record (`[1,2,3,4]`), and
+  no flag selects a depth; shards from earlier collectors carry a shorter prefix. A reader treats an
+  absent tier as uncollected, never as empty.
 - Perspective is **not** stored. Controllers are absolute ids; mine/opponent tags derive at training
   time relative to `actor_player`.
 

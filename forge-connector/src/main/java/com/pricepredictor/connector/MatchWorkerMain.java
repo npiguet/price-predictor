@@ -48,13 +48,6 @@ import java.util.function.IntPredicate;
  *   <li>{@code -Deffect.worker.lifetime=<token>} — pins the per-JVM token that makes
  *       record and game ids unique across worker restarts. Minted from the clock
  *       when absent, which is the normal case; only a test should set it.</li>
- *   <li>{@code -Deffect.snapshot.tiers=1,2,3} — the inclusion depth every snapshot
- *       in the run is built at, as a prefix of {@code 1,2,3,4}. A run-level
- *       property rather than a per-collector one: a depth that varies by record
- *       kind puts collection metadata into {@code state.tiers}, where a model can
- *       read it. Parsed by {@code PatchedCollectors.CollectionCaps} along with the
- *       rest of the {@code effect.*} caps, which that record documents; echoed at
- *       startup because it is also the largest single lever on shard size.</li>
  *   <li>{@code -Deffect.random.seat.share=<F>} and
  *       {@code -Deffect.random.seat.probability=<P>} — in a share {@code F} of
  *       matches, one seat chosen per match is a {@link RandomSeatController}
@@ -276,15 +269,9 @@ public class MatchWorkerMain {
             effectRecords = new RecordShardWriter(
                     config.effectRecordsDir(), config.runId(), config.workerIndex(),
                     config.workerLifetime());
-            // The tier vector is echoed beside the mode because both are
-            // properties of the whole shard that nothing in a record's content
-            // reveals: a run collected at a different depth is not comparable
-            // with this one, and the depth is what its size is mostly made of.
             System.out.println(
                     "Effect records: " + effectRecords.path()
-                            + " [mode=" + AttributionMode.detect().wireValue()
-                            + ", tiers=" + PatchedCollectors.CollectionCaps
-                                    .fromSystemProperties().snapshotTiers() + "]");
+                            + " [mode=" + AttributionMode.detect().wireValue() + "]");
             // The mode is one hook's answer, so a partly-applied patch still
             // reads "patched" while a channel this run meant to collect is
             // quietly empty. This is what names that.

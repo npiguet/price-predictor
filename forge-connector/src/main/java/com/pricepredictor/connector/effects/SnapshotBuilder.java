@@ -45,20 +45,27 @@ import java.util.StringJoiner;
  *       list and an uncollected tier are otherwise identical.</li>
  * </ul>
  *
- * <p>The tier vector is a property of the collection run, not of the caller.
- * Tiers 1 and 2 -- every referenced object in whatever zone it sits, plus the
- * global state, the battlefield and command-zone effect cards -- are what a
- * snapshot is; tiers 3 and 4 widen it to the unreferenced stack and to hand and
- * graveyard. Which of them a run collects is decided once and passed in, for the
- * reason the constructor gives.
+ * <p>Every snapshot renders all four inclusion tiers: every referenced object
+ * in whatever zone it sits (1), the global state, the battlefield and
+ * command-zone effect cards (2), the unreferenced stack (3), and unreferenced
+ * hands and graveyards (4). The depth is the same on every record, whatever
+ * collector or run wrote it, because a depth that varied made
+ * {@code state.tiers} a proxy for how a record was collected: interventional
+ * forks once rendered four tiers while every other collector rendered two or
+ * three, so tier 4 identified {@code interventional} exactly, and a flag the
+ * schema bars from ever being a model input had a perfect proxy sitting in the
+ * state.
  */
 public final class SnapshotBuilder {
 
-    /** Inclusion tiers, in the order the stages add them. */
-    public static final int TIER_REFERENCED = 1;
-    public static final int TIER_CORE = 2;
-    public static final int TIER_UNREFERENCED_STACK = 3;
-    public static final int TIER_UNREFERENCED_HAND_GRAVEYARD = 4;
+    /**
+     * The {@code state.tiers} every snapshot carries: all four, always.
+     *
+     * <p>Still written although it never varies, because the record schema is
+     * frozen and older corpora carry shallower vectors, which readers keep
+     * treating as uncollected rather than empty.
+     */
+    static final String TIERS_JSON = "[1,2,3,4]";
 
     private static final char[] COLORS = {'W', 'U', 'B', 'R', 'G'};
 
@@ -108,60 +115,9 @@ public final class SnapshotBuilder {
     }
 
     private final Game game;
-    private final int[] tiers;
 
-    /**
-     * @param tiers the inclusion tiers this <b>run</b> collects
-     *
-     * <p>There is deliberately no constructor that picks a default depth. The
-     * tier vector is a run-level property -- the feature spec adds tier 3 and
-     * then tier 4 by stage, not by call site -- and a convenience constructor is
-     * how that turned into a per-call-site choice: interventional forks asked for
-     * four tiers while every other collector asked for two or three, so
-     * {@code state.tiers} containing 4 identified {@code interventional} exactly,
-     * and a flag the schema bars from ever being a model input had a perfect
-     * proxy sitting in the state. Making every construction state its depth is
-     * what stops the next call site from reintroducing it.
-     */
-    public SnapshotBuilder(Game game, int[] tiers) {
+    public SnapshotBuilder(Game game) {
         this.game = game;
-        this.tiers = tiers.clone();
-        requirePrefix(this.tiers);
-    }
-
-    /**
-     * Reject a tier vector that is not a prefix of the four tiers.
-     *
-     * <p>Tiers are cumulative -- 3 widens 2, 4 widens 3 -- so a set with a hole
-     * in it describes no collection anyone could run, and the renderer would
-     * still write it into {@code state.tiers} as though it had. Tier 2 is
-     * required as well as merely declared: the battlefield and the command zone
-     * go into every snapshot unconditionally, so a vector omitting 2 would tell
-     * a reader the board was uncollected while the board sits in
-     * {@code entities}.
-     */
-    private static void requirePrefix(int[] tiers) {
-        boolean prefix = tiers.length >= 2 && tiers.length <= 4;
-        for (int i = 0; prefix && i < tiers.length; i++) {
-            prefix = tiers[i] == i + 1;
-        }
-        if (!prefix) {
-            throw new IllegalArgumentException(
-                    "snapshot tiers must be a prefix of [1,2,3,4] holding at"
-                            + " least 1 and 2, got "
-                            + java.util.Arrays.toString(tiers));
-        }
-    }
-
-    /**
-     * The depth this builder renders at.
-     *
-     * <p>Readable so a collector's wiring can be checked where the vector lands
-     * rather than where it was read: the tier-4 leak was a value that looked
-     * right at every call site and was overridden inside the constructor.
-     */
-    int[] tiers() {
-        return tiers.clone();
     }
 
     /** The entity id an event's subject and the snapshot both use. */
@@ -245,16 +201,14 @@ public final class SnapshotBuilder {
                 ZoneType.Battlefield, ZoneType.Command))) {
             entities.add(card);
         }
-        if (contains(tiers, TIER_UNREFERENCED_STACK)) {
-            for (Card card : game.getCardsIn(ZoneType.Stack)) {
-                entities.add(card);
-            }
+        // Tier 3: the unreferenced stack.
+        for (Card card : game.getCardsIn(ZoneType.Stack)) {
+            entities.add(card);
         }
-        if (contains(tiers, TIER_UNREFERENCED_HAND_GRAVEYARD)) {
-            for (Card card : game.getCardsIn(EnumSet.of(
-                    ZoneType.Hand, ZoneType.Graveyard))) {
-                entities.add(card);
-            }
+        // Tier 4: unreferenced hands and graveyards.
+        for (Card card : game.getCardsIn(EnumSet.of(
+                ZoneType.Hand, ZoneType.Graveyard))) {
+            entities.add(card);
         }
 
         StringJoiner entityJson = new StringJoiner(",", "[", "]");
@@ -265,16 +219,11 @@ public final class SnapshotBuilder {
         for (Player player : game.getPlayers()) {
             playerJson.add(playerToJson(player));
         }
-        StringJoiner tierJson = new StringJoiner(",", "[", "]");
-        for (int tier : tiers) {
-            tierJson.add(String.valueOf(tier));
-        }
-
         return stateJson(
                 globalToJson(), playerJson.toString(), entityJson.toString(),
                 refsJson(acting, sourceOverride),
                 pending == null ? "null" : pending.toJson(),
-                tierJson.toString());
+                TIERS_JSON);
     }
 
     /**
@@ -964,14 +913,5 @@ public final class SnapshotBuilder {
         if (value != null && !value.isEmpty()) {
             into.add(Json.string(name) + ":" + Json.string(value));
         }
-    }
-
-    private static boolean contains(int[] values, int value) {
-        for (int candidate : values) {
-            if (candidate == value) {
-                return true;
-            }
-        }
-        return false;
     }
 }

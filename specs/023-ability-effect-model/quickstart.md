@@ -132,21 +132,15 @@ python -m effects holdout-cards --out output/effects/records/depleted/holdout-ca
 python -m sealed match-outcomes \
     --exclude-cards output/effects/records/depleted/holdout-cards.txt \
     --effect-records output/effects/records/depleted/ --workers 6 \
-    --snapshot-tiers 1,2,3,4 \
     --playability-rate 0.1 \
     --legality-rate 0.1 \
     --interventions-per-game 2 \
-    --probes-per-game 2 \
-    --probe-keywords first_strike,double_strike,deathtouch,lifelink,trample,indestructible,wither,infect
+    --probes-per-game 2
 ```
 
-`--snapshot-tiers 1,2,3,4` because this command opts into interventions and probes, which are
-an interventional fork, so a run taking forks collects at that depth. Left at the `1,2,3` default it
-would write forks into snapshots shallower than the fork can see, and tier 4 is the one tier no later
-pass can add:
-an absent tier means uncollected, so a reader cannot tell an empty graveyard from an
-unrecorded one. It costs about 59% more entities per record — 11.8 cards sit in hands and
-graveyards against the 19.9 entities a snapshot already carries.
+Every snapshot collects all four inclusion tiers, so no flag sets a depth. Tier 4, unreferenced
+hands and graveyards, is what an interventional fork reads; it costs about 59% more entities per
+record — 11.8 cards sit in hands and graveyards against the 19.9 entities the other tiers carry.
 
 The two sampling rates are named rather than defaulted, because both defaults are judgement
 calls and the command should carry them. `0.1` is right for the same reason in both cases: the
@@ -171,22 +165,20 @@ Instrumentation is an opt-in on a command that already exists. The flag costs no
 it rides matches that were going to be played anyway — and the sealed corpora keep their exact format,
 so this doubles as a sealed self-play run. Ctrl-C to stop.
 
-Only one of the three fork flags is off by default, and it is not the one that reads like a switch.
-`--interventions-per-game` and `--probes-per-game` both default to 2, so a patched run already forks
-for interventions whether or not you name them; naming them here makes the budget explicit rather
-than turning it on. `--probe-keywords` defaults to empty and is what actually gates probes. Naming
-all eight damage-step keywords collects a probe branch for each, which is what gate 2 checks its
-model-side perturbation against; naming none takes no probe at all. Forks are the only expensive
-mechanism here — each costs a game copy that re-parses every card from its script — so the per-game
-budgets are the throttle, not the keyword list.
+None of the three fork flags is off by default. `--interventions-per-game` and `--probes-per-game`
+both default to 2, and `--probe-keywords` defaults to all eight damage-step keywords, so a patched
+run forks for interventions and probes whether or not you name them; naming the budgets here makes
+them explicit rather than turning them on. A probe branch for each keyword is what gate 2 checks its
+model-side perturbation against; `--probe-keywords ""` takes no probe at all, and a subset narrows
+them. Forks are the only expensive mechanism here — each costs a game copy that re-parses every card
+from its script — so the per-game budgets are the throttle, not the keyword list.
 
-**`--probes-per-game` is a budget, not a switch.** Without `--probe-keywords` it buys nothing, and a
-run that omits the keyword list collects a corpus with zero probe forks in it — which is what the
-55,296-record smoke corpus was, with nothing saying so until gate 2 had no engine-side branch to
-compare against. Every collecting command therefore prints its probe state before the first worker
-spawns:
+**`--probes-per-game` is a budget, not a switch.** With `--probe-keywords ""` it buys nothing, and the
+run collects a corpus with zero probe forks in it. Every collecting command prints its probe state
+before the first worker spawns — the first line by default, the second with the list emptied:
 
 ```
+Damage-step probes: up to 2 per game on first_strike, double_strike, deathtouch, lifelink, trample, indestructible, wither, infect
 Damage-step probes DISABLED: --probe-keywords is empty, so the --probes-per-game 2 budget buys no fork at all. Pass --probe-keywords <keyword>[,<keyword>...] to take any.
 ```
 
@@ -275,16 +267,14 @@ accept all seven: `match-outcomes`, `collect-coverage` and `collect-variants`.
 | `--playability-rate` | 0.1 | Share of decision points sampled. The legality subkinds are coalesced on their rendered payload instead, since the AI re-asks who may block while it evaluates. |
 | `--interventions-per-game` | 2 | Forced resolutions per game. On at the default — pass `0` to stop them, since omitting the flag leaves them running. |
 | `--probes-per-game` | 2 | Damage-step probes per game. A budget, not a switch. |
-| `--probe-keywords` | *(empty)* | Which keywords a probe may strip. Empty means **no probe is ever taken**, whatever the budget — the state each collecting command announces at startup. |
+| `--probe-keywords` | all eight damage-step keywords | Which keywords a probe may strip: `first_strike,double_strike,deathtouch,lifelink,trample,indestructible,wither,infect`. A subset narrows the probes; an empty string means **no probe is ever taken**, whatever the budget — the state each collecting command announces at startup. |
 | `--legality-rate` | 0 | Share of the AI's what-if legality queries kept. Real attack and block declarations are always written. The command above reproduces gen-1, which kept a tenth of every legality point. |
-| `--snapshot-tiers` | `1,2,3` | How deep every snapshot reaches: a prefix of `1,2,3,4` — 1 referenced objects, 2 core, 3 the unreferenced stack, 4 unreferenced hands and graveyards. Run-level, never per collector — a depth that varies by kind turns `state.tiers` into a proxy for how a record was collected. A run taking forks wants `1,2,3,4`. |
 
 ## 3b. Collect the validation corpus at full strength
 
 ```bash
 python -m sealed match-outcomes \
-    --effect-records output/effects/records/full-strength/ --workers 6 \
-    --snapshot-tiers 1,2,3,4
+    --effect-records output/effects/records/full-strength/ --workers 6
 ```
 
 The same command as step 3 without `--exclude-cards`, so these pools contain the held-out cards and
@@ -302,8 +292,7 @@ python -m effects collect-coverage \
     --training-corpus output/effects/records/depleted/ \
     --target-records 50 --workers 12 \
     --interventions-per-game 2 \
-    --probes-per-game 2 \
-    --probe-keywords first_strike,double_strike,deathtouch,lifelink,trample,indestructible,wither,infect
+    --probes-per-game 2
 ```
 
 Sealed self-play only ever plays what sealed pools contain, so a card in no sealed-legal set never
@@ -696,7 +685,7 @@ non-zero when a blocking gate fails.
 |---|---|
 | **Gate 1** (identity baseline) | Blocks shipping. All three margins must hold on the card-disjoint split's unique-text stratum — resolution records whose acting text appears on no training card, the only slice where a free embedding per text cannot recall the answer. Failure means the encoder is not reading text. |
 | **Gate 3** (collapse canaries) | Blocks shipping. Mean pairwise cosine ≤ 0.5 over 10,000 pairs, top PC ≤ 30% of variance. |
-| **Gate 2** (damage-step canary), per keyword | Blocks nothing. Each of the eight keywords passes or is routed to a probe. On a corpus collected with `--probe-keywords`, each routed keyword has engine-side branches to check the model-side perturbation against. |
+| **Gate 2** (damage-step canary), per keyword | Blocks nothing. Each of the eight keywords passes or is routed to a probe. On a corpus collected with probes on (the default), each routed keyword has engine-side branches to check the model-side perturbation against. |
 | Ward canary, nearest-neighbour / UMAP, decodability battery, scorer smoke test | Reported, not gating |
 
 The decodability battery needs `output/sealed/cards-win-rates.txt` from a `train-encoder` run; without
@@ -709,7 +698,7 @@ Every step above can be dropped, and the ones after it still run:
 | Drop | Cost |
 |---|---|
 | Step 0, the engine patch | Three of eight sampling classes, `degraded` mode, no forks. Evasion keywords will not separate — their signal is playability records. |
-| `--probe-keywords` in steps 3–4 | Gate 2 still reports a per-keyword verdict; a routed keyword has no engine-side branch to check against. |
+| Probes in steps 3–4 (`--probe-keywords ""`) | Gate 2 still reports a per-keyword verdict; a routed keyword has no engine-side branch to check against. |
 | `--interventions-per-game 0` | Cards the AI can never afford to play keep no resolution record. Omitting the flag does not do this: it defaults to 2, so interventions run anyway. |
 | Step 3b, the full-strength run | No card-disjoint stratum, so `train-effect-model` fails before its first epoch. Gate 1 has nothing to measure. |
 | `--exclude-cards` in step 3 | Held-out cards reach training games, and every game holding one is discarded instead — most of the corpus at a useful holdout size. The run looks identical while it happens. |

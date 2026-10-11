@@ -80,7 +80,6 @@ class PatchedCollectorTest {
     private static CollectionCaps caps(int manaCap, double playabilityRate) {
         return new CollectionCaps(
                 manaCap, playabilityRate, 2, 2, List.of(),
-                CollectionCaps.defaults().snapshotTiers(),
                 CollectionCaps.defaults().legalityRate());
     }
 
@@ -103,12 +102,9 @@ class PatchedCollectorTest {
         assertEquals(0.1, defaults.playabilityRate());
         assertEquals(2, defaults.interventionsPerGame());
         assertEquals(2, defaults.probesPerGame());
+        // A worker started without the property probes nothing; the eight
+        // keywords a run probes by default are the supervisor's to send.
         assertTrue(defaults.probeKeywords().isEmpty());
-        // One depth for the whole run. Chosen per collector, it was a perfect
-        // proxy for the interventional flag -- tier 4 appeared on those records
-        // and on nothing else -- which is collection metadata the schema keeps
-        // out of the model's inputs.
-        assertEquals(List.of(1, 2, 3), defaults.snapshotTiers());
         // What-if legality queries are off: real decisions are written
         // whatever the rate, and they alone fill the legality class.
         assertEquals(0.0, defaults.legalityRate());
@@ -129,7 +125,6 @@ class PatchedCollectorTest {
                 "effect.interventions.per.game", "3",
                 "effect.probes.per.game", "4",
                 "effect.probe.keywords", "wither, infect",
-                "effect.snapshot.tiers", "1,2",
                 "effect.legality.rate", "0.25");
         properties.forEach(System::setProperty);
         try {
@@ -139,7 +134,6 @@ class PatchedCollectorTest {
             assertEquals(3, caps.interventionsPerGame());
             assertEquals(4, caps.probesPerGame());
             assertEquals(List.of("wither", "infect"), caps.probeKeywords());
-            assertEquals(List.of(1, 2), caps.snapshotTiers());
             assertEquals(0.25, caps.legalityRate());
         } finally {
             properties.keySet().forEach(System::clearProperty);
@@ -152,21 +146,6 @@ class PatchedCollectorTest {
         // started by an older supervisor may set only some.
         CollectionCaps caps = CollectionCaps.fromSystemProperties();
         assertEquals(CollectionCaps.defaults(), caps);
-    }
-
-    @Test
-    void aMalformedTierVectorKeepsItsDefaultRatherThanFailing() {
-        // A worker that started with a typo in the vector collects the run's
-        // depth, not a partial one: a tier list that varies is exactly the
-        // defect the run-level value exists to prevent.
-        System.setProperty("effect.snapshot.tiers", "1,two,3");
-        try {
-            assertEquals(
-                    List.of(1, 2, 3),
-                    CollectionCaps.fromSystemProperties().snapshotTiers());
-        } finally {
-            System.clearProperty("effect.snapshot.tiers");
-        }
     }
 
     @Test
@@ -185,7 +164,7 @@ class PatchedCollectorTest {
     void probesAreOffUntilKeywordsAreNamed() {
         assertFalse(CollectionCaps.defaults().probesEnabled());
         assertTrue(new CollectionCaps(
-                2000, 0.1, 2, 2, List.of("wither"), List.of(1, 2, 3), 0.1)
+                2000, 0.1, 2, 2, List.of("wither"), 0.1)
                 .probesEnabled());
     }
 
@@ -1366,27 +1345,19 @@ class PatchedCollectorTest {
         assertTrue(collector.allowTriggerLine("[key]", false));
     }
 
-    // ── the snapshot depth is a run-level value ────────────────────────
+    // ── the snapshot depth is the same on every record ─────────────────
 
     @Test
-    void theSnapshotDepthComesFromTheRunsCaps() {
-        CollectionCaps deep = new CollectionCaps(
-                1, 1.0, 2, 2, List.of(), List.of(1, 2, 3, 4), 0.1);
+    void everySnapshotCarriesAllFourTiers() {
         PatchedCollectors collector = new PatchedCollectors(
                 TestCards.game(),
                 new RecordShardWriter(tempDir, "run", 0, "l1"),
-                "run.0-l1.0", deep, 1L);
+                "run.0-l1.0", CollectionCaps.defaults(), 1L);
 
         String json = collector.triggerRecord(
                 new FakeTrait("Moved"), Map.of(), true).toJson();
 
         assertTrue(json.contains("\"tiers\":[1,2,3,4]"), json);
-    }
-
-    @Test
-    void theTierVectorReachesTheBuilderAsAPrefix() {
-        assertArrayEquals(
-                new int[]{1, 2, 3}, CollectionCaps.defaults().snapshotTierArray());
     }
 
     // ── held probe branches ────────────────────────────────────────────
@@ -1398,7 +1369,7 @@ class PatchedCollectorTest {
 
     private PatchedCollectors withForks(RecordShardWriter writer) {
         CollectionCaps probing = new CollectionCaps(
-                1, 1.0, 2, 2, List.of("trample"), List.of(1, 2, 3), 0.1);
+                1, 1.0, 2, 2, List.of("trample"), 0.1);
         PatchedCollectors collector = new PatchedCollectors(
                 TestCards.game(), writer, "run.0-l1.0", probing, 1L);
         collector.withForks(
@@ -2085,7 +2056,7 @@ class PatchedCollectorTest {
         Path path = writer.path();
         try {
             BusBracketCollector bracket = new BusBracketCollector(
-                    TestCards.game(), writer, "run.0-l1.0", CollectionCaps.defaults());
+                    TestCards.game(), writer, "run.0-l1.0");
             try (PatchedCollectors collectors = new PatchedCollectors(
                     TestCards.game(), writer, "run.0-l1.0", CollectionCaps.defaults(), 1L)) {
                 collectors.withBracket(bracket);
@@ -2131,7 +2102,7 @@ class PatchedCollectorTest {
         Path path = writer.path();
         try {
             BusBracketCollector bracket = new BusBracketCollector(
-                    TestCards.game(), writer, "run.0-l1.0", CollectionCaps.defaults());
+                    TestCards.game(), writer, "run.0-l1.0");
             try (PatchedCollectors collectors = new PatchedCollectors(
                     TestCards.game(), writer, "run.0-l1.0", CollectionCaps.defaults(), 1L)) {
                 collectors.withBracket(bracket);
@@ -2177,7 +2148,7 @@ class PatchedCollectorTest {
         Path path = writer.path();
         try {
             BusBracketCollector bracket = new BusBracketCollector(
-                    TestCards.game(), writer, "run.0-l1.0", CollectionCaps.defaults());
+                    TestCards.game(), writer, "run.0-l1.0");
             try (PatchedCollectors collectors = new PatchedCollectors(
                     TestCards.game(), writer, "run.0-l1.0", CollectionCaps.defaults(), 1L)) {
                 collectors.withBracket(bracket);
@@ -2210,7 +2181,7 @@ class PatchedCollectorTest {
         Path path = writer.path();
         try {
             BusBracketCollector bracket = new BusBracketCollector(
-                    TestCards.game(), writer, "run.0-l1.0", CollectionCaps.defaults());
+                    TestCards.game(), writer, "run.0-l1.0");
             try (PatchedCollectors collectors = new PatchedCollectors(
                     TestCards.game(), writer, "run.0-l1.0", CollectionCaps.defaults(), 1L)) {
                 collectors.withBracket(bracket);
@@ -2242,7 +2213,7 @@ class PatchedCollectorTest {
         Path path = writer.path();
         try {
             BusBracketCollector bracket = new BusBracketCollector(
-                    TestCards.game(), writer, "run.0-l1.0", CollectionCaps.defaults());
+                    TestCards.game(), writer, "run.0-l1.0");
             try (PatchedCollectors collectors = new PatchedCollectors(
                     TestCards.game(), writer, "run.0-l1.0", CollectionCaps.defaults(), 1L)) {
                 collectors.withBracket(bracket);
@@ -2276,7 +2247,7 @@ class PatchedCollectorTest {
         Path path = writer.path();
         try {
             BusBracketCollector bracket = new BusBracketCollector(
-                    TestCards.game(), writer, "run.0-l1.0", CollectionCaps.defaults());
+                    TestCards.game(), writer, "run.0-l1.0");
             try (PatchedCollectors collectors = new PatchedCollectors(
                     TestCards.game(), writer, "run.0-l1.0", CollectionCaps.defaults(), 1L)) {
                 collectors.withBracket(bracket);
@@ -2320,7 +2291,7 @@ class PatchedCollectorTest {
         Path path = writer.path();
         try {
             BusBracketCollector bracket = new BusBracketCollector(
-                    TestCards.game(), writer, "run.0-l1.0", CollectionCaps.defaults());
+                    TestCards.game(), writer, "run.0-l1.0");
             try (PatchedCollectors collectors = new PatchedCollectors(
                     TestCards.game(), writer, "run.0-l1.0", CollectionCaps.defaults(), 1L)) {
                 collectors.withBracket(bracket);
@@ -2411,7 +2382,7 @@ class PatchedCollectorTest {
         Path path = writer.path();
         try {
             BusBracketCollector bracket = new BusBracketCollector(
-                    game, writer, "run.0-l1.0", CollectionCaps.defaults());
+                    game, writer, "run.0-l1.0");
             try (PatchedCollectors collectors = new PatchedCollectors(
                     game, writer, "run.0-l1.0", CollectionCaps.defaults(), 1L)) {
                 collectors.withBracket(bracket);
@@ -2488,7 +2459,7 @@ class PatchedCollectorTest {
         Path path = writer.path();
         try {
             BusBracketCollector bracket = new BusBracketCollector(
-                    TestCards.game(), writer, "run.0-l1.0", CollectionCaps.defaults());
+                    TestCards.game(), writer, "run.0-l1.0");
             try (PatchedCollectors collectors = new PatchedCollectors(
                     TestCards.game(), writer, "run.0-l1.0", CollectionCaps.defaults(), 1L)) {
                 collectors.withBracket(bracket);
@@ -2554,7 +2525,7 @@ class PatchedCollectorTest {
         Path path = writer.path();
         try {
             BusBracketCollector bracket = new BusBracketCollector(
-                    TestCards.game(), writer, "run.0-l1.0", CollectionCaps.defaults());
+                    TestCards.game(), writer, "run.0-l1.0");
             try (PatchedCollectors collectors = new PatchedCollectors(
                     TestCards.game(), writer, "run.0-l1.0", CollectionCaps.defaults(), 1L)) {
                 collectors.withBracket(bracket);
@@ -2614,7 +2585,7 @@ class PatchedCollectorTest {
         Path path = writer.path();
         try {
             BusBracketCollector bracket = new BusBracketCollector(
-                    TestCards.game(), writer, "run.0-l1.0", CollectionCaps.defaults());
+                    TestCards.game(), writer, "run.0-l1.0");
             try (PatchedCollectors collectors = new PatchedCollectors(
                     TestCards.game(), writer, "run.0-l1.0", CollectionCaps.defaults(), 1L)) {
                 collectors.withBracket(bracket);
@@ -2748,7 +2719,7 @@ class PatchedCollectorTest {
         CollectionCaps fullLegalityRate = new CollectionCaps(
                 CollectionCaps.defaults().manaCap(), CollectionCaps.defaults().playabilityRate(),
                 CollectionCaps.defaults().interventionsPerGame(), CollectionCaps.defaults().probesPerGame(),
-                CollectionCaps.defaults().probeKeywords(), CollectionCaps.defaults().snapshotTiers(), 1.0);
+                CollectionCaps.defaults().probeKeywords(), 1.0);
 
         RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1");
         Path path = writer.path();
@@ -2867,7 +2838,7 @@ class PatchedCollectorTest {
         CollectionCaps fullLegalityRate = new CollectionCaps(
                 CollectionCaps.defaults().manaCap(), CollectionCaps.defaults().playabilityRate(),
                 CollectionCaps.defaults().interventionsPerGame(), CollectionCaps.defaults().probesPerGame(),
-                CollectionCaps.defaults().probeKeywords(), CollectionCaps.defaults().snapshotTiers(), 1.0);
+                CollectionCaps.defaults().probeKeywords(), 1.0);
 
         RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1");
         Path path = writer.path();
@@ -2943,8 +2914,7 @@ class PatchedCollectorTest {
         CollectionCaps halfRate = new CollectionCaps(
                 CollectionCaps.defaults().manaCap(), 0.5,
                 CollectionCaps.defaults().interventionsPerGame(), CollectionCaps.defaults().probesPerGame(),
-                CollectionCaps.defaults().probeKeywords(), CollectionCaps.defaults().snapshotTiers(),
-                CollectionCaps.defaults().legalityRate());
+                CollectionCaps.defaults().probeKeywords(), CollectionCaps.defaults().legalityRate());
 
         RecordShardWriter soloWriter = new RecordShardWriter(tempDir, "solo", 0, "l1");
         Path soloPath = soloWriter.path();
@@ -3021,7 +2991,7 @@ class PatchedCollectorTest {
         return new CollectionCaps(
                 CollectionCaps.defaults().manaCap(), CollectionCaps.defaults().playabilityRate(),
                 CollectionCaps.defaults().interventionsPerGame(), CollectionCaps.defaults().probesPerGame(),
-                CollectionCaps.defaults().probeKeywords(), CollectionCaps.defaults().snapshotTiers(), 0.0);
+                CollectionCaps.defaults().probeKeywords(), 0.0);
     }
 
     private static List<String> recordsOf(Path path) throws Exception {
@@ -3078,7 +3048,7 @@ class PatchedCollectorTest {
         CollectionCaps everyWhatIf = new CollectionCaps(
                 CollectionCaps.defaults().manaCap(), CollectionCaps.defaults().playabilityRate(),
                 CollectionCaps.defaults().interventionsPerGame(), CollectionCaps.defaults().probesPerGame(),
-                CollectionCaps.defaults().probeKeywords(), CollectionCaps.defaults().snapshotTiers(), 1.0);
+                CollectionCaps.defaults().probeKeywords(), 1.0);
         try (PatchedCollectors collectors = new PatchedCollectors(
                 game, writer, "run.0-l1.0", everyWhatIf, 1L)) {
             collectors.combatLegalityHandler().invoke(null,

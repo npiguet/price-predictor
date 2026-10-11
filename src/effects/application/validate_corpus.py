@@ -1174,10 +1174,10 @@ class _Tally:
         )
 
     def _uniform_tiers(self) -> Finding:
-        """Snapshot depth is a run-level property, so one vector or none.
+        """Every record collects all four tiers, so one vector or none.
 
-        A depth chosen per collector makes ``state.tiers`` a proxy for how the
-        record was collected — in the first corpus tier 4 appeared on the
+        A depth that varies by collector makes ``state.tiers`` a proxy for how
+        the record was collected — in the first corpus tier 4 appeared on the
         interventional records and nowhere else, which is a perfect predictor
         of a field the schema forbids the model to see.
         """
@@ -1587,12 +1587,12 @@ class _Tally:
     def _probe_forks_were_taken(self) -> Finding:
         """Whether the probe path ran at all, and on which keywords.
 
-        ``--probe-keywords`` defaults to empty and empty takes no fork, so the
-        whole path can have unit tests and no runtime evidence whatever — which
-        is what the smoke corpus showed: zero probe forks in 55,296 records.
-        Watched rather than judged, because a run that deliberately names no
-        keyword is not a broken run; the number is here so an operator who
-        *meant* to probe finds out in minutes rather than at evaluation.
+        An emptied ``--probe-keywords`` takes no fork, so the whole path can
+        have unit tests and no runtime evidence whatever — which is what the
+        smoke corpus showed: zero probe forks in 55,296 records. Watched rather
+        than judged, because a run that deliberately names no keyword is not a
+        broken run; the number is here so an operator who *meant* to probe
+        finds out in minutes rather than at evaluation.
         """
         shown = ", ".join(
             f"{keyword} {count}"

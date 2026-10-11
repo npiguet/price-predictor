@@ -197,7 +197,7 @@ class ModalResolutionTest {
         RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1");
         Path path = writer.path();
         BusBracketCollector bracket = new BusBracketCollector(
-                game, writer, "run.0-l1.0", CollectionCaps.defaults());
+                game, writer, "run.0-l1.0");
         try (PatchedCollectors collectors = new PatchedCollectors(
                 game, writer, "run.0-l1.0", CollectionCaps.defaults(), 1L)) {
             collectors.withBracket(bracket);
@@ -250,7 +250,7 @@ class ModalResolutionTest {
         RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1");
         Path path = writer.path();
         BusBracketCollector bracket = new BusBracketCollector(
-                game, writer, "run.0-l1.0", CollectionCaps.defaults());
+                game, writer, "run.0-l1.0");
         try (PatchedCollectors collectors = new PatchedCollectors(
                 game, writer, "run.0-l1.0", CollectionCaps.defaults(), 1L)) {
             collectors.withBracket(bracket);
@@ -285,7 +285,7 @@ class ModalResolutionTest {
         RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1");
         Path path = writer.path();
         BusBracketCollector bracket = new BusBracketCollector(
-                game, writer, "run.0-l1.0", CollectionCaps.defaults());
+                game, writer, "run.0-l1.0");
         try (PatchedCollectors collectors = new PatchedCollectors(
                 game, writer, "run.0-l1.0", CollectionCaps.defaults(), 1L)) {
             collectors.withBracket(bracket);
@@ -322,7 +322,7 @@ class ModalResolutionTest {
         RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1");
         Path path = writer.path();
         BusBracketCollector bracket = new BusBracketCollector(
-                game, writer, "run.0-l1.0", CollectionCaps.defaults());
+                game, writer, "run.0-l1.0");
         try {
             bracket.beginBracket(charm);
             bracket.recordClauseEvent(new EffectEvent(EffectEvent.DAMAGE_DEALT).param("amount", 4));
@@ -379,7 +379,7 @@ class ModalResolutionTest {
         // fork's stack frozen and the forced ability parked off it.
         game.setAge(forge.game.GameStage.Play);
         CollectionCaps caps = new CollectionCaps(
-                2000, 0.1, 2, 0, List.of(), List.of(1, 2, 3), 0.1);
+                2000, 0.1, 2, 0, List.of(), 0.1);
 
         RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1");
         Path path = writer.path();
@@ -429,7 +429,7 @@ class ModalResolutionTest {
         creatureSpell.setActivatingPlayer(caster);
         game.setAge(forge.game.GameStage.Play);
         CollectionCaps caps = new CollectionCaps(
-                2000, 0.1, 2, 0, List.of(), List.of(1, 2, 3), 0.1);
+                2000, 0.1, 2, 0, List.of(), 0.1);
 
         RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1");
         Path path = writer.path();
@@ -467,7 +467,7 @@ class ModalResolutionTest {
         RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1");
         Path path = writer.path();
         BusBracketCollector bracket = new BusBracketCollector(
-                game, writer, "run.0-l1.0", CollectionCaps.defaults());
+                game, writer, "run.0-l1.0");
         try (PatchedCollectors collectors = new PatchedCollectors(
                 game, writer, "run.0-l1.0", CollectionCaps.defaults(), 1L)) {
             collectors.withBracket(bracket);

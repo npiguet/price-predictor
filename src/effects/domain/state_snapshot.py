@@ -259,7 +259,7 @@ class StateSnapshot:
     refs: Refs = field(default_factory=Refs)
     #: ``rewrite`` and ``trigger`` records only: the incoming event being handled.
     pending_event: Event | None = None
-    #: Which tiers the collector was configured to write. Never inferred.
+    #: Which tiers the collector wrote. Never inferred.
     tiers: frozenset[InclusionTier] = STAGE_ONE_TIERS
 
     def collected(self, tier: InclusionTier) -> bool:

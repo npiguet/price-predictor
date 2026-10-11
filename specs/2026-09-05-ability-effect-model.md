@@ -62,7 +62,7 @@ State is stored as data — names plus dynamic attributes. The tensor representa
   3. unreferenced stack contents;
   4. unreferenced hand and graveyard contents.
 
-  Tiers 1 and 2 need nothing; tier 3 needs the engine patch and tier 4 is what an interventional fork reads. A record carries the tiers current at its collection; readers treat an absent tier as uncollected, not empty.
+  Every snapshot collects all four tiers, whatever the collector or run, and writes `state.tiers` as `[1,2,3,4]`; no flag selects a depth. A record carries the tiers current at its collection; readers treat an absent tier as uncollected, not empty.
 - Perspective is not stored: controllers are absolute ids, and mine/opponent tags are derived at training time relative to `actor_player`.
 
 ## Events
@@ -110,17 +110,13 @@ Flags live on every collecting supervisor (`match-outcomes`, `collect-coverage`,
 | `--legality-rate` | 0 | fraction of the AI's what-if legality queries kept; real attack and block declarations are always written |
 | `--interventions-per-game` | 2 | interventional resolutions per game |
 | `--probes-per-game` | 2 | damage-step probe forks per game (only for keywords whose canary failed — § Evaluation, gate 2) |
-| `--probe-keywords` | _(none; probes disabled)_ | the canary-failing keywords to probe, comma-separated |
-| `--snapshot-tiers` | `1,2,3` | snapshot inclusion depth, a prefix of `1,2,3,4`; a run taking interventional forks collects at `1,2,3,4` |
+| `--probe-keywords` | all eight damage-step keywords (`first_strike,double_strike,deathtouch,lifelink,trample,indestructible,wither,infect`) | the keywords to probe, comma-separated; an empty string disables probes |
 
 Continuous records need no cap: coalescing per stable board is the cap.
 
 Every one of these is a per-worker-process quantity the supervisor cannot observe, so each travels to
 the JVM as an `effect.*` system property; the flag set, the property set and the JVM's
-`CollectionCaps` record are one set, pinned by a test that reads both sides. `--snapshot-tiers` is
-run-level rather than per-collector on purpose: a depth chosen per call site makes `state.tiers` a
-proxy for *how* a record was collected, and the first corpus put tier 4 on the interventional records
-and nowhere else — a perfect predictor of a flag the schema forbids the model to see.
+`CollectionCaps` record are one set, pinned by a test that reads both sides.
 
 # Ability identity
 

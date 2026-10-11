@@ -135,8 +135,9 @@ written.
   trample in the board, which is the board that anthem acted on.
 - Inclusion tiers, in order: (1) referenced objects — every entity-valued ref appears as an entity in
   whatever zone it sits, with that zone recorded; (2) core — global, battlefield, and command-zone
-  effect cards; (3) unreferenced stack; (4) unreferenced hand and graveyard. Tiers 1–2 from stage one,
-  3 from stage two, 4 from stage three. **An absent tier means uncollected, not empty.**
+  effect cards; (3) unreferenced stack; (4) unreferenced hand and graveyard. A collector writes all
+  four on every record (`tiers: [1,2,3,4]`); no flag selects a depth. Shards from earlier collectors
+  carry a shorter prefix. **An absent tier means uncollected, not empty.**
 - Perspective is not stored. Controllers are absolute; mine/opponent derives at training time from
   `actor_player`.
 - **The two grant sources are separate fields and must stay separate.** `granted_attached` holds
@@ -379,9 +380,8 @@ nothing resolving in between.
 **That is an open question static reasoning cannot settle, and it is now a question a corpus run can
 answer — the channel that would let anyone measure it did not exist before this task wired it.** The
 method is this branch's own, turned on itself: over a real collection, group `regenerated` events by
-bracket and check whether any single card's entity ref appears twice within one. A future pass with
-`--probe-keywords` or a plain `collect-coverage` window large enough to gather a few hundred `regenerated`
-events would settle this empirically rather than by further argument.
+bracket and check whether any single card's entity ref appears twice within one. Any collection pass large enough
+to gather a few hundred `regenerated` events settles this empirically rather than by further argument.
 
 ### `spell_countered` cannot see a counter that removed the stack instance but then failed to exile
 
@@ -573,7 +573,7 @@ What is not true: that no simulated resolution ever happens during collection. S
   `setUseSimulation(AIOption.USE_FULL_SIMULATION)`, regardless of how the two lobby seats were
   registered. So a forced ability resolves through the exact same `AbilityUtils`/`EffectRecordOutcomes`
   machinery a real resolution does, under full simulation, every time collection takes an intervention.
-- **A damage-step probe** (`--probe-keywords`, off unless named): `ForkCollector.probe` strips one
+- **A damage-step probe** (`--probe-keywords`, all eight damage-step keywords by default): `ForkCollector.probe` strips one
   keyword from a copy and calls `Combat.assignCombatDamage`/`dealAssignedDamage` on it directly — a
   turn-based action, not a resolution, so it never touches `GameSimulator` or an `AIOption` at all, but it
   is exactly as much a fork as the first kind.

@@ -114,7 +114,6 @@ public final class PatchedCollectors implements AutoCloseable {
             int interventionsPerGame,
             int probesPerGame,
             List<String> probeKeywords,
-            List<Integer> snapshotTiers,
             double legalityRate,
             double randomSeatShare,
             double randomSeatProbability) {
@@ -126,15 +125,14 @@ public final class PatchedCollectors implements AutoCloseable {
                 int interventionsPerGame,
                 int probesPerGame,
                 List<String> probeKeywords,
-                List<Integer> snapshotTiers,
                 double legalityRate) {
             this(manaCap, playabilityRate, interventionsPerGame, probesPerGame,
-                    probeKeywords, snapshotTiers, legalityRate, 0.0, 0.0);
+                    probeKeywords, legalityRate, 0.0, 0.0);
         }
 
         public static CollectionCaps defaults() {
             return new CollectionCaps(
-                    1, 0.1, 2, 2, List.of(), List.of(1, 2, 3), 0.0, 0.0, 0.0);
+                    1, 0.1, 2, 2, List.of(), 0.0, 0.0, 0.0);
         }
 
         /**
@@ -153,7 +151,6 @@ public final class PatchedCollectors implements AutoCloseable {
                             defaults.interventionsPerGame()),
                     intProperty("effect.probes.per.game", defaults.probesPerGame()),
                     listProperty("effect.probe.keywords"),
-                    tierProperty("effect.snapshot.tiers", defaults.snapshotTiers()),
                     doubleProperty("effect.legality.rate", defaults.legalityRate()),
                     // The random seat's two knobs (FR-021). A share of matches
                     // and a per-decision P: both are drawn in the JVM, so the
@@ -168,22 +165,6 @@ public final class PatchedCollectors implements AutoCloseable {
         /** Whether any match of this run may seat a random player at all. */
         public boolean randomSeatEnabled() {
             return randomSeatShare > 0.0;
-        }
-
-        /**
-         * The snapshot depth, as the builder wants it.
-         *
-         * <p>One run-level value read once, so no collector can pick its own.
-         * The builder refuses a vector that is not a prefix of {1,2,3,4}, which
-         * fails the worker at startup rather than writing a corpus whose tier
-         * list means something different on each kind of record.
-         */
-        public int[] snapshotTierArray() {
-            int[] tiers = new int[snapshotTiers.size()];
-            for (int i = 0; i < tiers.length; i++) {
-                tiers[i] = snapshotTiers.get(i);
-            }
-            return tiers;
         }
 
         private static int intProperty(String name, int fallback) {
@@ -204,26 +185,6 @@ public final class PatchedCollectors implements AutoCloseable {
             } catch (NumberFormatException e) {
                 return fallback;
             }
-        }
-
-        /** A comma-separated tier vector, falling back rather than failing. */
-        private static List<Integer> tierProperty(String name, List<Integer> fallback) {
-            String value = System.getProperty(name);
-            if (value == null || value.isBlank()) {
-                return fallback;
-            }
-            List<Integer> parsed = new ArrayList<>();
-            for (String part : value.split(",")) {
-                if (part.isBlank()) {
-                    continue;
-                }
-                try {
-                    parsed.add(Integer.parseInt(part.trim()));
-                } catch (NumberFormatException e) {
-                    return fallback;
-                }
-            }
-            return parsed.isEmpty() ? fallback : List.copyOf(parsed);
         }
 
         private static List<String> listProperty(String name) {
@@ -259,11 +220,7 @@ public final class PatchedCollectors implements AutoCloseable {
         this.writer = writer;
         this.gameId = gameId;
         this.caps = caps;
-        // The run's vector, not this collector's own. Every collector in the
-        // worker takes the same one, because a tier list that varies by record
-        // kind is collection metadata a model can read: in the first corpus
-        // tier 4 appeared on the interventional records and on nothing else.
-        this.snapshots = new SnapshotBuilder(game, caps.snapshotTierArray());
+        this.snapshots = new SnapshotBuilder(game);
         this.mode = AttributionMode.detect();
         this.sampler = new java.util.Random(scramble(seed));
     }
@@ -1492,9 +1449,10 @@ public final class PatchedCollectors implements AutoCloseable {
      * <p>Gate 2 perturbs the keyword <b>model-side</b> and asks whether the
      * prediction moves the right way. A probe answers the same question against
      * the engine: the same combat, actually re-run without the keyword, so the
-     * model's response has a ground truth to be checked against. It is built
-     * only for the keywords gate 2 routed to it, which is why
-     * {@code --probe-keywords} is empty by default.
+     * model's response has a ground truth to be checked against. Every
+     * collecting supervisor names all eight damage-step keywords unless a run
+     * narrows {@code --probe-keywords}; a worker started without the property
+     * probes none.
      *
      * <p>The branches are held rather than written. Each mirrors the real combat
      * record, which does not exist until the step this ran ahead of has
@@ -3309,9 +3267,9 @@ public final class PatchedCollectors implements AutoCloseable {
     /**
      * The trait's host, as the snapshot's tier-1 referenced list.
      *
-     * <p>Without it a dies-trigger's host sits in the graveyard, outside every
-     * tier this run collects, and {@code refs.source} would name an entity id
-     * that is in no {@code state.entities} — a join the reader cannot follow.
+     * <p>Without it a host outside every zone the other tiers sweep — one in
+     * exile, say — is in no {@code state.entities}, and {@code refs.source}
+     * would name an entity id the reader cannot follow.
      */
     private static List<Card> referencedOf(Card source) {
         return source == null ? List.of() : List.of(source);

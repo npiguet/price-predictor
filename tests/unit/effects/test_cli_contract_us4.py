@@ -40,7 +40,10 @@ class TestCollectVariants:
     def test_it_carries_the_shared_cap_flags(self):
         args = parse("collect-variants")
         assert args.mana_cap == 1
-        assert args.probe_keywords == ""
+        assert args.probe_keywords == (
+            "first_strike,double_strike,deathtouch,lifelink,trample,"
+            "indestructible,wither,infect"
+        )
 
     def test_the_volume_cap_is_overridable(self):
         assert parse(

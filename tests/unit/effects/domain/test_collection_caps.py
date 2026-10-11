@@ -21,13 +21,13 @@ from effects.domain.collection_caps import (
     DEFAULT_LEGALITY_RATE,
     DEFAULT_MANA_CAP,
     DEFAULT_PLAYABILITY_RATE,
+    DEFAULT_PROBE_KEYWORDS,
     DEFAULT_PROBES_PER_GAME,
     DEFAULT_RANDOM_SEAT_PROBABILITY,
     DEFAULT_RANDOM_SEAT_SHARE,
-    DEFAULT_SNAPSHOT_TIERS,
     CollectionCaps,
-    parse_snapshot_tiers,
 )
+from effects.domain.damage_step_keywords import KEYWORDS_BY_NAME
 from effects.infrastructure.cli import CAP_DEFAULTS
 from effects.infrastructure.cli import announce_probe_state as effects_announce
 from sealed.infrastructure.cli import (
@@ -39,10 +39,8 @@ from sealed.infrastructure.cli import (
     EFFECT_PROBES_PER_GAME,
     EFFECT_RANDOM_SEAT_PROBABILITY,
     EFFECT_RANDOM_SEAT_SHARE,
-    EFFECT_SNAPSHOT_TIERS,
     _effect_collection_caps,
 )
-from sealed.infrastructure.cli import _snapshot_tiers as sealed_snapshot_tiers
 from sealed.infrastructure.cli import announce_probe_state as sealed_announce
 
 
@@ -50,7 +48,7 @@ class TestBothSidesAnnounceProbesTheSameWay:
     """The probe startup line is restated on both sides, so it is pinned here.
 
     ``--probes-per-game`` reads like the switch and is the budget;
-    ``--probe-keywords`` is the switch and defaults to naming nothing. Two
+    ``--probe-keywords`` is the switch, and an emptied one names nothing. Two
     commands that said different things about that would be worse than one that
     said nothing, because an operator would learn to trust the wrong one.
     """
@@ -66,11 +64,37 @@ class TestBothSidesAnnounceProbesTheSameWay:
                 keywords, budget
             )
 
-    def test_the_two_defaults_both_leave_probes_off(self):
-        assert EFFECT_PROBE_KEYWORDS == CAP_DEFAULTS["probe_keywords"] == ""
-        assert "DISABLED" in effects_announce(
+    def test_the_two_defaults_both_turn_probes_on(self):
+        assert EFFECT_PROBE_KEYWORDS == CAP_DEFAULTS["probe_keywords"]
+        line = effects_announce(
             CAP_DEFAULTS["probe_keywords"], DEFAULT_PROBES_PER_GAME,
         )
+        assert "DISABLED" not in line
+        assert "first_strike" in line and "infect" in line
+
+
+class TestTheProbeKeywordDefault:
+    """Probes are on by default, over every keyword gate 2 checks."""
+
+    def test_it_names_all_eight_damage_step_keywords(self):
+        assert DEFAULT_PROBE_KEYWORDS == (
+            "first_strike,double_strike,deathtouch,lifelink,trample,"
+            "indestructible,wither,infect"
+        )
+
+    def test_it_is_gate_twos_own_table(self):
+        """Derived from the table, so a keyword gate 2 checks is never one
+        collection skips."""
+        assert DEFAULT_PROBE_KEYWORDS.split(",") == list(KEYWORDS_BY_NAME)
+
+    def test_it_reaches_the_worker(self):
+        assert CollectionCaps().as_system_properties()[
+            "effect.probe.keywords"
+        ] == DEFAULT_PROBE_KEYWORDS
+
+    def test_an_empty_list_still_turns_probes_off(self):
+        caps = CollectionCaps(probe_keywords="")
+        assert caps.as_system_properties()["effect.probe.keywords"] == ""
 
 
 class TestTheTwoSidesAgree:
@@ -84,7 +108,6 @@ class TestTheTwoSidesAgree:
         assert EFFECT_PROBES_PER_GAME == DEFAULT_PROBES_PER_GAME
         assert EFFECT_PROBE_KEYWORDS == CollectionCaps().probe_keywords
         assert EFFECT_LEGALITY_RATE == DEFAULT_LEGALITY_RATE
-        assert EFFECT_SNAPSHOT_TIERS == DEFAULT_SNAPSHOT_TIERS
         assert EFFECT_RANDOM_SEAT_SHARE == DEFAULT_RANDOM_SEAT_SHARE
         assert EFFECT_RANDOM_SEAT_PROBABILITY == DEFAULT_RANDOM_SEAT_PROBABILITY
 
@@ -111,7 +134,6 @@ class TestPropertyNames:
         assert "effect.mana.cap" in properties
         assert "effect.interventions.per.game" in properties
         assert "effect.probe.keywords" in properties
-        assert "effect.snapshot.tiers" in properties
         assert "effect.legality.rate" in properties
 
     def test_values_are_strings(self):
@@ -161,11 +183,10 @@ _JAVA_CAPS = (
 class TestTheJvmReadsExactlyWhatThePythonSideWrites:
     """The caps the worker reads and the caps a supervisor can set are one set.
 
-    They were not. ``effect.snapshot.tiers`` and ``effect.legality.rate`` were
-    read by ``CollectionCaps.fromSystemProperties``, documented in
-    ``MatchWorkerMain``, and settable by no command — so the tier-4 snapshot
-    stage three needs took a code edit to request, and the legality sampler ran
-    at a rate a javadoc called ``--legality-rate``, a flag that did not exist.
+    They were not. ``effect.legality.rate`` was read by
+    ``CollectionCaps.fromSystemProperties`` and settable by no command, so the
+    legality sampler ran at a rate a javadoc called ``--legality-rate``, a flag
+    that did not exist.
     A property one side reads and the other never writes is invisible from
     both.
     """
@@ -191,54 +212,19 @@ class TestTheJvmReadsExactlyWhatThePythonSideWrites:
         )
 
 
-class TestTheSnapshotTierVector:
-    """Stage three's hand-and-graveyard tier, reachable at last."""
+class TestNoSnapshotDepthKnob:
+    """Every record collects all four tiers, so no command can choose a depth."""
 
-    def test_it_defaults_to_the_three_stage_one_tiers(self):
-        assert CollectionCaps().snapshot_tiers == "1,2,3"
+    def test_the_caps_carry_no_tier_field(self):
+        assert "snapshot_tiers" not in {
+            field for field in CollectionCaps.__dataclass_fields__
+        }
 
-    def test_tier_four_is_expressible(self):
-        assert CollectionCaps(snapshot_tiers="1,2,3,4").snapshot_tiers == "1,2,3,4"
-
-    def test_it_travels_as_the_comma_separated_string_the_jvm_parses(self):
-        caps = CollectionCaps(snapshot_tiers="1,2,3,4")
-        assert caps.as_system_properties()["effect.snapshot.tiers"] == "1,2,3,4"
-
-    @pytest.mark.parametrize("text", ["1,2", "1,2,3", "1,2,3,4", " 1 , 2 "])
-    def test_a_prefix_of_the_four_tiers_is_accepted(self, text):
-        assert parse_snapshot_tiers(text)
-
-    @pytest.mark.parametrize("text", ["1,3", "2,3", "1", "", "1,2,4", "3,2,1"])
-    def test_anything_but_a_prefix_is_refused(self, text):
-        """Tiers are cumulative, and the battlefield goes into every snapshot
-        regardless — a vector omitting 2 would tell a reader the board was
-        uncollected while the board sits in `entities`."""
-        with pytest.raises(ValueError):
-            parse_snapshot_tiers(text)
-
-    def test_a_non_numeric_vector_is_refused_rather_than_silently_defaulted(self):
-        """The JVM's own reader falls back on this, which is the one behaviour
-        an operator cannot see."""
-        with pytest.raises(ValueError):
-            parse_snapshot_tiers("1,two,3")
-
-    def test_the_caps_object_refuses_it_at_construction(self):
-        with pytest.raises(ValueError):
-            CollectionCaps(snapshot_tiers="1,3")
-
-    @pytest.mark.parametrize("text", ["1,3", "1", "1,two,3"])
-    def test_both_commands_refuse_the_same_vectors(self, text):
-        """The rule is restated on the sealed side, which never imports this
-        one, so the two spellings are pinned together here."""
-        with pytest.raises(argparse.ArgumentTypeError):
-            sealed_snapshot_tiers(text)
-        with pytest.raises(ValueError):
-            parse_snapshot_tiers(text)
-
-    @pytest.mark.parametrize("text", ["1,2", "1,2,3", "1,2,3,4"])
-    def test_both_commands_accept_the_same_vectors(self, text):
-        assert sealed_snapshot_tiers(text) == text
-        assert parse_snapshot_tiers(text)
+    def test_no_property_names_a_depth(self):
+        assert "effect.snapshot.tiers" not in CollectionCaps().as_system_properties()
+        assert "effect.snapshot.tiers" not in _effect_collection_caps(
+            argparse.Namespace()
+        )
 
 
 class TestTheLegalityRate:

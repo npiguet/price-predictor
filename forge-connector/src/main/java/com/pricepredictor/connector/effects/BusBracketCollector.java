@@ -245,24 +245,12 @@ public final class BusBracketCollector {
     /** Told each combat record's id, for a probe that mirrors it. */
     private java.util.function.Consumer<String> onCombatRecord;
 
-    /**
-     * @param caps the run's collection caps, whose tier vector every collector
-     *             in the worker shares
-     *
-     * <p>The depth is the run's, not this collector's. Taken as an argument
-     * because that is what makes it impossible to pick one here: a hardcoded
-     * pair is how {@code combat} and {@code resolution} records came to carry
-     * {@code tiers=[1,2]} while every other kind carried {@code [1,2,3]}, which
-     * made the tier list say which collector wrote a record rather than what
-     * the run collected.
-     */
     public BusBracketCollector(
-            Game game, RecordShardWriter writer, String gameId,
-            PatchedCollectors.CollectionCaps caps) {
+            Game game, RecordShardWriter writer, String gameId) {
         this.game = game;
         this.writer = writer;
         this.gameId = gameId;
-        this.snapshots = new SnapshotBuilder(game, caps.snapshotTierArray());
+        this.snapshots = new SnapshotBuilder(game);
         this.mode = AttributionMode.detect();
         // Installed here and dropped at GameEventGameFinished, because this
         // collector has no other lifecycle: it is subscribed to the bus for
@@ -270,21 +258,6 @@ public final class BusBracketCollector {
         // unpatched checkout install() finds no hook and nothing changes.
         PatchHooks.install(
                 PLAYER_CONTROLLER_AI, CONFIRM_LISTENER, confirmHandler());
-    }
-
-    /**
-     * The same collector for a caller that does not hold the run's caps.
-     *
-     * <p>Reads the run-level {@code effect.*} properties itself rather than
-     * choosing a depth, so the vector is still the run's however the collector
-     * was built. It exists only so the caller can be changed separately; a
-     * caller that already holds the caps — {@code GamePlayer} reads them once
-     * per match — should pass them.
-     */
-    public BusBracketCollector(
-            Game game, RecordShardWriter writer, String gameId) {
-        this(game, writer, gameId,
-                PatchedCollectors.CollectionCaps.fromSystemProperties());
     }
 
     /**
@@ -307,11 +280,6 @@ public final class BusBracketCollector {
     /** Name the match's random seat, so every record can say whether it acted. */
     public void setRandomSeatPlayerId(String playerId) {
         this.randomSeatPlayerId = playerId;
-    }
-
-    /** The depth this collector's snapshots are built at — the run's, not its own. */
-    int[] snapshotTiers() {
-        return snapshots.tiers();
     }
 
     // ── brackets ────────────────────────────────────────────────────────

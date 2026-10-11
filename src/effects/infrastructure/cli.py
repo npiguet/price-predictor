@@ -22,10 +22,9 @@ from effects.domain.collection_caps import (
     DEFAULT_LEGALITY_RATE,
     DEFAULT_MANA_CAP,
     DEFAULT_PLAYABILITY_RATE,
+    DEFAULT_PROBE_KEYWORDS,
     DEFAULT_PROBES_PER_GAME,
-    DEFAULT_SNAPSHOT_TIERS,
     CollectionCaps,
-    parse_snapshot_tiers,
 )
 
 logger = logging.getLogger(__name__)
@@ -82,9 +81,8 @@ CAP_DEFAULTS: dict[str, object] = {
     "playability_rate": DEFAULT_PLAYABILITY_RATE,
     "interventions_per_game": DEFAULT_INTERVENTIONS_PER_GAME,
     "probes_per_game": DEFAULT_PROBES_PER_GAME,
-    "probe_keywords": "",
+    "probe_keywords": DEFAULT_PROBE_KEYWORDS,
     "legality_rate": DEFAULT_LEGALITY_RATE,
-    "snapshot_tiers": DEFAULT_SNAPSHOT_TIERS,
 }
 
 
@@ -96,22 +94,6 @@ def _add_cards_folder(parser: argparse.ArgumentParser) -> None:
             f"{' and '.join(DEFAULT_CARDS_FOLDERS)}."
         ),
     )
-
-
-def _snapshot_tiers(text: str) -> str:
-    """`--snapshot-tiers` as argparse wants it: validated, still the string.
-
-    The value travels to the JVM as a comma-separated property, so it stays a
-    string; only its shape is checked here. Raising
-    ``ArgumentTypeError`` puts the rule in the usage message rather than in a
-    traceback, and catches the vector the JVM would otherwise accept silently
-    and then throw on mid-game.
-    """
-    try:
-        parse_snapshot_tiers(text)
-    except ValueError as exc:
-        raise argparse.ArgumentTypeError(str(exc)) from None
-    return text
 
 
 def _add_cap_flags(parser: argparse.ArgumentParser) -> None:
@@ -143,18 +125,16 @@ def _add_cap_flags(parser: argparse.ArgumentParser) -> None:
         "--probes-per-game", type=int, default=CAP_DEFAULTS["probes_per_game"],
         help=(
             "Damage-step probe forks per game (default: 2). A budget, not a "
-            "switch: it buys nothing unless --probe-keywords names a keyword."
+            "switch: it is spent only on keywords --probe-keywords names."
         ),
     )
     parser.add_argument(
         "--probe-keywords", type=str, default=CAP_DEFAULTS["probe_keywords"],
         help=(
-            "Comma-separated canary-failing keywords to probe. REQUIRED to get "
-            "any probe at all: empty (the default) takes no fork whatever "
-            "--probes-per-game says, and the run reports zero probes hours "
-            "later. e.g. --probe-keywords "
-            "first_strike,double_strike,deathtouch,lifelink,trample,"
-            "indestructible,wither,infect"
+            "Comma-separated damage-step keywords to probe (default: all "
+            f"eight, {DEFAULT_PROBE_KEYWORDS}). Name a subset to narrow the "
+            "probes; an empty string takes no fork whatever --probes-per-game "
+            "says."
         ),
     )
     parser.add_argument(
@@ -164,30 +144,17 @@ def _add_cap_flags(parser: argparse.ArgumentParser) -> None:
             "none). Real attack and block declarations are always written."
         ),
     )
-    parser.add_argument(
-        "--snapshot-tiers", type=_snapshot_tiers,
-        default=CAP_DEFAULTS["snapshot_tiers"],
-        help=(
-            "Snapshot inclusion depth, comma-separated (default: "
-            f"{DEFAULT_SNAPSHOT_TIERS}). A prefix of 1,2,3,4: 1 referenced "
-            "objects, 2 core (global, battlefield, command-zone effect "
-            "cards), 3 the unreferenced stack, 4 unreferenced hands and "
-            "graveyards. Run-level, so every collector renders at the same "
-            "depth — a depth that varies by kind makes state.tiers a proxy "
-            "for how the record was collected."
-        ),
-    )
 
 
 def announce_probe_state(probe_keywords: str, probes_per_game: int) -> str:
     """The startup line every collecting supervisor prints about probes.
 
     ``--probes-per-game`` reads like the switch and is not: the budget is
-    spent only on keywords ``--probe-keywords`` names, and it names none by
-    default. A run launched without it collects a corpus with zero probe forks
-    in it — the smoke corpus had exactly that, 55,296 records and no probe
-    evidence at all — and nothing said so until gate 2 had nothing to check
-    against. So the absence is announced rather than left to the flag table.
+    spent only on keywords ``--probe-keywords`` names. A run that empties that
+    list collects a corpus with zero probe forks in it — the smoke corpus had
+    exactly that, 55,296 records and no probe evidence at all — and nothing
+    said so until gate 2 had nothing to check against. So the state is
+    announced rather than left to the flag table.
     """
     named = [word.strip() for word in probe_keywords.split(",") if word.strip()]
     if not named:
@@ -492,8 +459,7 @@ def _class_mix(text: str) -> dict[str, float]:
     """``--class-mix`` as argparse wants it: parsed through the trainer's own
     ``parse_kind_mix``, so the two commands cannot disagree about the syntax
     or the class vocabulary. Raising ``ArgumentTypeError`` puts a bad value in
-    the usage message rather than in a traceback (the same trade
-    ``_snapshot_tiers`` above makes).
+    the usage message rather than in a traceback.
     """
     from effects.application.train_effect_model import parse_kind_mix
 

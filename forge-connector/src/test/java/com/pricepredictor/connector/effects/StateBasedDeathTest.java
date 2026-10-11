@@ -178,7 +178,7 @@ class StateBasedDeathTest {
 
         RecordShardWriter writer = writer();
         BusBracketCollector collector = new BusBracketCollector(
-                game, writer, "run.0-l1.0", CollectionCaps.defaults());
+                game, writer, "run.0-l1.0");
         game.subscribeToEvents(collector);
         try {
             castAndResolve(game, bolt);
@@ -219,7 +219,7 @@ class StateBasedDeathTest {
 
         RecordShardWriter writer = writer();
         BusBracketCollector collector = new BusBracketCollector(
-                game, writer, "run.0-l1.0", CollectionCaps.defaults());
+                game, writer, "run.0-l1.0");
         game.subscribeToEvents(collector);
         try {
             castAndResolve(game, bolt);
@@ -256,7 +256,7 @@ class StateBasedDeathTest {
 
         RecordShardWriter writer = writer();
         BusBracketCollector collector = new BusBracketCollector(
-                game, writer, "run.0-l1.0", CollectionCaps.defaults());
+                game, writer, "run.0-l1.0");
         game.subscribeToEvents(collector);
         try (PatchedCollectors patched = new PatchedCollectors(
                 game, writer, "run.0-l1.0", CollectionCaps.defaults(), 1L)) {
@@ -286,7 +286,7 @@ class StateBasedDeathTest {
 
         RecordShardWriter writer = writer();
         BusBracketCollector collector = new BusBracketCollector(
-                game, writer, "run.0-l1.0", CollectionCaps.defaults());
+                game, writer, "run.0-l1.0");
         game.subscribeToEvents(collector);
         try {
             castAndResolve(game, shock);
@@ -319,7 +319,7 @@ class StateBasedDeathTest {
 
         RecordShardWriter writer = writer();
         BusBracketCollector collector = new BusBracketCollector(
-                game, writer, "run.0-l1.0", CollectionCaps.defaults());
+                game, writer, "run.0-l1.0");
         game.subscribeToEvents(collector);
         try {
             castAndResolve(game, bolt);
@@ -357,7 +357,7 @@ class StateBasedDeathTest {
 
         RecordShardWriter writer = writer();
         BusBracketCollector collector = new BusBracketCollector(
-                game, writer, "run.0-l1.0", CollectionCaps.defaults());
+                game, writer, "run.0-l1.0");
         game.subscribeToEvents(collector);
         try {
             castAndResolve(game, shock);
@@ -390,7 +390,7 @@ class StateBasedDeathTest {
 
         RecordShardWriter writer = writer();
         BusBracketCollector collector = new BusBracketCollector(
-                game, writer, "run.0-l1.0", CollectionCaps.defaults());
+                game, writer, "run.0-l1.0");
         game.subscribeToEvents(collector);
         try {
             game.getStack().add(shock);
@@ -426,7 +426,7 @@ class StateBasedDeathTest {
 
         RecordShardWriter writer = writer();
         BusBracketCollector collector = new BusBracketCollector(
-                game, writer, "run.0-l1.0", CollectionCaps.defaults());
+                game, writer, "run.0-l1.0");
         game.subscribeToEvents(collector);
         try {
             castAndResolve(game, shock);
@@ -460,7 +460,7 @@ class StateBasedDeathTest {
 
         RecordShardWriter writer = writer();
         BusBracketCollector collector = new BusBracketCollector(
-                game, writer, "run.0-l1.0", CollectionCaps.defaults());
+                game, writer, "run.0-l1.0");
         game.subscribeToEvents(collector);
         try {
             castAndResolve(game, deadWeight);
@@ -490,7 +490,7 @@ class StateBasedDeathTest {
 
         RecordShardWriter writer = writer();
         BusBracketCollector collector = new BusBracketCollector(
-                game, writer, "run.0-l1.0", CollectionCaps.defaults());
+                game, writer, "run.0-l1.0");
         game.subscribeToEvents(collector);
         try {
             castAndResolve(game, norn);
@@ -515,7 +515,7 @@ class StateBasedDeathTest {
 
         RecordShardWriter writer = writer();
         BusBracketCollector collector = new BusBracketCollector(
-                game, writer, "run.0-l1.0", CollectionCaps.defaults());
+                game, writer, "run.0-l1.0");
         game.subscribeToEvents(collector);
         try {
             castAndResolve(game, second);
@@ -545,7 +545,7 @@ class StateBasedDeathTest {
 
         RecordShardWriter writer = writer();
         BusBracketCollector collector = new BusBracketCollector(
-                game, writer, "run.0-l1.0", CollectionCaps.defaults());
+                game, writer, "run.0-l1.0");
         game.subscribeToEvents(collector);
         try {
             castAndResolve(game, bolt);
@@ -582,7 +582,7 @@ class StateBasedDeathTest {
             assertNotNull(charm);
             charm.setActivatingPlayer(caster);
             CollectionCaps caps = new CollectionCaps(
-                    2000, 0.1, 2, 0, List.of(), List.of(1, 2, 3), 0.1);
+                    2000, 0.1, 2, 0, List.of(), 0.1);
 
             Path dir = tempDir.resolve("fork-" + seed);
             RecordShardWriter writer = new RecordShardWriter(dir, "run", 0, "l1");
@@ -637,7 +637,7 @@ class StateBasedDeathTest {
 
         RecordShardWriter writer = writer();
         BusBracketCollector collector = new BusBracketCollector(
-                game, writer, "run.0-l1.0", CollectionCaps.defaults());
+                game, writer, "run.0-l1.0");
         game.subscribeToEvents(collector);
         try {
             castAndResolve(game, bolt);
@@ -700,7 +700,7 @@ class StateBasedDeathTest {
 
         RecordShardWriter writer = writer();
         BusBracketCollector collector = new BusBracketCollector(
-                game, writer, "run.0-l1.0", CollectionCaps.defaults());
+                game, writer, "run.0-l1.0");
         game.subscribeToEvents(collector);
         try (PatchedCollectors patched = new PatchedCollectors(
                 game, writer, "run.0-l1.0", CollectionCaps.defaults(), 1L)) {
@@ -740,7 +740,7 @@ class StateBasedDeathTest {
 
         RecordShardWriter writer = writer();
         BusBracketCollector collector = new BusBracketCollector(
-                game, writer, "run.0-l1.0", CollectionCaps.defaults());
+                game, writer, "run.0-l1.0");
         game.subscribeToEvents(collector);
         try (PatchedCollectors patched = new PatchedCollectors(
                 game, writer, "run.0-l1.0", CollectionCaps.defaults(), 1L)) {
@@ -787,7 +787,7 @@ class StateBasedDeathTest {
         // A one-creature board: the fork's random target draw has bears or a
         // player to choose from, so try seeds until one picks the bears.
         CollectionCaps caps = new CollectionCaps(
-                2000, 0.1, 50, 0, List.of(), List.of(1, 2, 3), 0.1);
+                2000, 0.1, 50, 0, List.of(), 0.1);
 
         RecordShardWriter writer = writer();
         try (PatchedCollectors patched = new PatchedCollectors(

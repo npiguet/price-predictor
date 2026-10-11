@@ -34,8 +34,8 @@ import java.util.StringJoiner;
  * <p>A <b>damage-step probe</b> re-runs one combat with a keyword stripped, to
  * isolate what that keyword did. It is built only for keywords gate 2 routed to
  * it, and taken only when {@code --probe-keywords} names one — the flag is the
- * runtime switch, separate from the build decision, so a checkout that has the
- * machinery still takes no fork unless asked.
+ * runtime switch, separate from the build decision. It names all eight
+ * damage-step keywords unless a run narrows or empties it.
  *
  * <p><b>Every fork is score-checked against the live game before any
  * perturbation.</b> A copy that already disagrees with the game it came from is
@@ -159,8 +159,6 @@ public final class ForkCollector {
     private final int interventionsPerGame;
     private final int probesPerGame;
     private final List<String> probeKeywords;
-    /** The run's snapshot depth, the same on every record this writes. */
-    private final int[] snapshotTiers;
     private final Random random;
     /** The draws a forced resolution makes, over the same seeded source. */
     private final RandomChoices choices;
@@ -183,13 +181,6 @@ public final class ForkCollector {
         this.interventionsPerGame = caps.interventionsPerGame();
         this.probesPerGame = caps.probesPerGame();
         this.probeKeywords = List.copyOf(caps.probeKeywords());
-        // The run's tier vector, not this collector's own idea of one. Choosing
-        // it here is what made state.tiers a perfect proxy for the
-        // interventional flag: tier 4 appeared on the 55,661 interventional
-        // records of the first corpus and on nothing else, so a model handed
-        // the tier list could read collection metadata the schema forbids as
-        // an input.
-        this.snapshotTiers = caps.snapshotTierArray();
         // Seeded so both branches of a probe see the same shuffles: a
         // difference between them has to be the keyword, not the draw.
         // Scrambled as the sampler's seed is: games are seeded consecutively,
@@ -238,10 +229,12 @@ public final class ForkCollector {
     /**
      * Whether another probe fork may be taken.
      *
-     * <p>With {@code --probe-keywords} unset, never — whatever the build state.
+     * <p>With {@code --probe-keywords} empty, never — whatever the build state.
      * The flag is the runtime switch; whether the probe code exists at all is
-     * the build decision gate 2 drives, and the two are deliberately separate
-     * so a checkout that has the machinery does not start using it by default.
+     * the build decision gate 2 drives, and the two are deliberately separate.
+     * A worker started with no {@code effect.probe.keywords} property reads
+     * the list as empty; every collecting supervisor sets it, naming all eight
+     * damage-step keywords unless the run narrows them.
      */
     public boolean mayProbe(String keyword) {
         // Normalized before the check: the flag names keywords the way the
@@ -358,7 +351,7 @@ public final class ForkCollector {
             // The fork's own state, not the live game's, and read *before* the
             // resolution: the record's state is the board the ability acted on, and
             // reading it after would hand the model the answer.
-            SnapshotBuilder snapshots = new SnapshotBuilder(fork, snapshotTiers);
+            SnapshotBuilder snapshots = new SnapshotBuilder(fork);
             String state = snapshots.toJson(forked, referencedOf(forked));
 
             ForcedResolution resolution = forceResolution(fork, forked, actor, snapshots);
@@ -724,7 +717,7 @@ public final class ForkCollector {
 
             // The state is the board as the step began, with the keyword already
             // gone: that is the input the counterfactual answers for.
-            SnapshotBuilder snapshots = new SnapshotBuilder(fork, snapshotTiers);
+            SnapshotBuilder snapshots = new SnapshotBuilder(fork);
             // No root: a damage step is a turn-based action, not a resolution, so
             // this branch's events attribute the way the observed combat record's
             // do -- from the resolving-clause pointer alone, which names nothing.

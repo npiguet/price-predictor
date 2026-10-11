@@ -1,7 +1,6 @@
 package com.pricepredictor.connector.effects;
 
 import com.pricepredictor.connector.ForgeExtension;
-import com.pricepredictor.connector.effects.PatchedCollectors.CollectionCaps;
 import forge.StaticData;
 import forge.ai.LobbyPlayerAi;
 import forge.deck.Deck;
@@ -35,7 +34,6 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 
-import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -78,13 +76,9 @@ class BusBracketCollectorTest {
 
     private RecordShardWriter writer;
 
-    private BusBracketCollector collector(CollectionCaps caps) {
-        writer = new RecordShardWriter(tempDir, "run", 0, "l1");
-        return new BusBracketCollector(TestCards.game(), writer, "run.0-l1.0", caps);
-    }
-
     private BusBracketCollector collector() {
-        return collector(CollectionCaps.defaults());
+        writer = new RecordShardWriter(tempDir, "run", 0, "l1");
+        return new BusBracketCollector(TestCards.game(), writer, "run.0-l1.0");
     }
 
     /** The records written so far, one parsed line each. */
@@ -325,42 +319,27 @@ class BusBracketCollectorTest {
     // ── snapshot depth ──────────────────────────────────────────────────
 
     /**
-     * The collector snapshots at the run's depth, not at one of its own.
+     * Both halves of a resolution carry all four tiers.
      *
-     * <p>Checked where the vector lands rather than where it was read. Hardcoded
-     * here, it made {@code state.tiers} say which collector wrote a record —
-     * {@code combat} and {@code resolution} at {@code [1,2]} against
+     * <p>Checked where the vector lands rather than where it is decided. A depth
+     * hardcoded per collector made {@code state.tiers} say which collector wrote
+     * a record — {@code combat} and {@code resolution} at {@code [1,2]} against
      * {@code [1,2,3]} everywhere else — which is collection metadata the schema
      * keeps out of a model's inputs.
      */
     @Test
-    void theSnapshotDepthIsTheRunsAndNotTheCollectorsOwn() {
-        assertArrayEquals(
-                new int[]{1, 2, 3},
-                collector(CollectionCaps.defaults()).snapshotTiers());
+    void everyRecordCarriesAllFourTiers() throws IOException {
+        BusBracketCollector collector = collector();
+        SpellAbility bolt = damageAbility();
 
-        CollectionCaps deep = new CollectionCaps(
-                1, 0.1, 2, 2, List.of(), List.of(1, 2, 3, 4), 0.1);
-        assertArrayEquals(new int[]{1, 2, 3, 4}, collector(deep).snapshotTiers());
-    }
+        collector.beginBracket(bolt);
+        collector.endBracket(bolt.getId(), false);
+        collector.flushHeldResolution();
 
-    /** And a caller that passes no caps still gets the run's, not a default here. */
-    @Test
-    void aCollectorBuiltWithoutCapsStillReadsTheRunsDepth() {
-        writer = new RecordShardWriter(tempDir, "run", 0, "l1");
-        String previous = System.getProperty("effect.snapshot.tiers");
-        System.setProperty("effect.snapshot.tiers", "1,2,3,4");
-        try {
-            assertArrayEquals(
-                    new int[]{1, 2, 3, 4},
-                    new BusBracketCollector(TestCards.game(), writer, "g")
-                            .snapshotTiers());
-        } finally {
-            if (previous == null) {
-                System.clearProperty("effect.snapshot.tiers");
-            } else {
-                System.setProperty("effect.snapshot.tiers", previous);
-            }
+        List<String> records = written();
+        assertEquals(2, records.size(), records.toString());
+        for (String record : records) {
+            assertTrue(record.contains("\"tiers\":[1,2,3,4]"), record);
         }
     }
 
@@ -547,7 +526,7 @@ class BusBracketCollectorTest {
                         + " | NumDmg$ 3", boltHost);
         writer = new RecordShardWriter(tempDir, "run", 0, "l1");
         BusBracketCollector outcomeCollector = new BusBracketCollector(
-                outcomeGame, writer, "run.0-l1.0", CollectionCaps.defaults());
+                outcomeGame, writer, "run.0-l1.0");
 
         outcomeCollector.beginBracket(bolt);
         outcomeCollector.onGameOutcome(new GameEventGameOutcome(
@@ -677,7 +656,7 @@ class BusBracketCollectorTest {
         Game game = gameInACombatDamageStep();
         writer = new RecordShardWriter(tempDir, "run", 0, "l1");
         BusBracketCollector collector = new BusBracketCollector(
-                game, writer, "run.0-l1.0", CollectionCaps.defaults());
+                game, writer, "run.0-l1.0");
         Card attacker = TestCards.build("Grizzly Bears");
 
         collector.onCardDamaged(new GameEventCardDamaged(
@@ -727,7 +706,7 @@ class BusBracketCollectorTest {
                         + " | NumDmg$ 3", boltHost);
         writer = new RecordShardWriter(tempDir, "run", 0, "l1");
         BusBracketCollector outcomeCollector = new BusBracketCollector(
-                outcomeGame, writer, "run.0-l1.0", CollectionCaps.defaults());
+                outcomeGame, writer, "run.0-l1.0");
 
         // Bolt resolves and its own bracket closes -- writing and clearing its
         // own effect half -- before anyone asks whether the game is over.

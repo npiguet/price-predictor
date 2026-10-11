@@ -991,35 +991,15 @@ EFFECT_MANA_CAP = 1
 EFFECT_PLAYABILITY_RATE = 0.1
 EFFECT_INTERVENTIONS_PER_GAME = 2
 EFFECT_PROBES_PER_GAME = 2
-EFFECT_PROBE_KEYWORDS = ""
+#: Every damage-step keyword gate 2 checks, in the spelling the JVM compares a
+#: normalized Forge keyword against.
+EFFECT_PROBE_KEYWORDS = (
+    "first_strike,double_strike,deathtouch,lifelink,trample,indestructible,"
+    "wither,infect"
+)
 EFFECT_LEGALITY_RATE = 0.0
-EFFECT_SNAPSHOT_TIERS = "1,2,3"
 EFFECT_RANDOM_SEAT_SHARE = 0.0
 EFFECT_RANDOM_SEAT_PROBABILITY = 0.0
-
-
-def _snapshot_tiers(text: str) -> str:
-    """`--snapshot-tiers` as argparse wants it: validated, still the string.
-
-    The rule is restated here rather than imported, like the cap defaults
-    above and for the same reason — this package never imports ``effects`` —
-    and a test that may see both sides pins the two spellings together.
-    Checked at all because the JVM's two failure modes are both worse than an
-    argument error: an unparseable vector falls back to the default silently,
-    and a parseable non-prefix throws once a game is already running.
-    """
-    try:
-        tiers = tuple(int(part.strip()) for part in text.split(",") if part.strip())
-    except ValueError:
-        raise argparse.ArgumentTypeError(
-            f"snapshot tiers must be comma-separated integers, got {text!r}"
-        ) from None
-    if tiers != (1, 2, 3, 4)[:len(tiers)] or len(tiers) < 2:
-        raise argparse.ArgumentTypeError(
-            "snapshot tiers must be a prefix of [1, 2, 3, 4] holding at least "
-            f"1 and 2, got {list(tiers)}"
-        )
-    return text
 
 
 def _effect_collection_caps(args: argparse.Namespace) -> dict[str, str]:
@@ -1050,9 +1030,6 @@ def _effect_collection_caps(args: argparse.Namespace) -> dict[str, str]:
         ),
         "effect.legality.rate": str(
             getattr(args, "legality_rate", EFFECT_LEGALITY_RATE)
-        ),
-        "effect.snapshot.tiers": str(
-            getattr(args, "snapshot_tiers", EFFECT_SNAPSHOT_TIERS)
         ),
         "effect.random.seat.share": str(
             getattr(args, "random_seat_share", EFFECT_RANDOM_SEAT_SHARE)
@@ -1110,19 +1087,18 @@ def _add_effect_record_flags(parser: argparse.ArgumentParser) -> None:
         default=EFFECT_PROBES_PER_GAME,
         help=(
             "Damage-step probe forks per game. Default:"
-            f" {EFFECT_PROBES_PER_GAME}. A budget, not a switch: it buys"
-            " nothing unless --probe-keywords names a keyword."
+            f" {EFFECT_PROBES_PER_GAME}. A budget, not a switch: it is spent"
+            " only on keywords --probe-keywords names."
         ),
     )
     parser.add_argument(
         "--probe-keywords",
         default=EFFECT_PROBE_KEYWORDS,
         help=(
-            "Comma-separated canary-failing keywords to probe. REQUIRED to get"
-            " any probe at all: empty (the default) takes no fork whatever"
-            " --probes-per-game says. e.g. --probe-keywords"
-            " first_strike,double_strike,deathtouch,lifelink,trample,"
-            "indestructible,wither,infect"
+            "Comma-separated damage-step keywords to probe (default: all"
+            f" eight, {EFFECT_PROBE_KEYWORDS}). Name a subset to narrow the"
+            " probes; an empty string takes no fork whatever"
+            " --probes-per-game says."
         ),
     )
     parser.add_argument(
@@ -1134,19 +1110,6 @@ def _add_effect_record_flags(parser: argparse.ArgumentParser) -> None:
             " and block declarations are always written. Default:"
             f" {EFFECT_LEGALITY_RATE}, none: a query the AI re-asks while"
             " planning is kept in proportion to how often it asked."
-        ),
-    )
-    parser.add_argument(
-        "--snapshot-tiers",
-        type=_snapshot_tiers,
-        default=EFFECT_SNAPSHOT_TIERS,
-        help=(
-            "Snapshot inclusion depth, comma-separated; a prefix of 1,2,3,4."
-            " 1 referenced objects, 2 core (global, battlefield, command-zone"
-            " effect cards), 3 the unreferenced stack, 4 unreferenced hands"
-            " and graveyards. Run-level, so every collector renders at the"
-            " same depth. Default:"
-            f" {EFFECT_SNAPSHOT_TIERS}."
         ),
     )
     parser.add_argument(
@@ -1202,12 +1165,12 @@ def announce_probe_state(probe_keywords: str, probes_per_game: int) -> str:
     """The startup line a collecting run prints about its probe budget.
 
     ``--probes-per-game`` reads like the switch and is not: the budget is spent
-    only on keywords ``--probe-keywords`` names, and it names none by default.
-    A run launched without it produces a corpus with zero probe forks in it —
-    the smoke corpus was exactly that, 55,296 records and no probe evidence at
-    all — and nothing said so until gate 2 had nothing to check its model-side
-    perturbation against. So the absence is announced at startup rather than
-    left to a flag table an operator reads once.
+    only on keywords ``--probe-keywords`` names. A run that empties that list
+    produces a corpus with zero probe forks in it — the smoke corpus was
+    exactly that, 55,296 records and no probe evidence at all — and nothing
+    said so until gate 2 had nothing to check its model-side perturbation
+    against. So the state is announced at startup rather than left to a flag
+    table an operator reads once.
 
     Restated here rather than imported from ``effects``, like the cap defaults
     above and for the same reason: this package never imports that one.

@@ -135,8 +135,8 @@ records appear with the fork's own state, paired to their real counterparts by `
 2. **Given** a fork whose copy-score check disagrees with the live game before any perturbation,
    **When** the guard fires, **Then** a warning is logged, no record is written, and the fork still
    counts against the per-game budget.
-3. **Given** `--probe-keywords` left at its default, **When** collection runs, **Then** no probe forks
-   are taken.
+3. **Given** `--probe-keywords` set to an empty string, **When** collection runs, **Then** no probe
+   forks are taken. Left at its default it names all eight damage-step keywords.
 4. **Given** probes enabled, **When** a probe runs, **Then** both branches run under an installed
    seeded random source restored in a `finally`, only one game runs concurrently in that JVM, and the
    fork branch is written as an ordinary `combat` record with `fork = true`.
@@ -304,8 +304,8 @@ loss.
   carried as an entity in whatever zone it sits with that zone recorded; (2) core: global, battlefield
   entities, and command-zone effect cards (player-scoped continuous effects with no permanent, carried
   as entities with the originating line's key); (3) unreferenced stack contents; (4) unreferenced hand
-  and graveyard contents — with tiers 1–2 always present, tier 3 requiring the
-  engine patch, and tier 4 what an interventional fork reads. Readers MUST treat an absent tier as uncollected rather than empty.
+  and graveyard contents — every snapshot collecting all four and writing `state.tiers` as
+  `[1,2,3,4]`, with no flag selecting a depth. Readers MUST treat an absent tier as uncollected rather than empty.
 - **FR-023**: Perspective MUST NOT be stored: controllers are absolute ids and mine/opponent tags are
   derived at training time relative to `actor_player`.
 - **FR-024**: Effect payloads MUST carry typed event lists of
@@ -320,7 +320,9 @@ loss.
   NOT be recorded.
 - **FR-028**: Collection caps and budgets MUST be exposed as flags on every collecting supervisor with
   the root spec's defaults: `--mana-cap` 2000, `--playability-rate` 0.1,
-  `--interventions-per-game` 2, `--probes-per-game` 2, `--probe-keywords` empty (probes disabled).
+  `--interventions-per-game` 2, `--probes-per-game` 2, `--probe-keywords` all eight damage-step
+  keywords (`first_strike,double_strike,deathtouch,lifelink,trample,indestructible,wither,infect`;
+  an empty string disables probes).
 - **FR-029**: `--playability-rate` MUST sample `decision`-subkind logging points only; `attackers` and
   `blockers` records are always logged. `--mana-cap` MUST count resolution records per unique
   mana-ability text, scoped per worker process. `continuous` records take no cap, because coalescing

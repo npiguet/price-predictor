@@ -127,7 +127,7 @@ summary count judged invariants only.
 | every record was collected in patched mode | any record carries `mode = degraded` |
 | `outcome` takes more than one value | every activation record reports the same outcome |
 | cost fields are not all empty | no activation record paid anything at all, or — once the window holds `--min-cost-evidence` activations — `mana_by_color` or `tapped` was never populated. Only those two: sacrifice, discard, exile and life costs are genuinely rare in a sealed pool, and a check that cries wolf on them is one an operator learns to skip |
-| snapshot tier depth is uniform across kinds | more than one `state.tiers` vector appears in the window |
+| snapshot tier depth is uniform across kinds | more than one `state.tiers` vector appears in the window. A current collector writes `[1,2,3,4]` on every record, so a second vector means the window mixes shards from collectors of different depths |
 | exact duplicates within a game stay rare, per kind | any kind's duplicate rate exceeds `--max-duplicate-rate` |
 | no record repeats an event inside itself | duplicate-event share exceeds `--max-duplicate-event-rate`. Distinct from the row above, which compares whole records and reads 0.00% on a corpus duplicating one event in seven |
 | trigger records draw negatives against positives | fired share exceeds `--max-trigger-fired-share`; the report breaks the ratio down per evaluated trigger mode as well as in aggregate |
@@ -140,7 +140,7 @@ summary count judged invariants only.
 | rewrites name the ability that ran instead | watched by default; breached only when `--min-rewrite-replaced-by-rate` is given. Measured over `replaced` and `updated` only, the two outcomes reachable after an ability ran |
 | events that declare a cause name one | watched by default; breached only when `--min-cause-rate` is given. Measured over the types whose own params row declares `cause` (`zone_change`, `destroyed`, `sacrificed`) rather than the whole vocabulary, where a near-zero rate would be correct. It is also the identity channel the duplicate-event row depends on: two attackers dealing the same damage to the same player differ in nothing but their cause |
 | a fork's turn agrees with the record it mirrors | any fork's `state.global.turn` differs from its `mirror_of` record's, above `--max-mirror-turn-disagreement-rate` (default **0**). A fork is taken *at* the moment it mirrors, so there is no healthy rate of disagreement; forks whose mirror fell outside the window are counted apart and judged not at all. It surfaced before as a backward turn jump in the game_id row, which named the game and blamed a merge that had not happened |
-| probe forks were taken | never — always watched. Zero probes means `--probe-keywords` was empty, which is a launch choice rather than a defect |
+| probe forks were taken | never — always watched. Zero probes means `--probe-keywords` was emptied, which is a launch choice rather than a defect |
 
 A kind absent from the window is reported as holding, not as broken: a two-minute window need not
 contain a `continuous` record, and a check that fails on silence teaches an operator to ignore it. The
@@ -172,36 +172,27 @@ no shards.
 | `--legality-rate` | 0 | fraction of the AI's what-if legality queries kept; real attack and block declarations are always written |
 | `--interventions-per-game` | 2 | interventional resolutions per game |
 | `--probes-per-game` | 2 | damage-step probe forks per game — a budget, not a switch |
-| `--probe-keywords` | none (**probes disabled**) | comma-separated canary-failing keywords; required for any probe at all |
-| `--snapshot-tiers` | `1,2,3` | snapshot inclusion depth; a prefix of `1,2,3,4` holding at least `1,2` — 4 adds unreferenced hands and graveyards |
+| `--probe-keywords` | `first_strike,double_strike,deathtouch,lifelink,trample,indestructible,wither,infect` | comma-separated damage-step keywords to probe; a subset narrows the probes, an empty string disables them. The default is derived from gate 2's table (`effects.domain.damage_step_keywords`) and restated in `sealed` |
 
 `continuous` records take no cap: coalescing per stable board is the cap.
 
-**The flag set and the JVM's cap set are one set.** Each flag becomes an `effect.*` system property
-(`--snapshot-tiers` → `effect.snapshot.tiers`, and so on) and the worker's `CollectionCaps` record
-reads exactly those names; a test reads both sides and fails when either grows a knob the other does
-not have. It grew two before that test existed: `effect.snapshot.tiers` and `effect.legality.rate`
-were read by the JVM, documented in `MatchWorkerMain`, and settable by no command, so the tier-4
-snapshot an interventional fork needs took a code edit to request and the legality sampler ran at a rate a
-javadoc called `--legality-rate` — a flag that did not exist.
+No flag selects a snapshot depth. Every snapshot collects all four inclusion tiers and writes
+`state.tiers` as `[1,2,3,4]`, whatever the command, collector or run.
 
-**`--snapshot-tiers` is validated before the JVM sees it.** A vector that is not a prefix of
-`1,2,3,4` holding at least `1,2` is a usage error, because both of the JVM's own failure modes are
-worse: an unparseable vector falls back to the default *silently*, and a parseable non-prefix throws
-inside `SnapshotBuilder` once a game is already running. Tiers are cumulative — 3 widens 2, 4 widens
-3 — and the battlefield goes into every snapshot regardless, so a vector omitting 2 would tell a
-reader the board was uncollected while the board sits in `entities`.
+**The flag set and the JVM's cap set are one set.** Each flag becomes an `effect.*` system property
+(`--legality-rate` → `effect.legality.rate`, and so on) and the worker's `CollectionCaps` record
+reads exactly those names; a test reads both sides and fails when either grows a knob the other does
+not have. A worker started without `effect.probe.keywords` reads an empty list and takes no probe;
+every collecting supervisor sets it.
 
 **`--probes-per-game` alone buys nothing.** The budget is spent only on keywords `--probe-keywords`
-names, and it names none by default, so a run launched without it collects a corpus with zero probe
-forks — which is what the 55,296-record smoke corpus was, with nothing saying so until gate 2 had no
-engine-side branch to check against. Every collecting supervisor therefore prints one of these at
-startup, before the first worker spawns:
+names, so a run that empties the list collects a corpus with zero probe forks. Every collecting
+supervisor prints one of these at startup, before the first worker spawns:
 
 ```
 Damage-step probes DISABLED: --probe-keywords is empty, so the --probes-per-game 2 budget buys no
 fork at all. Pass --probe-keywords <keyword>[,<keyword>...] to take any.
-Damage-step probes: up to 2 per game on trample, deathtouch
+Damage-step probes: up to 2 per game on first_strike, double_strike, deathtouch, lifelink, trample, indestructible, wither, infect
 ```
 
 `validate-corpus` reports the probe count as a watched number for the same reason, so a run that

@@ -7,8 +7,8 @@ import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -20,62 +20,34 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * key ordering a resolution-time refs splice depends on, which degrades to the
  * un-spliced state rather than to an error when it stops holding.
  *
- * <p>Neither needs a game: the tier vector is decided in the constructor, and
+ * <p>Neither needs a game: the tier vector is a constant of the builder, and
  * the state's block order is decided by string assembly.
  */
 class SnapshotBuilderTest {
 
-    private static final int[] STAGE_TWO = {1, 2, 3};
-
-    // ── the tier vector is a run-level value ────────────────────────────
+    // ── one depth for every record ──────────────────────────────────────
 
     /**
-     * The regression guard for the tier-4-means-interventional leak: a
-     * convenience constructor is how a run-level property became a per-call-site
-     * one, so its absence is the fix and this test is what states it.
+     * The regression guard for the tier-4-means-interventional leak: a depth a
+     * caller could choose is how {@code state.tiers} became a proxy for which
+     * collector wrote a record, so the builder takes no depth at all.
      */
     @Test
-    void everyConstructionStatesItsTierDepth() {
+    void noConstructionChoosesATierDepth() {
         Constructor<?>[] constructors = SnapshotBuilder.class.getConstructors();
         assertEquals(1, constructors.length,
                 "a second constructor would let a call site pick its own depth");
-        assertEquals(2, constructors[0].getParameterCount());
-        assertEquals(Game.class, constructors[0].getParameterTypes()[0]);
-        assertEquals(int[].class, constructors[0].getParameterTypes()[1]);
+        assertArrayEquals(
+                new Class<?>[]{Game.class}, constructors[0].getParameterTypes());
     }
 
+    /**
+     * Every snapshot declares all four tiers, so an empty hand or stack reads as
+     * empty rather than as uncollected.
+     */
     @Test
-    void theRunsOwnTierVectorsAreAccepted() {
-        new SnapshotBuilder(null, new int[]{1, 2});
-        new SnapshotBuilder(null, new int[]{1, 2, 3});
-        new SnapshotBuilder(null, new int[]{1, 2, 3, 4});
-    }
-
-    @Test
-    void aTierVectorWithAHoleInItIsRefused() {
-        // Tiers are cumulative, so [1,3] describes no collection anyone can run
-        // — but it would be written into state.tiers as though it did.
-        assertThrows(IllegalArgumentException.class,
-                () -> new SnapshotBuilder(null, new int[]{1, 3}));
-        assertThrows(IllegalArgumentException.class,
-                () -> new SnapshotBuilder(null, new int[]{2, 3}));
-    }
-
-    @Test
-    void aTierVectorThatOmitsTheBoardIsRefused() {
-        // The battlefield and the command zone go in unconditionally, so a
-        // vector without tier 2 would tell a reader the board was uncollected
-        // while the board sits in the entity list.
-        assertThrows(IllegalArgumentException.class,
-                () -> new SnapshotBuilder(null, new int[]{1}));
-        assertThrows(IllegalArgumentException.class,
-                () -> new SnapshotBuilder(null, new int[]{}));
-    }
-
-    @Test
-    void aTierVectorPastTheFourthIsRefused() {
-        assertThrows(IllegalArgumentException.class,
-                () -> new SnapshotBuilder(null, new int[]{1, 2, 3, 4, 5}));
+    void everySnapshotDeclaresAllFourTiers() {
+        assertEquals("[1,2,3,4]", SnapshotBuilder.TIERS_JSON);
     }
 
     // ── refs ────────────────────────────────────────────────────────────
@@ -92,7 +64,7 @@ class SnapshotBuilderTest {
         assertEquals(
                 "{\"targets\":[],\"source\":null,\"modes\":[],\"x\":null,"
                         + "\"choices\":{}}",
-                new SnapshotBuilder(null, STAGE_TWO).refsJson(null));
+                new SnapshotBuilder(null).refsJson(null));
     }
 
     /**

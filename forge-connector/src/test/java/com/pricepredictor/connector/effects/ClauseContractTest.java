@@ -167,7 +167,7 @@ class ClauseContractTest {
         RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1");
         Path path = writer.path();
         BusBracketCollector bracket = new BusBracketCollector(
-                TestCards.game(), writer, "run.0-l1.0", PatchedCollectors.CollectionCaps.defaults());
+                TestCards.game(), writer, "run.0-l1.0");
         try (PatchedCollectors collector = new PatchedCollectors(
                 TestCards.game(), writer, "run.0-l1.0",
                 PatchedCollectors.CollectionCaps.defaults(), 1L)) {
@@ -224,7 +224,7 @@ class ClauseContractTest {
         RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1");
         Path path = writer.path();
         BusBracketCollector bracket = new BusBracketCollector(
-                TestCards.game(), writer, "run.0-l1.0", PatchedCollectors.CollectionCaps.defaults());
+                TestCards.game(), writer, "run.0-l1.0");
         try (PatchedCollectors collector = new PatchedCollectors(
                 TestCards.game(), writer, "run.0-l1.0",
                 PatchedCollectors.CollectionCaps.defaults(), 1L)) {
@@ -286,7 +286,7 @@ class ClauseContractTest {
         Path path = writer.path();
         try {
             BusBracketCollector bracket = new BusBracketCollector(
-                    TestCards.game(), writer, "run.0-l1.0", PatchedCollectors.CollectionCaps.defaults());
+                    TestCards.game(), writer, "run.0-l1.0");
             try (PatchedCollectors collector = new PatchedCollectors(
                     TestCards.game(), writer, "run.0-l1.0",
                     PatchedCollectors.CollectionCaps.defaults(), 1L)) {
@@ -368,7 +368,7 @@ class ClauseContractTest {
         PrintStream originalErr = System.err;
         try {
             BusBracketCollector bracket = new BusBracketCollector(
-                    TestCards.game(), writer, "run.0-l1.0", PatchedCollectors.CollectionCaps.defaults());
+                    TestCards.game(), writer, "run.0-l1.0");
             try (PatchedCollectors collector = new PatchedCollectors(
                     TestCards.game(), writer, "run.0-l1.0",
                     PatchedCollectors.CollectionCaps.defaults(), 1L)) {
@@ -432,7 +432,7 @@ class ClauseContractTest {
         RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1");
         Path path = writer.path();
         BusBracketCollector bracket = new BusBracketCollector(
-                TestCards.game(), writer, "run.0-l1.0", PatchedCollectors.CollectionCaps.defaults());
+                TestCards.game(), writer, "run.0-l1.0");
         try (PatchedCollectors collector = new PatchedCollectors(
                 TestCards.game(), writer, "run.0-l1.0",
                 PatchedCollectors.CollectionCaps.defaults(), 1L)) {

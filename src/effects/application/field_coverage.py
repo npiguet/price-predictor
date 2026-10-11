@@ -63,7 +63,7 @@ class FieldCoverage:
 #: whether it is unwired or merely unexercised, and only the source says which.
 #: Everything below was confirmed by reading the writer. Fields that are
 #: constant only because one run is one run -- ``mode``, ``run_id``,
-#: ``mirror_of``, ``probed_keyword`` and ``probed_entity`` without
+#: ``mirror_of``, ``probed_keyword`` and ``probed_entity`` under an emptied
 #: ``--probe-keywords``, ``synthetic`` before stage four -- are deliberately
 #: absent, because listing them would fail the test on the corpus that does
 #: exercise them. The probe fields have read constant on every corpus collected

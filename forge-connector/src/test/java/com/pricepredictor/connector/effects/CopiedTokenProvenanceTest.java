@@ -53,8 +53,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @ExtendWith(ForgeExtension.class)
 class CopiedTokenProvenanceTest {
 
-    private static final int[] STAGE_TWO = {1, 2, 3};
-
     /** The script the Food token is filed under, and the file the bug named. */
     private static final String TOKEN_SCRIPT =
             "\"script_file\":\"tokenscripts/c_a_food_sac.txt\"";
@@ -120,7 +118,7 @@ class CopiedTokenProvenanceTest {
         assertNull(copied.getPaperCard(),
                 "GameCopier rebuilds tokens through TokenInfo, without a paper card");
 
-        String forked = new SnapshotBuilder(fork, STAGE_TWO).toJson(null, List.of());
+        String forked = new SnapshotBuilder(fork).toJson(null, List.of());
 
         assertTrue(forked.contains(TOKEN_SCRIPT), forked);
         assertFalse(forked.contains(CARD_SCRIPT), forked);
@@ -128,7 +126,7 @@ class CopiedTokenProvenanceTest {
         // And the whole block, not just the file: a forked record is meant to
         // read exactly like the record the same board would have written
         // un-forked, which is the property the join actually needs.
-        String mainline = new SnapshotBuilder(game, STAGE_TWO).toJson(null, List.of());
+        String mainline = new SnapshotBuilder(game).toJson(null, List.of());
         assertEquals(printedBlock(mainline), printedBlock(forked),
                 "the fork's printed keys differ from the board it was forked from");
     }
@@ -137,8 +135,8 @@ class CopiedTokenProvenanceTest {
     @Test
     void theSnapshotNamesTheTokenScriptNotThePrintedName() {
         ForkedBoard board = boardWithFoodTokenAndItsFork();
-        String mainline = new SnapshotBuilder(board.game(), STAGE_TWO).toJson(null, List.of());
-        String forked = new SnapshotBuilder(board.fork(), STAGE_TWO).toJson(null, List.of());
+        String mainline = new SnapshotBuilder(board.game()).toJson(null, List.of());
+        String forked = new SnapshotBuilder(board.fork()).toJson(null, List.of());
 
         assertTrue(mainline.contains("\"token_script_id\":\"c_a_food_sac\""), mainline);
         assertTrue(forked.contains("\"token_script_id\":\"c_a_food_sac\""), forked);
