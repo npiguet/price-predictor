@@ -24,6 +24,7 @@ from effects.domain.collection_caps import (
     DEFAULT_PLAYABILITY_RATE,
     DEFAULT_PROBE_KEYWORDS,
     DEFAULT_PROBES_PER_GAME,
+    DEFAULT_RANDOM_SEAT_SHARE,
     CollectionCaps,
 )
 
@@ -83,6 +84,7 @@ CAP_DEFAULTS: dict[str, object] = {
     "probes_per_game": DEFAULT_PROBES_PER_GAME,
     "probe_keywords": DEFAULT_PROBE_KEYWORDS,
     "legality_rate": DEFAULT_LEGALITY_RATE,
+    "random_seat_share": DEFAULT_RANDOM_SEAT_SHARE,
 }
 
 
@@ -144,6 +146,44 @@ def _add_cap_flags(parser: argparse.ArgumentParser) -> None:
             "none). Real attack and block declarations are always written."
         ),
     )
+    parser.add_argument(
+        "--random-seat-share", type=float,
+        default=CAP_DEFAULTS["random_seat_share"],
+        help=(
+            "Share of matches in which one seat, chosen at random per match, "
+            "is a random seat: with probability --random-seat-probability it "
+            "plays, targets, attacks and blocks uniformly at random among the "
+            "legal options instead of as the Forge AI, so it casts cards the "
+            "AI never would (default: 0, none)."
+        ),
+    )
+    parser.add_argument(
+        "--random-seat-probability", type=float, default=None,
+        help=(
+            "P, the chance the random seat draws at random at a decision "
+            "point. Required when --random-seat-share is above 0; no default."
+        ),
+    )
+
+
+def random_seat_error(args: argparse.Namespace) -> str | None:
+    """Why the random-seat flags cannot run, or None when they can (FR-026).
+
+    The same rules ``match-outcomes`` checks before any game: a share with no
+    ``P`` is a seat whose behaviour nobody chose. Restated rather than imported,
+    because ``effects`` never imports ``sealed.infrastructure``.
+    """
+    share = getattr(args, "random_seat_share", DEFAULT_RANDOM_SEAT_SHARE)
+    probability = getattr(args, "random_seat_probability", None)
+    if not 0.0 <= share <= 1.0:
+        return f"--random-seat-share must be between 0 and 1, got {share}"
+    if probability is not None and not 0.0 <= probability <= 1.0:
+        return (
+            f"--random-seat-probability must be between 0 and 1, got {probability}"
+        )
+    if share > 0 and probability is None:
+        return "--random-seat-share above 0 needs --random-seat-probability"
+    return None
 
 
 def announce_probe_state(probe_keywords: str, probes_per_game: int) -> str:
@@ -431,6 +471,10 @@ def coverage_config_from(args: argparse.Namespace):
 def run_collect_coverage(args: argparse.Namespace) -> int:
     from effects.application.collect_coverage import run as collect
 
+    error = random_seat_error(args)
+    if error is not None:
+        print(f"collect-coverage: {error}")
+        return 1
     try:
         # Before any worker starts: every refusal lives in the config.
         config = coverage_config_from(args)
@@ -1218,6 +1262,10 @@ def run_collect_variants(args: argparse.Namespace) -> int:
     from effects.application.collect_variants import CollectVariantsConfig
     from effects.application.collect_variants import run as collect
 
+    error = random_seat_error(args)
+    if error is not None:
+        print(f"collect-variants: {error}")
+        return 1
     print(announce_probe_state(args.probe_keywords, args.probes_per_game))
     records, listed = resolve_training_corpus(args)
     return collect(CollectVariantsConfig(

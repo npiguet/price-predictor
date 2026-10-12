@@ -88,8 +88,13 @@ class CollectionCaps:
         namespaces. ``field.default`` rather than a class attribute, because
         ``slots=True`` leaves none.
         """
+        # None is an unset flag, not a value: --random-seat-probability
+        # defaults to None so a share above 0 without it can be refused.
         return cls(**{
-            spec.name: getattr(args, spec.name, spec.default)
+            spec.name: (
+                spec.default if getattr(args, spec.name, None) is None
+                else getattr(args, spec.name)
+            )
             for spec in fields(cls)
         })
 

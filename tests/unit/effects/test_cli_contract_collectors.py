@@ -119,6 +119,77 @@ class TestNoSnapshotTierFlag:
             )
 
 
+class TestTheRandomSeatOnTheCollectors:
+    """Coverage and variant decks reach the random seat like self-play does.
+
+    The Forge AI never casts some cards at all; a random seat casts them for
+    real, costs and choices included, where an intervention forks past both.
+    """
+
+    @pytest.mark.parametrize("command", ["collect-coverage", "collect-variants"])
+    def test_the_flags_reach_the_worker_properties(self, command):
+        from effects.domain.collection_caps import CollectionCaps
+
+        args = parse(
+            command, "--random-seat-share", "0.5",
+            "--random-seat-probability", "0.25",
+        )
+        properties = CollectionCaps.from_args(args).as_system_properties()
+        assert properties["effect.random.seat.share"] == "0.5"
+        assert properties["effect.random.seat.probability"] == "0.25"
+
+    @pytest.mark.parametrize("command", ["collect-coverage", "collect-variants"])
+    def test_unset_flags_leave_the_seat_off(self, command):
+        from effects.domain.collection_caps import CollectionCaps
+
+        caps = CollectionCaps.from_args(parse(command))
+        assert caps.random_seat_share == 0.0
+        assert caps.random_seat_probability == 0.0
+
+    @pytest.mark.parametrize("argv,message", [
+        (("--random-seat-share", "0.5"), "needs --random-seat-probability"),
+        (("--random-seat-share", "1.5", "--random-seat-probability", "0.5"),
+         "between 0 and 1"),
+        (("--random-seat-share", "0.5", "--random-seat-probability", "-0.1"),
+         "between 0 and 1"),
+    ])
+    def test_a_bad_combination_is_refused(self, argv, message):
+        from effects.infrastructure.cli import random_seat_error
+
+        assert message in random_seat_error(parse("collect-coverage", *argv))
+
+    def test_a_share_with_its_probability_is_accepted(self):
+        from effects.infrastructure.cli import random_seat_error
+
+        assert random_seat_error(parse(
+            "collect-coverage", "--random-seat-share", "0.5",
+            "--random-seat-probability", "0.5",
+        )) is None
+
+    @pytest.mark.parametrize("command,module", [
+        ("collect-coverage", "effects.application.collect_coverage.run"),
+        ("collect-variants", "effects.application.collect_variants.run"),
+    ])
+    def test_a_share_without_a_probability_starts_no_worker(
+        self, command, module, capsys,
+    ):
+        from unittest.mock import patch
+
+        from effects.infrastructure.cli import (
+            run_collect_coverage,
+            run_collect_variants,
+        )
+
+        runner = {
+            "collect-coverage": run_collect_coverage,
+            "collect-variants": run_collect_variants,
+        }[command]
+        with patch(module) as collect:
+            assert runner(parse(command, "--random-seat-share", "0.5")) == 1
+        collect.assert_not_called()
+        assert "--random-seat-probability" in capsys.readouterr().out
+
+
 class TestSubcommandTable:
     def test_collect_coverage_is_registered(self):
         parser = build_parser()
