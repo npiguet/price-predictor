@@ -67,6 +67,32 @@ RANDOM_SEED = 42
 #: FR-036's floor: distinct games a held-out text must act in.
 DEFAULT_MIN_TEXT_GAMES = 5
 
+#: Card types that never go in a deck: Planechase planes and phenomena,
+#: Archenemy schemes, Vanguard avatars, Conspiracy's draft cards, and the
+#: contraptions and attractions Un-sets play from decks of their own. The
+#: converted tree holds some 450 of them, and Forge's card database does not
+#: load them as deck cards, so a coverage deck holding one fails to materialize
+#: and every other card in it sits the match out. Having no records, they weigh
+#: the most and land in most decks; leaving them in the unit made most of a
+#: round's decks unplayable and charged a stalled round to every card those
+#: decks held, until the cards retired.
+NON_DECK_TYPES: frozenset[str] = frozenset({
+    "scheme", "vanguard", "plane", "phenomenon", "conspiracy", "contraption",
+    "attraction", "dungeon",
+})
+
+
+def is_deckable(converted_text: str) -> bool:
+    """Whether a converted card's first ``types:`` line names no non-deck type.
+
+    A card with no ``types:`` line is kept: the filter exists to drop known
+    non-deck types, not to second-guess a converter that wrote no line.
+    """
+    for line in converted_text.splitlines():
+        if line.startswith("types:"):
+            return not NON_DECK_TYPES & set(line[len("types:"):].lower().split())
+    return True
+
 
 @dataclass
 class CollectCoverageConfig:
@@ -538,13 +564,23 @@ def run(config: CollectCoverageConfig) -> int:
     from effects.application.train_effect_model import load_card_files
 
     card_files = load_card_files(cards_folder)
+    texts = {
+        name: (cards_folder.parent / script).read_text(encoding="utf-8")
+        for name, script in card_files.items()
+        if (cards_folder.parent / script).exists()
+    }
+    non_deck = {name for name, text in texts.items() if not is_deckable(text)}
+    card_files = {
+        name: script for name, script in card_files.items() if name not in non_deck
+    }
     coverage = build_coverage_units(card_files, held_out)
     if not coverage:
         logger.error("No deckable cards under %s", cards_folder)
         return 1
     logger.info(
-        "Coverage unit: %d cards (%d held out), target %d records each",
-        len(coverage), len(held_out), config.target_records,
+        "Coverage unit: %d cards (%d held out, %d of a non-deck type), target "
+        "%d records each",
+        len(coverage), len(held_out), len(non_deck), config.target_records,
     )
 
     # The existing corpus is counted once, here, rather than again after every
@@ -564,11 +600,6 @@ def run(config: CollectCoverageConfig) -> int:
         if name in coverage:
             coverage[name].verdict = verdict
 
-    texts = {
-        name: (cards_folder.parent / script).read_text(encoding="utf-8")
-        for name, script in card_files.items()
-        if (cards_folder.parent / script).exists()
-    }
     decks_file = Path(config.effect_records) / "coverage-decks.txt"
     rng = random.Random(RANDOM_SEED)
 
@@ -880,8 +911,35 @@ def run_text_coverage(config: CollectCoverageConfig) -> int:
     card_files = load_card_files(cards_folder)
     roots = sidecar_roots(config.cards_folders)
     texts_by_card = load_card_texts(card_files, SidecarCache(roots))
-    present = frozenset(name for name in card_files if fold_card_name(name) in listed)
-    carriers = held_out_texts_of(present, texts_by_card)
+    listed_files = {
+        name: script for name, script in card_files.items()
+        if fold_card_name(name) in listed
+    }
+    texts = {
+        name: (cards_folder.parent / script).read_text(encoding="utf-8")
+        for name, script in listed_files.items()
+        if (cards_folder.parent / script).exists()
+    }
+    # Which texts are held out is decided over every listed card, non-deck
+    # ones included: left out of ``listed``, they would read as unlisted
+    # carriers and take the texts they share out of the round. Only then do
+    # they leave as carriers, since no deck can hold one, and a text no
+    # deckable card carries leaves the unit rather than retiring after rounds
+    # of decks that never load.
+    non_deck = {name for name, text in texts.items() if not is_deckable(text)}
+    present = frozenset(name for name in listed_files if name not in non_deck)
+    carriers = {
+        text: cards - non_deck
+        for text, cards in held_out_texts_of(
+            frozenset(listed_files), texts_by_card,
+        ).items()
+        if cards - non_deck
+    }
+    if non_deck:
+        logger.info(
+            "Held-out round: %d listed card(s) of a non-deck type left out",
+            len(non_deck),
+        )
     if not carriers:
         logger.error(
             "None of the %d card(s) in %s carries a text only listed cards "
@@ -908,11 +966,7 @@ def run_text_coverage(config: CollectCoverageConfig) -> int:
         sum(1 for unit in coverage.values() if not unit.castable),
     )
 
-    texts = {
-        name: (cards_folder.parent / card_files[name]).read_text(encoding="utf-8")
-        for name in present
-        if (cards_folder.parent / card_files[name]).exists()
-    }
+    texts = {name: text for name, text in texts.items() if name in present}
     decks_file = Path(config.effect_records) / "coverage-decks.txt"
     rng = random.Random(RANDOM_SEED)
     caps = held_out_round_caps(config.caps)

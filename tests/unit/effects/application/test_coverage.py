@@ -1129,6 +1129,121 @@ class TestOnlyCardsRefusals:
         assert config.min_text_games == 7
 
 
+class TestNonDeckTypesLeaveTheUnit:
+    """Planes, schemes, vanguards and the like never go in a deck.
+
+    Forge's card database does not load them as deck cards, so a coverage deck
+    holding one fails to materialize. With no records they weigh the most and
+    land in most decks: on the gen-2 corpus 71% of a round's decks held one.
+    """
+
+    @pytest.mark.parametrize("types,deckable", [
+        ("creature", True),
+        ("legendary planeswalker", True),
+        ("artifact creature", True),
+        ("scheme", False),
+        ("ongoing scheme", False),
+        ("vanguard", False),
+        ("plane dominaria", False),
+        ("phenomenon", False),
+        ("conspiracy", False),
+        ("artifact contraption", False),
+        ("artifact attraction", False),
+    ])
+    def test_the_types_line_decides(self, types, deckable):
+        from effects.application.collect_coverage import is_deckable
+
+        assert is_deckable(f"name: x\ntypes: {types}\n") is deckable
+
+    def test_a_card_without_a_types_line_is_kept(self):
+        from effects.application.collect_coverage import is_deckable
+
+        assert is_deckable("name: x\n")
+
+    def test_the_training_unit_holds_no_non_deck_card(self, tmp_path):
+        from effects.application import collect_coverage
+        from effects.infrastructure import collector_connector
+
+        cards = tmp_path / "cardsfolder"
+        (cards / "a").mkdir(parents=True)
+        for stem, types in (("aa", "creature"), ("my_plan", "scheme"),
+                            ("squee", "vanguard")):
+            (cards / "a" / f"{stem}.txt").write_text(
+                f"name: {stem}\nmana cost: {{G}}\ntypes: {types}\n",
+                encoding="utf-8",
+            )
+        (tmp_path / "records").mkdir()
+        consulted: list[list[str]] = []
+
+        def _consult(names, folder):
+            consulted.append(list(names))
+            return {}
+
+        supervisor = MagicMock()
+        supervisor.interrupted = False
+        with patch.object(collector_connector, "CollectorSupervisor",
+                          return_value=supervisor), \
+             patch.object(collect_coverage, "consult_castability", _consult):
+            collect_coverage.run(collect_coverage.CollectCoverageConfig(
+                effect_records=tmp_path / "records", cards_folders=(cards,),
+                target_records=1, decks_per_round=5,
+            ))
+
+        assert consulted == [["aa"]]
+        decks = supervisor.play_round.call_args.args[0].read_text(encoding="utf-8")
+        assert "my_plan" not in decks and "squee" not in decks
+
+    def test_the_held_out_round_drops_non_deck_carriers_only(
+        self, tmp_path, caplog,
+    ):
+        """A text a non-deck held-out card shares stays held out.
+
+        Which texts are held out is decided over every listed card: dropping
+        the scheme from the listed set first would make it an unlisted
+        carrier of the shared text and take that text out of the round.
+        """
+        import logging
+
+        from effects.application import collect_coverage
+        from effects.infrastructure import collector_connector
+
+        cards = tmp_path / "cardsfolder"
+        (cards / "a").mkdir(parents=True)
+        for stem, types in (("alpha", "creature"), ("plan", "scheme"),
+                            ("gamma", "creature")):
+            (cards / "a" / f"{stem}.txt").write_text(
+                f"name: {stem}\nmana cost: {{G}}\ntypes: {types}\n",
+                encoding="utf-8",
+            )
+        listed = tmp_path / "holdout-cards.txt"
+        listed.write_text("alpha\nplan\n", encoding="utf-8")
+        (tmp_path / "records").mkdir()
+        texts_by_card = {
+            "alpha": ["SP$ Shared", "SP$ Alpha"],
+            "plan": ["SP$ Shared", "SP$ Plan"],
+            "gamma": ["SP$ Common"],
+        }
+        consulted: list[list[str]] = []
+
+        def _consult(names, folder):
+            consulted.append(list(names))
+            return {}
+
+        with patch.object(collector_connector, "CollectorSupervisor",
+                          return_value=MagicMock(interrupted=False)), \
+             patch.object(collect_coverage, "consult_castability", _consult), \
+             patch("effects.application.train_effect_model.load_card_texts",
+                   return_value=texts_by_card), \
+             caplog.at_level(logging.INFO, logger=collect_coverage.__name__):
+            collect_coverage.run(collect_coverage.CollectCoverageConfig(
+                effect_records=tmp_path / "records", cards_folders=(cards,),
+                only_cards=listed, min_text_games=0,
+            ))
+
+        assert consulted == [["alpha"]]
+        assert "Held-out round: 2 text(s) on 1 card(s)" in caplog.text
+
+
 class TestHeldOutRoundCaps:
     """FR-035: full strength for the card's own records, not for the AI's planning."""
 
