@@ -111,6 +111,24 @@ class TestResolvePaths:
         assert paths.out.name == "embedding-probes-2026-10-gen2-a-latest-20261008"
         assert paths.out.parent == common.REPORTS
 
+    def test_a_reports_dir_moves_the_output_beside_the_arm(self, tree):
+        arm = tree.root / "2026-10-gen2-a"
+        paths = common.paths_for(
+            arm / "latest.pt", tree.abilities, _provenance(),
+            today=datetime.date(2026, 10, 8), reports_dir=arm / "reports",
+        )
+        assert paths.out == (
+            arm / "reports" / "embedding-probes-2026-10-gen2-a-latest-20261008"
+        )
+
+    def test_every_script_takes_a_reports_dir(self):
+        import argparse
+
+        args = common.add_probe_arguments(argparse.ArgumentParser()).parse_args(
+            ["--reports-dir", "arm/reports"],
+        )
+        assert args.reports_dir == Path("arm/reports")
+
     def test_sidecar_trees_default_to_what_the_checkpoint_recorded(self, tree):
         paths = common.paths_for(
             Path("c.pt"), tree.abilities, _provenance(),

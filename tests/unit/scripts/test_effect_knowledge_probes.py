@@ -462,6 +462,21 @@ class TestDigest:
         with pytest.raises(SystemExit, match="--freeze-probe-set"):
             run.load_probe_set(tmp_path / "missing.json", "aaa")
 
+    def test_the_set_follows_the_reports_dir_by_default(self):
+        args = run.parse_args(["--checkpoint", "c.pt", "--reports-dir", "arm/reports"])
+        assert run.probe_set_location(args, "abcdef0123456789") == Path(
+            "arm/reports/knowledge-probes-set-abcdef012345.json",
+        )
+
+    def test_a_probe_set_dir_keeps_the_set_shared_across_arms(self):
+        args = run.parse_args([
+            "--checkpoint", "c.pt", "--reports-dir", "arm/reports",
+            "--probe-set-dir", "shared",
+        ])
+        assert run.probe_set_location(args, "abcdef0123456789") == Path(
+            "shared/knowledge-probes-set-abcdef012345.json",
+        )
+
 
 # ── compare ─────────────────────────────────────────────────────────────
 

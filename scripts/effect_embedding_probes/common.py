@@ -12,7 +12,8 @@ vocabulary's encoding surface, the sidecar trees the checkpoint trained
 against, the curated corpus's manifest, and the width of ``e`` from the cache
 itself. Nothing is hardcoded to one run, so the battery runs unchanged on any
 sweep arm. Output goes under
-``output/effects/reports/embedding-probes-<checkpoint>-<date>/``.
+``<reports-dir>/embedding-probes-<checkpoint>-<date>/``, the reports dir
+defaulting to ``output/effects/reports/``.
 
 Unique means unique on the checkpoint's **encoding surface**: the text is
 ``encoding_text(line, prose, surface)``, which is what the encoder actually
@@ -142,6 +143,13 @@ def add_probe_arguments(parser: argparse.ArgumentParser) -> argparse.ArgumentPar
             "output/tokenscripts"
         ),
     )
+    parser.add_argument(
+        "--reports-dir", type=Path, default=None,
+        help=(
+            "Directory the run's embedding-probes-<checkpoint>-<date>/ folder "
+            "goes in (default: output/effects/reports/)"
+        ),
+    )
     return parser
 
 
@@ -169,6 +177,7 @@ def paths_for(
     recorded_folders=(),
     cards_folders=None,
     today: datetime.date | None = None,
+    reports_dir: Path | None = None,
 ) -> ProbePaths:
     """The run's paths from a checkpoint's recorded provenance.
 
@@ -189,7 +198,8 @@ def paths_for(
     return ProbePaths(
         checkpoint=checkpoint,
         abilities_root=Path(abilities_root),
-        out=REPORTS / f"embedding-probes-{checkpoint_label(checkpoint)}-{date}",
+        out=(Path(reports_dir) if reports_dir else REPORTS)
+        / f"embedding-probes-{checkpoint_label(checkpoint)}-{date}",
         cards_folders=folders,
         surface=surface_of(Path(provenance.vocab_path)),
         e_width=cache_e_width(abilities_root),
@@ -207,6 +217,7 @@ def resolve_paths(args: argparse.Namespace) -> ProbePaths:
         checkpoint, args.abilities_root, loaded.provenance,
         recorded_folders=getattr(loaded, "cards_folders", ()),
         cards_folders=getattr(args, "cards_folders", None),
+        reports_dir=getattr(args, "reports_dir", None),
     )
     if loaded.encoder_config.e_dim != paths.e_width:
         raise ValueError(

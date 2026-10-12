@@ -160,23 +160,39 @@ the same `--output`. The rebuild keeps every game-disjoint game the first build 
 ## Stage 5 — per sweep arm
 
 ```bash
-python -m effects train-effect-model --corpus output/effects/corpus-gen2/ \
-    --e-dim D --encoder-layers L --encoder-d-model W --e-noise R \
-    --withhold-keyword K --model-output models/effects/runs/2026-10-gen2-<arm>/
-python -m effects encode-abilities --checkpoint models/effects/runs/2026-10-gen2-<arm>/latest.pt
-python -m effects evaluate-effect-model --checkpoint models/effects/runs/2026-10-gen2-<arm>/latest.pt
-for s in build_texts effect_profiles pca_directions lexical_probes linear_probes type_merging neighbours keyword_expansion; do
-  python scripts/effect_embedding_probes/$s.py \
-      --checkpoint models/effects/runs/2026-10-gen2-<arm>/latest.pt --abilities-root output/effects/abilities
-done
-python scripts/effect_knowledge_probes/run.py --checkpoint models/effects/runs/2026-10-gen2-<arm>/latest.pt --freeze-probe-set   # first arm only
-python scripts/effect_knowledge_probes/run.py --checkpoint models/effects/runs/2026-10-gen2-<arm>/latest.pt
+python -u scripts/effect_sweep_arm.py --run-dir models/effects/runs/2026-10-gen2-<arm>/ \
+    --corpus output/effects/corpus-gen2/ [--freeze-probe-set] -- \
+    --e-dim D --encoder-layers L --encoder-d-model W --e-noise R --withhold-keyword K
 ```
+
+`effect_sweep_arm.py` runs, in order: `train-effect-model` with the flags after `--`,
+`encode-abilities`, `evaluate-effect-model`, the eight scripts in `scripts/effect_embedding_probes/`
+(`build_texts` first), and `scripts/effect_knowledge_probes/run.py`. It passes `--variant-scripts`
+to training, encoding and evaluation, and `--vocab-path` to training, defaulting to the paths
+`build-corpus` is given in stage 4. Pass `--freeze-probe-set` on
+the first arm only; that arm freezes the knowledge-probe set for the corpus before probing.
+
+The run directory holds the arm's whole record:
+
+| Path | Contents |
+|---|---|
+| `latest.pt`, `<timestamp>.pt` | checkpoints |
+| `arm.log` | the runner's command line, each step's start, and the step a failure stopped at |
+| `train.log`, `encode.log`, `evaluate.log` | each command's full output |
+| `probes-<script>.log`, `knowledge-probes.log` | each probe's full output |
+| `abilities/` | the ability cache this checkpoint encoded |
+| `reports/embedding-probes-*/`, `reports/knowledge-probes-*/` | the probe reports and the scorecard |
+
+Every log opens with the command line that produced it and the commit it ran at. A rerun appends to
+the log under its own command line. The frozen probe set is shared by every arm and stays in
+`output/effects/reports/`. After a failure, rerun with `--from-step` naming the failed step
+(`encode`, `evaluate`, `embedding-probes` or `knowledge-probes`). The runner refuses to train into a
+directory that already holds `latest.pt`.
 
 Compare arms:
 
 ```bash
-python scripts/effect_knowledge_probes/compare.py output/effects/reports/knowledge-probes-*/scorecard.json
+python scripts/effect_knowledge_probes/compare.py models/effects/runs/2026-10-gen2-*/reports/knowledge-probes-*/scorecard.json
 ```
 
 Results go into the gen-2 and probes records' Outcome sections, never into a spec.

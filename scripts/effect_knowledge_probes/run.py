@@ -112,7 +112,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--no-sweeps", action="store_true")
     parser.add_argument("--no-ablation", action="store_true")
     parser.add_argument("--reports-dir", type=Path, default=common.DEFAULT_REPORTS,
-                        help="where the probe set and the report directory go")
+                        help="where the report directory goes, and the probe set "
+                             "unless --probe-set-dir is given")
+    parser.add_argument("--probe-set-dir", type=Path, default=None,
+                        help="where the frozen probe set is written and read "
+                             "(default: --reports-dir); every arm of a sweep "
+                             "shares one set while its reports go beside its run")
     parser.add_argument("--games-per-stratum", type=int, default=GAMES_PER_STRATUM)
     parser.add_argument("--items-per-target", type=int, default=ITEMS_PER_TARGET)
     parser.add_argument("--profile-shards", type=int, default=PROFILE_SHARDS)
@@ -715,6 +720,11 @@ def write_tables(out_dir: Path, scorecard: dict) -> None:
         (out_dir / "ablation.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
+def probe_set_location(args: argparse.Namespace, corpus_digest: str) -> Path:
+    """The shared probe set's path: ``--probe-set-dir``, else ``--reports-dir``."""
+    return probe_set_path(args.probe_set_dir or args.reports_dir, corpus_digest)
+
+
 def report_dir(reports_dir: Path, checkpoint: Path, date: str) -> Path:
     stem = sibling("common").checkpoint_stem(checkpoint)
     return Path(reports_dir) / f"knowledge-probes-{stem}-{date.replace('-', '')}"
@@ -733,7 +743,7 @@ def main(argv: list[str] | None = None) -> int:
                          "trained with --corpus")
     manifest = CorpusStore(Path(corpus)).load()
     corpus_digest = manifest.digest()
-    set_path = probe_set_path(args.reports_dir, corpus_digest)
+    set_path = probe_set_location(args, corpus_digest)
     if args.freeze_probe_set:
         payload = freeze(args, checkpoint, Path(corpus), manifest, corpus_digest)
         common.write_json(set_path, payload)
