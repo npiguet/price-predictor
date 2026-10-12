@@ -171,8 +171,6 @@ for s in build_texts effect_profiles pca_directions lexical_probes linear_probes
 done
 python scripts/effect_knowledge_probes/run.py --checkpoint models/effects/runs/2026-10-gen2-<arm>/latest.pt --freeze-probe-set   # first arm only
 python scripts/effect_knowledge_probes/run.py --checkpoint models/effects/runs/2026-10-gen2-<arm>/latest.pt
-python -m effects scorer-smoke-test --checkpoint models/effects/runs/2026-10-gen2-<arm>/latest.pt \
-    --scratch-dir scratch/smoke-<arm>/
 ```
 
 Compare arms:

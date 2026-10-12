@@ -1139,11 +1139,8 @@ is read beside every gain it shows. The comparison draws on:
 - each arm's knowledge-probe scorecard;
 - the card-disjoint results per rule family, and the memorization gap;
 - gates 2 and 3, the ward canary and the zero-shot keyword check;
-- the two downstream checks of the design doc: the decodability battery, linear probes that read the
-  sealed pipeline's per-card win rates from each card's pooled `e`, and the pooled-`e` scorer smoke
-  test, which adds the mean and the maximum of each card's `e` vectors to the sealed scorer's input
-  and retrains Phase A of `train-scorer`, the stage that trains the deck scorer on cached card
-  vectors with the card encoder frozen.
+- the decodability battery, linear probes that read the sealed pipeline's per-card win rates from
+  each card's pooled `e`.
 
 ## Run plan: a pilot before the full collection, and the gen-1 work while collection runs
 
@@ -1228,20 +1225,16 @@ For each arm, in order:
    `taxonomy` columns have no gen-2 counterpart, and the parsed-script features stand in for them.
    `pca_directions.py` adds the participation ratio.
 5. The knowledge probes, following the probes record's run plan.
-6. The pooled-`e` scorer smoke test: `train-scorer` Phase A on the sealed corpus, with each card's
-   pooled `e` concatenated to the card vector the sealed scorer already reads.
 
 The arms are then compared by hand, and the Outcome section records the comparison.
 
-### Four pieces of tooling the run plan assumes do not exist yet
+### Three pieces of tooling the run plan assumes do not exist yet
 
 - **The zero-shot measurement.** `evaluate-effect-model` names the withheld keyword and measures
   nothing on it.
 - **The embedding probes take a checkpoint and a cache.** The scripts read gen-1's paths and the
   taxonomy baseline's cache. Each arm needs its own.
 - **The participation ratio in `pca_directions.py`.**
-- **A command for the scorer smoke test.** `write_scorer_smoke_cache` in `geometry_checks.py` writes
-  the concatenated vectors, and no command runs Phase A on them.
 
 ## Outcome
 
