@@ -1,4 +1,4 @@
-"""The three record-quality rules build-corpus applies (FR-148)."""
+"""The four record-quality rules build-corpus applies (FR-148)."""
 
 from __future__ import annotations
 
@@ -8,11 +8,18 @@ from effects.domain.record_quality import (
     EVENT_FLOOD,
     NO_ABILITY,
     NO_ACTING_TEXT,
+    UNJOINABLE_KEY,
     acting_text_defect,
     has_unattributed_events,
     quality_defect,
+    unjoinable_key_defect,
 )
-from effects.domain.records import CombatPayload, RecordKind, ResolutionPayload
+from effects.domain.records import (
+    CombatPayload,
+    RecordKind,
+    ResolutionPayload,
+    TriggerPayload,
+)
 
 
 def _event(attributed_to=None):
@@ -144,3 +151,47 @@ def test_one_rendered_key_among_dropped_ones_keeps_the_record(make_record, abili
 def test_only_resolution_records_are_subject_to_the_rule(make_record):
     record = make_record(kind=RecordKind.COMBAT, payload=CombatPayload())
     assert acting_text_defect(record, _resolver()) is None
+
+
+# ── the fourth rule: an acting key the sidecar cannot place ─────────────
+
+
+def _unjoinable(key: ProvenanceKey) -> KeyResolution:
+    raise KeyError(f"{key} appears in neither list")
+
+
+def test_a_record_acting_through_an_unjoinable_key_is_refused(make_record):
+    assert unjoinable_key_defect(make_record(), _unjoinable) == UNJOINABLE_KEY
+
+
+def test_one_unjoinable_key_among_joinable_ones_refuses_the_record(make_record, ability_key):
+    """A charm cast through Flashback carries its mode key beside keys that join."""
+    mode = ProvenanceKey(ability_key.script_file, 0, "keyword", 0, option=0)
+
+    def resolve(key: ProvenanceKey) -> KeyResolution:
+        if key.option is not None:
+            raise KeyError("no line carries a keyword mode")
+        return KeyResolution.LINE
+
+    record = make_record(ability=(ability_key, mode))
+    assert unjoinable_key_defect(record, resolve) == UNJOINABLE_KEY
+
+
+def test_every_answer_the_join_gives_keeps_the_record(make_record):
+    for answer in KeyResolution:
+        assert unjoinable_key_defect(make_record(), _resolver(spell=answer)) is None
+
+
+def test_the_unjoinable_rule_reaches_every_kind_with_an_acting_ability(
+    make_record, ability_key,
+):
+    """The surface builder joins a trigger's acting keys too, and would raise."""
+    trigger = make_record(
+        kind=RecordKind.TRIGGER, ability=(ability_key,),
+        payload=TriggerPayload(event=_event(), fired=True),
+    )
+    assert unjoinable_key_defect(trigger, _unjoinable) == UNJOINABLE_KEY
+    assert unjoinable_key_defect(
+        make_record(kind=RecordKind.COMBAT, payload=CombatPayload(), ability=None),
+        _unjoinable,
+    ) is None

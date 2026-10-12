@@ -629,15 +629,20 @@ loss.
   alongside its split (FR-090), and `evaluate-effect-model` MUST fail fast when the dataset it reads
   hashes differently. A rebuilt dataset is a different split, so scoring the gates against it would
   score them partly on games the model trained on.
-- **FR-148**: `build-corpus` MUST refuse a record for exactly three reasons — a resolution record
+- **FR-148**: `build-corpus` MUST refuse a record for exactly four reasons — a resolution record
   with no acting ability; a resolution record whose every acting key maps to no rendered line (a
   key the sidecar lists as dropped, or one naming an unconverted script), a key outside every
   `(face, trait_kind)` range the sidecar declared keeping the record, because it is a trait Forge
-  attached to a live card rather than a contentless one; and any record carrying more than
-  `--max-events-per-record` events (default 64) — in both passes, and MUST record the count per
-  reason in the manifest as `quality_dropped`. It MUST record, as `no_acting_text_scripts`, the
-  refused count per acting script file, and log the largest. A key inside a declared range and in
-  neither of the sidecar's lists MUST fail the build. An event attributed to `unresolved` MUST NOT
+  attached to a live card rather than a contentless one; any record carrying more than
+  `--max-events-per-record` events (default 64); and a record of any kind with an acting key
+  inside a declared range and in neither of the sidecar's lists (`unjoinable-key`) — in both
+  passes, and MUST record the count per reason in the manifest as `quality_dropped`. It MUST
+  record, as `no_acting_text_scripts`, the `no-acting-text` refused count per acting script file,
+  and log the largest; it MUST log the scripts with the most `unjoinable-key` refusals. The build
+  MUST fail when `unjoinable-key` refusals exceed both 20 records and 0.1% of the records read,
+  because that many means the cards were reconverted after collection; fewer are a collector gap,
+  such as a charm cast through Flashback, whose mode is keyed as the keyword trait plus an
+  `option` no converted line carries. An event attributed to `unresolved` MUST NOT
   be a refusal reason. It MUST instead be counted: `build-corpus` MUST record in the manifest, as
   `unattributed_records`, the number of records it **kept** carrying at least one such event, and
   MUST log that count and its share of kept records. `attributed_to` names the sub-ability clause

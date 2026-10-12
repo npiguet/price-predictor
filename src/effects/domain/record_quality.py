@@ -1,4 +1,4 @@
-"""Which records a curated corpus refuses on sight (FR-148): three rules.
+"""Which records a curated corpus refuses on sight (FR-148): four rules.
 
 Three shapes the first corpus held that no model should learn from. A
 resolution record with no acting ability is an outcome with no cause. A
@@ -8,6 +8,15 @@ the key names a trait the converter rendered nothing for. And a record
 carrying more events than any single ability resolves is a whole game that
 landed on one record: one such record in the first corpus held 278 events, 88
 card draws and the game's ``player_won``.
+
+The fourth is a record acting through a key its sidecar cannot place: inside
+a range the sidecar declares, yet in neither its lines nor its dropped keys.
+The join raises on such a key, because a reconversion between collection and
+training produces exactly that. One collector case produces it too: a charm
+cast through Flashback resolves as a copy Forge builds from the keyword, so
+its mode is keyed as the keyword trait plus an ``option`` no converted line
+carries. A handful of such records is refused like any other defect; a
+reconversion shows itself as many, and ``build-corpus`` stops on those.
 
 **An unattributed event is watched, not refused.** ``attributed_to`` names
 the sub-ability clause that produced an event, and the collector writes
@@ -47,7 +56,10 @@ from effects.domain.records import EffectRecord, RecordKind
 NO_ABILITY = "no-ability"
 EVENT_FLOOD = "event-flood"
 NO_ACTING_TEXT = "no-acting-text"
-QUALITY_REASONS: tuple[str, ...] = (NO_ABILITY, EVENT_FLOOD, NO_ACTING_TEXT)
+UNJOINABLE_KEY = "unjoinable-key"
+QUALITY_REASONS: tuple[str, ...] = (
+    NO_ABILITY, EVENT_FLOOD, NO_ACTING_TEXT, UNJOINABLE_KEY,
+)
 
 #: The ``attributed_to`` sentinel the collector writes when the producing
 #: clause was sought and nothing on the chain claimed the event. Aliased from
@@ -85,6 +97,28 @@ def quality_defect(
     return None
 
 
+def unjoinable_key_defect(
+    record: EffectRecord, resolve: Callable[[ProvenanceKey], KeyResolution],
+) -> str | None:
+    """``UNJOINABLE_KEY`` when an acting key is one its sidecar cannot place.
+
+    Every kind that carries an ``ability``, not only resolutions: the surface
+    builder and the trainer join a trigger's or a rewrite's acting keys as
+    well, and raise on the same key further down the line.
+
+    Args:
+        resolve: ``ProvenanceKey -> KeyResolution``, the sidecar cache's answer.
+            It raises ``KeyError`` on a key inside a declared range and in
+            neither of the sidecar's lists.
+    """
+    for key in record.ability or ():
+        try:
+            resolve(key)
+        except KeyError:
+            return UNJOINABLE_KEY
+    return None
+
+
 def acting_text_defect(
     record: EffectRecord, resolve: Callable[[ProvenanceKey], KeyResolution],
 ) -> str | None:
@@ -99,8 +133,8 @@ def acting_text_defect(
     trigger another card's static granted, and a disguise creature's face-down
     face are all real abilities whose text the join does not reach yet, and
     refusing them would be a loss rather than a cleanup. A key inside a range
-    the sidecar declared and in neither of its lists raises out of ``resolve``,
-    as the contract requires.
+    the sidecar declared and in neither of its lists raises out of ``resolve``;
+    ``unjoinable_key_defect`` refuses such a record first.
 
     Separate from ``quality_defect`` rather than another branch of it, because
     this one needs the join and that one needs nothing: a caller with no

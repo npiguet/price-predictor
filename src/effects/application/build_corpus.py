@@ -42,9 +42,11 @@ from effects.domain.corpus_manifest import SourceShard
 from effects.domain.provenance import ProvenanceKey
 from effects.domain.record_quality import (
     NO_ACTING_TEXT,
+    UNJOINABLE_KEY,
     acting_text_defect,
     has_unattributed_events,
     quality_defect,
+    unjoinable_key_defect,
 )
 from effects.domain.records import EffectRecord, RecordKind
 from effects.domain.token_key_remap import RemapCounts, TokenKeyRemapper, remap_record_dict
@@ -385,7 +387,11 @@ def _refusal(record: EffectRecord, *, max_events: int, roots: dict[str, str]) ->
     defect = quality_defect(record, max_events=max_events)
     if defect is not None:
         return defect
-    return acting_text_defect(record, _worker_sidecars(roots).resolution_of)
+    resolve = _worker_sidecars(roots).resolution_of
+    defect = unjoinable_key_defect(record, resolve)
+    if defect is not None:
+        return defect
+    return acting_text_defect(record, resolve)
 
 
 def init_survey_worker(config: SurveyConfig) -> None:
@@ -1274,6 +1280,16 @@ def decide(
 #: exactly this way and nothing said so.
 MAX_REFUSED_SHARE = 0.5
 
+#: How many of the records read may act through a key their sidecar cannot
+#: place before the build stops. A Flashback-cast charm leaves one such record
+#: in a few million; a reconversion between collection and training leaves one
+#: on every record of every card whose lines it moved, and a dataset built
+#: through it would join the survivors to the wrong text. The build stops only
+#: past both the share and the count, so a pilot of a few hundred records does
+#: not stop on its one Flashback cast.
+MAX_UNJOINABLE_SHARE = 0.001
+MAX_UNJOINABLE_RECORDS = 20
+
 #: Every write-pass stratum, in report order. All but the last are the real
 #: outputs -- shard directories a downstream reader loads, and what
 #: FR-143/FR-145 mean by "each output" -- and ``OUTPUTS`` is exactly that
@@ -1359,6 +1375,10 @@ class WriteResult:
     #: family's keys shows up in the build output rather than as one larger
     #: number. This is the tally the manifest records.
     textless_scripts: Counter[str] = field(default_factory=Counter)
+    #: The ``unjoinable-key`` refusals alone, by the acting key's script file,
+    #: so the build output names the cards a stale sidecar or a collector gap
+    #: is costing.
+    unjoinable_scripts: Counter[str] = field(default_factory=Counter)
     #: Records the pass **kept** whose events name no producing clause
     #: (FR-148). Counted after the quality check, so it is a share of what the
     #: dataset actually holds rather than of what the shards held. Watched
@@ -1467,6 +1487,8 @@ def write_shard_pass(relative: str) -> WriteResult:
                 out.refused_by_class[name] += 1
                 if defect == NO_ACTING_TEXT:
                     out.textless_scripts[record.ability[0].script_file] += 1
+                elif defect == UNJOINABLE_KEY:
+                    out.unjoinable_scripts[record.ability[0].script_file] += 1
                 continue
             out.read[name] += 1
             if has_unattributed_events(record):
@@ -1564,6 +1586,7 @@ def run_write_pass(
         total.quality_dropped.update(part.quality_dropped)
         total.refused_by_class.update(part.refused_by_class)
         total.textless_scripts.update(part.textless_scripts)
+        total.unjoinable_scripts.update(part.unjoinable_scripts)
         total.unattributed += part.unattributed
         total.remap.merge(part.remap)
         total.family_written.update(part.family_written)
@@ -1643,7 +1666,33 @@ def _check_refusals(written: WriteResult) -> None:
     ``no-acting-text`` dominating ``quality_dropped``, and a reconversion is
     the fix. Written anyway, the dataset is simply missing a sampling class,
     and the trainer reports that as a class this corpus happens not to hold.
+
+    ``unjoinable-key`` refusals are judged on their own, over every record
+    read, and stop the build past both ``MAX_UNJOINABLE_SHARE`` and
+    ``MAX_UNJOINABLE_RECORDS``: they are the join
+    failing rather than a record being poor, and far fewer of them than a
+    class majority already says the sidecars describe other cards.
     """
+    unjoinable =written.quality_dropped.get(UNJOINABLE_KEY, 0)
+    total_read = sum(written.read.values()) + sum(written.refused_by_class.values())
+    if (
+        unjoinable > MAX_UNJOINABLE_RECORDS
+        and unjoinable > MAX_UNJOINABLE_SHARE * total_read
+    ):
+        worst = ", ".join(
+            f"{script} ({count})"
+            for script, count in written.unjoinable_scripts.most_common(5)
+        )
+        raise BuildCorpusError(
+            f"{unjoinable} of the {total_read} record(s) read act through a key "
+            "inside a range their sidecar declares and in neither its lines nor "
+            f"its dropped keys ({100.0 * unjoinable / total_read:.2f}%, past the "
+            f"{100.0 * MAX_UNJOINABLE_SHARE:.1f}% and the {MAX_UNJOINABLE_RECORDS} "
+            "records the build drops without stopping). "
+            "That many means the sidecars do not describe the cards the "
+            "records were collected against: the cards were reconverted "
+            f"after collection. Worst scripts: {worst}."
+        )
     for name in sorted(written.refused_by_class):
         refused = written.refused_by_class[name]
         kept = written.read.get(name, 0)
@@ -2170,6 +2219,14 @@ def build(config: BuildCorpusConfig) -> int:
         logger.info(
             "no-acting-text refusals by script, most first: %s",
             ", ".join(f"{script} ({count})" for script, count in worst),
+        )
+    if written.unjoinable_scripts:
+        logger.info(
+            "unjoinable-key refusals by script, most first: %s",
+            ", ".join(
+                f"{script} ({count})"
+                for script, count in written.unjoinable_scripts.most_common(5)
+            ),
         )
     # Requested against delivered, side by side: the mixture in `class_mix` is
     # what the build was asked for, and only this says whether it got it.

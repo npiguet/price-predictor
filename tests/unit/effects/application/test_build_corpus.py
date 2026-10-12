@@ -1134,6 +1134,70 @@ def test_a_resolution_record_acting_only_through_a_dropped_key_is_refused(tmp_pa
     assert "g-clean-3.level" in written
 
 
+def test_a_record_acting_through_an_unjoinable_key_is_refused_not_fatal(tmp_path, a_corpus):
+    """FR-148's fourth rule, end to end through both passes.
+
+    A charm cast through Flashback keys its mode as a trait plus an ``option``
+    no converted line carries, inside a range the sidecar declares. The join
+    raises on that key; the build refuses the one record and writes the rest.
+    """
+    from effects.domain.record_quality import UNJOINABLE_KEY
+
+    mode_key = ProvenanceKey(_BEAR_FILE, 0, "spell", 1, option=0)
+    corpus = a_corpus.with_extra_records([
+        a_corpus.resolution("flashback-mode", game="g-clean-1", ability=(mode_key,)),
+    ])
+    out = tmp_path / "curated"
+    assert build(BuildCorpusConfig(
+        records_dir=corpus.records, cards_folders=corpus.cards,
+        forge_tokenscripts=corpus.forge_tokenscripts, output=out,
+        workers=1, **_LEGACY_RULES,
+    )) == 0
+    store = CorpusStore(out)
+    assert store.load().quality_dropped.get(UNJOINABLE_KEY) == 1
+    written = {
+        r.record_id
+        for d in (store.training_dir, store.card_disjoint_dir, store.game_disjoint_dir)
+        for r in read_records(d)
+    }
+    assert "flashback-mode" not in written
+    assert "g-clean-3.level" in written
+
+
+def test_unjoinable_keys_past_the_share_stop_the_build():
+    """Many records failing the join is a reconversion, not a collector gap."""
+    written = WriteResult(
+        read=Counter({"resolution-effect": 990}),
+        refused_by_class=Counter({"resolution-effect": 30}),
+        quality_dropped=Counter({"unjoinable-key": 30}),
+        unjoinable_scripts=Counter({_BEAR_FILE: 30}),
+    )
+
+    with pytest.raises(BuildCorpusError) as raised:
+        _check_refusals(written)
+
+    message = str(raised.value)
+    assert "reconverted" in message
+    assert _BEAR_FILE in message
+
+
+def test_unjoinable_keys_under_the_share_raise_nothing():
+    _check_refusals(WriteResult(
+        read=Counter({"resolution-effect": 99_970}),
+        refused_by_class=Counter({"resolution-effect": 30}),
+        quality_dropped=Counter({"unjoinable-key": 30}),
+    ))
+
+
+def test_a_few_unjoinable_keys_in_a_small_corpus_raise_nothing():
+    """A pilot of a few hundred records holding one Flashback cast builds."""
+    _check_refusals(WriteResult(
+        read=Counter({"resolution-effect": 14}),
+        refused_by_class=Counter({"resolution-effect": 1}),
+        quality_dropped=Counter({"unjoinable-key": 1}),
+    ))
+
+
 def test_the_gate_one_slice_holds_held_out_resolutions_of_card_disjoint_games(tmp_path, a_corpus):
     assert build(BuildCorpusConfig(**_LEGACY_RULES,
                                    records_dir=a_corpus.records, output=tmp_path / "out",
