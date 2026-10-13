@@ -1109,8 +1109,7 @@ first measurement of the claim the design rests on: that training `e` against th
 better `e`.
 
 Without an identity checkpoint, `evaluate-effect-model` reports gate 1 as skipped and runs gates 2
-and 3 and the checks it reports without a threshold, such as the ward canary and the decodability
-battery (section on the sweep). It already behaves that way when no `--variant-checkpoint identity`
+and 3 and the checks it reports without a threshold, such as the ward canary. It already behaves that way when no `--variant-checkpoint identity`
 is given.
 
 ## Gen-2 is a sweep over the width of `e` and the size of the encoder, compared by hand
@@ -1138,9 +1137,9 @@ is read beside every gain it shows. The comparison draws on:
 
 - each arm's knowledge-probe scorecard;
 - the card-disjoint results per rule family, and the memorization gap;
-- gates 2 and 3, the ward canary and the zero-shot keyword check;
-- the decodability battery, linear probes that read the sealed pipeline's per-card win rates from
-  each card's pooled `e`.
+- gates 2 and 3, the ward canary and the zero-shot keyword check.
+
+Strategic value, such as a card's win rate, is not compared: it is the game agent's to learn.
 
 ## Run plan: a pilot before the full collection, and the gen-1 work while collection runs
 
@@ -1215,9 +1214,7 @@ For each arm, in order:
    show whether the tail is reached.
 2. `python -m effects encode-abilities`, with known keywords left as tokens.
 3. `python -m effects evaluate-effect-model`: gates 2 and 3, the ward canary, the nearest
-   neighbours, the zero-shot keyword check and the decodability battery. The battery reads
-   `output/sealed/cards-win-rates.txt`, copied from `Y:\Nicolas\mtg\mtg-models-data\sealed\` on the
-   NAS. The role-polarity check and the matched real-versus-fork check run if the corpus holds mana
+   neighbours and the zero-shot keyword check. The role-polarity check and the matched real-versus-fork check run if the corpus holds mana
    and fork records. Gate 1 reports as skipped.
 4. The gen-1 embedding probes in `scripts/effect_embedding_probes/`, against the arm's cache:
    `build_texts.py` first, then `effect_profiles.py`, `pca_directions.py`, `lexical_probes.py`,
@@ -1468,5 +1465,3 @@ Linear probes over the whole cache recover what kind of ability a line is and it
 | life amount, R² | 0.086 | 0.362 |
 | cards amount, R² | 0.190 | 0.339 |
 | power amount, R² | 0.321 | 0.369 |
-
-The decodability battery did not run. `evaluate-effect-model` looks for the sealed pipeline's win-rate table at `output/sealed/cards-win-rates.txt`, and the table lives on the NAS. The battery runs once `--win-rates` names the NAS copy.

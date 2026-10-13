@@ -20,7 +20,7 @@ One vector per ability is also easier to interpret. It can be inspected, compare
 
 ## The probes cover what an ability does to the board, in ten families, and leave strategic value to the game agent
 
-The encoder's job is to capture an ability's immediate effect on the board. Strategic value, such as a card's win rate or its price, is out of scope for two reasons. The training corpus does not contain it, so the model has no signal to learn it from. Learning it is the game agent's job. The gen-2 record's run plan checks strategic value separately, with the decodability battery. The battery is a set of probes that read the sealed pipeline's per-card win rates from each card's pooled `e`, which is the mean and the maximum of the card's ability vectors placed side by side.
+The encoder's job is to capture an ability's immediate effect on the board. Strategic value, such as a card's win rate or its price, is out of scope for two reasons. The training corpus does not contain it, so the model has no signal to learn it from. Learning it is the game agent's job.
 
 The ten families below are what the probes target. Each label comes from a source that exists without the model: the parsed script, or an outcome observed in the effect-record corpus.
 
