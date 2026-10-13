@@ -1373,20 +1373,17 @@ The decodability battery joined the cache's lowercase card names to the win-rate
 
 The results are to be filled in after the gen-2 sweep.
 
-#### Every arm trains on batches of 16 records, with gradients summed over two batches, because batches of 32 do not fit on the 8 GB GPU
+#### The encoder pads each group of 32 texts to its own longest, so every arm trains at gen-1's batch of 32 records
 
-The first arm ran out of GPU memory on the fifth shard of its first epoch (2026-10-13), at the batch size of 32 that gen-1 trained at. Every arm therefore trains with `--batch-size 16 --grad-accum 2 --steps-per-epoch 10000`. The optimizer still updates the weights after every 32 records, and an epoch holds as many updates and records as gen-1's did.
+Padded to the longest text in a training step, gen-2's encoder input did not fit on the 8 GB GPU. The first arm ran out of GPU memory early in its first epoch (2026-10-13), at gen-1's batch of 32 records and again at 16. A training step encodes every ability text on its records' boards, from about a hundred to about three hundred texts. Gen-2 encodes each ability's whole chain, and a long chain reaches the encoder's limit of 512 tokens. One such text made every short line in the step cost as many positions as the long one.
 
-| | gen-1 | gen-2 arms |
+The encoder now sorts a step's texts by length and encodes them in groups of 32, each group padded to its own longest text. Padding is masked out of attention, so each text encodes as it would in one padded batch, and its gradient is the same. Every arm trains at the trainer's defaults of 32 records per batch and 5,000 batches per epoch, as gen-1 did.
+
+Both measurements replay the first arm's seed, so they read the same shards in the same order.
+
+| | padded to the step's longest | grouped by length |
 |---|---:|---:|
-| records per batch | 32 | 16 |
-| batches per optimizer update | 1 | 2 |
-| batches per epoch (`--steps-per-epoch`) | 5,000 | 10,000 |
-| optimizer updates per epoch | 5,000 | 5,000 |
-| records per epoch | 160,000 | 160,000 |
-
-The trainer counts three schedules in batches, not in optimizer updates: the learning-rate warmup, the ramp of the noise on `e` and the epoch at which the sparse fields join the loss. Doubling the batches per epoch keeps each of them at the same point of the run.
-
-Two things are now computed over 16 records instead of 32. The first is the covariance of `e`, but it is a running average over recent batches, which is what keeps the noise level independent of the batch size. The second is the set of fields scored in a batch, which drops a field when no record in the batch supervises it.
-
-The likely cause of the larger memory footprint is longer encoder inputs. Gen-2 encodes each ability's whole chain where gen-1 encoded its first line. The encoder also re-encodes every ability in a batch's board snapshots on every step.
+| records per batch | 16 | 32 |
+| shards of epoch 1 replayed | 49 | 50 |
+| share of the encoder's input that is padding, first 9 shards | 79% | 22% |
+| highest GPU memory in one step | 6.4 GB, out of memory on shard 49 | 2.9 GB |

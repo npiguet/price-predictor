@@ -58,6 +58,63 @@ NOISE_DECAY = 0.99
 #: the recent batches, so the factor drawn from lags it by at most that much.
 NOISE_REFACTOR_EVERY = 10
 
+#: Texts per encoder pass. A batch's texts are sorted by length and encoded in
+#: groups this size, each padded to its own longest text: padded to the
+#: batch's longest, one 512-token chain made every short line in the batch cost
+#: 512 positions, four fifths of the encoder's input was padding, and the
+#: activations a batch saved for backward overran the 8 GB card.
+ENCODE_CHUNK = 32
+
+
+def _length_chunks(attention_mask: torch.Tensor) -> list[tuple[torch.Tensor, int]]:
+    """``(rows, width)`` per encoder pass, rows grouped by length, on the host."""
+    lengths = attention_mask.sum(dim=1)
+    order = torch.argsort(lengths, stable=True)
+    return [
+        (rows, int(lengths[rows].max()))
+        for rows in order.split(ENCODE_CHUNK)
+    ]
+
+
+def encode_by_length(
+    encoder: AbilityEncoder, inputs: dict[str, torch.Tensor], device,
+    *, hidden: bool = False,
+) -> tuple[torch.Tensor, torch.Tensor | None]:
+    """``encoder(**inputs)`` in length-sorted groups, in the inputs' row order.
+
+    ``inputs`` is a host batch from ``collate_lines``. Padding is masked out of
+    attention, so each text encodes as it would padded to any width. With
+    ``hidden`` the token outputs come back padded to the batch's width as one
+    tensor, matching the one-batch outputs at every real token; what sits at a
+    padding position is unspecified, and the MLM pass never reads one.
+    """
+    chunks = _length_chunks(inputs["attention_mask"])
+    if len(chunks) == 1:
+        batch = {k: v.to(device, non_blocking=True) for k, v in inputs.items()}
+        vectors, tokens = encoder(**batch)
+        return vectors, tokens if hidden else None
+    parts, outputs = [], []
+    for rows, width in chunks:
+        batch = {
+            k: v.index_select(0, rows)[:, :width].to(device, non_blocking=True)
+            for k, v in inputs.items()
+        }
+        vectors, tokens = encoder(**batch)
+        parts.append(vectors)
+        outputs.append(tokens)
+    order = torch.cat([rows for rows, _ in chunks])
+    inverse = torch.empty_like(order)
+    inverse[order] = torch.arange(order.numel())
+    vectors = torch.cat(parts).index_select(0, inverse.to(device, non_blocking=True))
+    if not hidden:
+        return vectors, None
+    full = outputs[0].new_zeros(
+        (order.numel(), inputs["attention_mask"].shape[1], outputs[0].shape[-1]),
+    )
+    for (rows, width), tokens in zip(chunks, outputs):
+        full[rows.to(device, non_blocking=True), :width] = tokens
+    return vectors, full
+
 
 class NoiseState:
     """Gaussian noise on ``e`` scaled to the spread of ``e`` itself (FR-056).
@@ -483,8 +540,7 @@ class SurfaceBatcher:
             return stand_in.to(self.device, non_blocking=True)
         if inputs is None:
             return None
-        batch = {k: v.to(self.device, non_blocking=True) for k, v in inputs.items()}
-        vectors, _hidden = encoder(**batch)
+        vectors, _hidden = encode_by_length(encoder, inputs, self.device)
         return vectors
 
     def prepare_texts(self, ordered: list[str]) -> list:
@@ -553,11 +609,9 @@ class SurfaceBatcher:
 
     def mlm_forward(self, encoder: AbilityEncoder, masked: MaskedTokens):
         """``mlm_inputs``' device half: the encoder's outputs at the masks."""
-        batch = {
-            k: v.to(self.device, non_blocking=True)
-            for k, v in masked.inputs.items()
-        }
-        _e, hidden = encoder(**batch)
+        _e, hidden = encode_by_length(
+            encoder, masked.inputs, self.device, hidden=True,
+        )
         selected = hidden.reshape(-1, hidden.shape[-1]).index_select(
             0, masked.positions.to(self.device, non_blocking=True),
         )

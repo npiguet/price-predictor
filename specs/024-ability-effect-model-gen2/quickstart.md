@@ -162,13 +162,10 @@ the same `--output`. The rebuild keeps every game-disjoint game the first build 
 ```bash
 python -u scripts/effect_sweep_arm.py --run-dir models/effects/runs/2026-10-gen2-<arm>/ \
     --corpus output/effects/corpus-gen2/ [--freeze-probe-set] -- \
-    --e-dim D --encoder-layers L --encoder-d-model W --e-noise R --withhold-keyword K \
-    --batch-size 16 --grad-accum 2 --steps-per-epoch 10000
+    --e-dim D --encoder-layers L --encoder-d-model W --e-noise R --withhold-keyword K
 ```
 
-Every arm passes the last three flags. Batches of 32 exhaust the 8 GB GPU on gen-2 records, and
-16 records per batch, two batches per optimizer update and twice the batches per epoch keep 32
-records per update and 5,000 updates per epoch.
+Every arm keeps the trainer's batch size (32) and steps per epoch (5,000).
 
 `effect_sweep_arm.py` runs, in order: `train-effect-model` with the flags after `--`,
 `encode-abilities`, `evaluate-effect-model`, the eight scripts in `scripts/effect_embedding_probes/`
