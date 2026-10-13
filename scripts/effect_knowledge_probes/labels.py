@@ -115,6 +115,20 @@ def target_id(spec: TargetSpec) -> str:
     return f"{spec.family}/{spec.name}"
 
 
+def capped(value: float) -> float:
+    """``value`` with its magnitude at most the model's ``MAGNITUDE_CAP``, sign kept.
+
+    The model is trained and scored on amounts capped there, so an amount label
+    above it asks a probe for a number no training target ever held. A handful
+    of script literals do exactly that — Jumbo Cactuar's +9999 power, Overkill's
+    −9999 toughness, The Millennium Calendar's 1000 life — and a few items that
+    far out dominate an R² taken over thousands.
+    """
+    from effects.domain.effect_model import MAGNITUDE_CAP
+
+    return max(-MAGNITUDE_CAP, min(MAGNITUDE_CAP, float(value)))
+
+
 # ── script parsing ──────────────────────────────────────────────────────
 
 _LABEL_RE = re.compile(r"^\s*SV\d+:\s*")
@@ -211,7 +225,8 @@ def line_labels(
 
     A target the line says nothing about is absent rather than zero where zero
     would be a claim: a line with no ``Cost$`` has no cost colours, a line that
-    produces no mana has no production colours.
+    produces no mana has no production colours. Every amount is :func:`capped`,
+    and damage per mana is read off the capped damage.
     """
     parsed = segments(script)
     labels: dict[str, float] = {}
@@ -234,7 +249,7 @@ def line_labels(
         ):
             value = _sum_amount(parsed, keys, only)
             if value is not None:
-                labels[name] = value
+                labels[name] = capped(value)
     cost = root.get("Cost")
     cost_mana = mana_of_cost(cost) if cost is not None else None
     total_cost = sum(cost_mana.values()) if cost_mana else 0.0
@@ -307,7 +322,10 @@ def line_labels(
         shards = _cost_shards(cost)
         labels["repeatable"] = float(not any(
             s.startswith(("Sac<1/CARDNAME", "Exile<1/CARDNAME")) for s in shards))
-    return labels
+    return {
+        name: capped(value) if TARGETS_BY_NAME[name].kind == AMOUNT else value
+        for name, value in labels.items()
+    }
 
 
 # ── observed outcomes: effect profiles, state dependence, mana ──────────
@@ -371,7 +389,7 @@ def state_weight(n: int) -> float:
 
 
 def mana_observed(record) -> float | None:
-    """Mana a mana resolution produced, from its ``mana_produced`` events."""
+    """Mana a mana resolution produced, from its ``mana_produced`` events, :func:`capped`."""
     from effects.domain.event_schema import EventType
     from effects.domain.records import events_of
 
@@ -386,7 +404,7 @@ def mana_observed(record) -> float | None:
                 total += sum(v for v in amount.values() if isinstance(v, int | float))
             else:
                 total += 1
-    return total if seen else None
+    return capped(total) if seen else None
 
 
 # ── interactions: the trigger → resolution join ─────────────────────────
@@ -611,7 +629,7 @@ def record_items(record, sidecars, join: JoinResult, acting_text) -> list[Record
                 items.append(RecordItem(
                     rid, "dies", float(entry.fields.get("zone_outcome") == died),
                     entity=entity.id, group=card_of(entity)))
-                items.append(RecordItem(rid, "damage_taken", float(damage),
+                items.append(RecordItem(rid, "damage_taken", capped(damage),
                                         entity=entity.id, group=card_of(entity)))
             if entry.fields.get("pt_duration") is not None:
                 items.append(RecordItem(

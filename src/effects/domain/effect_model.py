@@ -254,7 +254,33 @@ _value_offset = 0
 for _name, _kind in VALUE_TARGETS:
     VALUE_SLICES[_name] = (_value_offset, _value_offset + _VALUE_WIDTHS[_kind])
     _value_offset += _VALUE_WIDTHS[_kind]
+
+#: Steps of the at-least targets (FR-058b): beside each stated amount, the head
+#: predicts whether its magnitude is at least k for k = 1 … 40, one yes/no each —
+#: the magnitude cap, and the board's thermometer length, so both sides of a
+#: comparison count on one scale.
+#: A single layer reading every such bit from ``e`` pushes ``e`` to carry the
+#: amount as a thermometer — the form the trunk's attention compares against a
+#: toughness or a life total in one dot product (the board side carries the
+#: same code, ``effect_head_input.thermometer``). Cumulative-link ordinal
+#: regression, kept beside the count loss rather than replacing it.
+AT_LEAST_STEPS = 40
+#: ``amount target -> (start, end)`` of its at-least block, after every
+#: :data:`VALUE_SLICES` block so the earlier layout of the head is a prefix.
+AT_LEAST_SLICES: dict[str, tuple[int, int]] = {}
+for _name, _kind in VALUE_TARGETS:
+    if _kind is not ValueKind.BINARY:
+        AT_LEAST_SLICES[_name] = (_value_offset, _value_offset + AT_LEAST_STEPS)
+        _value_offset += AT_LEAST_STEPS
 VALUE_WIDTH = _value_offset
+
+
+def at_least_targets(amounts: torch.Tensor) -> torch.Tensor:
+    """``(n,)`` amounts as ``(n, AT_LEAST_STEPS)`` bits: column k-1 is ``|amount| >= k``."""
+    steps = torch.arange(
+        1, AT_LEAST_STEPS + 1, device=amounts.device, dtype=amounts.dtype,
+    )
+    return (amounts.abs().unsqueeze(-1) >= steps).to(amounts.dtype)
 
 #: Rows of the option-kind embedding: a root or ordinary ability row, and a row
 #: from a charm mode's ``option`` line (FR-063a).
@@ -845,12 +871,13 @@ def verdict_loss(
 def value_loss(
     prediction: torch.Tensor, target: torch.Tensor, mask: torch.Tensor,
 ) -> torch.Tensor:
-    """The value head's loss over the batch's encoded texts (FR-058).
+    """The value head's loss over the batch's encoded texts (FR-058, FR-058b).
 
     One row per unique text. A count is Poisson, a signed amount the
     direction-and-magnitude split, a cost flag binary — the same losses the
-    per-entity fields of those types use. A masked target contributes nothing,
-    and the sum is normalized over the texts.
+    per-entity fields of those types use. Every amount also scores its
+    at-least bits by binary cross-entropy, averaged over the bits. A masked
+    target contributes nothing, and the sum is normalized over the texts.
     """
     rows = max(int(prediction.shape[0]), 1)
     # The mask is decided on the host, where the targets were built: testing a
@@ -874,6 +901,16 @@ def value_loss(
                 total = total + functional.binary_cross_entropy_with_logits(
                     output.squeeze(-1), wanted, reduction="sum",
                 )
+        if name in AT_LEAST_SLICES:
+            # Averaged over the steps, so an amount's forty bits weigh what
+            # one binary target does: summed, they would outweigh the rest of
+            # the head's loss many times over and set the encoder's gradient
+            # alone.
+            start, end = AT_LEAST_SLICES[name]
+            total = total + functional.binary_cross_entropy_with_logits(
+                prediction.index_select(0, selected)[:, start:end],
+                at_least_targets(wanted.float()), reduction="sum",
+            ) / AT_LEAST_STEPS
     return total / rows
 
 

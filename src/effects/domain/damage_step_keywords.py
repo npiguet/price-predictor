@@ -11,8 +11,16 @@ its fields on the same combat. Infect's creature-side fields and its
 player-side fields are exclusive by construction — a blocked attacker damages a
 creature and no player, an unblocked one the reverse — so a row-level
 "qualifies" would have made one half of every infect observation a guaranteed
-disagreement. Double strike has three such groups: it strikes first, it strikes
-twice, and against no blocker it hits the player twice.
+disagreement.
+
+A combat record covers **one damage step**, so what first strike and double
+strike change is visible in one record only: the first-strike step's. There the
+carrier deals its damage with the keyword and none without it, while a creature
+with neither keyword deals none either way — so the carrier's own damage taken
+cannot move, and what both rows read is what the carrier does to the creature
+or player it is fighting. In the regular step a first striker has already
+struck, and the board the record starts from already carries its hit, so
+neither row reads a regular-step record at all.
 
 The row's own ``qualifies`` is therefore **derived** rather than written: a
 combat qualifies for a keyword exactly when at least one of its effects applies
@@ -73,12 +81,17 @@ class CombatParticipant:
     blocks and never on a player, so it has none — reading its own controller
     there would hand trample and infect a player whose life and poison their
     carrier cannot touch.
+
+    ``combat_substep`` is the damage step the record covers — ``first_strike``
+    or ``regular`` — because a record holds one step's events, and the
+    first-strike rows are observable in one of the two only.
     """
 
     carrier: EntityState
     opponents: tuple[EntityState, ...]
     controller: str
     defending_player: str | None
+    combat_substep: str | None = None
 
 
 #: ``EntityState -> the keywords it carries``, spelled the way this table does.
@@ -115,6 +128,7 @@ def combat_participant(
             _defending_player(state, carrier)
             if combat.attacking is not None else None
         ),
+        combat_substep=state.global_.combat_substep,
     )
 
 
@@ -202,7 +216,7 @@ def _kills_outright(
 
     The carrier's own deathtouch is what makes this more than an arithmetic
     comparison: with it, one point is lethal to anything, so a 1/1 first striker
-    kills a 6/6 before it swings back.
+    kills a 6/6 in the first-strike step.
     """
     opponent = _lone_opponent(participant)
     if opponent is None:
@@ -211,23 +225,6 @@ def _kills_outright(
     if "deathtouch" in keywords_of(participant.carrier):
         return power >= 1
     return power >= _remaining_toughness(opponent)
-
-
-def _kills_first(
-    participant: CombatParticipant, keywords_of: KeywordsOf,
-) -> bool:
-    """...and the opponent does not strike first as well.
-
-    An opponent that also strikes first is not killed *before* it hits back, and
-    one the hit does not kill hits back in the regular step anyway — in either
-    case striking first changes nothing the record can show.
-    """
-    opponent = _lone_opponent(participant)
-    return (
-        opponent is not None
-        and not (_STRIKES_FIRST & keywords_of(opponent))
-        and _kills_outright(participant, keywords_of)
-    )
 
 
 def _survives_a_normal_hit(participant: CombatParticipant) -> bool:
@@ -251,35 +248,80 @@ def _always(_participant: CombatParticipant, _keywords_of: KeywordsOf) -> bool:
     return True
 
 
-def _kills_in_the_first_step(
-    participant: CombatParticipant, keywords_of: KeywordsOf,
-) -> bool:
-    """The condition both carrier-side effects share.
+def _strikes_first_because_of(keyword: str) -> Applies:
+    """The carrier deals damage in this first-strike step because of ``keyword``.
 
-    The opponent's own power is part of it: a creature with none could never
-    have killed the carrier or even marked damage on it, so killing a 0/2 wall
-    before it "strikes back" changes neither field.
+    Three things have to hold. The record is the first-strike step's: in the
+    regular step a first striker has already struck and the board carries its
+    hit, so nothing it does there turns on the keyword. The carrier has power.
+    And no **other** keyword of its own puts it in this step anyway — stripping
+    first strike from a creature that also has double strike leaves it
+    striking first, and moves nothing.
+
+    What the opponent carries does not enter into it. In this step a creature
+    with neither keyword deals no damage, and one with either deals its own
+    whatever the carrier does, so in both cases the carrier's hit lands in this
+    step with the keyword and not without it.
     """
-    opponent = _lone_opponent(participant)
-    return (
-        opponent is not None
-        and _deals_damage(participant)
-        and _power(opponent) >= 1
-        and _kills_first(participant, keywords_of)
-    )
+    others = _STRIKES_FIRST - {keyword}
+
+    def strikes_first(
+        participant: CombatParticipant, keywords_of: KeywordsOf,
+    ) -> bool:
+        return (
+            participant.combat_substep == "first_strike"
+            and _deals_damage(participant)
+            and not (others & keywords_of(participant.carrier))
+        )
+
+    return strikes_first
 
 
-def _a_second_hit_lands(
-    participant: CombatParticipant, keywords_of: KeywordsOf,
-) -> bool:
-    """Double strike's second hit reaches a creature that lived through the
-    first. One the first hit already kills — by size or by deathtouch — takes
-    the same damage and dies the same way either way."""
-    return (
-        _deals_damage(participant)
-        and _lone_opponent(participant) is not None
-        and not _kills_outright(participant, keywords_of)
-    )
+def _first_hit_lands_on_a_creature(keyword: str) -> Applies:
+    """The carrier's first-step hit lands on the one creature it is fighting.
+
+    One creature only: with several, Forge's own damage assignment decides who
+    takes what, and the opponent effect is read at the first of them.
+    """
+    strikes_first = _strikes_first_because_of(keyword)
+
+    def applies(participant: CombatParticipant, keywords_of: KeywordsOf) -> bool:
+        return (
+            strikes_first(participant, keywords_of)
+            and _lone_opponent(participant) is not None
+        )
+
+    return applies
+
+
+def _first_hit_kills(keyword: str) -> Applies:
+    """...and is lethal to it, by remaining toughness or by deathtouch.
+
+    A hit that does not kill still marks damage, which the damage effect reads,
+    but only a lethal one moves the opponent's death in this step.
+    """
+    strikes_first = _strikes_first_because_of(keyword)
+
+    def applies(participant: CombatParticipant, keywords_of: KeywordsOf) -> bool:
+        return (
+            strikes_first(participant, keywords_of)
+            and _kills_outright(participant, keywords_of)
+        )
+
+    return applies
+
+
+def _first_hit_lands_on_the_defending_player(keyword: str) -> Applies:
+    """An unblocked carrier's first-step hit lands on the defending player."""
+    strikes_first = _strikes_first_because_of(keyword)
+
+    def applies(participant: CombatParticipant, keywords_of: KeywordsOf) -> bool:
+        return (
+            strikes_first(participant, keywords_of)
+            and _is_unblocked_attacker(participant)
+        )
+
+    return applies
 
 
 def _an_opponent_survives_a_normal_hit(
@@ -373,10 +415,10 @@ class KeywordEffect:
     def label(self) -> str:
         """How this effect is named in a per-field breakdown.
 
-        Prefixed by its subject because one row can move the same field on both
-        sides of a combat: double strike lowers the *carrier's* damage taken and
-        raises its *opponent's*, and a breakdown that called both
-        ``damage_taken`` would report one of them twice and the other never.
+        Prefixed by its subject because one field can be moved on either side
+        of a combat: a breakdown that called both the carrier's and the
+        opponent's ``damage_taken`` by the field name alone could not say which
+        one it was reporting.
         """
         name = self.field if self.category is None else (
             f"{self.field}/{self.category}"
@@ -429,62 +471,52 @@ class DamageStepKeyword:
         )
 
 
+def _first_strike_step_effects(keyword: str) -> tuple[KeywordEffect, ...]:
+    """What first strike and double strike change inside one combat record.
+
+    The same three effects for both rows, because within the first-strike
+    step's record the two keywords do the same thing: the carrier deals its
+    damage in this step with the keyword and none without it. Double strike's
+    second hit is the regular step's, which neither row reads — that record
+    starts from a board already carrying the first hit, whose damage and deaths
+    the snapshot shows rather than the payload.
+    """
+    return (
+        # Its hit lands on the creature it is fighting.
+        KeywordEffect(
+            "damage_taken", Subject.OPPONENT, direction=1,
+            applies=_first_hit_lands_on_a_creature(keyword),
+        ),
+        # A lethal one kills it in this step.
+        KeywordEffect(
+            "zone_outcome", Subject.OPPONENT, direction=1, category="died",
+            applies=_first_hit_kills(keyword),
+        ),
+        # Unblocked, the defending player loses the life in this step.
+        KeywordEffect(
+            "life_delta", Subject.DEFENDING_PLAYER, direction=-1,
+            applies=_first_hit_lands_on_the_defending_player(keyword),
+        ),
+    )
+
+
+_FIRST_STRIKE_STEP_QUALIFIES_WHEN = (
+    "the record is the first-strike damage step's, the carrier deals combat "
+    "damage and no other keyword of its own would make it strike first, and "
+    "it is either fighting exactly one creature or an unblocked attacker"
+)
+
+
 DAMAGE_STEP_KEYWORDS: tuple[DamageStepKeyword, ...] = (
     DamageStepKeyword(
         keyword="first_strike",
-        qualifies_when=(
-            "the carrier is in combat with exactly one creature, that creature "
-            "has power and has neither first strike nor double strike, and the "
-            "carrier's hit would kill it"
-        ),
-        effects=(
-            # It kills before being killed, so it takes less damage back. Only
-            # when the hit actually kills: an opponent that survives hits back
-            # in the regular step either way.
-            KeywordEffect(
-                "damage_taken", Subject.CARRIER, direction=-1,
-                applies=_kills_in_the_first_step,
-            ),
-            KeywordEffect(
-                "zone_outcome", Subject.CARRIER, direction=-1, category="died",
-                applies=_kills_in_the_first_step,
-            ),
-        ),
+        qualifies_when=_FIRST_STRIKE_STEP_QUALIFIES_WHEN,
+        effects=_first_strike_step_effects("first_strike"),
     ),
     DamageStepKeyword(
         keyword="double_strike",
-        qualifies_when=(
-            "the carrier deals combat damage, and either it kills the one "
-            "creature it is fighting before that creature strikes back, or "
-            "that creature lives through the first hit, or it is unblocked"
-        ),
-        effects=(
-            # The first-strike half: it kills before being killed.
-            KeywordEffect(
-                "damage_taken", Subject.CARRIER, direction=-1,
-                applies=_kills_in_the_first_step,
-            ),
-            KeywordEffect(
-                "zone_outcome", Subject.CARRIER, direction=-1, category="died",
-                applies=_kills_in_the_first_step,
-            ),
-            # The second-hit half: twice as much reaches a creature that lived
-            # through the first. One the first hit already kills takes the same
-            # damage either way.
-            KeywordEffect(
-                "damage_taken", Subject.OPPONENT, direction=1,
-                applies=_a_second_hit_lands,
-            ),
-            KeywordEffect(
-                "zone_outcome", Subject.OPPONENT, direction=1, category="died",
-                applies=_a_second_hit_lands,
-            ),
-            # Unblocked, the player is hit twice.
-            KeywordEffect(
-                "life_delta", Subject.DEFENDING_PLAYER, direction=-1,
-                applies=_damages_the_defending_player,
-            ),
-        ),
+        qualifies_when=_FIRST_STRIKE_STEP_QUALIFIES_WHEN,
+        effects=_first_strike_step_effects("double_strike"),
     ),
     DamageStepKeyword(
         keyword="deathtouch",

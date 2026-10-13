@@ -873,6 +873,12 @@ the sweeps, the ablation, and the recorded digest. Run `compare.py` over two sco
   `ManaCost`, and on a spell line the mana-cost targets MUST be masked even where its `Cost$`
   carries mana (an additional-cost spell such as Bone Splinters, `Cost$ B Sac<1/Creature>`). The tap
   and sacrifice targets of a spell line still read from its `Cost$`.
+- **FR-058b**: For each amount target of FR-058 (every count and signed target), the value head MUST
+  also predict whether the amount's magnitude is at least k, for k = 1 to 40 (`AT_LEAST_STEPS`), as
+  forty binary targets under the amount's mask, trained with binary cross-entropy inside the value
+  loss beside the amount's count or signed loss, averaged over the forty so each amount's block
+  weighs as one binary target. A magnitude above 40 sets all forty; a stated zero
+  sets none.
 - **FR-059**: The value head MUST be filtered out at save time, like the MLM and script-API heads.
 - **FR-060**: The encoder MUST have no paired-encoding loss and no pairing head.
 - **FR-060a**: Training MUST apply the verdict-head and created-objects-head losses the base spec
@@ -903,6 +909,22 @@ the sweeps, the ablation, and the recorded digest. Run `compare.py` over two sco
   block, and the flag plus adjacency is the link between a mode and its root. A snapshot names an
   entity's abilities by root key, so the input MUST add, after each root row whose sidecar line is
   followed by `option` lines, one row per such line. No other positional scheme is added.
+- **FR-063c**: The effect model's input MUST follow an input layout the checkpoint records as
+  `training_settings["input_layout"]`. Training MUST record `"gen-2"`. A checkpoint recording none
+  (gen-1, and gen-2 arms trained before this requirement) MUST load and run with the earlier layout,
+  bit for bit. Under `"gen-2"`:
+  - the phase one-hot MUST map `combat_begin`, `combat_declare_attackers`,
+    `combat_declare_blockers`, `combat_first_strike_damage` and `combat_end` onto `begin_combat`,
+    `declare_attackers`, `declare_blockers`, `first_strike_damage` and `end_combat`;
+  - the counter block MUST map `+1/+1` onto `P1P1` and `-1/-1` onto `M1M1`;
+  - the overlay keyword multi-hot MUST map every `protection_from_<x>` onto `protection`, and MUST
+    append a `landwalk` member;
+  - each `CARD` slot MUST append thermometer codes (40 positions, the magnitude cap of FR-060c; position k set when the value is at
+    least k) of the entity's total power, total toughness, and total toughness minus marked damage,
+    all zeros for an entity with no power and toughness; each `PLAYER` slot MUST append one of the
+    player's life.
+  Every path that loads a checkpoint (`model_runner.load_runnable`, through which evaluation, gate 2
+  and both probe suites load) MUST build the layout the checkpoint records.
 - **FR-063b**: `train-effect-model`, `encode-abilities` and `evaluate-effect-model` MUST accept
   `--cards-folder` (repeatable; default `output/cardsfolder/`, `output/tokenscripts/`) as the sidecar
   roots they read, so stage 0 runs against gen-1's kept-aside sidecars after stage 1 reconverts.
@@ -921,6 +943,13 @@ the sweeps, the ablation, and the recorded digest. Run `compare.py` over two sco
   where that keyword is on the acting line or carried by an entity, beside the same fields over
   records carrying trained keywords.
 - **FR-069**: It MUST report gate 1 as skipped when no `--variant-checkpoint identity` is given.
+- **FR-069a**: Gate 2's `first_strike` and `double_strike` rows MUST qualify first-strike-step combat
+  records only (`combat_substep = first_strike`). Combat records are one per damage step, so the
+  carrier-side effects of striking first cannot show in any one record. Each row MUST score what the
+  carrier does in that step to whoever it fights: the lone blocker's (or blocked attacker's) damage
+  taken, and its death where the carrier's hit is lethal, or the defending player's life when the
+  carrier attacks unblocked. With the keyword the carrier deals that damage in this step, and
+  without it, none. The other six rows MUST stay unchanged.
 - **FR-070**: It MUST accept `--win-rates PATH` (default `output/sealed/cards-win-rates.txt`) as the
   per-card win-rate file the decodability battery reads.
 - **FR-071**: `python -m effects scorer-smoke-test` MUST write the pooled `e` of `--checkpoint`
@@ -951,6 +980,9 @@ the sweeps, the ablation, and the recorded digest. Run `compare.py` over two sco
 - **FR-077**: Probe records MUST come from both validation strata of the checkpoint's corpus, and
   every board-dependent result MUST be reported per stratum. Line-level probes MUST read every
   line of the checkpoint's cache and report held-out and trained lines separately.
+- **FR-077a**: Every amount label (counts and signed deltas, line-level and board-dependent) MUST be
+  capped at a magnitude of `MAGNITUDE_CAP` (40), its sign kept, as the model's targets are
+  (FR-060c).
 - **FR-078**: The suite MUST measure the corpus's interaction join rate once per probe set: the
   share of fired trigger records whose pending event the join finds in a resolution record of the
   same game.
@@ -977,8 +1009,9 @@ the sweeps, the ablation, and the recorded digest. Run `compare.py` over two sco
 - **FR-084**: The four board sweeps MUST each edit one input of a real record and read the full
   model's prediction at each value:
   - toughness: one target creature's toughness, 1 to 8; read that creature's predicted death;
-  - affordability: the acting player's untapped production, none to more than the cost; read the
-    predicted affordable verdict;
+  - affordability: the acting player's untapped production, none to more than the cost, with the
+    player's lands untapped or tapped so the board produces exactly that mana; read the predicted
+    affordable verdict;
   - board size: opposing creature count, 0 to 8, by copying a creature entity; read predicted
     deaths summed over the board;
   - damage: `NumDmg$` of the acting text, 1 to 8, on a spell and on a triggered ability, each
@@ -1003,13 +1036,13 @@ the sweeps, the ablation, and the recorded digest. Run `compare.py` over two sco
 - **FR-090**: The import-direction test of feature 023 MUST keep passing: `effects` imports only
   its declared surface from `price_predictor` and `sealed`, and nothing from `sealed.application`.
   The knowledge-probe and embedding-probe scripts sit outside `src/` and may import from `effects`.
-- **FR-091**: Gates 2 and 3 and the baseline variants MUST stay available and unchanged. Gen-2's
-  evaluation does not train the baselines.
+- **FR-091**: Gates 2 and 3 and the baseline variants MUST stay available and unchanged, apart from
+  gate 2's two rows of FR-069a. Gen-2's evaluation does not train the baselines.
 - **FR-092**: The record schema beyond `random_seat`, `what_if` and the `actor_player` of FR-030a,
   the state snapshot, events, per-kind payloads, collectors, caps and budgets beyond FR-021 to
   FR-038, the provenance join beyond FR-005a and FR-029a, synthetic variants, depleted collection,
-  the effect head and its output heads, its losses beyond FR-060a and FR-060b, its input beyond
-  FR-063a, the class mixture, and the embedding-cache layout MUST stay as feature 023 built them.
+  the effect head and its output heads, its losses beyond FR-058b, FR-060a and FR-060b, its input
+  beyond FR-063a and FR-063c, the class mixture, and the embedding-cache layout MUST stay as feature 023 built them.
 
 ### Key Entities
 

@@ -276,3 +276,6 @@ class TestTheBatchersTheLoopBuilds:
         # Every new run reads the gen-2 script rules and says so, so a loader
         # never confuses it with a gen-1 checkpoint that recorded none.
         assert settings["tokenizer_rules"] == "gen-2"
+        # Likewise the input layout (FR-063c): a loader builds the inputs the
+        # checkpoint recorded, and one recording none reads the earlier layout.
+        assert settings["input_layout"] == "gen-2"

@@ -17,9 +17,12 @@ from effects.domain.effect_head_input import (
     CARD_TYPES,
     COMBAT_SUBSTEPS,
     COUNTER_TYPES,
+    EARLIER_LAYOUT,
     OVERLAY_KEYWORDS,
+    OVERLAY_KEYWORDS_GEN2,
     PHASES,
     SUPERTYPES,
+    THERMOMETER_STEPS,
     THIS_TURN_COUNTERS,
     ZONES,
     SlotKind,
@@ -321,13 +324,15 @@ class TestControllerTags:
         record = _record()
         mine = player_features(record.state.players[0], record)
         theirs = player_features(record.state.players[1], record)
-        assert mine[-3:] == (1.0, 0.0, 0.0)
-        assert theirs[-3:] == (0.0, 1.0, 0.0)
+        # The three flags sit just before the life thermometer.
+        flags = slice(-3 - THERMOMETER_STEPS, -THERMOMETER_STEPS)
+        assert mine[flags] == (1.0, 0.0, 0.0)
+        assert theirs[flags] == (0.0, 1.0, 0.0)
 
     def test_a_targeted_player_is_flagged(self):
         state = _snapshot(refs=Refs(targets=("P1",)))
         record = _record(state=state)
-        assert player_features(state.players[1], record)[-1] == 1.0
+        assert player_features(state.players[1], record)[-1 - THERMOMETER_STEPS] == 1.0
 
     def test_the_global_slot_flags_whose_turn_it_is(self):
         mine = global_features(_record())
@@ -516,6 +521,9 @@ class TestFeatureEquivalence:
     that reaches every branch — a known value and an unknown one in each
     vocabulary, present and absent power/toughness, counters on and off the
     checked-in list, and both combat payloads.
+
+    The reference is the earlier input layout (FR-063c), which every checkpoint
+    recording no ``input_layout`` must keep reading bit for bit.
     """
 
     @staticmethod
@@ -718,6 +726,7 @@ class TestFeatureEquivalence:
                 masked = frozenset(entity.granted_temporary.keywords[:1])
                 assert card_features(
                     entity, record, masked_keywords=masked,
+                    layout=EARLIER_LAYOUT,
                 ) == self._ref_card_features(
                     entity, record, masked_keywords=masked,
                 )
@@ -726,11 +735,13 @@ class TestFeatureEquivalence:
 
     def test_the_global_and_player_features_are_unchanged(self):
         for record in self._boards(5):
-            assert global_features(record) == self._ref_global_features(record)
+            assert global_features(
+                record, layout=EARLIER_LAYOUT,
+            ) == self._ref_global_features(record)
             for player in record.state.players:
-                assert player_features(player, record) == (
-                    self._ref_player_features(player, record)
-                )
+                assert player_features(
+                    player, record, layout=EARLIER_LAYOUT,
+                ) == self._ref_player_features(player, record)
 
     def test_the_helpers_themselves_agree_on_every_vocabulary(self):
         for vocabulary in (PHASES, COMBAT_SUBSTEPS, ZONES, CARD_TYPES,
@@ -819,3 +830,116 @@ class TestOptionRows:
         )
         assert batcher.options_for(self._CHARM) == modes
         assert batcher.options_for(modes[0]) == ()
+
+
+class TestGen2Layout:
+    """The gen-2 input layout reads the collector's names and compares amounts (FR-063c).
+
+    The spellings are the collector's own, as a real gen-2 shard writes them:
+    Forge's ``combat_*`` phase names, ``+1/+1`` counters, and keywords already
+    normalized at parse time (``protection_from_red``, ``landwalk``).
+    """
+
+    @staticmethod
+    def _phase_slot(record, layout):
+        features = global_features(record, layout=layout)
+        # turn and stack size are two scalars each; the phase one-hot follows.
+        return features[4:4 + len(PHASES) + 1]
+
+    def test_a_forge_combat_phase_reaches_its_own_slot(self):
+        state = _snapshot(global_=GlobalState(
+            turn=3, phase="combat_declare_attackers", active="P0",
+            priority="P0", stack_size=0,
+        ))
+        record = _record(state=state)
+        gen2 = self._phase_slot(record, layout="gen-2")
+        earlier = self._phase_slot(record, layout=EARLIER_LAYOUT)
+        assert gen2[PHASES.index("declare_attackers")] == 1.0
+        assert earlier[-1] == 1.0  # the earlier layout's "other" slot
+
+    def test_every_forge_combat_phase_name_is_mapped(self):
+        for forge_name in (
+            "combat_begin", "combat_declare_attackers", "combat_declare_blockers",
+            "combat_first_strike_damage", "combat_end",
+        ):
+            state = _snapshot(global_=GlobalState(
+                turn=3, phase=forge_name, active="P0", priority="P0",
+                stack_size=0,
+            ))
+            assert self._phase_slot(_record(state=state), "gen-2")[-1] == 0.0
+
+    def test_plus_one_counters_read_as_p1p1(self):
+        entity = _entity("E1", counters={"+1/+1": 2})
+        record = _record(state=_snapshot(entities=(entity,)))
+        gen2 = card_features(entity, record, layout="gen-2")
+        earlier = card_features(entity, record, layout=EARLIER_LAYOUT)
+        plain = _entity("E1", counters={"P1P1": 2})
+        reference = card_features(
+            plain, _record(state=_snapshot(entities=(plain,))), layout="gen-2",
+        )
+        assert gen2 == reference
+        assert earlier != card_features(
+            plain, _record(state=_snapshot(entities=(plain,))),
+            layout=EARLIER_LAYOUT,
+        )
+
+    def test_protection_from_a_colour_and_landwalk_set_their_bits(self):
+        entity = _entity("E1", granted_temporary=GrantedTemporary(
+            keywords=("protection_from_red", "landwalk"),
+        ))
+        record = _record(state=_snapshot(entities=(entity,)))
+        features = card_features(entity, record, layout="gen-2")
+        tail = 2 + 3 + 6 + 3 + 2 + 3 * THERMOMETER_STEPS
+        end = len(features) - tail
+        block = features[end - (len(OVERLAY_KEYWORDS_GEN2) + 1):end]
+        assert block[OVERLAY_KEYWORDS_GEN2.index("protection")] == 1.0
+        assert block[OVERLAY_KEYWORDS_GEN2.index("landwalk")] == 1.0
+        assert block[-1] == 0.0
+
+    def test_the_card_ends_with_power_toughness_and_remaining_toughness(self):
+        entity = _entity(
+            "E1", pt=PowerToughness(base=(2, 3), boosts=(1, 1), counters=(1, 1)),
+            damage=2,
+        )
+        record = _record(state=_snapshot(entities=(entity,)))
+        features = card_features(entity, record, layout="gen-2")
+        steps = THERMOMETER_STEPS
+        power, toughness, remaining = (
+            features[-3 * steps:-2 * steps],
+            features[-2 * steps:-steps],
+            features[-steps:],
+        )
+        assert sum(power) == 4 and power[3] == 1.0 and power[4] == 0.0
+        assert sum(toughness) == 5
+        assert sum(remaining) == 3
+
+    def test_an_entity_without_power_and_toughness_carries_zero_codes(self):
+        entity = _entity("E1", types=("Enchantment",), pt=None)
+        record = _record(state=_snapshot(entities=(entity,)))
+        features = card_features(entity, record, layout="gen-2")
+        assert features[-3 * THERMOMETER_STEPS:] == (0.0,) * (3 * THERMOMETER_STEPS)
+
+    def test_the_player_ends_with_a_life_thermometer(self):
+        record = _record()
+        features = player_features(record.state.players[1], record, layout="gen-2")
+        assert sum(features[-THERMOMETER_STEPS:]) == 8  # P1 is at 8 life
+
+    def test_the_earlier_layout_is_the_gen2_layout_without_its_additions(self):
+        record = _record()
+        entity = record.state.entities[0]
+        assert len(card_features(entity, record, layout="gen-2")) == len(
+            card_features(entity, record, layout=EARLIER_LAYOUT),
+        ) + 3 * THERMOMETER_STEPS + 1
+        player = record.state.players[0]
+        assert len(player_features(player, record, layout="gen-2")) == len(
+            player_features(player, record, layout=EARLIER_LAYOUT),
+        ) + THERMOMETER_STEPS
+
+    def test_life_above_the_starting_twenty_reads_in_full(self):
+        players = (
+            PlayerState(id="P0", life=33, hand=3, library=21, graveyard=9),
+            PlayerState(id="P1", life=8, hand=1, library=30, graveyard=4),
+        )
+        record = _record(state=_snapshot(players=players))
+        features = player_features(players[0], record, layout="gen-2")
+        assert sum(features[-THERMOMETER_STEPS:]) == 33

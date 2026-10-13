@@ -235,11 +235,23 @@ class TestGateTwo:
         with pytest.raises(ValueError, match="direction must be"):
             KeywordEffect("damage_taken", Subject.CARRIER, direction=0)
 
-    def test_first_strike_predicts_less_damage_back_to_the_carrier(self):
-        row = KEYWORDS_BY_NAME["first_strike"]
+    @pytest.mark.parametrize("keyword", ["first_strike", "double_strike"])
+    def test_striking_first_predicts_more_damage_to_its_opponent(self, keyword):
+        """Within the first-strike step the carrier's hit lands with the
+        keyword and not without it."""
+        row = KEYWORDS_BY_NAME[keyword]
         damage = next(e for e in row.effects if e.field == "damage_taken")
-        assert damage.subject is Subject.CARRIER
-        assert damage.direction == -1
+        assert damage.subject is Subject.OPPONENT
+        assert damage.direction == 1
+
+    @pytest.mark.parametrize("keyword", ["first_strike", "double_strike"])
+    def test_striking_first_unblocked_predicts_the_defender_loses_more_life(
+        self, keyword,
+    ):
+        row = KEYWORDS_BY_NAME[keyword]
+        life = next(e for e in row.effects if e.field == "life_delta")
+        assert life.subject is Subject.DEFENDING_PLAYER
+        assert life.direction == -1
 
     def test_lifelink_predicts_the_controller_gains_life(self):
         row = KEYWORDS_BY_NAME["lifelink"]

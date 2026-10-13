@@ -92,6 +92,71 @@ THIS_TURN_COUNTERS: tuple[str, ...] = (
     "creatures_died", "spells_cast", "lands_played",
 )
 
+# ── input layouts (FR-063c) ──────────────────────────────────────────────
+#
+# The vocabularies above were written before the collector's spelling was
+# checked, and three of them miss it: Forge names five combat phases
+# ``combat_*``, writes counters as ``+1/+1``, and spells protection as
+# ``protection_from_red``. Each of those landed in its vocabulary's "other"
+# slot. The fix is a layout of its own rather than an edit of the tuples,
+# because a checkpoint trained on the earlier inputs has to keep reading them
+# bit for bit.
+
+#: Where a checkpoint records the layout it trained on, in its
+#: ``training_settings`` — beside ``tokenizer_rules``, the precedent. A
+#: checkpoint recording none (gen-1, and the gen-2 arms trained before the
+#: layout existed) reads :data:`EARLIER_LAYOUT`.
+INPUT_LAYOUT_KEY = "input_layout"
+INPUT_LAYOUT = "gen-2"
+EARLIER_LAYOUT: str | None = None
+
+PHASE_ALIASES: dict[str, str] = {
+    "combat_begin": "begin_combat",
+    "combat_declare_attackers": "declare_attackers",
+    "combat_declare_blockers": "declare_blockers",
+    "combat_first_strike_damage": "first_strike_damage",
+    "combat_end": "end_combat",
+}
+COUNTER_ALIASES: dict[str, str] = {"+1/+1": "P1P1", "-1/-1": "M1M1"}
+#: Appended rather than inserted, so every earlier member keeps its slot.
+OVERLAY_KEYWORDS_GEN2: tuple[str, ...] = (*OVERLAY_KEYWORDS, "landwalk")
+_PROTECTION_FROM = "protection_from_"
+
+#: Positions of a thermometer code. Position k is set when the value is at
+#: least k, so the dot product of an amount's code with a one-hot of t is 1
+#: exactly when the amount is at least t — the comparison "this damage kills
+#: this creature" is one attention score. Forty, the magnitude cap every
+#: amount is scored at (``effect_model.MAGNITUDE_CAP``, which this module cannot
+#: import without a cycle): life often climbs past its starting twenty, and a
+#: larger value sets every position.
+THERMOMETER_STEPS = 40
+
+
+def thermometer(value: float) -> list[float]:
+    """``value`` as :data:`THERMOMETER_STEPS` positions, position k set when ``value >= k``."""
+    return [1.0 if value >= k else 0.0 for k in range(1, THERMOMETER_STEPS + 1)]
+
+
+_NO_THERMOMETER: tuple[float, ...] = (0.0,) * THERMOMETER_STEPS
+
+
+def _phase_in(phase: str | None, layout: str | None) -> str | None:
+    if layout is EARLIER_LAYOUT or phase is None:
+        return phase
+    return PHASE_ALIASES.get(phase.strip().lower(), phase)
+
+
+def _counter_name(name: str, layout: str | None) -> str:
+    if layout is EARLIER_LAYOUT:
+        return name
+    return COUNTER_ALIASES.get(name, name)
+
+
+def _keyword_in(keyword: str, layout: str | None) -> str:
+    if layout is not EARLIER_LAYOUT and keyword.startswith(_PROTECTION_FROM):
+        return "protection"
+    return keyword
+
 
 @lru_cache(maxsize=None)
 def _positions(vocabulary: tuple[str, ...]) -> dict[str, int]:
@@ -247,13 +312,15 @@ _PLAYABILITY_SUBKINDS: tuple[str, ...] = tuple(
 )
 
 
-def global_features(record: EffectRecord) -> tuple[float, ...]:
+def global_features(
+    record: EffectRecord, *, layout: str | None = INPUT_LAYOUT,
+) -> tuple[float, ...]:
     """Turn structure, plus the record's own kind flags."""
     g = record.state.global_
     out: list[float] = []
     _push_scalar(out, g.turn)
     _push_scalar(out, g.stack_size)
-    out += _one_hot(g.phase, PHASES)
+    out += _one_hot(_phase_in(g.phase, layout), PHASES)
     out += _one_hot(g.combat_substep, COMBAT_SUBSTEPS)
     out.append(1.0 if g.active == record.actor_player else 0.0)
     out.append(1.0 if g.priority == record.actor_player else 0.0)
@@ -309,9 +376,15 @@ def _act_is_empty(record: EffectRecord) -> bool:
 
 
 def player_features(
-    player: PlayerState, record: EffectRecord,
+    player: PlayerState, record: EffectRecord, *,
+    layout: str | None = INPUT_LAYOUT,
 ) -> tuple[float, ...]:
-    """One player's resources, plus their relation to the acting player."""
+    """One player's resources, plus their relation to the acting player.
+
+    Under the gen-2 layout a thermometer code of life follows, so a burn
+    spell's damage reads against a life total the way it reads against a
+    toughness.
+    """
     out: list[float] = []
     for value in (player.life, player.hand, player.library, player.graveyard,
                   player.poison, player.energy):
@@ -325,6 +398,8 @@ def player_features(
     out.append(1.0 if player.id == record.actor_player else 0.0)
     out.append(0.0 if player.id == record.actor_player else 1.0)
     out.append(1.0 if player.id in record.state.refs.targets else 0.0)
+    if layout is not EARLIER_LAYOUT:
+        out += thermometer(player.life)
     return tuple(out)
 
 
@@ -333,6 +408,7 @@ def card_features(
     record: EffectRecord,
     *,
     masked_keywords: frozenset[str] = frozenset(),
+    layout: str | None = INPUT_LAYOUT,
 ) -> tuple[float, ...]:
     """One entity's structured characteristics plus its overlay.
 
@@ -340,6 +416,11 @@ def card_features(
     Gate 2's perturbation uses it to strip one keyword from a combat
     participant that was granted it rather than printing it, and a
     ``continuous`` record uses it to hide the acting static's own contribution.
+
+    Under the gen-2 layout, thermometer codes of total power, total toughness
+    and toughness left after marked damage close the vector. The last is
+    computed here rather than left to the trunk: subtracting is one more thing
+    a transformer would have to learn before it could compare.
     """
     state = record.state
     out: list[float] = []
@@ -366,6 +447,12 @@ def card_features(
     _push_scalar(out, entity.damage)
     counters = entity.counters
     if counters:
+        if layout is not EARLIER_LAYOUT:
+            renamed: dict[str, int] = {}
+            for name, value in counters.items():
+                name = _counter_name(name, layout)
+                renamed[name] = renamed.get(name, 0) + value
+            counters = renamed
         for counter in COUNTER_TYPES:
             _push_scalar(out, counters.get(counter, 0))
         _push_scalar(out, sum(
@@ -384,7 +471,13 @@ def card_features(
     granted = entity.granted_temporary.keywords
     if masked_keywords:
         granted = set(granted) - set(masked_keywords)
-    out += _multi_hot(granted, OVERLAY_KEYWORDS)
+    if layout is EARLIER_LAYOUT:
+        out += _multi_hot(granted, OVERLAY_KEYWORDS)
+    else:
+        out += _multi_hot(
+            [_keyword_in(keyword, layout) for keyword in granted],
+            OVERLAY_KEYWORDS_GEN2,
+        )
     _push_scalar(out, len(entity.granted_temporary.abilities))
     out.append(1.0 if state.controller_tag(
         entity.controller, record.actor_player) == "mine" else 0.0)
@@ -403,6 +496,17 @@ def card_features(
     # ── per-kind overlays ──
     out += _damage_assignment_features(entity, record)
     out += _pending_event_features(entity, record)
+
+    # ── comparable amounts (gen-2 layout) ──
+    if layout is not EARLIER_LAYOUT:
+        if pt is None:
+            out += _NO_THERMOMETER * 3
+        else:
+            power = pt.base[0] + pt.boosts[0] + pt.counters[0]
+            toughness = pt.base[1] + pt.boosts[1] + pt.counters[1]
+            out += thermometer(power)
+            out += thermometer(toughness)
+            out += thermometer(toughness - entity.damage)
     return tuple(out)
 
 
@@ -451,6 +555,7 @@ def build_effect_head_input(
     stripped_keywords: dict[str, frozenset[str]] | None = None,
     keyword_of=None,
     options_for=None,
+    layout: str | None = INPUT_LAYOUT,
 ) -> EffectHeadInput:
     """Lay one record out as the token surface.
 
@@ -490,6 +595,8 @@ def build_effect_head_input(
         keyword_of: ``ProvenanceKey -> str | None``, which keyword a line *is*.
             Required for ``stripped_keywords`` to reach the ability channel;
             without it only the overlay is stripped.
+        layout: the input layout (FR-063c) — :data:`INPUT_LAYOUT`, or
+            :data:`EARLIER_LAYOUT` for a checkpoint that recorded none.
         options_for: ``ProvenanceKey -> tuple[ProvenanceKey, ...]``, the keys of
             the charm-mode ``option`` lines that follow the key's line in its
             sidecar (FR-063a). A snapshot names an entity's abilities by root
@@ -506,7 +613,7 @@ def build_effect_head_input(
 
     slots.append(Slot(
         kind=SlotKind.GLOBAL, position=position,
-        features=global_features(record),
+        features=global_features(record, layout=layout),
     ))
     position += 1
 
@@ -522,7 +629,7 @@ def build_effect_head_input(
         entity_slots.append(len(slots))
         slots.append(Slot(
             kind=SlotKind.PLAYER, position=position,
-            features=player_features(player, record),
+            features=player_features(player, record, layout=layout),
             player_id=player.id,
         ))
         position += 1
@@ -539,6 +646,7 @@ def build_effect_head_input(
             features=card_features(
                 entity, record,
                 masked_keywords=masked.get(entity.id, frozenset()) | gone,
+                layout=layout,
             ),
             subtype_tokens=(
                 subtype_tokens_for(entity) if subtype_tokens_for else ()

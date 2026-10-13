@@ -7,10 +7,12 @@ the point — a rule that qualified a combat none of its effects could be read o
 would count toward the 200-record threshold and then score as a disagreement
 every time, which is a canary that sings whatever the model does.
 
-What each rule encodes is damage actually changing hands. A first-strike hit
-that does not kill changes nothing, because the blocker hits back in the regular
-step either way; a second hit from a double striker reaches only a creature that
-lived through the first; and a creature with no power deals no damage at all.
+What each rule encodes is damage actually changing hands, inside the one damage
+step a combat record covers. First strike and double strike change only the
+first-strike step's record — the carrier deals its damage there with the keyword
+and none without — so they read what the carrier does to whoever it is fighting
+in that step, and never read a regular-step record. A creature with no power
+deals no damage at all.
 
 The boards are deliberately tiny — one attacker, one or two blockers — because
 every rule these predicates encode is a rule about two creatures.
@@ -25,6 +27,7 @@ import pytest
 from effects.domain.damage_step_keywords import (
     KEYWORDS_BY_NAME,
     CombatParticipant,
+    Subject,
     combat_participant,
 )
 from effects.domain.provenance import ProvenanceKey
@@ -60,11 +63,18 @@ def _creature(
     )
 
 
-def _board(*entities: EntityState) -> StateSnapshot:
+#: Each damage step's phase, keyed by its substep, as a real record spells them.
+_STEPS = {
+    "first_strike": "combat_first_strike_damage",
+    "regular": "combat_damage",
+}
+
+
+def _board(*entities: EntityState, substep: str = "regular") -> StateSnapshot:
     return StateSnapshot(
         global_=GlobalState(
-            turn=4, phase="combat_damage", active="P0", priority="P0",
-            stack_size=0, combat_substep="regular",
+            turn=4, phase=_STEPS[substep], active="P0", priority="P0",
+            stack_size=0, combat_substep=substep,
         ),
         players=(
             PlayerState(id="P0", life=20, hand=3, library=30, graveyard=2),
@@ -82,6 +92,7 @@ def _attacker_and_blockers(
     attacker_keywords: tuple[str, ...] = (),
     blocker_damage: int = 0,
     blocker_keywords: tuple[str, ...] = (),
+    substep: str = "regular",
 ) -> tuple[StateSnapshot, EntityState]:
     blocker_ids = tuple(f"B{i}" for i in range(len(blockers)))
     carrier = _creature(
@@ -98,7 +109,7 @@ def _attacker_and_blockers(
         )
         for blocker_id, stats in zip(blocker_ids, blockers)
     )
-    return _board(carrier, *blocking), carrier
+    return _board(carrier, *blocking, substep=substep), carrier
 
 
 def _planeswalker() -> EntityState:
@@ -110,11 +121,15 @@ def _planeswalker() -> EntityState:
     )
 
 
-def _unblocked_attacker(power: int = 3, toughness: int = 3):
+def _unblocked_attacker(
+    power: int = 3, toughness: int = 3, *, substep: str = "regular",
+    keywords: tuple[str, ...] = (),
+):
     carrier = _creature(
-        "A", power, toughness, combat=CombatStatus(attacking="P1"),
+        "A", power, toughness, keywords=keywords,
+        combat=CombatStatus(attacking="P1"),
     )
-    return _board(carrier), carrier
+    return _board(carrier, substep=substep), carrier
 
 
 def _overlay_keywords(entity) -> set[str]:
@@ -179,6 +194,10 @@ class TestCombatParticipant:
         participant = combat_participant(state, state.entity("B0"))
         assert participant.defending_player is None
 
+    def test_it_carries_the_damage_step_the_record_covers(self):
+        state, carrier = _attacker_and_blockers(substep="first_strike")
+        assert combat_participant(state, carrier).combat_substep == "first_strike"
+
     def test_the_defending_player_survives_forges_defender_spelling(self):
         """Forge writes the defender object, not a player id."""
         carrier = _creature(
@@ -227,7 +246,8 @@ class TestDealsDamageAtAll:
         ["first_strike", "double_strike", "deathtouch", "lifelink", "wither",
          "infect"],
     )
-    def test_a_powerless_carrier_qualifies_for_nothing(self, keyword):
+    @pytest.mark.parametrize("substep", ["first_strike", "regular"])
+    def test_a_powerless_carrier_qualifies_for_nothing(self, keyword, substep):
         carrier = _creature(
             "A", 0, 3, keywords=(keyword,),
             combat=CombatStatus(attacking="P1", blocked_by=("B0",),
@@ -236,7 +256,8 @@ class TestDealsDamageAtAll:
         blocker = _creature(
             "B0", 1, 1, controller="P1", combat=CombatStatus(blocking=("A",)),
         )
-        assert not _qualifies(keyword, _board(carrier, blocker), carrier)
+        state = _board(carrier, blocker, substep=substep)
+        assert not _qualifies(keyword, state, carrier)
 
     def test_a_powerless_carrier_can_still_be_indestructible(self):
         """Indestructible is about damage coming in, not damage going out."""
@@ -246,146 +267,184 @@ class TestDealsDamageAtAll:
         assert _qualifies("indestructible", state, carrier)
 
 
-class TestFirstStrike:
-    def test_a_hit_that_kills_a_normal_timing_blocker_qualifies(self):
+_STRIKE_FIRST_ROWS = ["first_strike", "double_strike"]
+
+
+@pytest.mark.parametrize("keyword", _STRIKE_FIRST_ROWS)
+class TestStrikingFirst:
+    """First strike and double strike, read inside the first-strike step.
+
+    The two rows share every rule: within that step's record the carrier deals
+    its damage with the keyword and none without it, so what moves is the
+    creature or player on the receiving end of its hit.
+    """
+
+    def test_a_hit_on_a_lone_blocker_moves_its_damage(self, keyword):
+        """A 2/2 does not kill a 3/5, but the blocker still takes the 2."""
         state, carrier = _attacker_and_blockers(
-            attacker=(2, 2), blockers=((2, 2),),
+            attacker=(2, 2), blockers=((3, 5),), attacker_keywords=(keyword,),
+            substep="first_strike",
         )
-        assert _qualifies("first_strike", state, carrier)
+        assert _observable(keyword, state, carrier) == ["opponent.damage_taken"]
 
-    def test_a_blocker_the_hit_does_not_kill_does_not_qualify(self):
-        """It hits back in the regular step either way, so nothing moves."""
+    def test_a_lethal_hit_moves_its_death_too(self, keyword):
         state, carrier = _attacker_and_blockers(
-            attacker=(2, 2), blockers=((3, 5),),
+            attacker=(2, 2), blockers=((2, 2),), attacker_keywords=(keyword,),
+            substep="first_strike",
         )
-        assert not _qualifies("first_strike", state, carrier)
-
-    def test_damage_already_on_the_blocker_can_bring_it_into_range(self):
-        state, carrier = _attacker_and_blockers(
-            attacker=(2, 2), blockers=((3, 4),), blocker_damage=2,
-        )
-        assert _qualifies("first_strike", state, carrier)
-
-    def test_an_opponent_with_first_strike_disqualifies_it(self):
-        """Both hitting first is the same damage step again."""
-        state, carrier = _attacker_and_blockers(
-            blocker_keywords=("first_strike",),
-        )
-        assert not _qualifies("first_strike", state, carrier)
-
-    def test_an_opponent_with_double_strike_disqualifies_it(self):
-        state, carrier = _attacker_and_blockers(
-            blocker_keywords=("double_strike",),
-        )
-        assert not _qualifies("first_strike", state, carrier)
-
-    def test_several_blockers_make_the_assignment_unpredictable(self):
-        """Forge decides how a 3/3 splits three damage over two 2/2s, and the
-        table cannot, so neither carrier effect applies."""
-        state, carrier = _attacker_and_blockers(
-            attacker=(3, 3), blockers=((2, 2), (2, 2)),
-        )
-        assert _observable("first_strike", state, carrier) == []
-        assert not _qualifies("first_strike", state, carrier)
-
-    def test_a_deathtouch_carrier_kills_whatever_it_hits(self):
-        """One damage is lethal, so striking first saves even a 1/1."""
-        state, carrier = _attacker_and_blockers(
-            attacker=(1, 1), attacker_keywords=("first_strike", "deathtouch"),
-            blockers=((2, 2),),
-        )
-        assert _qualifies("first_strike", state, carrier)
-
-    def test_a_deathtouch_blocker_is_no_easier_to_kill(self):
-        """Deathtouch on the blocker makes the blocker deadlier, not frailer:
-        a 1/1 still fails to kill a 2/2 first, so nothing is saved."""
-        state, carrier = _attacker_and_blockers(
-            attacker=(1, 1), blockers=((2, 2),),
-            blocker_keywords=("deathtouch",),
-        )
-        assert not _qualifies("first_strike", state, carrier)
-
-    def test_a_blocker_with_no_power_could_never_have_killed_it(self):
-        """It kills the wall in the first step and takes nothing either way."""
-        state, carrier = _attacker_and_blockers(
-            attacker=(2, 2), blockers=((0, 2),),
-        )
-        assert _observable("first_strike", state, carrier) == []
-
-    def test_a_printed_keyword_on_the_opponent_counts_too(self):
-        """Printed first strike is most first strike; the overlay sees none."""
-        carrier = _creature(
-            "A", 2, 2, combat=CombatStatus(attacking="P1", blocked_by=("B0",)),
-        )
-        blocker = _creature(
-            "B0", 2, 2, controller="P1", printed=(_WHITE_KNIGHT,),
-            combat=CombatStatus(blocking=("A",)),
-        )
-        state = _board(carrier, blocker)
-        assert not _qualifies(
-            "first_strike", state, carrier, keywords_of=_printed_first_strike,
-        )
-        assert _qualifies("first_strike", state, carrier)
-
-    def test_an_unblocked_attacker_does_not_qualify(self):
-        """Nothing strikes back, so striking first changes nothing."""
-        state, carrier = _unblocked_attacker()
-        assert not _qualifies("first_strike", state, carrier)
-
-    def test_it_moves_the_carriers_damage_and_survival(self):
-        state, carrier = _attacker_and_blockers()
-        assert _observable("first_strike", state, carrier) == [
-            "carrier.damage_taken", "carrier.zone_outcome/died",
-        ]
-
-
-class TestDoubleStrike:
-    """Three groups, and which of them a combat can show is the whole rule."""
-
-    def test_a_first_hit_that_kills_shows_the_carrier_effects_only(self):
-        """The blocker dies to the first hit, so the second reaches nothing."""
-        state, carrier = _attacker_and_blockers(
-            attacker=(3, 3), blockers=((2, 2),),
-        )
-        assert _observable("double_strike", state, carrier) == [
-            "carrier.damage_taken", "carrier.zone_outcome/died",
-        ]
-
-    def test_a_blocker_that_survives_shows_the_opponent_effects_only(self):
-        state, carrier = _attacker_and_blockers(
-            attacker=(2, 2), blockers=((2, 5),),
-        )
-        assert _observable("double_strike", state, carrier) == [
+        assert _observable(keyword, state, carrier) == [
             "opponent.damage_taken", "opponent.zone_outcome/died",
         ]
 
-    def test_an_unblocked_double_striker_qualifies_through_the_player(self):
-        state, carrier = _unblocked_attacker()
-        assert _observable("double_strike", state, carrier) == [
+    def test_damage_already_on_the_blocker_can_bring_it_into_range(self, keyword):
+        state, carrier = _attacker_and_blockers(
+            attacker=(2, 2), blockers=((3, 4),), blocker_damage=2,
+            attacker_keywords=(keyword,), substep="first_strike",
+        )
+        assert "opponent.zone_outcome/died" in _observable(keyword, state, carrier)
+
+    def test_a_deathtouch_carrier_kills_whatever_it_hits(self, keyword):
+        state, carrier = _attacker_and_blockers(
+            attacker=(1, 1), blockers=((2, 9),),
+            attacker_keywords=(keyword, "deathtouch"), substep="first_strike",
+        )
+        assert "opponent.zone_outcome/died" in _observable(keyword, state, carrier)
+
+    def test_a_deathtouch_blocker_is_no_easier_to_kill(self, keyword):
+        """Deathtouch on the blocker makes it deadlier, not frailer."""
+        state, carrier = _attacker_and_blockers(
+            attacker=(1, 1), blockers=((2, 2),), attacker_keywords=(keyword,),
+            blocker_keywords=("deathtouch",), substep="first_strike",
+        )
+        assert _observable(keyword, state, carrier) == ["opponent.damage_taken"]
+
+    @pytest.mark.parametrize("opponent_keyword", _STRIKE_FIRST_ROWS)
+    def test_an_opponent_striking_first_too_changes_nothing(
+        self, keyword, opponent_keyword,
+    ):
+        """It deals its own damage in this step either way; the carrier's hit
+        lands here with the keyword and not without it all the same."""
+        state, carrier = _attacker_and_blockers(
+            attacker=(2, 2), blockers=((2, 2),), attacker_keywords=(keyword,),
+            blocker_keywords=(opponent_keyword,), substep="first_strike",
+        )
+        assert _observable(keyword, state, carrier) == [
+            "opponent.damage_taken", "opponent.zone_outcome/died",
+        ]
+
+    def test_an_opponent_with_no_power_changes_nothing(self, keyword):
+        """Nothing but a first striker deals damage in this step, so whether
+        the wall could have hit back is not this record's question."""
+        state, carrier = _attacker_and_blockers(
+            attacker=(2, 2), blockers=((0, 2),), attacker_keywords=(keyword,),
+            substep="first_strike",
+        )
+        assert _observable(keyword, state, carrier) == [
+            "opponent.damage_taken", "opponent.zone_outcome/died",
+        ]
+
+    def test_the_carriers_own_damage_is_never_read(self, keyword):
+        """In this step the opponent deals the same damage — none, or its own
+        first-strike hit — whatever the carrier keeps."""
+        for effect in KEYWORDS_BY_NAME[keyword].effects:
+            assert effect.subject is not Subject.CARRIER, effect.label
+
+    def test_a_blocker_hits_the_attacker_it_blocks(self, keyword):
+        state, _ = _attacker_and_blockers(
+            attacker=(3, 3), blockers=((2, 2),), blocker_keywords=(keyword,),
+            substep="first_strike",
+        )
+        blocker = state.entity("B0")
+        assert _observable(keyword, state, blocker) == ["opponent.damage_taken"]
+
+    def test_an_unblocked_attacker_moves_the_defending_players_life(self, keyword):
+        state, carrier = _unblocked_attacker(
+            keywords=(keyword,), substep="first_strike",
+        )
+        assert _observable(keyword, state, carrier) == [
             "defending_player.life_delta",
         ]
 
-    def test_a_blocker_whose_attacker_is_gone_shows_nothing(self):
+    def test_an_unblocked_attack_on_a_planeswalker_shows_nothing(self, keyword):
         carrier = _creature(
-            "B0", 2, 2, controller="P1", combat=CombatStatus(blocking=("A",)),
+            "A", 4, 4, keywords=(keyword,),
+            combat=CombatStatus(attacking="Chandra"),
         )
-        assert not _qualifies("double_strike", _board(carrier), carrier)
+        state = _board(carrier, _planeswalker(), substep="first_strike")
+        assert not _qualifies(keyword, state, carrier)
 
-    def test_several_blockers_show_nothing(self):
+    def test_several_blockers_make_the_assignment_unpredictable(self, keyword):
+        """Forge decides how a 3/3 splits three damage over two 2/2s."""
         state, carrier = _attacker_and_blockers(
             attacker=(3, 3), blockers=((2, 2), (2, 2)),
+            attacker_keywords=(keyword,), substep="first_strike",
         )
-        assert _observable("double_strike", state, carrier) == []
+        assert _observable(keyword, state, carrier) == []
 
-    def test_a_deathtouch_double_striker_kills_with_its_first_hit(self):
-        """So the second hit reaches nothing, whatever the blocker toughness."""
-        state, carrier = _attacker_and_blockers(
-            attacker=(1, 1), attacker_keywords=("double_strike", "deathtouch"),
-            blockers=((2, 9),),
+    def test_a_blocker_whose_attacker_is_gone_shows_nothing(self, keyword):
+        carrier = _creature(
+            "B0", 2, 2, controller="P1", keywords=(keyword,),
+            combat=CombatStatus(blocking=("A",)),
         )
-        assert _observable("double_strike", state, carrier) == [
-            "carrier.damage_taken", "carrier.zone_outcome/died",
-        ]
+        state = _board(carrier, substep="first_strike")
+        assert not _qualifies(keyword, state, carrier)
+
+    @pytest.mark.parametrize("shape", ["blocked", "unblocked", "blocker"])
+    def test_a_regular_step_record_never_qualifies(self, keyword, shape):
+        """The first strike already landed; the regular step's board carries
+        it, so nothing in that record turns on the keyword."""
+        if shape == "unblocked":
+            state, carrier = _unblocked_attacker(keywords=(keyword,))
+        elif shape == "blocked":
+            state, carrier = _attacker_and_blockers(
+                attacker=(2, 2), blockers=((2, 2),),
+                attacker_keywords=(keyword,),
+            )
+        else:
+            state, _ = _attacker_and_blockers(
+                attacker=(2, 2), blockers=((2, 2),),
+                blocker_keywords=(keyword,),
+            )
+            carrier = state.entity("B0")
+        assert state.global_.combat_substep == "regular"
+        assert _observable(keyword, state, carrier) == []
+
+    def test_a_record_with_no_substep_never_qualifies(self, keyword):
+        state, carrier = _unblocked_attacker(
+            keywords=(keyword,), substep="first_strike",
+        )
+        state = dataclasses.replace(
+            state,
+            global_=dataclasses.replace(state.global_, combat_substep=None),
+        )
+        assert not _qualifies(keyword, state, carrier)
+
+
+class TestTheOtherStrikeFirstKeyword:
+    """Stripping one keyword from a creature the other still puts in the
+    first-strike step moves nothing, so the row does not read it."""
+
+    @pytest.mark.parametrize(
+        "stripped, kept",
+        [("first_strike", "double_strike"), ("double_strike", "first_strike")],
+    )
+    def test_the_other_keyword_keeps_it_striking_first(self, stripped, kept):
+        state, carrier = _unblocked_attacker(
+            keywords=(stripped, kept), substep="first_strike",
+        )
+        assert not _qualifies(stripped, state, carrier)
+
+    def test_a_printed_first_strike_is_found_through_the_resolver(self):
+        """Printed first strike is most first strike; the overlay sees none."""
+        carrier = _creature(
+            "A", 2, 2, keywords=("double_strike",), printed=(_WHITE_KNIGHT,),
+            combat=CombatStatus(attacking="P1"),
+        )
+        state = _board(carrier, substep="first_strike")
+        assert _qualifies("double_strike", state, carrier)
+        assert not _qualifies(
+            "double_strike", state, carrier, keywords_of=_printed_first_strike,
+        )
 
 
 class TestLifelink:
@@ -581,17 +640,43 @@ class TestTheTableIsTheSingleSource:
             for effect in row.effects:
                 assert callable(effect.applies), f"{row.keyword}/{effect.field}"
 
-    def test_a_row_qualifies_exactly_when_an_effect_is_observable(self):
-        state, carrier = _attacker_and_blockers()
+    @pytest.mark.parametrize("substep", ["first_strike", "regular"])
+    def test_a_row_qualifies_exactly_when_an_effect_is_observable(self, substep):
+        state, carrier = _attacker_and_blockers(substep=substep)
         for keyword in KEYWORDS_BY_NAME:
             assert _qualifies(keyword, state, carrier) == bool(
                 _observable(keyword, state, carrier)
             ), keyword
 
+    @pytest.mark.parametrize(
+        "keyword",
+        ["deathtouch", "lifelink", "trample", "indestructible", "wither",
+         "infect"],
+    )
+    @pytest.mark.parametrize(
+        "shape",
+        [
+            {"attacker": (4, 2), "blockers": ((1, 3),)},
+            {"attacker": (1, 2), "blockers": ((3, 3),)},
+        ],
+    )
+    def test_the_other_rows_read_either_damage_step_alike(self, keyword, shape):
+        """Only the two strike-first rows turn on which step a record covers."""
+        observed = []
+        for substep in ("first_strike", "regular"):
+            state, carrier = _attacker_and_blockers(**shape, substep=substep)
+            observed.append(_observable(keyword, state, carrier))
+        unblocked = [
+            _observable(keyword, *_unblocked_attacker(substep=substep))
+            for substep in ("first_strike", "regular")
+        ]
+        assert observed[0] == observed[1]
+        assert unblocked[0] == unblocked[1]
+
     def test_a_row_names_each_head_field_once(self):
-        """Double strike reads damage_taken on both sides of the combat."""
-        assert KEYWORDS_BY_NAME["double_strike"].fields == (
-            "damage_taken", "zone_outcome", "life_delta",
+        """Infect reads two fields on the creature and two on the player."""
+        assert KEYWORDS_BY_NAME["infect"].fields == (
+            "counters_delta_m1m1", "damage_taken", "poison_delta", "life_delta",
         )
 
     def test_the_participant_is_frozen(self):

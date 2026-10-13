@@ -286,6 +286,23 @@ before this phase is complete.
 
 ---
 
+## Phase 11: Corrections after the first sweep arm
+
+**Goal**: the input vocabularies read the collector's names, the board's amounts and `e`'s stated amounts are comparable by one dot product, and gate 2 and the knowledge probes measure what they claim. Rationale: the gen-2 record's section on corrected inputs.
+
+**Independent Test**: a checkpoint recording no `input_layout` gives the same features and outputs as before; a `"gen-2"` checkpoint's features show the mapped names and the thermometer codes on real records; gate 2's first-strike rows qualify first-strike-step records only.
+
+- [ ] T133 [US5] Input layout in `src/effects/domain/effect_head_input.py` (FR-063c): `INPUT_LAYOUT_KEY`/`INPUT_LAYOUT` beside the tokenizer-rules precedent; `global_features`, `player_features`, `card_features` and `build_effect_head_input` take the layout; under `"gen-2"` the phase, counter and keyword aliases, the appended `landwalk` member, and thermometer codes (power, toughness, toughness minus damage; player life); a missing layout keeps every function's output unchanged
+- [ ] T134 [US5] Thread the layout: `SurfaceBatcher` holds it and passes it to `build_effect_head_input`; training's batchers and widths use `"gen-2"` and `_training_settings` records it; `model_runner.feature_widths`/`load_runnable` read it from the checkpoint (absent = earlier layout); `training_loop._feature_widths` uses it
+- [ ] T135 [US5] Tests in `tests/unit/effects/domain/test_effect_head_input.py`: under the earlier layout a real record's features are unchanged; under `"gen-2"` each alias reaches its slot and the thermometer codes read power, toughness, remaining toughness and life; a checkpoint without the key loads with the earlier widths
+- [ ] T136 [US5] At-least targets (FR-058b): `AT_LEAST_STEPS = 40`, equal to `THERMOMETER_STEPS` and `MAGNITUDE_CAP` and the at-least block in the value head's output (`src/effects/domain/effect_model.py` `VALUE_SLICES`/`VALUE_WIDTH`), its binary cross-entropy in `value_loss` under each amount's mask; tests in `tests/unit/effects/domain/test_effect_model.py`
+- [ ] T137 [US6] Gate 2's first-strike and double-strike rows per damage step in `src/effects/domain/damage_step_keywords.py` (FR-069a); tests beside the existing gate-2 tests
+- [ ] T138 [US7] Cap amount labels at `MAGNITUDE_CAP` in `scripts/effect_knowledge_probes/labels.py` (FR-077a); the affordability sweep in `scripts/effect_knowledge_probes/sweeps.py` sets the acting player's lands to match the edited production (FR-084); tests in `tests/unit/scripts/test_effect_knowledge_probes.py`
+- [ ] T139 Update `src/effects/CLAUDE.md` with the input layout and the at-least targets; full verification as in T128
+- [ ] T140 Retrain arm `e64` with `--freeze-probe-set` on the corrected inputs, then continue the sweep (T131)
+
+---
+
 ## Dependencies & Execution Order
 
 ### Phase dependencies

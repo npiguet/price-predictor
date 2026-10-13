@@ -94,6 +94,8 @@ from effects.domain.ability_tokenizer import (
     TOKENIZER_RULES_KEY,
 )
 from effects.domain.effect_head_input import (
+    INPUT_LAYOUT,
+    INPUT_LAYOUT_KEY,
     SlotKind,
     act_features,
     card_features,
@@ -743,6 +745,7 @@ class TrainingLoop(StepPreparation):
             "api_types": list(self.api_types),
             "param_keys": list(self.param_keys),
             TOKENIZER_RULES_KEY: TOKENIZER_RULES,
+            INPUT_LAYOUT_KEY: INPUT_LAYOUT,
         }
 
     # ── the run ─────────────────────────────────────────────────────────

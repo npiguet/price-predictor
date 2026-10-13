@@ -43,6 +43,7 @@ from effects.domain.ability_tokenizer import (
     tokenizer_surface,
 )
 from effects.domain.effect_head_input import (
+    INPUT_LAYOUT_KEY,
     SlotKind,
     act_features,
     card_features,
@@ -74,11 +75,16 @@ def build_sidecars(config) -> SidecarCache:
     ))
 
 
-def feature_widths(records) -> dict[SlotKind, int]:
+def input_layout_of(checkpoint) -> str | None:
+    """The input layout a checkpoint trained on; None for one that recorded none (FR-063c)."""
+    return (checkpoint.training_settings or {}).get(INPUT_LAYOUT_KEY)
+
+
+def feature_widths(records, layout: str | None) -> dict[SlotKind, int]:
     """Measure each slot kind's width from real records, as training does."""
     probe = records[0]
     widths = {
-        SlotKind.GLOBAL: len(global_features(probe)),
+        SlotKind.GLOBAL: len(global_features(probe, layout=layout)),
         SlotKind.ACT: len(act_features(probe)),
         SlotKind.PLAYER: 0,
         SlotKind.CARD: 0,
@@ -86,11 +92,11 @@ def feature_widths(records) -> dict[SlotKind, int]:
     for record in records:
         if record.state.players:
             widths[SlotKind.PLAYER] = len(
-                player_features(record.state.players[0], record)
+                player_features(record.state.players[0], record, layout=layout)
             )
         if record.state.entities:
             widths[SlotKind.CARD] = len(
-                card_features(record.state.entities[0], record)
+                card_features(record.state.entities[0], record, layout=layout)
             )
         if widths[SlotKind.PLAYER] and widths[SlotKind.CARD]:
             break
@@ -152,13 +158,17 @@ def load_runnable(
                 checkpoint.variant,
             )
 
+    # The inputs the checkpoint learned on: a gen-1 checkpoint, or a gen-2 arm
+    # trained before the layout was recorded, reads the earlier layout bit for
+    # bit (FR-063c).
+    layout = input_layout_of(checkpoint)
     batcher = SurfaceBatcher(
         tokenizer=tokenizer,
         sidecars=build_sidecars(config),
         masks=masks,
         surface=surface_of(vocab_path),
         e_dim=checkpoint.encoder_config.e_dim,
-        widths=feature_widths(records),
+        widths=feature_widths(records, layout),
         device=device,
         withhold_keyword=checkpoint.provenance.withheld_keyword,
         # Both are training-time augmentations. Sampling them at evaluation
@@ -168,6 +178,7 @@ def load_runnable(
         rng=random.Random(RANDOM_SEED),
         identity_table=identity_table,
         truncations=TruncationLog(log_truncation(logger, "evaluation")),
+        input_layout=layout,
     )
     fields = active_fields(
         present_classes=frozenset(sampling_class(r) for r in records),

@@ -888,6 +888,63 @@ class TestGen2Heads:
         assert float(value_loss(prediction, target, none)) == 0.0
         assert float(value_loss(prediction, target, ~none)) > 0.0
 
+    def test_at_least_bits_read_the_magnitude(self):
+        from effects.domain.effect_model import AT_LEAST_STEPS, at_least_targets
+
+        bits = at_least_targets(torch.tensor([0.0, 3.0, -2.0, 45.0]))
+        assert bits.shape == (4, AT_LEAST_STEPS)
+        assert bits[0].sum() == 0
+        assert bits[1].tolist()[:4] == [1.0, 1.0, 1.0, 0.0]
+        assert bits[2].sum() == 2  # a signed amount reads by its magnitude
+        assert bits[3].sum() == AT_LEAST_STEPS
+
+    def test_the_at_least_steps_the_thermometer_and_the_cap_agree(self):
+        # One scale on both sides of a comparison: the board's thermometer, the
+        # value head's at-least bits and the magnitude every amount is scored at.
+        from effects.domain.effect_head_input import THERMOMETER_STEPS
+        from effects.domain.effect_model import AT_LEAST_STEPS, MAGNITUDE_CAP
+
+        assert THERMOMETER_STEPS == AT_LEAST_STEPS == MAGNITUDE_CAP
+
+    def test_every_amount_has_an_at_least_block_and_no_cost_flag_does(self):
+        from effects.domain.effect_model import (
+            AT_LEAST_SLICES,
+            AT_LEAST_STEPS,
+            VALUE_SLICES,
+            VALUE_WIDTH,
+        )
+        from effects.domain.value_targets import VALUE_TARGETS, ValueKind
+
+        amounts = {n for n, kind in VALUE_TARGETS if kind is not ValueKind.BINARY}
+        assert set(AT_LEAST_SLICES) == amounts
+        # The earlier blocks are a prefix: the at-least blocks follow them all.
+        first = min(start for start, _ in AT_LEAST_SLICES.values())
+        assert first == max(end for _, end in VALUE_SLICES.values())
+        assert VALUE_WIDTH == first + len(amounts) * AT_LEAST_STEPS
+
+    def test_the_value_loss_scores_the_at_least_bits(self):
+        from effects.domain.effect_model import (
+            AT_LEAST_SLICES,
+            VALUE_WIDTH,
+            at_least_targets,
+            value_loss,
+        )
+        from effects.domain.value_targets import VALUE_TARGET_NAMES
+
+        damage = VALUE_TARGET_NAMES.index("damage")
+        target = torch.zeros(1, len(VALUE_TARGET_NAMES))
+        target[0, damage] = 3.0
+        mask = torch.zeros(1, len(VALUE_TARGET_NAMES), dtype=torch.bool)
+        mask[0, damage] = True
+        start, end = AT_LEAST_SLICES["damage"]
+        right = torch.zeros(1, VALUE_WIDTH)
+        right[0, start:end] = 20.0 * (2 * at_least_targets(torch.tensor([3.0]))[0] - 1)
+        wrong = right.clone()
+        wrong[0, start:end] = -wrong[0, start:end]
+        assert float(value_loss(right, target, mask)) < float(
+            value_loss(wrong, target, mask)
+        )
+
     def test_the_api_loss_skips_a_line_with_no_api_type(self):
         logits = torch.randn(2, 5)
         alone = api_loss(logits, torch.tensor([-1, -1]), None, None)

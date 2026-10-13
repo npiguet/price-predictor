@@ -484,6 +484,28 @@ the text, until the class quota is met.
   whether the cost taps and whether it sacrifices, as binary targets. A target is masked
   where the script states no fixed value. The head is filtered out at save time, like the
   MLM and script-API heads.
+- At-least targets. For each amount target, the value head also predicts whether the
+  amount's magnitude is at least k, for k = 1 to 40, each as a binary target under the
+  amount's mask, beside the amount's count or signed loss. The forty are averaged, so each
+  amount's block weighs as one binary target. A magnitude above 40 sets all forty.
+- Input layout. The model's inputs map the names the collector writes onto its fixed
+  vocabularies, and carry thermometer codes of the board's amounts:
+
+  | Input | Collector's name | Model's slot |
+  |---|---|---|
+  | phase | `combat_begin`, `combat_declare_attackers`, `combat_declare_blockers`, `combat_first_strike_damage`, `combat_end` | `begin_combat`, `declare_attackers`, `declare_blockers`, `first_strike_damage`, `end_combat` |
+  | counter type | `+1/+1`, `-1/-1` | `P1P1`, `M1M1` |
+  | keyword | `protection_from_<colour>` | `protection` |
+  | keyword | `landwalk` | `landwalk`, a slot appended to the keyword list |
+
+  - A thermometer code of a value n is 40 positions, the magnitude cap, position k set when
+    n ≥ k.
+  - Each card slot carries thermometer codes of its total power, its total toughness, and its
+    total toughness minus its marked damage; each player slot carries one of its life. An
+    entity with no power and toughness carries zeros.
+  - The checkpoint records `input_layout = gen-2` in its training settings. A checkpoint that
+    records none loads with the earlier layout: no name mapping, no thermometer codes, no
+    landwalk slot.
 - Cost targets. The value head reads cost targets from the line's `Cost$` only. A card's
   mana cost covers the whole card, so no line's encoding text gains the face's
   `ManaCost`, and a spell line's mana-cost targets are masked even where its `Cost$`
@@ -539,6 +561,11 @@ the text, until the class quota is met.
   records where that keyword is on the acting line or carried by an entity, beside the
   same fields over records carrying trained keywords.
 - Gate 1 reports as skipped when no `--variant-checkpoint identity` is given.
+- Gate 2's first strike and double strike rows read first-strike-step combat records only
+  (`combat_substep = first_strike`). Each scores what the carrier does in that step to
+  whoever it fights: the blocker's damage taken, and its death where the hit is lethal, or
+  the defending player's life when the carrier is unblocked. With the keyword the carrier
+  deals that damage, and without it, none.
 
 `--win-rates PATH` (default `output/sealed/cards-win-rates.txt`) names the per-card
 win-rate file the decodability battery reads.
@@ -574,6 +601,8 @@ train-scorer` Phase A against that directory as a subprocess. It never writes un
   non-mana costs, interactions, side, evasion and blocking, target legality, duration and
   repeatability, and state dependence. The probes record gives each family's targets and
   label sources.
+- Every amount label is capped at a magnitude of 40, its sign kept, as the model's targets
+  are.
 - For a board-dependent target, the ladder's rungs are:
 
   | Rung | Input |
@@ -603,7 +632,7 @@ train-scorer` Phase A against that directory as a subprocess. It never writes un
   | Sweep | Edited input | Read |
   |---|---|---|
   | toughness | one target creature's toughness, 1 to 8 | that creature's predicted death |
-  | affordability | the acting player's untapped production, none to more than the cost | the predicted affordable verdict |
+  | affordability | the acting player's untapped production, none to more than the cost, with the player's lands untapped or tapped to match | the predicted affordable verdict |
   | board size | opposing creature count, 0 to 8, by copying a creature entity | predicted deaths summed over the board |
   | damage | `NumDmg$` of the acting text, 1 to 8, on a spell and on a triggered ability, each encoded by the checkpoint's encoder | the toughness-4 target's predicted death |
 

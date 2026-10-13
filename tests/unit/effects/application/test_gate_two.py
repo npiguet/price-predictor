@@ -47,7 +47,11 @@ from effects.domain.damage_step_keywords import (
     Subject,
     combat_participant,
 )
-from effects.domain.effect_head_input import OVERLAY_KEYWORDS, SlotKind
+from effects.domain.effect_head_input import (
+    OVERLAY_KEYWORDS_GEN2,
+    THERMOMETER_STEPS,
+    SlotKind,
+)
 from effects.domain.effect_model import (
     FIELD_SLICES,
     FIELDS_BY_NAME,
@@ -115,15 +119,24 @@ def _creature(
     )
 
 
-def _combat_record(*entities: EntityState, game: str = "g1") -> EffectRecord:
+#: Each damage step's phase, keyed by its substep, as a real record spells them.
+_STEPS = {
+    "first_strike": "combat_first_strike_damage",
+    "regular": "combat_damage",
+}
+
+
+def _combat_record(
+    *entities: EntityState, game: str = "g1", substep: str = "regular",
+) -> EffectRecord:
     return EffectRecord(
         record_id=f"{game}.1", run_id="run", timestamp="t", game_id=game,
         kind=RecordKind.COMBAT, actor_player="P0",
         payload=CombatPayload(attackers=("A",)),
         state=StateSnapshot(
             global_=GlobalState(
-                turn=4, phase="combat_damage", active="P0", priority="P0",
-                stack_size=0, combat_substep="regular",
+                turn=4, phase=_STEPS[substep], active="P0", priority="P0",
+                stack_size=0, combat_substep=substep,
             ),
             players=(
                 PlayerState(id="P0", life=20, hand=3, library=30, graveyard=1),
@@ -134,8 +147,14 @@ def _combat_record(*entities: EntityState, game: str = "g1") -> EffectRecord:
     )
 
 
-def _printed_board(game: str = "g1") -> EffectRecord:
-    """The attacker prints first strike; the blocker prints nothing relevant."""
+def _printed_board(
+    game: str = "g1", substep: str = "first_strike",
+) -> EffectRecord:
+    """The attacker prints first strike; the blocker prints nothing relevant.
+
+    The first-strike step's record by default, the one record the first-strike
+    row reads: the attacker's 2 damage lands on the 2/2 blocker and kills it.
+    """
     attacker = _creature(
         "A", 2, 2, printed=(_FIRST_STRIKE, _PUMP),
         combat=CombatStatus(attacking="P1", blocked_by=("B0",), became_blocked=True),
@@ -144,7 +163,7 @@ def _printed_board(game: str = "g1") -> EffectRecord:
         "B0", 2, 2, controller="P1", printed=(_OTHER,),
         combat=CombatStatus(blocking=("A",)),
     )
-    return _combat_record(attacker, blocker, game=game)
+    return _combat_record(attacker, blocker, game=game, substep=substep)
 
 
 def _overlay_board(game: str = "g1") -> EffectRecord:
@@ -157,7 +176,7 @@ def _overlay_board(game: str = "g1") -> EffectRecord:
         "B0", 2, 2, controller="P1", printed=(_OTHER,),
         combat=CombatStatus(blocking=("A",)),
     )
-    return _combat_record(attacker, blocker, game=game)
+    return _combat_record(attacker, blocker, game=game, substep="first_strike")
 
 
 def _batcher() -> SurfaceBatcher:
@@ -292,14 +311,15 @@ def _overlay_column(features: tuple[float, ...], keyword: str) -> float:
     """Read one overlay-keyword bit out of a ``[CARD]`` slot's features.
 
     The multi-hot is followed by a fixed tail (granted-ability count, three
-    relation flags, the stack block and the two per-kind overlays), so the
-    block's position is found by counting back from the end rather than by
-    re-deriving every field ahead of it.
+    relation flags, the stack block, the two per-kind overlays and the gen-2
+    layout's three thermometer codes), so the block's position is found by
+    counting back from the end rather than by re-deriving every field ahead of
+    it.
     """
-    tail = 2 + 3 + 6 + 3 + 2
+    tail = 2 + 3 + 6 + 3 + 2 + 3 * THERMOMETER_STEPS
     end = len(features) - tail
-    start = end - (len(OVERLAY_KEYWORDS) + 1)
-    return features[start + OVERLAY_KEYWORDS.index(keyword)]
+    start = end - (len(OVERLAY_KEYWORDS_GEN2) + 1)
+    return features[start + OVERLAY_KEYWORDS_GEN2.index(keyword)]
 
 
 class _NoEncoder:
@@ -381,11 +401,11 @@ def _participant(record, entity_id: str):
 class TestScoreObservation:
     """Which effects a combat can show, and whether each moved the right way."""
 
-    def _first_strike(self, carrier_damage_base, carrier_damage_stripped):
+    def _first_strike(self, opponent_damage_base, opponent_damage_stripped):
         record = _printed_board()
         participant = _participant(record, "A")
-        base = {"A": _vector(damage_taken=math.log(carrier_damage_base))}
-        stripped = {"A": _vector(damage_taken=math.log(carrier_damage_stripped))}
+        base = {"B0": _vector(damage_taken=math.log(opponent_damage_base))}
+        stripped = {"B0": _vector(damage_taken=math.log(opponent_damage_stripped))}
         # Only the damage effect, so the zone effect cannot decide the verdict.
         row = _only(KEYWORDS_BY_NAME["first_strike"], "damage_taken")
         return score_observation(
@@ -394,15 +414,16 @@ class TestScoreObservation:
         )
 
     def test_a_change_in_the_rules_direction_agrees(self):
-        """First strike means less damage comes back, so present < absent."""
-        agreed, per_effect = self._first_strike(1.0, 3.0)
+        """With first strike the carrier's hit lands in this step, so the
+        blocker takes more with it than without: present > absent."""
+        agreed, per_effect = self._first_strike(3.0, 1.0)
         assert agreed
-        assert per_effect == {"carrier.damage_taken": True}
+        assert per_effect == {"opponent.damage_taken": True}
 
     def test_a_change_the_other_way_disagrees(self):
-        agreed, per_effect = self._first_strike(3.0, 1.0)
+        agreed, per_effect = self._first_strike(1.0, 3.0)
         assert not agreed
-        assert per_effect == {"carrier.damage_taken": False}
+        assert per_effect == {"opponent.damage_taken": False}
 
     def test_no_change_at_all_disagrees(self):
         """A model that ignored the keyword is not a model that got it right."""
@@ -412,15 +433,15 @@ class TestScoreObservation:
     def test_every_effect_must_agree(self):
         record = _printed_board()
         participant = _participant(record, "A")
-        base = {"A": _zone_and_damage(damage=1.0, died_logit=1.0)}
-        stripped = {"A": _zone_and_damage(damage=3.0, died_logit=0.0)}
+        base = {"B0": _zone_and_damage(damage=3.0, died_logit=0.0)}
+        stripped = {"B0": _zone_and_damage(damage=1.0, died_logit=1.0)}
         agreed, per_effect = score_observation(
             KEYWORDS_BY_NAME["first_strike"], participant, base, stripped,
             fields=_FIELDS, keywords_of=_overlay_keywords,
         )
         # Damage moved the right way; the death probability moved the wrong way.
         assert per_effect == {
-            "carrier.damage_taken": True, "carrier.zone_outcome/died": False,
+            "opponent.damage_taken": True, "opponent.zone_outcome/died": False,
         }
         assert not agreed
 
@@ -475,13 +496,13 @@ class TestScoreObservation:
         without_damage = tuple(
             spec for spec in PER_ENTITY_FIELDS if spec.name != "damage_taken"
         )
-        base = {"A": _zone_and_damage(damage=3.0, died_logit=0.0)}
-        stripped = {"A": _zone_and_damage(damage=1.0, died_logit=1.0)}
+        base = {"B0": _zone_and_damage(damage=3.0, died_logit=1.0)}
+        stripped = {"B0": _zone_and_damage(damage=1.0, died_logit=0.0)}
         _agreed, per_effect = score_observation(
             KEYWORDS_BY_NAME["first_strike"], participant, base, stripped,
             fields=without_damage, keywords_of=_overlay_keywords,
         )
-        assert set(per_effect) == {"carrier.zone_outcome/died"}
+        assert set(per_effect) == {"opponent.zone_outcome/died"}
 
 
 def _overlay_keywords(entity) -> set[str]:
@@ -545,7 +566,8 @@ class TestSubjectResolution:
     def test_the_carrier_is_itself(self):
         record = _printed_board()
         participant = _participant(record, "A")
-        effect = KEYWORDS_BY_NAME["first_strike"].effects[0]
+        effect = KEYWORDS_BY_NAME["indestructible"].effects[0]
+        assert effect.subject is Subject.CARRIER
         assert subject_id(effect, participant) == "A"
 
     def test_the_opponent_is_the_first_creature_it_fights(self):
@@ -587,6 +609,34 @@ class TestQualifyingObservations:
         )
         assert len(found) == 1
 
+    @pytest.mark.parametrize("keyword", ["first_strike", "double_strike"])
+    def test_a_regular_step_record_is_never_a_strike_first_observation(
+        self, keyword,
+    ):
+        """The first striker already struck; that step's own record is the one
+        the keyword changes, and the regular step's board starts after it."""
+        attacker = _creature(
+            "A", 2, 2, keywords=(keyword,),
+            combat=CombatStatus(attacking="P1", blocked_by=("B0",),
+                                became_blocked=True),
+        )
+        blocker = _creature(
+            "B0", 2, 2, controller="P1", combat=CombatStatus(blocking=("A",)),
+        )
+        unblocked = _creature(
+            "A", 2, 2, keywords=(keyword,), combat=CombatStatus(attacking="P1"),
+        )
+        rows = (KEYWORDS_BY_NAME[keyword],)
+        for record in (
+            _combat_record(attacker, blocker),
+            _combat_record(unblocked),
+            _printed_board(substep="regular"),
+        ):
+            assert record.state.global_.combat_substep == "regular"
+            assert qualifying_observations(
+                record, rows, KeywordResolver(_Sidecars()),
+            ) == []
+
     def test_a_carrier_the_predicate_rejects_is_not_an_observation(self):
         """Trample on a 2/2 blocked by a 2/2 runs nothing over."""
         attacker = _creature(
@@ -604,24 +654,24 @@ class TestQualifyingObservations:
         assert found == []
 
     def test_an_unblocked_double_striker_is_still_an_observation(self):
-        """It hits the player twice, which the row carries as a life effect."""
+        """Its first hit lands on the player, which the row reads as life."""
         attacker = _creature(
             "A", 2, 2, keywords=("double_strike",),
             combat=CombatStatus(attacking="P1"),
         )
-        record = _combat_record(attacker)
+        record = _combat_record(attacker, substep="first_strike")
         found = qualifying_observations(
             record, (KEYWORDS_BY_NAME["double_strike"],), KeywordResolver(None),
         )
         assert len(found) == 1
 
     def test_an_observation_with_nothing_readable_is_not_counted(self):
-        """A 0-power double striker deals no damage twice."""
+        """A 0-power double striker deals no damage in either step."""
         attacker = _creature(
             "A", 0, 4, keywords=("double_strike",),
             combat=CombatStatus(attacking="P1"),
         )
-        record = _combat_record(attacker)
+        record = _combat_record(attacker, substep="first_strike")
         found = qualifying_observations(
             record, (KEYWORDS_BY_NAME["double_strike"],), KeywordResolver(None),
         )
@@ -684,12 +734,15 @@ class TestCounting:
 
 
 class _AbilityCountingModel:
-    """A stand-in whose every output falls as the entity keeps more abilities.
+    """A stand-in whose predicted damage and death rise with the record's
+    ability count.
 
     Not a model of anything — it exists so the scorer's two builds differ in a
     way that is a function of the perturbation and nothing else, which is what
     makes an agreement number here a test of the wiring rather than of a
-    randomly initialised head.
+    randomly initialised head. The build that keeps the keyword keeps one more
+    ability, so it predicts more damage and a likelier death, which is the way
+    first strike moves its opponent.
     """
 
     def eval(self):
@@ -701,9 +754,11 @@ class _AbilityCountingModel:
     def per_entity(self, batch):
         slot_kinds = batch["slot_kinds"]
         abilities = (slot_kinds == int(SlotKind.ABILITY)).sum(dim=1).float()
-        ramp = torch.arange(1, PER_ENTITY_WIDTH + 1, dtype=torch.float32)
-        row = -0.5 * abilities[:, None, None] * ramp[None, None, :]
-        return row.expand(-1, slot_kinds.shape[1], -1)
+        row = torch.zeros(slot_kinds.shape[0], PER_ENTITY_WIDTH)
+        row[:, FIELD_SLICES["damage_taken"][0]] = 0.5 * abilities
+        died = FIELD_SLICES["zone_outcome"][0] + ZONE_OUTCOMES.index("died")
+        row[:, died] = 0.5 * abilities
+        return row[:, None, :].expand(-1, slot_kinds.shape[1], -1)
 
 
 class TestScoreKeywords:
@@ -726,7 +781,7 @@ class TestScoreKeywords:
             fields=_FIELDS,
         )
         assert set(scores["first_strike"].per_field) == {
-            "carrier.damage_taken", "carrier.zone_outcome/died",
+            "opponent.damage_taken", "opponent.zone_outcome/died",
         }
 
     def test_a_keyword_no_record_qualifies_for_scores_nothing(self):

@@ -1434,7 +1434,7 @@ The arm's `e` spreads over more than twice as many effective dimensions as gen-1
 | noise pilot 0.1, 3 epochs | 0.482 | 25.7% | 7.07 |
 | arm `e64`, 15 epochs | 0.462 | 21.0% | 9.23 |
 
-##### Gate 2 passes five of the eight damage-step keywords, and first strike is the one the model has learned least
+##### Gate 2 passes five of the eight damage-step keywords, and scores first strike and double strike on records that cannot show their effect
 
 Deathtouch, trample, indestructible and infect pass, where gen-1 had too few records to judge them. Gate 2 asks whether the model's predictions move the way a damage-step keyword moves the real outcome, on the game-disjoint stratum. It passes a keyword at 70% direction agreement over at least 200 qualifying records. Gen-2's random seat and its larger stratum bring every keyword but wither past 200 records, so first strike and double strike are now judged on agreement, and both fall short.
 
@@ -1449,7 +1449,7 @@ Deathtouch, trample, indestructible and infect pass, where gen-1 had too few rec
 | first strike | 707 | 31.5% | to a probe | 40.4% |
 | wither | 142 | 65.5% | too few records | 81.8% |
 
-First strike fails on the carrier's death. The model gets the direction of the carrier's damage taken right 77% of the time and of its death 37% of the time: it does not predict that a first striker kills its blocker before the blocker strikes back. Double strike falls short on the carrier's death, at 57%, and on the defending player's life, at 67%.
+The first-strike and double-strike rows measure an effect no single record can show. Combat damage is recorded one record per damage step. The first-strike row expects a first striker to take less damage and die less often. In the first-strike step, the creature it fights deals no damage with the keyword or without it. In the regular step, the first striker has already struck and does not strike again. The row's rule never reads the step, and in a sample of 60 shards 19 of its 23 qualifying cases are regular-step records after the first strike had landed. In one, Squall, Gunblade Duelist has already put 3 damage on a 5/5 token, the rule counts the token's 2 remaining toughness as a kill, and the token kills Squall. The two rows therefore say nothing about the model; the next section rescores them by step.
 
 ##### The embedding probes read the API type, the mana cost and the amounts from `e` far better than gen-1's
 
@@ -1465,3 +1465,34 @@ Linear probes over the whole cache recover what kind of ability a line is and it
 | life amount, R² | 0.086 | 0.362 |
 | cards amount, R² | 0.190 | 0.339 |
 | power amount, R² | 0.321 | 0.369 |
+
+#### The model's inputs are corrected and its amounts given a comparable form, and arm `e64` trains again on them
+
+Arm `e64` exposed two faults in what the effect model reads. Three of its input vocabularies miss names the collector writes, and the amounts it compares reach the trunk in forms a threshold cannot be read from. Gen-2 corrects both before the sweep continues, and arm `e64` trains again under its first settings. Every correction is computed from fields the records already hold, so the corpus is neither collected nor built again. The first run above stays as the record of the uncorrected inputs.
+
+##### Three input vocabularies miss the names the collector writes
+
+The model one-hot encodes a record's phase, a permanent's counters and its keywords against fixed lists of names, with a final slot for any other value. Five of the thirteen phases, the +1/+1 and -1/-1 counters and two evasion keywords are spelled differently in the records, so each lands in that final slot. A beginning-of-combat trigger, an attack declaration and an end-of-combat trigger then share one phase input, and a +1/+1 counter reads like a spore counter. The share below is over 467,200 records from the three main collection runs.
+
+| input | the model's names | the collector's names | share falling to "other" |
+|---|---|---|---:|
+| phase | `begin_combat`, `declare_attackers`, `declare_blockers`, `first_strike_damage`, `end_combat` | `combat_begin`, `combat_declare_attackers`, `combat_declare_blockers`, `combat_first_strike_damage`, `combat_end` | 35% of records |
+| counter type | `P1P1`, `M1M1` | `+1/+1`, `-1/-1` | 58% of counters |
+| keyword | `protection`, and no landwalk | `protection_from_red` and its other colours, `landwalk` | a few per thousand keywords |
+
+The first-strike damage step was never lost to the model, because a separate sub-step input marks the two damage steps. The corrected inputs map each collector name onto the model's slot and add a landwalk slot. A checkpoint records which input layout it trained on, so gen-1 and the first run of arm `e64` keep loading with the inputs they learned.
+
+##### The damage an ability deals reaches `e`, but not in a form the trunk compares with a toughness
+
+The encoder already reads numbers by value. Every number in a script adds to its token a learned direction scaled by the logarithm of the number, so 3 and 4 lie next to each other before training starts. The amount survives into `e` approximately: a probe reads a held-out line's damage from `e` with R² 0.69. A threshold needs it exactly. In the damage sweep, raising a spell's damage from 1 to 8 against a toughness-4 creature barely moves the predicted death, with no step between 3 and 4 (knowledge probes record).
+
+The trunk compares two slots through attention, which scores a pair of slots by a dot product. Two changes put both sides of the comparison into a form one dot product can threshold.
+
+- **The board's amounts as thermometer codes.** A thermometer code writes the value n as n ones followed by zeros, here over 40 positions, the magnitude cap every amount is already scored at. Life often climbs past its starting 20, so a shorter code would lose it. Each creature's power, its toughness and its toughness left after marked damage gain one, and each player's life gains one, beside the raw and logarithmic values the slots already carry. A linear map turns a thermometer code into a one-hot of its value, and the dot product of an amount's thermometer code with a one-hot of t is 1 exactly when the amount is at least t. This is the piecewise-linear encoding Gorishniy et al. found among the best for numbers read by a transformer (2022), at whole-number steps.
+- **The value head learns each stated amount as "at least k".** For every amount the head already predicts from `e` alone, damage, power and toughness change, counters, cards drawn and the mana costs, it also predicts whether the amount is at least k, for k from 1 to 40, each as a yes/no target, so both sides of a comparison count on one scale. A head that reads every such bit from `e` through a single layer pushes `e` to carry the amount as a thermometer the trunk can read the same way. This is cumulative-link ordinal regression, kept beside the existing count losses.
+
+##### Three evaluation checks are corrected before the arm is measured again
+
+- **Gate 2 scores first strike and double strike on the first-strike step.** With the keyword, the carrier deals its damage in that step, and without it, it deals none there. Each row now reads that difference on whoever the carrier fights: the blocker's damage taken and death, or the defending player's life.
+- **Probe amount labels are capped at 40**, as the model's targets are, so a few printed literals such as Jumbo Cactuar's +9,999 power no longer decide a probe's R².
+- **The affordability sweep sets the acting player's lands to match the mana it gives them**, so the board no longer contradicts the edited production.

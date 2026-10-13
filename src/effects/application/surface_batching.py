@@ -35,6 +35,7 @@ from effects.domain.ability_encoder import (
 from effects.domain.ability_tokenizer import AbilityTokenizer
 from effects.domain.damage_step_keywords import keyword_of_line
 from effects.domain.effect_head_input import (
+    INPUT_LAYOUT,
     SlotKind,
     build_effect_head_input,
     continuous_masked_keywords,
@@ -325,8 +326,12 @@ class SurfaceBatcher:
         identity_table: torch.nn.Embedding | None = None,
         noise: NoiseState | None = None,
         truncations: TruncationLog | None = None,
+        input_layout: str | None = INPUT_LAYOUT,
     ) -> None:
         self.tokenizer = tokenizer
+        #: The input layout every surface is built in (FR-063c): training's
+        #: own, or the one a loaded checkpoint recorded.
+        self.input_layout = input_layout
         #: Where a text the encoder's window cuts short is reported, once per
         #: run (FR-006). The caller owns it, so it outlives this batch.
         self.truncations = truncations
@@ -686,6 +691,7 @@ class SurfaceBatcher:
             stripped_keywords=strip_keywords,
             keyword_of=self.keyword_of_key,
             options_for=self.options_for,
+            layout=self.input_layout,
         )
 
     def build(self, records, encoder: AbilityEncoder, strip_per_record=None):

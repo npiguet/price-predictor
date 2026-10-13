@@ -288,6 +288,56 @@ class TestLineLabels:
         found = labels.line_labels(root, "spell", "Charm")
         assert not {"damage", "power_change", "counters_placed"} & set(found)
 
+    # The real scripts, as their sidecars in output/cardsfolder/ carry them.
+    @pytest.mark.parametrize(("script", "line_kind", "api", "target", "sign"), [
+        pytest.param(
+            "Execute$ SV1 | Mode$ Attacks | TriggerDescription$ 10,000 Needles — Whenever "
+            "this creature attacks, it gets +9999/+0 until end of turn. | ValidCard$ "
+            "Card.Self [SEG] SV1: DB$ Pump | Defined$ Self | NumAtt$ +9999",
+            "triggered", "Pump", "power_change", 1, id="jumbo-cactuar"),
+        pytest.param(
+            "IsCurse$ True | NumDef$ -9999 | SP$ Pump | SpellDescription$ Target creature "
+            "gets -0/-9999 until end of turn. | ValidTgts$ Creature",
+            "spell", "Pump", "toughness_change", -1, id="overkill"),
+        pytest.param(
+            "Execute$ SV1 | IsPresent$ Card.Self+counters_GE1000_TIME | Mode$ Always | "
+            "TriggerDescription$ When there are 1,000 or more time counters on CARDNAME, "
+            "sacrifice it and each opponent loses 1,000 life. | TriggerZones$ Battlefield "
+            "[SEG] SV1: DB$ Sacrifice | SubAbility$ SV2 [SEG] SV2: DB$ LoseLife | "
+            "Defined$ Opponent | LifeAmount$ 1000",
+            "triggered", "Sacrifice", "life_amount", 1, id="the-millennium-calendar"),
+        pytest.param(
+            "AB$ GainLife | Cost$ SubCounter<8/LOYALTY> | LifeAmount$ 100 | "
+            "Planeswalker$ True | SpellDescription$ You gain 100 life. | Ultimate$ True",
+            "planeswalker", "GainLife", "life_amount", 1, id="ajani-mentor-of-heroes"),
+    ])
+    def test_an_amount_is_capped_where_the_model_s_targets_are(
+            self, script, line_kind, api, target, sign):
+        from effects.domain.effect_model import MAGNITUDE_CAP
+
+        assert labels.line_labels(script, line_kind, api)[target] == sign * MAGNITUDE_CAP
+
+    def test_damage_per_mana_is_read_off_the_capped_damage(self):
+        from effects.domain.effect_model import MAGNITUDE_CAP
+
+        found = labels.line_labels(
+            "AB$ DealDamage | Cost$ 2 R T | NumDmg$ 100 | ValidTgts$ Any", "activated",
+            "DealDamage")
+        assert found["damage"] == MAGNITUDE_CAP
+        assert found["damage_per_mana"] == pytest.approx(MAGNITUDE_CAP / 3)
+
+    def test_every_amount_label_is_within_the_cap_and_no_flag_moves(self):
+        from effects.domain.effect_model import MAGNITUDE_CAP
+
+        for line in _fixture_lines("gen1-sidecars"):
+            found = labels.line_labels(line.script_text, line.line_kind,
+                                       line.script_api_type)
+            for name, value in found.items():
+                if labels.TARGETS_BY_NAME[name].kind == labels.AMOUNT:
+                    assert abs(value) <= MAGNITUDE_CAP
+                else:
+                    assert value in (0.0, 1.0)
+
 
 # ── record labels from real records ─────────────────────────────────────
 
@@ -339,6 +389,47 @@ class TestRecordLabels:
         for record, item in affected:
             entry = derive_targets(record).get(item.entity)
             assert item.label == float(bool(entry and entry.affected))
+
+    def test_damage_taken_is_capped_where_the_model_s_targets_are(self, records, sidecars):
+        from dataclasses import replace
+
+        from effects.domain.effect_model import MAGNITUDE_CAP
+        from effects.domain.event_schema import Event, EventType
+        from effects.domain.records import Moment
+
+        # The fixture's resolutions damage no creature, so one is given the
+        # damage event a real record carries, at an amount far past the cap.
+        record = next(r for r in records if r.moment is Moment.RESOLUTION and any(
+            e.zone == "battlefield" and "creature" in e.types for e in r.state.entities))
+        creature = next(e for e in record.state.entities
+                        if e.zone == "battlefield" and "creature" in e.types)
+        event = Event(EventType.DAMAGE_DEALT, subjects=(creature.id,),
+                      params={"amount": 9999, "combat": False})
+        huge = replace(record, payload=replace(record.payload,
+                                               events=(*record.payload.events, event)))
+        acting = run._acting_text_function(sidecars, "script")
+        found = [i for i in labels.record_items(huge, sidecars, labels.join_triggers([huge]),
+                                                acting)
+                 if i.target == "damage_taken" and i.entity == creature.id]
+        assert [i.label for i in found] == [MAGNITUDE_CAP]
+
+    def test_observed_mana_is_capped_where_the_model_s_targets_are(self, records):
+        from dataclasses import replace
+
+        from effects.domain.effect_model import MAGNITUDE_CAP
+        from effects.domain.event_schema import Event, EventType
+        from effects.domain.records import ResolutionPayload
+
+        record = next(r for r in records if isinstance(r.payload, ResolutionPayload))
+
+        def producing(events: int):
+            # The event a real mana resolution carries, repeated.
+            event = Event(EventType.MANA_PRODUCED, subjects=(record.actor_player,),
+                          params={"mana_by_color": {"G": 1}})
+            return replace(record, payload=ResolutionPayload(events=(event,) * events))
+
+        assert labels.mana_observed(producing(3)) == 3.0
+        assert labels.mana_observed(producing(int(MAGNITUDE_CAP) + 10)) == MAGNITUDE_CAP
 
     def test_the_join_finds_causes_in_the_same_game(self, records):
         result = labels.join_triggers(records)
@@ -395,18 +486,6 @@ class TestSweepEditor:
             if before.id != target.id:
                 assert before == after
 
-    def test_production_edits_one_player_only(self, records):
-        record = next(r for r in records if r.subkind is not None
-                      and r.subkind.value == "decision")
-        edited = sweeps.set_production(record, record.actor_player, ["1", "1", "R"], 2)
-        actor = next(p for p in edited.state.players if p.id == record.actor_player)
-        assert actor.untapped_production == {"R": 1, "C": 1}
-        assert actor.floating_mana == {}
-        assert _differences(record, edited) == {"players"}
-        for before, after in zip(record.state.players, edited.state.players):
-            if before.id != record.actor_player:
-                assert before == after
-
     def test_board_size_sets_the_opposing_creature_count(self, records):
         record = next(r for r in records if sweeps.opposing_creatures(r))
         for count in (0, 1, 5):
@@ -430,6 +509,120 @@ class TestSweepEditor:
         ids = {r.record_id for r in records}
         for rows in chosen.values():
             assert all(row["record_id"] in ids for row in rows)
+
+
+def _decision(records, cost: str):
+    """The fixture's decision record whose first candidate costs ``cost``."""
+    return next(r for r in records if r.subkind is not None
+                and r.subkind.value == "decision"
+                and sweeps.candidate_mana(r) == cost)
+
+
+def _lands(record, player: str) -> list:
+    return [e for e in record.state.entities if e.zone == "battlefield"
+            and e.controller == player and "land" in e.types]
+
+
+class TestAffordabilityEdit:
+    """The sweep's mana is the player's untapped lands, and the count beside them."""
+
+    def test_the_untapped_lands_make_exactly_the_swept_mana(self, records):
+        # The actor's untapped Swamp is the board the collector wrote.
+        record = _decision(records, "{2}{U}")
+        actor = record.actor_player
+        assert [(e.name, e.tapped) for e in _lands(record, actor)] == [("Swamp", False)]
+        pips = sweeps.candidate_cost(record)
+        for amount in range(len(pips) + 3):
+            edited = sweeps.set_untapped_lands(record, actor, pips, amount)
+            untapped = [e for e in _lands(edited, actor) if not e.tapped]
+            assert len(untapped) == amount
+            colours = [sweeps.basic_land_colour(e) for e in untapped]
+            assert None not in colours
+            player = edited.state.player(actor)
+            assert player.untapped_production == {
+                c: colours.count(c) for c in ("W", "U", "B", "R", "G")}
+            assert player.floating_mana == {}
+            ids = [e.id for e in edited.state.entities]
+            assert len(ids) == len(set(ids))
+            for before, after in zip(record.state.players, edited.state.players):
+                if before.id != actor:
+                    assert before == after
+            kept = {e.id: e for e in edited.state.entities}
+            for before in record.state.entities:
+                if before not in _lands(record, actor):
+                    assert kept[before.id] == before
+
+    def test_coloured_pips_are_fed_first_and_the_player_s_basics_reused(self, records):
+        record = _decision(records, "{2}{U}")
+        actor = record.actor_player
+        pips = sweeps.candidate_cost(record)
+
+        def board(amount):
+            edited = sweeps.set_untapped_lands(record, actor, pips, amount)
+            production = edited.state.player(actor).untapped_production
+            swamp = next(e for e in _lands(edited, actor) if e.name == "Swamp")
+            return {c: n for c, n in production.items() if n}, swamp.tapped
+
+        assert board(0) == ({}, True)
+        assert board(1) == ({"U": 1}, True)
+        assert board(2) == ({"U": 1, "B": 1}, False)
+        assert board(4) == ({"U": 3, "B": 1}, False)
+
+    def test_every_other_land_of_the_player_is_tapped(self, records):
+        from dataclasses import replace
+
+        record = _decision(records, "{1}{U}")
+        actor = record.actor_player
+        building = next(e for e in _lands(record, actor) if e.name == "TCRI Building")
+        untapped = replace(record, state=replace(record.state, entities=tuple(
+            replace(e, tapped=False) if e.id == building.id else e
+            for e in record.state.entities)))
+        edited = sweeps.set_untapped_lands(untapped, actor, sweeps.candidate_cost(record), 1)
+        assert edited.state.entity(building.id).tapped
+        assert [e.name for e in _lands(edited, actor) if not e.tapped] == ["Island"]
+
+    def test_a_fresh_land_is_the_basic_the_collector_writes(self, records):
+        from dataclasses import replace
+
+        swamp = next(e for r in records for e in r.state.entities if e.name == "Swamp")
+        fresh = sweeps.basic_land("B", "P9~land0", "P9")
+        assert fresh == replace(swamp, id="P9~land0", controller="P9", zone="battlefield",
+                                tapped=False, sick=False)
+
+    @pytest.mark.parametrize(("cost", "payable"), [
+        ("{2}{U}", True), ("{1}{G/U}", True), ("{W}{W}", True),
+        ("{3}", False), ("{0}", False), ("{X}{R}", False), ("{C}{1}", False),
+        ("{S}{G}", False), ("{2/W}", False), ("{U/P}", False),
+    ])
+    def test_only_a_cost_basic_lands_pay_pip_for_pip_is_swept(self, cost, payable):
+        assert sweeps.land_payable(cost) is payable
+
+    def test_an_untapped_mana_creature_keeps_a_record_out(self, records, sidecars):
+        from dataclasses import replace
+
+        record = _decision(records, "{2}{U}")
+        assert sweeps.affordability_ready(record, sidecars)
+        nurturer = next(e for r in records for e in r.state.entities
+                        if e.name == "Scaled Nurturer")
+
+        def with_nurturer(tapped):
+            dork = replace(nurturer, id="E-dork", zone="battlefield",
+                           controller=record.actor_player, tapped=tapped)
+            return replace(record, state=replace(
+                record.state, entities=(*record.state.entities, dork)))
+
+        assert not sweeps.affordability_ready(with_nurturer(False), sidecars)
+        assert sweeps.affordability_ready(with_nurturer(True), sidecars)
+
+    def test_a_candidate_on_the_player_s_own_land_keeps_a_record_out(self, records,
+                                                                      sidecars):
+        from dataclasses import replace
+
+        record = _decision(records, "{2}{U}")
+        swamp = _lands(record, record.actor_player)[0]
+        candidate = replace(record.payload.candidates[0], ability=(swamp.printed[1],))
+        on_land = replace(record, payload=replace(record.payload, candidates=(candidate,)))
+        assert not sweeps.affordability_ready(on_land, sidecars)
 
 
 # ── the probe set's digest ──────────────────────────────────────────────
