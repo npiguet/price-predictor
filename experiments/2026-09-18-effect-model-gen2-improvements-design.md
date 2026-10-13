@@ -1468,7 +1468,7 @@ Linear probes over the whole cache recover what kind of ability a line is and it
 
 #### The model's inputs are corrected and its amounts given a comparable form, and arm `e64` trains again on them
 
-Arm `e64` exposed two faults in what the effect model reads. Three of its input vocabularies miss names the collector writes, and the amounts it compares reach the trunk in forms a threshold cannot be read from. Gen-2 corrects both before the sweep continues, and arm `e64` trains again under its first settings. Every correction is computed from fields the records already hold, so the corpus is neither collected nor built again. The first run above stays as the record of the uncorrected inputs.
+Arm `e64` exposed two faults in what the effect model reads. Three of its input vocabularies miss names the collector writes, and the amounts it compares reach the trunk in forms a threshold cannot be read from. Gen-2 corrects both before the sweep continues, and arm `e64` trains again under its first settings. Every correction is computed from fields the records already hold, so the corpus is neither collected nor built again. A third fault, in the collector, is repaired in the built corpus (below). The first run above stays as the record of the uncorrected inputs.
 
 ##### Three input vocabularies miss the names the collector writes
 
@@ -1491,8 +1491,37 @@ The trunk compares two slots through attention, which scores a pair of slots by 
 - **The board's amounts as thermometer codes.** A thermometer code writes the value n as n ones followed by zeros, here over 40 positions, the magnitude cap every amount is already scored at. Life often climbs past its starting 20, so a shorter code would lose it. Each creature's power, its toughness and its toughness left after marked damage gain one, and each player's life gains one, beside the raw and logarithmic values the slots already carry. A linear map turns a thermometer code into a one-hot of its value, and the dot product of an amount's thermometer code with a one-hot of t is 1 exactly when the amount is at least t. This is the piecewise-linear encoding Gorishniy et al. found among the best for numbers read by a transformer (2022), at whole-number steps.
 - **The value head learns each stated amount as "at least k".** For every amount the head already predicts from `e` alone, damage, power and toughness change, counters, cards drawn and the mana costs, it also predicts whether the amount is at least k, for k from 1 to 40, each as a yes/no target, so both sides of a comparison count on one scale. A head that reads every such bit from `e` through a single layer pushes `e` to carry the amount as a thermometer the trunk can read the same way. This is cumulative-link ordinal regression, kept beside the existing count losses.
 
+##### The first-strike step's outcomes were never collected, and the built corpus is repaired for them
+
+The collector recorded the first-strike damage step's damage to players and nothing else. It
+decided that an event was combat damage by checking that the phase name contains
+`COMBAT_DAMAGE`, which Forge's `COMBAT_FIRST_STRIKE_DAMAGE` does not. In that step, damage to a
+creature, the life changes and the deaths reached no record. Every first-strike-step record
+therefore taught that an unblocked first striker leaves the defending player's life unchanged, and
+no record showed a first striker killing its blocker. The gen-3 draft gives the cause and the raw
+shards' counts.
+
+Gen-2 is not collected again, so the built corpus is repaired in place and the raw shards are left
+alone. `scripts/repair_first_strike_steps.py` adds each record's missing player outcomes from the
+record's own damage events: the life loss, the life a lifelinker gains its controller, and poison
+for an infect creature's damage. A record holding a blocked fight in which either side strikes
+first is dropped, because that fight's creature damage and deaths are gone and cannot be
+recovered. The corpus over-samples keyword combats, so first-strike records weigh more in it than
+in collection.
+
+| corpus part | records | repaired | dropped |
+|---|---:|---:|---:|
+| training | 892,205 | 20,864 | 2,432 |
+| card-disjoint stratum | 3,626,459 | 2,490 | 141 |
+| game-disjoint stratum | 1,163,084 | 1,855 | 216 |
+| validation samples | 4,096 | 42 | 0 |
+
+The collector now tests both damage-step names. Gen-2's real first-strike records cover attackers
+that were not blocked; how first strike plays out between creatures it learns from the probe forks
+alone, which were collected on a path the bug did not touch.
+
 ##### Three evaluation checks are corrected before the arm is measured again
 
-- **Gate 2 scores first strike and double strike on the first-strike step.** With the keyword, the carrier deals its damage in that step, and without it, it deals none there. Each row now reads that difference on whoever the carrier fights: the blocker's damage taken and death, or the defending player's life.
+- **Gate 2 scores first strike and double strike on the first-strike step.** With the keyword, the carrier deals its damage in that step, and without it, it deals none there. Each row now reads that difference on whoever the carrier fights: the blocker's damage taken and death, or the defending player's life. On gen-2's records nearly every qualifying case is an unblocked attacker, because the blocked fights of that step were never recorded.
 - **Probe amount labels are capped at 40**, as the model's targets are, so a few printed literals such as Jumbo Cactuar's +9,999 power no longer decide a probe's R².
 - **The affordability sweep sets the acting player's lands to match the mana it gives them**, so the board no longer contradicts the edited production.

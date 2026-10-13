@@ -729,6 +729,38 @@ class BusBracketCollectorTest {
     }
 
     /**
+     * A creature hit in the first-strike damage step opens a combat record.
+     *
+     * <p>Forge names that step {@code COMBAT_FIRST_STRIKE_DAMAGE}, which does
+     * not contain {@code COMBAT_DAMAGE}. A test on that substring alone sent a
+     * first striker's damage to a creature, its life changes and its kills to
+     * the ordinary bracket, where no record ever read them: only damage to a
+     * player, which reads the event's own combat flag, opened the step's
+     * record.
+     */
+    @Test
+    void aCreatureHitInTheFirstStrikeStepOpensACombatRecord() throws IOException {
+        Game game = gameInACombatDamageStep(PhaseType.COMBAT_FIRST_STRIKE_DAMAGE);
+        writer = new RecordShardWriter(tempDir, "run", 0, "l1");
+        BusBracketCollector collector = new BusBracketCollector(
+                game, writer, "run.0-l1.0");
+        Card attacker = TestCards.build("White Knight");
+
+        collector.onCardDamaged(new GameEventCardDamaged(
+                TestCards.build("Grizzly Bears").getView(), attacker.getView(), 2,
+                GameEventCardDamaged.DamageType.Normal));
+        collector.finishGame(Set.of());
+
+        List<String> records = written();
+        assertEquals(1, records.size(), records.toString());
+        assertTrue(records.get(0).contains("\"kind\":\"combat\""), records.get(0));
+        assertTrue(records.get(0).contains("\"combat_substep\":\"first_strike\""),
+                records.get(0));
+        assertTrue(records.get(0).contains("\"cause\":\"E" + attacker.getId() + "\""),
+                records.get(0));
+    }
+
+    /**
      * A game in a damage step, the only state a combat bracket opens in.
      *
      * <p>Its own game rather than the shared one every other test here uses:
@@ -737,6 +769,10 @@ class BusBracketCollectorTest {
      * too.
      */
     private static Game gameInACombatDamageStep() {
+        return gameInACombatDamageStep(PhaseType.COMBAT_DAMAGE);
+    }
+
+    private static Game gameInACombatDamageStep(PhaseType step) {
         Deck deck = new Deck();
         List<RegisteredPlayer> players = List.of(
                 new RegisteredPlayer(deck).setPlayer(new LobbyPlayerAi("a", null)),
@@ -744,8 +780,7 @@ class BusBracketCollectorTest {
         GameRules rules = new GameRules(GameType.Constructed);
         Game game = new Game(
                 players, rules, new Match(rules, players, "BusBracketTest"));
-        game.getPhaseHandler().devModeSet(
-                PhaseType.COMBAT_DAMAGE, game.getPlayers().get(0));
+        game.getPhaseHandler().devModeSet(step, game.getPlayers().get(0));
         return game;
     }
 

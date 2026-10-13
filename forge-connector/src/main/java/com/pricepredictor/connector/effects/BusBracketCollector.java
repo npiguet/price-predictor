@@ -1395,12 +1395,21 @@ public final class BusBracketCollector {
         return referenced;
     }
 
+    /**
+     * Whether the game is in either combat damage step.
+     *
+     * <p>Both names are tested: Forge's first-strike step is {@code
+     * COMBAT_FIRST_STRIKE_DAMAGE}, which does not contain {@code
+     * COMBAT_DAMAGE}, and a test on that substring alone sent the step's
+     * creature damage, life changes and deaths to the ordinary bracket.
+     */
     private boolean isCombatDamage() {
         var phase = game.getPhaseHandler();
         if (phase == null || phase.getPhase() == null) {
             return false;
         }
-        return phase.getPhase().toString().contains("COMBAT_DAMAGE");
+        String step = phase.getPhase().toString();
+        return step.contains("COMBAT_DAMAGE") || step.contains("FIRST_STRIKE_DAMAGE");
     }
 
     /**

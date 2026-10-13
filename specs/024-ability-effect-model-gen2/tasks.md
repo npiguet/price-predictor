@@ -298,8 +298,10 @@ before this phase is complete.
 - [ ] T136 [US5] At-least targets (FR-058b): `AT_LEAST_STEPS = 40`, equal to `THERMOMETER_STEPS` and `MAGNITUDE_CAP` and the at-least block in the value head's output (`src/effects/domain/effect_model.py` `VALUE_SLICES`/`VALUE_WIDTH`), its binary cross-entropy in `value_loss` under each amount's mask; tests in `tests/unit/effects/domain/test_effect_model.py`
 - [ ] T137 [US6] Gate 2's first-strike and double-strike rows per damage step in `src/effects/domain/damage_step_keywords.py` (FR-069a); tests beside the existing gate-2 tests
 - [ ] T138 [US7] Cap amount labels at `MAGNITUDE_CAP` in `scripts/effect_knowledge_probes/labels.py` (FR-077a); the affordability sweep in `scripts/effect_knowledge_probes/sweeps.py` sets the acting player's lands to match the edited production (FR-084); tests in `tests/unit/scripts/test_effect_knowledge_probes.py`
-- [ ] T139 Update `src/effects/CLAUDE.md` with the input layout and the at-least targets; full verification as in T128
-- [ ] T140 Retrain arm `e64` with `--freeze-probe-set` on the corrected inputs, then continue the sweep (T131)
+- [X] T139 Update `src/effects/CLAUDE.md` with the input layout and the at-least targets; full verification as in T128
+- [X] T141 `isCombatDamage()` in `forge-connector/.../effects/BusBracketCollector.java` matches both damage-step names (FR-052b); test in `BusBracketCollectorTest`; rebuild the JAR with `mvn install -DskipTests`
+- [X] T142 `scripts/repair_first_strike_steps.py` (FR-052a), tests in `tests/unit/scripts/test_repair_first_strike_steps.py`; run it once on `output/effects/corpus-gen2/`
+- [ ] T140 Retrain arm `e64` with `--freeze-probe-set` on the corrected inputs and the repaired corpus, then continue the sweep (T131)
 
 ---
 

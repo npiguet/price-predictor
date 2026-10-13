@@ -464,6 +464,25 @@ the text, until the class quota is met.
 | `--reuse-cap` | 4 | maximum repeats of one record when a family or signature is short |
 | `--text-cap` | 200 | maximum written records per ability text in a cell, repeats included |
 
+## 8.6 First-strike-step repair
+
+Gen-2's collector wrote no creature damage, life change or death in the first-strike damage
+step (the experiments record gives the cause). `python scripts/repair_first_strike_steps.py
+--corpus DIR [--dry-run]` repairs a built gen-2 corpus in place and leaves the raw shards alone.
+For every real `combat` record with `combat_substep = first_strike` (not a probe fork) that
+carries no `life_change` or `poison_change`:
+
+- a record whose blocks pair any attacker and blocker where either side has first strike or
+  double strike is dropped;
+- otherwise, from the record's combat `damage_dealt` events to players: one `life_change` per
+  player for the damage it took, a positive `life_change` for each lifelinker's controller, and
+  a `poison_change` (cause: the attacker's controller) instead of life loss for an infect
+  creature's damage, in the collector's event shape.
+
+Keywords resolve as gate 2 resolves them. The counts are appended to `DIR/repairs.json`; the
+manifest is unchanged. A second run changes nothing. The collector tests both damage-step
+names, so a corpus built from records collected afterwards needs no repair.
+
 # 9. Training
 
 - Rarity weight. Within a class, records weight ∝ effective_games^(−0.5), with a ceiling

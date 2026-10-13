@@ -157,6 +157,13 @@ python -m effects build-corpus --records-dir output/effects/records/ \
 Send the manifest's shortfall list back to `collect-coverage` / `collect-variants`, then rebuild into
 the same `--output`. The rebuild keeps every game-disjoint game the first build placed.
 
+Records collected before the collector's first-strike fix lack the first-strike step's outcomes.
+Repair the built corpus once, after its last rebuild (root spec § 8.6):
+
+```bash
+python -u scripts/repair_first_strike_steps.py --corpus output/effects/corpus-gen2/
+```
+
 ## Stage 5 — per sweep arm
 
 ```bash

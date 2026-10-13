@@ -27,6 +27,40 @@ during the state-based check that follows a resolution ends the open effect half
 next pass of the same check then lands in the trigger's bracket. It is written into the trigger's
 effect half when the trigger resolves, although the death came first.
 
+**The first-strike damage step lost everything but its damage to players.** The collector
+decided that an event was combat damage by checking that the phase name contains
+`COMBAT_DAMAGE`. Forge names the first-strike step `COMBAT_FIRST_STRIKE_DAMAGE`, which does not
+contain it. In that step only damage to a player opened a combat record, because that path reads
+the event's own combat flag. Damage to creatures, the life changes and the deaths went to the
+ordinary bracket, which no ability holds open during a damage step, so they reached no record.
+Gen-1 and gen-2 were both collected this way.
+
+The loss left two marks on gen-2's raw shards. A first-strike-step record exists only when a
+player took damage, and it holds that damage and nothing it caused: the defending player's life
+never moves. A first-strike fight between creatures alone has no record at all, so no record
+shows a first striker killing its blocker before the blocker strikes back. The probe forks are
+collected on another path and record the step correctly. On a sample of 40 raw shards the
+first-strike step occurs in one game in ten and makes 6% of combat records.
+
+| first-strike steps, 40 raw shards | count |
+|---|---:|
+| seen in any record | 361 |
+| with a combat record, a player having taken damage | 282 |
+| of those, with a blocked fight | 12 |
+| with no combat record | 79 |
+
+Gen-2 repairs its built corpus and leaves the raw shards alone, because it is not collected
+again. `scripts/repair_first_strike_steps.py` adds each record's missing player outcomes from
+the record's own damage events: the life loss, the lifelinker's gain, and poison for infect
+damage. It drops a record holding a blocked fight in which either side strikes first, because
+that fight's creature damage and deaths are gone. Gen-2's real first-strike knowledge therefore
+covers unblocked attackers, and its creature-side knowledge of first strike comes from the probe
+forks alone.
+
+The collector now tests both damage-step names, and a collector test fixes the case. Gen-3's
+collection is the first to record the first-strike step whole. The dropped-event count proposed above
+would have caught this loss on the first pilot.
+
 **Damage events on a probe fork lose their source.** On a probe fork, every `damage_dealt` event
 lacks `params.cause`, and damage to a creature reports `combat: false`. Observed combats carry both
 correctly. The source can be recovered from the payload's `assignment_choices`. Because the source

@@ -839,6 +839,18 @@ the sweeps, the ablation, and the recorded digest. Run `compare.py` over two sco
   text, until the class quota is met.
 - **FR-052**: Selection MUST be deterministic for a given corpus, flag set and `--seed`.
 
+- **FR-052a**: `scripts/repair_first_strike_steps.py --corpus DIR [--dry-run]` MUST repair a built
+  gen-2 corpus in place as root spec § 8.6 defines: on every non-probe `combat` record with
+  `combat_substep = first_strike` and no `life_change` or `poison_change`, drop it when a blocked
+  pair has a first or double striker on either side, else add the players' `life_change`, the
+  lifelinkers' controllers' `life_change` and infect's `poison_change` from its combat
+  `damage_dealt` events to players. It MUST leave every other record byte for byte, write each
+  shard atomically, append its counts (overall and per corpus part) to `DIR/repairs.json`, and
+  change nothing on a second run.
+- **FR-052b**: The collector's combat-damage test MUST match both `COMBAT_DAMAGE` and
+  `COMBAT_FIRST_STRIKE_DAMAGE`, so a creature hit in the first-strike step opens that step's
+  combat record.
+
 #### Manifest (root spec § 13)
 
 - **FR-053**: The curated-corpus manifest MUST add: per class and family, the available records,
