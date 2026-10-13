@@ -317,7 +317,7 @@ Every arm is probed on one probe set, frozen over gen-2's corpus (probe-set dige
 
 #### Arm `e64` (2026-10-13)
 
-The first arm keeps gen-1's sizes, `e` 64 wide and an encoder of four layers 256 wide, and its checkpoint is from epoch 15. The scorecard is `models/effects/runs/2026-10-gen2-e64/reports/knowledge-probes-2026-10-gen2-e64-20261013/scorecard.json`. Probing took 14 minutes and peaked at 0.34 GiB of GPU memory, and freezing the set took 5 minutes more.
+This run predates the input corrections in the gen-2 record, and arm `e64` trains again on the corrected inputs. The first run keeps gen-1's sizes, `e` 64 wide and an encoder of four layers 256 wide, and its checkpoint is from epoch 15. The scorecard is `models/effects/runs/2026-10-gen2-e64-earlier-inputs/reports/knowledge-probes-2026-10-gen2-e64-20261013/scorecard.json`. Probing took 14 minutes and peaked at 0.34 GiB of GPU memory, and freezing the set took 5 minutes more.
 
 | item | value |
 |---|---|
