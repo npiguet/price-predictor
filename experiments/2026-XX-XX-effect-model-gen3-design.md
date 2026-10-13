@@ -81,6 +81,62 @@ probability 1 − (1 − r)^K. Blocker what-ifs outnumber real block decisions a
 --only-cards` targets every text carried only by held-out cards. That set is larger than the
 held-out texts themselves.
 
+## Training could draw more of the records a weak output field needs, from the whole corpus
+
+**Some output fields stay weak while the others improve.** The model predicts 46 output fields per
+entity, such as life change, damage taken or keywords gained. Each is scored by its explained
+deviance: the share of the loss of the best constant prediction that the model removes, where 0%
+is no better than always guessing the field's average. On the first gen-2 arm, a few fields with a
+real amount to learn barely moved between the first two epochs that scored them.
+
+| field | loss of the constant prediction | epoch 3 | epoch 4 |
+|---|---:|---:|---:|
+| `keywords_gained` | 0.565 | 21% | 21% |
+| `poison_delta` | 0.138 | −11% | −14% |
+| `life_delta`, for comparison | 2.402 | 80% | 81% |
+
+Gen-3 could let training respond: when a field stays weak, show more of the records that
+supervise it. Gen-2 fixes each record's share of training when the corpus is built, and the
+trainer only shuffles within the one shard it holds.
+
+**The idea is established, as adaptive data mixing and adaptive loss weighting.** Large
+language-model pretraining stores its data as separate sources and draws from each by a mixing
+weight. Methods such as DoReMi raise a source's weight while its loss stays high against a reference
+model. Multi-task training, of which these 46 fields are a case, balances the tasks' loss weights
+instead, with methods such as GradNorm and uncertainty weighting.
+
+**Four mechanisms are possible, from cheapest to most flexible.**
+
+1. **A weight per field in the loss.** The trainer already computes every field's loss separately,
+   so nothing on disk changes.
+2. **A field factor in the weighted shuffle within a shard.** An epoch uses about a third of each
+   shard's records, so this can raise a field's share about threefold and no further.
+3. **Pools with mixing weights.** `build-corpus` writes the training stratum as several shard
+   directories, one per pool, and files each record in the pool of the rarest field it supervises.
+   Gen-2 already gives a legality record the rarest single mode on its board. The trainer draws each
+   epoch's shards from the pools by weights a controller adjusts at each epoch boundary. A pool of a
+   few hundred records can stay in memory and be mixed into every step.
+4. **An index from field to records, possibly in a database.** A record would then count for every
+   field it supervises, not only its rarest. The cost is reading scattered records across the whole
+   corpus, where today the trainer reads whole shards in sequence.
+
+**Five constraints apply whichever mechanism is chosen.**
+
+- **Calibration.** A field drawn at five times its natural share teaches the model that its outcome
+  is five times as common. Each record's loss then needs an importance weight, its natural share
+  divided by its drawn share. Loss weighting does not shift the base rates in the same way.
+- **Memorization.** A rare field may rest on few distinct texts; poison comes from a handful of
+  infect and toxic abilities. Raising its share repeats those texts. The ceiling has to be on how
+  often each distinct text is seen per epoch, as gen-2's reuse cap is.
+- **Reproducibility.** A gen-2 run repeats bit for bit from its seed. A controller driven by losses
+  does not, because GPU arithmetic varies between runs. Changing the weights only at epoch
+  boundaries, and logging them, lets a rerun replay them.
+- **Weak against unlearnable.** A field can be weak because the snapshot lacks what decides it. The
+  controller should boost a field only while its training loss keeps falling, and pass a field that
+  stays flat to collection.
+- **Validation stays out of the loop.** The controller reads training loss. If the card-disjoint
+  validation steered training, it would stop being an unbiased measure.
+
 ## Outcome
 
 To be filled in once gen-3 is designed and run.
