@@ -137,6 +137,60 @@ instead, with methods such as GradNorm and uncertainty weighting.
 - **Validation stays out of the loop.** The controller reads training loss. If the card-disjoint
   validation steered training, it would stop being an unbiased measure.
 
+## The Comprehensive Rules could index what the corpus covers, rule by rule
+
+**Gen-2 measures coverage by card text and by rule family, not by the rules of the game.** A rule
+family is the script-level class `build-corpus` balances on, such as an ability's API type or a
+trigger's mode. Whether the corpus shows the legend rule, a creature dying at toughness 0, or two
+continuous effects applied in layer order is never counted. Gen-3 could go through the
+Comprehensive Rules and record three things for each rule:
+
+1. whether the records the collectors write can show it at all;
+2. how many records in the corpus do show it;
+3. which game situations would illustrate it, as a unit test illustrates one behaviour of code.
+
+The counts would then feed corpus balancing and collection, and the illustrations would become a
+test set.
+
+**A triage pass comes first, because many rules can never appear in a record.** The rules run to
+thousands of numbered subrules. Deck construction, mulligans, multiplayer variants and most
+priority bookkeeping have no counterpart in an effect record. Sorting every rule into observable in
+a record, observable only indirectly, or out of scope decides how large the rest of the work is. A
+language model can make the first pass over the document, with a person checking the borderline
+rules.
+
+**Counting a rule needs a detector that recognizes it in a record, and detectors range from trivial
+to impossible.**
+
+| rule | how a record shows it | detector |
+|---|---|---|
+| 702.2, deathtouch | a combat with a deathtouch creature, and the probe forks that strip it | exists: the combat family and the probe keyword |
+| 704.5f, a creature with toughness 0 dies | a zone change during the state-based check after a resolution | derivable from the effect half's events |
+| 613, the order of continuous-effect layers | no field records which layer applied what | needs new collected fields |
+
+A detector is also a coverage counter, so the same code would put per-rule counts in the corpus
+manifest.
+
+**Illustrating a rule needs situations built on purpose, not found in self-play.** Coverage rounds
+target cards, and a rare interaction between rules may never occur in a sealed game. Two sources
+could build them:
+
+- **Interventional forks.** They already force an ability onto the stack in a copied game. A
+  rule-driven fork would set up the board the rule needs first.
+- **Forge's puzzle files.** Forge ships 372 puzzles under `forge-gui/res/puzzle/`, each a starting
+  game state: life totals, the active player and phase, and every zone's cards with their links.
+  Written for a rule, such a state is a unit test the collector could play. Whether a collecting
+  worker can load one has not been checked.
+
+**The rule tests that judge the model must stay out of its training.** If the same situations both
+balance the corpus and measure the model, they stop measuring generalization. A frozen,
+hand-checked set of rule scenarios would join the knowledge probes as an evaluation. Collection
+targeted at a rule would feed training separately.
+
+**Rules could also be the pools of the adaptive sampling above.** A per-rule detector gives each
+record the rules it exercises, which is the same index that sampling by field needs. The two items
+would share the decision between pools, an index and a database.
+
 ## Outcome
 
 To be filled in once gen-3 is designed and run.
