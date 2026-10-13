@@ -1371,7 +1371,7 @@ The decodability battery joined the cache's lowercase card names to the win-rate
 
 ### The sweep
 
-The results are to be filled in after the gen-2 sweep.
+Each arm's results are recorded below as the arm completes. The comparison across arms follows the last one.
 
 #### The encoder pads each group of 32 texts to its own longest, so every arm trains at gen-1's batch of 32 records
 
@@ -1387,3 +1387,86 @@ Both measurements replay the first arm's seed, so they read the same shards in t
 | shards of epoch 1 replayed | 49 | 50 |
 | share of the encoder's input that is padding, first 9 shards | 79% | 22% |
 | highest GPU memory in one step | 6.4 GB, out of memory on shard 49 | 2.9 GB |
+
+#### Arm `e64` (2026-10-13): the output fields trail gen-1 by about a tenth of a loss point, and `e` spreads over more than twice gen-1's dimensions
+
+The first arm keeps gen-1's sizes: `e` 64 wide and an encoder of four layers 256 wide. It trains at the noise ratio of 0.1, withholds cascade and uses seed 1255389894, on the stage-4 corpus (digest `b3adb69a2950`). Its card-disjoint loss last improved at epoch 15, and the early stopper ended the run at epoch 20, after five epochs without a new best. Training took 11 hours, and encoding, evaluation and both probe suites one more. Every log, each opening with its command line and commit, and both probe reports are in `models/effects/runs/2026-10-gen2-e64/`. The knowledge probes are recorded in [`2026-09-19-effect-knowledge-probes-design.md`](2026-09-19-effect-knowledge-probes-design.md#gen-2-arms).
+
+##### The arm matches gen-1 on the output fields for ten epochs, then falls behind on outcomes the ability text decides
+
+On the 46 output-field terms, the arm matches gen-1 up to epoch 10 and trails it from epoch 12, by a tenth of a loss point at the arm's best epoch. The field terms are the comparable part: gen-2's validation loss adds the verdict, created-objects, value, script-API and MLM terms to them, while gen-1's is the field terms alone. Gen-1 kept improving for another 24 epochs, to 2.91.
+
+| card-disjoint loss, by epoch | 9 | 12 | 15 | 18 |
+|---|---:|---:|---:|---:|
+| gen-1, field terms (its whole loss) | 3.72 | 3.49 | 3.35 | 3.29 |
+| arm `e64`, field terms | 3.73 | 3.59 | 3.46 | 3.48 |
+| arm `e64`, with the head terms | 4.30 | 4.13 | 3.93 | 4.00 |
+
+The gap sits in fields whose target is larger in gen-2's sample, or new to it. The constant-predictor floor, the loss of always predicting a field's mean, sums to about the same in both card-disjoint samples, 15.0 and 14.6. More of gen-2's floor lies in fields the ability text decides, and less in the gate. `pt_duration` is a target gen-1 never had in practice, because gen-1 recorded every pump as instant (second pilot, above). On keywords gained the arm also removes less of its own floor than gen-1 did, 71% against 85%. The template holdout gives a held-out keyword grant no near-twin in training to lean on, which is the likeliest reason.
+
+| field, epoch 18 | floor, gen-1 | floor, gen-2 | loss, gen-1 | loss, arm `e64` |
+|---|---:|---:|---:|---:|
+| gate | 5.05 | 4.63 | 1.164 | 1.169 |
+| keywords gained | 0.43 | 0.57 | 0.065 | 0.164 |
+| +1/+1 counters | 0.12 | 0.43 | 0.026 | 0.079 |
+| `pt_duration` | 0.00 | 0.23 | 0.000 | 0.043 |
+| mana deltas, six fields | 0.10 | 0.41 | 0.024 | 0.049 |
+| cards milled | 0.15 | 0.06 | 0.064 | 0.015 |
+
+##### The card-disjoint loss swings between epochs by more than it improves, so five epochs of patience stopped the run at epoch 20
+
+From epoch 15 on, the card-disjoint loss moved by up to about a quarter of a point from one epoch to the next without a new low, while the game-disjoint loss kept close to its best. Gen-1 never went five epochs without a new best and ran to epoch 39. The card-disjoint sample holds 2,048 records over 500 held-out texts. Under the template holdout no held-out text has a near-twin in training, so each text's loss depends on how the model happens to generalize to it that epoch.
+
+| epoch | card-disjoint | of it, field terms | game-disjoint |
+|---:|---:|---:|---:|
+| 14 | 4.049 | 3.592 | 3.252 |
+| 15 | 3.927 | 3.458 | 3.178 |
+| 16 | 4.118 | 3.654 | 3.168 |
+| 17 | 4.018 | 3.549 | 3.213 |
+| 18 | 4.002 | 3.483 | 3.175 |
+| 19 | 4.281 | 3.796 | 3.341 |
+| 20 | 4.014 | 3.529 | 3.116 |
+
+##### Gate 3 passes with `e` spread over nine effective dimensions, against gen-1's four
+
+The arm's `e` spreads over more than twice as many effective dimensions as gen-1's, and its top component carries about half gen-1's share of the variance. The effective dimensions are the participation ratio, the number of equally weighted directions that would give the same spread. The noise pilot at the same ratio lies between the two on both measures after three epochs.
+
+| cache | mean pairwise cosine | top component share | participation ratio |
+|---|---:|---:|---:|
+| gen-1, 40 epochs | 0.152 | 40.0% | 3.93 |
+| noise pilot 0.1, 3 epochs | 0.482 | 25.7% | 7.07 |
+| arm `e64`, 15 epochs | 0.462 | 21.0% | 9.23 |
+
+##### Gate 2 passes five of the eight damage-step keywords, and first strike is the one the model has learned least
+
+Deathtouch, trample, indestructible and infect pass, where gen-1 had too few records to judge them. Gate 2 asks whether the model's predictions move the way a damage-step keyword moves the real outcome, on the game-disjoint stratum. It passes a keyword at 70% direction agreement over at least 200 qualifying records. Gen-2's random seat and its larger stratum bring every keyword but wither past 200 records, so first strike and double strike are now judged on agreement, and both fall short.
+
+| keyword | qualifying records | direction agreement | verdict | gen-1 agreement |
+|---|---:|---:|---|---:|
+| lifelink | 2,169 | 97.8% | pass | 98.2% |
+| indestructible | 342 | 99.1% | pass | 100% |
+| trample | 2,331 | 90.9% | pass | 82.7% |
+| deathtouch | 899 | 85.3% | pass | 88.4% |
+| infect | 1,453 | 76.5% | pass | 75.3% |
+| double strike | 672 | 64.3% | to a probe | 71.7% |
+| first strike | 707 | 31.5% | to a probe | 40.4% |
+| wither | 142 | 65.5% | too few records | 81.8% |
+
+First strike fails on the carrier's death. The model gets the direction of the carrier's damage taken right 77% of the time and of its death 37% of the time: it does not predict that a first striker kills its blocker before the blocker strikes back. Double strike falls short on the carrier's death, at 57%, and on the defending player's life, at 67%.
+
+##### The embedding probes read the API type, the mana cost and the amounts from `e` far better than gen-1's
+
+Linear probes over the whole cache recover what kind of ability a line is and its amounts far better from the arm's `e` than from gen-1's. Gen-2 trains two heads that read `e` alone: the script-API head predicts the line's API type, and the value head its stated amounts and cost flags. Part of the gain is therefore by construction. The knowledge probes test whether the trunk uses what these heads put into `e`.
+
+| linear probe on `e`, all texts | gen-1 | arm `e64` |
+|---|---:|---:|
+| API type, accuracy | 0.641 | 0.879 |
+| line kind, accuracy | 0.677 | 0.897 |
+| mana cost, R² | 0.057 | 0.486 |
+| damage amount, R² | 0.343 | 0.513 |
+| counters amount, R² | 0.175 | 0.589 |
+| life amount, R² | 0.086 | 0.362 |
+| cards amount, R² | 0.190 | 0.339 |
+| power amount, R² | 0.321 | 0.369 |
+
+The decodability battery did not run. `evaluate-effect-model` looks for the sealed pipeline's win-rate table at `output/sealed/cards-win-rates.txt`, and the table lives on the NAS. The battery runs once `--win-rates` names the NAS copy.

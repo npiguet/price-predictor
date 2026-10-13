@@ -313,4 +313,95 @@ Replacing `e` with matched noise raises the loss most on keywords gained, the ga
 
 ### Gen-2 arms
 
-To be filled in after the gen-2 sweep, with each arm read against gen-1 by direction.
+Every arm is probed on one probe set, frozen over gen-2's corpus (probe-set digest `927c88b0fae4`), and read against gen-1 by direction. Gen-1's set was frozen over gen-1's corpus, so the two compare family by family rather than item by item. Unless a table says otherwise, scores are the MLP probe's: AUC for yes/no targets, R² for amounts. The arm's training and gates are recorded in the gen-2 record's sweep section.
+
+#### Arm `e64` (2026-10-13)
+
+The first arm keeps gen-1's sizes, `e` 64 wide and an encoder of four layers 256 wide, and its checkpoint is from epoch 15. The scorecard is `models/effects/runs/2026-10-gen2-e64/reports/knowledge-probes-2026-10-gen2-e64-20261013/scorecard.json`. Probing took 14 minutes and peaked at 0.34 GiB of GPU memory, and freezing the set took 5 minutes more.
+
+| item | value |
+|---|---|
+| line items | 36,178 |
+| record items | 35,699 |
+| interaction pairs | 2,010 |
+| interaction join rate | 7.0% |
+
+##### `e` now holds a line's costs, its timing and most of its amounts
+
+A probe reading `e` alone recovers a line's costs and timing almost perfectly, where gen-1's `e` gave them up close to chance on held-out lines. It reads mana cost and damage on held-out lines nearly as well as on trained ones. Every width control stays at chance, with AUC near 0.5 and R² below zero, so the gain is content and not width. Gen-2 changes both what the encoder reads, an ability's whole chain, and what trains it, with a value head and a script-API head that read `e` alone. One arm cannot separate the two.
+
+| line property | gen-1, trained | arm, trained | gen-1, held-out | arm, held-out |
+|---|---:|---:|---:|---:|
+| total mana cost (R²) | 0.142 | 0.837 | −0.186 | 0.738 |
+| damage amount (R²) | 0.348 | 0.697 | 0.243 | 0.692 |
+| counters placed (R²) | 0.596 | 0.640 | 0.479 | 0.542 |
+| power change (R²) | 0.523 | — | 0.083 | 0.398 |
+| toughness change (R²) | −0.011 | — | 0.061 | 0.255 |
+| tap cost | 0.738 | 1.000 | 0.658 | 0.999 |
+| sacrifice cost | 0.737 | 0.999 | 0.579 | 0.888 |
+| instant speed | 0.779 | 0.882 | 0.584 | 0.768 |
+| repeatable | 0.863 | 0.985 | 0.755 | 0.917 |
+| affects each player or permanent | 0.894 | 0.988 | 0.807 | 0.970 |
+| affects an opponent | 0.849 | 0.949 | 0.801 | 0.878 |
+| produces red mana | 0.623 | 0.954 | — | — |
+| a trigger fires on a paired line's event, all lines | 0.842 | 0.948 | — | — |
+
+The arm's trained-line R² on power, toughness and life change is left out because three script literals decide it. Jumbo Cactuar's +9,999 power, Overkill's −9,999 toughness and The Millennium Calendar's 1,000 life dominate those labels' variance. The probe labels are not capped at 40 as the model's targets are, so the R² measures how those three lines are fitted. None of the three is held out, so the held-out columns are unaffected.
+
+##### `e` carries affordability and how long a pump lasts; the trunk supplies deaths, trigger firing and blocking
+
+On affordability and on a power change lasting until end of turn, `e` closes nearly the whole gap between the board alone and the model's own prediction. Rung 0 reads the board with every `e` zeroed, and rung 1 adds the ability vectors. On a creature's death and on whether a trigger fires, it closes about a third or less, and the trunk's output at rung 2 carries what the model predicts. Blocking legality gains nothing from `e`, as in gen-1.
+
+| target, card-disjoint | rung 0 | rung 1 | 1w | rung 2 | rung 3 | share | gen-1 rung 3 |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| affordable | 0.729 | 0.963 | 0.852 | 0.973 | 0.976 | 0.95 | — |
+| power change lasts until end of turn | 0.844 | 0.994 | 0.838 | 0.996 | 0.992 | 1.02 | 0.939 |
+| legal target | 0.930 | 0.964 | 0.922 | 0.989 | 0.984 | 0.64 | 0.955 |
+| legal target, carrying protection | 0.738 | 0.805 | 0.681 | 0.960 | 0.893 | 0.43 | 0.635 |
+| trigger fires | 0.693 | 0.758 | 0.727 | 0.879 | 0.872 | 0.36 | — |
+| entity affected | 0.789 | 0.838 | 0.758 | 0.972 | 0.976 | 0.26 | 0.997 |
+| dies | 0.736 | 0.759 | 0.751 | 0.935 | 0.928 | 0.12 | — |
+| may block | 0.884 | 0.877 | 0.866 | 0.890 | 0.802 | — | 0.748 |
+
+Gen-2 trains the verdict head, so affordability and trigger firing have a model read-out for the first time, and both match the trunk's output. Target legality against a hexproof, shroud, protection or ward permanent rose the most of the targets gen-1 could already read. Gen-1 labelled every pump as instant, so its duration row compares nothing. The game-disjoint stratum agrees except on death, where the model's own prediction falls to 0.77 while the trunk's output stays at 0.94, on 256 records.
+
+The model's own blocking prediction scores below a probe on the board alone, and its `blocker_legal` field removed less of its constant-predictor floor as training went on, 64% at epoch 9 and 54% at epoch 15. The board alone reads blocking far better in gen-2's sample than in gen-1's, so the two rows of rung 0 do not compare.
+
+##### Deaths now follow the target's toughness, and barely the damage amount
+
+Gen-2's corpus records the deaths a resolution's damage causes, and the model predicts them. The toughness sweep falls steadily as the target's toughness rises, where gen-1 read zero at every value. Each sweep averages twenty records with different damage amounts, so a step at each record's own threshold shows as a slope. The board-size sweep rises by about a fifth of a death per added opposing creature, against the one per creature a sweeper should give, and against a fiftieth in gen-1.
+
+The damage sweep moves the text instead of the board: it re-encodes one spell with `NumDmg$` from 1 to 8 against a toughness-4 target. The predicted death rises only slightly, with no step between 3 and 4, on a spell and on a triggered ability alike. The line probe above reads the damage amount from `e`, so the amount is in the vector, but not in a form the trunk compares with a toughness. The ladder agrees: on death, `e` adds little over the board, and the trunk's output carries the whole prediction.
+
+| sweep | 1, or 0 creatures | 4 | 8 |
+|---|---:|---:|---:|
+| toughness of the target, its death, gen-1 | 0.000 | 0.000 | 0.000 |
+| toughness of the target, its death, arm | 0.861 | 0.569 | 0.127 |
+| `NumDmg$` on a spell, toughness-4 target's death, gen-1 | 0.000 | 0.000 | 0.000 |
+| `NumDmg$` on a spell, toughness-4 target's death, arm | 0.447 | 0.578 | 0.551 |
+| `NumDmg$` on a triggered ability, same, arm | 0.674 | 0.751 | 0.782 |
+| opposing creatures, deaths summed over the board, gen-1 | 0.003 | 0.089 | 0.154 |
+| opposing creatures, deaths summed over the board, arm | 0.001 | 0.782 | 1.479 |
+
+##### The affordability sweep leaves the verdict flat, because it edits an input the model does not decide by
+
+The affordable verdict stays near 0.29 from no mana to two more than the cost. The sweep edits the acting player's untapped production, one number per colour, and leaves every land on the board as it was. The model still separates affordable candidates at 0.976 AUC, so it reads affordability from something the sweep leaves unchanged, most likely the untapped lands and their mana abilities. The sweep cannot show a step until it edits the lands as well.
+
+##### The trunk still reads `e` almost only at `[ACT]`, and now needs the exact keyword a line grants
+
+Replacing `e` with matched noise at `[ACT]` alone costs about as much as replacing it everywhere, and replacing it in the card slots alone costs almost nothing, as in gen-1. The nearest other text's vector still costs little on any field.
+
+| field | base loss | noise, every slot | noise, `[ACT]` | noise, card slots | API-type mean | nearest text |
+|---|---:|---:|---:|---:|---:|---:|
+| gate | 1.088 | +1.320 | +1.322 | +0.011 | +0.242 | +0.037 |
+| keywords gained | 0.130 | +0.826 | +0.848 | −0.002 | +0.829 | +0.033 |
+| power change | 0.227 | +1.147 | +1.205 | −0.001 | +0.292 | +0.010 |
+| +1/+1 counters | 0.080 | +0.311 | +0.313 | +0.001 | +0.019 | −0.001 |
+| damage taken | 0.543 | +0.205 | +0.196 | +0.009 | +0.043 | +0.015 |
+| poison | 0.050 | +0.030 | +0.025 | +0.004 | −0.036 | +0.002 |
+
+On keywords gained, the API type's mean vector costs as much as noise, where in gen-1 it cost about three fifths as much. Every keyword grant shares the `Keyword` API type, so its mean says that a keyword is granted and not which. On poison, the API type's mean lowers the loss: the per-text vectors make the model's poison predictions worse than a vector carrying only the type would.
+
+##### `e` still says little about how much a text's outcome varies
+
+The state-dependence probe reads about the same small share of each text's outcome spread from the arm's `e` as from gen-1's on trained lines, R² 0.16 against 0.18. On held-out lines it reads almost none, where gen-1's `e` read a quarter of the spread on its 155 held-out lines.
