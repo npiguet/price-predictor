@@ -181,6 +181,9 @@ to training, encoding and evaluation, and `--vocab-path` to training, defaulting
 `build-corpus` is given in stage 4. Pass `--freeze-probe-set` on
 the first arm only; that arm freezes the knowledge-probe set for the corpus before probing.
 
+An arm whose training step was interrupted, by a crash or by the machine stopping, continues from
+the last completed epoch: rerun the same command with `--resume` added before `--`.
+
 The run directory holds the arm's whole record:
 
 | Path | Contents |

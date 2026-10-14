@@ -556,8 +556,24 @@ names, so a corpus built from records collected afterwards needs no repair.
   root key, so the input adds one row per `option` line after the root row it follows. No
   other positional scheme is added.
 
+- Resume. At the end of every epoch, after validation, training rewrites `resume.pt` in
+  `--model-output` atomically. It holds:
+  - the epoch, the optimizer step, and whether the early stopper ended the run;
+  - the encoder's and the effect model's full state, training-only heads included;
+  - the optimizer state, the early stopper's best and epochs since, and the noise state on `e`;
+  - the CPU and CUDA random-generator states;
+  - the settings a resumed epoch must share: seed, corpus digest, variant, sizes, batching,
+    curriculum, withheld keyword, augmentation rates, loss weights, tokenizer rules and input
+    layout.
+
+  `--resume` continues from it at the next epoch. A resumed run trains what the uninterrupted
+  run would have. A resume file whose settings differ is refused, naming each difference; the
+  epoch count and the patience may change. A file recording an early stop, or an epoch at or
+  past `--epochs`, trains nothing.
+
 | Flag | Default | Meaning |
 |---|---|---|
+| `--resume` | off | continue from `resume.pt` in `--model-output` |
 | `--e-noise` | 0.1 | noise ratio `r`, relative to the running covariance of `e` |
 | `--value-weight` | 0.05 | value-head loss weight |
 | `--encoder-layers` | 4 | encoder transformer layers |

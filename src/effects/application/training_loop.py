@@ -121,8 +121,12 @@ from effects.domain.rarity import RARITY_BUCKETS
 from effects.infrastructure.effect_model_store import (
     EffectCheckpoint,
     EffectModelStore,
+    ResumeMismatchError,
     SplitProvenance,
     content_hash,
+    load_resume_state,
+    resume_mismatches,
+    save_resume_state,
 )
 from effects.infrastructure.model_runner import IDENTITY_TABLE_KEY
 from effects.infrastructure.sidecar_io import (
@@ -846,11 +850,17 @@ class TrainingLoop(StepPreparation):
         stopper = EarlyStopper(self.config.patience)
         store = EffectModelStore(self.config.resolved_model_output())
         step = 0
+        first_epoch = 1
+        if self.config.resume:
+            resumed = self._restore(encoder, model, optimizer, stopper)
+            if resumed is None:
+                return 0
+            first_epoch, step = resumed
 
         heads = self._training_heads(model)
-        pool = self._start_workers(widths, heads)
+        pool = self._start_workers(widths, heads, first_epoch=first_epoch)
         try:
-            for epoch in range(1, self.config.epochs + 1):
+            for epoch in range(first_epoch, self.config.epochs + 1):
                 encoder.train()
                 model.train()
                 # With --grad-accum > 1 the last steps of an epoch can leave a
@@ -1014,6 +1024,10 @@ class TrainingLoop(StepPreparation):
                         ),
                         training_settings=self._training_settings(),
                     ))
+                self._save_resume(
+                    epoch, step, encoder, model, optimizer, stopper,
+                    finished=stopper.should_stop,
+                )
                 if stopper.should_stop:
                     logger.info(
                         "Early stop: %d epochs without a new card-disjoint best",
@@ -1067,8 +1081,126 @@ class TrainingLoop(StepPreparation):
             if budget > 0
         ]
 
-    def _start_workers(self, widths, heads: frozenset[str]):
-        """The step-preparing processes, with epoch 1 queued; None for none.
+    # ── resuming ────────────────────────────────────────────────────────
+
+    def _resume_settings(self) -> dict:
+        """Every setting a resumed epoch has to share with the interrupted run.
+
+        The draws need no state of their own: every shard draw, shuffle and
+        per-step draw is seeded by the seed, the epoch and the step's place in
+        it, so the seed and the shapes that place a step are what must match.
+        The epoch count and the patience are left out, so an interrupted run
+        can be resumed with more epochs or more patience.
+        """
+        config = self.config
+        return {
+            "seed": self.seed,
+            "corpus_digest": self.corpus_digest,
+            "variant": config.variant,
+            "e_dim": config.e_dim,
+            "encoder_layers": config.encoder_layers,
+            "encoder_d_model": config.encoder_d_model,
+            "steps_per_epoch": config.steps_per_epoch,
+            "shards_per_epoch": config.shards_per_epoch,
+            "batch_size": config.batch_size,
+            "grad_accum": config.grad_accum,
+            "curriculum_epoch": config.curriculum_epoch,
+            "withhold_keyword": config.withhold_keyword,
+            "keyword_expand_p": config.keyword_expand_p,
+            "context_dropout": config.context_dropout,
+            **self._training_settings(),
+        }
+
+    def _save_resume(
+        self, epoch: int, step: int, encoder, model, optimizer, stopper, *,
+        finished: bool,
+    ) -> None:
+        """Everything the next epoch needs, written once the epoch is scored.
+
+        The model's whole state, training-only heads included — the saved
+        checkpoint drops those, and a resumed run would have to relearn them —
+        with the optimizer's moments, the noise's running covariance and the
+        random generators, which dropout and the noise draw read on the device.
+        """
+        noise = self.noise
+        save_resume_state(self.config.resolved_model_output(), {
+            "epoch": epoch,
+            "step": step,
+            "finished": finished,
+            "settings": self._resume_settings(),
+            "encoder": encoder.state_dict(),
+            "model": model.state_dict(),
+            "identity_table": (
+                self.identity_table.state_dict()
+                if self.identity_table is not None else None
+            ),
+            "optimizer": optimizer.state_dict(),
+            "stopper": {"best": stopper.best, "since_best": stopper.since_best},
+            "noise": {
+                "sigma": noise.sigma,
+                "step": noise.step,
+                "factor": noise._factor,
+                "draws_since_factor": noise._draws_since_factor,
+            },
+            "rng": {
+                "cpu": torch.get_rng_state(),
+                "cuda": (
+                    torch.cuda.get_rng_state_all()
+                    if torch.cuda.is_available() else None
+                ),
+            },
+        })
+
+    def _restore(self, encoder, model, optimizer, stopper) -> tuple[int, int] | None:
+        """``(first epoch, step)`` to continue from; None when nothing is left.
+
+        Refuses a resume file written under other settings: resumed from a
+        different seed or corpus, the run would be neither the interrupted one
+        nor a fresh one.
+        """
+        state = load_resume_state(self.config.resolved_model_output())
+        mismatches = resume_mismatches(state["settings"], self._resume_settings())
+        if mismatches:
+            raise ResumeMismatchError(
+                "The resume file was written under other settings: "
+                + "; ".join(mismatches)
+            )
+        encoder.load_state_dict(state["encoder"])
+        model.load_state_dict(state["model"])
+        if self.identity_table is not None and state["identity_table"] is not None:
+            self.identity_table.load_state_dict(state["identity_table"])
+        optimizer.load_state_dict(state["optimizer"])
+        stopper.best = state["stopper"]["best"]
+        stopper.since_best = state["stopper"]["since_best"]
+        noise = state["noise"]
+        self.noise.sigma = (
+            noise["sigma"].to(self.device) if noise["sigma"] is not None else None
+        )
+        self.noise.step = noise["step"]
+        self.noise._factor = (
+            noise["factor"].to(self.device) if noise["factor"] is not None else None
+        )
+        self.noise._draws_since_factor = noise["draws_since_factor"]
+        torch.set_rng_state(state["rng"]["cpu"])
+        if state["rng"]["cuda"] is not None and torch.cuda.is_available():
+            torch.cuda.set_rng_state_all(state["rng"]["cuda"])
+        epoch, step = state["epoch"], state["step"]
+        if state["finished"] or epoch >= self.config.epochs:
+            logger.info(
+                "The resume file records a finished run (epoch %d); nothing "
+                "to resume.", epoch,
+            )
+            return None
+        logger.info(
+            "Resuming after epoch %d, step %d: best card-disjoint %.4f, %d "
+            "epoch(s) since.", epoch, step, stopper.best, stopper.since_best,
+        )
+        return epoch + 1, step
+
+    def _start_workers(
+        self, widths, heads: frozenset[str], *, first_epoch: int = 1,
+    ):
+        """The step-preparing processes, with ``first_epoch`` queued; None for none.
 
         Each worker may hold one shard's steps prepared ahead (up to
         ``MAX_STEPS_AHEAD``): with fewer, the workers whose shards come later
@@ -1100,7 +1232,7 @@ class TrainingLoop(StepPreparation):
             pin=self.device.type == "cuda",
         )
         try:
-            for task in self._epoch_tasks(1)[1]:
+            for task in self._epoch_tasks(first_epoch)[1]:
                 pool.submit(task)
         except BaseException:
             pool.close()

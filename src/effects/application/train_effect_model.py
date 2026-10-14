@@ -848,6 +848,9 @@ class TrainEffectModelConfig:
     epochs: int = 40
     patience: int = 5
     withhold_keyword: str | None = None
+    #: ``--resume``: continue from the ``resume.pt`` the run left in
+    #: ``--model-output`` after its last completed epoch.
+    resume: bool = False
 
     @property
     def curriculum_step(self) -> int:

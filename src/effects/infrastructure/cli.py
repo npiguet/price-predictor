@@ -1414,6 +1414,14 @@ def _train_effect_model_parser(subparsers) -> None:
     parser.add_argument("--epochs", type=int, default=40)
     parser.add_argument("--patience", type=int, default=5)
     parser.add_argument(
+        "--resume", action="store_true",
+        help=(
+            "Continue an interrupted run from the resume.pt it left in "
+            "--model-output after its last completed epoch. Every setting that "
+            "shapes the run must match the interrupted one, --seed included."
+        ),
+    )
+    parser.add_argument(
         "--withhold-keyword", type=str, default=None,
         help=(
             "Hold one implemented keyword's token out of training so the "
@@ -1511,6 +1519,7 @@ def train_config_from(args: argparse.Namespace):
         epochs=args.epochs,
         patience=args.patience,
         withhold_keyword=args.withhold_keyword,
+        resume=args.resume,
     )
 
 

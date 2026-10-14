@@ -937,6 +937,23 @@ the sweeps, the ablation, and the recorded digest. Run `compare.py` over two sco
     player's life.
   Every path that loads a checkpoint (`model_runner.load_runnable`, through which evaluation, gate 2
   and both probe suites load) MUST build the layout the checkpoint records.
+- **FR-063d**: At the end of every epoch, after validation and any checkpoint save, training MUST
+  rewrite `<--model-output>/resume.pt` atomically (temporary name, then rename) with: the epoch,
+  the optimizer step, a `finished` flag set when the early stopper ends the run, the encoder's and
+  model's full `state_dict` (training-only heads included), the identity table if any, the
+  optimizer state, the early stopper's `best` and `since_best`, the noise state (`sigma`, `step`,
+  factor, draws since factor), the CPU and CUDA RNG states, and the settings of
+  `_resume_settings()` (seed, corpus digest, variant, `e_dim`, encoder size, steps and shards per
+  epoch, batch size, grad accumulation, curriculum epoch, withheld keyword, keyword-expansion and
+  context-dropout rates, and the training settings). `train-effect-model --resume` MUST restore
+  all of it and continue at the next epoch, queuing that epoch's shards first; a resumed run MUST
+  train bit for bit what the uninterrupted run trains on the same device. It MUST refuse a file
+  whose settings differ (`ResumeMismatchError`, naming each), ignore `--epochs` and `--patience`
+  in that comparison, fail without a resume file, and train nothing when the file records an
+  early stop or an epoch at or past `--epochs`. `scripts/effect_sweep_arm.py --resume` MUST pass
+  `--resume` to the training step, train into a run directory holding `latest.pt` only then,
+  refuse without `resume.pt` or beside `--from-step`, and name `--resume` when a training step
+  fails.
 - **FR-063b**: `train-effect-model`, `encode-abilities` and `evaluate-effect-model` MUST accept
   `--cards-folder` (repeatable; default `output/cardsfolder/`, `output/tokenscripts/`) as the sidecar
   roots they read, so stage 0 runs against gen-1's kept-aside sidecars after stage 1 reconverts.

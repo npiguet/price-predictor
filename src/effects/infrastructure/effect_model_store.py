@@ -363,3 +363,60 @@ def resolve_inference_paths(
         else Path(provenance.keyword_definitions_path)
     )
     return resolved_vocab, resolved_keyword
+
+
+# ── resuming an interrupted run ─────────────────────────────────────────────
+
+#: The file a training run rewrites at the end of every epoch, beside its
+#: checkpoints. It is not a checkpoint: a checkpoint is the best epoch's
+#: weights for inference, with the training-only heads filtered out, while this
+#: is everything the next epoch needs to continue as if the run had never
+#: stopped — the full model, the optimizer, the step count, the early stopper,
+#: the noise on ``e`` and the random generators.
+RESUME_NAME = "resume.pt"
+
+
+class ResumeMismatchError(RuntimeError):
+    """A resume file written by a run whose settings differ from this one's."""
+
+
+def save_resume_state(directory: Path, state: dict[str, Any]) -> Path:
+    """Write ``state`` to ``directory/resume.pt`` atomically.
+
+    Written to a temporary name and renamed over the old file, so a machine
+    that stops mid-write leaves the previous epoch's state rather than half of
+    this one's.
+    """
+    import os
+
+    import torch
+
+    directory = Path(directory)
+    directory.mkdir(parents=True, exist_ok=True)
+    path = directory / RESUME_NAME
+    temporary = directory / (RESUME_NAME + ".writing")
+    torch.save(state, temporary)
+    os.replace(temporary, path)
+    return path
+
+
+def load_resume_state(directory: Path) -> dict[str, Any]:
+    """The state :func:`save_resume_state` wrote, on the CPU."""
+    import torch
+
+    path = Path(directory) / RESUME_NAME
+    if not path.exists():
+        raise FileNotFoundError(
+            f"No resume file at {path}: nothing to resume. A run writes one at "
+            "the end of each epoch it completes."
+        )
+    return torch.load(path, map_location="cpu", weights_only=False)
+
+
+def resume_mismatches(saved: dict[str, Any], current: dict[str, Any]) -> list[str]:
+    """Every setting whose value differs between a resume file and this run."""
+    return [
+        f"{name}: resume file {saved.get(name)!r}, this run {current[name]!r}"
+        for name in sorted(current)
+        if saved.get(name) != current[name]
+    ]

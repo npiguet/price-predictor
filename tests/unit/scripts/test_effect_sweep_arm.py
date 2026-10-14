@@ -115,5 +115,45 @@ class TestMain:
         code = arm.main(["--run-dir", str(tmp_path), "--corpus", "c", "--from-step", "encode"])
         assert code == 1
         assert ran == ["encode.log", "evaluate.log"]
-        assert "resume with --from-step evaluate" in (tmp_path / "arm.log").read_text(
+        assert "continue with --from-step evaluate" in (tmp_path / "arm.log").read_text(
             encoding="utf-8")
+
+
+class TestResume:
+    """An interrupted training step continues from its resume file."""
+
+    def test_resume_reaches_the_trainer(self, tmp_path):
+        steps = _plan([
+            "--run-dir", str(tmp_path), "--corpus", "c", "--resume",
+            "--", "--e-dim", "64",
+        ])
+        assert steps[0][1][-1] == "--resume"
+
+    def test_a_trained_arm_with_a_resume_file_is_continued(self, tmp_path, monkeypatch):
+        (tmp_path / "latest.pt").write_bytes(b"")
+        (tmp_path / "resume.pt").write_bytes(b"")
+        ran = []
+        monkeypatch.setattr(arm, "run_logged", lambda command, log: ran.append(command) or 0)
+        code = arm.main([
+            "--run-dir", str(tmp_path), "--corpus", "c", "--resume", "--", "--e-dim", "64",
+        ])
+        assert code == 0
+        assert ran[0][-1] == "--resume"
+
+    def test_resume_without_a_resume_file_is_refused(self, tmp_path, capsys):
+        code = arm.main([
+            "--run-dir", str(tmp_path), "--corpus", "c", "--resume", "--", "--e-dim", "64",
+        ])
+        assert code == 2
+        assert "resume.pt" in capsys.readouterr().err
+
+    def test_resume_continues_training_only(self, tmp_path):
+        (tmp_path / "resume.pt").write_bytes(b"")
+        assert arm.main([
+            "--run-dir", str(tmp_path), "--corpus", "c", "--resume", "--from-step", "encode",
+        ]) == 2
+
+    def test_a_failed_training_step_names_resume(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(arm, "run_logged", lambda command, log: 1)
+        arm.main(["--run-dir", str(tmp_path), "--corpus", "c", "--", "--e-dim", "64"])
+        assert "continue with --resume" in (tmp_path / "arm.log").read_text(encoding="utf-8")

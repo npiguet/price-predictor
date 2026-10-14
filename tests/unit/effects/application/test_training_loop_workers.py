@@ -122,11 +122,29 @@ def _config(corpus, out: Path, **overrides) -> TrainEffectModelConfig:
     return TrainEffectModelConfig(**settings)
 
 
+class _Interrupted(Exception):
+    """Stands in for the machine turning off after an epoch."""
+
+
 def _run(
     monkeypatch, corpus, out: Path, caplog, *, workers: int, seed: int = SEED,
+    interrupt_after: int | None = None, resume: bool = False,
 ) -> dict:
-    """Two epochs end to end; every loss, the final weights, the share lines."""
+    """Two epochs end to end; every loss, the final weights, the share lines.
+
+    ``interrupt_after`` stops the run once that epoch's resume file is written,
+    as a machine turning off would; ``resume`` continues from that file.
+    """
     monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
+    if interrupt_after is not None:
+        real_save = TrainingLoop._save_resume
+
+        def save_then_stop(self, epoch, *args, **kwargs):
+            real_save(self, epoch, *args, **kwargs)
+            if epoch == interrupt_after:
+                raise _Interrupted
+
+        monkeypatch.setattr(TrainingLoop, "_save_resume", save_then_stop)
     built: dict[str, torch.nn.Module] = {}
     losses: list[float] = []
     real_loss = TrainingLoop._loss_for
@@ -154,8 +172,10 @@ def _run(
     monkeypatch.setattr(TrainingLoop, "_loss_for", loss_for)
     caplog.clear()
     with caplog.at_level(logging.INFO, logger="effects.application.training_loop"):
-        code = TrainingLoop(
-            _config(corpus, out, prefetch_workers=workers, seed=seed),
+        loop = TrainingLoop(
+            _config(
+                corpus, out, prefetch_workers=workers, seed=seed, resume=resume,
+            ),
             held_out=HeldOutCards(names=frozenset(), script_files=frozenset()),
             inherited=CorpusSplit(
                 held_out_cards=(), card_disjoint_games=frozenset(),
@@ -167,9 +187,13 @@ def _run(
             },
             holdout_permille=20, holdout_max_carriers=8, gate_one_records=0,
             rarity={}, corpus_digest="",
-        ).execute()
+        )
+        try:
+            code = loop.execute()
+        except _Interrupted:
+            code = None
     monkeypatch.undo()
-    assert code == 0
+    assert code in (0, None)
     return {
         "losses": losses,
         "parameters": {
@@ -274,6 +298,52 @@ def test_another_seed_is_another_run(monkeypatch, corpus, tmp_path, caplog, in_p
         not torch.equal(value, other["parameters"][name])
         for name, value in in_process["parameters"].items()
     )
+
+
+# ── resuming an interrupted run ─────────────────────────────────────────
+
+
+def test_a_run_resumed_after_an_epoch_is_the_uninterrupted_run(
+    monkeypatch, corpus, tmp_path, caplog, in_process,
+):
+    """Interrupted after epoch 1 and resumed, the run ends where it would have.
+
+    Epoch 2 is the curriculum epoch, so the resumed epoch also crosses the
+    early stopper's reset and the sparse fields' switch-on.
+    """
+    out = tmp_path / "interrupted"
+    first = _run(monkeypatch, corpus, out, caplog, workers=0, interrupt_after=1)
+    assert (out / "resume.pt").exists()
+    second = _run(monkeypatch, corpus, out, caplog, workers=2, resume=True)
+
+    assert first["losses"] + second["losses"] == in_process["losses"]
+    assert first["shares"] + second["shares"] == in_process["shares"]
+    for name, value in in_process["parameters"].items():
+        assert torch.equal(value, second["parameters"][name]), name
+    assert not multiprocessing.active_children()
+
+
+def test_a_resume_under_another_seed_is_refused(monkeypatch, corpus, tmp_path, caplog):
+    from effects.infrastructure.effect_model_store import ResumeMismatchError
+
+    out = tmp_path / "interrupted"
+    _run(monkeypatch, corpus, out, caplog, workers=0, interrupt_after=1)
+    with pytest.raises(ResumeMismatchError, match="seed"):
+        _run(monkeypatch, corpus, out, caplog, workers=0, seed=SEED + 1, resume=True)
+
+
+def test_resuming_a_run_that_reached_its_last_epoch_trains_nothing(
+    monkeypatch, corpus, tmp_path, caplog,
+):
+    out = tmp_path / "finished"
+    _run(monkeypatch, corpus, out, caplog, workers=0)
+    again = _run(monkeypatch, corpus, out, caplog, workers=0, resume=True)
+    assert again["losses"] == []
+
+
+def test_resuming_without_a_resume_file_fails(monkeypatch, corpus, tmp_path, caplog):
+    with pytest.raises(FileNotFoundError, match="resume"):
+        _run(monkeypatch, corpus, tmp_path / "empty", caplog, workers=0, resume=True)
 
 
 # ── the plumbing ────────────────────────────────────────────────────────

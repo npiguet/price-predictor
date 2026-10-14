@@ -12,6 +12,8 @@ directory then holds:
 - ``abilities/``, the ability cache this checkpoint encoded, so one arm's
   probes never read another arm's cache;
 - ``reports/``, the embedding-probe and knowledge-probe report directories;
+- ``resume.pt``, rewritten after every training epoch, which ``--resume``
+  continues from when the training step was interrupted;
 - one log per step (``arm.log``, ``train.log``, ``encode.log``,
   ``evaluate.log``, ``probes-<script>.log``, ``knowledge-probes.log``), each
   opening with the exact command line that produced it and the commit it ran
@@ -89,7 +91,8 @@ def plan(args: argparse.Namespace, train_args: list[str]) -> list[tuple[str, lis
         ("train", python + ["-m", "effects", "train-effect-model",
                             "--corpus", str(args.corpus),
                             "--vocab-path", str(args.vocab_path), *variants,
-                            "--model-output", str(run_dir), *train_args], "train.log"),
+                            "--model-output", str(run_dir), *train_args,
+                            *(["--resume"] if args.resume else [])], "train.log"),
         ("encode", python + ["-m", "effects", "encode-abilities",
                              "--checkpoint", checkpoint, *variants,
                              "--output-root", abilities],
@@ -137,6 +140,9 @@ def parse_args(argv: list[str]) -> tuple[argparse.Namespace, list[str]]:
                         help="where the shared knowledge-probe set lives")
     parser.add_argument("--freeze-probe-set", action="store_true",
                         help="freeze the knowledge-probe set first (first arm on a corpus)")
+    parser.add_argument("--resume", action="store_true",
+                        help="continue an interrupted training step from the "
+                             "resume.pt it left in --run-dir, then run the rest")
     return parser.parse_args(own), train_args
 
 
@@ -144,9 +150,18 @@ def main(argv: list[str] | None = None) -> int:
     argv = sys.argv[1:] if argv is None else argv
     args, train_args = parse_args(argv)
     run_dir: Path = args.run_dir
-    if args.from_step == "train" and (run_dir / "latest.pt").exists():
+    if args.resume and args.from_step != "train":
+        print("--resume continues the training step; drop --from-step",
+              file=sys.stderr)
+        return 2
+    if args.resume and not (run_dir / "resume.pt").exists():
+        print(f"{run_dir} holds no resume.pt to continue from", file=sys.stderr)
+        return 2
+    if (args.from_step == "train" and not args.resume
+            and (run_dir / "latest.pt").exists()):
         print(f"{run_dir} already holds a trained arm; pick another --run-dir, "
-              "or resume with --from-step", file=sys.stderr)
+              "continue its training with --resume, or skip to a later step "
+              "with --from-step", file=sys.stderr)
         return 2
     if args.from_step == "train" and not train_args:
         print("pass the arm's train-effect-model flags after --", file=sys.stderr)
@@ -164,8 +179,9 @@ def main(argv: list[str] | None = None) -> int:
         code = run_logged(command, run_dir / log)
         if code != 0:
             with arm_log.open("a", encoding="utf-8") as out:
+                again = "--resume" if step == "train" else f"--from-step {step}"
                 out.write(f"{datetime.datetime.now():%H:%M:%S} {step} failed "
-                          f"(exit {code}); resume with --from-step {step}\n")
+                          f"(exit {code}); continue with {again}\n")
             return code
     with arm_log.open("a", encoding="utf-8") as out:
         out.write(f"{datetime.datetime.now():%H:%M:%S} arm complete\n")
