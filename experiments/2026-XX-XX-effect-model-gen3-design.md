@@ -239,6 +239,54 @@ targeted at a rule would feed training separately.
 record the rules it exercises, which is the same index that sampling by field needs. The two items
 would share the decision between pools, an index and a database.
 
+## Early stopping could read a smoothed loss in which every output field counts
+
+**The card-disjoint loss moves between epochs by about as much as it improves, so stopping on its
+raw value can fire on noise.** Gen-2 training keeps the epoch with the lowest card-disjoint
+validation loss and stops after five epochs without a new lowest, a rule called patience. Late in
+gen-2's run with 64-dimensional ability embeddings, the loss went up and down by about 0.1 from one epoch to the
+next while its trend fell by less than that per epoch.
+
+| epoch | card-disjoint loss |
+|---:|---:|
+| 20 | 3.9391 |
+| 21 | 4.0106 |
+| 22 | 3.9189 |
+| 23 | 4.0816 |
+| 24 | 3.7801 |
+| 25 | 3.7344 |
+
+An unusually low epoch resets the patience counter and sets a mark that ordinary epochs then fail to
+beat. Five ordinary epochs in a row then end training while the trend is still falling. The kept checkpoint is
+also the luckiest epoch, so its loss overstates the model.
+
+**The first change is to stop on a smoothed loss.** Two forms are common:
+
+- **A moving mean of the last three epochs' losses.** Patience counts epochs without a new lowest
+  mean. The kept checkpoint is the middle epoch of the best window.
+- **An exponential moving average of the weights.** Training keeps a running average of the
+  parameters, each step moving it a small fraction toward the current weights, and validation scores
+  the average. The average is itself less noisy than any single epoch's weights and is usually a
+  slightly better model, so it is both what stopping reads and what the run keeps. `resume.pt` would
+  have to carry it.
+
+**The second change is to count every output field equally in the stopping loss.** The loss is a sum
+over the 46 output fields, and a few large fields carry most of it: the gate, toughness, damage taken
+and life. A field such as `keywords_gained` can get worse without moving the total. Each field can
+instead be scored by its explained deviance on the card-disjoint stratum, the measure defined in the
+section on adaptive sampling above, and stopping can read the mean over the fields. Two details need
+deciding:
+
+- **Fields with almost nothing to learn.** A field whose constant prediction already has a tiny loss,
+  such as `poison_delta`, has an explained deviance that swings widely on a few records. Such fields
+  need a floor on their constant-prediction loss to enter the mean, or a weight that grows with it.
+- **What a point is worth.** An equal mean rewards a weak field going from 20% to 30% as much as
+  life going from 80% to 90%. That is the intent, but it lets a weak field's noise steer stopping,
+  which makes the smoothing above more necessary, not less.
+
+The same per-field scores are what adaptive sampling would read on the training side, so the two
+items would share their bookkeeping.
+
 ## Outcome
 
 To be filled in once gen-3 is designed and run.
