@@ -1225,6 +1225,50 @@ For each arm, in order:
 
 The arms are then compared by hand, and the Outcome section records the comparison.
 
+### Stage 6 — a difference between arms counts only where it exceeds the noise between runs
+
+Each arm is a single training run with one seed, so two arms can differ by chance alone. Whether
+this stage runs is decided once the sweep's results are in; it is worth its cost only when arms
+land close together.
+
+Three sources of variation make two equally good arms score differently, and one run measures
+only two of them.
+
+| source | what varies | measured from one run |
+|---|---|---|
+| validation sample | the card-disjoint loss of one model on another sample of held-out texts | yes, by resampling the held-out texts |
+| movement within a run | the loss from one epoch to the next as the weights keep changing | yes, from the epochs on the plateau |
+| seed | the level a run settles at, from its initial weights, data order, dropout and noise | no; it needs a second run |
+
+The epochs on the plateau set a floor, not the whole margin. Two arms that differ by less than
+their epoch-to-epoch movement cannot be told apart. Seed variance is usually larger, because a run
+with another seed tends to sit at another level for the whole run rather than only wobble
+differently, and nothing inside one run shows that offset. Consecutive epochs start from each
+other's weights, so their spread also understates the noise in their mean. On arm `e64`'s first
+run the plateau's movement was about a tenth of a loss point.
+
+| arm `e64`, first run, epochs 14 to 20 | mean | standard deviation |
+|---|---:|---:|
+| card-disjoint loss | 4.06 | 0.11 |
+| of it, the output fields | 3.58 | 0.12 |
+
+The comparison then takes three steps, each run only if the one before leaves the answer open.
+
+1. **A paired comparison on the same records.** Both arms' checkpoints score the same card-disjoint
+   records. The difference is taken per held-out text, because the records of one text are
+   correlated, and bootstrapped over texts for a confidence interval. Pairing removes most of the
+   sample's noise, since both models face the same hard and easy texts. The arms already train
+   with one seed, so they also read the same shards in the same order. Arms are compared on the
+   mean of their last few epochs as well as on their best one, because the best of about twenty
+   noisy epochs reads lower than the model's true level, and more so in a noisier run.
+2. **Agreement across measures.** A wider arm that wins on the card-disjoint loss, on most rule
+   families and on the knowledge probes' rung 1 minus rung 1w is more convincing than one that wins
+   on a single number, although all of them come from the same run.
+3. **A second seed of one arm.** One extra run gives a rough estimate of the spread between seeds,
+   σ, and three give a usable one. A difference between two arms is then read against about √2·σ.
+
+No script performs step 1 yet.
+
 ### Three pieces of tooling the run plan assumes do not exist yet
 
 - **The zero-shot measurement.** `evaluate-effect-model` names the withheld keyword and measures
