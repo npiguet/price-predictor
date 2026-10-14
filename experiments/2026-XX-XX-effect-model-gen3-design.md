@@ -115,6 +115,20 @@ probability 1 − (1 − r)^K. Blocker what-ifs outnumber real block decisions a
 --only-cards` targets every text carried only by held-out cards. That set is larger than the
 held-out texts themselves.
 
+## The observed-mana probe counts every mana event as one mana
+
+**The knowledge probes' observed-mana target reads a field the collector never writes.**
+`labels.mana_observed` sums each `mana_produced` event's `params.amount`. The collector writes
+`params.mana_by_color` instead, a map from colour to count, so every event counts as one mana
+whatever it produced. On gen-2's first arm the target scored no rung at all, so no gen-2 conclusion
+rests on it.
+
+**Two questions about what the collector writes have to be settled before the fix.** A dual land's
+event reads `{"W": 1, "R": 1}`, which may be one mana of either colour or the collector listing
+both of the land's colours. Thousands of gen-2's events carry an empty map. The probe can count
+mana correctly only once both are understood, and either may turn out to be a collector defect
+rather than a probe one.
+
 ## Training could draw more of the records a weak output field needs, from the whole corpus
 
 **Some output fields stay weak while the others improve.** The model predicts 46 output fields per
