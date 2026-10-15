@@ -15,6 +15,7 @@ import io
 import json
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
@@ -37,6 +38,7 @@ labels = run.sibling("labels")
 ladder = run.sibling("ladder")
 sweeps = run.sibling("sweeps")
 compare = run.sibling("compare")
+board = run.sibling("board")
 common = run.sibling("common")
 
 
@@ -724,6 +726,108 @@ class TestCompare:
         assert "rung 1 − rung 1w" in stdout.buffer.getvalue().decode("utf-8")
 
 
+# ── board abilities ─────────────────────────────────────────────────────
+
+
+def _key(trait_kind: str, face: int = 0):
+    from effects.domain.provenance import ProvenanceKey
+
+    return ProvenanceKey("cardsfolder/x/x.txt", face, trait_kind, 0)
+
+
+class _Sidecars:
+    """A sidecar cache over made-up lines: ``get`` for a card, ``line_for`` for a key."""
+
+    def __init__(self, lines, api_by_kind=None):
+        self.lines = lines
+        self.api_by_kind = api_by_kind or {}
+
+    def get(self, script_file):
+        return SimpleNamespace(lines=self.lines)
+
+    def line_for(self, key):
+        api = self.api_by_kind.get(key.trait_kind)
+        return None if api is None else SimpleNamespace(script_api_type=api)
+
+
+def _line_of(api, *keys):
+    return SimpleNamespace(script_api_type=api, provenance=keys)
+
+
+def _legality(*forbidden_kinds):
+    from effects.domain.records import PlayabilitySubkind, RecordKind
+
+    return SimpleNamespace(
+        kind=RecordKind.PLAYABILITY, subkind=PlayabilitySubkind.BLOCKERS,
+        payload=SimpleNamespace(forbidden=[
+            SimpleNamespace(responsible_static=(_key(kind),)) for kind in forbidden_kinds]),
+    )
+
+
+class TestBoard:
+    def test_a_keyword_line_and_the_other_face_are_not_unlisted(self):
+        entity = SimpleNamespace(printed=(_key("spell"),), face=0)
+        sidecars = _Sidecars([
+            _line_of("Keyword", _key("static")),
+            _line_of("Continuous", _key("static")),
+            _line_of(None, _key("trigger", face=1)),
+            _line_of("DealDamage", _key("spell")),
+        ])
+        assert board.unlisted_kinds(entity, sidecars) == {"static"}
+
+    def test_a_permanent_without_printed_keys_lists_nothing(self):
+        entity = SimpleNamespace(printed=(), face=0)
+        assert board.unlisted_kinds(entity, _Sidecars([])) == frozenset()
+
+    def test_legality_is_split_by_the_restricting_static(self):
+        sidecars = _Sidecars([], {"static": "CantBlock", "keyword": "Keyword"})
+        assert board.subset_of(_legality("static", "keyword"), sidecars) == "legality-static"
+        assert board.subset_of(_legality("keyword"), sidecars) == "legality-keyword"
+        assert board.subset_of(_legality(), sidecars) == "legality-none"
+        assert board.subset_of(_legality("trigger"), sidecars) is None
+
+    def test_collect_stops_each_subset_at_its_quota(self):
+        sidecars = _Sidecars([], {"static": "CantBlock"})
+        chosen = board.collect([_legality()] * 5 + [_legality("static")] * 2,
+                               sidecars, per_subset=3)
+        assert len(chosen["legality-none"]) == 3
+        assert len(chosen["legality-static"]) == 2
+        assert set(chosen) == set(board.SUBSETS)
+
+    def test_fixture_records_land_in_subsets_that_fit_them(self, records, sidecars):
+        from effects.domain.records import Moment, RecordKind
+
+        seen = set()
+        for record in records:
+            name = board.subset_of(record, sidecars)
+            if name is None:
+                continue
+            seen.add(name)
+            if name.startswith("legality"):
+                assert record.kind is RecordKind.PLAYABILITY
+            else:
+                assert record.kind is RecordKind.RESOLUTION
+                assert record.moment is Moment.RESOLUTION
+            if name == "resolution-replacement":
+                assert any(
+                    "replacement" in board.unlisted_kinds(entity, sidecars)
+                    for entity in record.state.entities
+                    if entity.zone == "battlefield" and entity.id != record.state.refs.source)
+        assert {"legality-none", "resolution-none", "resolution-replacement"} <= seen
+
+    def test_the_table_sets_subsets_side_by_side(self):
+        body = {"base_loss": 0.5, "noise": {"cards": 0.01, "act": 0.2, "all": 0.2}}
+        result = {
+            "legality-static": {"n": {"card-disjoint": 3}, "ablation": {"blocker_legal": body}},
+            "legality-none": {"n": {"card-disjoint": 4}, "ablation": {"blocker_legal": body}},
+        }
+        text = board.table(result)
+        assert "| field | legality-static | legality-none |" in text
+        assert "| blocker_legal | 0.500 | 0.500 |" in text
+        assert "| blocker_legal | 0.010 | 0.010 |" in text
+        assert "legality-static 3" in text
+
+
 # ── one forward pass through a real checkpoint ──────────────────────────
 
 _GEN1 = _ROOT / "models" / "effects" / "runs" / "2026-09-17-full-textless-corpus" / "latest.pt"
@@ -795,7 +899,6 @@ class TestExtraction:
     def test_method_c_trains_a_shallow_trunk_beside_the_full_model(self, probe_model,
                                                                   records, tmp_path):
         import shutil
-        from types import SimpleNamespace
 
         (tmp_path / "training").mkdir()
         shutil.copy(_FIXTURES / "gen1-records.jsonl.gz",

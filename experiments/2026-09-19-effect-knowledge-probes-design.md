@@ -110,6 +110,35 @@ The same replacements are also applied to the `[ACT]` slot alone and to the card
 
 Ablation measures reliance, not location. A trunk can lean on `e` and still do the work itself: it may need `e` to know which ability it is looking at and then compute everything else from the board. That is why the ladder is the headline and the ablation supports it.
 
+### The card slots hold no static, trigger or replacement, so a second ablation measures what their absence costs
+
+The state snapshot gives each permanent its spell and activated abilities as card-slot lines, and nothing else. A permanent's statics, triggers and replacements reach the model only through what they have already done to the board: an anthem's +1/+1 is in the toughness, a granted keyword is in the flags. About a quarter of the permanents on the battlefield in card-disjoint records carry such a line on their current face, triggers most often.
+
+| battlefield permanents in 1,500 records of the first card-disjoint shard, counted once per record | count |
+|---|---:|
+| sampled | 24,363 |
+| with a trigger, a non-keyword static or a replacement | 6,394 |
+| with a trigger | 3,882 |
+| with a non-keyword static | 3,010 |
+| with a replacement | 1,274 |
+
+A Pacifism shows the model an enchantment attached to a creature and no text, and a Rest in Peace shows it an enchantment that does nothing.
+
+What a static decides at the moment of the record therefore reaches the model as no text. Who may block a creature, and what a destroy turns into, are the two places this matters most. The full ablation cannot show it: its card-slot replacement costs almost nothing because the lines that would matter were never in the card slots, and the records where they matter are a small part of its sample.
+
+The board-abilities ablation runs method B on six subsets of the validation strata instead. Each pairs records where an unlisted line decides the answer with a control of the same kind where none does.
+
+| subset | records |
+|---|---|
+| legality-static | attack or block legality, a creature kept out by a static that is not a keyword line, such as Pacifism |
+| legality-keyword | the same, kept out by keyword lines only, such as protection, which the keyword flags carry |
+| legality-none | the same, nobody kept out |
+| resolution-replacement | an effect half, with a replacement line on a permanent other than the source |
+| resolution-static | an effect half, with a non-keyword static on another permanent and no replacement |
+| resolution-none | an effect half, with no static, trigger or replacement line on any other permanent |
+
+Gen-2 does not list the missing lines; the gen-3 draft records the collector change that would. The subsets' losses on gen-2's arms are the baseline that change is measured against. A model that reads the lines should lower the loss on legality-static and resolution-replacement toward their controls, and its card-slot ablation there should rise above zero.
+
 ## The share and the ablation together say which families gen-3 must move into `e`
 
 Each pattern of share, reliance and oracle rung points to one next step: a change to gen-3's architecture, more corpus records, or a stronger probe.

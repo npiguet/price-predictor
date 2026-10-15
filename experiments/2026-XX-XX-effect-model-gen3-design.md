@@ -239,6 +239,16 @@ targeted at a rule would feed training separately.
 record the rules it exercises, which is the same index that sampling by field needs. The two items
 would share the decision between pools, an index and a database.
 
+## The snapshot should list every line of a permanent, not only its spell and activated abilities
+
+**The model never reads a permanent's statics, triggers or replacements.** `SnapshotBuilder.printedKeys` fills a permanent's card-slot lines from Forge's `getSpellAbilities()`, which holds the cast spell and the activated abilities. Attachment-granted lines come from the same call on each attachment. About a quarter of the permanents on the battlefield carry a line this leaves out, and the knowledge-probes record gives the counts. Keyword lines are unaffected, because the keyword flags carry them.
+
+**What a static has already done reaches the model, and what it decides at the moment of the record does not.** An anthem's +1/+1 is in the toughness and a granted keyword is in the flags. A "can't block" static, a replacement that exiles instead of destroying, a damage doubler, or a lord whose removal shrinks its creatures are text the model needs and never sees. Pacifism shows it an enchantment attached to a creature and nothing more.
+
+**The fix is in the collector, so gen-2 keeps its corpus and measures the cost instead.** `printedKeys` and `grantedAttached` would add the card's live triggers, static abilities and replacement effects, through `getTriggers()`, `getStaticAbilities()` and `getReplacementEffects()`. Reading Forge's live lists respects a creature that has lost its abilities, which reading the card's sidecar at training time would not. Abilities a permanent gains from another permanent's static, such as a lord granting a mana ability, still appear nowhere, and are worth listing in the same change. A board-heavy record then encodes more texts per step, so training slows somewhat.
+
+**Gen-2's board-abilities ablation is the baseline.** It scores each gen-2 arm on legality restricted by a non-keyword static and on resolutions with a replacement on another permanent, beside controls of the same kinds. A gen-3 model that reads the new lines should close those subsets' loss toward their controls, and noise in its card slots should start to cost something there.
+
 ## Early stopping could read a smoothed loss in which every output field counts
 
 **The card-disjoint loss moves between epochs by about as much as it improves, so stopping on its

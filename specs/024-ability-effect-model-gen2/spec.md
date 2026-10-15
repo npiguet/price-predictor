@@ -1049,6 +1049,16 @@ the sweeps, the ablation, and the recorded digest. Run `compare.py` over two sco
   noise matched to the vectors' mean and covariance, by the mean `e` of the line's API type, or by
   the `e` of the nearest other text, each applied to every slot, to `[ACT]` alone, and to the card
   slots alone.
+- **FR-085b**: The knowledge probes MUST run the FR-085 ablation on six subsets of the validation
+  strata, unless `--no-board`: attack or block legality records restricted by a non-keyword static,
+  by keyword lines only, or by nothing; and resolution effect halves with a replacement line on a
+  permanent other than the source, with a non-keyword static there and no replacement, or with no
+  static, trigger or replacement line on any other permanent. A permanent's lines MUST be read from
+  its sidecar on its current face, keyword lines excluded. Each subset MUST take the first
+  `--board-records` (default 300) records per stratum from the first `--board-shards` (default
+  200) shards in path order, so arms on one corpus read the same records. The scorecard MUST hold
+  each subset's per-stratum count and ablation, and `board-abilities.md` each subset's per-field
+  loss and its increase with noise in the card slots.
 - **FR-086**: `--per-layer` MUST probe each trunk layer's output through forward hooks, without
   modifying the model. `--method-c` MUST train a shallow trunk, one transformer layer or none, on
   frozen `e`; it is off by default.

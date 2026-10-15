@@ -15,6 +15,8 @@ frozen set, and writes one scorecard recording its digest (FR-088):
   board-dependent targets and per held-out/trained split for line properties;
 * the four board sweeps (``sweeps``);
 * the ablation of ``e`` (``ablation``);
+* the same ablation on records where a permanent's unlisted static, trigger or
+  replacement decides the answer, beside controls (``board``);
 * optionally every trunk layer (``--per-layer``) and a shallow trunk trained on
   frozen ``e`` (``--method-c``).
 
@@ -111,6 +113,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--method-c-steps", type=int, default=METHOD_C_STEPS)
     parser.add_argument("--no-sweeps", action="store_true")
     parser.add_argument("--no-ablation", action="store_true")
+    parser.add_argument("--no-board", action="store_true",
+                        help="skip the board-abilities ablation (board.py)")
     parser.add_argument("--reports-dir", type=Path, default=common.DEFAULT_REPORTS,
                         help="where the report directory goes, and the probe set "
                              "unless --probe-set-dir is given")
@@ -122,6 +126,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--items-per-target", type=int, default=ITEMS_PER_TARGET)
     parser.add_argument("--profile-shards", type=int, default=PROFILE_SHARDS)
     parser.add_argument("--ablation-records", type=int, default=ABLATION_RECORDS)
+    parser.add_argument("--board-records", type=int, default=None,
+                        help="records per board subset per stratum (default board.py's)")
+    parser.add_argument("--board-shards", type=int, default=None,
+                        help="validation shards read per stratum for the board subsets")
     args = parser.parse_args(argv)
     args.cards_folder = args.cards_folder or list(common.DEFAULT_CARDS_FOLDERS)
     unknown = set(args.families or ()) - set(labels.FAMILIES)
@@ -521,7 +529,7 @@ def probe(args, checkpoint, corpus: Path, probe_set: dict) -> dict:
     from effects.infrastructure.record_io import read_shard
 
     common, labels, ladder = sibling("common"), sibling("labels"), sibling("ladder")
-    sweeps, ablation = sibling("sweeps"), sibling("ablation")
+    sweeps, ablation, board = sibling("sweeps"), sibling("ablation"), sibling("board")
     started = time.time()
     if torch.cuda.is_available():
         torch.cuda.reset_peak_memory_stats()
@@ -560,6 +568,21 @@ def probe(args, checkpoint, corpus: Path, probe_set: dict) -> dict:
     every = [r for rows in records_by_stratum.values() for r in rows]
     if not every:
         raise SystemExit("no probe records were found in the probe set's sources")
+    board_chosen: dict[str, dict[str, list]] = {}
+    if not args.no_board:
+        board_sidecars = common.sidecar_cache(args.cards_folder)
+        for stratum in common.STRATA:
+            directory = Path(corpus) / "validation" / stratum
+            if not directory.exists():
+                continue
+            progress(f"board subsets: scanning {stratum}")
+            board_chosen[stratum] = board.collect(
+                board.stratum_records(
+                    directory, shards=args.board_shards or board.SHARDS_PER_STRATUM),
+                board_sidecars, per_subset=args.board_records or board.RECORDS_PER_SUBSET)
+            progress("  " + ", ".join(
+                f"{name} {len(rows)}" for name, rows in board_chosen[stratum].items()))
+            every += [r for rows in board_chosen[stratum].values() for r in rows]
     progress(f"loading {args.checkpoint}")
     probe_model = common.load_probe_model(
         args.checkpoint, args.cards_folder, every, checkpoint=checkpoint,
@@ -645,10 +668,15 @@ def probe(args, checkpoint, corpus: Path, probe_set: dict) -> dict:
                 if count >= args.ablation_records:
                     break
                 samples.append(record)
+    stats = None
     if not args.no_ablation and samples:
         progress(f"ablation over {len(samples)} records")
         stats = ablation.cache_statistics(cache[0])
         scorecard["ablation"] = ablation.run_ablation(probe_model, samples, stats)
+    if board_chosen:
+        progress("board-abilities ablation")
+        stats = stats or ablation.cache_statistics(cache[0])
+        scorecard["board_abilities"] = board.run(probe_model, board_chosen, stats, ablation)
     if args.method_c and samples:
         progress("method C: a shallow trunk on frozen e")
         scorecard["method_c"] = method_c(args, probe_model, corpus, samples)
@@ -718,6 +746,9 @@ def write_tables(out_dir: Path, scorecard: dict) -> None:
             cells = [_fmt(body[r][s]) for r in abl.REPLACEMENTS for s in abl.SCOPES]
             lines.append(f"| {name} | {_fmt(body['base_loss'])} | " + " | ".join(cells) + " |")
         (out_dir / "ablation.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
+    if scorecard.get("board_abilities"):
+        (out_dir / "board-abilities.md").write_text(
+            sibling("board").table(scorecard["board_abilities"]), encoding="utf-8")
 
 
 def probe_set_location(args: argparse.Namespace, corpus_digest: str) -> Path:

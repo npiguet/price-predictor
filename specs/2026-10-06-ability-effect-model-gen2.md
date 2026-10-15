@@ -677,6 +677,21 @@ train-scorer` Phase A against that directory as a subprocess. It never writes un
   matched to the vectors' mean and covariance, by the mean `e` of the line's API type, or
   by the `e` of the nearest other text. Each replacement is applied to every slot, to
   `[ACT]` alone, and to the card slots alone.
+- The board-abilities ablation runs the same measurement on six subsets of the validation
+  strata, the first 300 records of each per stratum in shard order (`--no-board` skips it):
+
+  | subset | records |
+  |---|---|
+  | legality-static | attack or block legality, a creature kept out by a static that is not a keyword line |
+  | legality-keyword | the same, kept out by keyword lines only |
+  | legality-none | the same, nobody kept out |
+  | resolution-replacement | an effect half, a replacement line on a permanent other than the source |
+  | resolution-static | an effect half, a non-keyword static on another permanent, no replacement |
+  | resolution-none | an effect half, no other permanent with a static, trigger or replacement line |
+
+  A permanent's lines are read from its sidecar, because the snapshot lists its spell and
+  activated abilities only. The report is `board-abilities.md`: per field, each subset's loss
+  and its increase with noise in the card slots.
 - `--per-layer` probes each trunk layer's output. `--method-c` trains a shallow trunk, one
   transformer layer or none, on frozen `e`.
 - `compare SCORECARD ...` sets scorecards side by side per family and per rung, and ranks
