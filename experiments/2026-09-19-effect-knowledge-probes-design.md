@@ -510,7 +510,7 @@ The run reads 600 records per subset, 300 from each validation stratum, and its 
 
 #### Arm `e128` (2026-10-16)
 
-Arm `e128` doubles the width of `e` and keeps every other setting of arm `e64`'s second run; its checkpoint is from epoch 22. It is probed on the same frozen set (digest `ab6452679131`), so the two arms compare item by item. The scorecard is `models/effects/runs/2026-10-gen2-e128/reports/knowledge-probes-2026-10-gen2-e128-20261016/scorecard.json`.
+Arm `e128` doubles the width of `e` and keeps every other setting of arm `e64`'s second run; its checkpoint is from epoch 22. It is probed on the same frozen set (digest `ab6452679131`), so the two arms compare item by item. The scorecard is `models/effects/runs/2026-10-gen2-e128/reports/knowledge-probes-2026-10-gen2-e128-20261015/scorecard.json`.
 
 ##### Deaths fall with toughness more steeply, and still not at each spell's own damage
 
