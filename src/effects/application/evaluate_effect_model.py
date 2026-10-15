@@ -606,10 +606,11 @@ class EvaluationReport:
 
     @property
     def ships(self) -> bool:
-        """Whether the model and cache may ship.
+        """Whether gates 1 and 3 both hold.
 
         Only gates 1 and 3 can answer no. Gate 2 is routing information and the
-        remaining checks are diagnostics.
+        remaining checks are diagnostics. The verdict is reported; it never
+        stops the command.
         """
         return not self.blocking_failures
 
@@ -639,7 +640,7 @@ class EvaluationReport:
             )
         lines.append(
             "SHIPS" if self.ships
-            else "BLOCKED: " + ", ".join(c.name for c in self.blocking_failures)
+            else "GATES FAILED: " + ", ".join(c.name for c in self.blocking_failures)
         )
         return "\n".join(lines)
 

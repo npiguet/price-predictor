@@ -1676,7 +1676,9 @@ def run_evaluate_effect_model(args: argparse.Namespace) -> int:
         logger.error("%s", exc)
         return 2
     print(report.render())
-    return 0 if report.ships else 1
+    # A failed gate is a result to record, not a reason to stop: the sweep runs
+    # every arm's probes after evaluation whatever the verdicts.
+    return 0
 
 
 # ── scorer-smoke-test ───────────────────────────────────────────────────

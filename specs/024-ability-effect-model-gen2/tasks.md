@@ -302,6 +302,7 @@ before this phase is complete.
 - [X] T141 `isCombatDamage()` in `forge-connector/.../effects/BusBracketCollector.java` matches both damage-step names (FR-052b); test in `BusBracketCollectorTest`; rebuild the JAR with `mvn install -DskipTests`
 - [X] T142 `scripts/repair_first_strike_steps.py` (FR-052a), tests in `tests/unit/scripts/test_repair_first_strike_steps.py`; run it once on `output/effects/corpus-gen2/`
 - [X] T143 Per-epoch `resume.pt` and `train-effect-model --resume` (FR-063d) in `src/effects/application/training_loop.py` and `src/effects/infrastructure/effect_model_store.py`; `--resume` on `scripts/effect_sweep_arm.py`; tests: a run interrupted after epoch 1 and resumed equals the uninterrupted run bit for bit (`test_training_loop_workers.py`), a changed seed is refused, a finished run trains nothing; the runner's resume handling in `test_effect_sweep_arm.py`
+- [X] T144 `evaluate-effect-model` exits 0 after any gate verdict and prints `GATES FAILED: <gates>` (FR-091a) in `src/effects/infrastructure/cli.py` and `src/effects/application/evaluate_effect_model.py`; tests in `tests/unit/effects/infrastructure/test_cli_evaluate_exit.py` and `test_gates.py`
 - [ ] T140 Retrain arm `e64` with `--freeze-probe-set` on the corrected inputs and the repaired corpus, then continue the sweep (T131)
 
 ---

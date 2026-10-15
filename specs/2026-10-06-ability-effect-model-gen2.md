@@ -601,6 +601,8 @@ names, so a corpus built from records collected afterwards needs no repair.
   whoever it fights: the blocker's damage taken, and its death where the hit is lethal, or
   the defending player's life when the carrier is unblocked. With the keyword the carrier
   deals that damage, and without it, none.
+- A failed gate 1 or gate 3 is printed as `GATES FAILED: <gates>` and the command still
+  exits 0. Only an error, such as a hash, split or corpus mismatch, exits non-zero.
 
 `--win-rates PATH` (default `output/sealed/cards-win-rates.txt`) names the per-card
 win-rate file the decodability battery reads.

@@ -447,7 +447,7 @@ class TestReport:
         report.add(evaluate_gate_three(np.ones((50, 8))))
         rendered = report.render()
         assert "gate-3" in rendered
-        assert "BLOCKED" in rendered
+        assert "GATES FAILED: gate-3" in rendered
 
     def test_a_passing_gate_still_prints_every_figure_it_measured(self):
         """The design record needs all three gate-1 margins, pass or fail."""

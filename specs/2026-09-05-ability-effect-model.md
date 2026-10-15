@@ -462,7 +462,7 @@ Prediction checks run the loaded checkpoints against records from `--records-dir
 
 The damage-step canary covers the damage-step family only; evasion keywords are not part of any canary gate, since their supervision arrives with playability records and so needs the engine patch.
 
-**Gates** (numeric). Gates 1 and 3 block shipping the model or the cache. Gate 2 blocks nothing: it is a per-keyword routing decision whose failure is what schedules that keyword's probe.
+**Gates** (numeric). Gates 1 and 3 are pass/fail verdicts on the model and the cache; `evaluate-effect-model` reports them and exits 0 either way. Gate 2 is a per-keyword routing decision whose failure is what schedules that keyword's probe.
 
 1. **Identity-baseline gate** — card-disjoint split, unique-text stratum, resolution records: the `full` model beats the `identity` variant by ≥ 0.05 absolute affected-gate F1, ≥ 0.05 absolute zone-outcome accuracy on affected entities, and ≥ 5% relative reduction in mean Poisson deviance over the count-valued fields. All three must hold.
 2. **Damage-step keyword canary**, run per keyword over first strike, double strike, deathtouch, lifelink, trample, indestructible, wither, and infect; it decides whether that keyword gets a probe.

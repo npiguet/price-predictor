@@ -1067,6 +1067,10 @@ the sweeps, the ablation, and the recorded digest. Run `compare.py` over two sco
   The knowledge-probe and embedding-probe scripts sit outside `src/` and may import from `effects`.
 - **FR-091**: Gates 2 and 3 and the baseline variants MUST stay available and unchanged, apart from
   gate 2's two rows of FR-069a. Gen-2's evaluation does not train the baselines.
+- **FR-091a**: `evaluate-effect-model` MUST exit 0 whatever the gates' verdicts. A failed gate 1 or
+  gate 3 MUST be printed as `GATES FAILED: <gates>` in place of `SHIPS`, so a sweep arm runs its
+  probes after any verdict. Errors (hash, split or corpus mismatch, a missing file, a bad flag)
+  MUST still exit non-zero.
 - **FR-092**: The record schema beyond `random_seat`, `what_if` and the `actor_player` of FR-030a,
   the state snapshot, events, per-kind payloads, collectors, caps and budgets beyond FR-021 to
   FR-038, the provenance join beyond FR-005a and FR-029a, synthetic variants, depleted collection,
