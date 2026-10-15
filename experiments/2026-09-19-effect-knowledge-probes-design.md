@@ -507,3 +507,46 @@ The run reads 600 records per subset, 300 from each validation stratum, and its 
 | minimum blockers | 0.651 | 0.821 | 0.279 | | | |
 | zone outcome | | | | 0.129 | 0.109 | 0.061 |
 | affected gate | 1.376 | 1.813 | 0.520 | 1.040 | 0.804 | 0.814 |
+
+#### Arm `e128` (2026-10-16)
+
+Arm `e128` doubles the width of `e` and keeps every other setting of arm `e64`'s second run; its checkpoint is from epoch 22. It is probed on the same frozen set (digest `ab6452679131`), so the two arms compare item by item. The scorecard is `models/effects/runs/2026-10-gen2-e128/reports/knowledge-probes-2026-10-gen2-e128-20261016/scorecard.json`.
+
+##### Deaths fall with toughness more steeply, and still not at each spell's own damage
+
+The toughness sweep starts higher and falls further than arm `e64`'s, and its per-record curves fall around toughness 3 to 4 rather than 4 to 6. A 1-damage spell's curve now drops sooner, but still one to three steps after toughness 1. The damage sweep rises more steeply with the stated amount, again with no step between 3 and 4. The trunk reads more of the amount from the wider `e`, without yet comparing it with the toughness.
+
+| sweep | 1 | 2 | 3 | 4 | 5 | 8 |
+|---|---:|---:|---:|---:|---:|---:|
+| toughness of the target, its death, `e64` | 0.563 | 0.542 | 0.519 | 0.466 | 0.317 | 0.122 |
+| toughness of the target, its death, `e128` | 0.861 | 0.757 | 0.564 | 0.344 | 0.204 | 0.064 |
+| `NumDmg$` on a spell, toughness-4 target's death, `e64` | 0.454 | 0.530 | 0.569 | 0.629 | 0.653 | 0.683 |
+| `NumDmg$` on a spell, toughness-4 target's death, `e128` | 0.252 | 0.389 | 0.500 | 0.595 | 0.647 | 0.733 |
+
+The affordability sweep climbs more slowly than arm `e64`'s, to 0.38 at eight mana against 0.46.
+
+##### The model's death prediction holds, and its damage prediction falls back
+
+The model's own prediction of a creature's death is as good as arm `e64`'s. Its damage-taken prediction falls back to no better than a constant, where arm `e64`'s explained about a quarter of the variance, although the trunk's output still holds nearly as much. Blocking and protected-target legality are a little lower.
+
+| target, card-disjoint, the model's own prediction | `e64` | `e128` |
+|---|---:|---:|
+| dies | 0.941 | 0.945 |
+| damage taken (R²) | 0.234 | −0.039 |
+| damage taken, trunk output (rung 2, R²) | 0.461 | 0.428 |
+| may block | 0.837 | 0.812 |
+| legal target, carrying protection | 0.932 | 0.925 |
+| trigger fires | 0.900 | 0.897 |
+
+##### The board-abilities gaps keep their direction on attack legality and narrow on resolutions
+
+On attack legality, a non-keyword static restriction stays far harder than no restriction, and the gap widens because the unrestricted case improved. On block legality, the unrestricted case is now the harder one. On resolutions, the zone loss with a replacement on another permanent falls to nearly the control's, so arm `e64`'s doubling does not repeat. The subsets hold 600 records each, so the smaller differences may not repeat; the attack-legality gap is far larger than any of them.
+
+| field loss | legality-static | legality-keyword | legality-none | resolution-replacement | resolution-static | resolution-none |
+|---|---:|---:|---:|---:|---:|---:|
+| attack legality, `e64` | 0.991 | 0.080 | 0.625 | | | |
+| attack legality, `e128` | 0.955 | 0.057 | 0.323 | | | |
+| block legality, `e64` | 0.759 | 0.491 | 0.673 | | | |
+| block legality, `e128` | 0.802 | 0.473 | 0.876 | | | |
+| zone outcome, `e64` | | | | 0.129 | 0.109 | 0.061 |
+| zone outcome, `e128` | | | | 0.102 | 0.110 | 0.096 |

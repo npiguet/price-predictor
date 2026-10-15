@@ -1651,6 +1651,68 @@ Linear probes over the whole cache read the API type, the target type and the ma
 | life amount, R² | 0.086 | 0.362 | 0.315 |
 | power amount, R² | 0.321 | 0.369 | 0.385 |
 
+#### Arm `e128` (2026-10-16): twice the width of `e` matches arm `e64` on the loss and spreads `e` over more dimensions
+
+Arm `e128` doubles the width of `e` to 128 and keeps every other setting of arm `e64`'s second run: the corrected inputs, the repaired corpus, the encoder of four layers 256 wide, the noise ratio, the withheld keyword and the seed. Its card-disjoint loss last improved at epoch 22, and the early stopper ended the run at epoch 27. Training took 14 hours, and encoding, evaluation and both probe suites 70 minutes more. Every log and both probe reports are in `models/effects/runs/2026-10-gen2-e128/`.
+
+##### The two widths trade the lead from epoch to epoch, and `e64`'s best epoch is the lower
+
+Neither arm leads for long. Between epochs 9 and 24 the gap at a matched epoch changed sign seven times and stayed within about two tenths, the size of each arm's own swing from one epoch to the next. Arm `e64`'s best epoch is lower by 0.16. It comes from three low epochs in a row, 24 to 26, where arm `e128` stayed near 3.93. Whether a gap of that size exceeds the noise between two runs of one arm is the question stage 6 answers.
+
+| card-disjoint loss, by epoch | 9 | 12 | 15 | 18 | 21 | 22 | best |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| arm `e64` | 4.41 | 4.21 | 3.97 | 3.98 | 4.01 | 3.92 | 3.73, epoch 25 |
+| arm `e128` | 4.28 | 4.24 | 4.19 | 3.91 | 3.90 | 3.89 | 3.89, epoch 22 |
+
+At the best epochs, arm `e128` is ahead on the gate and the zone outcome, and behind on toughness change, keywords gained, blocking legality, duration and poison. Poison falls furthest, to 26% of its floor removed against 59%.
+
+| field, card-disjoint, share of the floor removed | `e64`, epoch 25 | `e128`, epoch 22 |
+|---|---:|---:|
+| affected gate | 76% | 77% |
+| zone outcome | 77% | 80% |
+| toughness change | 77% | 73% |
+| keywords gained | 73% | 69% |
+| blocking legality | 57% | 49% |
+| `pt_duration` | 85% | 78% |
+| poison | 59% | 26% |
+
+##### Gate 3 passes, with `e` spread over more effective dimensions than `e64`'s
+
+Arm `e128`'s mean pairwise cosine is well below arm `e64`'s, and its `e` spreads over more effective dimensions. The top component's share is lower too, but it does not compare across widths: a wider vector divides its variance over more directions by construction. The participation ratio, the number of equally weighted directions giving the same spread, is the comparable measure.
+
+| cache | mean pairwise cosine | top component share | participation ratio |
+|---|---:|---:|---:|
+| arm `e64`, epoch 25 | 0.465 | 30.0% | 7.46 of 64 |
+| arm `e128`, epoch 22 | 0.329 | 21.4% | 9.83 of 128 |
+
+##### Gate 2 passes seven keywords, infect among them
+
+First strike, double strike, deathtouch, lifelink, trample, indestructible and infect pass. Infect passes at 75%, where arm `e64` fell just short at 68%. Wither still has too few records.
+
+| keyword | qualifying records | `e64` agreement | `e128` agreement |
+|---|---:|---:|---:|
+| indestructible | 342 | 99.4% | 99.1% |
+| lifelink | 2,169 | 99.0% | 98.3% |
+| trample | 2,331 | 96.7% | 97.0% |
+| first strike | 2,503 | 86.5% | 82.7% |
+| deathtouch | 899 | 86.1% | 85.4% |
+| infect | 1,453 | 68.2% | 75.1% |
+| double strike | 294 | 70.7% | 71.1% |
+
+##### Linear probes read the amounts better from the wider `e`, which a wider vector gives a linear probe for free
+
+A linear probe over the cache reads every stated amount better from arm `e128`'s `e`, the damage amount most. The embedding probes have no width control, and a probe with twice the inputs fits more of any label, so this table bounds what the width adds rather than measuring it. The knowledge probes' width control is the fair comparison, and they are recorded in the probes record.
+
+| linear probe on `e`, all texts | `e64` | `e128` |
+|---|---:|---:|
+| API type, accuracy | 0.892 | 0.898 |
+| target type, accuracy | 0.926 | 0.912 |
+| mana cost, R² | 0.528 | 0.566 |
+| damage amount, R² | 0.485 | 0.617 |
+| counters amount, R² | 0.544 | 0.611 |
+| power amount, R² | 0.385 | 0.452 |
+| life amount, R² | 0.315 | 0.394 |
+
 #### Arm `e64` predicts a death from the creature's toughness alone, so training adds copies labelled by the rule
 
 Arm `e64` predicts that a creature hit by a damage spell dies unless its toughness is about 5 or more, whatever the damage. The knowledge probes' toughness sweep edits one hit creature's toughness from 1 to 8 on twenty real records and reads the predicted death. Read record by record against each spell's damage, nearly every curve falls between toughness 4 and 6. A spell dealing 1 damage and one dealing 3 give the same curve.
