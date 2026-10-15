@@ -340,3 +340,13 @@ def test_the_mlm_pass_returns_only_the_masked_positions():
 
 def test_the_mlm_pass_masks_nothing_at_probability_zero():
     assert _mlm_batcher([5, 5]).mlm_inputs(_EchoEncoder(), 0.0) is None
+
+
+def test_a_stand_in_key_reads_its_text_with_the_real_line():
+    """A counterfactual copy's acting key names no sidecar (FR-063e)."""
+    batcher = _batcher()
+    stand = ProvenanceKey("counterfactual/5/cardsfolder/l/lightning_bolt.txt", 0, "spell", 0)
+    batcher.stand_in(stand, "deals 5 damage to any target", _ACT)
+    assert batcher.text_of(stand) == "deals 5 damage to any target"
+    assert batcher.line_of(stand) is _LINES[_ACT]
+    assert batcher.options_for(stand) == ()

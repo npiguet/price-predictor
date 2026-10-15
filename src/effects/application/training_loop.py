@@ -739,8 +739,17 @@ class TrainingLoop(StepPreparation):
         self._last_terms = {**self._last_terms, "mlm": term.detach()}
 
     def _training_settings(self) -> dict:
-        """The flags a sweep arm differs by, and the script-API vocabularies (FR-063)."""
+        """The flags a sweep arm differs by, and the script-API vocabularies (FR-063).
+
+        ``lethality_copies`` is written only when set, so a run without copies
+        records, and resumes against, exactly the settings it always did.
+        """
+        copies = (
+            {"lethality_copies": self.config.lethality_copies}
+            if self.config.lethality_copies else {}
+        )
         return {
+            **copies,
             "e_noise": self.config.e_noise,
             "value_weight": self.config.value_weight,
             "mlm_weight": self.config.mlm_weight,

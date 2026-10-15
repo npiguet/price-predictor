@@ -66,6 +66,7 @@ from effects.domain.effect_targets import (
     supervises_created_objects,
     verdict_targets,
 )
+from effects.domain.lethality_counterfactuals import counterfactual, qualify
 from effects.domain.rarity import rarity_bucket
 from effects.domain.records import EffectRecord
 from effects.domain.rule_families import rule_family
@@ -75,6 +76,8 @@ from price_predictor.infrastructure.tokenizer_store import load_vocabulary
 
 #: Rarity-bucket label for a record with no acting text (combat, legality).
 NO_TEXT_BUCKET = "no-text"
+#: The epoch line's family label for the step's counterfactual copies (FR-063e).
+COUNTERFACTUAL_FAMILY = "(lethality copy)"
 
 
 def plan_rng(seed: int, epoch: int, position: int) -> random.Random:
@@ -152,6 +155,8 @@ class PreparedStep:
     mask: torch.Tensor
     index: torch.Tensor
     heads: HeadTargets
+    #: Counterfactual copies the step appended to its planned records (FR-063e).
+    counterfactuals: int = 0
 
     def slim(self) -> PreparedStep:
         """Only what the device half reads: tensors and the rows' texts.
@@ -369,8 +374,13 @@ class StepPreparation:
         batcher = self._batcher(
             tokenizer, sidecars, widths, training=training, rng=rng,
         )
-        batch = batcher.prepare(records)
         targets = [derive_targets(record) for record in records]
+        copies = []
+        if training and self.config.lethality_copies > 0:
+            copies = self._counterfactuals(records, targets, batcher, sidecars)
+            records = [*records, *(copy.record for copy in copies)]
+            targets = [*targets, *(copy.targets for copy in copies)]
+        batch = batcher.prepare(records)
         gate, field_targets, mask, index = entity_target_tensors(
             batch.surfaces, targets, fields,
         )
@@ -380,13 +390,41 @@ class StepPreparation:
         prepared = PreparedStep(
             batcher=batcher, batch=batch, fields=fields, gate=gate,
             field_targets=field_targets, mask=mask, index=index,
-            heads=head_targets,
+            heads=head_targets, counterfactuals=len(copies),
         )
         if slim:
             prepared.slim()
         if pin:
             prepared.pin()
         return prepared
+
+    def _counterfactuals(self, records, targets, batcher, sidecars) -> list:
+        """``--lethality-copies`` copies of each step record that qualifies (FR-063e).
+
+        Drawn from the batcher's generator before the build draws from it, so
+        a run that makes none takes exactly the draws it always took. Each
+        copy's edited text is staged on the batcher under the copy's own key.
+        """
+        resolver = self._keyword_resolver(sidecars)
+        copies = []
+        for record, record_targets in zip(records, targets):
+            if not record.ability:
+                continue
+            key = record.ability[0]
+            qualified = qualify(
+                record, batcher.line_of(key), record_targets, resolver.keywords_of,
+            )
+            if qualified is None:
+                continue
+            for number in range(self.config.lethality_copies):
+                copy = counterfactual(
+                    record, qualified, record_targets, batcher.text_of(key),
+                    batcher.rng, number,
+                )
+                if copy.key is not None:
+                    batcher.stand_in(copy.key, copy.text, key)
+                copies.append(copy)
+        return copies
 
     def _head_targets(
         self, records, batcher, batch: PreparedBatch, *, training: bool,
@@ -595,6 +633,9 @@ class StepPreparation:
                 training=True, heads=heads, pin=pin, slim=True,
                 rng=step_rng(self.seed, task.epoch, task.position, index),
             )
+            copies = getattr(prepared, "counterfactuals", 0)
+            if copies:
+                families[COUNTERFACTUAL_FAMILY] += copies
             yield StepReady(prepared, dict(buckets), dict(families))
 
 

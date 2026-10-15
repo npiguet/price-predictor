@@ -556,6 +556,21 @@ names, so a corpus built from records collected afterwards needs no repair.
   root key, so the input adds one row per `option` line after the root row it follows. No
   other positional scheme is added.
 
+- Lethality copies. With `--lethality-copies K`, each training step appends K copies of every
+  record that qualifies, labelled by rule 704.5f-g rather than by a collected outcome:
+
+  | step | rule |
+  |---|---|
+  | qualifies | a resolution effect half whose chain has one `DealDamage`/`DamageAll` segment with a literal or paid-X amount, or one `Pump`/`PumpAll` lowering toughness by one; no `Remember*`, `Condition*`, `ReplaceDying*`, `Imprint*`, `DamageSource`, `DividedAsYouChoose`, `DivideEvenly`, `ExcessSVar`, `ExcessDamage` or `KW` parameter in any segment |
+  | hit | each battlefield creature the amount hit changes in the amount and its zone only; each player it hit loses exactly the amount; no other creature is hit |
+  | excluded | a source with deathtouch, wither, infect or lifelink; a hit creature with indestructible, a shield counter or an attachment; a real outcome the rule contradicts |
+  | copy | a new amount and one hit creature's new toughness, each drawn uniformly from 1 to 8, the creature's marked damage cleared; a literal amount is edited in the copy's text, read under a key of its own, and a paid X in the copy's references |
+  | label | every hit creature dies when its damage reaches its toughness or its toughness falls to 0 or below, and stays otherwise; its damage or toughness change, and each hit player's life change, is the new amount |
+
+  The copies are drawn from the step's generator before its other draws, so K = 0 trains
+  exactly as before, and the setting is recorded only when K > 0. The epoch line counts the
+  copies under the family `(lethality copy)`.
+
 - Resume. At the end of every epoch, after validation, training rewrites `resume.pt` in
   `--model-output` atomically. It holds:
   - the epoch, the optimizer step, and whether the early stopper ended the run;
@@ -574,6 +589,7 @@ names, so a corpus built from records collected afterwards needs no repair.
 | Flag | Default | Meaning |
 |---|---|---|
 | `--resume` | off | continue from `resume.pt` in `--model-output` |
+| `--lethality-copies` | 0 | counterfactual copies per qualifying damage or -X/-X resolution in a training step |
 | `--e-noise` | 0.1 | noise ratio `r`, relative to the running covariance of `e` |
 | `--value-weight` | 0.05 | value-head loss weight |
 | `--encoder-layers` | 4 | encoder transformer layers |

@@ -304,6 +304,8 @@ before this phase is complete.
 - [X] T143 Per-epoch `resume.pt` and `train-effect-model --resume` (FR-063d) in `src/effects/application/training_loop.py` and `src/effects/infrastructure/effect_model_store.py`; `--resume` on `scripts/effect_sweep_arm.py`; tests: a run interrupted after epoch 1 and resumed equals the uninterrupted run bit for bit (`test_training_loop_workers.py`), a changed seed is refused, a finished run trains nothing; the runner's resume handling in `test_effect_sweep_arm.py`
 - [X] T144 `evaluate-effect-model` exits 0 after any gate verdict and prints `GATES FAILED: <gates>` (FR-091a) in `src/effects/infrastructure/cli.py` and `src/effects/application/evaluate_effect_model.py`; tests in `tests/unit/effects/infrastructure/test_cli_evaluate_exit.py` and `test_gates.py`
 - [X] T145 The board-abilities ablation (FR-085b) in `scripts/effect_knowledge_probes/board.py`, wired into `run.py` (`--no-board`, `--board-records`, `--board-shards`); tests in `tests/unit/scripts/test_effect_knowledge_probes.py`
+- [X] T146 Lethality copies (FR-063e): `src/effects/domain/lethality_counterfactuals.py`; `SurfaceBatcher.line_of`/`stand_in`; `StepPreparation._counterfactuals` in `_prepare_step`; `--lethality-copies` on `train-effect-model`; tests in `tests/unit/effects/domain/test_lethality_counterfactuals.py` and `test_surface_batching.py`
+- [ ] T147 Train an arm `e64-lethality` with `--lethality-copies 8`, otherwise e64's settings, and compare its toughness and damage sweeps, death predictions and fields with e64's
 - [ ] T140 Retrain arm `e64` with `--freeze-probe-set` on the corrected inputs and the repaired corpus, then continue the sweep (T131)
 
 ---

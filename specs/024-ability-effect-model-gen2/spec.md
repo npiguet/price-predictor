@@ -937,6 +937,28 @@ the sweeps, the ablation, and the recorded digest. Run `compare.py` over two sco
     player's life.
   Every path that loads a checkpoint (`model_runner.load_runnable`, through which evaluation, gate 2
   and both probe suites load) MUST build the layout the checkpoint records.
+- **FR-063e**: With `--lethality-copies K` (default 0), each training step MUST append K
+  counterfactual copies of every planned record that `lethality_counterfactuals.qualify` accepts,
+  never in validation. A record qualifies when it is a resolution effect half; its acting chain
+  holds exactly one `DealDamage`/`DamageAll` segment with a literal `NumDmg$` or `NumDmg$ X` with
+  a recorded X, or one `Pump`/`PumpAll` with a negative literal or `-X` `NumDef$`; no segment has a
+  parameter starting `Remember`, `Condition`, `ReplaceDying` or `Imprint`, nor `DamageSource`,
+  `DividedAsYouChoose`, `DivideEvenly`, `ExcessSVar`, `ExcessDamage` or `KW`, nor `Defined$`
+  naming `Remembered`; every battlefield creature it hit took exactly the amount and has no target
+  field beyond the amount's and the zone's (`pt_duration` and `power_delta` allowed for a shrink);
+  every player whose life changed lost exactly the amount (damage only) and none gained poison;
+  the source lacks deathtouch, wither, infect and lifelink; no hit creature has indestructible, a
+  shield counter or an attachment; and each hit creature's real zone outcome is `died` exactly when
+  rule 704.5f-g says so, `stayed` otherwise. A copy MUST draw the amount and one hit creature's
+  toughness uniformly from 1 to 8 (base toughness absorbing the change, marked damage cleared),
+  edit a literal amount in the acting text (`NumDmg$`, `NumDef$`, a symmetric `NumAtt$`, and the
+  description's `N damage` or `-N/-N`) under the key `counterfactual/<amount>/<script_file>`,
+  staged on the batcher with the real line, or set `refs.x` for a paid X, and relabel every hit
+  creature (`damage_taken` or `toughness_delta`, `power_delta` when symmetric, `zone_outcome`
+  `died` or absent) and every hit player (`life_delta`). Its draws MUST come from the step's
+  generator before the build's, so K = 0 trains bit for bit as before; `training_settings` MUST
+  record `lethality_copies` only when K > 0; the epoch line MUST count the copies under the family
+  `(lethality copy)`.
 - **FR-063d**: At the end of every epoch, after validation and any checkpoint save, training MUST
   rewrite `<--model-output>/resume.pt` atomically (temporary name, then rename) with: the epoch,
   the optimizer step, a `finished` flag set when the early stopper ends the run, the encoder's and

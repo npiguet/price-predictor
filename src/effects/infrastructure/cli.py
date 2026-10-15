@@ -1363,6 +1363,14 @@ def _train_effect_model_parser(subparsers) -> None:
     )
     parser.add_argument("--keyword-expand-p", type=float, default=0.25)
     parser.add_argument("--context-dropout", type=float, default=0.15)
+    parser.add_argument(
+        "--lethality-copies", type=int, default=0,
+        help=(
+            "Counterfactual copies per qualifying damage or -X/-X resolution in "
+            "each training step, with the target's toughness and the stated "
+            "amount redrawn and the death labelled by the rules (default: 0)"
+        ),
+    )
     parser.add_argument("--mlm-weight", type=float, default=0.1)
     parser.add_argument("--mlm-mask-prob", type=float, default=0.15)
     parser.add_argument("--api-weight", type=float, default=0.05)
@@ -1504,6 +1512,7 @@ def train_config_from(args: argparse.Namespace):
         encoder_d_model=args.encoder_d_model,
         keyword_expand_p=args.keyword_expand_p,
         context_dropout=args.context_dropout,
+        lethality_copies=args.lethality_copies,
         mlm_weight=args.mlm_weight,
         mlm_mask_prob=args.mlm_mask_prob,
         api_weight=args.api_weight,

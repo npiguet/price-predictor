@@ -826,6 +826,9 @@ class TrainEffectModelConfig:
     encoder_d_model: int = 256
     keyword_expand_p: float = 0.25
     context_dropout: float = 0.15
+    #: Counterfactual copies of each qualifying damage or -X/-X resolution a
+    #: training step makes, labelled by the rules (FR-063e); 0 makes none.
+    lethality_copies: int = 0
     mlm_weight: float = 0.1
     mlm_mask_prob: float = 0.15
     api_weight: float = 0.05

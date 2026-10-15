@@ -408,6 +408,20 @@ class SurfaceBatcher:
         """
         return self._resolve(key)[0]
 
+    def line_of(self, key):
+        """The sidecar line one ability key resolves to, or None."""
+        return self._resolve(key)[1]
+
+    def stand_in(self, key, text: str, like) -> None:
+        """Make ``key`` read ``text`` for this batcher's life, with ``like``'s line.
+
+        A counterfactual copy's acting key names no sidecar (FR-063e): its text
+        is the real line's with the amount edited, and everything read off the
+        line itself, such as the API type, is the real line's.
+        """
+        self._text_by_key[key] = (text, self.line_of(like))
+        self._options_by_key[key] = ()
+
     def batch_texts(self, records) -> dict[str, object]:
         """Every ability text this batch's surfaces reference, to its line.
 

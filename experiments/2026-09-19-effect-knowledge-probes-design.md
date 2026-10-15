@@ -493,3 +493,17 @@ A probe reading `e` alone recovers a line's damage and each coloured mana cost b
 | life change (R²) | — | 0.560 | 0.339 | 0.445 |
 
 The ablation and the state-dependence probe repeat the first run's results. Noise in `e` at `[ACT]` alone costs as much as noise everywhere, and noise in the card slots costs almost nothing. The probe reads about a sixth of each trained text's outcome spread from `e`, and none on held-out lines.
+
+##### A static restriction the model cannot read costs it most on attack legality, and a replacement doubles its zone loss
+
+Where a non-keyword static keeps a creature from attacking, the model's attack-legality loss is well above the unrestricted control, while a keyword restriction is the easiest case of the three. Blocking shows the same order with smaller gaps. On resolutions, a replacement on another permanent doubles the zone-outcome loss of the control, and a non-keyword static raises it almost as much. Noise in the card slots costs nothing on any subset, because the lines that would matter are not in the card slots. These are the baseline the gen-3 snapshot change is measured against. The subsets differ in more than the unlisted line, since a record with Pacifism on the board is a different game state from one without, so the gaps bound the cost of the missing text rather than measure it exactly.
+
+The run reads 600 records per subset, 300 from each validation stratum, and its report is `models/effects/runs/2026-10-gen2-e64/reports/board-run/`.
+
+| field loss | legality-static | legality-keyword | legality-none | resolution-replacement | resolution-static | resolution-none |
+|---|---:|---:|---:|---:|---:|---:|
+| attack legality | 0.991 | 0.080 | 0.625 | | | |
+| block legality | 0.759 | 0.491 | 0.673 | | | |
+| minimum blockers | 0.651 | 0.821 | 0.279 | | | |
+| zone outcome | | | | 0.129 | 0.109 | 0.061 |
+| affected gate | 1.376 | 1.813 | 0.520 | 1.040 | 0.804 | 0.814 |

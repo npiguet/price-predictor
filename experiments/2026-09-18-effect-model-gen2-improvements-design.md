@@ -1650,3 +1650,38 @@ Linear probes over the whole cache read the API type, the target type and the ma
 | counters amount, R² | 0.175 | 0.589 | 0.544 |
 | life amount, R² | 0.086 | 0.362 | 0.315 |
 | power amount, R² | 0.321 | 0.369 | 0.385 |
+
+#### Arm `e64` predicts a death from the creature's toughness alone, so training adds copies labelled by the rule
+
+Arm `e64` predicts that a creature hit by a damage spell dies unless its toughness is about 5 or more, whatever the damage. The knowledge probes' toughness sweep edits one hit creature's toughness from 1 to 8 on twenty real records and reads the predicted death. Read record by record against each spell's damage, nearly every curve falls between toughness 4 and 6. A spell dealing 1 damage and one dealing 3 give the same curve.
+
+| spell | predicted death at toughness 1 | 2 | 3 | 4 | 5 | 6 | should fall after |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| 1 damage | 0.94 | 0.93 | 0.88 | 0.77 | 0.45 | 0.25 | 1 |
+| 2 damage | 0.96 | 0.95 | 0.93 | 0.88 | 0.61 | 0.29 | 2 |
+| 3 damage | 0.93 | 0.92 | 0.87 | 0.68 | 0.27 | 0.09 | 3 |
+
+##### The corpus rarely shows damage falling short of a creature's toughness
+
+Forge's AI aims its removal at creatures it can kill, so nearly every damage resolution in the corpus is lethal. A model then fits "a small creature dies" and has no reason to read the amount from `e` and compare it with the toughness the board gives. The rule itself holds in the records: a lethal hit died in all but two cases, and a short one stayed in all but four. Combat shows more short hits, but there both numbers are on the board, and a spell's amount reaches the trunk only through `e`.
+
+| 40 training shards | lethal | not lethal |
+|---|---:|---:|
+| a spell or ability's damage to a targeted creature | 170 | 36 |
+| its damage to a creature it did not target | 567 | 254 |
+| -X/-X on a targeted creature | 14 | 21 |
+| combat damage to a creature | 3,252 | 1,314 |
+
+##### A training step adds copies that redraw the amount and the toughness, labelled by rule 704.5f-g
+
+A record qualifies when its acting chain holds one damage or -X/-X effect with a stated amount, and nothing in the chain can turn on the death. Remembering what was damaged, exiling it instead of letting it die, or splitting the amount all disqualify a record. Its real outcome must already obey the rule. The source must have no deathtouch, wither, infect or lifelink, and the hit creature no indestructible, shield counter or attachment.
+
+Each copy draws a new amount and a new toughness for one hit creature, each from 1 to 8, so a little more than half the copies are lethal. A literal amount is edited in the copy's ability text, which the encoder reads live, and a paid X in the record's X. Every hit creature is labelled dead when its damage reaches its toughness or its toughness falls to 0, and every player hit loses the new amount. The rules as written are the target, not Forge's AI, so a label taken from the rule is what the model should learn.
+
+About one training record in four hundred qualifies, close to 400 of the records an epoch trains on. `--lethality-copies 8` therefore adds about 3,000 copies an epoch, each one varying only the comparison the model is missing.
+
+| training records, first 25 shards | count |
+|---|---:|
+| read | 50,431 |
+| qualifying, a literal amount | 76 |
+| qualifying, a paid X | 46 |
