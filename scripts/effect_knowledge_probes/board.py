@@ -167,6 +167,10 @@ def table(result: Mapping[str, dict]) -> str:
     def fmt(value) -> str:
         return "" if value is None or isnan(value) else f"{value:.3f}"
 
+    def shown(values) -> bool:
+        """A row is worth a line when some subset measured more than rounding."""
+        return any(v is not None and not isnan(v) and abs(v) >= 0.0005 for v in values)
+
     present = [name for name in SUBSETS if result.get(name, {}).get("ablation")]
     fields = sorted({field for name in present for field in result[name]["ablation"]})
     lines = ["# Board abilities", "",
@@ -177,16 +181,15 @@ def table(result: Mapping[str, dict]) -> str:
              "| field | " + " | ".join(present) + " |",
              "|---|" + "---:|" * len(present)]
     for field in fields:
-        cells = [fmt(result[name]["ablation"].get(field, {}).get("base_loss"))
-                 for name in present]
-        if any(cells):
-            lines.append(f"| {field} | " + " | ".join(cells) + " |")
+        values = [result[name]["ablation"].get(field, {}).get("base_loss") for name in present]
+        if shown(values):
+            lines.append(f"| {field} | " + " | ".join(fmt(v) for v in values) + " |")
     lines += ["", "## Loss increase with noise in the card slots", "",
               "| field | " + " | ".join(present) + " |",
               "|---|" + "---:|" * len(present)]
     for field in fields:
-        cells = [fmt(result[name]["ablation"].get(field, {}).get("noise", {}).get("cards"))
-                 for name in present]
-        if any(cells):
-            lines.append(f"| {field} | " + " | ".join(cells) + " |")
+        values = [result[name]["ablation"].get(field, {}).get("noise", {}).get("cards")
+                  for name in present]
+        if shown(values):
+            lines.append(f"| {field} | " + " | ".join(fmt(v) for v in values) + " |")
     return "\n".join(lines) + "\n"

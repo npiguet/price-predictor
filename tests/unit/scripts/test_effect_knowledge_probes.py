@@ -827,6 +827,12 @@ class TestBoard:
         assert "| blocker_legal | 0.010 | 0.010 |" in text
         assert "legality-static 3" in text
 
+    def test_a_field_no_subset_measured_is_left_out(self):
+        zero = {"base_loss": 0.0, "noise": {"cards": 0.0}}
+        result = {"legality-none": {"n": {"card-disjoint": 1},
+                                    "ablation": {"colors_lost": zero}}}
+        assert "colors_lost" not in board.table(result)
+
 
 # ── one forward pass through a real checkpoint ──────────────────────────
 

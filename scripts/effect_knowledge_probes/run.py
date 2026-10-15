@@ -529,7 +529,8 @@ def probe(args, checkpoint, corpus: Path, probe_set: dict) -> dict:
     from effects.infrastructure.record_io import read_shard
 
     common, labels, ladder = sibling("common"), sibling("labels"), sibling("ladder")
-    sweeps, ablation, board = sibling("sweeps"), sibling("ablation"), sibling("board")
+    sweeps, ablation = sibling("sweeps"), sibling("ablation")
+    board_probe = sibling("board")
     started = time.time()
     if torch.cuda.is_available():
         torch.cuda.reset_peak_memory_stats()
@@ -576,10 +577,10 @@ def probe(args, checkpoint, corpus: Path, probe_set: dict) -> dict:
             if not directory.exists():
                 continue
             progress(f"board subsets: scanning {stratum}")
-            board_chosen[stratum] = board.collect(
-                board.stratum_records(
-                    directory, shards=args.board_shards or board.SHARDS_PER_STRATUM),
-                board_sidecars, per_subset=args.board_records or board.RECORDS_PER_SUBSET)
+            board_chosen[stratum] = board_probe.collect(
+                board_probe.stratum_records(
+                    directory, shards=args.board_shards or board_probe.SHARDS_PER_STRATUM),
+                board_sidecars, per_subset=args.board_records or board_probe.RECORDS_PER_SUBSET)
             progress("  " + ", ".join(
                 f"{name} {len(rows)}" for name, rows in board_chosen[stratum].items()))
             every += [r for rows in board_chosen[stratum].values() for r in rows]
@@ -676,7 +677,7 @@ def probe(args, checkpoint, corpus: Path, probe_set: dict) -> dict:
     if board_chosen:
         progress("board-abilities ablation")
         stats = stats or ablation.cache_statistics(cache[0])
-        scorecard["board_abilities"] = board.run(probe_model, board_chosen, stats, ablation)
+        scorecard["board_abilities"] = board_probe.run(probe_model, board_chosen, stats, ablation)
     if args.method_c and samples:
         progress("method C: a shallow trunk on frozen e")
         scorecard["method_c"] = method_c(args, probe_model, corpus, samples)
