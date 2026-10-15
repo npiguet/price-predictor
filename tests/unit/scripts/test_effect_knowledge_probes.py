@@ -11,7 +11,9 @@ Fixtures are real: the gen-1 records and sidecars cut from the corpus by
 from __future__ import annotations
 
 import importlib.util
+import io
 import json
+import sys
 from pathlib import Path
 
 import numpy as np
@@ -711,6 +713,15 @@ class TestCompare:
         text = out.read_text(encoding="utf-8")
         assert "## magnitudes" in text and "a linear" in text and "b mlp" in text
         assert "Ranking on rung 1" in text
+
+    def test_the_table_prints_to_a_cp1252_stdout(self, tmp_path, monkeypatch):
+        path = tmp_path / "a.json"
+        path.write_text(json.dumps(_card("a", 0.7, 0.6)), encoding="utf-8")
+        stdout = io.TextIOWrapper(io.BytesIO(), encoding="cp1252")
+        monkeypatch.setattr(sys, "stdout", stdout)
+        assert compare.main([str(path)]) == 0
+        stdout.flush()
+        assert "rung 1 − rung 1w" in stdout.buffer.getvalue().decode("utf-8")
 
 
 # ── one forward pass through a real checkpoint ──────────────────────────

@@ -1569,6 +1569,84 @@ alone, which were collected on a path the bug did not touch.
 - **Gate 2 scores first strike and double strike on the first-strike step.** With the keyword, the carrier deals its damage in that step, and without it, it deals none there. Each row now reads that difference on whoever the carrier fights: the blocker's damage taken and death, or the defending player's life. On gen-2's records nearly every qualifying case is an unblocked attacker, because the blocked fights of that step were never recorded.
 - **Probe amount labels are capped at 40**, as the model's targets are, so a few printed literals such as Jumbo Cactuar's +9,999 power no longer decide a probe's R².
 - **The affordability sweep sets the acting player's lands to match the mana it gives them**, so the board no longer contradicts the edited production.
+
 ##### A shutdown stopped the retrained arm at epoch 9, and training now resumes from its last completed epoch
 
 The machine turned off during epoch 9 of arm `e64`'s second training run (2026-10-14). A checkpoint holds the best epoch's weights without the training-only heads, the optimizer or the noise state, so no run could continue from one. Training now rewrites a resume file at the end of every epoch, and `--resume` continues from it. A run interrupted after epoch 1 and resumed trains bit for bit what the uninterrupted run trains. The interrupted run had written no resume file, so arm `e64` trains again from epoch 1 with the same seed rather than restarting approximately from epoch 8's weights.
+
+#### Arm `e64` on the corrected inputs (2026-10-15): a longer run lowers the card-disjoint loss, and the corrections themselves change little at a matched epoch
+
+The second run of arm `e64` trains on the corrected inputs, the at-least targets and the repaired corpus, with the first run's sizes, noise ratio, withheld keyword and seed. Its card-disjoint loss last improved at epoch 25, and the early stopper ended the run at epoch 30. Training took 16 hours, and encoding, evaluation and both probe suites 70 minutes more. Every log, each opening with its command line and commit, and both probe reports are in `models/effects/runs/2026-10-gen2-e64/`. The knowledge probes are recorded in [`2026-09-19-effect-knowledge-probes-design.md`](2026-09-19-effect-knowledge-probes-design.md#gen-2-arms).
+
+##### The best epoch improves on the first run's because training ran ten epochs longer
+
+At a matched epoch, the second run scores the output fields no better than the first. It is behind up to epoch 12, level at epoch 15 and slightly behind at epoch 18. Its best epoch is better because it reached epoch 25: the first run's patience ran out at epoch 20 on an unlucky stretch of epochs (above). The second run trails gen-1 on the field terms by between a tenth and a quarter of a point at every epoch compared.
+
+| card-disjoint loss, by epoch | 9 | 12 | 15 | 18 | 25 |
+|---|---:|---:|---:|---:|---:|
+| gen-1, field terms (its whole loss) | 3.72 | 3.49 | 3.35 | 3.29 | 3.13 |
+| first run, field terms | 3.73 | 3.59 | 3.46 | 3.48 | — |
+| second run, field terms | 3.89 | 3.72 | 3.47 | 3.53 | 3.27 |
+| second run, with the head terms | 4.41 | 4.21 | 3.97 | 3.98 | 3.73 |
+
+The card-disjoint loss still moves between epochs by about as much as it improves. From epoch 20 to 30 it went up and down by about a tenth of a point from one epoch to the next, so the early stopper read a noisy signal again. The gen-3 draft proposes stopping on a smoothed loss instead.
+
+| epoch | 20 | 21 | 22 | 23 | 24 | 25 | 26 | 27 | 28 | 29 | 30 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| card-disjoint loss | 3.939 | 4.011 | 3.919 | 4.082 | 3.780 | 3.734 | 3.751 | 3.886 | 3.871 | 3.873 | 3.756 |
+
+##### Between the best epochs, colours gained, poison and -1/-1 counters gain the most, mostly from the extra epochs
+
+Colours gained, poison, -1/-1 counters, keywords gained and tap state improve the most between the two runs' best epochs. Most of the gain comes from the ten extra epochs. At epoch 15 the second run is clearly ahead on colours gained, keywords gained and tap state, and behind on poison and -1/-1 counters. Types gained and charge counters are the two fields that fell.
+
+| field, card-disjoint, share of the floor removed | first run, epoch 15 | second run, epoch 15 | second run, epoch 25 |
+|---|---:|---:|---:|
+| colours gained | 28% | 42% | 70% |
+| poison | 38% | 35% | 59% |
+| -1/-1 counters | −8% | −46% | 39% |
+| keywords gained | 67% | 72% | 73% |
+| tap state | 82% | 89% | 91% |
+| `pt_duration` | 78% | 79% | 85% |
+| life | 82% | 83% | 84% |
+| blocking legality | 54% | 52% | 57% |
+| types gained | 67% | 55% | 51% |
+| charge counters | 9% | −13% | −33% |
+
+##### Gate 3 fails by a hundredth of a point on its top component, and that component separates creature removal from lines that touch no creature
+
+The top principal component of the second run's `e` carries 30.03% of the variance, just past gate 3's limit of 30%. The mean pairwise cosine is unchanged from the first run. A collapsed space would push every line toward one point. This one instead stretches one direction that sorts lines by what they do, and the second component and the participation ratio shrink to make room for it. Its one end holds damage and exile aimed at a creature: "deals 3 damage to target creature", "exile target creature". Its other end holds lines that never touch a creature, chiefly spell-copy and cast triggers. The first run's top component ran from creature-targeting lines to draw, mill and mana lines, at a smaller share. The repaired deaths and the toughness codes make killing a creature a larger part of what the trunk predicts, which may be why the direction grew. The arm was carried through its probes, and the sweep continues with failed gates reported rather than stopping a run.
+
+| cache | mean pairwise cosine | top component share | second component | participation ratio |
+|---|---:|---:|---:|---:|
+| gen-1, 40 epochs | 0.152 | 40.0% | — | 3.93 |
+| first run, epoch 15 | 0.462 | 21.0% | 16.9% | 9.23 |
+| second run, epoch 25 | 0.465 | 30.0% | 12.5% | 7.46 |
+
+##### Gate 2 now passes first strike and double strike, read on the first-strike step
+
+Scored on the first-strike step, first strike passes at 86% and double strike at 71%, where the first run's rule failed both on regular-step records. Nearly every qualifying record is an unblocked attacker, and the defending player's life carries most of the agreement. Infect fell below 70% and goes to a probe. Its poison and life rows agree 96% of the time, and the damage marked on the creature it fights 27%, against 54% in the first run. Wither still has too few records. Gate 1 needs the identity baseline, which gen-2 does not train, and is skipped.
+
+| keyword | qualifying records | direction agreement | verdict | first run |
+|---|---:|---:|---|---:|
+| indestructible | 342 | 99.4% | pass | 99.1% |
+| lifelink | 2,169 | 99.0% | pass | 97.8% |
+| trample | 2,331 | 96.7% | pass | 90.9% |
+| first strike | 2,503 | 86.5% | pass | 31.5% on the regular step |
+| deathtouch | 899 | 86.1% | pass | 85.3% |
+| double strike | 294 | 70.7% | pass | 64.3% on the regular step |
+| infect | 1,453 | 68.2% | to a probe | 76.5% |
+| wither | 142 | 36.6% | too few records | 65.5% |
+
+##### The embedding probes read `e` about as well as the first run's
+
+Linear probes over the whole cache read the API type, the target type and the mana cost slightly better from the second run's `e`, and the damage, counters and life amounts slightly worse. The at-least targets did not raise how well a linear probe reads a stated amount from `e`. Whether the trunk now compares an amount with a toughness is a question for the damage sweep in the knowledge probes record.
+
+| linear probe on `e`, all texts | gen-1 | first run | second run |
+|---|---:|---:|---:|
+| API type, accuracy | 0.641 | 0.879 | 0.892 |
+| target type, accuracy | — | 0.903 | 0.926 |
+| mana cost, R² | 0.057 | 0.486 | 0.528 |
+| damage amount, R² | 0.343 | 0.513 | 0.485 |
+| counters amount, R² | 0.175 | 0.589 | 0.544 |
+| life amount, R² | 0.086 | 0.362 | 0.315 |
+| power amount, R² | 0.321 | 0.369 | 0.385 |

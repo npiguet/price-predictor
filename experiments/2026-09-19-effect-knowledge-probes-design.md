@@ -405,3 +405,62 @@ On keywords gained, the API type's mean vector costs as much as noise, where in 
 ##### `e` still says little about how much a text's outcome varies
 
 The state-dependence probe reads about the same small share of each text's outcome spread from the arm's `e` as from gen-1's on trained lines, R² 0.16 against 0.18. On held-out lines it reads almost none, where gen-1's `e` read a quarter of the spread on its 155 held-out lines.
+
+#### Arm `e64` on the corrected inputs (2026-10-15)
+
+The second run of arm `e64` trains on the corrected inputs, the at-least targets and the repaired corpus described in the gen-2 record, and its checkpoint is from epoch 25. The probe set is frozen again over the same corpus with every amount label capped at 40 (probe-set digest `ab6452679131`). It holds as many items as the first run's set and differs from it in the capped labels. The scorecard is `models/effects/runs/2026-10-gen2-e64/reports/knowledge-probes-2026-10-gen2-e64-20261015/scorecard.json`, and `compare-vs-earlier-inputs.md` beside it sets the two runs side by side. Probing took 14 minutes and peaked at 0.36 GiB of GPU memory, and freezing the set took 5 minutes more.
+
+##### The model predicts deaths and damage better, and the trunk still supplies most of it
+
+The model's own prediction of a creature's death, its damage taken, its blocking and its protected-target legality all improve on the first run. The largest gain is on the game-disjoint stratum, where the first run's death prediction fell well below its trunk's output; the second run's comes much closer to it. The ladder keeps its shape: on death and damage, `e` adds little over the board, and the trunk's output at rung 2 carries the prediction.
+
+| target, card-disjoint | rung 0 | rung 1 | rung 2 | model, first run | model, second run |
+|---|---:|---:|---:|---:|---:|
+| dies | 0.768 | 0.787 | 0.920 | 0.928 | 0.941 |
+| dies, game-disjoint | 0.729 | 0.764 | 0.928 | 0.77 | 0.892 |
+| damage taken (R²) | −0.161 | 0.144 | 0.461 | −0.007 | 0.234 |
+| may block | 0.872 | 0.869 | 0.878 | 0.802 | 0.837 |
+| legal target, carrying protection | 0.754 | 0.811 | 0.950 | 0.893 | 0.932 |
+| trigger fires | 0.695 | 0.759 | 0.899 | 0.872 | 0.900 |
+| affordable | 0.726 | 0.959 | 0.980 | 0.976 | 0.977 |
+
+##### The damage sweep rises more steeply with the stated damage, still without a step between 3 and 4
+
+Raising a spell's `NumDmg$` from 1 to 8 against a toughness-4 target now lifts the predicted death from under a half to about two thirds, where the first run moved it by a tenth. The rise is spread over the whole range, and the step from 3 to 4 is smaller than the step from 1 to 2. The trunk therefore reads more of the amount than before, but still not as a threshold it compares with the target's toughness. The triggered ability shows the same pattern.
+
+The toughness sweep falls less steeply than in the first run. At toughness 1 the predicted death is about one half, where the first run's was near nine in ten, and at toughness 8 the two runs agree. Each point averages twenty records with different damage amounts, so a lower start means the model doubts more of the small-target deaths. The board-size sweep is unchanged, at about a fifth of a death per added creature.
+
+| sweep | 1, or 0 creatures | 3 | 4 | 8 |
+|---|---:|---:|---:|---:|
+| toughness of the target, its death, first run | 0.861 | 0.696 | 0.569 | 0.127 |
+| toughness of the target, its death, second run | 0.563 | 0.519 | 0.466 | 0.122 |
+| `NumDmg$` on a spell, toughness-4 target's death, first run | 0.447 | 0.522 | 0.578 | 0.551 |
+| `NumDmg$` on a spell, toughness-4 target's death, second run | 0.454 | 0.569 | 0.629 | 0.683 |
+| `NumDmg$` on a triggered ability, same, second run | 0.616 | 0.709 | 0.767 | 0.793 |
+| opposing creatures, deaths summed over the board, second run | 0.002 | 0.591 | 0.779 | 1.501 |
+
+##### The affordability sweep now rises with the mana given, and never passes one half
+
+With the acting player's lands set to match the edited production, the affordable verdict climbs from near zero with no mana to just under one half with seven or eight. The first run's sweep, which left the lands unchanged, stayed flat near 0.29. The climb is gradual because each point averages items with different costs. The verdict stays below one half even at eight mana, so the model reads affordability partly from something the sweep does not set, while still separating affordable candidates at 0.977 AUC.
+
+| untapped mana given | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| affordable verdict, first run | 0.287 | 0.287 | 0.288 | 0.288 | 0.257 | 0.254 | 0.249 | 0.291 | 0.272 |
+| affordable verdict, second run | 0.009 | 0.091 | 0.147 | 0.215 | 0.262 | 0.342 | 0.374 | 0.471 | 0.462 |
+| items | 20 | 20 | 20 | 20 | 17 | 15 | 12 | 6 | 4 |
+
+##### `e` holds the damage amount and the coloured costs better, and power and toughness changes on held-out lines worse
+
+A probe reading `e` alone recovers a line's damage and each coloured mana cost better than from the first run's `e`, on held-out lines as on trained ones. With labels capped at 40, the trained-line power, toughness and life changes are readable for the first time, and `e` holds most of each. On held-out lines, power and toughness change fell.
+
+| line property, MLP probe on `e` | first run, trained | second run, trained | first run, held-out | second run, held-out |
+|---|---:|---:|---:|---:|
+| damage amount (R²) | 0.697 | 0.843 | 0.692 | 0.754 |
+| red mana in the cost (R²) | 0.701 | 0.839 | 0.325 | 0.504 |
+| blue mana in the cost (R²) | 0.738 | 0.828 | 0.513 | 0.627 |
+| total mana cost (R²) | 0.837 | 0.870 | 0.738 | 0.767 |
+| power change (R²) | — | 0.720 | 0.398 | 0.345 |
+| toughness change (R²) | — | 0.729 | 0.255 | 0.149 |
+| life change (R²) | — | 0.560 | 0.339 | 0.445 |
+
+The ablation and the state-dependence probe repeat the first run's results. Noise in `e` at `[ACT]` alone costs as much as noise everywhere, and noise in the card slots costs almost nothing. The probe reads about a sixth of each trained text's outcome spread from `e`, and none on held-out lines.
