@@ -1420,7 +1420,18 @@ def _train_effect_model_parser(subparsers) -> None:
         ),
     )
     parser.add_argument("--epochs", type=int, default=40)
-    parser.add_argument("--patience", type=int, default=5)
+    parser.add_argument(
+        "--patience", type=int, default=5,
+        help="Epochs without a new card-disjoint best before stopping; 0 never stops early",
+    )
+    parser.add_argument(
+        "--lr-scale", type=float, default=1.0,
+        help="Factor on the learning rate; may differ from the run a --resume continues",
+    )
+    parser.add_argument(
+        "--save-every-epoch", action="store_true",
+        help="Also keep every epoch's checkpoint under <model-output>/epochs/",
+    )
     parser.add_argument(
         "--resume", action="store_true",
         help=(
@@ -1513,6 +1524,8 @@ def train_config_from(args: argparse.Namespace):
         keyword_expand_p=args.keyword_expand_p,
         context_dropout=args.context_dropout,
         lethality_copies=args.lethality_copies,
+        lr_scale=args.lr_scale,
+        save_every_epoch=args.save_every_epoch,
         mlm_weight=args.mlm_weight,
         mlm_mask_prob=args.mlm_mask_prob,
         api_weight=args.api_weight,

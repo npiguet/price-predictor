@@ -959,6 +959,14 @@ the sweeps, the ablation, and the recorded digest. Run `compare.py` over two sco
   generator before the build's, so K = 0 trains bit for bit as before; `training_settings` MUST
   record `lethality_copies` only when K > 0; the epoch line MUST count the copies under the family
   `(lethality copy)`.
+- **FR-063f**: `--patience 0` MUST disable early stopping. `--resume` MUST decide whether a
+  resume file has anything left to train under this run's `--patience` and `--epochs`, not the
+  file's own `finished` flag, so a run that stopped early continues under a larger patience or
+  none. `--lr-scale F` (default 1.0) MUST multiply every step's learning rate and MUST NOT be a
+  resume setting. `--save-every-epoch` MUST save each epoch's checkpoint through an
+  `EffectModelStore` at `<model-output>/epochs/`, leaving the best-only checkpoints and
+  `latest.pt` as they are. Whenever an epoch sets a new card-disjoint best, the run MUST copy
+  `resume.pt` to `resume-best.pt` after writing it.
 - **FR-063d**: At the end of every epoch, after validation and any checkpoint save, training MUST
   rewrite `<--model-output>/resume.pt` atomically (temporary name, then rename) with: the epoch,
   the optimizer step, a `finished` flag set when the early stopper ends the run, the encoder's and

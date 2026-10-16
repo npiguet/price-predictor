@@ -1855,3 +1855,18 @@ Arm `e64`, first run on the earlier inputs, epoch 15:
 | 6 | 0.68 | 0.66 | 0.63 | 0.59 | 0.52 | 0.44 | 0.35 | 0.26 |
 | 7 | 0.64 | 0.62 | 0.59 | 0.54 | 0.46 | 0.37 | 0.28 | 0.21 |
 | 8 | 0.65 | 0.63 | 0.60 | 0.55 | 0.48 | 0.39 | 0.30 | 0.22 |
+
+##### The boundary is blurred on the training records too, and sharpens with every checkpoint
+
+The faults in arm `e64-lethality`'s grid are a fault of fit, not of generalization. Read on 40 training records that qualify for copies, the records the copies were drawn from, its diagonal is as soft as on the probe set's held-out records. The lethal-side ceiling comes from the affected gate rather than the death itself: when the damage is clearly lethal the predicted death given that the creature was affected is 0.99, while in 10 of the 40 records the model doubts that the targeted creature is affected at all.
+
+The boundary sharpens from checkpoint to checkpoint while the card-disjoint loss levels off. The gap between a hit lethal by one point and one short by a point, in the predicted death given that the creature was affected, widens at every saved epoch. The training loss was still falling when the early stopper ended the run, because the stopper reads the card-disjoint loss, whose epoch-to-epoch swing hides a change of this size.
+
+| arm `e64-lethality`, training records | error against the rule | lethal by 1 | exactly lethal | short by 1 | lethal by 1 minus short by 1 |
+|---|---:|---:|---:|---:|---:|
+| epoch 10 | 0.224 | 0.81 | 0.71 | 0.57 | 0.24 |
+| epoch 17 | 0.169 | 0.82 | 0.69 | 0.47 | 0.35 |
+| epoch 24 | 0.187 | 0.63 | 0.43 | 0.24 | 0.39 |
+| epoch 28 | 0.157 | 0.78 | 0.60 | 0.36 | 0.42 |
+
+Two continuations test how far training alone carries it. The first continues the arm from its last epoch for 20 more epochs at the same learning rate, with no early stopping and every epoch's checkpoint kept. The second continues from the first's best epoch at a tenth of the learning rate for 20 epochs. Both runs read the same shards in the same order as the arm would have, since every draw is seeded by the step's place in the run, so the learning rate is the only difference between them.

@@ -128,7 +128,7 @@ class _Interrupted(Exception):
 
 def _run(
     monkeypatch, corpus, out: Path, caplog, *, workers: int, seed: int = SEED,
-    interrupt_after: int | None = None, resume: bool = False,
+    interrupt_after: int | None = None, resume: bool = False, **config,
 ) -> dict:
     """Two epochs end to end; every loss, the final weights, the share lines.
 
@@ -146,6 +146,7 @@ def _run(
 
         monkeypatch.setattr(TrainingLoop, "_save_resume", save_then_stop)
     built: dict[str, torch.nn.Module] = {}
+    initial: dict[str, torch.Tensor] = {}
     losses: list[float] = []
     real_loss = TrainingLoop._loss_for
 
@@ -159,6 +160,10 @@ def _run(
         built["model"] = EffectModel(replace(
             config, d_model=32, n_layers=1, n_heads=2, ff_dim=64,
         ))
+        initial.update({
+            name: value.detach().clone()
+            for name, value in built["model"].state_dict().items()
+        })
         return built["model"]
 
     def loss_for(self, *args, **kwargs):
@@ -175,6 +180,7 @@ def _run(
         loop = TrainingLoop(
             _config(
                 corpus, out, prefetch_workers=workers, seed=seed, resume=resume,
+                **config,
             ),
             held_out=HeldOutCards(names=frozenset(), script_files=frozenset()),
             inherited=CorpusSplit(
@@ -204,6 +210,7 @@ def _run(
         "shares": [m for m in caplog.messages if "by rarity bucket" in m],
         "held back": [m.split("|")[2] for m in caplog.messages if "held back" in m],
         "workers": any("worker process" in m for m in caplog.messages),
+        "initial": initial,
     }
 
 
@@ -339,6 +346,69 @@ def test_resuming_a_run_that_reached_its_last_epoch_trains_nothing(
     _run(monkeypatch, corpus, out, caplog, workers=0)
     again = _run(monkeypatch, corpus, out, caplog, workers=0, resume=True)
     assert again["losses"] == []
+
+
+def _stopped_early(out: Path) -> None:
+    """Rewrite a finished run's resume file as one the early stopper ended."""
+    from effects.infrastructure.effect_model_store import (
+        load_resume_state,
+        save_resume_state,
+    )
+
+    state = load_resume_state(out)
+    state["finished"] = True
+    state["stopper"]["since_best"] = 5
+    save_resume_state(out, state)
+
+
+def test_a_run_stopped_early_stays_stopped_under_the_same_patience(
+    monkeypatch, corpus, tmp_path, caplog,
+):
+    out = tmp_path / "stopped"
+    _run(monkeypatch, corpus, out, caplog, workers=0)
+    _stopped_early(out)
+    again = _run(monkeypatch, corpus, out, caplog, workers=0, resume=True, epochs=3)
+    assert again["losses"] == []
+
+
+def test_a_run_stopped_early_continues_with_no_early_stopping(
+    monkeypatch, corpus, tmp_path, caplog,
+):
+    """``--patience 0`` reopens it and trains to ``--epochs`` (FR-063f)."""
+    out = tmp_path / "stopped"
+    _run(monkeypatch, corpus, out, caplog, workers=0)
+    _stopped_early(out)
+    again = _run(
+        monkeypatch, corpus, out, caplog, workers=0, resume=True, epochs=3, patience=0,
+    )
+    assert again["losses"]  # it trained epoch 3
+
+
+def test_every_epoch_is_kept_and_the_best_one_s_resume_state(
+    monkeypatch, corpus, tmp_path, caplog,
+):
+    out = tmp_path / "kept"
+    _run(monkeypatch, corpus, out, caplog, workers=0, save_every_epoch=True)
+    assert len(list((out / "epochs").glob("2*.pt"))) == 2
+    assert (out / "epochs" / "latest.pt").exists()
+    assert (out / "resume-best.pt").exists()
+
+
+def test_a_zero_learning_rate_factor_trains_nothing(monkeypatch, corpus, tmp_path, caplog):
+    """The factor reaches every step's rate: at 0 no weight moves (FR-063f)."""
+    run = _run(monkeypatch, corpus, tmp_path / "frozen", caplog, workers=0, lr_scale=0.0)
+    for name, value in run["initial"].items():
+        assert torch.equal(value, run["parameters"][f"model.{name}"]), name
+
+
+def test_early_stopping_with_no_patience_never_stops():
+    from effects.application.train_effect_model import EarlyStopper
+
+    stopper = EarlyStopper(0)
+    stopper.update(1.0)
+    for _ in range(50):
+        stopper.update(2.0)
+    assert not stopper.should_stop
 
 
 def test_resuming_without_a_resume_file_fails(monkeypatch, corpus, tmp_path, caplog):

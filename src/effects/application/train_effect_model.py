@@ -829,6 +829,12 @@ class TrainEffectModelConfig:
     #: Counterfactual copies of each qualifying damage or -X/-X resolution a
     #: training step makes, labelled by the rules (FR-063e); 0 makes none.
     lethality_copies: int = 0
+    #: A factor on the learning rate at every step (FR-063f). Not a resume
+    #: setting: a resumed run may continue at another rate.
+    lr_scale: float = 1.0
+    #: Also keep each epoch's checkpoint under ``<model-output>/epochs/``
+    #: (FR-063f), beside the best-only ones, so any epoch can be probed.
+    save_every_epoch: bool = False
     mlm_weight: float = 0.1
     mlm_mask_prob: float = 0.15
     api_weight: float = 0.05
@@ -1007,7 +1013,8 @@ class EarlyStopper:
 
     @property
     def should_stop(self) -> bool:
-        return self.since_best >= self.patience
+        """Never with ``patience`` 0: that run trains every epoch it is given."""
+        return self.patience > 0 and self.since_best >= self.patience
 
 
 class ContextCache:

@@ -581,15 +581,21 @@ names, so a corpus built from records collected afterwards needs no repair.
     curriculum, withheld keyword, augmentation rates, loss weights, tokenizer rules and input
     layout.
 
-  `--resume` continues from it at the next epoch. A resumed run trains what the uninterrupted
+  Whenever an epoch sets a new card-disjoint best, `resume.pt` is also copied to
+  `resume-best.pt`; copied into another run directory as its `resume.pt`, it continues from
+  the best epoch. `--resume` continues from it at the next epoch. A resumed run trains what the uninterrupted
   run would have. A resume file whose settings differ is refused, naming each difference; the
-  epoch count and the patience may change. A file recording an early stop, or an epoch at or
-  past `--epochs`, trains nothing.
+  epoch count and the patience may change. A file at an epoch at or past `--epochs`, or one
+  this run's `--patience` would stop at, trains nothing; under a larger patience, or 0, a run
+  that stopped early continues.
 
 | Flag | Default | Meaning |
 |---|---|---|
 | `--resume` | off | continue from `resume.pt` in `--model-output` |
 | `--lethality-copies` | 0 | counterfactual copies per qualifying damage or -X/-X resolution in a training step |
+| `--patience` | 5 | epochs without a new card-disjoint best before stopping; 0 never stops early |
+| `--lr-scale` | 1.0 | factor on every step's learning rate; not a resume setting |
+| `--save-every-epoch` | off | also keep each epoch's checkpoint under `<model-output>/epochs/` |
 | `--e-noise` | 0.1 | noise ratio `r`, relative to the running covariance of `e` |
 | `--value-weight` | 0.05 | value-head loss weight |
 | `--encoder-layers` | 4 | encoder transformer layers |

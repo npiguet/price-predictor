@@ -374,6 +374,12 @@ def resolve_inference_paths(
 #: stopped — the full model, the optimizer, the step count, the early stopper,
 #: the noise on ``e`` and the random generators.
 RESUME_NAME = "resume.pt"
+#: The resume state of the run's best card-disjoint epoch, copied from
+#: ``resume.pt`` whenever an epoch sets a new best (FR-063f). Copied into
+#: another run's directory as its ``resume.pt``, it continues from that epoch.
+RESUME_BEST_NAME = "resume-best.pt"
+#: Where ``--save-every-epoch`` keeps one checkpoint per epoch.
+EPOCHS_DIR = "epochs"
 
 
 class ResumeMismatchError(RuntimeError):

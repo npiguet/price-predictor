@@ -35,6 +35,7 @@ from __future__ import annotations
 
 import logging
 import random
+import shutil
 import time
 from collections import Counter, defaultdict
 from collections.abc import Mapping, Sequence
@@ -119,6 +120,9 @@ from effects.domain.effect_model import (
 )
 from effects.domain.rarity import RARITY_BUCKETS
 from effects.infrastructure.effect_model_store import (
+    EPOCHS_DIR,
+    RESUME_BEST_NAME,
+    RESUME_NAME,
     EffectCheckpoint,
     EffectModelStore,
     ResumeMismatchError,
@@ -1011,8 +1015,8 @@ class TrainingLoop(StepPreparation):
                         sum(unresolved.values()),
                         ", ".join(f"{name} ({hits})" for name, hits in worst),
                     )
-                if stopper.update(result.card_disjoint_loss):
-                    store.save(EffectCheckpoint(
+                def checkpoint() -> EffectCheckpoint:
+                    return EffectCheckpoint(
                         encoder_config=encoder_config,
                         model_config=model_config,
                         encoder_state=encoder.state_dict(),
@@ -1021,9 +1025,10 @@ class TrainingLoop(StepPreparation):
                         variant=self.config.variant,
                         best_val_loss=stopper.best,
                         epoch=epoch,
-                        # The identity baseline's e lives in this table rather than
-                        # in the encoder, so a checkpoint without it reloads as
-                        # random vectors and hands gate 1 a margin nobody earned.
+                        # The identity baseline's e lives in this table rather
+                        # than in the encoder, so a checkpoint without it reloads
+                        # as random vectors and hands gate 1 a margin nobody
+                        # earned.
                         extra=(
                             {IDENTITY_TABLE_KEY: self.identity_table.state_dict()}
                             if self.identity_table is not None else {}
@@ -1032,10 +1037,18 @@ class TrainingLoop(StepPreparation):
                             str(folder) for folder in self.config.cards_folders
                         ),
                         training_settings=self._training_settings(),
-                    ))
+                    )
+
+                best = stopper.update(result.card_disjoint_loss)
+                if best:
+                    store.save(checkpoint())
+                if self.config.save_every_epoch:
+                    EffectModelStore(
+                        self.config.resolved_model_output() / EPOCHS_DIR,
+                    ).save(checkpoint())
                 self._save_resume(
                     epoch, step, encoder, model, optimizer, stopper,
-                    finished=stopper.should_stop,
+                    finished=stopper.should_stop, best=best,
                 )
                 if stopper.should_stop:
                     logger.info(
@@ -1122,7 +1135,7 @@ class TrainingLoop(StepPreparation):
 
     def _save_resume(
         self, epoch: int, step: int, encoder, model, optimizer, stopper, *,
-        finished: bool,
+        finished: bool, best: bool = False,
     ) -> None:
         """Everything the next epoch needs, written once the epoch is scored.
 
@@ -1159,6 +1172,11 @@ class TrainingLoop(StepPreparation):
                 ),
             },
         })
+        if best:
+            # The best epoch's own resume state, so a later run can continue
+            # from the best epoch rather than the last one (FR-063f).
+            directory = self.config.resolved_model_output()
+            shutil.copyfile(directory / RESUME_NAME, directory / RESUME_BEST_NAME)
 
     def _restore(self, encoder, model, optimizer, stopper) -> tuple[int, int] | None:
         """``(first epoch, step)`` to continue from; None when nothing is left.
@@ -1194,7 +1212,10 @@ class TrainingLoop(StepPreparation):
         if state["rng"]["cuda"] is not None and torch.cuda.is_available():
             torch.cuda.set_rng_state_all(state["rng"]["cuda"])
         epoch, step = state["epoch"], state["step"]
-        if state["finished"] or epoch >= self.config.epochs:
+        # Recomputed under this run's patience rather than read from the file,
+        # so a run that stopped early continues when given more patience, or
+        # none (FR-063f).
+        if stopper.should_stop or epoch >= self.config.epochs:
             logger.info(
                 "The resume file records a finished run (epoch %d); nothing "
                 "to resume.", epoch,
@@ -1435,7 +1456,7 @@ class TrainingLoop(StepPreparation):
                 for group in optimizer.param_groups:
                     group["lr"] = learning_rate = learning_rate_at(
                         step, warmup=warmup,
-                    )
+                    ) * self.config.lr_scale
                 # Counted from the plan where it was prepared: no device read
                 # (FR-055).
                 for bucket, count in message.buckets.items():

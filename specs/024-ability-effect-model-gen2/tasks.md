@@ -306,6 +306,9 @@ before this phase is complete.
 - [X] T145 The board-abilities ablation (FR-085b) in `scripts/effect_knowledge_probes/board.py`, wired into `run.py` (`--no-board`, `--board-records`, `--board-shards`); tests in `tests/unit/scripts/test_effect_knowledge_probes.py`
 - [X] T146 Lethality copies (FR-063e): `src/effects/domain/lethality_counterfactuals.py`; `SurfaceBatcher.line_of`/`stand_in`; `StepPreparation._counterfactuals` in `_prepare_step`; `--lethality-copies` on `train-effect-model`; tests in `tests/unit/effects/domain/test_lethality_counterfactuals.py` and `test_surface_batching.py`
 - [X] T147 Train an arm `e64-lethality` with `--lethality-copies 8`, otherwise e64's settings, and compare its toughness and damage sweeps, death predictions and fields with e64's
+- [X] T148 Training continuation controls (FR-063f) in `src/effects/application/training_loop.py`, `train_effect_model.py` (`EarlyStopper`, config), `cli.py` and `effect_model_store.py` (`RESUME_BEST_NAME`, `EPOCHS_DIR`); tests in `test_training_loop_workers.py`
+- [ ] T149 Continue `e64-lethality` from its last epoch for 20 more epochs, `--patience 0 --save-every-epoch`, in `runs/2026-10-gen2-e64-lethality-ext20/`; read the damage-by-toughness boundary on training records at every epoch
+- [ ] T150 Continue from T149's best epoch at `--lr-scale 0.1` for 20 epochs in `runs/2026-10-gen2-e64-lethality-lr0.1/`; compare its boundary and losses with T149's
 - [ ] T140 Retrain arm `e64` with `--freeze-probe-set` on the corrected inputs and the repaired corpus, then continue the sweep (T131)
 
 ---
