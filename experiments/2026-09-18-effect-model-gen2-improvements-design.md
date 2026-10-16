@@ -1795,3 +1795,63 @@ Gate 3 passes, with `e` spread over nine effective dimensions. Gate 2 passes sev
 |---|---:|---:|---:|
 | arm `e64` | 0.465 | 30.0% | 7.46 |
 | arm `e64-lethality` | 0.398 | 24.1% | 9.19 |
+
+##### Only the lethality copies give the damage-by-toughness grid its diagonal
+
+Each grid below sets one damage spell's `NumDmg$` from 1 to 8 and its target's toughness from 1 to 8, and reads the target's predicted death. A cell averages the 20 damage-spell records of the knowledge probes' damage sweep, the same records for every arm. By the rules, every cell on or below the diagonal, where the damage reaches the toughness, should be near 1, and every cell above it near 0. The script is `scripts/effect_knowledge_probes/damage_grid.py`. It edits the text through the batcher's memo, as the damage sweep does, and the toughness as the toughness sweep does.
+
+Arm `e64-lethality` is the only arm whose grid has the diagonal. Above it, its predictions fall to near nothing within one or two steps of toughness, and below it they hold near 0.8. The other three arms' rows change little with the damage, so their predictions follow the toughness almost alone. Arm `e128`'s rows separate more than arm `e64`'s, the partial reading of the amount its sweeps showed.
+
+Two faults remain in arm `e64-lethality`'s grid. On the diagonal itself, where damage equals toughness, the prediction is between 0.4 and 0.77 rather than near 1. Below it, the lethal side levels off near 0.8, a ceiling every row shares.
+
+Arm `e64-lethality`, epoch 28:
+
+| damage \ toughness | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| 1 | 0.77 | 0.57 | 0.21 | 0.09 | 0.03 | 0.01 | 0.00 | 0.00 |
+| 2 | 0.76 | 0.70 | 0.48 | 0.25 | 0.10 | 0.03 | 0.01 | 0.01 |
+| 3 | 0.74 | 0.72 | 0.61 | 0.38 | 0.13 | 0.04 | 0.02 | 0.01 |
+| 4 | 0.77 | 0.76 | 0.71 | 0.51 | 0.20 | 0.06 | 0.02 | 0.01 |
+| 5 | 0.79 | 0.80 | 0.79 | 0.72 | 0.45 | 0.19 | 0.07 | 0.03 |
+| 6 | 0.79 | 0.80 | 0.81 | 0.80 | 0.66 | 0.40 | 0.20 | 0.08 |
+| 7 | 0.76 | 0.78 | 0.80 | 0.82 | 0.80 | 0.67 | 0.44 | 0.24 |
+| 8 | 0.78 | 0.80 | 0.82 | 0.84 | 0.86 | 0.82 | 0.69 | 0.49 |
+
+Arm `e128`, epoch 22:
+
+| damage \ toughness | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| 1 | 0.81 | 0.69 | 0.46 | 0.25 | 0.15 | 0.10 | 0.07 | 0.05 |
+| 2 | 0.82 | 0.76 | 0.60 | 0.39 | 0.24 | 0.16 | 0.11 | 0.08 |
+| 3 | 0.83 | 0.79 | 0.69 | 0.50 | 0.34 | 0.24 | 0.17 | 0.12 |
+| 4 | 0.83 | 0.80 | 0.73 | 0.60 | 0.45 | 0.34 | 0.25 | 0.18 |
+| 5 | 0.82 | 0.80 | 0.75 | 0.65 | 0.52 | 0.41 | 0.31 | 0.24 |
+| 6 | 0.83 | 0.81 | 0.78 | 0.70 | 0.59 | 0.50 | 0.40 | 0.32 |
+| 7 | 0.83 | 0.81 | 0.78 | 0.72 | 0.63 | 0.54 | 0.45 | 0.38 |
+| 8 | 0.84 | 0.82 | 0.79 | 0.73 | 0.65 | 0.57 | 0.48 | 0.40 |
+
+Arm `e64`, second run on the corrected inputs, epoch 25:
+
+| damage \ toughness | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| 1 | 0.61 | 0.60 | 0.55 | 0.45 | 0.31 | 0.21 | 0.16 | 0.09 |
+| 2 | 0.63 | 0.63 | 0.60 | 0.53 | 0.39 | 0.28 | 0.22 | 0.14 |
+| 3 | 0.64 | 0.64 | 0.62 | 0.57 | 0.45 | 0.33 | 0.27 | 0.18 |
+| 4 | 0.67 | 0.67 | 0.66 | 0.63 | 0.52 | 0.40 | 0.34 | 0.24 |
+| 5 | 0.68 | 0.69 | 0.68 | 0.65 | 0.57 | 0.45 | 0.39 | 0.29 |
+| 6 | 0.69 | 0.70 | 0.70 | 0.69 | 0.65 | 0.57 | 0.51 | 0.42 |
+| 7 | 0.59 | 0.59 | 0.59 | 0.58 | 0.55 | 0.48 | 0.44 | 0.36 |
+| 8 | 0.69 | 0.69 | 0.69 | 0.68 | 0.65 | 0.58 | 0.52 | 0.43 |
+
+Arm `e64`, first run on the earlier inputs, epoch 15:
+
+| damage \ toughness | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| 1 | 0.69 | 0.64 | 0.56 | 0.45 | 0.31 | 0.19 | 0.12 | 0.07 |
+| 2 | 0.68 | 0.65 | 0.59 | 0.50 | 0.38 | 0.26 | 0.17 | 0.11 |
+| 3 | 0.66 | 0.64 | 0.59 | 0.52 | 0.42 | 0.32 | 0.22 | 0.15 |
+| 4 | 0.70 | 0.68 | 0.64 | 0.58 | 0.49 | 0.38 | 0.28 | 0.20 |
+| 5 | 0.68 | 0.66 | 0.63 | 0.57 | 0.49 | 0.40 | 0.31 | 0.22 |
+| 6 | 0.68 | 0.66 | 0.63 | 0.59 | 0.52 | 0.44 | 0.35 | 0.26 |
+| 7 | 0.64 | 0.62 | 0.59 | 0.54 | 0.46 | 0.37 | 0.28 | 0.21 |
+| 8 | 0.65 | 0.63 | 0.60 | 0.55 | 0.48 | 0.39 | 0.30 | 0.22 |
