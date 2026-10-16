@@ -550,3 +550,41 @@ On attack legality, a non-keyword static restriction stays far harder than no re
 | block legality, `e128` | 0.802 | 0.473 | 0.876 | | | |
 | zone outcome, `e64` | | | | 0.129 | 0.109 | 0.061 |
 | zone outcome, `e128` | | | | 0.102 | 0.110 | 0.096 |
+
+#### Arm `e64-lethality` (2026-10-16)
+
+Arm `e64-lethality` is arm `e64`'s second run with `--lethality-copies 8`, and its checkpoint is from epoch 28. It is probed on the same frozen set (digest `ab6452679131`). The scorecard is `models/effects/runs/2026-10-gen2-e64-lethality/reports/knowledge-probes-2026-10-gen2-e64-lethality-20261016/scorecard.json`.
+
+##### The toughness sweep falls to nothing by toughness 6, and the damage sweep rises past one half between 3 and 5
+
+Averaged over its twenty records, the toughness sweep now falls steeply and reaches nothing by toughness 6, where arm `e64`'s still predicted a death about one time in three at toughness 5. Read record by record, each curve falls at or within one point of its spell's damage, which the gen-2 record tabulates. The damage sweep against a toughness-4 target rises from near nothing at 1 damage to above four in five at 6. It crosses one half between 3 and 4 for a spell and a triggered ability alike, which is where the rule puts the step, though the spell reaches only one half at 4 damage.
+
+| sweep | 1 | 2 | 3 | 4 | 5 | 6 | 8 |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| toughness of the target, its death, `e64` | 0.563 | 0.542 | 0.519 | 0.466 | 0.317 | 0.213 | 0.122 |
+| toughness of the target, its death, `e64-lethality` | 0.696 | 0.570 | 0.411 | 0.257 | 0.095 | 0.036 | 0.003 |
+| `NumDmg$` on a spell, toughness-4 target's death, `e64` | 0.454 | 0.530 | 0.569 | 0.629 | 0.653 | 0.686 | 0.683 |
+| `NumDmg$` on a spell, toughness-4 target's death, `e64-lethality` | 0.087 | 0.255 | 0.383 | 0.509 | 0.723 | 0.803 | 0.845 |
+| `NumDmg$` on a triggered ability, same, `e64-lethality` | 0.144 | 0.234 | 0.464 | 0.652 | 0.779 | 0.878 | 0.923 |
+
+##### The trunk now holds most of the damage a creature takes, and the model's own damage read-out does not follow
+
+The trunk's output at rung 2 explains six tenths of the damage each creature takes, against under half in arm `e64`. The model's own damage-taken prediction falls back, as it did in arm `e128`, so the information reaches the trunk and not the output head's damage field. Death, protected-target legality and trigger firing all rise slightly.
+
+| target, card-disjoint | rung 2, `e64` | rung 2, `e64-lethality` | model, `e64` | model, `e64-lethality` |
+|---|---:|---:|---:|---:|
+| dies | 0.920 | 0.947 | 0.941 | 0.943 |
+| damage taken (R²) | 0.461 | 0.615 | 0.234 | 0.062 |
+| legal target, carrying protection | 0.950 | 0.968 | 0.932 | 0.951 |
+| trigger fires | 0.899 | 0.887 | 0.900 | 0.915 |
+| may block | 0.878 | 0.904 | 0.837 | 0.822 |
+
+##### The board-abilities subsets keep arm `e64`'s pattern
+
+Attack legality restricted by a non-keyword static stays far harder than no restriction. Block legality is harder unrestricted than restricted, as in arm `e128`. A replacement on another permanent still raises the zone loss over the control. Noise in the card slots still costs nothing, since the copies change no card slot's text.
+
+| field loss | legality-static | legality-keyword | legality-none | resolution-replacement | resolution-static | resolution-none |
+|---|---:|---:|---:|---:|---:|---:|
+| attack legality | 1.014 | 0.050 | 0.318 | | | |
+| block legality | 0.917 | 0.539 | 1.065 | | | |
+| zone outcome | | | | 0.115 | 0.128 | 0.047 |

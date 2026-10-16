@@ -1747,3 +1747,51 @@ About one training record in four hundred qualifies, close to 400 of the records
 | read | 50,431 |
 | qualifying, a literal amount | 76 |
 | qualifying, a paid X | 46 |
+
+##### Arm `e64-lethality` (2026-10-16): deaths now fall at each spell's own damage, and the loss is the lowest of the sweep
+
+Trained with `--lethality-copies 8` and otherwise arm `e64`'s second run's settings, the model predicts a creature's death from the comparison between the damage and its toughness. Nearly every toughness-sweep curve now falls at or within one point of the spell's own damage, where arm `e64`'s fell at toughness 4 to 6 whatever the damage. The copies made up about 2% of the records trained, close to the 400 qualifying records an epoch the corpus count predicted. The card-disjoint loss last improved at epoch 28, the early stopper ended the run at epoch 33, and every log and both probe reports are in `models/effects/runs/2026-10-gen2-e64-lethality/`.
+
+| spell, toughness-sweep record | toughness 1 | 2 | 3 | 4 | 5 | 6 | should fall after |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| 1 damage, arm `e64` | 0.94 | 0.93 | 0.88 | 0.77 | 0.45 | 0.25 | 1 |
+| 1 damage, arm `e64-lethality` | 0.94 | 0.50 | 0.04 | 0.00 | 0.00 | 0.00 | 1 |
+| 2 damage, arm `e64` | 0.96 | 0.95 | 0.93 | 0.88 | 0.61 | 0.29 | 2 |
+| 2 damage, arm `e64-lethality` | 0.86 | 0.75 | 0.15 | 0.01 | 0.00 | 0.00 | 2 |
+| 3 damage, arm `e64` | 0.93 | 0.92 | 0.87 | 0.68 | 0.27 | 0.09 | 3 |
+| 3 damage, arm `e64-lethality` | 0.92 | 0.89 | 0.80 | 0.43 | 0.10 | 0.03 | 3 |
+| 5 damage, arm `e64-lethality` | 0.98 | 0.98 | 0.98 | 0.97 | 0.86 | 0.47 | 5 |
+
+The boundary is soft by about one point. At the exact threshold, where the damage equals the toughness, the prediction is often well below one: three quarters for 2 damage against toughness 2, and about one half for the damage sweep's 4 damage against toughness 4. Activated pings for 1 damage are the one family still predicted wrong: on a toughness-1 creature the model gives them a third of a chance or less, though four of the five such records in the sweep qualify for copies.
+
+The best card-disjoint loss is the lowest of the three arms, by less than the swing between epochs, so the copies cost nothing on the objective. Types gained, poison and the zone outcome improve. Blocking legality falls the most, to its lowest of any arm, and the copies hold no blocking records, so that loss is not explained by them and may be run-to-run variation.
+
+| field, card-disjoint, share of the floor removed | `e64`, epoch 25 | `e64-lethality`, epoch 28 |
+|---|---:|---:|
+| zone outcome | 77% | 81% |
+| affected gate | 76% | 77% |
+| poison | 59% | 65% |
+| types gained | 51% | 66% |
+| toughness change | 77% | 72% |
+| blocking legality | 57% | 36% |
+
+| arm | best epoch | card-disjoint loss | stopped at |
+|---|---:|---:|---:|
+| `e64` | 25 | 3.734 | 30 |
+| `e128` | 22 | 3.891 | 27 |
+| `e64-lethality` | 28 | 3.699 | 33 |
+
+Gate 3 passes, with `e` spread over nine effective dimensions. Gate 2 passes seven keywords, and first strike and double strike agree more often than in any other arm. Whether a first strike kills before the blocker strikes back is the same comparison of damage with toughness that the copies teach, which may be why.
+
+| gate 2 keyword | `e64` | `e64-lethality` |
+|---|---:|---:|
+| first strike | 86.5% | 91.3% |
+| double strike | 70.7% | 85.4% |
+| deathtouch | 86.1% | 88.1% |
+| infect | 68.2% | 76.7% |
+| trample | 96.7% | 93.8% |
+
+| cache | mean pairwise cosine | top component share | participation ratio |
+|---|---:|---:|---:|
+| arm `e64` | 0.465 | 30.0% | 7.46 |
+| arm `e64-lethality` | 0.398 | 24.1% | 9.19 |
