@@ -629,3 +629,53 @@ Attack legality restricted by a non-keyword static stays far harder than no rest
 | attack legality | 1.011 | 0.058 | 0.240 | | | |
 | block legality | 0.806 | 0.477 | 0.879 | | | |
 | zone outcome | | | | 0.099 | 0.104 | 0.087 |
+
+#### Run A, arm `e64-lethality` continued to epoch 53 (2026-10-17)
+
+Run A continues arm `e64-lethality` for twenty more epochs at the same learning rate and is probed at two checkpoints: epoch 42, its best card-disjoint loss, and epoch 53, its last. Both are probed on the same frozen set (digest `ab6452679131`). The scorecards are `models/effects/runs/2026-10-gen2-e64-lethality-ext20/reports/knowledge-probes-2026-10-gen2-e64-lethality-ext20-20261017/scorecard.json` and `models/effects/runs/2026-10-gen2-e64-lethality-ext20-last/reports/knowledge-probes-2026-10-gen2-e64-lethality-ext20-last-20261017/scorecard.json`.
+
+##### The damage sweep crosses one half a point late at epoch 42 and a point early at epoch 53
+
+The two checkpoints place the step in opposite directions from the rule, which puts it between 3 and 4 damage against a toughness-4 target. Epoch 42 crosses one half between 4 and 5 for a spell and a triggered ability alike. Epoch 53 crosses between 2 and 3 for both. The toughness sweep follows: epoch 42's falls faster than arm `e64-lethality`'s, epoch 53's more slowly. The gen-2 record shows the same movement of the boundary on the training records, epoch by epoch.
+
+| sweep | 1 | 2 | 3 | 4 | 5 | 8 |
+|---|---:|---:|---:|---:|---:|---:|
+| toughness of the target, its death, `e64-lethality` | 0.696 | 0.570 | 0.411 | 0.257 | 0.095 | 0.003 |
+| toughness of the target, its death, run A epoch 42 | 0.639 | 0.441 | 0.298 | 0.123 | 0.062 | 0.008 |
+| toughness of the target, its death, run A epoch 53 | 0.670 | 0.565 | 0.510 | 0.425 | 0.240 | 0.046 |
+| `NumDmg$` on a spell, toughness-4 target's death, `e64-lethality` | 0.087 | 0.255 | 0.383 | 0.509 | 0.723 | 0.845 |
+| `NumDmg$` on a spell, same, run A epoch 42 | 0.042 | 0.125 | 0.212 | 0.453 | 0.757 | 0.876 |
+| `NumDmg$` on a spell, same, run A epoch 53 | 0.119 | 0.406 | 0.730 | 0.860 | 0.872 | 0.895 |
+| `NumDmg$` on a triggered ability, same, `e64-lethality` | 0.144 | 0.234 | 0.464 | 0.652 | 0.779 | 0.923 |
+| `NumDmg$` on a triggered ability, same, run A epoch 42 | 0.092 | 0.136 | 0.206 | 0.351 | 0.710 | 0.946 |
+| `NumDmg$` on a triggered ability, same, run A epoch 53 | 0.224 | 0.352 | 0.655 | 0.853 | 0.938 | 0.985 |
+
+Read record by record at epoch 42, most of the spells' and triggered abilities' curves fall at their own damage. Three of the four activated pings for 1 damage are again predicted to spare a toughness-1 creature, at 0.31 or less, as in arm `e64-lethality`.
+
+##### The trunk holds more of the damage taken, and the model reads blocking better at both checkpoints
+
+The trunk's output at rung 2 explains about two thirds of the damage each creature takes at both checkpoints, more than any earlier arm. The model's own damage-taken prediction comes back to arm `e64`'s level. The model's blocking prediction gains about five hundredths at both, matching blocking legality's recovery in the gen-2 record. Its death prediction falls at epoch 53, where the boundary has moved toward a death.
+
+| target, card-disjoint | rung 2, `e64-lethality` | rung 2, epoch 42 | rung 2, epoch 53 | model, `e64-lethality` | model, epoch 42 | model, epoch 53 |
+|---|---:|---:|---:|---:|---:|---:|
+| dies | 0.947 | 0.966 | 0.940 | 0.943 | 0.948 | 0.910 |
+| damage taken (R²) | 0.615 | 0.681 | 0.674 | 0.062 | 0.205 | 0.170 |
+| may block | 0.904 | 0.923 | 0.923 | 0.822 | 0.873 | 0.865 |
+| legal target, carrying protection | 0.968 | 0.969 | 0.965 | 0.951 | 0.952 | 0.965 |
+| trigger fires | 0.887 | 0.890 | 0.902 | 0.915 | 0.913 | 0.922 |
+
+##### Unrestricted block legality improves most in the board-abilities subsets
+
+Block legality with no restriction on the board, the hardest block subset in arms `e128` and `e64-lethality`, is now the easiest of the three. Attack legality restricted by a non-keyword static stays far harder than no restriction. A replacement on another permanent doubles the zone loss over the control at epoch 42 and barely raises it at epoch 53.
+
+| field loss | legality-static | legality-keyword | legality-none | resolution-replacement | resolution-static | resolution-none |
+|---|---:|---:|---:|---:|---:|---:|
+| attack legality, `e64-lethality` | 1.014 | 0.050 | 0.318 | | | |
+| attack legality, epoch 42 | 0.982 | 0.036 | 0.381 | | | |
+| attack legality, epoch 53 | 0.953 | 0.024 | 0.341 | | | |
+| block legality, `e64-lethality` | 0.917 | 0.539 | 1.065 | | | |
+| block legality, epoch 42 | 0.643 | 0.498 | 0.432 | | | |
+| block legality, epoch 53 | 0.723 | 0.497 | 0.462 | | | |
+| zone outcome, `e64-lethality` | | | | 0.115 | 0.128 | 0.047 |
+| zone outcome, epoch 42 | | | | 0.118 | 0.136 | 0.058 |
+| zone outcome, epoch 53 | | | | 0.108 | 0.107 | 0.094 |

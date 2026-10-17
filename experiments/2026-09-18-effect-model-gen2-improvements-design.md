@@ -1944,3 +1944,113 @@ Gate 3 passes, with `e` spread over about as many effective dimensions as arm `e
 |---|---:|---:|---:|
 | arm `e128` | 0.329 | 21.4% | 9.83 of 128 |
 | arm `e128-lethality` | 0.356 | 22.1% | 9.26 of 128 |
+
+##### Run A (2026-10-17): twenty more epochs sharpen the boundary, and its position keeps moving from epoch to epoch
+
+Run A continues arm `e64-lethality` from its epoch 33 to epoch 53 at the same learning rate, with no early stopping and every epoch's checkpoint kept. It reads the same shards in the same order the arm would have. The card-disjoint loss set new bests at epochs 36, 40 and 42, and epoch 42's is the lowest of any arm. Every log, both probe reports and the 20 checkpoints are in `models/effects/runs/2026-10-gen2-e64-lethality-ext20/`, and the last epoch's probe reports in `models/effects/runs/2026-10-gen2-e64-lethality-ext20-last/`.
+
+The training loss kept falling through all twenty epochs, and the two validation losses fell far less. Averaged over five epochs, the card-disjoint loss stops improving after epoch 43, and the game-disjoint loss edges down by under a tenth. Single epochs swing by about two tenths, so one epoch's loss says little on its own.
+
+| epochs, averaged | training | card-disjoint | game-disjoint |
+|---|---:|---:|---:|
+| 24–28, arm `e64-lethality` | 3.629 | 3.753 | 3.049 |
+| 29–33, arm `e64-lethality` | 3.497 | 3.811 | 3.018 |
+| 34–38, run A | 3.369 | 3.763 | 3.010 |
+| 39–43, run A | 3.257 | 3.685 | 2.991 |
+| 44–48, run A | 3.145 | 3.676 | 2.986 |
+| 49–53, run A | 3.077 | 3.707 | 2.939 |
+
+| arm | best epoch | card-disjoint loss |
+|---|---:|---:|
+| `e64-lethality` | 28 | 3.699 |
+| run A | 42 | 3.519 |
+
+On the training records, the boundary is sharper from epoch 40 on than at any checkpoint of arm `e64-lethality`. The table reads the same 40 qualifying training records as before, with the predicted death given that the creature was affected. The gap between a hit lethal by one point and one short by a point stays above one half at most epochs from 40 to 52, where arm `e64-lethality` reached 0.42 at best among its measured checkpoints. The error against the rule falls with it.
+
+Where the boundary sits still moves from one epoch to the next, by as much as it did before. The prediction for an exactly lethal hit ranges from one half at epoch 47 to above nine in ten at epoch 53. At epoch 53 the whole boundary has moved toward a death: a hit short by one point is predicted to kill nearly two times in three, and the gap falls back to its epoch-34 level. Between consecutive epochs the position moves by more than the twenty epochs sharpened the boundary.
+
+| run A, training records | error against the rule | lethal by 1 | exactly lethal | short by 1 | lethal by 1 minus short by 1 |
+|---|---:|---:|---:|---:|---:|
+| epoch 34 | 0.163 | 0.93 | 0.84 | 0.62 | 0.31 |
+| epoch 35 | 0.129 | 0.88 | 0.70 | 0.42 | 0.46 |
+| epoch 36 | 0.135 | 0.88 | 0.73 | 0.46 | 0.42 |
+| epoch 37 | 0.156 | 0.93 | 0.82 | 0.59 | 0.34 |
+| epoch 38 | 0.136 | 0.95 | 0.85 | 0.60 | 0.35 |
+| epoch 39 | 0.130 | 0.84 | 0.64 | 0.37 | 0.47 |
+| epoch 40 | 0.115 | 0.87 | 0.67 | 0.33 | 0.55 |
+| epoch 41 | 0.132 | 0.85 | 0.69 | 0.42 | 0.43 |
+| epoch 42 | 0.113 | 0.88 | 0.68 | 0.34 | 0.54 |
+| epoch 43 | 0.125 | 0.87 | 0.68 | 0.35 | 0.52 |
+| epoch 44 | 0.119 | 0.92 | 0.78 | 0.47 | 0.45 |
+| epoch 45 | 0.120 | 0.88 | 0.66 | 0.35 | 0.53 |
+| epoch 46 | 0.120 | 0.83 | 0.65 | 0.33 | 0.51 |
+| epoch 47 | 0.128 | 0.75 | 0.50 | 0.20 | 0.54 |
+| epoch 48 | 0.136 | 0.77 | 0.52 | 0.23 | 0.53 |
+| epoch 49 | 0.130 | 0.76 | 0.51 | 0.21 | 0.55 |
+| epoch 50 | 0.122 | 0.85 | 0.63 | 0.33 | 0.52 |
+| epoch 51 | 0.119 | 0.80 | 0.53 | 0.22 | 0.58 |
+| epoch 52 | 0.119 | 0.91 | 0.74 | 0.41 | 0.50 |
+| epoch 53 | 0.126 | 0.98 | 0.91 | 0.65 | 0.32 |
+
+The probe set's grids show the same two checkpoints at their extremes. Epoch 42's grid is the sharpest of any arm, with the lowest error against the rule. Epoch 53's has moved so far toward a death that it predicts one for a hit short by a point seven times in ten, and the gap across the boundary nearly vanishes. The checkpoint the card-disjoint loss chose is also run A's closest to the rule on the training records, and its grid is the closest of any arm's on the probe set.
+
+| probe-set grid | error against the rule | lethal by 1 | exactly lethal | short by 1 | lethal by 1 minus short by 1 |
+|---|---:|---:|---:|---:|---:|
+| arm `e64-lethality`, epoch 28 | 0.210 | 0.70 | 0.55 | 0.32 | 0.38 |
+| arm `e128-lethality`, epoch 22 | 0.224 | 0.56 | 0.41 | 0.21 | 0.35 |
+| run A, epoch 42 | 0.190 | 0.72 | 0.54 | 0.24 | 0.48 |
+| run A, epoch 53 | 0.234 | 0.83 | 0.80 | 0.71 | 0.11 |
+
+Run A, epoch 42:
+
+| damage \ toughness | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| 1 | 0.61 | 0.30 | 0.10 | 0.04 | 0.01 | 0.00 | 0.00 | 0.00 |
+| 2 | 0.60 | 0.53 | 0.25 | 0.13 | 0.05 | 0.01 | 0.00 | 0.00 |
+| 3 | 0.60 | 0.60 | 0.51 | 0.21 | 0.09 | 0.03 | 0.01 | 0.00 |
+| 4 | 0.71 | 0.72 | 0.72 | 0.45 | 0.16 | 0.06 | 0.02 | 0.01 |
+| 5 | 0.74 | 0.76 | 0.78 | 0.76 | 0.48 | 0.22 | 0.09 | 0.03 |
+| 6 | 0.80 | 0.81 | 0.82 | 0.82 | 0.71 | 0.41 | 0.20 | 0.09 |
+| 7 | 0.81 | 0.81 | 0.82 | 0.84 | 0.85 | 0.77 | 0.55 | 0.33 |
+| 8 | 0.86 | 0.85 | 0.85 | 0.88 | 0.90 | 0.91 | 0.88 | 0.79 |
+
+Run A, epoch 53:
+
+| damage \ toughness | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| 1 | 0.61 | 0.43 | 0.19 | 0.12 | 0.07 | 0.03 | 0.01 | 0.00 |
+| 2 | 0.65 | 0.65 | 0.60 | 0.41 | 0.20 | 0.12 | 0.05 | 0.02 |
+| 3 | 0.73 | 0.74 | 0.76 | 0.73 | 0.44 | 0.22 | 0.09 | 0.03 |
+| 4 | 0.83 | 0.84 | 0.85 | 0.86 | 0.80 | 0.57 | 0.26 | 0.09 |
+| 5 | 0.85 | 0.85 | 0.86 | 0.87 | 0.87 | 0.82 | 0.60 | 0.31 |
+| 6 | 0.87 | 0.87 | 0.88 | 0.89 | 0.89 | 0.88 | 0.80 | 0.58 |
+| 7 | 0.88 | 0.87 | 0.88 | 0.89 | 0.89 | 0.89 | 0.88 | 0.81 |
+| 8 | 0.89 | 0.89 | 0.89 | 0.90 | 0.90 | 0.90 | 0.90 | 0.89 |
+
+Blocking legality recovers at both checkpoints, to well above any earlier arm, so arm `e64-lethality`'s fall in it was a property of its epoch 28. Toughness change, keywords gained and types gained improve at epoch 42. Poison falls back at epoch 42 and types gained at epoch 53, two fields with few records whose shares swing between checkpoints.
+
+| field, card-disjoint, share of the floor removed | `e64-lethality`, epoch 28 | run A, epoch 42 | run A, epoch 53 |
+|---|---:|---:|---:|
+| zone outcome | 81% | 83% | 82% |
+| affected gate | 77% | 77% | 74% |
+| toughness change | 72% | 77% | 74% |
+| keywords gained | 73% | 76% | 79% |
+| blocking legality | 36% | 66% | 63% |
+| types gained | 66% | 78% | 44% |
+| poison | 65% | 52% | 65% |
+
+Gate 3 passes at both checkpoints, with `e` spread over more effective dimensions than any other 64-wide arm. Gate 2 sends double strike to a stage-three probe at epoch 42 and passes it at epoch 53, a swing of a fifth on 294 records. Infect moves the other way between the two.
+
+| gate 2 keyword | `e64-lethality`, epoch 28 | run A, epoch 42 | run A, epoch 53 |
+|---|---:|---:|---:|
+| first strike | 91.3% | 87.0% | 92.0% |
+| double strike | 85.4% | 62.9% | 82.0% |
+| deathtouch | 88.1% | 85.9% | 87.5% |
+| infect | 76.7% | 82.0% | 73.5% |
+| trample | 93.8% | 88.2% | 87.0% |
+
+| cache | mean pairwise cosine | top component share | participation ratio |
+|---|---:|---:|---:|
+| arm `e64-lethality`, epoch 28 | 0.398 | 24.1% | 9.19 of 64 |
+| run A, epoch 42 | 0.360 | 18.3% | 11.07 of 64 |
+| run A, epoch 53 | 0.298 | 18.9% | 10.39 of 64 |
