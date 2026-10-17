@@ -1781,7 +1781,7 @@ The best card-disjoint loss is the lowest of the three arms, by less than the sw
 | `e128` | 22 | 3.891 | 27 |
 | `e64-lethality` | 28 | 3.699 | 33 |
 
-Gate 3 passes, with `e` spread over nine effective dimensions. Gate 2 passes seven keywords, and first strike and double strike agree more often than in any other arm. Whether a first strike kills before the blocker strikes back is the same comparison of damage with toughness that the copies teach, which may be why.
+Gate 3 passes, with `e` spread over nine effective dimensions. Gate 2 passes seven keywords, and first strike and double strike agree more often than in any other arm.
 
 | gate 2 keyword | `e64` | `e64-lethality` |
 |---|---:|---:|
@@ -1800,9 +1800,24 @@ Gate 3 passes, with `e` spread over nine effective dimensions. Gate 2 passes sev
 
 Each grid below sets one damage spell's `NumDmg$` from 1 to 8 and its target's toughness from 1 to 8, and reads the target's predicted death. A cell averages the 20 damage-spell records of the knowledge probes' damage sweep, the same records for every arm. By the rules, every cell on or below the diagonal, where the damage reaches the toughness, should be near 1, and every cell above it near 0. The script is `scripts/effect_knowledge_probes/damage_grid.py`. It edits the text through the batcher's memo, as the damage sweep does, and the toughness as the toughness sweep does.
 
-Arm `e64-lethality` is the only arm whose grid has the diagonal. Above it, its predictions fall to near nothing within one or two steps of toughness, and below it they hold near 0.8. The other three arms' rows change little with the damage, so their predictions follow the toughness almost alone. Arm `e128`'s rows separate more than arm `e64`'s, the partial reading of the amount its sweeps showed.
+Arms `e64-lethality` and `e128-lethality` are the only arms whose grids have the diagonal. Above it, their predictions fall to near nothing within one or two steps of toughness, and below it they hold near 0.8. The other three arms' rows change little with the damage, so their predictions follow the toughness almost alone. Arm `e128`'s rows separate more than arm `e64`'s, the partial reading of the amount its sweeps showed.
 
 Two faults remain in arm `e64-lethality`'s grid. On the diagonal itself, where damage equals toughness, the prediction is between 0.4 and 0.77 rather than near 1. Below it, the lethal side levels off near 0.8, a ceiling every row shares.
+
+Arm `e128-lethality`'s grid switches to a death too late. From 3 damage up, each row crosses one half one to two points of toughness before the rule does. At damage equal to toughness it therefore predicts survival, with every diagonal cell from 3 to 8 below one half.
+
+Arm `e128-lethality`, epoch 22:
+
+| damage \ toughness | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| 1 | 0.75 | 0.43 | 0.14 | 0.06 | 0.03 | 0.01 | 0.01 | 0.00 |
+| 2 | 0.77 | 0.57 | 0.26 | 0.11 | 0.05 | 0.02 | 0.01 | 0.00 |
+| 3 | 0.78 | 0.66 | 0.36 | 0.15 | 0.05 | 0.02 | 0.01 | 0.00 |
+| 4 | 0.79 | 0.74 | 0.52 | 0.29 | 0.13 | 0.05 | 0.02 | 0.01 |
+| 5 | 0.81 | 0.78 | 0.68 | 0.44 | 0.24 | 0.11 | 0.05 | 0.02 |
+| 6 | 0.84 | 0.83 | 0.79 | 0.63 | 0.43 | 0.28 | 0.15 | 0.07 |
+| 7 | 0.84 | 0.84 | 0.85 | 0.80 | 0.64 | 0.51 | 0.37 | 0.22 |
+| 8 | 0.86 | 0.86 | 0.87 | 0.87 | 0.82 | 0.72 | 0.59 | 0.43 |
 
 Arm `e64-lethality`, epoch 28:
 
@@ -1870,3 +1885,62 @@ The boundary sharpens from checkpoint to checkpoint while the card-disjoint loss
 | epoch 28 | 0.157 | 0.78 | 0.60 | 0.36 | 0.42 |
 
 Two continuations test how far training alone carries it. The first continues the arm from its last epoch for 20 more epochs at the same learning rate, with no early stopping and every epoch's checkpoint kept. The second continues from the first's best epoch at a tenth of the learning rate for 20 epochs. Both runs read the same shards in the same order as the arm would have, since every draw is seeded by the step's place in the run, so the learning rate is the only difference between them.
+
+##### Arm `e128-lethality` (2026-10-17): the copies give the wider `e` the diagonal too, and where its boundary sits moves between checkpoints
+
+Arm `e128-lethality` is arm `e128` trained with `--lethality-copies 8`, every other setting unchanged. Its card-disjoint loss last improved at epoch 22, and the early stopper ended the run at epoch 27. The copies made up about 2% of the records trained, as in arm `e64-lethality`. Training took 14 hours, and encoding, evaluation and both probe suites 70 minutes more. Every log and both probe reports are in `models/effects/runs/2026-10-gen2-e128-lethality/`.
+
+Read record by record, each toughness-sweep curve falls at or near its spell's own damage, and the activated pings for 1 damage now fall with the rest. Arm `e64-lethality` gave those pings a third of a chance or less of killing a toughness-1 creature. Arm `e128-lethality` gives them between one half and four in five, and near nothing at toughness 2. Several curves for 3 damage or more fall one point early, the same displacement the grid above shows.
+
+| spell, toughness-sweep record | toughness 1 | 2 | 3 | 4 | 5 | should fall after |
+|---|---:|---:|---:|---:|---:|---:|
+| 1 damage, spell | 0.92 | 0.13 | 0.01 | 0.00 | 0.00 | 1 |
+| 1 damage, activated, `Cost$ T` | 0.73 | 0.12 | 0.00 | 0.00 | 0.00 | 1 |
+| 1 damage, activated, `Cost$ U T` | 0.51 | 0.04 | 0.00 | 0.00 | 0.00 | 1 |
+| 2 damage, spell | 0.93 | 0.51 | 0.05 | 0.00 | 0.00 | 2 |
+| 3 damage, spell | 0.97 | 0.95 | 0.85 | 0.46 | 0.14 | 3 |
+| 3 damage, spell | 0.88 | 0.74 | 0.08 | 0.01 | 0.00 | 3 |
+| 3 damage, triggered | 0.99 | 0.97 | 0.68 | 0.09 | 0.02 | 3 |
+| 5 damage, triggered | 0.77 | 0.69 | 0.75 | 0.62 | 0.16 | 5 |
+
+The boundary's position on the training records moves from one checkpoint to the next, while the gap across it grows more steadily. The table reads the same 40 qualifying training records as arm `e64-lethality`'s, with the predicted death given that the creature was affected. At epoch 20 the model gave a hit short by one point a death nearly two times in three. At epoch 22 it gave an exactly lethal hit a death only half the time. The gap between a hit lethal by one point and one short by a point is at the best epoch the same as arm `e64-lethality`'s at its best. The late switch in the grid is therefore the position the best checkpoint happened to stop at, not a sharper or blunter boundary than arm `e64-lethality`'s.
+
+| training records | error against the rule | lethal by 1 | exactly lethal | short by 1 | lethal by 1 minus short by 1 |
+|---|---:|---:|---:|---:|---:|
+| arm `e128-lethality`, epoch 12 | 0.206 | 0.89 | 0.78 | 0.62 | 0.26 |
+| arm `e128-lethality`, epoch 17 | 0.160 | 0.89 | 0.75 | 0.54 | 0.34 |
+| arm `e128-lethality`, epoch 20 | 0.173 | 0.93 | 0.84 | 0.64 | 0.29 |
+| arm `e128-lethality`, epoch 22 | 0.173 | 0.71 | 0.51 | 0.30 | 0.41 |
+| arm `e64-lethality`, epoch 28 | 0.157 | 0.78 | 0.60 | 0.36 | 0.42 |
+
+The best card-disjoint loss is below arm `e128`'s and above arm `e64-lethality`'s, by less than the swing between epochs in both cases. Types gained improve the most. Blocking legality keeps arm `e128`'s level, so arm `e64-lethality`'s fall in it does not come from the copies. Poison falls to no better than a constant prediction.
+
+| arm | best epoch | card-disjoint loss | stopped at |
+|---|---:|---:|---:|
+| `e128` | 22 | 3.891 | 27 |
+| `e64-lethality` | 28 | 3.699 | 33 |
+| `e128-lethality` | 22 | 3.835 | 27 |
+
+| field, card-disjoint, share of the floor removed | `e128`, epoch 22 | `e128-lethality`, epoch 22 |
+|---|---:|---:|
+| zone outcome | 80% | 79% |
+| affected gate | 77% | 78% |
+| types gained | 62% | 75% |
+| blocking legality | 49% | 50% |
+| toughness change | 73% | 72% |
+| poison | 26% | −3% |
+
+Gate 3 passes, with `e` spread over about as many effective dimensions as arm `e128`'s. Gate 2 passes six keywords. Double strike falls below the threshold and is routed to a stage-three probe with wither, its opponent's damage taken agreeing a quarter of the time. The gains arm `e64-lethality` made on first strike and double strike do not repeat with the copies at this width.
+
+| gate 2 keyword | `e128` | `e64-lethality` | `e128-lethality` |
+|---|---:|---:|---:|
+| first strike | 82.7% | 91.3% | 85.2% |
+| double strike | 71.1% | 85.4% | 54.8% |
+| deathtouch | 85.4% | 88.1% | 90.0% |
+| infect | 75.1% | 76.7% | 71.0% |
+| trample | 97.0% | 93.8% | 96.1% |
+
+| cache | mean pairwise cosine | top component share | participation ratio |
+|---|---:|---:|---:|
+| arm `e128` | 0.329 | 21.4% | 9.83 of 128 |
+| arm `e128-lethality` | 0.356 | 22.1% | 9.26 of 128 |
