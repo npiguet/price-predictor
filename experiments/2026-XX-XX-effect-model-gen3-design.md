@@ -327,7 +327,20 @@ The model needs to read each condition from the text, compare it with the board,
 
 **The snapshot records whether each static line is in force.** Once the snapshot lists a permanent's statics, as the section above on statics, triggers and replacements proposes, each listed static carries `active`, Forge's answer to whether its condition holds now. A permanent with different statics on its controller's turn then shows the text of both, which one is in force, and, through the `continuous` records, what the one in force does.
 
-**The inputs say who is the active player for every player and every card, not only for the actor.** Today the global slot says whether the acting player is the active player, and a card slot says only whether the actor controls the card. For a static on an opponent's permanent, the model has to combine the two flags to learn whether the card's controller is the active player. Each player slot gains "is the active player", and each card slot "its controller is the active player". This is an input change and needs no new collection.
+**The board input says who controls, who owns, whose turn it is and who holds priority, for every player and every card.** Three roles are easy to confuse. The active player is the player whose turn it is (rule 102.1), and changes only when the turn does. The player with priority is the one allowed to act now (rule 117), which passes back and forth within a step, so an opponent holds priority while responding during the active player's turn. The acting player is the record's own notion: the controller of the ability being recorded, or the player making the decision.
+
+Gen-2's input states each of these only relative to the acting player. The global slot says whether the acting player is the active player and whether they hold priority, a player slot says whether it is the acting player, and a card slot, a spell on the stack included, says whether the acting player controls it. To learn that an opponent's creature belongs to the active player, the model has to combine two of those flags. The snapshot records no owner at all, which matters wherever control has changed: a stolen creature, "return it to its owner's hand", a card going to its owner's graveyard.
+
+| gen-3 input | slot | source |
+|---|---|---|
+| is the active player | each player | computed from the existing snapshot |
+| holds priority | each player | computed from the existing snapshot |
+| controller is the active player | each card | computed from the existing snapshot |
+| controller holds priority | each card | computed from the existing snapshot |
+| owner is the acting player | each card | new `owner` field per entity, at collection |
+| owner differs from controller | each card | new `owner` field per entity, at collection |
+
+The acting-player bits stay. Every row but the owner rows is an input-layout change computed from what the snapshot already holds, and the `owner` field is a new snapshot field the collector writes for every entity.
 
 **Each condition is balanced between met and unmet in the curated corpus.** Forge's AI casts sorcery-speed spells on its own turn and holds most instants for the opponent's, so a turn condition is seen mostly one way. Training on that teaches the base rate rather than the condition, as Forge's lethal removal did for deaths in gen-2. The fix has three parts:
 
