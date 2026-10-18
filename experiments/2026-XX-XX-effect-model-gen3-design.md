@@ -297,6 +297,24 @@ deciding:
 The same per-field scores are what adaptive sampling would read on the training side, so the two
 items would share their bookkeeping.
 
+## The playability verdict should say whether the timing allows a play, which Forge decides apart from the rest
+
+**The `can_play` label leaves out the casting-timing rule, so the corpus labels a sorcery playable on the opponent's turn.** A `decision` record's three verdict bits are `can_play`, `affordable` and `has_legal_target`, and `can_play` is Forge's `SpellAbility.canPlay()`. That call covers split second and a script's own restrictions: the phases it names, whose turn it requires, activation limits and zones. The default timing rule lives in a separate call, `canCastTiming`, which no hook records. Under that rule a spell is cast at sorcery speed unless it is an instant or has flash, and an activated ability with `SorcerySpeed$` or a loyalty cost needs sorcery timing too. The hook in `AiController.canPlayAndPayForFace` fires after the AI's own timing check whatever that check answered, so a sorcery the AI weighs during the opponent's turn is written as playable. The random seat records `canPlay` as well, though it applies timing to its own choice of play.
+
+**The AI writes only candidates that already passed `canPlay`.** `AiController.canPlayAndPayFor` returns before the hook for a candidate that fails it, so every `can_play = false` in the corpus comes from the random seat.
+
+**Split second on the stack reaches the model only as the stack card's ability text.** The card slots' keyword flags have no `split_second`, and the knowledge probes found the trunk reads little of other cards' text.
+
+**The fix is in the collector, and Forge's own answer is the label.** Each candidate carries a fourth verdict bit, `timing`, holding `canCastTiming`, recorded at the AI's hook and at the random seat alike. Recomputing the rule in Python from the snapshot would miss what Forge already applies:
+
+- flash granted by a static, such as Leyline of Anticipation or Vedalken Orrery;
+- a static that holds opponents to sorcery timing, such as Teferi, Time Raveler;
+- a spell cast through another effect, which ignores its own timing.
+
+Where Forge can name the static that decided the timing, its key goes in `responsible_static`, as for the other verdicts. The AI's hook moves ahead of its `canPlay` filter, so the AI's candidates include the ones that fail. The keyword flags gain `split_second`. `can_play` keeps its meaning, because the record schema adds fields and never redefines one; the verdict head gains a column for `timing`, masked on a gen-2 shard that has no such field.
+
+**A knowledge probe measures it.** It takes `decision` records for sorcery-speed and instant-speed candidates and edits the phase, the stack size and whose turn it is, reading the predicted `timing` bit; a subset puts a split-second spell on the stack. Gen-2 has no timing bit to read, so its baseline is `can_play` under the same edits, which should stay high for sorceries at instant timing.
+
 ## Outcome
 
 To be filled in once gen-3 is designed and run.
