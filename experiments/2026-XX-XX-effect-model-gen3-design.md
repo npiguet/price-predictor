@@ -297,7 +297,7 @@ deciding:
 The same per-field scores are what adaptive sampling would read on the training side, so the two
 items would share their bookkeeping.
 
-## The playability verdict should say whether the timing allows a play, which Forge decides apart from the rest
+## The model has to learn every rule that depends on whose turn or which step it is, and collection records which check decided each one
 
 **The `can_play` label leaves out the casting-timing rule, so the corpus labels a sorcery playable on the opponent's turn.** A `decision` record's three verdict bits are `can_play`, `affordable` and `has_legal_target`, and `can_play` is Forge's `SpellAbility.canPlay()`. That call covers split second and a script's own restrictions: the phases it names, whose turn it requires, activation limits and zones. The default timing rule lives in a separate call, `canCastTiming`, which no hook records. Under that rule a spell is cast at sorcery speed unless it is an instant or has flash, and an activated ability with `SorcerySpeed$` or a loyalty cost needs sorcery timing too. The hook in `AiController.canPlayAndPayForFace` fires after the AI's own timing check whatever that check answered, so a sorcery the AI weighs during the opponent's turn is written as playable. The random seat records `canPlay` as well, though it applies timing to its own choice of play.
 
@@ -313,7 +313,29 @@ items would share their bookkeeping.
 
 Where Forge can name the static that decided the timing, its key goes in `responsible_static`, as for the other verdicts. The AI's hook moves ahead of its `canPlay` filter, so the AI's candidates include the ones that fail. The keyword flags gain `split_second`. `can_play` keeps its meaning, because the record schema adds fields and never redefines one; the verdict head gains a column for `timing`, masked on a gen-2 shard that has no such field.
 
-**A knowledge probe measures it.** It takes `decision` records for sorcery-speed and instant-speed candidates and edits the phase, the stack size and whose turn it is, reading the predicted `timing` bit; a subset puts a split-second spell on the stack. Gen-2 has no timing bit to read, so its baseline is `can_play` under the same edits, which should stay high for sorceries at instant timing.
+**Casting speed is one case of a wider family, and a timing bit alone does not teach the rest.** Many texts depend on whose turn or which step it is:
+
+- **activation restrictions**: "activate only during your turn", "only during combat", "only once each turn", "only if you control an artifact";
+- **resolution branches**: a spell or ability that does more, or something else, when it resolves on its controller's turn or an opponent's;
+- **conditional statics**: a permanent whose static abilities differ between its controller's turn and an opponent's, so that its keywords or its restrictions change when the turn passes.
+
+The model needs to read each condition from the text, compare it with the board, and predict what follows. Each kind needs its own label at collection, because a single `can_play` bit or a resolution's outcome often does not say which condition decided it.
+
+**Each candidate records which rules checks it fails, not only that it fails.** Beside `timing`, a candidate carries `failed_checks`, a list naming each check Forge found unmet: split second, casting speed, whose turn, phase or step, combat, activation limit, a script condition, the zone, a static prohibition, and the cost. Each named check carries its `responsible_static` where a static decided it. Forge groups most of these inside `SpellAbilityRestriction.canPlay`, so the hook calls the parts separately where Forge exposes them, and the implementation has to confirm how finely it can split them. The verdict head gains a column per check. "Activate only during your turn" is then supervised by its own column rather than folded into `can_play`, whose meaning stays as it is.
+
+**A resolution records which branches of its chain ran.** Forge evaluates each chain segment's `Condition$` as it resolves. The resolution payload gains `conditions_met`, one entry per segment the chain conditions, saying whether the condition held, keyed by the segment index `attributed_to` already uses. An outcome alone can be ambiguous, because a branch that ran may change nothing visible on this board. The new field says which branch ran, and the model can be trained to predict it at the acting line.
+
+**The snapshot records whether each static line is in force.** Once the snapshot lists a permanent's statics, as the section above on statics, triggers and replacements proposes, each listed static carries `active`, Forge's answer to whether its condition holds now. A permanent with different statics on its controller's turn then shows the text of both, which one is in force, and, through the `continuous` records, what the one in force does.
+
+**The inputs say who is the active player for every player and every card, not only for the actor.** Today the global slot says whether the acting player is the active player, and a card slot says only whether the actor controls the card. For a static on an opponent's permanent, the model has to combine the two flags to learn whether the card's controller is the active player. Each player slot gains "is the active player", and each card slot "its controller is the active player". This is an input change and needs no new collection.
+
+**Each condition is balanced between met and unmet in the curated corpus.** Forge's AI casts sorcery-speed spells on its own turn and holds most instants for the opponent's, so a turn condition is seen mostly one way. Training on that teaches the base rate rather than the condition, as Forge's lethal removal did for deaths in gen-2. The fix has three parts:
+
+- **Curation splits each condition's budget by its value.** Gen-2's curation already splits each class over rule families and then over outcome signatures, with one water-filling allocator, a reuse cap on short cells and the shortfall reported in the manifest. For a record whose acting line, candidate or listed static carries a turn or step condition, the signature gains whether the condition held, taken from `failed_checks`, `conditions_met` or the static's `active`. Met and unmet then draw equal budgets, a short side repeats up to the reuse cap, and the manifest names every condition that stays one-sided.
+- **Collection evaluates both players' candidates at every priority stop.** A decision record is a rules-level question and takes no action, so the collector can ask it for the player without priority too. The answers come from the same board under both values of "whose turn it is" for that candidate's controller, which balances whose-turn checks by construction. This needs the hook to evaluate candidates without priority correctly, because Forge's `canPlay` assumes the asking player could act; the implementation has to establish what Forge answers there.
+- **Interventional forks fill the side that stays short.** A text whose resolution branch is seen on one turn only is a candidate for a fork that resolves it at a phase boundary of the other player's turn, under the existing fork rules and budgets.
+
+**A knowledge probe measures each kind.** It takes records whose acting line, candidate or board carries a turn or step condition and edits whose turn it is and the phase, then reads the prediction the condition governs: the matching verdict column for a restriction, the predicted outcome or branch for a resolution, and the affected creature's keywords or legality for a conditional static. Further subsets cover casting speed under the same edits and a split-second spell on the stack. Gen-2 has no such columns, so its baseline is `can_play` and its outcome predictions under the same edits.
 
 ## Outcome
 
