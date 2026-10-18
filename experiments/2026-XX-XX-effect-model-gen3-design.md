@@ -4,7 +4,11 @@ Draft design record for the third generation of the ability effect model. It col
 collection and in the curated corpus that gen-2 leaves open, so that gen-3's design starts from
 them. Gen-2 is described in
 [`2026-09-18-effect-model-gen2-improvements-design.md`](2026-09-18-effect-model-gen2-improvements-design.md),
-called the gen-2 record below. Nothing here is decided yet.
+called the gen-2 record below.
+
+Gen-3 collects its corpus from scratch and keeps no gen-1 or gen-2 record. Its record schema is
+therefore a new version: a field can change meaning or go away, and no gen-3 reader needs to read a
+gen-2 shard. Beyond that, nothing here is decided yet.
 
 A few terms recur. A record is one observed game event: an ability resolving, a combat, a trigger, a
 legality decision. A resolution record comes in two halves joined by a link, the cost half and the
@@ -311,7 +315,7 @@ items would share their bookkeeping.
 - a static that holds opponents to sorcery timing, such as Teferi, Time Raveler;
 - a spell cast through another effect, which ignores its own timing.
 
-Where Forge can name the static that decided the timing, its key goes in `responsible_static`, as for the other verdicts. The AI's hook moves ahead of its `canPlay` filter, so the AI's candidates include the ones that fail. The keyword flags gain `split_second`. `can_play` keeps its meaning, because the record schema adds fields and never redefines one; the verdict head gains a column for `timing`, masked on a gen-2 shard that has no such field.
+Where Forge can name the static that decided the timing, its key goes in `responsible_static`, as for the other verdicts. The AI's hook moves ahead of its `canPlay` filter, so the AI's candidates include the ones that fail. The keyword flags gain `split_second`. `can_play` becomes Forge's whole answer, `canPlay` and `canCastTiming` together, and the verdict head gains a column for `timing` beside it.
 
 **Casting speed is one case of a wider family, and a timing bit alone does not teach the rest.** Many texts depend on whose turn or which step it is:
 
@@ -321,7 +325,7 @@ Where Forge can name the static that decided the timing, its key goes in `respon
 
 The model needs to read each condition from the text, compare it with the board, and predict what follows. Each kind needs its own label at collection, because a single `can_play` bit or a resolution's outcome often does not say which condition decided it.
 
-**Each candidate records which rules checks it fails, not only that it fails.** Beside `timing`, a candidate carries `failed_checks`, a list naming each check Forge found unmet: split second, casting speed, whose turn, phase or step, combat, activation limit, a script condition, the zone, a static prohibition, and the cost. Each named check carries its `responsible_static` where a static decided it. Forge groups most of these inside `SpellAbilityRestriction.canPlay`, so the hook calls the parts separately where Forge exposes them, and the implementation has to confirm how finely it can split them. The verdict head gains a column per check. "Activate only during your turn" is then supervised by its own column rather than folded into `can_play`, whose meaning stays as it is.
+**Each candidate records which rules checks it fails, not only that it fails.** Beside `timing`, a candidate carries `failed_checks`, a list naming each check Forge found unmet: split second, casting speed, whose turn, phase or step, combat, activation limit, a script condition, the zone, a static prohibition, and the cost. Each named check carries its `responsible_static` where a static decided it. Forge groups most of these inside `SpellAbilityRestriction.canPlay`, so the hook calls the parts separately where Forge exposes them, and the implementation has to confirm how finely it can split them. The verdict head gains a column per check. "Activate only during your turn" is then supervised by its own column as well as through `can_play`.
 
 **A resolution records which branches of its chain ran.** Forge evaluates each chain segment's `Condition$` as it resolves. The resolution payload gains `conditions_met`, one entry per segment the chain conditions, saying whether the condition held, keyed by the segment index `attributed_to` already uses. An outcome alone can be ambiguous, because a branch that ran may change nothing visible on this board. The new field says which branch ran, and the model can be trained to predict it at the acting line.
 
