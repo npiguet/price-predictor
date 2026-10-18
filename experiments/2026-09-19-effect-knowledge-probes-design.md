@@ -679,3 +679,48 @@ Block legality with no restriction on the board, the hardest block subset in arm
 | zone outcome, `e64-lethality` | | | | 0.115 | 0.128 | 0.047 |
 | zone outcome, epoch 42 | | | | 0.118 | 0.136 | 0.058 |
 | zone outcome, epoch 53 | | | | 0.108 | 0.107 | 0.094 |
+
+#### Run B, run A continued from epoch 42 at a tenth of the learning rate (2026-10-18)
+
+Run B continues run A from its epoch 42 at a tenth of the learning rate for twenty epochs and is probed at two checkpoints: epoch 43, its best card-disjoint loss, and epoch 62, its last. Both are probed on the same frozen set (digest `ab6452679131`). The scorecards are `models/effects/runs/2026-10-gen2-e64-lethality-lr0.1/reports/knowledge-probes-2026-10-gen2-e64-lethality-lr0.1-20261018/scorecard.json` and `models/effects/runs/2026-10-gen2-e64-lethality-lr0.1-last/reports/knowledge-probes-2026-10-gen2-e64-lethality-lr0.1-last-20261018/scorecard.json`.
+
+##### At its last epoch the damage sweep steps where the rule puts it, for a spell and a triggered ability alike
+
+Run B's last epoch puts the step of the damage sweep against a toughness-4 target where the rule does, between 3 and 4 damage, for a spell and a triggered ability alike. Arm `e64-lethality` did too, and neither of run A's checkpoints did. Run B's best epoch crosses one half at 4 damage for a spell, by a hair, and between 4 and 5 for a triggered ability, close to run A's epoch 42. Its best epoch's toughness sweep matches run A's epoch 42, and its last epoch's falls more slowly, though far less so than run A's epoch 53.
+
+| sweep | 1 | 2 | 3 | 4 | 5 | 8 |
+|---|---:|---:|---:|---:|---:|---:|
+| toughness of the target, its death, run A epoch 42 | 0.639 | 0.441 | 0.298 | 0.123 | 0.062 | 0.008 |
+| toughness of the target, its death, run B epoch 43 | 0.626 | 0.401 | 0.298 | 0.138 | 0.061 | 0.006 |
+| toughness of the target, its death, run B epoch 62 | 0.651 | 0.457 | 0.410 | 0.256 | 0.104 | 0.002 |
+| `NumDmg$` on a spell, toughness-4 target's death, run A epoch 42 | 0.042 | 0.125 | 0.212 | 0.453 | 0.757 | 0.876 |
+| `NumDmg$` on a spell, same, run B epoch 43 | 0.018 | 0.103 | 0.215 | 0.510 | 0.753 | 0.865 |
+| `NumDmg$` on a spell, same, run B epoch 62 | 0.032 | 0.124 | 0.379 | 0.768 | 0.828 | 0.868 |
+| `NumDmg$` on a triggered ability, same, run A epoch 42 | 0.092 | 0.136 | 0.206 | 0.351 | 0.710 | 0.946 |
+| `NumDmg$` on a triggered ability, same, run B epoch 43 | 0.069 | 0.121 | 0.201 | 0.354 | 0.630 | 0.945 |
+| `NumDmg$` on a triggered ability, same, run B epoch 62 | 0.103 | 0.182 | 0.338 | 0.672 | 0.840 | 0.946 |
+
+##### The last epoch's damage read-outs are the best of any checkpoint
+
+Run B's last epoch explains more of the damage each creature takes than any earlier checkpoint, at rung 2 and in the model's own prediction alike. Its death prediction falls slightly. At its best epoch, run B matches run A's epoch 42 on every read-out within about a hundredth.
+
+| target, card-disjoint | rung 2, run A epoch 42 | rung 2, run B epoch 43 | rung 2, run B epoch 62 | model, run A epoch 42 | model, run B epoch 43 | model, run B epoch 62 |
+|---|---:|---:|---:|---:|---:|---:|
+| dies | 0.966 | 0.954 | 0.942 | 0.948 | 0.957 | 0.938 |
+| damage taken (R²) | 0.681 | 0.689 | 0.716 | 0.205 | 0.204 | 0.285 |
+| may block | 0.923 | 0.917 | 0.923 | 0.873 | 0.868 | 0.880 |
+| legal target, carrying protection | 0.969 | 0.969 | 0.965 | 0.952 | 0.960 | 0.958 |
+| trigger fires | 0.890 | 0.897 | 0.900 | 0.913 | 0.918 | 0.922 |
+
+##### The board-abilities subsets keep run A's pattern
+
+Attack legality restricted by a non-keyword static stays far harder than no restriction. Block legality is about as hard unrestricted as with a keyword restriction, and a static restriction is harder than both. A replacement on another permanent still raises the zone loss over the control.
+
+| field loss | legality-static | legality-keyword | legality-none | resolution-replacement | resolution-static | resolution-none |
+|---|---:|---:|---:|---:|---:|---:|
+| attack legality, epoch 43 | 0.939 | 0.029 | 0.399 | | | |
+| attack legality, epoch 62 | 0.911 | 0.028 | 0.430 | | | |
+| block legality, epoch 43 | 0.705 | 0.500 | 0.519 | | | |
+| block legality, epoch 62 | 0.730 | 0.499 | 0.457 | | | |
+| zone outcome, epoch 43 | | | | 0.100 | 0.093 | 0.038 |
+| zone outcome, epoch 62 | | | | 0.107 | 0.097 | 0.058 |

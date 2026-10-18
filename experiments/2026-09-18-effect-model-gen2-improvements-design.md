@@ -2054,3 +2054,102 @@ Gate 3 passes at both checkpoints, with `e` spread over more effective dimension
 | arm `e64-lethality`, epoch 28 | 0.398 | 24.1% | 9.19 of 64 |
 | run A, epoch 42 | 0.360 | 18.3% | 11.07 of 64 |
 | run A, epoch 53 | 0.298 | 18.9% | 10.39 of 64 |
+
+##### Run B (2026-10-18): a tenth of the learning rate holds the boundary in place and sharpens it, and the card-disjoint loss is lowest at its first epoch
+
+Run B continues run A from its best epoch, 42, at a tenth of the learning rate for twenty epochs, with no early stopping and every epoch's checkpoint kept. It reads the same shards in the same order as run A, so at a matching epoch the learning rate is the only difference between them. Every log, both probe reports and the 20 checkpoints are in `models/effects/runs/2026-10-gen2-e64-lethality-lr0.1/`, and the last epoch's probe reports in `models/effects/runs/2026-10-gen2-e64-lethality-lr0.1-last/`.
+
+The card-disjoint loss is lowest at run B's first epoch and drifts up slowly after it, while the training loss keeps falling. Epoch 43's is the lowest of any arm, by a hundredth over run A's best. At every matching epoch run B stays below run A on both validation losses, and its losses move far less between epochs than run A's.
+
+| epochs, averaged | run A, card-disjoint | run B, card-disjoint | run A, game-disjoint | run B, game-disjoint | run A, training | run B, training |
+|---|---:|---:|---:|---:|---:|---:|
+| 43–47 | 3.692 | 3.540 | 3.011 | 2.871 | 3.159 | 2.979 |
+| 48–52 | 3.672 | 3.589 | 2.953 | 2.882 | 3.094 | 2.900 |
+| 53–57 | | 3.614 | | 2.885 | | 2.859 |
+| 58–62 | | 3.618 | | 2.911 | | 2.813 |
+
+| arm | best epoch | card-disjoint loss |
+|---|---:|---:|
+| `e64-lethality` | 28 | 3.699 |
+| run A | 42 | 3.519 |
+| run B | 43 | 3.506 |
+
+On the training records, the boundary stays where it is from epoch to epoch and keeps sharpening. The error against the rule is lower at every one of run B's epochs than at run A's best, and it falls slowly across the run. The prediction for an exactly lethal hit stays between six and eight in ten, where run A's ranged from one half to above nine in ten. A hit short by one point is never predicted to kill more than about two times in five. The gap across the boundary holds near six tenths throughout.
+
+| run B, training records | error against the rule | lethal by 1 | exactly lethal | short by 1 | lethal by 1 minus short by 1 |
+|---|---:|---:|---:|---:|---:|
+| epoch 43 | 0.108 | 0.87 | 0.63 | 0.27 | 0.59 |
+| epoch 44 | 0.104 | 0.89 | 0.67 | 0.31 | 0.58 |
+| epoch 45 | 0.108 | 0.87 | 0.63 | 0.29 | 0.58 |
+| epoch 46 | 0.102 | 0.90 | 0.68 | 0.31 | 0.59 |
+| epoch 47 | 0.097 | 0.93 | 0.74 | 0.36 | 0.57 |
+| epoch 48 | 0.093 | 0.93 | 0.74 | 0.33 | 0.59 |
+| epoch 49 | 0.096 | 0.90 | 0.66 | 0.26 | 0.63 |
+| epoch 50 | 0.095 | 0.91 | 0.69 | 0.29 | 0.62 |
+| epoch 51 | 0.101 | 0.87 | 0.62 | 0.24 | 0.63 |
+| epoch 52 | 0.100 | 0.89 | 0.67 | 0.30 | 0.59 |
+| epoch 53 | 0.089 | 0.92 | 0.68 | 0.27 | 0.65 |
+| epoch 54 | 0.094 | 0.92 | 0.71 | 0.31 | 0.61 |
+| epoch 55 | 0.093 | 0.94 | 0.79 | 0.39 | 0.55 |
+| epoch 56 | 0.088 | 0.93 | 0.73 | 0.32 | 0.62 |
+| epoch 57 | 0.093 | 0.92 | 0.71 | 0.31 | 0.61 |
+| epoch 58 | 0.089 | 0.93 | 0.74 | 0.32 | 0.61 |
+| epoch 59 | 0.089 | 0.92 | 0.73 | 0.31 | 0.62 |
+| epoch 60 | 0.090 | 0.93 | 0.74 | 0.33 | 0.60 |
+| epoch 61 | 0.088 | 0.93 | 0.73 | 0.31 | 0.62 |
+| epoch 62 | 0.094 | 0.95 | 0.81 | 0.42 | 0.53 |
+
+| training records, across a run's epochs | error against the rule | exactly lethal | short by 1 |
+|---|---:|---:|---:|
+| run A, epochs 34–53 | 0.113–0.163 | 0.50–0.91 | 0.20–0.65 |
+| run B, epochs 43–62 | 0.088–0.108 | 0.62–0.81 | 0.24–0.42 |
+
+The probe set's grids agree. Run B's best epoch matches run A's, the sharpest of the earlier grids. Its last epoch has the lowest error against the rule of any grid, where run A's last epoch had moved the whole boundary toward a death. Which of run B's checkpoints is kept therefore matters far less than it did in run A.
+
+| probe-set grid | error against the rule | lethal by 1 | exactly lethal | short by 1 | lethal by 1 minus short by 1 |
+|---|---:|---:|---:|---:|---:|
+| run A, epoch 42 | 0.190 | 0.72 | 0.54 | 0.24 | 0.48 |
+| run A, epoch 53 | 0.234 | 0.83 | 0.80 | 0.71 | 0.11 |
+| run B, epoch 43 | 0.191 | 0.71 | 0.54 | 0.21 | 0.50 |
+| run B, epoch 62 | 0.165 | 0.78 | 0.67 | 0.31 | 0.47 |
+
+Run B, epoch 62:
+
+| damage \ toughness | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| 1 | 0.68 | 0.35 | 0.07 | 0.03 | 0.00 | 0.00 | 0.00 | 0.00 |
+| 2 | 0.65 | 0.59 | 0.35 | 0.12 | 0.04 | 0.00 | 0.00 | 0.00 |
+| 3 | 0.65 | 0.62 | 0.64 | 0.38 | 0.08 | 0.01 | 0.00 | 0.00 |
+| 4 | 0.79 | 0.78 | 0.80 | 0.77 | 0.31 | 0.06 | 0.01 | 0.00 |
+| 5 | 0.79 | 0.79 | 0.80 | 0.83 | 0.70 | 0.29 | 0.05 | 0.01 |
+| 6 | 0.84 | 0.83 | 0.84 | 0.86 | 0.84 | 0.60 | 0.21 | 0.05 |
+| 7 | 0.84 | 0.84 | 0.84 | 0.86 | 0.87 | 0.83 | 0.59 | 0.27 |
+| 8 | 0.85 | 0.85 | 0.85 | 0.87 | 0.88 | 0.89 | 0.86 | 0.75 |
+
+The fields keep run A's epoch-42 levels at both of run B's checkpoints, with three exceptions. Poison falls the furthest, to its lowest share of any 64-wide run, and blocking legality and types gained lose a little of run A's gains.
+
+| field, card-disjoint, share of the floor removed | run A, epoch 42 | run B, epoch 43 | run B, epoch 62 |
+|---|---:|---:|---:|
+| zone outcome | 83% | 82% | 83% |
+| affected gate | 77% | 77% | 75% |
+| toughness change | 77% | 78% | 76% |
+| keywords gained | 76% | 78% | 78% |
+| blocking legality | 66% | 60% | 60% |
+| types gained | 78% | 70% | 74% |
+| poison | 52% | 38% | 21% |
+
+Gate 3 passes at both checkpoints. Gate 2 again routes double strike to a stage-three probe at the best checkpoint and passes it at the last, as in run A, so on its 294 records the keyword's agreement swings by tens of points between checkpoints of one run.
+
+| gate 2 keyword | run A, epoch 42 | run B, epoch 43 | run B, epoch 62 |
+|---|---:|---:|---:|
+| first strike | 87.0% | 83.8% | 86.2% |
+| double strike | 62.9% | 44.2% | 81.0% |
+| deathtouch | 85.9% | 83.1% | 80.8% |
+| infect | 82.0% | 77.6% | 78.0% |
+| trample | 88.2% | 89.2% | 92.7% |
+
+| cache | mean pairwise cosine | top component share | participation ratio |
+|---|---:|---:|---:|
+| run A, epoch 42 | 0.360 | 18.3% | 11.07 of 64 |
+| run B, epoch 43 | 0.381 | 18.8% | 10.81 of 64 |
+| run B, epoch 62 | 0.419 | 22.3% | 9.29 of 64 |
