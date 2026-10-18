@@ -2153,3 +2153,112 @@ Gate 3 passes at both checkpoints. Gate 2 again routes double strike to a stage-
 | run A, epoch 42 | 0.360 | 18.3% | 11.07 of 64 |
 | run B, epoch 43 | 0.381 | 18.8% | 10.81 of 64 |
 | run B, epoch 62 | 0.419 | 22.3% | 9.29 of 64 |
+
+##### Run A128 (2026-10-18): the wider arm's continuation moves its boundary as run A's did, and its best-loss checkpoint sits at the worst position
+
+Run A128 continues arm `e128-lethality` from its epoch 27 to epoch 47 at the same learning rate, with no early stopping and every epoch's checkpoint kept, as run A did for arm `e64-lethality`. Its card-disjoint loss set new bests at epochs 28 and 30, below the arm's own best. Every log, both probe reports and the 20 checkpoints are in `models/effects/runs/2026-10-gen2-e128-lethality-ext20/`, and the last epoch's probe reports in `models/effects/runs/2026-10-gen2-e128-lethality-ext20-last/`.
+
+The first epochs of the continuation lowered the card-disjoint loss, and the next fifteen did not lower it further. Averaged over five epochs it stays between 3.81 and 3.90 from epoch 28 on, while the training loss falls steadily and the game-disjoint loss edges down. Its best stays above both 64-wide continuations.
+
+| epochs, averaged | training | card-disjoint | game-disjoint |
+|---|---:|---:|---:|
+| 18–22, arm `e128-lethality` | 3.875 | 4.003 | 3.102 |
+| 23–27, arm `e128-lethality` | 3.663 | 3.965 | 3.079 |
+| 28–32, run A128 | 3.521 | 3.813 | 2.963 |
+| 33–37, run A128 | 3.412 | 3.900 | 3.020 |
+| 38–42, run A128 | 3.295 | 3.821 | 2.924 |
+| 43–47, run A128 | 3.174 | 3.868 | 2.884 |
+
+| arm | best epoch | card-disjoint loss |
+|---|---:|---:|
+| `e128-lethality` | 22 | 3.835 |
+| run A128 | 30 | 3.708 |
+| run A | 42 | 3.519 |
+| run B | 43 | 3.506 |
+
+On the training records, the boundary's position moves from epoch to epoch by as much as run A's. The prediction for an exactly lethal hit ranges from about four in ten to above nine in ten, and a hit short by one point is predicted to kill from one time in six to three times in four. The sharpest epochs match run A's, with the gap across the boundary near six tenths, but they alternate with epochs where it falls below a quarter.
+
+| run A128, training records | error against the rule | lethal by 1 | exactly lethal | short by 1 | lethal by 1 minus short by 1 |
+|---|---:|---:|---:|---:|---:|
+| epoch 28 | 0.167 | 0.77 | 0.59 | 0.37 | 0.40 |
+| epoch 29 | 0.149 | 0.93 | 0.81 | 0.58 | 0.35 |
+| epoch 30 | 0.177 | 0.98 | 0.92 | 0.73 | 0.24 |
+| epoch 31 | 0.149 | 0.90 | 0.78 | 0.52 | 0.38 |
+| epoch 32 | 0.134 | 0.80 | 0.55 | 0.27 | 0.53 |
+| epoch 33 | 0.163 | 0.93 | 0.82 | 0.59 | 0.34 |
+| epoch 34 | 0.150 | 0.95 | 0.85 | 0.62 | 0.33 |
+| epoch 35 | 0.137 | 0.85 | 0.64 | 0.37 | 0.48 |
+| epoch 36 | 0.145 | 0.80 | 0.58 | 0.33 | 0.47 |
+| epoch 37 | 0.119 | 0.88 | 0.65 | 0.31 | 0.57 |
+| epoch 38 | 0.121 | 0.95 | 0.82 | 0.51 | 0.44 |
+| epoch 39 | 0.131 | 0.92 | 0.77 | 0.46 | 0.46 |
+| epoch 40 | 0.134 | 0.91 | 0.75 | 0.47 | 0.44 |
+| epoch 41 | 0.120 | 0.84 | 0.62 | 0.29 | 0.55 |
+| epoch 42 | 0.138 | 0.97 | 0.89 | 0.62 | 0.35 |
+| epoch 43 | 0.120 | 0.94 | 0.81 | 0.49 | 0.45 |
+| epoch 44 | 0.178 | 0.97 | 0.93 | 0.74 | 0.23 |
+| epoch 45 | 0.113 | 0.85 | 0.59 | 0.26 | 0.59 |
+| epoch 46 | 0.118 | 0.89 | 0.68 | 0.35 | 0.54 |
+| epoch 47 | 0.145 | 0.69 | 0.43 | 0.17 | 0.52 |
+
+The checkpoint the card-disjoint loss chose, epoch 30, has its boundary moved furthest toward a death. On the probe set it predicts a death for three in four hits short by a point, and its grid has the widest error against the rule and the smallest gap of any grid. The last epoch sits on the other side, toward survival: it predicts a death for an exactly lethal hit only four times in ten. In run A the best-loss checkpoint happened to land near the rule; here it landed at an extreme. At the full learning rate, the card-disjoint loss does not select where the boundary sits.
+
+| probe-set grid | error against the rule | lethal by 1 | exactly lethal | short by 1 | lethal by 1 minus short by 1 |
+|---|---:|---:|---:|---:|---:|
+| arm `e128-lethality`, epoch 22 | 0.224 | 0.56 | 0.41 | 0.21 | 0.35 |
+| run A128, epoch 30 | 0.245 | 0.85 | 0.84 | 0.75 | 0.10 |
+| run A128, epoch 47 | 0.210 | 0.63 | 0.40 | 0.13 | 0.50 |
+
+Run A128, epoch 30:
+
+| damage \ toughness | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| 1 | 0.79 | 0.68 | 0.31 | 0.16 | 0.13 | 0.09 | 0.05 | 0.03 |
+| 2 | 0.80 | 0.76 | 0.55 | 0.26 | 0.15 | 0.11 | 0.07 | 0.03 |
+| 3 | 0.79 | 0.78 | 0.77 | 0.66 | 0.36 | 0.18 | 0.09 | 0.04 |
+| 4 | 0.81 | 0.81 | 0.82 | 0.82 | 0.76 | 0.59 | 0.32 | 0.11 |
+| 5 | 0.82 | 0.82 | 0.84 | 0.84 | 0.85 | 0.83 | 0.71 | 0.40 |
+| 6 | 0.84 | 0.84 | 0.85 | 0.86 | 0.87 | 0.88 | 0.86 | 0.71 |
+| 7 | 0.83 | 0.83 | 0.84 | 0.85 | 0.87 | 0.89 | 0.91 | 0.88 |
+| 8 | 0.83 | 0.84 | 0.86 | 0.87 | 0.90 | 0.93 | 0.95 | 0.95 |
+
+Run A128, epoch 47:
+
+| damage \ toughness | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| 1 | 0.69 | 0.25 | 0.07 | 0.05 | 0.04 | 0.02 | 0.00 | 0.00 |
+| 2 | 0.68 | 0.53 | 0.19 | 0.07 | 0.04 | 0.02 | 0.00 | 0.00 |
+| 3 | 0.63 | 0.57 | 0.36 | 0.10 | 0.04 | 0.01 | 0.00 | 0.00 |
+| 4 | 0.67 | 0.64 | 0.62 | 0.29 | 0.08 | 0.02 | 0.00 | 0.00 |
+| 5 | 0.68 | 0.66 | 0.73 | 0.62 | 0.25 | 0.07 | 0.01 | 0.00 |
+| 6 | 0.74 | 0.72 | 0.78 | 0.78 | 0.55 | 0.26 | 0.07 | 0.02 |
+| 7 | 0.80 | 0.79 | 0.83 | 0.86 | 0.84 | 0.72 | 0.42 | 0.17 |
+| 8 | 0.82 | 0.82 | 0.85 | 0.87 | 0.87 | 0.85 | 0.68 | 0.41 |
+
+Most fields improve at the best checkpoint over arm `e128-lethality`'s, poison and blocking legality the most. The last epoch has the highest zone-outcome share of any checkpoint, gives back the gains in poison and blocking legality, and falls below the arm on types gained.
+
+| field, card-disjoint, share of the floor removed | `e128-lethality`, epoch 22 | run A128, epoch 30 | run A128, epoch 47 |
+|---|---:|---:|---:|
+| zone outcome | 79% | 82% | 86% |
+| affected gate | 78% | 76% | 75% |
+| toughness change | 72% | 76% | 75% |
+| keywords gained | 69% | 73% | 72% |
+| blocking legality | 50% | 64% | 56% |
+| types gained | 75% | 83% | 57% |
+| poison | −3% | 41% | 0% |
+
+Gate 3 passes at both checkpoints, with the lowest mean pairwise cosine of any checkpoint at epoch 30. Gate 2 passes double strike at the best checkpoint and routes it to a stage-three probe at the last, the reverse of both 64-wide continuations.
+
+| gate 2 keyword | `e128-lethality`, epoch 22 | run A128, epoch 30 | run A128, epoch 47 |
+|---|---:|---:|---:|
+| first strike | 85.2% | 75.0% | 80.1% |
+| double strike | 54.8% | 79.6% | 59.9% |
+| deathtouch | 90.0% | 84.5% | 78.0% |
+| infect | 71.0% | 76.7% | 80.2% |
+| trample | 96.1% | 90.5% | 93.1% |
+
+| cache | mean pairwise cosine | top component share | participation ratio |
+|---|---:|---:|---:|
+| arm `e128-lethality`, epoch 22 | 0.356 | 22.1% | 9.26 of 128 |
+| run A128, epoch 30 | 0.287 | 20.7% | 9.92 of 128 |
+| run A128, epoch 47 | 0.300 | 18.0% | 11.09 of 128 |

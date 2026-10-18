@@ -724,3 +724,50 @@ Attack legality restricted by a non-keyword static stays far harder than no rest
 | block legality, epoch 62 | 0.730 | 0.499 | 0.457 | | | |
 | zone outcome, epoch 43 | | | | 0.100 | 0.093 | 0.038 |
 | zone outcome, epoch 62 | | | | 0.107 | 0.097 | 0.058 |
+
+#### Run A128, arm `e128-lethality` continued to epoch 47 (2026-10-18)
+
+Run A128 continues arm `e128-lethality` for twenty more epochs at the same learning rate and is probed at two checkpoints: epoch 30, its best card-disjoint loss, and epoch 47, its last. Both are probed on the same frozen set (digest `ab6452679131`). The scorecards are `models/effects/runs/2026-10-gen2-e128-lethality-ext20/reports/knowledge-probes-2026-10-gen2-e128-lethality-ext20-20261018/scorecard.json` and `models/effects/runs/2026-10-gen2-e128-lethality-ext20-last/reports/knowledge-probes-2026-10-gen2-e128-lethality-ext20-last-20261018/scorecard.json`.
+
+##### The damage sweep crosses one half a point early at epoch 30 and a point late at epoch 47
+
+The two checkpoints place the step on opposite sides of the rule, which puts it between 3 and 4 damage against a toughness-4 target, in the opposite order from run A. Epoch 30 crosses one half between 2 and 3 damage for a spell and a triggered ability alike. Epoch 47 crosses between 4 and 5 for both. The toughness sweep follows: epoch 30's falls far more slowly than arm `e128-lethality`'s, and epoch 47's about as fast.
+
+| sweep | 1 | 2 | 3 | 4 | 5 | 8 |
+|---|---:|---:|---:|---:|---:|---:|
+| toughness of the target, its death, `e128-lethality` | 0.779 | 0.401 | 0.210 | 0.094 | 0.027 | 0.001 |
+| toughness of the target, its death, run A128 epoch 30 | 0.826 | 0.717 | 0.466 | 0.356 | 0.219 | 0.024 |
+| toughness of the target, its death, run A128 epoch 47 | 0.761 | 0.449 | 0.258 | 0.126 | 0.053 | 0.001 |
+| `NumDmg$` on a spell, toughness-4 target's death, `e128-lethality` | 0.063 | 0.107 | 0.154 | 0.291 | 0.438 | 0.871 |
+| `NumDmg$` on a spell, same, run A128 epoch 30 | 0.156 | 0.263 | 0.659 | 0.821 | 0.843 | 0.873 |
+| `NumDmg$` on a spell, same, run A128 epoch 47 | 0.054 | 0.069 | 0.104 | 0.287 | 0.620 | 0.865 |
+| `NumDmg$` on a triggered ability, same, `e128-lethality` | 0.083 | 0.100 | 0.115 | 0.184 | 0.350 | 0.899 |
+| `NumDmg$` on a triggered ability, same, run A128 epoch 30 | 0.313 | 0.342 | 0.598 | 0.779 | 0.843 | 0.927 |
+| `NumDmg$` on a triggered ability, same, run A128 epoch 47 | 0.102 | 0.152 | 0.200 | 0.369 | 0.632 | 0.923 |
+
+Read record by record at epoch 30, the activated pings for 1 damage are predicted to kill a toughness-1 creature at 0.69 or more, as in arm `e128-lethality`.
+
+##### The model reads blocking and trigger firing better at both checkpoints
+
+The model's own blocking prediction gains about four hundredths at both checkpoints, and its trigger-firing prediction about two. Its damage-taken read-out keeps arm `e128-lethality`'s level. Death and protected-target legality fall slightly at epoch 30 and recover at epoch 47.
+
+| target, card-disjoint | rung 2, `e128-lethality` | rung 2, epoch 30 | rung 2, epoch 47 | model, `e128-lethality` | model, epoch 30 | model, epoch 47 |
+|---|---:|---:|---:|---:|---:|---:|
+| dies | 0.928 | 0.932 | 0.925 | 0.945 | 0.933 | 0.951 |
+| damage taken (R²) | 0.632 | 0.655 | 0.635 | 0.213 | 0.210 | 0.214 |
+| may block | 0.907 | 0.900 | 0.906 | 0.798 | 0.844 | 0.842 |
+| legal target, carrying protection | 0.971 | 0.942 | 0.965 | 0.930 | 0.925 | 0.951 |
+| trigger fires | 0.894 | 0.897 | 0.907 | 0.897 | 0.914 | 0.917 |
+
+##### Unrestricted attack legality worsens at the best checkpoint and recovers at the last
+
+Attack legality restricted by a non-keyword static stays far harder than no restriction at both checkpoints. Unrestricted attack legality is harder at epoch 30 than at any other checkpoint trained with lethality copies, and recovers at epoch 47. A replacement on another permanent still raises the zone loss over the control.
+
+| field loss | legality-static | legality-keyword | legality-none | resolution-replacement | resolution-static | resolution-none |
+|---|---:|---:|---:|---:|---:|---:|
+| attack legality, epoch 30 | 0.961 | 0.046 | 0.593 | | | |
+| attack legality, epoch 47 | 0.960 | 0.036 | 0.219 | | | |
+| block legality, epoch 30 | 0.736 | 0.618 | 0.576 | | | |
+| block legality, epoch 47 | 0.744 | 0.489 | 0.514 | | | |
+| zone outcome, epoch 30 | | | | 0.115 | 0.107 | 0.070 |
+| zone outcome, epoch 47 | | | | 0.091 | 0.078 | 0.037 |
