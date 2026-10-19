@@ -1,0 +1,105 @@
+checkpoint,keyword,qualifying_records,agreement_pct,verdict
+e64 (earlier inputs),first_strike,707,31.5,probe
+e64 (earlier inputs),double_strike,672,64.3,probe
+e64 (earlier inputs),deathtouch,899,85.3,pass
+e64 (earlier inputs),lifelink,2169,97.8,pass
+e64 (earlier inputs),trample,2331,90.9,pass
+e64 (earlier inputs),indestructible,342,99.1,pass
+e64 (earlier inputs),wither,142,,too few records
+e64 (earlier inputs),infect,1453,76.5,pass
+e64,first_strike,2503,86.5,pass
+e64,double_strike,294,70.7,pass
+e64,deathtouch,899,86.1,pass
+e64,lifelink,2169,99,pass
+e64,trample,2331,96.7,pass
+e64,indestructible,342,99.4,pass
+e64,wither,142,,too few records
+e64,infect,1453,68.2,probe
+e128,first_strike,2503,82.7,pass
+e128,double_strike,294,71.1,pass
+e128,deathtouch,899,85.4,pass
+e128,lifelink,2169,98.3,pass
+e128,trample,2331,97,pass
+e128,indestructible,342,99.1,pass
+e128,wither,142,,too few records
+e128,infect,1453,75.1,pass
+e64-lethality,first_strike,2503,91.3,pass
+e64-lethality,double_strike,294,85.4,pass
+e64-lethality,deathtouch,899,88.1,pass
+e64-lethality,lifelink,2169,97.9,pass
+e64-lethality,trample,2331,93.8,pass
+e64-lethality,indestructible,342,99.4,pass
+e64-lethality,wither,142,,too few records
+e64-lethality,infect,1453,76.7,pass
+e128-lethality,first_strike,2503,85.2,pass
+e128-lethality,double_strike,294,54.8,probe
+e128-lethality,deathtouch,899,90,pass
+e128-lethality,lifelink,2169,99,pass
+e128-lethality,trample,2331,96.1,pass
+e128-lethality,indestructible,342,99.1,pass
+e128-lethality,wither,142,,too few records
+e128-lethality,infect,1453,71,pass
+A best,first_strike,2503,87,pass
+A best,double_strike,294,62.9,probe
+A best,deathtouch,899,85.9,pass
+A best,lifelink,2169,98.1,pass
+A best,trample,2331,88.2,pass
+A best,indestructible,342,96.8,pass
+A best,wither,142,,too few records
+A best,infect,1453,82,pass
+A last,first_strike,2503,92,pass
+A last,double_strike,294,82,pass
+A last,deathtouch,899,87.5,pass
+A last,lifelink,2169,97.7,pass
+A last,trample,2331,87,pass
+A last,indestructible,342,99.1,pass
+A last,wither,142,,too few records
+A last,infect,1453,73.5,pass
+B best,first_strike,2503,83.8,pass
+B best,double_strike,294,44.2,probe
+B best,deathtouch,899,83.1,pass
+B best,lifelink,2169,98.1,pass
+B best,trample,2331,89.2,pass
+B best,indestructible,342,98,pass
+B best,wither,142,,too few records
+B best,infect,1453,77.6,pass
+B last,first_strike,2503,86.2,pass
+B last,double_strike,294,81,pass
+B last,deathtouch,899,80.8,pass
+B last,lifelink,2169,98.1,pass
+B last,trample,2331,92.7,pass
+B last,indestructible,342,97.7,pass
+B last,wither,142,,too few records
+B last,infect,1453,78,pass
+A128 best,first_strike,2503,75,pass
+A128 best,double_strike,294,79.6,pass
+A128 best,deathtouch,899,84.5,pass
+A128 best,lifelink,2169,97.4,pass
+A128 best,trample,2331,90.5,pass
+A128 best,indestructible,342,98.8,pass
+A128 best,wither,142,,too few records
+A128 best,infect,1453,76.7,pass
+A128 last,first_strike,2503,80.1,pass
+A128 last,double_strike,294,59.9,probe
+A128 last,deathtouch,899,78,pass
+A128 last,lifelink,2169,98.7,pass
+A128 last,trample,2331,93.1,pass
+A128 last,indestructible,342,99.1,pass
+A128 last,wither,142,,too few records
+A128 last,infect,1453,80.2,pass
+B128 best,first_strike,2503,84.1,pass
+B128 best,double_strike,294,57.5,probe
+B128 best,deathtouch,899,79.5,pass
+B128 best,lifelink,2169,98.8,pass
+B128 best,trample,2331,91,pass
+B128 best,indestructible,342,99.1,pass
+B128 best,wither,142,,too few records
+B128 best,infect,1453,77.4,pass
+B128 last,first_strike,2503,76.9,pass
+B128 last,double_strike,294,48.3,probe
+B128 last,deathtouch,899,79.1,pass
+B128 last,lifelink,2169,98.4,pass
+B128 last,trample,2331,91.5,pass
+B128 last,indestructible,342,99.4,pass
+B128 last,wither,142,,too few records
+B128 last,infect,1453,78.9,pass

@@ -1,0 +1,4 @@
+run,epoch 9,epoch 12,epoch 15,epoch 18,epoch 25
+"gen-1, field terms (its whole loss)",3.72,3.49,3.35,3.29,3.13
+"e64 (earlier inputs), field terms",3.73,3.59,3.46,3.48,
+"e64, field terms",3.89,3.72,3.47,3.53,3.27

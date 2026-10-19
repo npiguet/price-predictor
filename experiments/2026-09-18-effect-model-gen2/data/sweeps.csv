@@ -1,0 +1,598 @@
+checkpoint,sweep,value,prediction,records
+gen-1,board_size,0,0.00310377,20
+gen-1,board_size,1,0.0281683,20
+gen-1,board_size,2,0.050405,20
+gen-1,board_size,3,0.0706365,20
+gen-1,board_size,4,0.0893179,20
+gen-1,board_size,5,0.106759,20
+gen-1,board_size,6,0.123207,20
+gen-1,board_size,7,0.138797,20
+gen-1,board_size,8,0.153645,20
+gen-1,damage_spell,1,1.48335e-05,20
+gen-1,damage_spell,2,1.87653e-05,20
+gen-1,damage_spell,3,2.5413e-05,20
+gen-1,damage_spell,4,2.45407e-05,20
+gen-1,damage_spell,5,2.76402e-05,20
+gen-1,damage_spell,6,2.49121e-05,20
+gen-1,damage_spell,7,2.58195e-05,20
+gen-1,damage_spell,8,2.59467e-05,20
+gen-1,toughness,1,4.74801e-05,20
+gen-1,toughness,2,2.67041e-05,20
+gen-1,toughness,3,2.32566e-05,20
+gen-1,toughness,4,2.17681e-05,20
+gen-1,toughness,5,2.12272e-05,20
+gen-1,toughness,6,2.09683e-05,20
+gen-1,toughness,7,1.99745e-05,20
+gen-1,toughness,8,1.86264e-05,20
+e64 (earlier inputs),affordability,0,0.286896,20
+e64 (earlier inputs),affordability,1,0.287496,20
+e64 (earlier inputs),affordability,2,0.287843,20
+e64 (earlier inputs),affordability,3,0.287887,20
+e64 (earlier inputs),affordability,4,0.257469,16
+e64 (earlier inputs),affordability,5,0.254443,14
+e64 (earlier inputs),affordability,6,0.248925,11
+e64 (earlier inputs),affordability,7,0.290941,6
+e64 (earlier inputs),affordability,8,0.271807,4
+e64 (earlier inputs),affordability,9,0.0565748,1
+e64 (earlier inputs),affordability,10,0.0560932,1
+e64 (earlier inputs),board_size,0,0.000957869,20
+e64 (earlier inputs),board_size,1,0.209785,20
+e64 (earlier inputs),board_size,2,0.407455,20
+e64 (earlier inputs),board_size,3,0.597575,20
+e64 (earlier inputs),board_size,4,0.781775,20
+e64 (earlier inputs),board_size,5,0.961071,20
+e64 (earlier inputs),board_size,6,1.13661,20
+e64 (earlier inputs),board_size,7,1.30908,20
+e64 (earlier inputs),board_size,8,1.4785,20
+e64 (earlier inputs),damage_spell,1,0.447181,20
+e64 (earlier inputs),damage_spell,2,0.500536,20
+e64 (earlier inputs),damage_spell,3,0.521937,20
+e64 (earlier inputs),damage_spell,4,0.577856,20
+e64 (earlier inputs),damage_spell,5,0.570604,20
+e64 (earlier inputs),damage_spell,6,0.586451,20
+e64 (earlier inputs),damage_spell,7,0.536368,20
+e64 (earlier inputs),damage_spell,8,0.551092,20
+e64 (earlier inputs),damage_triggered,1,0.674062,20
+e64 (earlier inputs),damage_triggered,2,0.706484,20
+e64 (earlier inputs),damage_triggered,3,0.743174,20
+e64 (earlier inputs),damage_triggered,4,0.750919,20
+e64 (earlier inputs),damage_triggered,5,0.77546,20
+e64 (earlier inputs),damage_triggered,6,0.77556,20
+e64 (earlier inputs),damage_triggered,7,0.763254,20
+e64 (earlier inputs),damage_triggered,8,0.782319,20
+e64 (earlier inputs),toughness,1,0.861236,20
+e64 (earlier inputs),toughness,2,0.780796,20
+e64 (earlier inputs),toughness,3,0.696214,20
+e64 (earlier inputs),toughness,4,0.568909,20
+e64 (earlier inputs),toughness,5,0.413198,20
+e64 (earlier inputs),toughness,6,0.275818,20
+e64 (earlier inputs),toughness,7,0.182237,20
+e64 (earlier inputs),toughness,8,0.126522,20
+e64,affordability,0,0.00871837,20
+e64,affordability,1,0.091354,20
+e64,affordability,2,0.147097,20
+e64,affordability,3,0.215152,20
+e64,affordability,4,0.262327,17
+e64,affordability,5,0.34203,15
+e64,affordability,6,0.373599,12
+e64,affordability,7,0.470736,6
+e64,affordability,8,0.462448,4
+e64,affordability,9,0.0655993,1
+e64,affordability,10,0.100186,1
+e64,board_size,0,0.00152864,20
+e64,board_size,1,0.204988,20
+e64,board_size,2,0.400476,20
+e64,board_size,3,0.591453,20
+e64,board_size,4,0.778805,20
+e64,board_size,5,0.963085,20
+e64,board_size,6,1.14474,20
+e64,board_size,7,1.32398,20
+e64,board_size,8,1.50109,20
+e64,damage_spell,1,0.454228,20
+e64,damage_spell,2,0.529758,20
+e64,damage_spell,3,0.569278,20
+e64,damage_spell,4,0.62906,20
+e64,damage_spell,5,0.653493,20
+e64,damage_spell,6,0.686418,20
+e64,damage_spell,7,0.580992,20
+e64,damage_spell,8,0.683276,20
+e64,damage_triggered,1,0.616127,20
+e64,damage_triggered,2,0.666895,20
+e64,damage_triggered,3,0.709455,20
+e64,damage_triggered,4,0.766808,20
+e64,damage_triggered,5,0.769028,20
+e64,damage_triggered,6,0.793792,20
+e64,damage_triggered,7,0.729647,20
+e64,damage_triggered,8,0.792671,20
+e64,toughness,1,0.563411,20
+e64,toughness,2,0.541808,20
+e64,toughness,3,0.518599,20
+e64,toughness,4,0.465711,20
+e64,toughness,5,0.316791,20
+e64,toughness,6,0.212743,20
+e64,toughness,7,0.165684,20
+e64,toughness,8,0.122151,20
+e128,affordability,0,0.0122782,20
+e128,affordability,1,0.0622564,20
+e128,affordability,2,0.104533,20
+e128,affordability,3,0.147327,20
+e128,affordability,4,0.160069,17
+e128,affordability,5,0.216724,15
+e128,affordability,6,0.233541,12
+e128,affordability,7,0.345298,6
+e128,affordability,8,0.377836,4
+e128,affordability,9,0.0430341,1
+e128,affordability,10,0.0527621,1
+e128,board_size,0,6.27392e-05,20
+e128,board_size,1,0.19841,20
+e128,board_size,2,0.382151,20
+e128,board_size,3,0.554712,20
+e128,board_size,4,0.718525,20
+e128,board_size,5,0.87594,20
+e128,board_size,6,1.02832,20
+e128,board_size,7,1.17668,20
+e128,board_size,8,1.32234,20
+e128,damage_spell,1,0.251982,20
+e128,damage_spell,2,0.388614,20
+e128,damage_spell,3,0.500369,20
+e128,damage_spell,4,0.595487,20
+e128,damage_spell,5,0.646662,20
+e128,damage_spell,6,0.699213,20
+e128,damage_spell,7,0.719674,20
+e128,damage_spell,8,0.733482,20
+e128,damage_triggered,1,0.336555,20
+e128,damage_triggered,2,0.418619,20
+e128,damage_triggered,3,0.482734,20
+e128,damage_triggered,4,0.549292,20
+e128,damage_triggered,5,0.630812,20
+e128,damage_triggered,6,0.689745,20
+e128,damage_triggered,7,0.693555,20
+e128,damage_triggered,8,0.697761,20
+e128,toughness,1,0.861049,20
+e128,toughness,2,0.757214,20
+e128,toughness,3,0.564325,20
+e128,toughness,4,0.344187,20
+e128,toughness,5,0.204415,20
+e128,toughness,6,0.137924,20
+e128,toughness,7,0.0917453,20
+e128,toughness,8,0.0642508,20
+e64-lethality,affordability,0,0.00668698,20
+e64-lethality,affordability,1,0.0637907,20
+e64-lethality,affordability,2,0.101448,20
+e64-lethality,affordability,3,0.148836,20
+e64-lethality,affordability,4,0.17103,17
+e64-lethality,affordability,5,0.24352,15
+e64-lethality,affordability,6,0.275292,12
+e64-lethality,affordability,7,0.436661,6
+e64-lethality,affordability,8,0.473875,4
+e64-lethality,affordability,9,0.256107,1
+e64-lethality,affordability,10,0.317261,1
+e64-lethality,board_size,0,1.64528e-05,20
+e64-lethality,board_size,1,0.196492,20
+e64-lethality,board_size,2,0.38663,20
+e64-lethality,board_size,3,0.573469,20
+e64-lethality,board_size,4,0.757947,20
+e64-lethality,board_size,5,0.940303,20
+e64-lethality,board_size,6,1.12093,20
+e64-lethality,board_size,7,1.29999,20
+e64-lethality,board_size,8,1.47772,20
+e64-lethality,damage_spell,1,0.0871451,20
+e64-lethality,damage_spell,2,0.254857,20
+e64-lethality,damage_spell,3,0.382697,20
+e64-lethality,damage_spell,4,0.508653,20
+e64-lethality,damage_spell,5,0.723031,20
+e64-lethality,damage_spell,6,0.802613,20
+e64-lethality,damage_spell,7,0.824481,20
+e64-lethality,damage_spell,8,0.844999,20
+e64-lethality,damage_triggered,1,0.143691,20
+e64-lethality,damage_triggered,2,0.234444,20
+e64-lethality,damage_triggered,3,0.463613,20
+e64-lethality,damage_triggered,4,0.651849,20
+e64-lethality,damage_triggered,5,0.778671,20
+e64-lethality,damage_triggered,6,0.877771,20
+e64-lethality,damage_triggered,7,0.906919,20
+e64-lethality,damage_triggered,8,0.922824,20
+e64-lethality,toughness,1,0.6964,20
+e64-lethality,toughness,2,0.570397,20
+e64-lethality,toughness,3,0.41128,20
+e64-lethality,toughness,4,0.257424,20
+e64-lethality,toughness,5,0.0945578,20
+e64-lethality,toughness,6,0.0355418,20
+e64-lethality,toughness,7,0.0113855,20
+e64-lethality,toughness,8,0.00331505,20
+e128-lethality,affordability,0,0.0164304,20
+e128-lethality,affordability,1,0.0818545,20
+e128-lethality,affordability,2,0.134598,20
+e128-lethality,affordability,3,0.182105,20
+e128-lethality,affordability,4,0.203684,17
+e128-lethality,affordability,5,0.25367,15
+e128-lethality,affordability,6,0.230464,12
+e128-lethality,affordability,7,0.30077,6
+e128-lethality,affordability,8,0.262653,4
+e128-lethality,affordability,9,0.129297,1
+e128-lethality,affordability,10,0.145083,1
+e128-lethality,board_size,0,0.00629124,20
+e128-lethality,board_size,1,0.220049,20
+e128-lethality,board_size,2,0.413425,20
+e128-lethality,board_size,3,0.594597,20
+e128-lethality,board_size,4,0.767538,20
+e128-lethality,board_size,5,0.93413,20
+e128-lethality,board_size,6,1.09526,20
+e128-lethality,board_size,7,1.25201,20
+e128-lethality,board_size,8,1.40516,20
+e128-lethality,damage_spell,1,0.0632095,20
+e128-lethality,damage_spell,2,0.107387,20
+e128-lethality,damage_spell,3,0.154328,20
+e128-lethality,damage_spell,4,0.290808,20
+e128-lethality,damage_spell,5,0.438051,20
+e128-lethality,damage_spell,6,0.631504,20
+e128-lethality,damage_spell,7,0.799678,20
+e128-lethality,damage_spell,8,0.870755,20
+e128-lethality,damage_triggered,1,0.0828943,20
+e128-lethality,damage_triggered,2,0.0997048,20
+e128-lethality,damage_triggered,3,0.114869,20
+e128-lethality,damage_triggered,4,0.18374,20
+e128-lethality,damage_triggered,5,0.350128,20
+e128-lethality,damage_triggered,6,0.636396,20
+e128-lethality,damage_triggered,7,0.858194,20
+e128-lethality,damage_triggered,8,0.898635,20
+e128-lethality,toughness,1,0.77948,20
+e128-lethality,toughness,2,0.401207,20
+e128-lethality,toughness,3,0.209971,20
+e128-lethality,toughness,4,0.0941881,20
+e128-lethality,toughness,5,0.0265593,20
+e128-lethality,toughness,6,0.00712632,20
+e128-lethality,toughness,7,0.00222345,20
+e128-lethality,toughness,8,0.000788044,20
+A best,affordability,0,0.00166239,20
+A best,affordability,1,0.058259,20
+A best,affordability,2,0.0887951,20
+A best,affordability,3,0.125635,20
+A best,affordability,4,0.127283,17
+A best,affordability,5,0.176949,15
+A best,affordability,6,0.210698,12
+A best,affordability,7,0.318887,6
+A best,affordability,8,0.305495,4
+A best,affordability,9,0.0579863,1
+A best,affordability,10,0.0922195,1
+A best,board_size,0,1.17273e-05,20
+A best,board_size,1,0.200016,20
+A best,board_size,2,0.393499,20
+A best,board_size,3,0.583203,20
+A best,board_size,4,0.770248,20
+A best,board_size,5,0.956299,20
+A best,board_size,6,1.14183,20
+A best,board_size,7,1.32718,20
+A best,board_size,8,1.51284,20
+A best,damage_spell,1,0.0415394,20
+A best,damage_spell,2,0.125025,20
+A best,damage_spell,3,0.211824,20
+A best,damage_spell,4,0.453242,20
+A best,damage_spell,5,0.757142,20
+A best,damage_spell,6,0.824426,20
+A best,damage_spell,7,0.842583,20
+A best,damage_spell,8,0.876151,20
+A best,damage_triggered,1,0.0915853,20
+A best,damage_triggered,2,0.135837,20
+A best,damage_triggered,3,0.205769,20
+A best,damage_triggered,4,0.351325,20
+A best,damage_triggered,5,0.710207,20
+A best,damage_triggered,6,0.890925,20
+A best,damage_triggered,7,0.925214,20
+A best,damage_triggered,8,0.946292,20
+A best,toughness,1,0.638779,20
+A best,toughness,2,0.440998,20
+A best,toughness,3,0.297867,20
+A best,toughness,4,0.122726,20
+A best,toughness,5,0.0622616,20
+A best,toughness,6,0.0455439,20
+A best,toughness,7,0.0233279,20
+A best,toughness,8,0.00789778,20
+A last,affordability,0,0.00641307,20
+A last,affordability,1,0.0736592,20
+A last,affordability,2,0.123034,20
+A last,affordability,3,0.194935,20
+A last,affordability,4,0.239034,17
+A last,affordability,5,0.300341,15
+A last,affordability,6,0.354559,12
+A last,affordability,7,0.433307,6
+A last,affordability,8,0.408952,4
+A last,affordability,9,0.20665,1
+A last,affordability,10,0.393936,1
+A last,board_size,0,2.81402e-05,20
+A last,board_size,1,0.19075,20
+A last,board_size,2,0.379407,20
+A last,board_size,3,0.566877,20
+A last,board_size,4,0.753117,20
+A last,board_size,5,0.938184,20
+A last,board_size,6,1.12121,20
+A last,board_size,7,1.30284,20
+A last,board_size,8,1.48268,20
+A last,damage_spell,1,0.118961,20
+A last,damage_spell,2,0.405918,20
+A last,damage_spell,3,0.729588,20
+A last,damage_spell,4,0.859508,20
+A last,damage_spell,5,0.871603,20
+A last,damage_spell,6,0.885946,20
+A last,damage_spell,7,0.886908,20
+A last,damage_spell,8,0.895139,20
+A last,damage_triggered,1,0.223736,20
+A last,damage_triggered,2,0.351539,20
+A last,damage_triggered,3,0.654648,20
+A last,damage_triggered,4,0.852701,20
+A last,damage_triggered,5,0.93839,20
+A last,damage_triggered,6,0.970882,20
+A last,damage_triggered,7,0.980965,20
+A last,damage_triggered,8,0.985334,20
+A last,toughness,1,0.669585,20
+A last,toughness,2,0.564576,20
+A last,toughness,3,0.509769,20
+A last,toughness,4,0.424765,20
+A last,toughness,5,0.239583,20
+A last,toughness,6,0.124319,20
+A last,toughness,7,0.0703235,20
+A last,toughness,8,0.0462073,20
+B best,affordability,0,0.00229752,20
+B best,affordability,1,0.0531951,20
+B best,affordability,2,0.090131,20
+B best,affordability,3,0.136904,20
+B best,affordability,4,0.158372,17
+B best,affordability,5,0.221569,15
+B best,affordability,6,0.269242,12
+B best,affordability,7,0.371497,6
+B best,affordability,8,0.364769,4
+B best,affordability,9,0.0898913,1
+B best,affordability,10,0.157799,1
+B best,board_size,0,9.70414e-06,20
+B best,board_size,1,0.167763,20
+B best,board_size,2,0.329286,20
+B best,board_size,3,0.487017,20
+B best,board_size,4,0.642038,20
+B best,board_size,5,0.795453,20
+B best,board_size,6,0.947365,20
+B best,board_size,7,1.09827,20
+B best,board_size,8,1.24856,20
+B best,damage_spell,1,0.0181442,20
+B best,damage_spell,2,0.103151,20
+B best,damage_spell,3,0.214868,20
+B best,damage_spell,4,0.509744,20
+B best,damage_spell,5,0.752606,20
+B best,damage_spell,6,0.819016,20
+B best,damage_spell,7,0.831277,20
+B best,damage_spell,8,0.865161,20
+B best,damage_triggered,1,0.0685698,20
+B best,damage_triggered,2,0.120615,20
+B best,damage_triggered,3,0.201434,20
+B best,damage_triggered,4,0.354143,20
+B best,damage_triggered,5,0.630478,20
+B best,damage_triggered,6,0.883803,20
+B best,damage_triggered,7,0.922814,20
+B best,damage_triggered,8,0.945129,20
+B best,toughness,1,0.625963,20
+B best,toughness,2,0.40098,20
+B best,toughness,3,0.29782,20
+B best,toughness,4,0.138291,20
+B best,toughness,5,0.0611568,20
+B best,toughness,6,0.0439033,20
+B best,toughness,7,0.020764,20
+B best,toughness,8,0.00581685,20
+B last,affordability,0,0.0014329,20
+B last,affordability,1,0.0458372,20
+B last,affordability,2,0.0848821,20
+B last,affordability,3,0.146921,20
+B last,affordability,4,0.192238,17
+B last,affordability,5,0.268082,15
+B last,affordability,6,0.324594,12
+B last,affordability,7,0.440177,6
+B last,affordability,8,0.430418,4
+B last,affordability,9,0.0951674,1
+B last,affordability,10,0.183286,1
+B last,board_size,0,7.43066e-06,20
+B last,board_size,1,0.142074,20
+B last,board_size,2,0.279519,20
+B last,board_size,3,0.412856,20
+B last,board_size,4,0.542541,20
+B last,board_size,5,0.669751,20
+B last,board_size,6,0.796118,20
+B last,board_size,7,0.922385,20
+B last,board_size,8,1.04847,20
+B last,damage_spell,1,0.0316855,20
+B last,damage_spell,2,0.123599,20
+B last,damage_spell,3,0.379324,20
+B last,damage_spell,4,0.768147,20
+B last,damage_spell,5,0.827845,20
+B last,damage_spell,6,0.857741,20
+B last,damage_spell,7,0.860858,20
+B last,damage_spell,8,0.868033,20
+B last,damage_triggered,1,0.103199,20
+B last,damage_triggered,2,0.182015,20
+B last,damage_triggered,3,0.337688,20
+B last,damage_triggered,4,0.672266,20
+B last,damage_triggered,5,0.839918,20
+B last,damage_triggered,6,0.932038,20
+B last,damage_triggered,7,0.94062,20
+B last,damage_triggered,8,0.945861,20
+B last,toughness,1,0.651407,20
+B last,toughness,2,0.456784,20
+B last,toughness,3,0.410001,20
+B last,toughness,4,0.256474,20
+B last,toughness,5,0.103668,20
+B last,toughness,6,0.0511451,20
+B last,toughness,7,0.0164951,20
+B last,toughness,8,0.00199721,20
+A128 best,affordability,0,0.00759305,20
+A128 best,affordability,1,0.0668188,20
+A128 best,affordability,2,0.122062,20
+A128 best,affordability,3,0.180952,20
+A128 best,affordability,4,0.203175,17
+A128 best,affordability,5,0.255715,15
+A128 best,affordability,6,0.254475,12
+A128 best,affordability,7,0.326281,6
+A128 best,affordability,8,0.348001,4
+A128 best,affordability,9,0.103973,1
+A128 best,affordability,10,0.122314,1
+A128 best,board_size,0,0.000272788,20
+A128 best,board_size,1,0.185605,20
+A128 best,board_size,2,0.358954,20
+A128 best,board_size,3,0.525199,20
+A128 best,board_size,4,0.685945,20
+A128 best,board_size,5,0.842415,20
+A128 best,board_size,6,0.995746,20
+A128 best,board_size,7,1.14585,20
+A128 best,board_size,8,1.29267,20
+A128 best,damage_spell,1,0.155833,20
+A128 best,damage_spell,2,0.263484,20
+A128 best,damage_spell,3,0.658631,20
+A128 best,damage_spell,4,0.821107,20
+A128 best,damage_spell,5,0.84308,20
+A128 best,damage_spell,6,0.856032,20
+A128 best,damage_spell,7,0.852182,20
+A128 best,damage_spell,8,0.873397,20
+A128 best,damage_triggered,1,0.312855,20
+A128 best,damage_triggered,2,0.342314,20
+A128 best,damage_triggered,3,0.598466,20
+A128 best,damage_triggered,4,0.778955,20
+A128 best,damage_triggered,5,0.843095,20
+A128 best,damage_triggered,6,0.902283,20
+A128 best,damage_triggered,7,0.908765,20
+A128 best,damage_triggered,8,0.926916,20
+A128 best,toughness,1,0.82611,20
+A128 best,toughness,2,0.717146,20
+A128 best,toughness,3,0.465657,20
+A128 best,toughness,4,0.356396,20
+A128 best,toughness,5,0.21859,20
+A128 best,toughness,6,0.103086,20
+A128 best,toughness,7,0.0548142,20
+A128 best,toughness,8,0.024202,20
+A128 last,affordability,0,0.00144682,20
+A128 last,affordability,1,0.0224549,20
+A128 last,affordability,2,0.0727837,20
+A128 last,affordability,3,0.13508,20
+A128 last,affordability,4,0.16545,17
+A128 last,affordability,5,0.216022,15
+A128 last,affordability,6,0.235065,12
+A128 last,affordability,7,0.257538,6
+A128 last,affordability,8,0.198021,4
+A128 last,affordability,9,0.026233,1
+A128 last,affordability,10,0.0580352,1
+A128 last,board_size,0,0.000339748,20
+A128 last,board_size,1,0.188678,20
+A128 last,board_size,2,0.369565,20
+A128 last,board_size,3,0.545363,20
+A128 last,board_size,4,0.71728,20
+A128 last,board_size,5,0.885882,20
+A128 last,board_size,6,1.05147,20
+A128 last,board_size,7,1.21383,20
+A128 last,board_size,8,1.37214,20
+A128 last,damage_spell,1,0.0541535,20
+A128 last,damage_spell,2,0.069104,20
+A128 last,damage_spell,3,0.10385,20
+A128 last,damage_spell,4,0.286517,20
+A128 last,damage_spell,5,0.620125,20
+A128 last,damage_spell,6,0.777891,20
+A128 last,damage_spell,7,0.857645,20
+A128 last,damage_spell,8,0.865009,20
+A128 last,damage_triggered,1,0.101963,20
+A128 last,damage_triggered,2,0.151577,20
+A128 last,damage_triggered,3,0.199669,20
+A128 last,damage_triggered,4,0.369487,20
+A128 last,damage_triggered,5,0.631864,20
+A128 last,damage_triggered,6,0.846808,20
+A128 last,damage_triggered,7,0.905659,20
+A128 last,damage_triggered,8,0.922765,20
+A128 last,toughness,1,0.760792,20
+A128 last,toughness,2,0.449485,20
+A128 last,toughness,3,0.258373,20
+A128 last,toughness,4,0.126116,20
+A128 last,toughness,5,0.0533531,20
+A128 last,toughness,6,0.0200478,20
+A128 last,toughness,7,0.00361384,20
+A128 last,toughness,8,0.000758335,20
+B128 best,affordability,0,0.00171904,20
+B128 best,affordability,1,0.0377512,20
+B128 best,affordability,2,0.0892637,20
+B128 best,affordability,3,0.143899,20
+B128 best,affordability,4,0.176362,17
+B128 best,affordability,5,0.249374,15
+B128 best,affordability,6,0.267597,12
+B128 best,affordability,7,0.382333,6
+B128 best,affordability,8,0.388068,4
+B128 best,affordability,9,0.0816856,1
+B128 best,affordability,10,0.110713,1
+B128 best,board_size,0,0.000155166,20
+B128 best,board_size,1,0.227592,20
+B128 best,board_size,2,0.444869,20
+B128 best,board_size,3,0.654721,20
+B128 best,board_size,4,0.857735,20
+B128 best,board_size,5,1.05466,20
+B128 best,board_size,6,1.2467,20
+B128 best,board_size,7,1.43341,20
+B128 best,board_size,8,1.61628,20
+B128 best,damage_spell,1,0.0555478,20
+B128 best,damage_spell,2,0.135753,20
+B128 best,damage_spell,3,0.319006,20
+B128 best,damage_spell,4,0.683414,20
+B128 best,damage_spell,5,0.822643,20
+B128 best,damage_spell,6,0.842721,20
+B128 best,damage_spell,7,0.847933,20
+B128 best,damage_spell,8,0.85442,20
+B128 best,damage_triggered,1,0.165347,20
+B128 best,damage_triggered,2,0.237409,20
+B128 best,damage_triggered,3,0.348745,20
+B128 best,damage_triggered,4,0.62211,20
+B128 best,damage_triggered,5,0.811342,20
+B128 best,damage_triggered,6,0.924581,20
+B128 best,damage_triggered,7,0.929617,20
+B128 best,damage_triggered,8,0.95204,20
+B128 best,toughness,1,0.859003,20
+B128 best,toughness,2,0.545591,20
+B128 best,toughness,3,0.364782,20
+B128 best,toughness,4,0.227823,20
+B128 best,toughness,5,0.085814,20
+B128 best,toughness,6,0.0386836,20
+B128 best,toughness,7,0.0172402,20
+B128 best,toughness,8,0.00336671,20
+B128 last,affordability,0,0.0020113,20
+B128 last,affordability,1,0.0435658,20
+B128 last,affordability,2,0.0938566,20
+B128 last,affordability,3,0.156973,20
+B128 last,affordability,4,0.200824,17
+B128 last,affordability,5,0.264815,15
+B128 last,affordability,6,0.294964,12
+B128 last,affordability,7,0.381301,6
+B128 last,affordability,8,0.363578,4
+B128 last,affordability,9,0.106948,1
+B128 last,affordability,10,0.142556,1
+B128 last,board_size,0,0.000314374,20
+B128 last,board_size,1,0.204678,20
+B128 last,board_size,2,0.399044,20
+B128 last,board_size,3,0.586543,20
+B128 last,board_size,4,0.768162,20
+B128 last,board_size,5,0.944623,20
+B128 last,board_size,6,1.11721,20
+B128 last,board_size,7,1.28637,20
+B128 last,board_size,8,1.45081,20
+B128 last,damage_spell,1,0.0504196,20
+B128 last,damage_spell,2,0.111755,20
+B128 last,damage_spell,3,0.198967,20
+B128 last,damage_spell,4,0.573902,20
+B128 last,damage_spell,5,0.826848,20
+B128 last,damage_spell,6,0.853094,20
+B128 last,damage_spell,7,0.856439,20
+B128 last,damage_spell,8,0.855,20
+B128 last,damage_triggered,1,0.129312,20
+B128 last,damage_triggered,2,0.190201,20
+B128 last,damage_triggered,3,0.303268,20
+B128 last,damage_triggered,4,0.634527,20
+B128 last,damage_triggered,5,0.863634,20
+B128 last,damage_triggered,6,0.949399,20
+B128 last,damage_triggered,7,0.948182,20
+B128 last,damage_triggered,8,0.964647,20
+B128 last,toughness,1,0.829883,20
+B128 last,toughness,2,0.493325,20
+B128 last,toughness,3,0.335545,20
+B128 last,toughness,4,0.176779,20
+B128 last,toughness,5,0.0933005,20
+B128 last,toughness,6,0.0420725,20
+B128 last,toughness,7,0.0106592,20
+B128 last,toughness,8,0.00125796,20
