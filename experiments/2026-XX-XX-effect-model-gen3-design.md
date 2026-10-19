@@ -26,9 +26,9 @@ game, taken at the combat damage step, in which one keyword is stripped from one
 what changes.
 
 The record has three parts. Part 1 lists what gen-2 leaves open, why each gap matters, and how
-gen-3 plans to close it. Part 2 records, step by step, what was done to close the gaps and the
-steps still to take. Part 3, the outcome, records whether gen-3 worked, what still needs changing,
-and the improvements its results suggest.
+gen-3 plans to close it. Part 2 records each step taken to close the gaps, what it looked for and
+what it found, and the steps still to take. Part 3, the outcome, records whether gen-3 worked,
+what still needs changing, and the improvements its results suggest.
 
 ## Part 1: what gen-2 leaves open, and how gen-3 plans to fix it
 
@@ -482,68 +482,45 @@ The combat grid measures the result on blocks from the validation strata, which 
 
 ## Part 2: the steps taken
 
-### Step 1, the rules catalogue: every rule triaged, and every mechanical rule given a verified scenario that Forge has not yet played
+### Step 1, the rules catalogue: every rule is triaged, and every mechanical rule has a scenario that Forge has not yet played
 
 **The rules catalogue is the part of the rules index built so far.** It covers the first and third
 items of the plan in part 1: whether a record can show each rule, and which game situations
-illustrate it. It splits the 2026-09-25 edition of the Comprehensive Rules into 410 units. A unit is
-one section, except in sections 701 and 702, where each keyword is its own unit. Each of the 3,166
-rules has a triage line. Each mechanical or legality rule has a scenario: a board, every player
-decision already taken, and variants that differ by one fact so that the rule's outcome flips.
-Decisions are out of scope by design, because the model predicts what the engine does once they
-are made. The catalogue lives in `rules/`. `rules/README.md` gives its formats, `rules/STATUS.md`
-the per-unit checklist, and `rules/FINDINGS.md` the detail behind this step.
+illustrate it. It went from the rules text to scenarios in three stages: split the rules into
+units, triage every rule, then write a scenario for every rule with an outcome. Decisions are out
+of scope throughout, because the model predicts what the engine does once they are made. The
+catalogue lives in `rules/`. `rules/README.md` gives its formats, `rules/STATUS.md` the per-unit
+checklist, and `rules/FINDINGS.md` the detail behind this step.
 
-#### The catalogue was built in four passes, with Sonnet writing and Opus checking
+#### The rules split into 410 units, one per section or per keyword
 
-**A script split the rules, and language-model agents did the rest.**
-`scripts/rules_catalogue.py` and the workflow script `scripts/rules_catalogue_workflow.js` ran the
-passes in this order:
+**The 2026-09-25 edition of the Comprehensive Rules, from magic.wizards.com, holds 3,166 numbered
+rules.** The split writes one line per rule, with its text, examples and cross-references, and one
+readable file per unit. A unit is one three-digit section, such as 704, state-based actions. Sections
+701 and 702, keyword actions and keyword abilities, hold a third of all rules, so there each keyword
+is its own unit: 702.2 is deathtouch. A unit is small enough to read whole.
 
-1. **Split.** The script parsed the rules text into one line per rule in `rules/rules.jsonl` and one
-   readable file per unit under `rules/cr/`. It grouped the units into work packets of at most
-   16,000 characters of rule text, none crossing a chapter. It marked chapters 8 and 9,
-   multiplayer rules and casual variants, out of scope without an agent, because collection plays
-   two-player games.
-2. **Triage.** A Sonnet agent per packet gave every rule a category, an observability level, the
-   record kinds that could show it, and a one-line outcome.
-3. **Scenarios.** A Sonnet agent per chunk of at most 20 rules wrote the scenarios. It used real
-   card names, checked against Forge's `cardsfolder`, and preferred vanilla cards so that no other
-   ability interferes. A rule it could not illustrate went on the unit's skip list, with the reason.
-4. **Verification.** An Opus agent per chunk checked each scenario against the rules text and the
-   Forge script of every card used. It fixed what was wrong, logged each change in the file's
-   `review` list, and marked the file verified.
+**Chapters 8 and 9 are out of scope without further reading.** They hold the multiplayer rules and
+the casual variants, and collection plays two-player games.
 
-**A pilot on five units came first, and it kept the verifier on Opus.** The pilot ran units 704
-(state-based actions), 608 (resolution), 701.6 (counter), 702.2 (deathtouch) and 702.19 (trample).
-Its Opus verifier made 20 changes across 64 scenarios, so the verifier stayed on the stronger
-model for the full run.
+#### Triage: half of the rules have an observable outcome, and one in eight of those needs a new record field
 
-**The full run was a pipeline per packet, capped at four agents at once.** A packet's scenarios
-started as soon as its triage finished, without waiting for other packets. At most three of the
-four running agents were Opus verifiers. A pass rerun on a unit keeps every file that exists and is
-verified, so a unit that an agent missed reran alone; one triage agent skipped 701.61 and it was
-rerun by itself.
+**Triage asked of every rule whether the engine decides an observable outcome once the decisions are
+made.** Each rule got one of five categories:
 
-**A validator checks every file mechanically.** `rules_catalogue.py validate` checks that every
-rule has a triage line with valid values, and that every mechanical or legality rule is in a
-scenario or on a skip list. It also checks that each scenario has at least two variants with valid
-polarities, and that every card name exists in Forge. It warns when a scenario lacks a variant in
-which the rule's effect happens or one in which it does not. `rules/RUN-NOTES.md` keeps what each
-writer flagged and what each verifier fixed, chunk by chunk.
+- **mechanical:** the engine decides an outcome, such as a zone change, damage, a resolution or
+  fizzle, or a trigger firing. Legality rechecked at resolution, as in 608.2b, counts here.
+- **legality:** the engine decides whether an action is allowed when it is taken, such as casting
+  timing, legal targets or legal blocks.
+- **decision:** a choice a player makes, such as ordering triggers or assigning combat damage.
+- **definitional:** a term or characteristic with no outcome of its own.
+- **out of scope:** cannot occur in a Forge two-player game, or is not game mechanics.
 
-| build | value |
-|---|---:|
-| agents | 261 |
-| subagent tokens | 27.2M |
-| wall-clock | about 5.3 hours |
+A mechanical or legality rule also got its observability, the gen-2 record kinds that could show it,
+and its outcome in one sentence.
 
-#### Half of the rules have an observable outcome
-
-**A mechanical rule decides an outcome once the decisions are made, and a legality rule decides
-whether an action is allowed.** A mechanical outcome is a zone change, damage, a resolution or
-fizzle, or a trigger firing. Mechanical and legality rules together are about half the document.
-Chapter 7, the keyword sections, holds more than half of the mechanical rules.
+**Mechanical and legality rules are about half the document.** Chapter 7, the keyword sections,
+holds more than half of the mechanical rules.
 
 | category | rules |
 |---|---:|
@@ -554,13 +531,13 @@ Chapter 7, the keyword sections, holds more than half of the mechanical rules.
 | decision | 135 |
 
 Out of scope covers the 302 rules of chapters 8 and 9 and 306 others: game start and mulligans,
-deck construction, stickers, the casual-variant card types of chapter 3, ante, and physical
-card handling.
+deck construction, stickers, the casual-variant card types of chapter 3, ante, and physical card
+handling.
 
 **Most mechanical and legality rules are visible in gen-2's record fields, and one in eight needs a
 new field.** A direct rule shows in a field such as a resolution's outcome or a playability verdict.
 An indirect rule needs a detector over a record's events, such as a state-based death after a
-resolution.
+resolution. A rule that needs new fields has an outcome a game shows but no record captures.
 
 | observability, mechanical and legality rules | rules |
 |---|---:|
@@ -577,11 +554,29 @@ mana value, the X chosen and an Adventure's face on the stack; which layer appli
 what a linked ability remembers; and what happened earlier in the turn. `rules/FINDINGS.md` maps
 each family to its rules.
 
-#### The scenarios cover all but 95 of the rules that need one
+#### Scenarios: every mechanical or legality rule but 95 has a pair of boards that flips its outcome
+
+**A scenario is a minimal pair, written so that changing one fact flips the rule's outcome.** It
+sets a board, lists every decision already taken, and gives at least two variants. The base variant
+is the board as set. Each other variant changes exactly one fact, and is labelled by whether the
+rule's effect happens, does not happen, or takes a third branch. Grizzly Bears dealt 2 damage by
+Shock dies; a Centaur Courser in its place survives. The scenarios follow four rules:
+
+- **Real cards, as plain as possible.** Every card is named as Forge names it, and a vanilla card
+  is preferred so that no other ability interferes.
+- **Distinct mechanisms get distinct scenarios.** Red Elemental Blast whose target stops being blue
+  in response fizzles under 608.2b. Pyroblast aimed at a non-blue spell resolves and does nothing.
+  Both look like "nothing happened" and are different rules.
+- **Expected outcomes are observable only:** zone moves, life, damage, counters, power and
+  toughness, whether a stack object resolved, fizzled or was countered, whether a trigger fired, or
+  whether an action was legal.
+- **A rule no situation can illustrate is skipped, with the reason.**
+
+Each scenario was then checked against the rules text and against the Forge script of every card
+it uses.
 
 **Nearly every scenario pairs a variant in which the rule's effect happens with a close one in which
-it does not.** Each scenario has at least two variants. Resolution and playability records carry
-more than half of the scenarios.
+it does not.** Resolution and playability records carry more than half of the scenarios.
 
 | scenarios by record kind | count |
 |---|---:|
@@ -603,29 +598,25 @@ more than half of the scenarios.
 rampage on one creature and mana produced as a Phyrexian symbol are examples. The rest need a
 command zone or a sideboard, or have no observable difference between their cases.
 
-#### The verifier changed about one thing for every three scenarios, and few changes touched the rules
+#### No scenario has run in Forge yet, and about 75 point at a suspected Forge departure from the rules
 
-**About 35 of the verifier's 570 or so changes corrected a rules-level outcome.** A spell written
-as resolving that fizzles on the recheck of 608.2b is an example. The rest corrected how the
-scenario was built. The commonest were a base variant that already carried a change, a setup in
-which a player draws from an empty library before the outcome, a variant that tested a different
-rule, and a decision left open. A scenario written by one model is therefore not usable unchecked.
-The verified ones still hold errors of both kinds at a rate nobody has measured, because neither
-agent ran the engine.
+**Every expected outcome is a reading of the rules text and of the cards' Forge scripts.** Until
+Forge plays the scenarios, some of those outcomes are wrong at a rate not yet measured.
 
 **Many scenarios depend on how Forge implements the situation.** 762 scenarios carry a note about
-it. Most of these notes are behaviour the writer could not confirm, or a description of how the card
-is scripted. About 90 need setup state that a starting-state file may not express, such as a
-designation or a turn's history. About 75 name a suspected Forge departure from the rules, and
-`rules/FINDINGS.md` lists ten to test first.
+it. Most of these notes flag engine behaviour that reading the scripts could not settle, or
+describe how a card is scripted. About 90 need setup state that a starting-state file may not
+express, such as a designation or a turn's history. About 75 name a suspected Forge departure from
+the rules, such as connive 0 firing the "connives" trigger. `rules/FINDINGS.md` lists ten to test
+first.
 
 ### Steps still to take, as the catalogue sets them
 
 #### The scenarios become labels and tests only once Forge plays them
 
 **Every scenario has to run in Forge before it labels training data or judges a model.** Playing
-each variant checks the scenario's construction and its expected outcome at once, which is the
-check the two agents could not make.
+each variant checks the scenario's construction and its expected outcome at once, which no
+reading of the rules text and scripts can do.
 
 **The decisions have to become structured actions first.** A scenario's decisions and each
 variant's change are English sentences. A conversion pass would write each one as an action list:
@@ -639,7 +630,7 @@ a collecting worker can load one is still unchecked. A spike on a dozen scenario
 before the whole catalogue is converted.
 
 **A scenario whose Forge outcome differs from its expected outcome is either wrong or has found a
-Forge departure from the rules.** The verifier's fixes show what a wrong scenario looks like. A
+Forge departure from the rules.** A
 confirmed Forge departure is recorded on the scenario. That scenario then stays out of the rule
 tests until Forge is patched on the hooks branch or the departure is accepted. Where Forge plays
 a scenario as expected, Forge's outcome and the rule's outcome are the same. The question the
