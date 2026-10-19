@@ -1000,7 +1000,8 @@ def _one_on_one(records):
     record = replace(
         record, fork=False, interventional=False, mirror_of=None,
         payload=replace(record.payload, blocks={attacker: (blocker,)}, probed_keyword=None),
-        state=replace(record.state, entities=tuple(entities)))
+        state=replace(record.state, entities=tuple(entities),
+                      global_=replace(record.state.global_, combat_substep="regular")))
     return record, attacker, blocker
 
 
@@ -1009,20 +1010,23 @@ def _keywords(entity):
 
 
 class TestCombatGrid:
-    @pytest.mark.parametrize("attacker, blocker, keywords, expected", [
-        ((3, 3, 0), (2, 2, 0), ({}, {}), (False, True)),
-        ((2, 2, 0), (2, 3, 0), ({}, {}), (True, False)),
-        ((2, 2, 0), (1, 3, 1), ({}, {}), (False, True)),
-        ((1, 5, 0), (1, 5, 0), ({"deathtouch"}, {}), (False, True)),
-        ((5, 5, 0), (5, 5, 0), ({}, {"indestructible"}), (True, False)),
-        ((3, 3, 0), (5, 3, 0), ({"first_strike"}, {}), (False, True)),
-        ((2, 3, 0), (5, 3, 0), ({"first_strike"}, {}), (True, False)),
-        ((5, 3, 0), (3, 3, 0), ({}, {"first_strike"}), (True, False)),
-        ((2, 2, 0), (1, 4, 0), ({"double_strike"}, {}), (False, True)),
+    @pytest.mark.parametrize("attacker, blocker, keywords, step, expected", [
+        ((3, 3, 0), (2, 2, 0), ({}, {}), "regular", (False, True)),
+        ((2, 2, 0), (2, 3, 0), ({}, {}), "regular", (True, False)),
+        ((2, 2, 0), (1, 3, 1), ({}, {}), "regular", (False, True)),
+        ((1, 5, 0), (1, 5, 0), ({"deathtouch"}, {}), "regular", (False, True)),
+        ((5, 5, 0), (5, 5, 0), ({}, {"indestructible"}), "regular", (True, False)),
+        ((3, 3, 0), (5, 3, 0), ({"first_strike"}, {}), "first_strike", (False, True)),
+        ((2, 3, 0), (5, 3, 0), ({"first_strike"}, {}), "first_strike", (False, False)),
+        ((2, 3, 0), (5, 3, 0), ({"first_strike"}, {}), "regular", (True, False)),
+        ((5, 3, 0), (3, 3, 0), ({}, {"first_strike"}), "first_strike", (True, False)),
+        ((2, 2, 0), (1, 4, 0), ({"double_strike"}, {}), "first_strike", (False, False)),
+        ((2, 2, 0), (1, 4, 2), ({"double_strike"}, {}), "regular", (False, True)),
+        ((2, 2, 0), (0, 4, 0), ({}, {}), "first_strike", (False, False)),
     ])
-    def test_the_rule(self, attacker, blocker, keywords, expected):
-        assert combat_grid.combat_deaths(
-            attacker, blocker, frozenset(keywords[0]), frozenset(keywords[1])) == expected
+    def test_the_rule(self, attacker, blocker, keywords, step, expected):
+        assert combat_grid.step_deaths(
+            attacker, blocker, frozenset(keywords[0]), frozenset(keywords[1]), step) == expected
 
     def test_power_edits_one_entity_only(self, records):
         record, attacker, _ = _one_on_one(records)
@@ -1047,7 +1051,7 @@ class TestCombatGrid:
         record, attacker, blocker = _one_on_one(records)
         a, _ = combat_grid.side_of(record, attacker)
         b, _ = combat_grid.side_of(record, blocker)
-        attacker_dies, blocker_dies = combat_grid.combat_deaths(a, b)
+        attacker_dies, blocker_dies = combat_grid.step_deaths(a, b)
         died = ZONE_OUTCOMES.index("died")
         outcome = {e: SimpleNamespace(fields={"zone_outcome": died} if dies else {})
                    for e, dies in ((attacker, attacker_dies), (blocker, blocker_dies))}
@@ -1080,6 +1084,47 @@ class TestCombatGrid:
             record, attacker, blocker, "blocker", "blocker-indestructible")
         assert rule.max() == 0.0
 
+    def test_a_first_striker_is_read_in_the_first_strike_step(self, records):
+        record, attacker, blocker = _one_on_one(records)
+        step = np.array([[float(p >= t) for t in range(1, 9)] for p in range(1, 9)])
+        rows, rule = combat_grid.grid_records(
+            record, attacker, blocker, "blocker", "attacker-first-strike")
+        assert rows[0][0].state.global_.combat_substep == "first_strike"
+        assert np.array_equal(rule, step)
+        _, rule = combat_grid.grid_records(
+            record, attacker, blocker, "attacker", "attacker-first-strike")
+        assert rule.max() == 0.0
+        _, rule = combat_grid.grid_records(
+            record, attacker, blocker, "blocker", "blocker-first-strike")
+        assert rule.max() == 0.0
+        _, rule = combat_grid.grid_records(
+            record, attacker, blocker, "attacker", "blocker-first-strike")
+        assert np.array_equal(rule, step)
+
+    def test_a_double_strikers_second_hit_lands_on_the_first(self, records):
+        record, attacker, blocker = _one_on_one(records)
+        rows, rule = combat_grid.grid_records(
+            record, attacker, blocker, "blocker", "attacker-double-strike-second-hit")
+        assert rows[2][5].state.global_.combat_substep == "regular"
+        assert rows[2][5].state.entity(blocker).damage == 3
+        assert np.array_equal(rule, np.array([[float(2 * p >= t) for t in range(1, 9)]
+                                              for p in range(1, 9)]))
+
+    def test_a_first_strike_step_record_never_qualifies(self, records, monkeypatch):
+        import effects.domain.effect_targets as effect_targets
+        from effects.domain.effect_model import ZONE_OUTCOMES
+
+        record, attacker, blocker = _one_on_one(records)
+        a, _ = combat_grid.side_of(record, attacker)
+        b, _ = combat_grid.side_of(record, blocker)
+        died = ZONE_OUTCOMES.index("died")
+        outcome = {e: SimpleNamespace(fields={"zone_outcome": died} if dies else {})
+                   for e, dies in zip((attacker, blocker), combat_grid.step_deaths(a, b))}
+        monkeypatch.setattr(effect_targets, "derive_targets", lambda r: outcome)
+        assert combat_grid.single_block(record, _keywords) == (attacker, blocker)
+        first = combat_grid.set_step(record, "first_strike")
+        assert combat_grid.single_block(first, _keywords) is None
+
     def test_damage_the_step_already_marked_is_cleared_and_other_damage_disqualifies(
         self, records, monkeypatch,
     ):
@@ -1094,7 +1139,7 @@ class TestCombatGrid:
             record, blocker, lambda e: replace(e, damage=power))
         a, _ = combat_grid.side_of(record, attacker)
         b, _ = combat_grid.side_of(record, blocker)
-        attacker_dies, blocker_dies = combat_grid.combat_deaths(a, b)
+        attacker_dies, blocker_dies = combat_grid.step_deaths(a, b)
         died = ZONE_OUTCOMES.index("died")
         outcome = {e: SimpleNamespace(fields={"zone_outcome": died} if dies else {})
                    for e, dies in ((attacker, attacker_dies), (blocker, blocker_dies))}
