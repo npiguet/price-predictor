@@ -1,0 +1,7 @@
+{"id": "702.2", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.2a", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.2b", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution", "combat"], "outcome": "A creature with toughness above 0 that was dealt any damage by a deathtouch source is destroyed in the next state-based check.", "note": ""}
+{"id": "702.2c", "category": "mechanical", "observability": "indirect", "record_kinds": ["combat"], "outcome": "Any nonzero combat damage assigned by a deathtouch source counts as lethal, so the attacker may assign just 1 damage to each blocker and the excess goes on.", "note": ""}
+{"id": "702.2d", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "A deathtouch source dealing damage from a zone other than the battlefield still destroys the creature it damages.", "note": ""}
+{"id": "702.2e", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "A source that left its zone before dealing damage is judged by its last known information, so damage from a formerly deathtouch object still destroys the creature.", "note": ""}
+{"id": "702.2f", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": "Redundancy of instances has no separate outcome."}

@@ -1,0 +1,443 @@
+{
+  "unit": "702.19",
+  "verified": true,
+  "review": [
+    "702.19c-1: the blocked variant added Grizzly Bears to B's battlefield and also declared it as a blocker; put Grizzly Bears on B's battlefield in the base setup (not blocking) so the variant changes only the block declaration.",
+    "702.19e-1: the blocked variant added Grizzly Bears to B's battlefield and also declared it as a blocker; put Grizzly Bears on B's battlefield in the base setup (not blocking) so the variant changes only the block declaration.",
+    "702.19f-1: planeswalker_stays was labelled does_not_fire although 702.19f still applies there (no damage reaches B), and no variant made the rule's effect fail; relabelled planeswalker_stays fires and added a trample_over_planeswalkers variant (Thrasta instead of Craw Wurm, 7 damage to B) as the does_not_fire branch."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.19a-1",
+      "rules": [
+        "702.19a"
+      ],
+      "title": "Trample only matters while the creature is attacking",
+      "record_kind": "combat",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Colossal Dreadmaw",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A attacks player B with Colossal Dreadmaw.",
+        "B blocks Colossal Dreadmaw with Grizzly Bears.",
+        "A assigns 2 damage to Grizzly Bears and 4 damage to player B.",
+        "No spells or abilities are used; combat damage is dealt."
+      ],
+      "variants": [
+        {
+          "label": "trampler_attacks",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears is destroyed by 2 damage. B takes 4 trample damage (life 16). Colossal Dreadmaw takes 2 damage and survives."
+        },
+        {
+          "label": "trampler_blocks",
+          "polarity": "does_not_fire",
+          "delta": "The roles are reversed: B controls Colossal Dreadmaw and blocks with it, and A attacks with Grizzly Bears (no summoning sickness).",
+          "expected": "Colossal Dreadmaw deals all 6 damage to Grizzly Bears, which is destroyed. A's life stays 20. Colossal Dreadmaw takes 2 damage and survives. No damage goes to either player."
+        }
+      ],
+      "cards": [
+        "Colossal Dreadmaw",
+        "Grizzly Bears"
+      ],
+      "forge_notes": "In the second variant the harness fixes the attacker and blocker declarations for the swapped sides."
+    },
+    {
+      "id": "702.19b-1",
+      "rules": [
+        "702.19b"
+      ],
+      "title": "A trampling attacker assigns lethal damage to its blockers and the excess to the defending player",
+      "record_kind": "combat",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Colossal Dreadmaw",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A attacks player B with Colossal Dreadmaw.",
+        "B blocks Colossal Dreadmaw with Grizzly Bears.",
+        "A assigns the maximum possible damage to player B: lethal damage to each blocker and the rest to B.",
+        "No spells or abilities are used; combat damage is dealt."
+      ],
+      "variants": [
+        {
+          "label": "trample",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears (2 toughness) receives 2 damage and is destroyed. B takes the 4 excess damage (life 16)."
+        },
+        {
+          "label": "no_trample",
+          "polarity": "does_not_fire",
+          "delta": "A's attacker is Craw Wurm (6/4, no trample) instead of Colossal Dreadmaw.",
+          "expected": "Craw Wurm assigns all 6 damage to Grizzly Bears, which is destroyed. B's life stays 20."
+        },
+        {
+          "label": "toughness_matches_power",
+          "polarity": "does_not_fire",
+          "delta": "B's blocker is a Colossal Dreadmaw (6 toughness) instead of Grizzly Bears.",
+          "expected": "A's Colossal Dreadmaw assigns all 6 damage to the blocking Colossal Dreadmaw as lethal damage, and none to B (life 20). Both Colossal Dreadmaws are destroyed."
+        },
+        {
+          "label": "damage_already_marked",
+          "polarity": "fires",
+          "delta": "Grizzly Bears already has 1 damage marked, so lethal damage is 1.",
+          "expected": "Grizzly Bears receives 1 damage and is destroyed. B takes 5 damage (life 15)."
+        },
+        {
+          "label": "two_blockers",
+          "polarity": "fires",
+          "delta": "B blocks with two Grizzly Bears instead of one.",
+          "expected": "Each Grizzly Bears receives 2 damage and is destroyed. B takes the 2 excess damage (life 18)."
+        }
+      ],
+      "cards": [
+        "Colossal Dreadmaw",
+        "Craw Wurm",
+        "Grizzly Bears"
+      ],
+      "forge_notes": "The damage assignment must be fixed by the harness. The second Grizzly Bears of the two_blockers variant is a second copy of the same card."
+    },
+    {
+      "id": "702.19c-1",
+      "rules": [
+        "702.19c"
+      ],
+      "title": "Trample over planeswalkers lets excess damage beyond the planeswalker's loyalty reach its controller",
+      "record_kind": "combat",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Thrasta, Tempest's Roar",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            {
+              "card": "Jace Beleren",
+              "counters": {
+                "loyalty": 3
+              }
+            },
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Thrasta has been on the battlefield since an earlier turn, so it has no hexproof."
+      },
+      "decisions": [
+        "A attacks Jace Beleren with Thrasta, Tempest's Roar.",
+        "B declares no blockers (Grizzly Bears does not block).",
+        "A assigns 3 damage to Jace Beleren and 4 damage to player B.",
+        "No spells or abilities are used; combat damage is dealt."
+      ],
+      "variants": [
+        {
+          "label": "trample_over_planeswalkers",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Jace Beleren is dealt 3 damage, loses all loyalty and goes to B's graveyard. B takes 4 damage (life 16)."
+        },
+        {
+          "label": "plain_trample",
+          "polarity": "does_not_fire",
+          "delta": "A's attacker is Colossal Dreadmaw (6/6, trample but not trample over planeswalkers) instead of Thrasta, and A assigns all 6 damage to Jace Beleren.",
+          "expected": "Jace Beleren is dealt 6 damage and goes to B's graveyard. B's life stays 20: Colossal Dreadmaw cannot assign damage to B."
+        },
+        {
+          "label": "blocked",
+          "polarity": "fires",
+          "delta": "B blocks Thrasta with Grizzly Bears; A assigns 2 damage to Grizzly Bears, 3 to Jace Beleren and 2 to player B.",
+          "expected": "Grizzly Bears is destroyed. Jace Beleren is dealt 3 damage and goes to B's graveyard. B takes 2 damage (life 18)."
+        }
+      ],
+      "cards": [
+        "Thrasta, Tempest's Roar",
+        "Colossal Dreadmaw",
+        "Jace Beleren",
+        "Grizzly Bears"
+      ],
+      "forge_notes": "Thrasta carries both Trample and Trample:Planeswalker in Forge, matching the Oracle text. The damage assignment must be fixed by the harness."
+    },
+    {
+      "id": "702.19d-1",
+      "rules": [
+        "702.19d"
+      ],
+      "title": "A blocked trampler whose blocker has left combat assigns all its damage to the defending player",
+      "record_kind": "combat",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Colossal Dreadmaw",
+              "summoning_sick": false
+            },
+            "Mountain"
+          ],
+          "B": [
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Lightning Bolt"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A attacks player B with Colossal Dreadmaw.",
+        "B blocks Colossal Dreadmaw with Grizzly Bears.",
+        "In the declare blockers step A casts Lightning Bolt targeting Grizzly Bears, tapping Mountain; both players pass and it resolves, destroying Grizzly Bears.",
+        "A assigns all 6 damage to player B.",
+        "No further spells or abilities are used; combat damage is dealt."
+      ],
+      "variants": [
+        {
+          "label": "trampler_no_blockers_left",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Colossal Dreadmaw stays blocked but has no blocker, and deals all 6 damage to B (life 14). Grizzly Bears is in B's graveyard."
+        },
+        {
+          "label": "no_trample",
+          "polarity": "does_not_fire",
+          "delta": "A's attacker is Craw Wurm (6/4, no trample) instead of Colossal Dreadmaw.",
+          "expected": "Craw Wurm is blocked and has no blocker, so it deals no combat damage. B's life stays 20. Grizzly Bears is in B's graveyard."
+        }
+      ],
+      "cards": [
+        "Colossal Dreadmaw",
+        "Craw Wurm",
+        "Grizzly Bears",
+        "Mountain",
+        "Lightning Bolt"
+      ],
+      "forge_notes": "In the second variant Craw Wurm's summoning sickness is also cleared."
+    },
+    {
+      "id": "702.19e-1",
+      "rules": [
+        "702.19e"
+      ],
+      "title": "A trample-over-planeswalkers attacker whose planeswalker left combat deals its damage to the defending player",
+      "record_kind": "combat",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Thrasta, Tempest's Roar",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            {
+              "card": "Jace Beleren",
+              "counters": {
+                "loyalty": 3
+              }
+            },
+            "Mountain",
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "B": [
+            "Lightning Bolt"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Thrasta has been on the battlefield since an earlier turn, so it has no hexproof."
+      },
+      "decisions": [
+        "A attacks Jace Beleren with Thrasta, Tempest's Roar.",
+        "B declares no blockers (Grizzly Bears does not block).",
+        "In the declare blockers step B casts Lightning Bolt targeting Jace Beleren, tapping Mountain; both players pass and it resolves, destroying Jace Beleren.",
+        "A assigns all 7 damage to player B.",
+        "No further spells or abilities are used; combat damage is dealt."
+      ],
+      "variants": [
+        {
+          "label": "unblocked",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Jace Beleren is in B's graveyard. Thrasta deals all 7 damage to B (life 13)."
+        },
+        {
+          "label": "blocked",
+          "polarity": "fires",
+          "delta": "B blocks Thrasta with Grizzly Bears; A assigns 2 damage to Grizzly Bears and 5 to player B.",
+          "expected": "Grizzly Bears is destroyed. B takes 5 damage (life 15). Jace Beleren is in B's graveyard."
+        },
+        {
+          "label": "plain_trample",
+          "polarity": "does_not_fire",
+          "delta": "A's attacker is Colossal Dreadmaw (6/6, trample but not trample over planeswalkers) instead of Thrasta.",
+          "expected": "Colossal Dreadmaw deals no combat damage to B (life 20) because it can only assign damage to the planeswalker that left the battlefield. Jace Beleren is in B's graveyard."
+        }
+      ],
+      "cards": [
+        "Thrasta, Tempest's Roar",
+        "Colossal Dreadmaw",
+        "Jace Beleren",
+        "Grizzly Bears",
+        "Mountain",
+        "Lightning Bolt"
+      ],
+      "forge_notes": "Forge may treat an attacker whose planeswalker has left the battlefield as removed from combat (dealing no damage at all) rather than as attacking nothing; the base and blocked variants need the 702.19e exception to be implemented."
+    },
+    {
+      "id": "702.19f-1",
+      "rules": [
+        "702.19f"
+      ],
+      "title": "A creature without trample over planeswalkers never deals combat damage to the defending player for attacking a planeswalker",
+      "record_kind": "combat",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Craw Wurm",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            {
+              "card": "Jace Beleren",
+              "counters": {
+                "loyalty": 3
+              }
+            },
+            "Mountain"
+          ]
+        },
+        "hand": {
+          "B": [
+            "Lightning Bolt"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A attacks Jace Beleren with Craw Wurm.",
+        "B declares no blockers.",
+        "In the declare blockers step B casts Lightning Bolt targeting Jace Beleren, tapping Mountain; both players pass and it resolves, destroying Jace Beleren.",
+        "No further spells or abilities are used; combat damage is dealt."
+      ],
+      "variants": [
+        {
+          "label": "planeswalker_removed",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Jace Beleren is in B's graveyard. Craw Wurm deals no combat damage and B's life stays 20."
+        },
+        {
+          "label": "trample_over_planeswalkers",
+          "polarity": "does_not_fire",
+          "delta": "A's attacker is Thrasta, Tempest's Roar (7/7, trample over planeswalkers) instead of Craw Wurm.",
+          "expected": "Jace Beleren is in B's graveyard. Thrasta deals all 7 combat damage to B (life 13)."
+        },
+        {
+          "label": "planeswalker_stays",
+          "polarity": "fires",
+          "delta": "B does not cast Lightning Bolt, and Jace Beleren stays on the battlefield.",
+          "expected": "Craw Wurm deals 6 damage to Jace Beleren, which loses all loyalty and goes to B's graveyard. B's life stays 20: the excess over the loyalty is not dealt to B."
+        },
+        {
+          "label": "attacks_player",
+          "polarity": "other",
+          "delta": "A attacks player B instead of Jace Beleren, and B does not cast Lightning Bolt.",
+          "expected": "Craw Wurm deals 6 damage to B (life 14). Jace Beleren stays at 3 loyalty."
+        }
+      ],
+      "cards": [
+        "Craw Wurm",
+        "Thrasta, Tempest's Roar",
+        "Jace Beleren",
+        "Mountain",
+        "Lightning Bolt"
+      ],
+      "forge_notes": "Forge may treat an attacker whose planeswalker has left the battlefield as removed from combat; either way it deals no damage to B. In the trample_over_planeswalkers variant Thrasta has been on the battlefield since an earlier turn."
+    }
+  ]
+}

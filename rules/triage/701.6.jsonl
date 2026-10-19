@@ -1,0 +1,3 @@
+{"id": "701.6", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "701.6a", "category": "mechanical", "observability": "direct", "record_kinds": ["resolution"], "outcome": "A countered spell or ability is removed from the stack without resolving, none of its effects occur, and a countered spell goes to its owner's graveyard.", "note": ""}
+{"id": "701.6b", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "Costs paid for a countered spell or ability stay paid: the mana is spent and sacrificed or discarded cards stay gone.", "note": ""}

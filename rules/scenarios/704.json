@@ -1,0 +1,1669 @@
+{
+  "unit": "704",
+  "verified": true,
+  "review": [
+    "704.5c-1: poison is dealt by combat damage, so the record kind is combat, not resolution; changed record_kind and added combat to the 704.5c triage line.",
+    "704.5h-1: setup started in declare_blockers although the first decision declares attackers; set step to declare_attackers and added combat to the 704.5h triage line.",
+    "704.5m-2: expected put Pacifism into B's graveyard, but A owns Pacifism; corrected to A's graveyard.",
+    "704.5r-1: decision had players pass before the trigger was put on the stack; reordered, and noted that Forge's MaxCounter static may refuse the counter instead of removing it by state-based action.",
+    "704.5s-1: setup step was main1 although the decisions pass through upkeep and draw first, so the lore counter would never be added; set step to draw and fixed the decisions.",
+    "704.5t: triage marked it out_of_scope though venture cards and dungeons are playable in a Forge two-player game; reclassified as mechanical/needs_new_fields and added scenario 704.5t-1.",
+    "704.5v: the skip reason was wrong, since countering the Siege's defeat trigger isolates the graveyard branch; replaced the skip with scenario 704.5v-1 (Lightning Bolt then Stifle).",
+    "704.5y: the skip reason was wrong, since gaining control of a Siege makes its protector illegal in a two-player game; replaced the skip with scenario 704.5y-1 (Confiscate) and set the triage record kind to playability.",
+    "704.5x: skip reason reworded to the actual reason (protector assigned on entry, no effect makes a permanent become a battle)."
+  ],
+  "skipped": [
+    {
+      "id": "704.5w",
+      "reason": "no non-Siege battle has been printed, so no Forge card can illustrate it"
+    },
+    {
+      "id": "704.5x",
+      "reason": "every battle gets a protector as it enters (310.9a) and no Forge card turns a permanent already on the battlefield into a battle, so a battle without a protector cannot arise in a two-player game"
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "704.3-1",
+      "rules": [
+        "704.3"
+      ],
+      "title": "State-based checks repeat until no action applies",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain"
+          ],
+          "B": [
+            "Goblin King",
+            {
+              "card": "Goblin Piker",
+              "damage": 1
+            }
+          ]
+        },
+        "hand": {
+          "A": [
+            "Shock"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Goblin King gives Goblin Piker +1/+1, so Goblin Piker is a 3/2 with 1 damage marked."
+      },
+      "decisions": [
+        "A casts Shock targeting Goblin King, tapping Mountain.",
+        "Both players pass; Shock resolves."
+      ],
+      "variants": [
+        {
+          "label": "piker_damaged",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Goblin King is dealt 2 damage and dies in the first state-based check. Goblin Piker is then 2/1 with 1 damage and dies in the repeated check. Both are in B's graveyard before any player receives priority."
+        },
+        {
+          "label": "piker_undamaged",
+          "polarity": "does_not_fire",
+          "delta": "Goblin Piker has no damage marked.",
+          "expected": "Goblin King dies in the first check. Goblin Piker (2/1, no damage) stays on the battlefield; the repeated check finds nothing to do."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Shock",
+        "Goblin King",
+        "Goblin Piker"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "704.4-1",
+      "rules": [
+        "704.4"
+      ],
+      "title": "A state-based check ignores a transient 0 toughness in the middle of a resolution",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Maro",
+            "Mountain",
+            "Mountain",
+            "Swamp",
+            "Swamp"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Wheel of Fortune",
+            "Plains",
+            "Plains"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Maro's power and toughness equal the number of cards in its controller's hand. Each library holds at least 10 cards."
+      },
+      "decisions": [
+        "A casts Wheel of Fortune, tapping Mountain and two other lands.",
+        "Both players pass; Wheel of Fortune resolves."
+      ],
+      "variants": [
+        {
+          "label": "wheel",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "During resolution A's hand is empty and Maro is momentarily 0/0, but no state-based check runs then. After resolution A holds 7 cards and Maro is a 7/7 that stays on the battlefield."
+        },
+        {
+          "label": "mind_rot",
+          "polarity": "does_not_fire",
+          "delta": "A's hand holds Mind Rot instead of Wheel of Fortune; A casts Mind Rot targeting A, tapping Swamp and two other lands.",
+          "expected": "Mind Rot makes A discard the two Plains, leaving A's hand empty. Maro is 0/0 at the next check and moves to A's graveyard."
+        }
+      ],
+      "cards": [
+        "Maro",
+        "Mountain",
+        "Swamp",
+        "Wheel of Fortune",
+        "Mind Rot",
+        "Plains"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "704.5a-1",
+      "rules": [
+        "704.5a"
+      ],
+      "title": "A player at 0 life loses the game",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 3
+        },
+        "battlefield": {
+          "A": [
+            "Mountain"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Lightning Bolt"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Lightning Bolt targeting B, tapping Mountain.",
+        "Both players pass; Lightning Bolt resolves."
+      ],
+      "variants": [
+        {
+          "label": "lethal",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "B takes 3 damage, has 0 life and loses the game at the next state-based check."
+        },
+        {
+          "label": "survives",
+          "polarity": "does_not_fire",
+          "delta": "B has 4 life.",
+          "expected": "B takes 3 damage, has 1 life and the game continues."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Lightning Bolt"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "704.5b-1",
+      "rules": [
+        "704.5b"
+      ],
+      "title": "Drawing from an empty library loses the game",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Divination"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Island"
+          ]
+        },
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Divination, tapping three Islands.",
+        "Both players pass; Divination resolves."
+      ],
+      "variants": [
+        {
+          "label": "one_card",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "A draws the only card of the library, then attempts a second draw from the empty library, and loses the game at the next state-based check."
+        },
+        {
+          "label": "two_cards",
+          "polarity": "does_not_fire",
+          "delta": "A's library holds two cards.",
+          "expected": "A draws both cards, the library is empty, and the game continues because no draw was attempted from it."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Divination"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "704.5c-1",
+      "rules": [
+        "704.5c"
+      ],
+      "title": "Ten poison counters lose the game",
+      "record_kind": "combat",
+      "setup": {
+        "active": "A",
+        "step": "declare_attackers",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Plague Stinger",
+              "summoning_sick": false
+            }
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "B has 9 poison counters. B controls no creatures."
+      },
+      "decisions": [
+        "A declares Plague Stinger as an attacker against B.",
+        "No blockers are declared.",
+        "Combat damage is dealt: Plague Stinger deals 1 damage with infect."
+      ],
+      "variants": [
+        {
+          "label": "nine",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "B receives 1 poison counter instead of losing life, now has 10 poison counters, and loses the game at the next state-based check. B's life stays 20."
+        },
+        {
+          "label": "eight",
+          "polarity": "does_not_fire",
+          "delta": "B has 8 poison counters.",
+          "expected": "B receives 1 poison counter, now has 9, and stays in the game. B's life stays 20."
+        }
+      ],
+      "cards": [
+        "Plague Stinger"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "704.5d-1",
+      "rules": [
+        "704.5d"
+      ],
+      "title": "A token that leaves the battlefield ceases to exist",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain"
+          ],
+          "B": [
+            {
+              "card": "Grizzly Bears",
+              "token": true
+            }
+          ]
+        },
+        "hand": {
+          "A": [
+            "Shock"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "B's Grizzly Bears is a token that is a copy of Grizzly Bears."
+      },
+      "decisions": [
+        "A casts Shock targeting B's Grizzly Bears, tapping Mountain.",
+        "Both players pass; Shock resolves."
+      ],
+      "variants": [
+        {
+          "label": "token",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The token is destroyed and goes to B's graveyard, then ceases to exist at the next check. B's graveyard is empty."
+        },
+        {
+          "label": "card",
+          "polarity": "does_not_fire",
+          "delta": "B's Grizzly Bears is a card, not a token.",
+          "expected": "Grizzly Bears is destroyed and stays in B's graveyard."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Shock",
+        "Grizzly Bears"
+      ],
+      "forge_notes": "A token copy of a card is the simplest reachable token whose name Forge's cardsfolder knows."
+    },
+    {
+      "id": "704.5e-1",
+      "rules": [
+        "704.5e"
+      ],
+      "title": "A copy of a spell ceases to exist once it leaves the stack",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Island",
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Lightning Bolt",
+            "Twincast"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Only the first sentence of 704.5e (a spell copy) is illustrated; copies of cards in other zones need a cast-from-copy effect."
+      },
+      "decisions": [
+        "A casts Lightning Bolt targeting B, tapping Mountain.",
+        "A casts Twincast targeting Lightning Bolt, tapping two Islands; the copy also targets B.",
+        "Both players pass; the copy resolves, then both players pass; the original resolves."
+      ],
+      "variants": [
+        {
+          "label": "copy",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "B takes 6 damage in total. A's graveyard holds exactly Twincast and Lightning Bolt; the copy resolved and ceased to exist and never reached a graveyard."
+        },
+        {
+          "label": "real_card",
+          "polarity": "does_not_fire",
+          "delta": "A's hand holds a second Lightning Bolt instead of Twincast; A casts it targeting B, tapping the other Mountain.",
+          "expected": "B takes 6 damage in total. A's graveyard holds two Lightning Bolt cards, because the second one is a card and not a copy."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Island",
+        "Lightning Bolt",
+        "Twincast"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "704.5f-1",
+      "rules": [
+        "704.5f"
+      ],
+      "title": "Toughness 0 or less puts a creature into the graveyard and regeneration cannot replace it",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Swamp"
+          ],
+          "B": [
+            "Swamp",
+            "Drudge Skeletons"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Disfigure"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Disfigure targeting Drudge Skeletons, tapping Swamp.",
+        "B responds by paying B from Swamp to activate Drudge Skeletons' regeneration, creating a shield.",
+        "Both players pass; the regeneration ability resolves, then Disfigure resolves."
+      ],
+      "variants": [
+        {
+          "label": "dies",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Drudge Skeletons becomes -1/-1, is put into B's graveyard, and the regeneration shield does not replace it."
+        },
+        {
+          "label": "counters",
+          "polarity": "does_not_fire",
+          "delta": "Drudge Skeletons carries two +1/+1 counters.",
+          "expected": "Drudge Skeletons becomes 1/1 and stays on the battlefield; the regeneration shield is unused."
+        }
+      ],
+      "cards": [
+        "Swamp",
+        "Disfigure",
+        "Drudge Skeletons"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "704.5g-1",
+      "rules": [
+        "704.5g"
+      ],
+      "title": "Lethal damage destroys a creature unless regeneration replaces it",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain"
+          ],
+          "B": [
+            "Swamp",
+            "Drudge Skeletons"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Shock"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Shock targeting Drudge Skeletons, tapping Mountain.",
+        "B passes priority without responding.",
+        "Both players pass; Shock resolves."
+      ],
+      "variants": [
+        {
+          "label": "no_shield",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Drudge Skeletons (1/1) has 2 damage marked, is destroyed and moves to B's graveyard."
+        },
+        {
+          "label": "shield",
+          "polarity": "other",
+          "delta": "In response to Shock, B pays B from Swamp to regenerate Drudge Skeletons.",
+          "expected": "Drudge Skeletons is destroyed in the check but regeneration replaces it: it becomes tapped, has no damage and stays on the battlefield."
+        },
+        {
+          "label": "tougher",
+          "polarity": "does_not_fire",
+          "delta": "Drudge Skeletons carries two +1/+1 counters and B does not regenerate.",
+          "expected": "Drudge Skeletons (3/3) has 2 damage marked and stays on the battlefield."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Swamp",
+        "Shock",
+        "Drudge Skeletons"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "704.5h-1",
+      "rules": [
+        "704.5h"
+      ],
+      "title": "Damage from a deathtouch source is lethal",
+      "record_kind": "combat",
+      "setup": {
+        "active": "A",
+        "step": "declare_attackers",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Hill Giant",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            "Typhoid Rats"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A attacks B with Hill Giant.",
+        "B blocks Hill Giant with Typhoid Rats.",
+        "Combat damage is dealt: Hill Giant assigns 3 to Typhoid Rats, Typhoid Rats assigns 1 to Hill Giant."
+      ],
+      "variants": [
+        {
+          "label": "deathtouch",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Hill Giant has 1 damage marked from a deathtouch source and is destroyed; Typhoid Rats takes 3 and dies. Both are in their owners' graveyards."
+        },
+        {
+          "label": "plain_blocker",
+          "polarity": "does_not_fire",
+          "delta": "B blocks with Fugitive Wizard instead of Typhoid Rats.",
+          "expected": "Hill Giant has 1 damage marked and stays on the battlefield; Fugitive Wizard takes 3 and dies."
+        }
+      ],
+      "cards": [
+        "Hill Giant",
+        "Typhoid Rats",
+        "Fugitive Wizard"
+      ],
+      "forge_notes": "B's battlefield in the second variant lists Fugitive Wizard in place of Typhoid Rats."
+    },
+    {
+      "id": "704.5i-1",
+      "rules": [
+        "704.5i"
+      ],
+      "title": "A planeswalker with 0 loyalty goes to the graveyard",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain"
+          ],
+          "B": [
+            {
+              "card": "Jace Beleren",
+              "counters": {
+                "loyalty": 3
+              }
+            }
+          ]
+        },
+        "hand": {
+          "A": [
+            "Lightning Bolt"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Lightning Bolt targeting Jace Beleren, tapping Mountain.",
+        "Both players pass; Lightning Bolt resolves."
+      ],
+      "variants": [
+        {
+          "label": "zero",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Damage to Jace Beleren removes 3 loyalty counters; with 0 loyalty it is put into B's graveyard."
+        },
+        {
+          "label": "four",
+          "polarity": "does_not_fire",
+          "delta": "Jace Beleren has 4 loyalty.",
+          "expected": "Jace Beleren keeps 1 loyalty counter and stays on the battlefield."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Lightning Bolt",
+        "Jace Beleren"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "704.5j-1",
+      "rules": [
+        "704.5j"
+      ],
+      "title": "The legend rule puts all but one same-named legendary permanent into the graveyard",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Isamaru, Hound of Konda"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Isamaru, Hound of Konda"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts the second Isamaru, Hound of Konda, tapping Plains.",
+        "Both players pass; it resolves.",
+        "A chooses to keep the new Isamaru."
+      ],
+      "variants": [
+        {
+          "label": "same_controller",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "A controls exactly one Isamaru, Hound of Konda (the new one); the other is in A's graveyard."
+        },
+        {
+          "label": "other_controller",
+          "polarity": "does_not_fire",
+          "delta": "The Isamaru already on the battlefield is controlled by B.",
+          "expected": "Both Isamaru stay on the battlefield, one under each player's control, and the graveyards are empty."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Isamaru, Hound of Konda"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "704.5k-1",
+      "rules": [
+        "704.5k"
+      ],
+      "title": "The world rule keeps only the newest world permanent",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Forest",
+            "Plains",
+            "Plains",
+            "Concordant Crossroads"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Concordant Crossroads"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts the second Concordant Crossroads, tapping Forest.",
+        "Both players pass; it resolves."
+      ],
+      "variants": [
+        {
+          "label": "two_worlds",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The older Concordant Crossroads is put into A's graveyard; the newer one stays on the battlefield."
+        },
+        {
+          "label": "one_world",
+          "polarity": "does_not_fire",
+          "delta": "A's hand holds Glorious Anthem instead of the second Concordant Crossroads; A casts it tapping Forest and two Plains.",
+          "expected": "Both permanents stay on the battlefield, because Glorious Anthem is not a world permanent."
+        }
+      ],
+      "cards": [
+        "Forest",
+        "Plains",
+        "Concordant Crossroads",
+        "Glorious Anthem"
+      ],
+      "forge_notes": "The tie branch (two world permanents with the same timestamp) is not illustrated."
+    },
+    {
+      "id": "704.5m-1",
+      "rules": [
+        "704.5m"
+      ],
+      "title": "An Aura attached to an illegal object goes to the graveyard",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Pacifism",
+              "attached_to": "Grizzly Bears"
+            }
+          ],
+          "B": [
+            "Plains",
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "B": [
+            "Gods Willing"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A passes priority with an empty stack.",
+        "B casts Gods Willing targeting Grizzly Bears, tapping Plains, and chooses white.",
+        "Both players pass; Gods Willing resolves and B scries 1."
+      ],
+      "variants": [
+        {
+          "label": "white",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears has protection from white, so Pacifism (a white Aura) is attached illegally and is put into A's graveyard. Grizzly Bears stays on the battlefield."
+        },
+        {
+          "label": "red",
+          "polarity": "does_not_fire",
+          "delta": "B chooses red.",
+          "expected": "Grizzly Bears has protection from red; Pacifism stays attached and Grizzly Bears still cannot attack or block."
+        }
+      ],
+      "cards": [
+        "Pacifism",
+        "Grizzly Bears",
+        "Plains",
+        "Gods Willing"
+      ],
+      "forge_notes": "Gods Willing's scry is inert for this scenario."
+    },
+    {
+      "id": "704.5m-2",
+      "rules": [
+        "704.5m"
+      ],
+      "title": "An Aura whose enchanted object left the battlefield goes to the graveyard",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            {
+              "card": "Pacifism",
+              "attached_to": "Grizzly Bears"
+            }
+          ],
+          "B": [
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Shock"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Shock targeting Grizzly Bears, tapping Mountain.",
+        "Both players pass; Shock resolves."
+      ],
+      "variants": [
+        {
+          "label": "dies",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears dies in the first check and moves to B's graveyard; Pacifism, attached to nothing, is put into A's graveyard (its owner) in the repeated check."
+        },
+        {
+          "label": "survives",
+          "polarity": "does_not_fire",
+          "delta": "The enchanted creature is Centaur Courser (3/3) instead of Grizzly Bears.",
+          "expected": "Centaur Courser has 2 damage marked and stays on the battlefield with Pacifism attached."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Shock",
+        "Grizzly Bears",
+        "Centaur Courser",
+        "Pacifism"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "704.5n-1",
+      "rules": [
+        "704.5n"
+      ],
+      "title": "An Equipment attached to an illegal permanent becomes unattached",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Forest",
+            "Plains",
+            "Plains"
+          ],
+          "B": [
+            "Grizzly Bears",
+            {
+              "card": "Bonesplitter",
+              "attached_to": "Grizzly Bears"
+            }
+          ]
+        },
+        "hand": {
+          "A": [
+            "Song of the Dryads"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Song of the Dryads targeting B's Grizzly Bears, tapping Forest and two Plains.",
+        "Both players pass; Song of the Dryads resolves."
+      ],
+      "variants": [
+        {
+          "label": "song",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears becomes a colorless Forest land and is no longer a creature, so Bonesplitter becomes unattached and remains on the battlefield."
+        },
+        {
+          "label": "pacifism",
+          "polarity": "does_not_fire",
+          "delta": "A's hand holds Pacifism instead of Song of the Dryads; A casts it targeting Grizzly Bears, tapping two Plains.",
+          "expected": "Grizzly Bears is still a creature, so Bonesplitter stays attached and Grizzly Bears is a 4/2 that cannot attack or block."
+        }
+      ],
+      "cards": [
+        "Forest",
+        "Plains",
+        "Grizzly Bears",
+        "Bonesplitter",
+        "Song of the Dryads",
+        "Pacifism"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "704.5p-1",
+      "rules": [
+        "704.5p"
+      ],
+      "title": "A permanent that is both attached and a creature becomes unattached",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Grizzly Bears",
+            {
+              "card": "Bonesplitter",
+              "attached_to": "Grizzly Bears"
+            }
+          ]
+        },
+        "hand": {
+          "A": [
+            "March of the Machines"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Only the creature clause of 704.5p is illustrated."
+      },
+      "decisions": [
+        "A casts March of the Machines, tapping Island and three Mountains.",
+        "Both players pass; it resolves."
+      ],
+      "variants": [
+        {
+          "label": "march",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Bonesplitter becomes a 1/1 artifact creature and becomes unattached but stays on the battlefield; Grizzly Bears is a 2/2."
+        },
+        {
+          "label": "no_march",
+          "polarity": "does_not_fire",
+          "delta": "A passes priority without casting March of the Machines.",
+          "expected": "Bonesplitter stays attached and Grizzly Bears is a 4/2."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Mountain",
+        "Grizzly Bears",
+        "Bonesplitter",
+        "March of the Machines"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "704.5q-1",
+      "rules": [
+        "704.5q"
+      ],
+      "title": "+1/+1 and -1/-1 counters cancel in pairs",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Swamp",
+            "Swamp",
+            "Swamp",
+            {
+              "card": "Grizzly Bears",
+              "counters": {
+                "+1/+1": 2
+              }
+            }
+          ]
+        },
+        "hand": {
+          "A": [
+            "Black Sun's Zenith"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Black Sun's Zenith with X=1, tapping three Swamps.",
+        "Both players pass; Black Sun's Zenith resolves and is shuffled into A's library."
+      ],
+      "variants": [
+        {
+          "label": "both_kinds",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears receives one -1/-1 counter; one +1/+1 and one -1/-1 counter are removed, leaving one +1/+1 counter and no -1/-1 counter. It is a 3/3."
+        },
+        {
+          "label": "only_minus",
+          "polarity": "does_not_fire",
+          "delta": "Grizzly Bears has no +1/+1 counters.",
+          "expected": "Grizzly Bears keeps its one -1/-1 counter and is a 1/1."
+        }
+      ],
+      "cards": [
+        "Swamp",
+        "Grizzly Bears",
+        "Black Sun's Zenith"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "704.5r-1",
+      "rules": [
+        "704.5r"
+      ],
+      "title": "Excess counters above a stated maximum are removed",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "upkeep",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Rasputin Dreamweaver",
+              "counters": {
+                "dream": 7
+              },
+              "summoning_sick": false
+            }
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Rasputin Dreamweaver started the turn untapped."
+      },
+      "decisions": [
+        "Rasputin Dreamweaver's upkeep trigger goes on the stack (it started the turn untapped).",
+        "Both players pass; the trigger resolves and puts a dream counter on Rasputin Dreamweaver."
+      ],
+      "variants": [
+        {
+          "label": "at_cap",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Rasputin briefly has 8 dream counters; at the next state-based check one is removed, leaving 7."
+        },
+        {
+          "label": "below_cap",
+          "polarity": "does_not_fire",
+          "delta": "Rasputin has 5 dream counters.",
+          "expected": "Rasputin ends with 6 dream counters; nothing is removed."
+        }
+      ],
+      "cards": [
+        "Rasputin Dreamweaver"
+      ],
+      "forge_notes": "Forge scripts the cap as a MaxCounter static, which may stop the eighth counter from being placed rather than removing it in a state-based check; the end count (7) is the same either way."
+    },
+    {
+      "id": "704.5s-1",
+      "rules": [
+        "704.5s"
+      ],
+      "title": "A Saga at its final chapter is sacrificed once the chapter ability has left the stack",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "draw",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "History of Benalia",
+              "counters": {
+                "lore": 2
+              }
+            }
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "As A's precombat main phase begins, A adds a lore counter to History of Benalia as a turn-based action (714.3b)."
+      },
+      "decisions": [
+        "Both players pass priority in the draw step.",
+        "The lore counter is added as precombat main begins and the chapter ability triggers.",
+        "Both players pass; the chapter ability resolves."
+      ],
+      "variants": [
+        {
+          "label": "final_chapter",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "History of Benalia has 3 lore counters. While chapter III is on the stack it stays on the battlefield; after chapter III resolves it is sacrificed and is in A's graveyard."
+        },
+        {
+          "label": "middle_chapter",
+          "polarity": "does_not_fire",
+          "delta": "History of Benalia has 1 lore counter.",
+          "expected": "Chapter II triggers and creates a 2/2 Knight token; History of Benalia stays with 2 lore counters."
+        }
+      ],
+      "cards": [
+        "History of Benalia"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "704.5z-1",
+      "rules": [
+        "704.5z"
+      ],
+      "title": "Only the most recent Role of one controller stays on a permanent",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Forest",
+            "Grizzly Bears",
+            "Centaur Courser",
+            {
+              "card": "Royal Role",
+              "token": true,
+              "attached_to": "Grizzly Bears"
+            }
+          ]
+        },
+        "hand": {
+          "A": [
+            "Royal Treatment"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Grizzly Bears already has a Royal Role token controlled by A attached to it. The Role token is a token and not in cardsfolder by card name."
+      },
+      "decisions": [
+        "A casts Royal Treatment targeting Grizzly Bears, tapping Forest.",
+        "Both players pass; Royal Treatment resolves and a new Royal Role is attached to Grizzly Bears."
+      ],
+      "variants": [
+        {
+          "label": "same_creature",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The older Royal Role is put into A's graveyard and ceases to exist; Grizzly Bears has one Royal Role and is a 3/3 with ward 1."
+        },
+        {
+          "label": "other_creature",
+          "polarity": "does_not_fire",
+          "delta": "Royal Treatment targets Centaur Courser.",
+          "expected": "Each creature has one Royal Role: Grizzly Bears is a 3/3 and Centaur Courser is a 4/4; no Role leaves the battlefield."
+        }
+      ],
+      "cards": [
+        "Forest",
+        "Grizzly Bears",
+        "Centaur Courser",
+        "Royal Treatment"
+      ],
+      "forge_notes": "Royal Role token script is role_royal."
+    },
+    {
+      "id": "704.5aa-1",
+      "rules": [
+        "704.5aa"
+      ],
+      "title": "A player with start your engines! and no speed gets speed 1",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Burnout Bashtronaut"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "A has no speed."
+      },
+      "decisions": [
+        "A casts Burnout Bashtronaut, tapping Mountain.",
+        "Both players pass; it resolves."
+      ],
+      "variants": [
+        {
+          "label": "no_speed",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "A controls a permanent with start your engines! and has no speed, so A's speed becomes 1."
+        },
+        {
+          "label": "has_speed",
+          "polarity": "other",
+          "delta": "A already has speed 3.",
+          "expected": "A's speed stays 3."
+        },
+        {
+          "label": "no_engine",
+          "polarity": "does_not_fire",
+          "delta": "A's hand holds Goblin Piker instead of Burnout Bashtronaut; A casts it tapping two Mountains.",
+          "expected": "A has no speed."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Burnout Bashtronaut",
+        "Goblin Piker"
+      ],
+      "forge_notes": "Speed is not part of any existing record field."
+    },
+    {
+      "id": "704.7-1",
+      "rules": [
+        "704.7"
+      ],
+      "title": "One replacement effect replaces every game loss of the same check",
+      "record_kind": "rewrite",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 1,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Swamp",
+            "Swamp",
+            "Lich's Mirror"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Night's Whisper",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Plains"
+          ]
+        },
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Night's Whisper, tapping two Swamps.",
+        "Both players pass; Night's Whisper resolves."
+      ],
+      "variants": [
+        {
+          "label": "mirror",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "A draws one card, attempts to draw from the empty library and loses 2 life. The two game losses (0 or less life and the failed draw) are replaced once by Lich's Mirror: A stays in the game with 20 life and 7 cards in hand."
+        },
+        {
+          "label": "no_mirror",
+          "polarity": "does_not_fire",
+          "delta": "Lich's Mirror is not on the battlefield.",
+          "expected": "A has -1 life and attempted a draw from an empty library; A loses the game."
+        }
+      ],
+      "cards": [
+        "Swamp",
+        "Lich's Mirror",
+        "Night's Whisper",
+        "Plains"
+      ],
+      "forge_notes": "Lich's Mirror's library must hold at least 7 cards after it shuffles: the setup has 9 cards owned by A in library, hand and battlefield."
+    },
+    {
+      "id": "704.8-1",
+      "rules": [
+        "704.8"
+      ],
+      "title": "Last known information comes from before the whole state-based check",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Swamp",
+            "Swamp",
+            "Swamp",
+            "Swamp",
+            "Swamp",
+            {
+              "card": "Young Wolf",
+              "counters": {
+                "+1/+1": 1
+              }
+            }
+          ]
+        },
+        "hand": {
+          "A": [
+            "Black Sun's Zenith"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Black Sun's Zenith with X=3, tapping five Swamps.",
+        "Both players pass; Black Sun's Zenith resolves."
+      ],
+      "variants": [
+        {
+          "label": "had_counter",
+          "polarity": "does_not_fire",
+          "delta": "",
+          "expected": "Young Wolf has one +1/+1 and three -1/-1 counters; it dies in the check, and its last known information shows a +1/+1 counter, so undying does not trigger. Young Wolf stays in A's graveyard."
+        },
+        {
+          "label": "no_counter",
+          "polarity": "fires",
+          "delta": "Young Wolf has no +1/+1 counter.",
+          "expected": "Young Wolf dies and its last known information shows no +1/+1 counter, so undying triggers; Young Wolf returns to the battlefield with a +1/+1 counter as a 2/2."
+        }
+      ],
+      "cards": [
+        "Swamp",
+        "Young Wolf",
+        "Black Sun's Zenith"
+      ],
+      "forge_notes": "Polarity refers to the undying trigger. Black Sun's Zenith also puts three -1/-1 counters on any other creature; none is present."
+    },
+    {
+      "id": "704.5t-1",
+      "rules": [
+        "704.5t"
+      ],
+      "title": "A dungeon is removed once its bottommost room ability has left the stack",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Kick in the Door"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "A's command zone holds the dungeon Lost Mine of Phandelver (a Forge token script, not in cardsfolder) with A's venture marker on Dark Pool. Each library holds at least 5 cards."
+      },
+      "decisions": [
+        "A casts Kick in the Door targeting Grizzly Bears, tapping Mountain.",
+        "Both players pass; Kick in the Door resolves and A ventures into the dungeon. From a room with two exits A moves to Dark Pool.",
+        "The room ability of the room entered goes on the stack; both players pass and it resolves."
+      ],
+      "variants": [
+        {
+          "label": "last_room",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The marker moves to Temple of Dumathoin. While its room ability is on the stack the dungeon stays in the command zone; after A draws a card, Lost Mine of Phandelver is removed from the game (completed)."
+        },
+        {
+          "label": "middle_room",
+          "polarity": "does_not_fire",
+          "delta": "A's venture marker starts on Goblin Lair.",
+          "expected": "The marker moves to Dark Pool: B loses 1 life (19) and A gains 1 life (21). Lost Mine of Phandelver stays in the command zone."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Grizzly Bears",
+        "Kick in the Door"
+      ],
+      "forge_notes": "Lost Mine of Phandelver is a Forge token script (tokenscripts/lost_mine_of_phandelver.txt). Dungeon completion is not a field of any record."
+    },
+    {
+      "id": "704.5v-1",
+      "rules": [
+        "704.5v"
+      ],
+      "title": "A defeated Siege goes to the graveyard only once its defeat trigger has left the stack without exiling it",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Island",
+            {
+              "card": "Invasion of Zendikar",
+              "counters": {
+                "defense": 3
+              }
+            }
+          ]
+        },
+        "hand": {
+          "A": [
+            "Lightning Bolt",
+            "Stifle"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "B is the protector of A's Invasion of Zendikar."
+      },
+      "decisions": [
+        "A casts Lightning Bolt targeting Invasion of Zendikar, tapping Mountain.",
+        "Both players pass; Lightning Bolt resolves and removes the last 3 defense counters; the Siege's defeat trigger goes on the stack.",
+        "A casts Stifle targeting the defeat trigger, tapping Island.",
+        "Both players pass; Stifle resolves."
+      ],
+      "variants": [
+        {
+          "label": "stifled",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The defeat trigger is countered. Invasion of Zendikar, with defense 0 and no ability of its own on the stack, is put into A's graveyard."
+        },
+        {
+          "label": "trigger_resolves",
+          "polarity": "does_not_fire",
+          "delta": "A does not cast Stifle; both players pass, the defeat trigger resolves and A casts the Siege transformed.",
+          "expected": "Invasion of Zendikar stays on the battlefield with defense 0 while its trigger is on the stack, then is exiled and cast transformed; Awakened Skyclave enters A's battlefield and A's graveyard holds only Lightning Bolt."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Island",
+        "Invasion of Zendikar",
+        "Lightning Bolt",
+        "Stifle"
+      ],
+      "forge_notes": "Damage to a battle removes defense counters (310.6). Forge may implement the Siege's intrinsic defeat trigger engine-side rather than in the card script."
+    },
+    {
+      "id": "704.5y-1",
+      "rules": [
+        "704.5y"
+      ],
+      "title": "A Siege whose controller becomes its protector gets the other player as protector",
+      "record_kind": "playability",
+      "setup": {
+        "active": "B",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            {
+              "card": "Invasion of Zendikar",
+              "counters": {
+                "defense": 3
+              }
+            }
+          ],
+          "B": [
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            }
+          ]
+        },
+        "hand": {
+          "B": [
+            "Confiscate"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "B is the protector of A's Invasion of Zendikar."
+      },
+      "decisions": [
+        "B casts Confiscate targeting Invasion of Zendikar, tapping six Islands.",
+        "Both players pass; Confiscate resolves.",
+        "B moves to combat; the legal attack targets of Grizzly Bears are recorded."
+      ],
+      "variants": [
+        {
+          "label": "stolen_siege",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "B controls Invasion of Zendikar and cannot protect it, so A becomes its protector. Grizzly Bears can legally attack A or Invasion of Zendikar."
+        },
+        {
+          "label": "stolen_land",
+          "polarity": "does_not_fire",
+          "delta": "Confiscate targets A's Mountain instead of Invasion of Zendikar.",
+          "expected": "A still controls Invasion of Zendikar and B remains its protector. Grizzly Bears can legally attack A but not Invasion of Zendikar."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Island",
+        "Invasion of Zendikar",
+        "Grizzly Bears",
+        "Confiscate"
+      ],
+      "forge_notes": "Protector is not a record field; the reassignment shows in the playability verdict for attack targets. The graveyard branch (no player can protect) cannot arise in a two-player game."
+    }
+  ]
+}

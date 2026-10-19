@@ -1,0 +1,1447 @@
+{
+  "unit": "608",
+  "verified": true,
+  "review": [
+    "608.1-1: the pass order in the decisions and the response delta was wrong (the caster of a response receives priority first); restated it as A passes, B casts and passes, A passes.",
+    "608.2a-1: never-triggers was labelled does_not_fire, but there the trigger is never put on the stack (603.4), so 608.2a never applies; relabelled it other.",
+    "608.2h-1: target-leaves was labelled does_not_fire, but it is a 608.2b fizzle in which 608.2h never applies; relabelled it other and noted in forge_notes that 608.2h has no does_not_fire branch.",
+    "608.2j-2: was a Doom Blade targeting-legality check (601.2c/115, not an effect, so not 608.2j); rewrote it as a Hellfire resolution, the rule's own 'destroy all nonblack creatures' case, with Edgewalker spared versus Grizzly Bears destroyed.",
+    "608.2k: the skip claimed only exotic cards reach it and that it adds nothing beyond 608.2h; both false (a Theros god losing devotion while blocked by Wall of Tears is the rule's own example). Removed the skip and added 608.2k-1.",
+    "608.2p: the skip claimed Forge has no 'when an ability resolves' trigger; Forge has Mode$ AbilityResolves (Narci, Fable Singer; Tom Bombadil; Tyvar the Bellicose). Removed the skip and added 608.2p-1 with Narci and History of Benalia."
+  ],
+  "skipped": [
+    {
+      "id": "608.2m",
+      "reason": "cannot be illustrated with a simple Forge state: it needs a resolving instant, sorcery or ability that leaves the stack part-way through its own resolution, which no basic card does; ordinary resolution to the graveyard is covered by 608.2n-1"
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "608.1-1",
+      "rules": [
+        "608.1"
+      ],
+      "title": "The top object of the stack resolves each time both players pass in succession",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain"
+          ],
+          "B": [
+            "Mountain",
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Shock"
+          ],
+          "B": [
+            "Shock"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Shock targeting Grizzly Bears, tapping one Mountain.",
+        "A passes priority, then B passes priority; Shock resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "After both players pass once, A's Shock resolves: Grizzly Bears (2/2) takes 2 damage and moves to B's graveyard; Shock moves to A's graveyard; the stack is empty."
+        },
+        {
+          "label": "response",
+          "polarity": "does_not_fire",
+          "delta": "After A passes with Shock on the stack, B responds by casting Shock targeting A, tapping B's Mountain; B passes, then A passes.",
+          "expected": "After both players pass once, only B's Shock (the top object) resolves: A's life is 18, B's Shock is in B's graveyard. A's Shock is still on the stack and Grizzly Bears has no damage; A's Shock resolves only after a second round of passes."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Grizzly Bears",
+        "Shock"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "608.2a-1",
+      "rules": [
+        "608.2a"
+      ],
+      "title": "An intervening-if trigger whose condition is false on resolution does nothing",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "upkeep",
+        "life": {
+          "A": 40,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Felidar Sovereign"
+          ],
+          "B": [
+            "Mountain"
+          ]
+        },
+        "hand": {
+          "B": [
+            "Shock"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "A's upkeep begins; Felidar Sovereign's trigger (if you have 40 or more life, you win the game) goes on the stack."
+      },
+      "decisions": [
+        "The upkeep trigger is put on the stack (A has 40 life, so the condition is true when it triggers).",
+        "A passes priority; B passes priority; the trigger resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The trigger resolves with A at 40 life: A wins the game."
+        },
+        {
+          "label": "life-lost-in-response",
+          "polarity": "does_not_fire",
+          "delta": "B responds by casting Shock targeting A, tapping Mountain, before the trigger resolves.",
+          "expected": "A's life is 38 when the trigger would resolve; the condition is false, the trigger is removed from the stack and does nothing; nobody wins and the game continues."
+        },
+        {
+          "label": "never-triggers",
+          "polarity": "other",
+          "delta": "A starts at 39 life instead of 40 and B casts nothing.",
+          "expected": "The trigger does not go on the stack at all; nobody wins."
+        }
+      ],
+      "cards": [
+        "Felidar Sovereign",
+        "Mountain",
+        "Shock"
+      ],
+      "forge_notes": "Forge expresses the condition as trigger parameters (LifeTotal / LifeAmount); check that Forge re-evaluates it on resolution and does not only check it when the trigger is put on the stack."
+    },
+    {
+      "id": "608.2b-1",
+      "rules": [
+        "608.2b"
+      ],
+      "title": "A spell whose only target became illegal does not resolve at all",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Swamp",
+            "Swamp"
+          ],
+          "B": [
+            "Grizzly Bears",
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Sorin's Thirst"
+          ],
+          "B": [
+            "Unsummon"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Sorin's Thirst targeting Grizzly Bears, tapping both Swamps.",
+        "B passes priority; A passes priority; Sorin's Thirst resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "does_not_fire",
+          "delta": "",
+          "expected": "The target is still legal: Sorin's Thirst resolves, Grizzly Bears takes 2 damage and moves to B's graveyard, and A gains 2 life (A at 22)."
+        },
+        {
+          "label": "target-leaves",
+          "polarity": "fires",
+          "delta": "B responds by casting Unsummon on Grizzly Bears, tapping Island; Unsummon resolves first.",
+          "expected": "Grizzly Bears is in B's hand, so Sorin's Thirst has no legal target: it does not resolve, moves to A's graveyard, and A gains no life (A stays at 20)."
+        }
+      ],
+      "cards": [
+        "Swamp",
+        "Island",
+        "Grizzly Bears",
+        "Sorin's Thirst",
+        "Unsummon"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "608.2b-2",
+      "rules": [
+        "608.2b"
+      ],
+      "title": "A spell with some legal targets resolves and skips only the illegal ones",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain"
+          ],
+          "B": [
+            "Grizzly Bears",
+            "Llanowar Elves",
+            "Island",
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Arc Trail"
+          ],
+          "B": [
+            "Unsummon",
+            "Unsummon"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Llanowar Elves is summoning sick and not used for mana."
+      },
+      "decisions": [
+        "A casts Arc Trail, choosing Grizzly Bears for 2 damage and Llanowar Elves for 1 damage, tapping both Mountains.",
+        "B passes priority; A passes priority; Arc Trail resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "does_not_fire",
+          "delta": "",
+          "expected": "Both targets are legal: Grizzly Bears takes 2 damage and Llanowar Elves takes 1 damage; both move to B's graveyard."
+        },
+        {
+          "label": "one-target-leaves",
+          "polarity": "other",
+          "delta": "B responds by casting Unsummon on Llanowar Elves, tapping one Island; Unsummon resolves first.",
+          "expected": "Llanowar Elves is in B's hand. Arc Trail still resolves for its remaining legal target: Grizzly Bears takes 2 damage and moves to B's graveyard; the Elves are unaffected; Arc Trail moves to A's graveyard."
+        },
+        {
+          "label": "both-targets-leave",
+          "polarity": "fires",
+          "delta": "B responds with both Unsummons, one on each creature, tapping both Islands; both resolve first.",
+          "expected": "Both creatures are in B's hand. Arc Trail has no legal target: it does not resolve and moves to A's graveyard; no damage is dealt."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Island",
+        "Grizzly Bears",
+        "Llanowar Elves",
+        "Arc Trail",
+        "Unsummon"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "608.2b-3",
+      "rules": [
+        "608.2b"
+      ],
+      "title": "A legal target that fails a resolution-time condition resolves and does nothing",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain"
+          ],
+          "B": [
+            "Merfolk of the Pearl Trident",
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Pyroblast"
+          ],
+          "B": [
+            "Unsummon"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Pyroblast choosing the mode 'Destroy target permanent if it's blue', targeting Merfolk of the Pearl Trident, tapping Mountain.",
+        "B passes priority; A passes priority; Pyroblast resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "does_not_fire",
+          "delta": "",
+          "expected": "The target is legal and blue: Pyroblast resolves and Merfolk of the Pearl Trident is destroyed (B's graveyard); Pyroblast moves to A's graveyard."
+        },
+        {
+          "label": "not-blue",
+          "polarity": "other",
+          "delta": "B's creature is Grizzly Bears (green) instead of Merfolk of the Pearl Trident, and A targets it.",
+          "expected": "Pyroblast resolves (it is not countered or fizzled) but does nothing: Grizzly Bears stays on the battlefield undamaged; Pyroblast moves to A's graveyard."
+        },
+        {
+          "label": "target-leaves",
+          "polarity": "fires",
+          "delta": "B responds by casting Unsummon on Merfolk of the Pearl Trident, tapping Island.",
+          "expected": "Merfolk is in B's hand; Pyroblast's target is illegal, so it fizzles (does not resolve) and moves to A's graveyard."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Island",
+        "Merfolk of the Pearl Trident",
+        "Grizzly Bears",
+        "Pyroblast",
+        "Unsummon"
+      ],
+      "forge_notes": "The not-blue variant needs Grizzly Bears in place of Merfolk on B's battlefield; Island and Unsummon are unused there."
+    },
+    {
+      "id": "608.2c-1",
+      "rules": [
+        "608.2c"
+      ],
+      "title": "Later text modifies earlier text: destroy, and it can't be regenerated",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Swamp",
+            "Swamp"
+          ],
+          "B": [
+            "River Boa",
+            "Forest"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Terror",
+            "Doom Blade"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Terror targeting River Boa, tapping both Swamps.",
+        "B activates River Boa's regenerate ability ({G}), tapping Forest, creating a regeneration shield; the ability resolves.",
+        "Both players pass; Terror resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Terror destroys River Boa and the regeneration shield cannot save it: River Boa moves to B's graveyard."
+        },
+        {
+          "label": "no-clause",
+          "polarity": "does_not_fire",
+          "delta": "A casts Doom Blade (no regeneration clause) instead of Terror.",
+          "expected": "Doom Blade destroys River Boa but the regeneration shield replaces it: River Boa stays on the battlefield, tapped, with no damage and the shield used up."
+        }
+      ],
+      "cards": [
+        "Swamp",
+        "Forest",
+        "River Boa",
+        "Terror",
+        "Doom Blade"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "608.2f-1",
+      "rules": [
+        "608.2f"
+      ],
+      "title": "An effect acting on several objects processes them simultaneously",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Blood Artist"
+          ],
+          "B": [
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Day of Judgment"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Day of Judgment, tapping all four Plains.",
+        "Both players pass; Day of Judgment resolves.",
+        "For each Blood Artist trigger that goes on the stack, A targets B."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Blood Artist and Grizzly Bears are destroyed simultaneously, so Blood Artist sees both deaths: two triggers fire, B loses 2 life (B at 18) and A gains 2 life (A at 22)."
+        },
+        {
+          "label": "one-at-a-time",
+          "polarity": "does_not_fire",
+          "delta": "A has two Mountains and two Shocks instead of the Plains and Day of Judgment; A casts one Shock on Blood Artist, then after it resolves a second Shock on Grizzly Bears.",
+          "expected": "Blood Artist dies first and triggers once (B at 19, A at 21); when Grizzly Bears dies afterwards, Blood Artist is gone and does not trigger. One trigger fired in total."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Mountain",
+        "Blood Artist",
+        "Grizzly Bears",
+        "Day of Judgment",
+        "Shock"
+      ],
+      "forge_notes": "The one-at-a-time variant replaces A's lands and hand: Mountain, Mountain on the battlefield and Shock, Shock in hand."
+    },
+    {
+      "id": "608.2g-1",
+      "rules": [
+        "608.2g"
+      ],
+      "title": "A spell cast during resolution goes on top of the stack and resolves before the casting source",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Forest",
+            "Forest"
+          ],
+          "B": [
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Bloodbraid Elf"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Lightning Bolt",
+            "Mountain"
+          ]
+        },
+        "exile": {},
+        "notes": "A's library top card is Lightning Bolt."
+      },
+      "decisions": [
+        "A casts Bloodbraid Elf, tapping all four lands; the cascade trigger goes on the stack above it.",
+        "Both players pass; the cascade trigger resolves: Lightning Bolt is exiled and A chooses to cast it without paying, targeting Grizzly Bears.",
+        "Both players pass; Lightning Bolt resolves; both players pass again; Bloodbraid Elf resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Lightning Bolt is cast without priority passing and goes on top of the stack, so it resolves before Bloodbraid Elf: Grizzly Bears dies, Bolt goes to A's graveyard, and then Bloodbraid Elf enters A's battlefield. The cascade trigger has left the stack."
+        },
+        {
+          "label": "nothing-cheaper",
+          "polarity": "does_not_fire",
+          "delta": "A's library is Serra Angel, then Mountain; no nonland card with lesser mana value exists.",
+          "expected": "No spell is cast: Serra Angel and Mountain are put on the bottom of A's library; Grizzly Bears has no damage; Bloodbraid Elf resolves and enters A's battlefield."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Forest",
+        "Bloodbraid Elf",
+        "Lightning Bolt",
+        "Grizzly Bears",
+        "Serra Angel"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "608.2h-1",
+      "rules": [
+        "608.2h"
+      ],
+      "title": "An effect that needs information about a departed object uses its last known information",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains"
+          ],
+          "B": [
+            "Grizzly Bears",
+            "Forest",
+            "Island"
+          ]
+        },
+        "hand": {
+          "B": [
+            "Giant Growth",
+            "Unsummon"
+          ],
+          "A": [
+            "Swords to Plowshares"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Swords to Plowshares targeting Grizzly Bears, tapping Plains.",
+        "B passes priority; A passes priority; Swords to Plowshares resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears is exiled and B gains life equal to its last known power, 2: B is at 22."
+        },
+        {
+          "label": "pumped",
+          "polarity": "other",
+          "delta": "B responds by casting Giant Growth on Grizzly Bears, tapping Forest; Giant Growth resolves first.",
+          "expected": "Grizzly Bears is a 5/5 when exiled, so its last known power is 5: Grizzly Bears is exiled and B gains 5 life (B at 25)."
+        },
+        {
+          "label": "target-leaves",
+          "polarity": "other",
+          "delta": "B responds by casting Unsummon on Grizzly Bears, tapping Island.",
+          "expected": "Grizzly Bears is in B's hand; Swords to Plowshares fizzles, B gains no life (B at 20)."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Forest",
+        "Island",
+        "Grizzly Bears",
+        "Swords to Plowshares",
+        "Giant Growth",
+        "Unsummon"
+      ],
+      "forge_notes": "608.2h has no does_not_fire branch: last known information is always used once the object has left. The target-leaves variant is a 608.2b fizzle kept as a contrast where no information is needed at all."
+    },
+    {
+      "id": "608.2i-1",
+      "rules": [
+        "608.2i"
+      ],
+      "title": "An effect that looks back in time counts an attack by a creature that no longer exists",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Grizzly Bears"
+          ],
+          "B": [
+            "Centaur Courser"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Mardu Heart-Piercer"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Grizzly Bears is not summoning sick."
+      },
+      "decisions": [
+        "A attacks with Grizzly Bears only.",
+        "B blocks Grizzly Bears with Centaur Courser.",
+        "Combat damage: Grizzly Bears deals 2 to Centaur Courser and Centaur Courser deals 3 to Grizzly Bears.",
+        "In main phase 2, A casts Mardu Heart-Piercer, tapping all four Mountains; it resolves.",
+        "If Heart-Piercer's raid trigger goes on the stack, A targets B; both players pass and it resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears died in combat and is in A's graveyard, but A attacked this turn: Heart-Piercer's raid trigger fires and deals 2 damage to B (B at 18)."
+        },
+        {
+          "label": "no-attack",
+          "polarity": "does_not_fire",
+          "delta": "A does not attack with Grizzly Bears; combat is skipped.",
+          "expected": "A did not attack this turn: Heart-Piercer enters, its raid trigger does not fire, and B stays at 20; Grizzly Bears is still on the battlefield."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Grizzly Bears",
+        "Centaur Courser",
+        "Mardu Heart-Piercer"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "608.2j-1",
+      "rules": [
+        "608.2j"
+      ],
+      "title": "An effect referring to a color checks only that color",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains"
+          ],
+          "B": [
+            "Edgewalker"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Cleanse"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Edgewalker is a white-and-black creature."
+      },
+      "decisions": [
+        "A casts Cleanse, tapping all four Plains.",
+        "Both players pass; Cleanse resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Edgewalker is black (and white), so 'destroy all black creatures' destroys it: Edgewalker moves to B's graveyard."
+        },
+        {
+          "label": "green-creature",
+          "polarity": "does_not_fire",
+          "delta": "B's creature is Grizzly Bears instead of Edgewalker.",
+          "expected": "Grizzly Bears is not black: it stays on the battlefield undamaged; Cleanse moves to A's graveyard."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Edgewalker",
+        "Grizzly Bears",
+        "Cleanse"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "608.2j-2",
+      "rules": [
+        "608.2j"
+      ],
+      "title": "'Destroy all nonblack creatures' spares a white-and-black creature",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Swamp",
+            "Swamp",
+            "Swamp",
+            "Swamp",
+            "Swamp"
+          ],
+          "B": [
+            "Edgewalker"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Hellfire"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Edgewalker is a white-and-black creature."
+      },
+      "decisions": [
+        "A casts Hellfire, tapping all five Swamps.",
+        "Both players pass; Hellfire resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Edgewalker is black, so it is not a nonblack creature: it stays on the battlefield. No creature died, so Hellfire deals 3 damage to A (A at 17); Hellfire moves to A's graveyard."
+        },
+        {
+          "label": "green-creature",
+          "polarity": "does_not_fire",
+          "delta": "B's creature is Grizzly Bears instead of Edgewalker.",
+          "expected": "Grizzly Bears is nonblack: it is destroyed and moves to B's graveyard. One creature died, so Hellfire deals 4 damage to A (A at 16)."
+        }
+      ],
+      "cards": [
+        "Swamp",
+        "Edgewalker",
+        "Grizzly Bears",
+        "Hellfire"
+      ],
+      "forge_notes": "Forge counts X from the cards Hellfire destroyed (RememberDestroyed)."
+    },
+    {
+      "id": "608.2k-1",
+      "rules": [
+        "608.2k"
+      ],
+      "title": "A trigger still returns the creature it referred to after that permanent stops being a creature",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "declare_attackers",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Heliod, God of the Sun",
+              "summoning_sick": false
+            },
+            "Serra Angel",
+            "Serra Angel"
+          ],
+          "B": [
+            "Wall of Tears",
+            "Swamp",
+            "Swamp"
+          ]
+        },
+        "hand": {
+          "B": [
+            "Doom Blade"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "A's devotion to white is 5 (Heliod 1, each Serra Angel 2), so Heliod is a 5/6 indestructible creature."
+      },
+      "decisions": [
+        "A attacks with Heliod, God of the Sun only.",
+        "B blocks Heliod with Wall of Tears; Wall of Tears' trigger resolves, setting up the return at end of combat.",
+        "Still in the declare blockers step, B casts Doom Blade targeting one Serra Angel, tapping both Swamps; it resolves.",
+        "Both players pass through combat damage to the end of combat step; the delayed trigger resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "One Serra Angel is in A's graveyard; A's devotion to white drops to 3, so Heliod stops being a creature and leaves combat; no combat damage is dealt. At end of combat Heliod, now a noncreature enchantment, is still returned to A's hand."
+        },
+        {
+          "label": "still-creature",
+          "polarity": "other",
+          "delta": "B does not cast Doom Blade.",
+          "expected": "Heliod stays a 5/6 creature and deals 5 damage to Wall of Tears, which moves to B's graveyard; at end of combat Heliod is returned to A's hand."
+        }
+      ],
+      "cards": [
+        "Heliod, God of the Sun",
+        "Serra Angel",
+        "Wall of Tears",
+        "Swamp",
+        "Doom Blade"
+      ],
+      "forge_notes": "608.2k has no does_not_fire branch: the referred object is affected whatever characteristics it gained or lost. Forge remembers the blocked creature as an LKI copy (TriggeredAttackerLKICopy); check that the bounce still finds Heliod once it is no longer a creature."
+    },
+    {
+      "id": "608.2n-1",
+      "rules": [
+        "608.2n"
+      ],
+      "title": "A resolved spell goes to the graveyard and a resolved ability ceases to exist",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Firebolt"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Firebolt from hand targeting B, tapping one Mountain.",
+        "Both players pass; Firebolt resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "B takes 2 damage (B at 18) and Firebolt moves from the stack to A's graveyard."
+        },
+        {
+          "label": "flashback",
+          "polarity": "does_not_fire",
+          "delta": "Firebolt starts in A's graveyard instead of A's hand, and A casts it with flashback ({4}{R}), tapping all five Mountains.",
+          "expected": "B takes 2 damage (B at 18) and Firebolt is exiled instead of going to A's graveyard."
+        },
+        {
+          "label": "ability",
+          "polarity": "other",
+          "delta": "The object is not a spell: A has an untapped Prodigal Sorcerer (instead of Firebolt) and activates it targeting B.",
+          "expected": "B takes 1 damage (B at 19); the ability is removed from the stack and ceases to exist; Prodigal Sorcerer stays on the battlefield, tapped, and nothing goes to a graveyard."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Firebolt",
+        "Prodigal Sorcerer"
+      ],
+      "forge_notes": "The ability variant adds Prodigal Sorcerer (not summoning sick) to A's battlefield and removes Firebolt from the hand."
+    },
+    {
+      "id": "608.2p-1",
+      "rules": [
+        "608.2p"
+      ],
+      "title": "An ability that triggers when another ability resolves triggers after that resolution",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Narci, Fable Singer",
+            {
+              "card": "History of Benalia",
+              "counters": {
+                "LORE": 2
+              }
+            }
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Plains"
+          ]
+        },
+        "exile": {},
+        "notes": "A's precombat main phase has just begun: the turn-based action adds a lore counter to History of Benalia and the chapter ability for that counter goes on the stack. A controls no Knights."
+      },
+      "decisions": [
+        "Both players pass; the chapter ability resolves.",
+        "If two triggers of Narci, Fable Singer go on the stack together, A puts the life-drain trigger on top; both players pass on each and they resolve."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Chapter III (the final chapter) resolves; Narci's trigger fires: B loses 3 life (B at 17) and A gains 3 life (A at 23). History of Benalia is sacrificed by the state-based check and moves to A's graveyard; Narci's sacrifice trigger fires and A draws Plains."
+        },
+        {
+          "label": "not-final-chapter",
+          "polarity": "does_not_fire",
+          "delta": "History of Benalia starts with 1 lore counter instead of 2.",
+          "expected": "Chapter II resolves: A creates a 2/2 white Knight token with vigilance. Narci's trigger does not fire; life totals stay 20 and 20; History of Benalia stays on the battlefield with 2 lore counters; A draws nothing."
+        }
+      ],
+      "cards": [
+        "Narci, Fable Singer",
+        "History of Benalia",
+        "Plains"
+      ],
+      "forge_notes": "Forge implements the trigger as Mode$ AbilityResolves with ValidSpellAbility$ Triggered.LastChapter."
+    },
+    {
+      "id": "608.3a-1",
+      "rules": [
+        "608.3a"
+      ],
+      "title": "A permanent spell without targets enters the battlefield under its controller's control",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Forest",
+            "Forest"
+          ],
+          "B": [
+            "Island",
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Grizzly Bears"
+          ],
+          "B": [
+            "Counterspell"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Grizzly Bears, tapping both Forests.",
+        "B passes priority; A passes priority; Grizzly Bears resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears becomes a permanent and enters the battlefield under A's control."
+        },
+        {
+          "label": "countered",
+          "polarity": "does_not_fire",
+          "delta": "B responds with Counterspell, tapping both Islands.",
+          "expected": "Grizzly Bears never resolves: it is countered and moves to A's graveyard; nothing enters A's battlefield."
+        }
+      ],
+      "cards": [
+        "Forest",
+        "Island",
+        "Grizzly Bears",
+        "Counterspell"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "608.3b-1",
+      "rules": [
+        "608.3b",
+        "608.3c"
+      ],
+      "title": "An Aura spell enters attached to its target, or goes to the graveyard if the target is illegal",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Plains"
+          ],
+          "B": [
+            "Grizzly Bears",
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Pacifism"
+          ],
+          "B": [
+            "Unsummon"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Pacifism targeting Grizzly Bears, tapping both Plains.",
+        "B passes priority; A passes priority; Pacifism resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "does_not_fire",
+          "delta": "",
+          "expected": "Pacifism enters the battlefield under A's control attached to Grizzly Bears; Grizzly Bears can't attack or block."
+        },
+        {
+          "label": "target-leaves",
+          "polarity": "fires",
+          "delta": "B responds by casting Unsummon on Grizzly Bears, tapping Island.",
+          "expected": "Grizzly Bears is in B's hand; Pacifism has an illegal target, does not resolve and is put into A's graveyard; it never enters the battlefield."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Island",
+        "Grizzly Bears",
+        "Pacifism",
+        "Unsummon"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "608.3b-2",
+      "rules": [
+        "608.3b"
+      ],
+      "title": "A bestowed Aura spell with an illegal target resolves as a creature spell",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Grizzly Bears"
+          ],
+          "B": [
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Hopeful Eidolon"
+          ],
+          "B": [
+            "Unsummon"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Hopeful Eidolon for its bestow cost ({3}{W}) targeting Grizzly Bears, tapping all four Plains.",
+        "B passes priority; A passes priority; the spell resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "does_not_fire",
+          "delta": "",
+          "expected": "The target is legal: Hopeful Eidolon enters attached to Grizzly Bears as an Aura; Grizzly Bears is a 3/3 with lifelink and Hopeful Eidolon is not a creature."
+        },
+        {
+          "label": "target-leaves",
+          "polarity": "fires",
+          "delta": "B responds by casting Unsummon on A's Grizzly Bears, tapping Island.",
+          "expected": "Grizzly Bears is in A's hand. The bestowed spell does not fizzle: it becomes a creature spell and resolves, so Hopeful Eidolon enters A's battlefield as a 1/1 lifelink creature (not in the graveyard)."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Island",
+        "Grizzly Bears",
+        "Hopeful Eidolon",
+        "Unsummon"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "608.3d-1",
+      "rules": [
+        "608.3b",
+        "608.3d"
+      ],
+      "title": "A mutating creature spell merges with its target, or enters alone if the target is illegal",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Forest",
+            "Forest",
+            "Forest",
+            "Grizzly Bears"
+          ],
+          "B": [
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Gemrazer"
+          ],
+          "B": [
+            "Unsummon"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "B controls no artifact or enchantment, so Gemrazer's mutate trigger has no target."
+      },
+      "decisions": [
+        "A casts Gemrazer for its mutate cost ({1}{G}{G}) targeting Grizzly Bears, tapping all three Forests; A will put it over the target.",
+        "B passes priority; A passes priority; the spell resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Gemrazer merges with Grizzly Bears: A controls one creature permanent that is a 4/4 Gemrazer with reach and trample; Grizzly Bears is part of it, not a separate permanent."
+        },
+        {
+          "label": "target-leaves",
+          "polarity": "does_not_fire",
+          "delta": "B responds by casting Unsummon on A's Grizzly Bears, tapping Island.",
+          "expected": "Grizzly Bears is in A's hand. The mutating spell resolves as a creature spell: Gemrazer enters A's battlefield as an ordinary 4/4 with reach and trample; nothing merged."
+        }
+      ],
+      "cards": [
+        "Forest",
+        "Island",
+        "Grizzly Bears",
+        "Gemrazer",
+        "Unsummon"
+      ],
+      "forge_notes": "Mutate onto a creature then bouncing the target in response may be hard to reach in Forge's puzzle mode; use an interventional fork if needed."
+    },
+    {
+      "id": "608.3e-1",
+      "rules": [
+        "608.3e"
+      ],
+      "title": "A permanent spell that can't enter the battlefield is put into its owner's graveyard",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            "Island",
+            "Island"
+          ],
+          "B": [
+            "Worms of the Earth",
+            "Dryad Arbor",
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Clone"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Worms of the Earth: lands can't enter the battlefield."
+      },
+      "decisions": [
+        "A casts Clone, tapping all four Islands.",
+        "Both players pass; Clone resolves and A chooses to have it enter as a copy of Dryad Arbor."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "As a copy of Dryad Arbor Clone would be a land and can't enter the battlefield: Clone is put into A's graveyard."
+        },
+        {
+          "label": "copy-bears",
+          "polarity": "does_not_fire",
+          "delta": "A chooses to have Clone enter as a copy of Grizzly Bears.",
+          "expected": "A copy of Grizzly Bears is not a land: Clone enters A's battlefield as a 2/2 Grizzly Bears copy."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Worms of the Earth",
+        "Dryad Arbor",
+        "Grizzly Bears",
+        "Clone"
+      ],
+      "forge_notes": "Forge's Clone replacement effect and Worms' replacement ('Lands can't enter the battlefield') may not combine as the rule describes; verify in the engine."
+    },
+    {
+      "id": "608.3f-1",
+      "rules": [
+        "608.3f"
+      ],
+      "title": "A copy of a permanent spell becomes a token as it enters the battlefield",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Lithoform Engine"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Grizzly Bears"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Grizzly Bears, tapping two Forests.",
+        "With Grizzly Bears on the stack, A activates Lithoform Engine ({4}, {T}) targeting that spell, tapping the other four Forests.",
+        "Both players pass; the copy resolves, then both players pass again and the original resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "A controls two Grizzly Bears: the original card and a token that is the copy."
+        },
+        {
+          "label": "no-copy",
+          "polarity": "does_not_fire",
+          "delta": "A does not activate Lithoform Engine.",
+          "expected": "A controls one Grizzly Bears (the card) and no token."
+        }
+      ],
+      "cards": [
+        "Forest",
+        "Lithoform Engine",
+        "Grizzly Bears"
+      ],
+      "forge_notes": "Only the token-ness of the copy is hard to see in current records (needs_new_fields)."
+    },
+    {
+      "id": "608.3g-1",
+      "rules": [
+        "608.3g"
+      ],
+      "title": "A delayed trigger from a static ability on the stack is created as the permanent enters",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Mardu Scout"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Mardu Scout for its dash cost ({1}{R}), tapping both Mountains.",
+        "Both players pass; Mardu Scout resolves and enters the battlefield.",
+        "The turn advances to the beginning of the end step."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Mardu Scout enters with haste; at the beginning of the end step the delayed trigger returns it to A's hand."
+        },
+        {
+          "label": "hard-cast",
+          "polarity": "does_not_fire",
+          "delta": "A casts Mardu Scout for its normal mana cost ({R}{R}) instead of dashing it.",
+          "expected": "No delayed trigger is created: Mardu Scout stays on A's battlefield at the end step."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Mardu Scout"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

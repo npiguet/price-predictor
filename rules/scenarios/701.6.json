@@ -1,0 +1,329 @@
+{
+  "unit": "701.6",
+  "verified": true,
+  "review": [
+    "701.6b-1, 701.6b-2, 701.6b-3: the not_countered variants were labelled does_not_fire, but no refund ever happens, so 701.6b has no does_not_fire branch; relabelled them other (costs stay paid whether or not the spell or ability is countered)."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "701.6a-1",
+      "rules": [
+        "701.6a"
+      ],
+      "title": "A countered spell does not resolve and goes to its owner's graveyard",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Forest",
+            "Forest"
+          ],
+          "B": [
+            "Island",
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Grizzly Bears"
+          ],
+          "B": [
+            "Counterspell"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Both libraries are non-empty and irrelevant."
+      },
+      "decisions": [
+        "A casts Grizzly Bears, tapping both Forests.",
+        "B responds by casting Counterspell targeting Grizzly Bears, tapping both Islands.",
+        "Both players pass; Counterspell resolves.",
+        "Both players pass with the stack empty."
+      ],
+      "variants": [
+        {
+          "label": "countered",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Counterspell resolves and Grizzly Bears is countered: it never reaches the battlefield and is in A's graveyard. Counterspell is in B's graveyard. The stack is empty."
+        },
+        {
+          "label": "not_countered",
+          "polarity": "does_not_fire",
+          "delta": "B holds Counterspell and does not cast it; both players pass and Grizzly Bears resolves.",
+          "expected": "Grizzly Bears resolves and is on A's battlefield. Counterspell is still in B's hand. A's graveyard is empty."
+        }
+      ],
+      "cards": [
+        "Forest",
+        "Island",
+        "Grizzly Bears",
+        "Counterspell"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "701.6a-2",
+      "rules": [
+        "701.6a"
+      ],
+      "title": "A countered activated ability is removed from the stack and its effect does not occur",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Prodigal Sorcerer",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            "Island"
+          ]
+        },
+        "hand": {
+          "B": [
+            "Stifle"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A activates Prodigal Sorcerer, tapping it as the cost, targeting player B.",
+        "B responds by casting Stifle targeting Prodigal Sorcerer's activated ability, tapping Island.",
+        "Both players pass; Stifle resolves.",
+        "Both players pass with the stack empty."
+      ],
+      "variants": [
+        {
+          "label": "countered",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Stifle counters the ability: it leaves the stack without resolving and B's life stays at 20. Prodigal Sorcerer stays tapped on A's battlefield. Stifle is in B's graveyard."
+        },
+        {
+          "label": "not_countered",
+          "polarity": "does_not_fire",
+          "delta": "B does not cast Stifle; both players pass.",
+          "expected": "The ability resolves and deals 1 damage to B, whose life is 19. Prodigal Sorcerer is tapped on A's battlefield. Stifle is still in B's hand."
+        }
+      ],
+      "cards": [
+        "Prodigal Sorcerer",
+        "Island",
+        "Stifle"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "701.6b-1",
+      "rules": [
+        "701.6b"
+      ],
+      "title": "Mana spent on a countered spell is not refunded",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain"
+          ],
+          "B": [
+            "Island",
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Shock"
+          ],
+          "B": [
+            "Counterspell"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Shock costs one mana; the second Mountain stays untapped."
+      },
+      "decisions": [
+        "A casts Shock targeting player B, tapping the first Mountain.",
+        "B responds by casting Counterspell targeting Shock, tapping both Islands.",
+        "Both players pass; Counterspell resolves.",
+        "Both players pass with the stack empty."
+      ],
+      "variants": [
+        {
+          "label": "countered",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Shock is countered and goes to A's graveyard; B's life stays 20. The first Mountain stays tapped (A's mana is not refunded) and the second Mountain is untapped."
+        },
+        {
+          "label": "not_countered",
+          "polarity": "other",
+          "delta": "B does not cast Counterspell and passes.",
+          "expected": "Shock resolves and deals 2 damage to B, whose life is 18. The first Mountain is tapped as in the base variant."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Island",
+        "Shock",
+        "Counterspell"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "701.6b-2",
+      "rules": [
+        "701.6b"
+      ],
+      "title": "Permanents sacrificed to cast a countered spell stay sacrificed",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain"
+          ],
+          "B": [
+            "Island",
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Fireblast"
+          ],
+          "B": [
+            "Counterspell"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Fireblast targeting player B, paying its alternative cost by sacrificing both Mountains.",
+        "B responds by casting Counterspell targeting Fireblast, tapping both Islands.",
+        "Both players pass; Counterspell resolves.",
+        "Both players pass with the stack empty."
+      ],
+      "variants": [
+        {
+          "label": "countered",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Fireblast is countered and goes to A's graveyard together with both sacrificed Mountains (they do not return to the battlefield). B's life stays 20."
+        },
+        {
+          "label": "not_countered",
+          "polarity": "other",
+          "delta": "B does not cast Counterspell and passes.",
+          "expected": "Fireblast resolves and deals 4 damage to B, whose life is 16. Both Mountains are in A's graveyard as in the base variant."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Island",
+        "Fireblast",
+        "Counterspell"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "701.6b-3",
+      "rules": [
+        "701.6b"
+      ],
+      "title": "A creature sacrificed as the cost of a countered ability stays sacrificed",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Mogg Fanatic",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            "Island"
+          ]
+        },
+        "hand": {
+          "B": [
+            "Stifle"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A activates Mogg Fanatic, sacrificing it as the cost, targeting player B.",
+        "B responds by casting Stifle targeting the Mogg Fanatic ability, tapping Island.",
+        "Both players pass; Stifle resolves.",
+        "Both players pass with the stack empty."
+      ],
+      "variants": [
+        {
+          "label": "countered",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The ability is countered: B's life stays 20. Mogg Fanatic stays in A's graveyard and does not return to the battlefield."
+        },
+        {
+          "label": "not_countered",
+          "polarity": "other",
+          "delta": "B does not cast Stifle and passes.",
+          "expected": "The ability resolves and deals 1 damage to B, whose life is 19. Mogg Fanatic is in A's graveyard."
+        }
+      ],
+      "cards": [
+        "Mogg Fanatic",
+        "Island",
+        "Stifle"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

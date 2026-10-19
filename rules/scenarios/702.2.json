@@ -1,0 +1,264 @@
+{
+  "unit": "702.2",
+  "verified": true,
+  "review": [
+    "702.2c-1: the two_blockers variant blocked with a Grizzly Bears that was not on B's battlefield, so it changed the setup and the blocks at once; put Grizzly Bears on B's battlefield in the base setup (not blocking) so the variant changes only the block declaration."
+  ],
+  "skipped": [
+    {
+      "id": "702.2d",
+      "reason": "cannot be illustrated with cards Forge implements: it needs a deathtouch source that deals damage from the hand, graveyard, exile or library (a card in such a zone made to deal damage while holding deathtouch), and no simple, well-known card reaches that state in a two-player game; the deathtouch outcome itself is covered by 702.2b-1, 702.2b-2 and 702.2e-1"
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "702.2b-1",
+      "rules": [
+        "702.2b"
+      ],
+      "title": "A creature dealt combat damage by a deathtouch source is destroyed regardless of toughness",
+      "record_kind": "combat",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Hill Giant",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            "Typhoid Rats"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A attacks player B with Hill Giant.",
+        "B blocks Hill Giant with Typhoid Rats.",
+        "No spells or abilities are used; combat damage is dealt."
+      ],
+      "variants": [
+        {
+          "label": "deathtouch_blocker",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Hill Giant deals 3 damage to Typhoid Rats and Typhoid Rats deals 1 damage to Hill Giant. Both creatures are destroyed and are in their owners' graveyards. B's life stays 20."
+        },
+        {
+          "label": "plain_blocker",
+          "polarity": "does_not_fire",
+          "delta": "B's blocker is Mons's Goblin Raiders (1/1, no abilities) instead of Typhoid Rats.",
+          "expected": "Hill Giant deals 3 damage to Mons's Goblin Raiders, which is destroyed. Hill Giant has 1 damage marked and stays on the battlefield. B's life stays 20."
+        }
+      ],
+      "cards": [
+        "Hill Giant",
+        "Typhoid Rats",
+        "Mons's Goblin Raiders"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.2b-2",
+      "rules": [
+        "702.2b"
+      ],
+      "title": "Noncombat damage from a deathtouch source destroys a creature",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Prodigal Sorcerer",
+              "summoning_sick": false
+            },
+            {
+              "card": "Basilisk Collar",
+              "attached_to": "Prodigal Sorcerer"
+            }
+          ],
+          "B": [
+            "Hill Giant"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Basilisk Collar is already attached, so no equip cost is paid."
+      },
+      "decisions": [
+        "A activates Prodigal Sorcerer, tapping it as the cost, targeting Hill Giant.",
+        "Both players pass; the ability resolves.",
+        "Both players pass with the stack empty."
+      ],
+      "variants": [
+        {
+          "label": "equipped",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Prodigal Sorcerer deals 1 damage to Hill Giant, which is destroyed in the next state-based check and is in B's graveyard. A gains 1 life (20 to 21) from lifelink."
+        },
+        {
+          "label": "unequipped",
+          "polarity": "does_not_fire",
+          "delta": "Basilisk Collar is not on the battlefield.",
+          "expected": "Prodigal Sorcerer deals 1 damage to Hill Giant, which stays on the battlefield with 1 damage marked. A's life stays 20."
+        }
+      ],
+      "cards": [
+        "Prodigal Sorcerer",
+        "Basilisk Collar",
+        "Hill Giant"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.2c-1",
+      "rules": [
+        "702.2c"
+      ],
+      "title": "With deathtouch and trample, 1 damage is lethal to each blocker and the rest tramples over",
+      "record_kind": "combat",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Colossal Dreadmaw",
+              "summoning_sick": false
+            },
+            {
+              "card": "Basilisk Collar",
+              "attached_to": "Colossal Dreadmaw"
+            }
+          ],
+          "B": [
+            "Hill Giant",
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Basilisk Collar gives the trampling Colossal Dreadmaw deathtouch and lifelink. B's Grizzly Bears does not block in the base variant."
+      },
+      "decisions": [
+        "A attacks player B with Colossal Dreadmaw.",
+        "B blocks Colossal Dreadmaw with Hill Giant only; Grizzly Bears does not block.",
+        "A assigns 1 damage to Hill Giant and 5 damage to player B.",
+        "No spells or abilities are used; combat damage is dealt."
+      ],
+      "variants": [
+        {
+          "label": "deathtouch_trample",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Hill Giant takes 1 damage from a deathtouch source and is destroyed. B takes 5 damage (life 15). Hill Giant deals 3 damage to Colossal Dreadmaw, which survives. A gains 6 life from lifelink (life 26)."
+        },
+        {
+          "label": "no_collar",
+          "polarity": "does_not_fire",
+          "delta": "Basilisk Collar is not on the battlefield, so A must assign 3 damage (lethal) to Hill Giant and assigns the other 3 damage to player B.",
+          "expected": "Hill Giant is destroyed by 3 damage. B takes 3 damage (life 17). A's life stays 20. Colossal Dreadmaw survives with 3 damage marked."
+        },
+        {
+          "label": "two_blockers",
+          "polarity": "fires",
+          "delta": "Grizzly Bears also blocks Colossal Dreadmaw, and A assigns 1 damage to Hill Giant, 1 damage to Grizzly Bears and 4 damage to player B.",
+          "expected": "Hill Giant and Grizzly Bears are both destroyed. B takes 4 damage (life 16). Colossal Dreadmaw takes 5 damage and survives. A gains 6 life (life 26)."
+        }
+      ],
+      "cards": [
+        "Colossal Dreadmaw",
+        "Basilisk Collar",
+        "Hill Giant",
+        "Grizzly Bears"
+      ],
+      "forge_notes": "Lifelink and the two-blocker variant add observable side effects; the damage assignment must be fixed by the harness rather than by Forge's AI."
+    },
+    {
+      "id": "702.2e-1",
+      "rules": [
+        "702.2e"
+      ],
+      "title": "A source that left the battlefield is judged by its last known information for deathtouch",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Mogg Fanatic",
+              "summoning_sick": false
+            },
+            {
+              "card": "Basilisk Collar",
+              "attached_to": "Mogg Fanatic"
+            }
+          ],
+          "B": [
+            "Hill Giant"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Basilisk Collar is already attached."
+      },
+      "decisions": [
+        "A activates Mogg Fanatic, sacrificing it as the cost, targeting Hill Giant.",
+        "Both players pass; the ability resolves.",
+        "Both players pass with the stack empty."
+      ],
+      "variants": [
+        {
+          "label": "equipped_when_sacrificed",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Mogg Fanatic is in A's graveyard and Basilisk Collar is unattached on A's battlefield. The ability deals 1 damage to Hill Giant, which is destroyed in the next state-based check. A gains 1 life (life 21)."
+        },
+        {
+          "label": "unequipped",
+          "polarity": "does_not_fire",
+          "delta": "Basilisk Collar is not on the battlefield.",
+          "expected": "Mogg Fanatic is in A's graveyard. The ability deals 1 damage to Hill Giant, which stays on the battlefield with 1 damage marked. A's life stays 20."
+        }
+      ],
+      "cards": [
+        "Mogg Fanatic",
+        "Basilisk Collar",
+        "Hill Giant"
+      ],
+      "forge_notes": "Depends on Forge capturing the sacrificed creature's keywords (last known information) as the damage source; if it checks the card in the graveyard instead, the base variant will differ."
+    }
+  ]
+}
