@@ -368,6 +368,20 @@ The acting-player bits stay. Every row but the owner rows is an input-layout cha
 
 **The pairing belongs in the trunk's input.** Two forms would carry it: each card slot gains the board position of the attacker it blocks, or the trunk's attention gains a bias between a blocker and its attacker, as it could between an aura and the permanent it enchants. Either needs no new collection, since the snapshot already holds the pairing.
 
+## Combat could get lethality copies of its own, as damage spells have in gen-2
+
+**Gen-2's lethality copies cover damage spells only, and combat is now the weaker of the two.** A copy redraws a qualifying record's damage amount and the hit creature's toughness, and labels the death by the rule rather than by what Forge did. The gen-2 record's combat grids show where combat stands without them. Before the copies, the model separated a lethal block from a non-lethal one better than a lethal spell from a non-lethal one. With the copies and a tenth of the learning rate, the spell grid's error falls below every combat grid's. The combat boundary stays soft on every checkpoint, the attacker's death sits further from the rule than the blocker's, and a first striker is predicted to die as often as a creature without the keyword.
+
+**A combat copy would redraw the numbers of a qualifying block and label every death by the rule.** It would set one creature's power and the other's toughness, label both creatures' deaths and their damage taken by rules 510 and 702, and could grant a damage-step keyword with the step marker set to match. The first-strike step makes 6% of combat records, and blocked fights are a part of those. A keyword copy could show a first striker surviving its blocker as often as training needs.
+
+**Whether gen-3 adopts them depends on what the rest of gen-3 already fixes.** Four items above change the same outcomes: the snapshot taken before the damage step, the block pairing in the input, the whole first-strike step collected, and training that draws more of the records a weak field needs. Combat copies are worth their cost only for what remains after those. Three questions to settle with them:
+
+- Which blocks qualify: single blocks only, or several blockers once the pairing is in the input, with damage assignment order and trample.
+- Whether rule labels or Forge's outcome is the target. Gen-2's spell copies chose the rule. Combat copies would make the same choice, unless a rule-by-rule coverage plan settles it differently.
+- How many copies, and how they share an epoch with the field-weighted sampling.
+
+The combat grid measures the result on blocks from the validation strata, which copies never touch.
+
 ## Outcome
 
 To be filled in once gen-3 is designed and run.
