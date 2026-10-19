@@ -55,3 +55,6 @@ output/
 
 # SDD worktrees
 /.worktrees/
+
+# Comprehensive Rules catalogue: cached Forge card names
+/rules/.forge-card-names.txt
