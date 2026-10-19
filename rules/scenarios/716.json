@@ -1,0 +1,309 @@
+{
+  "unit": "716",
+  "verified": true,
+  "review": [
+    "716.3-1: the opponents_land variant changed three facts (active player, who plays a land, which land); replaced it with the one-fact change that B controls Druid Class, and dropped the now unused Mountain."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "716.2a-1",
+      "rules": [
+        "716.2a"
+      ],
+      "title": "A level bar is activatable only at sorcery speed and only when the Class is one level below",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Druid Class"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Druid Class is level 1. Its bars: {2}{G}: Level 2 (additional land each turn); {4}{G}: Level 3."
+      },
+      "decisions": [
+        "A activates the Level 2 ability of Druid Class, tapping three Forests.",
+        "Both players pass; the ability resolves."
+      ],
+      "variants": [
+        {
+          "label": "level_two_at_sorcery_speed",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Legal: Druid Class is level 1 and it is A's main phase with an empty stack. The ability resolves and Druid Class becomes level 2."
+        },
+        {
+          "label": "instant_timing",
+          "polarity": "does_not_fire",
+          "delta": "It is B's upkeep (B is the active player) and A has priority.",
+          "expected": "Not legal: a level bar can be activated only as a sorcery."
+        },
+        {
+          "label": "already_level_two",
+          "polarity": "does_not_fire",
+          "delta": "Druid Class is already level 2.",
+          "expected": "Not legal: the Level 2 bar requires the Class to be level 1."
+        },
+        {
+          "label": "skipping_a_level",
+          "polarity": "does_not_fire",
+          "delta": "A attempts the Level 3 ability ({4}{G}, tapping all five Forests) while Druid Class is level 1.",
+          "expected": "Not legal: the Level 3 bar requires the Class to be level 2."
+        }
+      ],
+      "cards": [
+        "Forest",
+        "Druid Class"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "716.2a-2",
+      "rules": [
+        "716.2a"
+      ],
+      "title": "A level's static ability applies as long as the Class is at least that level",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Druid Class",
+            "Forest"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Forest"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "A has already played a land this turn (the Forest on the battlefield). Druid Class is level 2: its Level 2 text lets A play an additional land each turn. Druid Class's landfall trigger also gains A 1 life per land."
+      },
+      "decisions": [
+        "A attempts to play the Forest from hand as a second land this turn."
+      ],
+      "variants": [
+        {
+          "label": "level_two",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Legal: the Class is level 2, so it has the ability to play an additional land each turn. The Forest enters and the landfall trigger gains A 1 life (21)."
+        },
+        {
+          "label": "level_one",
+          "polarity": "does_not_fire",
+          "delta": "Druid Class is level 1.",
+          "expected": "Not legal: the Level 2 ability is not yet active and A has no land plays left."
+        }
+      ],
+      "cards": [
+        "Druid Class",
+        "Forest"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "716.2b-1",
+      "rules": [
+        "716.2b",
+        "716.2d"
+      ],
+      "title": "A copy of a Class does not copy its level; a permanent without a level is treated as level 1",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            "Island",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Druid Class"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Mirrormade"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "The original Druid Class is level 2. Mirrormade enters as a copy of any artifact or enchantment."
+      },
+      "decisions": [
+        "A casts Mirrormade (tapping three Islands); it resolves and A has it enter as a copy of Druid Class.",
+        "A activates the Level 2 ability of the copy, tapping three Forests."
+      ],
+      "variants": [
+        {
+          "label": "activate_the_copy",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Legal: the copy has no level (levels are not copiable) and is treated as level 1, so its Level 2 bar can be activated. It resolves and the copy becomes level 2. The original stays level 2."
+        },
+        {
+          "label": "activate_the_original",
+          "polarity": "does_not_fire",
+          "delta": "A activates the Level 2 ability of the original Druid Class instead of the copy's.",
+          "expected": "Not legal: the original is level 2 and the Level 2 bar requires level 1."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Forest",
+        "Druid Class",
+        "Mirrormade"
+      ],
+      "forge_notes": "The part of 716.2b about a permanent that stops being a Class keeping its level is not illustrated: no Forge card removes the Class type from a Class."
+    },
+    {
+      "id": "716.3-1",
+      "rules": [
+        "716.3"
+      ],
+      "title": "A Class's ability not preceded by a level bar works at every level",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Druid Class"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Forest"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Druid Class is level 1. Its top section is 'Landfall - whenever a land you control enters, you gain 1 life.'"
+      },
+      "decisions": [
+        "A plays Forest from hand.",
+        "The landfall trigger goes on the stack; both players pass and it resolves."
+      ],
+      "variants": [
+        {
+          "label": "level_one",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The landfall trigger fires although Druid Class is only level 1; A gains 1 life (21)."
+        },
+        {
+          "label": "level_two",
+          "polarity": "fires",
+          "delta": "Druid Class is level 2.",
+          "expected": "The landfall trigger fires the same way; A gains 1 life (21)."
+        },
+        {
+          "label": "opponent_controls_class",
+          "polarity": "does_not_fire",
+          "delta": "Druid Class is controlled by B instead of A.",
+          "expected": "The Forest enters under A's control, not under the Class controller's, so the landfall trigger does not fire. A and B stay at 20 life."
+        }
+      ],
+      "cards": [
+        "Druid Class",
+        "Forest"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "716.4-1",
+      "rules": [
+        "716.4"
+      ],
+      "title": "Level counters and class levels do not interact",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            "Island",
+            "Student of Warfare",
+            "Druid Class"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Venerated Teacher"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Druid Class is level 1. Student of Warfare is a leveler: 2 or more level counters make it a 3/3 with first strike. Venerated Teacher puts two level counters on each creature its controller has with level up."
+      },
+      "decisions": [
+        "A casts Venerated Teacher, tapping three Islands.",
+        "Both players pass; it resolves and enters. Its enters trigger goes on the stack; both players pass and it resolves."
+      ],
+      "variants": [
+        {
+          "label": "class_level_one",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Student of Warfare gets 2 level counters and becomes a 3/3 with first strike. Druid Class gets no level counters (it has no level up) and stays at class level 1."
+        },
+        {
+          "label": "class_level_three",
+          "polarity": "other",
+          "delta": "Druid Class is level 3.",
+          "expected": "Student of Warfare still gets exactly 2 level counters and becomes a 3/3 with first strike, not a higher level: Druid Class's class level plays no part. Druid Class gets no level counters and stays at class level 3."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Student of Warfare",
+        "Druid Class",
+        "Venerated Teacher"
+      ],
+      "forge_notes": "Forge needs the Class level to be set directly in the setup."
+    }
+  ]
+}

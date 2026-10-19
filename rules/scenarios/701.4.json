@@ -1,0 +1,83 @@
+{
+  "unit": "701.4",
+  "verified": true,
+  "review": [],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "701.4b-1",
+      "rules": [
+        "701.4b"
+      ],
+      "title": "An 'if a Dragon was beheld' condition looks at the Dragon as it was when beheld",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "B",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            "Shivan Dragon"
+          ],
+          "B": [
+            "Forest",
+            "Swamp",
+            "Mountain",
+            "Swamp",
+            "Mountain"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Dispelling Exhale"
+          ],
+          "B": [
+            "Llanowar Elves",
+            "Doom Blade"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "B has exactly five lands. B is the active player in main1 with an empty stack."
+      },
+      "decisions": [
+        "B casts Llanowar Elves, tapping Forest.",
+        "A responds with Dispelling Exhale targeting Llanowar Elves, tapping both Islands; as its optional additional cost A beholds a Dragon by choosing Shivan Dragon on the battlefield.",
+        "B responds with Doom Blade targeting Shivan Dragon, tapping one Swamp and one Mountain.",
+        "Both players pass; Doom Blade resolves and Shivan Dragon is destroyed.",
+        "Both players pass; Dispelling Exhale resolves. B has one Swamp and one Mountain untapped and pays the unless-cost if B is able to."
+      ],
+      "variants": [
+        {
+          "label": "beheld",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Shivan Dragon is in A's graveyard when Dispelling Exhale resolves, but a Dragon was beheld, so the unless-cost is {4}. B has only two untapped lands and cannot pay: Llanowar Elves is countered and moves to B's graveyard."
+        },
+        {
+          "label": "not_beheld",
+          "polarity": "does_not_fire",
+          "delta": "A does not pay the optional behold cost when casting Dispelling Exhale.",
+          "expected": "No Dragon was beheld, so the unless-cost is {2}. B pays {2} with the untapped Swamp and Mountain and Llanowar Elves resolves onto the battlefield. Shivan Dragon is still destroyed by Doom Blade."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Forest",
+        "Swamp",
+        "Mountain",
+        "Shivan Dragon",
+        "Dispelling Exhale",
+        "Llanowar Elves",
+        "Doom Blade"
+      ],
+      "forge_notes": "Forge reads the condition from Count$OptionalGenericCostPaid, which does not look at the Dragon at resolution; confirm the optional behold cost can be paid by choosing a battlefield Dragon."
+    }
+  ]
+}

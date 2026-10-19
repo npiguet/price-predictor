@@ -1,0 +1,135 @@
+{
+  "unit": "701.41",
+  "verified": true,
+  "review": [
+    "701.41a-1: base variant carried a delta (the target choice); moved the targets into decisions, emptied the base delta and restated the other deltas as target changes.",
+    "701.41a-2: two_other_creatures changed two facts (added Hill Giant and a target); dropped it, since 701.41a-1 already shows two counters. no_other_creature claimed the trigger is not put on the stack, but an up-to-two-targets ability can go on the stack with zero targets; expected now states only the observable outcome (no counters)."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "701.41a-1",
+      "rules": [
+        "701.41a"
+      ],
+      "title": "Support N on a spell puts a +1/+1 counter on each of up to N target creatures",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Forest",
+            "Forest",
+            "Grizzly Bears"
+          ],
+          "B": [
+            "Hill Giant"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Lead by Example"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Lead by Example (Support 2) targeting Grizzly Bears and Hill Giant, tapping both Forests.",
+        "Both players pass; Lead by Example resolves."
+      ],
+      "variants": [
+        {
+          "label": "two_targets",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Lead by Example resolves. Grizzly Bears gets a +1/+1 counter (3/3) and Hill Giant gets a +1/+1 counter (4/4)."
+        },
+        {
+          "label": "one_target",
+          "polarity": "other",
+          "delta": "Lead by Example targets only Grizzly Bears.",
+          "expected": "Lead by Example resolves. Grizzly Bears gets a +1/+1 counter (3/3). Hill Giant stays 3/3 with no counter."
+        },
+        {
+          "label": "no_target",
+          "polarity": "does_not_fire",
+          "delta": "Lead by Example is cast with no targets.",
+          "expected": "Lead by Example resolves with no targets. No counter is put on any creature; Grizzly Bears is 2/2 and Hill Giant is 3/3."
+        }
+      ],
+      "cards": [
+        "Forest",
+        "Grizzly Bears",
+        "Hill Giant",
+        "Lead by Example"
+      ],
+      "forge_notes": "Forge models Support as a PutCounter with the Support parameter; a zero-target cast needs TargetMin 0."
+    },
+    {
+      "id": "701.41a-2",
+      "rules": [
+        "701.41a"
+      ],
+      "title": "Support N on a permanent targets only other creatures",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Aerie Auxiliary"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Aerie Auxiliary, tapping all four Plains.",
+        "Aerie Auxiliary resolves and enters the battlefield; its support 2 trigger targets Grizzly Bears; the trigger resolves."
+      ],
+      "variants": [
+        {
+          "label": "one_other_creature",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears gets a +1/+1 counter (3/3). Aerie Auxiliary stays 3/3 with no counter."
+        },
+        {
+          "label": "no_other_creature",
+          "polarity": "does_not_fire",
+          "delta": "A controls no creature other than Aerie Auxiliary (no Grizzly Bears).",
+          "expected": "Aerie Auxiliary is not a legal target for its own support ability, so the ability targets no creature. No +1/+1 counter is put on any creature and Aerie Auxiliary stays 3/3."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Grizzly Bears",
+        "Aerie Auxiliary"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

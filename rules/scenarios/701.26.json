@@ -1,0 +1,133 @@
+{
+  "unit": "701.26",
+  "verified": true,
+  "review": [],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "701.26a-1",
+      "rules": [
+        "701.26a"
+      ],
+      "title": "Only an untapped permanent can be tapped",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Compassionate Healer",
+              "summoning_sick": false
+            },
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Twiddle"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Forest",
+            "Forest"
+          ]
+        },
+        "exile": {},
+        "notes": "Library lists are top first."
+      },
+      "decisions": [
+        "A casts Twiddle targeting Compassionate Healer, tapping Island.",
+        "Both players pass; Twiddle resolves and A chooses to tap.",
+        "If Compassionate Healer's trigger fires, it resolves and A keeps the scryed card on top."
+      ],
+      "variants": [
+        {
+          "label": "untapped",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Compassionate Healer becomes tapped and its trigger fires: A gains 1 life (21) and scries 1, keeping Forest on top."
+        },
+        {
+          "label": "already-tapped",
+          "polarity": "does_not_fire",
+          "delta": "Compassionate Healer starts tapped.",
+          "expected": "Twiddle resolves and tapping does nothing: Compassionate Healer stays tapped, it does not become tapped again, its trigger does not fire and A's life stays 20."
+        }
+      ],
+      "cards": [
+        "Compassionate Healer",
+        "Island",
+        "Twiddle",
+        "Forest"
+      ],
+      "forge_notes": "Forge's TapOrUntap prompt may not offer tap for an already tapped permanent; force the choice if so."
+    },
+    {
+      "id": "701.26b-1",
+      "rules": [
+        "701.26b"
+      ],
+      "title": "Only a tapped permanent can be untapped",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Servant of Tymaret",
+              "tapped": true,
+              "summoning_sick": false
+            },
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Twiddle"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Twiddle targeting Servant of Tymaret, tapping Island.",
+        "Both players pass; Twiddle resolves and A chooses to untap.",
+        "If Servant of Tymaret's trigger fires, it resolves."
+      ],
+      "variants": [
+        {
+          "label": "tapped",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Servant of Tymaret becomes untapped and its inspired trigger fires: B loses 1 life (19) and A gains 1 life (21)."
+        },
+        {
+          "label": "already-untapped",
+          "polarity": "does_not_fire",
+          "delta": "Servant of Tymaret starts untapped.",
+          "expected": "Twiddle resolves and untapping does nothing: Servant of Tymaret stays untapped, its trigger does not fire and life totals stay 20 and 20."
+        }
+      ],
+      "cards": [
+        "Servant of Tymaret",
+        "Island",
+        "Twiddle"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

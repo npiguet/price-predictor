@@ -1,0 +1,4 @@
+{"id": "702.126", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.126a", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "Each generic mana in the total cost of a spell with improvise can be paid by tapping an untapped artifact the caster controls.", "note": ""}
+{"id": "702.126b", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "Improvise applies after the total cost is determined, so it cannot pay colored mana and does not change the cost.", "note": ""}
+{"id": "702.126c", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "A second instance of improvise adds no further payment ability.", "note": ""}

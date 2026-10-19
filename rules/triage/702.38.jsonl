@@ -1,0 +1,3 @@
+{"id": "702.38", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.38a", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "A permanent with amplify N enters with N +1/+1 counters for each shared-creature-type card revealed from hand.", "note": ""}
+{"id": "702.38b", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "Each instance of amplify works separately, adding its own counters.", "note": ""}

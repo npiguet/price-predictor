@@ -1,0 +1,149 @@
+{
+  "unit": "702.31",
+  "verified": true,
+  "review": [],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.31b-1",
+      "rules": [
+        "702.31b"
+      ],
+      "title": "A creature with horsemanship can be blocked only by creatures with horsemanship",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Shu Cavalry",
+              "summoning_sick": false
+            },
+            {
+              "card": "Hill Giant",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            "Wu Light Cavalry",
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Shu Cavalry is a 2/2 with horsemanship, Hill Giant a 3/3 with no abilities, Wu Light Cavalry a 1/2 with horsemanship, Grizzly Bears a 2/2 with no abilities."
+      },
+      "decisions": [
+        "A attacks player B with Shu Cavalry and Hill Giant.",
+        "B declares Grizzly Bears blocking Shu Cavalry and Wu Light Cavalry not blocking."
+      ],
+      "variants": [
+        {
+          "label": "plain_blocks_horsemanship",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The block is illegal (Grizzly Bears has no horsemanship): Grizzly Bears is not a legal blocker for Shu Cavalry."
+        },
+        {
+          "label": "horsemanship_blocks_horsemanship",
+          "polarity": "does_not_fire",
+          "delta": "B declares Wu Light Cavalry blocking Shu Cavalry instead (Grizzly Bears does not block).",
+          "expected": "The block is legal: Wu Light Cavalry has horsemanship and blocks Shu Cavalry."
+        },
+        {
+          "label": "horsemanship_blocks_plain",
+          "polarity": "other",
+          "delta": "B declares Wu Light Cavalry blocking Hill Giant instead (Grizzly Bears does not block).",
+          "expected": "The block is legal: a creature with horsemanship can block a creature without it."
+        },
+        {
+          "label": "plain_blocks_plain",
+          "polarity": "other",
+          "delta": "B declares Grizzly Bears blocking Hill Giant instead (Wu Light Cavalry does not block).",
+          "expected": "The block is legal: neither creature involved has horsemanship."
+        }
+      ],
+      "cards": [
+        "Shu Cavalry",
+        "Hill Giant",
+        "Wu Light Cavalry",
+        "Grizzly Bears"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.31c-1",
+      "rules": [
+        "702.31c"
+      ],
+      "title": "A second instance of horsemanship does not change the blocking restriction",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Plains",
+            "Plains",
+            {
+              "card": "Shu Cavalry",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            "Wu Light Cavalry",
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Riding Red Hare"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Shu Cavalry already has horsemanship; Riding Red Hare gives it a second instance until end of turn."
+      },
+      "decisions": [
+        "A casts Riding Red Hare targeting Shu Cavalry, tapping all three Plains; both players pass and the spell resolves.",
+        "A attacks player B with Shu Cavalry (now 5/5).",
+        "B declares Grizzly Bears blocking Shu Cavalry; Wu Light Cavalry does not block."
+      ],
+      "variants": [
+        {
+          "label": "plain_blocker",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The block is illegal: with two instances of horsemanship Shu Cavalry is still blockable only by creatures with horsemanship, and Grizzly Bears has none."
+        },
+        {
+          "label": "horsemanship_blocker",
+          "polarity": "does_not_fire",
+          "delta": "B declares Wu Light Cavalry blocking Shu Cavalry instead (Grizzly Bears does not block).",
+          "expected": "The block is legal: Wu Light Cavalry has horsemanship."
+        }
+      ],
+      "cards": [
+        "Shu Cavalry",
+        "Riding Red Hare",
+        "Wu Light Cavalry",
+        "Grizzly Bears",
+        "Plains"
+      ],
+      "forge_notes": "Riding Red Hare is a sorcery cast in main1; the setup step is main1 and combat follows within the same decisions."
+    }
+  ]
+}

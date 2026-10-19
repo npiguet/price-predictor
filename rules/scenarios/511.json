@@ -1,0 +1,183 @@
+{
+  "unit": "511",
+  "verified": true,
+  "review": [
+    "511.3-1: decision said B was 'holding priority' in A's end of combat step, but A gets priority first; reworded so A passes and then B casts Condemn."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "511.2-1",
+      "rules": [
+        "511.2"
+      ],
+      "title": "An 'at end of combat' trigger fires as the end of combat step begins",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Grizzly Bears"
+          ],
+          "B": [
+            "Cinder Wall"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Cinder Wall (3/3 defender): whenever it blocks, destroy it at end of combat. Both creatures have been under their controllers' control since before this turn."
+      },
+      "decisions": [
+        "A attacks B with Grizzly Bears.",
+        "B blocks Grizzly Bears with Cinder Wall (base variant); its block trigger resolves in the declare blockers step.",
+        "No other spells or abilities are used; both players pass through combat damage and into the end of combat step."
+      ],
+      "variants": [
+        {
+          "label": "wall_blocks",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Combat damage is dealt first (Cinder Wall takes 2 damage and survives the damage step; Grizzly Bears takes 3 and dies). The delayed trigger fires as the end of combat step begins, and when it resolves Cinder Wall moves to B's graveyard before the postcombat main phase."
+        },
+        {
+          "label": "no_block",
+          "polarity": "does_not_fire",
+          "delta": "B declares no blockers.",
+          "expected": "Cinder Wall's block trigger never fires, so no 'end of combat' ability triggers: Cinder Wall stays on the battlefield, B's life is 18 and Grizzly Bears survives."
+        }
+      ],
+      "cards": [
+        "Grizzly Bears",
+        "Cinder Wall"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "511.2-2",
+      "rules": [
+        "511.2"
+      ],
+      "title": "An 'until end of combat' effect expires at the end of the combat phase, an 'until end of turn' effect does not",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Jade Statue",
+            "Grizzly Bears",
+            "Mountain",
+            "Mountain",
+            "Forest"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Giant Growth"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Jade Statue ({2}: becomes a 3/6 Golem artifact creature until end of combat; activate only during combat) has been under A's control since before this turn. Giant Growth is used only in the growth_persists variant. Observation points: A holds priority in the end of combat step, then in the postcombat main phase."
+      },
+      "decisions": [
+        "A activates Jade Statue, tapping both Mountains; the ability resolves.",
+        "A attacks B with Jade Statue; B declares no blockers.",
+        "No other spells or abilities are used; both players pass through combat damage, the end of combat step and into the postcombat main phase."
+      ],
+      "variants": [
+        {
+          "label": "statue_expires",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Jade Statue deals 3 combat damage (B at 17). In the end of combat step Jade Statue is still a 3/6 Golem artifact creature. In the postcombat main phase the effect has ended: Jade Statue is a noncreature artifact. Grizzly Bears is 2/2 throughout."
+        },
+        {
+          "label": "growth_persists",
+          "polarity": "does_not_fire",
+          "delta": "In the beginning of combat step A also casts Giant Growth (tapping Forest) targeting Grizzly Bears, and it resolves.",
+          "expected": "Jade Statue behaves as in the base variant (creature in the end of combat step, noncreature in the postcombat main phase), but Grizzly Bears is still 5/5 in both the end of combat step and the postcombat main phase, because Giant Growth lasts until end of turn."
+        }
+      ],
+      "cards": [
+        "Jade Statue",
+        "Grizzly Bears",
+        "Giant Growth",
+        "Mountain",
+        "Forest"
+      ],
+      "forge_notes": "Jade Statue uses Duration$ UntilEndOfCombat; confirm Forge removes it when the end of combat phase ends and not at the start of the end of combat step."
+    },
+    {
+      "id": "511.3-1",
+      "rules": [
+        "511.3"
+      ],
+      "title": "At the end of the end of combat step creatures are removed from combat",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Grizzly Bears"
+          ],
+          "B": [
+            "Plains"
+          ]
+        },
+        "hand": {
+          "B": [
+            "Condemn"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Grizzly Bears has been under A's control since before this turn. Condemn ({W} instant): put target attacking creature on the bottom of its owner's library; its controller gains life equal to its toughness."
+      },
+      "decisions": [
+        "A attacks B with Grizzly Bears; B declares no blockers.",
+        "Combat damage is dealt (B at 18); both players pass until the end of combat step.",
+        "In the end of combat step, A passes priority and B casts Condemn targeting Grizzly Bears, tapping Plains (base variant)."
+      ],
+      "variants": [
+        {
+          "label": "end_of_combat_step",
+          "polarity": "does_not_fire",
+          "delta": "",
+          "expected": "Grizzly Bears is still an attacking creature during the end of combat step, so casting Condemn is legal (has_legal_target true, can_play true). It resolves: Grizzly Bears goes to the bottom of A's library and A gains 2 life (22)."
+        },
+        {
+          "label": "postcombat_main",
+          "polarity": "fires",
+          "delta": "Both players pass in the end of combat step and B tries to cast Condemn in the postcombat main phase instead.",
+          "expected": "The end of combat step has ended, so Grizzly Bears has been removed from combat and is no longer attacking: Condemn has no legal target and casting it is not legal (can_play false). Grizzly Bears stays on the battlefield and A's life stays 20."
+        }
+      ],
+      "cards": [
+        "Grizzly Bears",
+        "Condemn",
+        "Plains"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

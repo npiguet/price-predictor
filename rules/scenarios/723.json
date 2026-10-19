@@ -1,0 +1,408 @@
+{
+  "unit": "723",
+  "verified": true,
+  "review": [
+    "723.1-1: decisions had B draw before its upkeep cast; the draw step follows upkeep, reworded.",
+    "723.1b-1: decisions skipped over the skipped B turn and A's intervening turn; made them explicit.",
+    "723.3-1: scenario records a playability verdict but triage listed only resolution for 723.3; added playability to the triage record_kinds."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "723.1-1",
+      "rules": [
+        "723.1"
+      ],
+      "title": "The controller of a player makes that player's decisions for the entire next turn, and no longer",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mindslaver",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains"
+          ],
+          "B": [
+            "Mountain",
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "B": [
+            "Lightning Bolt"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "B": [
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain"
+          ]
+        },
+        "exile": {},
+        "notes": "Mindslaver: '{4}, {T}, Sacrifice Mindslaver: You control target player during that player's next turn.'"
+      },
+      "decisions": [
+        "A activates Mindslaver targeting B, tapping four Plains; Mindslaver is sacrificed as a cost.",
+        "Both players pass; the ability resolves. A ends the turn.",
+        "B's first turn after the activation: B untaps. In B's upkeep the player making B's decisions casts Lightning Bolt from B's hand targeting B's Grizzly Bears, tapping B's Mountain.",
+        "Both players pass; Lightning Bolt resolves. B takes no other action and the turn ends.",
+        "A takes a turn and passes it. B's second turn after the activation: B untaps, draws and takes no action."
+      ],
+      "variants": [
+        {
+          "label": "upkeep_of_next_turn",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "A makes B's decisions from the first moment of B's turn: the Lightning Bolt cast in B's upkeep is A's choice. Lightning Bolt deals 3 damage to Grizzly Bears, which goes to B's graveyard; Lightning Bolt goes to B's graveyard; Mindslaver is in A's graveyard. B makes its own decisions in B's second turn."
+        },
+        {
+          "label": "end_step_of_next_turn",
+          "polarity": "fires",
+          "delta": "The Lightning Bolt is cast in B's end step of the first turn instead of its upkeep.",
+          "expected": "A still makes B's decisions in B's end step, the last step of the controlled turn: the Lightning Bolt cast is A's choice and kills Grizzly Bears. B makes its own decisions in B's second turn."
+        },
+        {
+          "label": "second_turn",
+          "polarity": "does_not_fire",
+          "delta": "The Lightning Bolt is cast in B's second turn after the activation (upkeep) instead of the first; B takes no action in its first turn.",
+          "expected": "The control effect ended at the beginning of B's second turn: B itself makes B's decisions, and the cast of Lightning Bolt in that turn is B's own choice. Lightning Bolt kills Grizzly Bears all the same; Mindslaver is in A's graveyard."
+        }
+      ],
+      "cards": [
+        "Mindslaver",
+        "Plains",
+        "Mountain",
+        "Grizzly Bears",
+        "Lightning Bolt"
+      ],
+      "forge_notes": "The observable is which player supplies B's decisions; the physical outcome of the fixed Bolt cast is identical across variants."
+    },
+    {
+      "id": "723.1a-1",
+      "rules": [
+        "723.1a"
+      ],
+      "title": "With several player-controlling effects on one player, the last one created is the one that works",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mindslaver",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains"
+          ],
+          "B": [
+            "Mindslaver",
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Mountain",
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "B": [
+            "Lightning Bolt"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "B": [
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain"
+          ]
+        },
+        "exile": {},
+        "notes": "Both players control a Mindslaver ('{4}, {T}, Sacrifice: You control target player during that player's next turn.'). The two copies are controlled by different players, so the legend rule does not apply."
+      },
+      "decisions": [
+        "A activates its Mindslaver targeting B, tapping four Plains.",
+        "B activates its own Mindslaver targeting B, tapping four Islands, in response to A's ability. The stack resolves from the top: B's ability first, then A's.",
+        "Both players pass; both abilities resolve. A ends the turn.",
+        "In B's next turn, the player making B's decisions casts Lightning Bolt from B's hand targeting B's Grizzly Bears, tapping B's Mountain, and the turn ends."
+      ],
+      "variants": [
+        {
+          "label": "a_resolves_last",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "A's effect is created last and overwrites B's control of itself: A makes B's decisions in B's next turn. Lightning Bolt kills Grizzly Bears; both Mindslavers are in their owners' graveyards."
+        },
+        {
+          "label": "b_resolves_last",
+          "polarity": "fires",
+          "delta": "B activates its own Mindslaver only after A's ability has resolved and A has passed priority with an empty stack, instead of in response.",
+          "expected": "B's effect is created last and overwrites A's: B makes its own decisions in B's next turn and A makes none of them. Lightning Bolt kills Grizzly Bears; both Mindslavers are in their owners' graveyards."
+        },
+        {
+          "label": "single_effect",
+          "polarity": "does_not_fire",
+          "delta": "B does not activate its Mindslaver.",
+          "expected": "Only A's effect exists, so nothing is overwritten: A makes B's decisions in B's next turn. Lightning Bolt kills Grizzly Bears; B's Mindslaver is still on the battlefield."
+        }
+      ],
+      "cards": [
+        "Mindslaver",
+        "Plains",
+        "Island",
+        "Mountain",
+        "Grizzly Bears",
+        "Lightning Bolt"
+      ],
+      "forge_notes": "The observable is which player supplies B's decisions."
+    },
+    {
+      "id": "723.1b-1",
+      "rules": [
+        "723.1b"
+      ],
+      "title": "A pending player-controlling effect waits through a skipped turn",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mindslaver",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains"
+          ],
+          "B": [
+            "Island",
+            "Island",
+            "Island",
+            "Mountain",
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "B": [
+            "Lightning Bolt",
+            "Meditate"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "B": [
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain"
+          ]
+        },
+        "exile": {},
+        "notes": "Meditate: 'Draw four cards. You skip your next turn.'"
+      },
+      "decisions": [
+        "A activates Mindslaver targeting B, tapping four Plains.",
+        "B responds by casting Meditate, tapping three Islands. Meditate resolves first (B draws four cards and will skip its next turn), then Mindslaver's ability resolves. A ends the turn. B's next turn is skipped; A takes its following turn and takes no action.",
+        "B's next turn actually taken (the turn after the skipped one): the player making B's decisions casts Lightning Bolt from B's hand during B's upkeep targeting B's Grizzly Bears, tapping B's Mountain.",
+        "Both players pass; Lightning Bolt resolves. The turn ends. The following B turn: B takes no action."
+      ],
+      "variants": [
+        {
+          "label": "turn_skipped",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "B's next turn is skipped and the control effect waits. In the first turn B actually takes (after A's following turn) A makes B's decisions and the Lightning Bolt cast is A's choice; Grizzly Bears dies. In the turn after that, B makes its own decisions."
+        },
+        {
+          "label": "no_skip",
+          "polarity": "does_not_fire",
+          "delta": "B does not cast Meditate; B's Meditate stays in hand and B's next turn is not skipped.",
+          "expected": "The effect applies to B's very next turn: A makes B's decisions in B's upkeep and casts Lightning Bolt, and Grizzly Bears dies. The effect is used up: in the following B turn B makes its own decisions."
+        }
+      ],
+      "cards": [
+        "Mindslaver",
+        "Plains",
+        "Island",
+        "Mountain",
+        "Grizzly Bears",
+        "Lightning Bolt",
+        "Meditate"
+      ],
+      "forge_notes": "In turn_skipped the 'next turn actually taken' is two turns later than in no_skip, so the Lightning Bolt is cast later in the turn order; the observable is which player supplies B's decisions."
+    },
+    {
+      "id": "723.3-1",
+      "rules": [
+        "723.3"
+      ],
+      "title": "A controlled player remains the active player and the controller gains no objects or turn",
+      "record_kind": "playability",
+      "setup": {
+        "active": "B",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            "Island"
+          ],
+          "B": [
+            "Island",
+            "Island",
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Divination"
+          ],
+          "B": [
+            "Divination"
+          ]
+        },
+        "graveyard": {
+          "A": [
+            "Mindslaver"
+          ]
+        },
+        "library": {
+          "A": [
+            "Island",
+            "Island",
+            "Island",
+            "Island"
+          ],
+          "B": [
+            "Island",
+            "Island",
+            "Island",
+            "Island"
+          ]
+        },
+        "exile": {},
+        "notes": "It is B's turn and A controls B for this turn through an already resolved Mindslaver (in A's graveyard). The stack is empty. Divination is a sorcery."
+      },
+      "decisions": [
+        "The engine evaluates the casts below; the verdict is recorded."
+      ],
+      "variants": [
+        {
+          "label": "controlled_player_casts",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "A, controlling B, can have B cast B's Divination from B's hand, paying with B's Islands: legal (can_play true), because B is still the active player and the stack is empty. The spell is cast by B."
+        },
+        {
+          "label": "controller_casts_own",
+          "polarity": "does_not_fire",
+          "delta": "A tries to cast A's own Divination from A's hand, paying with A's Islands, instead of B's.",
+          "expected": "Not legal (can_play false): A is not the active player, and controlling B does not change that, so A cannot cast a sorcery in B's turn."
+        }
+      ],
+      "cards": [
+        "Divination",
+        "Island",
+        "Mindslaver"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "723.7-1",
+      "rules": [
+        "723.7"
+      ],
+      "title": "A control effect can restrict the controlled player's actions, as Word of Command restricts mana abilities to lands",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Swamp",
+            "Swamp"
+          ],
+          "B": [
+            "Forest",
+            {
+              "card": "Llanowar Elves",
+              "summoning_sick": false
+            }
+          ]
+        },
+        "hand": {
+          "A": [
+            "Word of Command"
+          ],
+          "B": [
+            "Grizzly Bears"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Word of Command: 'Look at target opponent's hand and choose a card from it. You control that player until it finishes resolving. The player plays that card if able. While doing so, the player can activate mana abilities only if they are from lands that player controls.'"
+      },
+      "decisions": [
+        "A casts Word of Command targeting B, tapping two Swamps.",
+        "Both players pass; Word of Command resolves and A chooses Grizzly Bears from B's hand.",
+        "The controlled B attempts to play Grizzly Bears ({1}{G})."
+      ],
+      "variants": [
+        {
+          "label": "elves_mana",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "B cannot pay {1}{G}: only the Forest's mana can be used, because mana abilities of nonland permanents cannot be activated, so Llanowar Elves cannot be tapped (can_play false). Grizzly Bears stays in B's hand. Word of Command is in A's graveyard."
+        },
+        {
+          "label": "two_lands",
+          "polarity": "does_not_fire",
+          "delta": "B controls a second Forest instead of Llanowar Elves.",
+          "expected": "B pays {1}{G} with two Forests (can_play true) and plays Grizzly Bears, which enters B's battlefield. Word of Command is in A's graveyard."
+        }
+      ],
+      "cards": [
+        "Word of Command",
+        "Swamp",
+        "Forest",
+        "Llanowar Elves",
+        "Grizzly Bears"
+      ],
+      "forge_notes": "Forge implements the restriction with a CantBeActivated static on an effect owned by the targeted player."
+    }
+  ]
+}

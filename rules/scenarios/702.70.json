@@ -1,0 +1,130 @@
+{
+  "unit": "702.70",
+  "verified": true,
+  "review": [],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.70a-1",
+      "rules": [
+        "702.70a"
+      ],
+      "title": "Poisonous gives the damaged player poison counters when the creature deals combat damage to them",
+      "record_kind": "combat",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Virulent Sliver",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A attacks player B with Virulent Sliver.",
+        "B declares no blockers.",
+        "No spells or abilities are used; combat damage is dealt."
+      ],
+      "variants": [
+        {
+          "label": "unblocked",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Virulent Sliver deals 1 combat damage to B (life 19). Its poisonous 1 triggers and B gets 1 poison counter."
+        },
+        {
+          "label": "blocked",
+          "polarity": "does_not_fire",
+          "delta": "B blocks Virulent Sliver with Grizzly Bears.",
+          "expected": "Virulent Sliver deals its damage to Grizzly Bears and dies. No combat damage is dealt to B, poisonous does not trigger and B has no poison counters."
+        }
+      ],
+      "cards": [
+        "Virulent Sliver",
+        "Grizzly Bears"
+      ],
+      "forge_notes": "Virulent Sliver grants Poisonous:1 to every Sliver, itself included."
+    },
+    {
+      "id": "702.70b-1",
+      "rules": [
+        "702.70b"
+      ],
+      "title": "Each instance of poisonous triggers separately",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Virulent Sliver",
+              "summoning_sick": false
+            },
+            {
+              "card": "Virulent Sliver",
+              "summoning_sick": true
+            }
+          ],
+          "B": [
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A attacks player B with the Virulent Sliver that is not summoning sick.",
+        "B declares no blockers.",
+        "No spells or abilities are used; combat damage is dealt."
+      ],
+      "variants": [
+        {
+          "label": "two_instances",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The attacker has two instances of poisonous 1. Both trigger and B gets 2 poison counters. B's life is 19."
+        },
+        {
+          "label": "one_instance",
+          "polarity": "other",
+          "delta": "A controls only one Virulent Sliver (the attacker).",
+          "expected": "The attacker has one instance of poisonous 1. B gets 1 poison counter. B's life is 19."
+        },
+        {
+          "label": "blocked",
+          "polarity": "does_not_fire",
+          "delta": "B blocks the attacking Virulent Sliver with Grizzly Bears.",
+          "expected": "No combat damage is dealt to B. Neither poisonous instance triggers and B has no poison counters."
+        }
+      ],
+      "cards": [
+        "Virulent Sliver",
+        "Grizzly Bears"
+      ],
+      "forge_notes": "Two Virulent Slivers each grant Poisonous:1 to the attacker; confirm Forge keeps both as separate keyword instances."
+    }
+  ]
+}

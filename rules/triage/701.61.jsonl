@@ -1,0 +1,2 @@
+{"id": "701.61", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "701.61a", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "Foraging either exiles three cards from the forager's graveyard or sacrifices a Food, moving those objects to exile or the graveyard.", "note": "Names a choice (graveyard cards or Food) and its observable zone-change consequence."}

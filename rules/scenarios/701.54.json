@@ -1,0 +1,523 @@
+{
+  "unit": "701.54",
+  "verified": true,
+  "review": [
+    "701.54c-3, 701.54c-4: with three or four temptations the Ring's loot trigger also fires when Grizzly Bears attacks, but A's library was empty, so A would draw from an empty library and lose; gave A a library with Island on top and added the loot to decisions and every expected outcome.",
+    "701.54d-1: the b_tempted variant changed both the active player and the caster and tested only Ringwraiths' 'you' condition, not 701.54d; replaced it with has_creature (the same temptation with a creature to choose), dropped B's now-unused cards, and noted that 701.54d has no does_not_fire branch.",
+    "701.54b-1: 701.54b (Ring-bearer is not copiable) has an observable outcome through copy effects but was triaged definitional; reclassified as mechanical/continuous and added a Clone scenario."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "701.54a-1",
+      "rules": [
+        "701.54a"
+      ],
+      "title": "Each time the Ring tempts a player a creature becomes Ring-bearer until another one does",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Grizzly Bears",
+            "Runeclaw Bear"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Birthday Escape"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Forest"
+          ]
+        },
+        "exile": {},
+        "notes": "The Ring has tempted A once and Grizzly Bears is A's Ring-bearer. Library lists are top first; cards below the listed ones are irrelevant Forests. The Ring emblem and the Ring-bearer designation are not zones or fields the scenario format lists, so they are described here."
+      },
+      "decisions": [
+        "A casts Birthday Escape, tapping the Island.",
+        "Both players pass; Birthday Escape resolves: A draws a card, then the Ring tempts A.",
+        "A chooses Runeclaw Bear as the new Ring-bearer."
+      ],
+      "variants": [
+        {
+          "label": "new_bearer",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The Ring has tempted A twice. Runeclaw Bear is A's Ring-bearer (and legendary) and Grizzly Bears is no longer a Ring-bearer. A drew Forest."
+        },
+        {
+          "label": "same_bearer",
+          "polarity": "does_not_fire",
+          "delta": "A chooses Grizzly Bears again.",
+          "expected": "The Ring has tempted A twice. Grizzly Bears is still A's Ring-bearer and Runeclaw Bear is not. A drew Forest."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Grizzly Bears",
+        "Runeclaw Bear",
+        "Birthday Escape",
+        "Forest"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "701.54c-1",
+      "rules": [
+        "701.54c"
+      ],
+      "title": "The Ring makes the Ring-bearer legendary and unblockable by creatures with greater power",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            },
+            {
+              "card": "Runeclaw Bear",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            "Hill Giant"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "The Ring has tempted A once and Grizzly Bears (2/2) is A's Ring-bearer. Hill Giant is 3/3. The Ring emblem and the Ring-bearer designation are not zones or fields the scenario format lists, so they are described here."
+      },
+      "decisions": [
+        "A attacks B with Grizzly Bears.",
+        "B's blocks are declared: Hill Giant is considered as a blocker."
+      ],
+      "variants": [
+        {
+          "label": "greater_power",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears is legendary. Hill Giant (power 3) cannot block Grizzly Bears (power 2): the block is illegal."
+        },
+        {
+          "label": "equal_power",
+          "polarity": "does_not_fire",
+          "delta": "B's creature is Runeclaw Bear (2/2) instead of Hill Giant.",
+          "expected": "Runeclaw Bear (power 2, not greater than 2) can legally block Grizzly Bears."
+        },
+        {
+          "label": "not_bearer",
+          "polarity": "other",
+          "delta": "A attacks with Runeclaw Bear, which is not the Ring-bearer, and B's creature is Hill Giant.",
+          "expected": "Runeclaw Bear has no Ring evasion: Hill Giant can legally block it."
+        }
+      ],
+      "cards": [
+        "Grizzly Bears",
+        "Runeclaw Bear",
+        "Hill Giant"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "701.54c-2",
+      "rules": [
+        "701.54c"
+      ],
+      "title": "After two temptations the Ring-bearer attacking makes its controller loot",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            },
+            {
+              "card": "Runeclaw Bear",
+              "summoning_sick": false
+            }
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Forest"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Island"
+          ]
+        },
+        "exile": {},
+        "notes": "The Ring has tempted A twice and Grizzly Bears is A's Ring-bearer. Library lists are top first; cards below the listed ones are irrelevant Forests. The Ring emblem and the Ring-bearer designation are not zones or fields the scenario format lists, so they are described here."
+      },
+      "decisions": [
+        "A attacks B with Grizzly Bears.",
+        "The Ring's attack trigger resolves: A draws a card, then discards Forest."
+      ],
+      "variants": [
+        {
+          "label": "two_temptations",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The trigger fires: A draws Island and discards Forest. A's hand is [Island] and Forest is in A's graveyard."
+        },
+        {
+          "label": "one_temptation",
+          "polarity": "does_not_fire",
+          "delta": "The Ring has tempted A only once.",
+          "expected": "No trigger fires. A's hand stays [Forest] and Island stays on top of the library."
+        },
+        {
+          "label": "not_bearer",
+          "polarity": "other",
+          "delta": "A attacks with Runeclaw Bear, which is not the Ring-bearer.",
+          "expected": "No trigger fires. A's hand stays [Forest] and Island stays on top of the library."
+        }
+      ],
+      "cards": [
+        "Grizzly Bears",
+        "Runeclaw Bear",
+        "Forest",
+        "Island"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "701.54c-3",
+      "rules": [
+        "701.54c"
+      ],
+      "title": "After three temptations a creature blocking the Ring-bearer is sacrificed at end of combat",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            "Wall of Wood"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Island"
+          ]
+        },
+        "exile": {},
+        "notes": "The Ring has tempted A three times and Grizzly Bears (2/2) is A's Ring-bearer. Wall of Wood is 0/3 with defender. The Ring emblem and the Ring-bearer designation are not zones or fields the scenario format lists, so they are described here. Library lists are top first; cards below the listed ones are irrelevant Forests."
+      },
+      "decisions": [
+        "A attacks B with Grizzly Bears.",
+        "The Ring's attack trigger (A has been tempted two or more times) resolves: A draws Island and discards it.",
+        "B blocks Grizzly Bears with Wall of Wood; combat damage is dealt, and the end of combat step is reached."
+      ],
+      "variants": [
+        {
+          "label": "three_temptations",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears' attack makes A draw Island and discard it. Wall of Wood takes 2 damage and survives combat damage. At end of combat B sacrifices Wall of Wood: it moves to B's graveyard."
+        },
+        {
+          "label": "two_temptations",
+          "polarity": "does_not_fire",
+          "delta": "The Ring has tempted A only twice.",
+          "expected": "Grizzly Bears' attack makes A draw Island and discard it. Wall of Wood takes 2 damage and survives combat. Nothing is sacrificed: it stays on the battlefield with 2 damage marked until the cleanup step."
+        }
+      ],
+      "cards": [
+        "Grizzly Bears",
+        "Wall of Wood",
+        "Island"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "701.54c-4",
+      "rules": [
+        "701.54c"
+      ],
+      "title": "After four temptations the Ring-bearer's combat damage to a player makes each opponent lose 3 life",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            }
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Island"
+          ]
+        },
+        "exile": {},
+        "notes": "The Ring has tempted A four times and Grizzly Bears is A's Ring-bearer. The Ring emblem and the Ring-bearer designation are not zones or fields the scenario format lists, so they are described here. Library lists are top first; cards below the listed ones are irrelevant Forests."
+      },
+      "decisions": [
+        "A attacks B with Grizzly Bears. B has no blockers.",
+        "The Ring's attack trigger (A has been tempted two or more times) resolves: A draws Island and discards it.",
+        "Combat damage is dealt and the Ring's trigger resolves."
+      ],
+      "variants": [
+        {
+          "label": "four_temptations",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears' attack makes A draw Island and discard it. Grizzly Bears deals 2 combat damage to B and the Ring's trigger makes B lose 3 life: B's life is 15."
+        },
+        {
+          "label": "three_temptations",
+          "polarity": "does_not_fire",
+          "delta": "The Ring has tempted A only three times.",
+          "expected": "Grizzly Bears' attack makes A draw Island and discard it. Grizzly Bears deals 2 combat damage to B and no trigger fires: B's life is 18."
+        }
+      ],
+      "cards": [
+        "Grizzly Bears",
+        "Island"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "701.54d-1",
+      "rules": [
+        "701.54d"
+      ],
+      "title": "The Ring tempts a player, firing temptation triggers, even if there is no creature to choose",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Birthday Escape"
+          ]
+        },
+        "graveyard": {
+          "A": [
+            "Ringwraiths"
+          ]
+        },
+        "library": {
+          "A": [
+            "Forest"
+          ]
+        },
+        "exile": {},
+        "notes": "A controls no creature. Ringwraiths in A's graveyard: when the Ring tempts you, return it from your graveyard to your hand. Library lists are top first; cards below the listed ones are irrelevant Forests. The Ring emblem and the Ring-bearer designation are not zones or fields the scenario format lists, so they are described here."
+      },
+      "decisions": [
+        "A casts Birthday Escape, tapping the Island.",
+        "Both players pass; Birthday Escape resolves: A draws a card, then the Ring tempts A. A has no creature to choose as Ring-bearer.",
+        "Ringwraiths' trigger resolves if it fired."
+      ],
+      "variants": [
+        {
+          "label": "no_creature",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "A gets the Ring emblem and has no Ring-bearer, but the Ring still tempted A: Ringwraiths' trigger fires and Ringwraiths returns from A's graveyard to A's hand. A drew Forest."
+        },
+        {
+          "label": "has_creature",
+          "polarity": "other",
+          "delta": "A controls Grizzly Bears, which A chooses as Ring-bearer.",
+          "expected": "A gets the Ring emblem and Grizzly Bears becomes A's Ring-bearer (legendary). Ringwraiths' trigger fires and Ringwraiths returns to A's hand. A drew Forest."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Birthday Escape",
+        "Ringwraiths",
+        "Forest",
+        "Grizzly Bears"
+      ],
+      "forge_notes": "701.54d has no does_not_fire branch: completing the actions of 701.54a always counts as the Ring tempting the player."
+    },
+    {
+      "id": "701.54e-1",
+      "rules": [
+        "701.54e"
+      ],
+      "title": "A creature is your Ring-bearer only while it is on the battlefield under your control",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "B",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Grizzly Bears",
+            "Runeclaw Bear"
+          ],
+          "B": [
+            "Mountain",
+            "Mountain",
+            "Mountain"
+          ]
+        },
+        "hand": {
+          "B": [
+            "Act of Treason"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "The Ring has tempted A once and Grizzly Bears is A's Ring-bearer (legendary). Active player is B. The Ring emblem and the Ring-bearer designation are not zones or fields the scenario format lists, so they are described here."
+      },
+      "decisions": [
+        "B casts Act of Treason targeting Grizzly Bears, tapping three Mountains.",
+        "Both players pass; Act of Treason resolves: B gains control of Grizzly Bears until end of turn, untaps it and it gains haste.",
+        "The turn ends and control of Grizzly Bears returns to A."
+      ],
+      "variants": [
+        {
+          "label": "bearer_stolen",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "While B controls Grizzly Bears it is not A's Ring-bearer, so it is no longer legendary. After control returns to A it is still not a Ring-bearer: A has no Ring-bearer."
+        },
+        {
+          "label": "other_creature_stolen",
+          "polarity": "does_not_fire",
+          "delta": "B targets Runeclaw Bear with Act of Treason.",
+          "expected": "Grizzly Bears stays A's Ring-bearer and legendary. Runeclaw Bear is controlled by B until end of turn and is not a Ring-bearer."
+        }
+      ],
+      "cards": [
+        "Grizzly Bears",
+        "Runeclaw Bear",
+        "Mountain",
+        "Act of Treason"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "701.54b-1",
+      "rules": [
+        "701.54b"
+      ],
+      "title": "A copy of the Ring-bearer is not a Ring-bearer",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Grizzly Bears"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Clone"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "The Ring has tempted A once and Grizzly Bears is A's Ring-bearer, so it is legendary through the Ring emblem. The Ring emblem and the Ring-bearer designation are not zones or fields the scenario format lists, so they are described here."
+      },
+      "decisions": [
+        "A casts Clone, tapping four Islands.",
+        "Both players pass; Clone resolves and A has it enter as a copy of A's Ring-bearer.",
+        "If the legend rule applies, A keeps the original creature."
+      ],
+      "variants": [
+        {
+          "label": "copy_of_bearer",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Clone enters as Grizzly Bears, a 2/2 that is neither legendary nor a Ring-bearer. Both creatures stay on the battlefield and the original Grizzly Bears is still A's Ring-bearer."
+        },
+        {
+          "label": "printed_legendary",
+          "polarity": "other",
+          "delta": "A's Ring-bearer is Isamaru, Hound of Konda (a printed legendary 2/2) instead of Grizzly Bears.",
+          "expected": "Clone enters as Isamaru, Hound of Konda, legendary because that supertype is copiable, but not a Ring-bearer. The legend rule puts the Clone into A's graveyard; the original Isamaru stays A's Ring-bearer."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Grizzly Bears",
+        "Clone",
+        "Isamaru, Hound of Konda"
+      ],
+      "forge_notes": "701.54b has no does_not_fire branch: the designation is never copied. The printed_legendary variant contrasts it with a copiable supertype."
+    }
+  ]
+}

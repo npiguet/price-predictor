@@ -1,0 +1,4 @@
+{"id": "702.48", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.48a", "category": "mechanical", "observability": "direct", "record_kinds": ["playability", "resolution"], "outcome": "Sacrificing a permanent as an offering additional cost reduces the spell's cost by its mana cost and allows casting at instant speed.", "note": ""}
+{"id": "702.48b", "category": "decision", "observability": "none", "record_kinds": [], "outcome": "", "note": "choice timing; the sacrifice happens during cost payment"}
+{"id": "702.48c", "category": "mechanical", "observability": "direct", "record_kinds": ["playability"], "outcome": "The sacrificed permanent's generic and colored mana reduce the matching parts of the total cost, with excess colored reducing generic.", "note": ""}

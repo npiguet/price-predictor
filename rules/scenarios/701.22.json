@@ -1,0 +1,148 @@
+{
+  "unit": "701.22",
+  "verified": true,
+  "review": [
+    "701.22d-1: replaced the open Forge question with the result of reading GameAction.scry (the trigger runs with an empty library) and noted how the empty library is reached."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "701.22b-1",
+      "rules": [
+        "701.22b"
+      ],
+      "title": "Scrying 0 is not a scry event and triggers nothing",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Flamespeaker Adept",
+              "summoning_sick": false
+            },
+            "Snow-Covered Island",
+            "Snow-Covered Island",
+            "Snow-Covered Island",
+            "Snow-Covered Island",
+            "Snow-Covered Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Graven Lore"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest"
+          ]
+        },
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Graven Lore, paying with the five Snow-Covered Islands.",
+        "Both players pass; Graven Lore resolves: A scries 5 (looks at five Forests), keeps all five on top in order, then draws three cards."
+      ],
+      "variants": [
+        {
+          "label": "scry_five",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "A scries 5, so Flamespeaker Adept's 'whenever you scry' trigger fires: Flamespeaker Adept is 4/3 with first strike until end of turn. A draws three cards."
+        },
+        {
+          "label": "scry_zero",
+          "polarity": "does_not_fire",
+          "delta": "A pays for Graven Lore with the five non-snow Islands, so X is 0 and A scries 0.",
+          "expected": "No scry event occurs and Flamespeaker Adept's trigger does not fire: it stays 2/3 without first strike. A still draws three cards."
+        }
+      ],
+      "cards": [
+        "Flamespeaker Adept",
+        "Snow-Covered Island",
+        "Island",
+        "Forest",
+        "Graven Lore"
+      ],
+      "forge_notes": "GameAction.scry returns before any event when the scry number is 0."
+    },
+    {
+      "id": "701.22d-1",
+      "rules": [
+        "701.22d"
+      ],
+      "title": "A scry trigger fires after the scry even if the scry was impossible",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Flamespeaker Adept",
+              "summoning_sick": false
+            }
+          ]
+        },
+        "hand": {
+          "A": [
+            "Temple of Mystery"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": []
+        },
+        "exile": {},
+        "notes": "A drew the last card of A's library earlier, so A's library is empty but A has not lost the game."
+      },
+      "decisions": [
+        "A plays Temple of Mystery.",
+        "Its enters trigger goes on the stack; both players pass; it resolves and A scries 1 with an empty library."
+      ],
+      "variants": [
+        {
+          "label": "empty_library",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Temple of Mystery enters tapped. A has no cards to look at, but A still scried: Flamespeaker Adept's trigger fires and it is 4/3 with first strike until end of turn."
+        },
+        {
+          "label": "opponent_controls_adept",
+          "polarity": "does_not_fire",
+          "delta": "Flamespeaker Adept is controlled by B instead of A.",
+          "expected": "A scries but the trigger watches its controller's scries only: Flamespeaker Adept's trigger does not fire and it stays 2/3 without first strike."
+        }
+      ],
+      "cards": [
+        "Flamespeaker Adept",
+        "Temple of Mystery"
+      ],
+      "forge_notes": "GameAction.scry keeps a player with an empty library among the scrying players and runs the Scry trigger with ScryNum 0 after the (empty) arrangement."
+    }
+  ]
+}

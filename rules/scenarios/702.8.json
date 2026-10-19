@@ -1,0 +1,81 @@
+{
+  "unit": "702.8",
+  "verified": true,
+  "review": [
+    "skipped: removed 702.8b, which the triage classifies definitional (redundancy), so they need neither a scenario nor a skip.",
+    "triage/702.8.jsonl: was missing; wrote it (702.8a legality/playability, the rest definitional)."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.8a-1",
+      "rules": [
+        "702.8a"
+      ],
+      "title": "A creature spell with flash can be cast at instant timing, one without it cannot",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Grizzly Bears",
+            {
+              "card": "Mountain",
+              "tapped": true
+            }
+          ],
+          "B": [
+            "Forest",
+            "Forest"
+          ]
+        },
+        "hand": {
+          "A": [],
+          "B": [
+            "Ashcoat Bear"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Player B has priority after A passes in A's beginning of combat step, with an empty stack."
+      },
+      "decisions": [
+        "B, holding priority in A's beginning of combat step, checks whether the creature card in hand can be cast."
+      ],
+      "variants": [
+        {
+          "label": "flash_creature",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Casting Ashcoat Bear (flash) is legal for B: can_play is true. It can be paid with the two Forests."
+        },
+        {
+          "label": "no_flash_creature",
+          "polarity": "does_not_fire",
+          "delta": "B's hand holds Grizzly Bears (no flash) instead of Ashcoat Bear.",
+          "expected": "Casting Grizzly Bears is illegal for B in A's beginning of combat step: can_play is false."
+        },
+        {
+          "label": "flash_with_spell_on_stack",
+          "polarity": "other",
+          "delta": "Shock controlled by A targeting B is on the stack when B receives priority, and B's hand holds Ashcoat Bear.",
+          "expected": "Casting Ashcoat Bear in response to Shock is legal for B: can_play is true."
+        }
+      ],
+      "cards": [
+        "Grizzly Bears",
+        "Ashcoat Bear",
+        "Forest",
+        "Shock",
+        "Mountain"
+      ],
+      "forge_notes": "In the flash_with_spell_on_stack variant, put Shock on the stack as {\"card\": \"Shock\", \"controller\": \"A\", \"targets\": [\"B\"]}; A's battlefield otherwise holds a Mountain tapped for it."
+    }
+  ]
+}

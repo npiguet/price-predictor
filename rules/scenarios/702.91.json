@@ -1,0 +1,146 @@
+{
+  "unit": "702.91",
+  "verified": true,
+  "review": [],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.91a-1",
+      "rules": [
+        "702.91a"
+      ],
+      "title": "Battle cry gives each other attacking creature +1/+0",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Goblin Wardriver",
+              "summoning_sick": false
+            },
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            }
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A attacks player B with Goblin Wardriver and Grizzly Bears.",
+        "Goblin Wardriver's battle cry triggers on the attack declaration; both players pass and the trigger resolves.",
+        "B has no creatures and declares no blockers; combat damage is dealt."
+      ],
+      "variants": [
+        {
+          "label": "both_attack",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Battle cry triggers once and resolves. Grizzly Bears gets +1/+0 until end of turn and is 3/2; Goblin Wardriver stays 2/2. Combat damage: 2 + 3 = 5, so B's life is 15."
+        },
+        {
+          "label": "no_other_attacker",
+          "polarity": "does_not_fire",
+          "delta": "A attacks with Goblin Wardriver only; Grizzly Bears stays home.",
+          "expected": "Battle cry triggers and resolves with no other attacking creature to affect. Goblin Wardriver stays 2/2 and Grizzly Bears stays 2/2 untapped at home. Combat damage: 2, so B's life is 18."
+        },
+        {
+          "label": "battle_cry_creature_home",
+          "polarity": "does_not_fire",
+          "delta": "A attacks with Grizzly Bears only; Goblin Wardriver stays home.",
+          "expected": "Battle cry does not trigger because Goblin Wardriver did not attack. Grizzly Bears stays 2/2. Combat damage: 2, so B's life is 18."
+        }
+      ],
+      "cards": [
+        "Goblin Wardriver",
+        "Grizzly Bears"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.91b-1",
+      "rules": [
+        "702.91b"
+      ],
+      "title": "Each instance of battle cry triggers separately",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Reckless Pyrosurfer",
+              "summoning_sick": false
+            },
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            },
+            "Forest",
+            "Mountain"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Mountain",
+            "Rampant Growth"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Forest"
+          ]
+        },
+        "exile": {},
+        "notes": "A's library contains a Forest and nothing else relevant. A has not yet played a land this turn."
+      },
+      "decisions": [
+        "A plays Mountain from hand; Reckless Pyrosurfer's landfall trigger resolves and it gains battle cry until end of turn.",
+        "A casts Rampant Growth, tapping Forest and the first Mountain; it resolves and puts the Forest from the library onto the battlefield tapped. Landfall triggers again and resolves, so Reckless Pyrosurfer now has two instances of battle cry until end of turn.",
+        "A moves to combat and attacks player B with Reckless Pyrosurfer (haste) and Grizzly Bears.",
+        "Every battle cry trigger goes on the stack; both players pass and each resolves.",
+        "B has no creatures and declares no blockers; combat damage is dealt."
+      ],
+      "variants": [
+        {
+          "label": "two_instances",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Two battle cry triggers resolve separately. Grizzly Bears gets +2/+0 and is 4/2; Reckless Pyrosurfer stays 2/2. Combat damage: 2 + 4 = 6, so B's life is 14."
+        },
+        {
+          "label": "one_instance",
+          "polarity": "does_not_fire",
+          "delta": "A does not cast Rampant Growth, so only one land entered and Reckless Pyrosurfer has a single instance of battle cry.",
+          "expected": "One battle cry trigger resolves. Grizzly Bears gets +1/+0 and is 3/2. Combat damage: 2 + 3 = 5, so B's life is 15."
+        }
+      ],
+      "cards": [
+        "Reckless Pyrosurfer",
+        "Grizzly Bears",
+        "Forest",
+        "Mountain",
+        "Rampant Growth"
+      ],
+      "forge_notes": "Reckless Pyrosurfer gains battle cry through two separate Pump effects; check that Forge keeps two instances of the keyword rather than collapsing them."
+    }
+  ]
+}

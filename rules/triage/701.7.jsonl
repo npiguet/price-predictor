@@ -1,0 +1,4 @@
+{"id": "701.7", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "701.7a", "category": "mechanical", "observability": "direct", "record_kinds": ["resolution"], "outcome": "Creating tokens puts the specified number of tokens with the specified characteristics onto the battlefield.", "note": ""}
+{"id": "701.7b", "category": "mechanical", "observability": "direct", "record_kinds": ["rewrite"], "outcome": "A replacement effect on token creation applies before continuous effects modify the token, while one on entering applies after.", "note": ""}
+{"id": "701.7c", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}

@@ -1,0 +1,71 @@
+{
+  "unit": "702.30",
+  "verified": true,
+  "review": [],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.30a-1",
+      "rules": [
+        "702.30a"
+      ],
+      "title": "Echo makes its controller pay at the next upkeep or sacrifice the permanent",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "upkeep",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Pouncing Jaguar",
+            "Forest"
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Pouncing Jaguar (echo {G}) came under A's control during A's previous turn and A has not paid its echo cost yet. Forest is untapped."
+      },
+      "decisions": [
+        "The beginning of A's upkeep: the echo trigger goes on the stack.",
+        "A declines to pay {G}; the trigger resolves."
+      ],
+      "variants": [
+        {
+          "label": "unpaid",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Echo triggers and A does not pay: Pouncing Jaguar is sacrificed and is in A's graveyard. Forest stays untapped."
+        },
+        {
+          "label": "paid",
+          "polarity": "other",
+          "delta": "A pays {G} by tapping Forest when the trigger resolves.",
+          "expected": "Echo triggers and is paid: Pouncing Jaguar stays on the battlefield, Forest is tapped."
+        },
+        {
+          "label": "opponents_upkeep",
+          "polarity": "does_not_fire",
+          "delta": "It is B's upkeep: B is the active player.",
+          "expected": "No echo trigger fires: Pouncing Jaguar stays on the battlefield and Forest stays untapped."
+        },
+        {
+          "label": "already_paid",
+          "polarity": "does_not_fire",
+          "delta": "Pouncing Jaguar has been under A's control since before A's previous upkeep (its echo was paid then).",
+          "expected": "No echo trigger fires at this upkeep: Pouncing Jaguar stays on the battlefield and Forest stays untapped."
+        }
+      ],
+      "cards": [
+        "Pouncing Jaguar",
+        "Forest"
+      ],
+      "forge_notes": "The already_paid variant needs Forge's 'echo paid' flag set on Pouncing Jaguar; a puzzle state may have to set it explicitly."
+    }
+  ]
+}

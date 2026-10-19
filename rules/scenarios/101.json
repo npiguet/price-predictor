@@ -1,0 +1,315 @@
+{
+  "unit": "101",
+  "verified": true,
+  "review": [],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "101.2-1",
+      "rules": [
+        "101.2"
+      ],
+      "title": "A \"can't play lands\" effect beats \"may play an additional land\"",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Exploration",
+            "Aggressive Mining",
+            "Forest"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Forest",
+            "Forest"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "A has not played a land this turn. Aggressive Mining's \"You can't play lands\" applies to its controller."
+      },
+      "decisions": [
+        "A attempts to play a Forest from hand as a land play.",
+        "A attempts to play the second Forest from hand as a land play."
+      ],
+      "variants": [
+        {
+          "label": "mining_mine",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Both land plays are illegal (can_play false for each Forest): Exploration's additional land play does not override Aggressive Mining. Both Forests stay in A's hand."
+        },
+        {
+          "label": "mining_opponent",
+          "polarity": "does_not_fire",
+          "delta": "Aggressive Mining is controlled by B instead of A, so its \"You can't play lands\" applies to B only.",
+          "expected": "Both land plays are legal: the first Forest uses A's normal land play, the second uses Exploration's additional land play. Both Forests move from A's hand to the battlefield."
+        }
+      ],
+      "cards": [
+        "Exploration",
+        "Aggressive Mining",
+        "Forest"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "101.2-2",
+      "rules": [
+        "101.2"
+      ],
+      "title": "A \"can't attack\" effect beats an \"attacks each combat if able\" requirement",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "declare_attackers",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Bloodrock Cyclops",
+              "summoning_sick": false
+            },
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            {
+              "card": "Pacifism",
+              "attached_to": "Bloodrock Cyclops"
+            }
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "B controls Pacifism, which enchants A's Bloodrock Cyclops. B has no creatures."
+      },
+      "decisions": [
+        "A declares no attackers."
+      ],
+      "variants": [
+        {
+          "label": "pacified_cyclops",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Bloodrock Cyclops is not a legal attacker (Pacifism's can't-attack wins over its must-attack requirement), so declaring no attackers is legal and no creature attacks. B stays at 20 life."
+        },
+        {
+          "label": "pacified_bears",
+          "polarity": "does_not_fire",
+          "delta": "Pacifism enchants Grizzly Bears instead of Bloodrock Cyclops.",
+          "expected": "Bloodrock Cyclops is a legal attacker and must attack, so declaring no attackers is illegal. Declaring Bloodrock Cyclops alone is the legal declaration."
+        }
+      ],
+      "cards": [
+        "Bloodrock Cyclops",
+        "Grizzly Bears",
+        "Pacifism"
+      ],
+      "forge_notes": "Forge enforces MustAttack requirements when validating the declaration; the declaration must be given explicitly."
+    },
+    {
+      "id": "101.2a-1",
+      "rules": [
+        "101.2a"
+      ],
+      "title": "Adding and removing abilities follow timestamp order, not \"can't\" precedence",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Island",
+            "Island"
+          ],
+          "B": [
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Humble",
+            "Jump"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Humble: until end of turn, loses all abilities and has base power and toughness 0/1. Jump: gains flying until end of turn."
+      },
+      "decisions": [
+        "A casts Humble targeting Grizzly Bears, tapping Plains and Island. Both players pass; Humble resolves.",
+        "A casts Jump targeting Grizzly Bears, tapping Island. Both players pass; Jump resolves."
+      ],
+      "variants": [
+        {
+          "label": "humble_then_jump",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears is 0/1 and has flying: the later ability grant is not undone by the earlier loss of all abilities."
+        },
+        {
+          "label": "jump_then_humble",
+          "polarity": "does_not_fire",
+          "delta": "The decisions swap order: A casts Jump first (tapping Island) and Humble second (tapping Plains and Island).",
+          "expected": "Grizzly Bears is 0/1 and has no abilities, flying included: the later loss of all abilities removes the earlier grant."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Island",
+        "Humble",
+        "Jump",
+        "Grizzly Bears"
+      ],
+      "forge_notes": "Check that Forge applies Animate RemoveAllAbilities only to abilities with an earlier timestamp."
+    },
+    {
+      "id": "101.3-1",
+      "rules": [
+        "101.3"
+      ],
+      "title": "The impossible part of a discard instruction is ignored",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Swamp",
+            "Swamp",
+            "Swamp"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Mind Rot"
+          ],
+          "B": [
+            "Mountain"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Mind Rot makes the target player discard two cards."
+      },
+      "decisions": [
+        "A casts Mind Rot targeting B, tapping three Swamps.",
+        "Both players pass; Mind Rot resolves."
+      ],
+      "variants": [
+        {
+          "label": "one_card",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Mind Rot resolves. B discards the one card in hand (Mountain moves to B's graveyard); the second discard is impossible and ignored. B's hand is empty."
+        },
+        {
+          "label": "two_cards",
+          "polarity": "does_not_fire",
+          "delta": "B's hand is Mountain and Forest.",
+          "expected": "Mind Rot resolves. B discards both cards; Mountain and Forest move to B's graveyard."
+        },
+        {
+          "label": "empty_hand",
+          "polarity": "fires",
+          "delta": "B's hand is empty.",
+          "expected": "Mind Rot resolves. Both discards are impossible and ignored; nothing changes and no zone move occurs."
+        }
+      ],
+      "cards": [
+        "Swamp",
+        "Mind Rot",
+        "Mountain",
+        "Forest"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "101.4-1",
+      "rules": [
+        "101.4"
+      ],
+      "title": "Players' sacrifices chosen in APNAP order happen simultaneously",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Swamp",
+            "Blood Artist"
+          ],
+          "B": [
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Innocent Blood"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "A's Blood Artist triggers on its own death or another creature's death and A targets B with each trigger."
+      },
+      "decisions": [
+        "A casts Innocent Blood, tapping Swamp.",
+        "Both players pass; Innocent Blood resolves. A chooses Blood Artist to sacrifice, then B chooses Grizzly Bears.",
+        "Both Blood Artist triggers target B; both players pass and they resolve."
+      ],
+      "variants": [
+        {
+          "label": "both_sacrifice",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Blood Artist and Grizzly Bears are sacrificed together and go to their owners' graveyards. Blood Artist sees both deaths and triggers twice: B loses 2 life (18) and A gains 2 life (22)."
+        },
+        {
+          "label": "only_a_sacrifices",
+          "polarity": "does_not_fire",
+          "delta": "B controls no creature.",
+          "expected": "Only Blood Artist is sacrificed. Blood Artist triggers once: B loses 1 life (19) and A gains 1 life (21)."
+        }
+      ],
+      "cards": [
+        "Swamp",
+        "Blood Artist",
+        "Grizzly Bears",
+        "Innocent Blood"
+      ],
+      "forge_notes": "Confirm that Forge's Sacrifice effect moves all chosen cards in one batch so that the leaves-the-battlefield triggers see both deaths."
+    }
+  ]
+}

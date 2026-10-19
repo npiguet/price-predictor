@@ -1,0 +1,128 @@
+{
+  "unit": "702.193",
+  "verified": true,
+  "review": [
+    "702.193b-1: variant two_forests flipped legality only by removing mana, not by the reduction rule, and Forests let the base pass even if colored reduction were wrong; switched the lands to three Plains and replaced the variant with Gamma Grotesque, whose {2} cannot reduce the second {G} of its power-up cost."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.193a-1",
+      "rules": [
+        "702.193a"
+      ],
+      "title": "A power-up ability costs less if the permanent entered this turn and can be activated only once",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Hulk, Gamma Goliath",
+              "summoning_sick": true
+            },
+            "Forest",
+            "Forest",
+            "Forest"
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Hulk's power-up ability is '{6}{R}{G}: put five +1/+1 counters on Hulk'. summoning_sick true for Hulk means it entered the battlefield this turn."
+      },
+      "decisions": [
+        "A activates Hulk's power-up ability, paying with three Forests.",
+        "Both players pass; the ability resolves."
+      ],
+      "variants": [
+        {
+          "label": "entered_this_turn",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The activation is legal at the reduced cost {3}. Hulk gets five +1/+1 counters and is an 11/10."
+        },
+        {
+          "label": "entered_on_earlier_turn",
+          "polarity": "does_not_fire",
+          "delta": "Hulk entered the battlefield on an earlier turn (not summoning sick).",
+          "expected": "The activation is not legal: the cost stays {6}{R}{G} and three Forests cannot pay it. Hulk gets no counters."
+        },
+        {
+          "label": "already_activated",
+          "polarity": "does_not_fire",
+          "delta": "Hulk's power-up ability was already activated once (Hulk has five +1/+1 counters).",
+          "expected": "The activation is not legal: a power-up ability can be activated only once. Hulk keeps its five counters (11/10)."
+        }
+      ],
+      "cards": [
+        "Hulk, Gamma Goliath",
+        "Forest"
+      ],
+      "forge_notes": "Hulk's own ReduceCost static ability applies only to other creatures."
+    },
+    {
+      "id": "702.193b-1",
+      "rules": [
+        "702.193b"
+      ],
+      "title": "The permanent's mana cost reduces the matching generic, colored and colorless mana of the power-up cost",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Hulk, Gamma Goliath",
+              "summoning_sick": true
+            },
+            "Plains",
+            "Plains",
+            "Plains"
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Hulk's mana cost is {3}{R}{G}; its power-up cost is {6}{R}{G}. Gamma Grotesque's mana cost is {2}{G}; its power-up cost is {4}{G}{G}. summoning_sick true means the creature entered the battlefield this turn."
+      },
+      "decisions": [
+        "A checks the cost and legality of the creature's power-up activation with three Plains."
+      ],
+      "variants": [
+        {
+          "label": "hulk_colors_match",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The cost after adjustment is {3}: Hulk's {R} and {G} remove the {R}{G} of the power-up cost and Hulk's {3} removes 3 of the {6}. Three Plains pay it, so the activation is legal."
+        },
+        {
+          "label": "gamma_grotesque_extra_green",
+          "polarity": "does_not_fire",
+          "delta": "A's creature is Gamma Grotesque (mana cost {2}{G}, power-up {4}{G}{G}), also entered this turn, instead of Hulk.",
+          "expected": "The cost after adjustment is {2}{G}: Gamma Grotesque's {G} removes one {G} and its {2} removes only generic mana, so one {G} remains. Three Plains cannot pay {G}, so the activation is not legal."
+        }
+      ],
+      "cards": [
+        "Hulk, Gamma Goliath",
+        "Gamma Grotesque",
+        "Plains"
+      ],
+      "forge_notes": "Hulk's mana cost never exceeds the colored part of its power-up cost, so the 'excess reduces generic' branch of 702.193b cannot be reached with any card Forge implements."
+    }
+  ]
+}

@@ -1,0 +1,5 @@
+{"id": "702.169", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.169a", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.169b", "category": "mechanical", "observability": "indirect", "record_kinds": ["continuous"], "outcome": "A solved static ability applies only while the Case is solved.", "note": ""}
+{"id": "702.169c", "category": "mechanical", "observability": "direct", "record_kinds": ["trigger"], "outcome": "A solved triggered ability triggers only if the Case is solved.", "note": ""}
+{"id": "702.169d", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "A solved activated ability can be activated only if the Case is solved.", "note": ""}

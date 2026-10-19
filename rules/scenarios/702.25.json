@@ -1,0 +1,139 @@
+{
+  "unit": "702.25",
+  "verified": true,
+  "review": [],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.25a-1",
+      "rules": [
+        "702.25a"
+      ],
+      "title": "Flanking gives a non-flanking blocker -1/-1",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "declare_attackers",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Benalish Cavalry",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Benalish Cavalry (2/2 flanking) has been declared as an attacker."
+      },
+      "decisions": [
+        "A attacks player B with Benalish Cavalry.",
+        "B blocks Benalish Cavalry with Grizzly Bears.",
+        "The flanking trigger goes on the stack; both players pass and it resolves.",
+        "No other spells or abilities are used; combat damage is dealt."
+      ],
+      "variants": [
+        {
+          "label": "non_flanking_blocker",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Flanking triggers and Grizzly Bears gets -1/-1 until end of turn (1/1). Benalish Cavalry deals 2 damage, so Grizzly Bears moves to B's graveyard; Grizzly Bears deals 1 damage to Benalish Cavalry, which survives with 1 damage."
+        },
+        {
+          "label": "flanking_blocker",
+          "polarity": "does_not_fire",
+          "delta": "B's blocker is a second Benalish Cavalry instead of Grizzly Bears.",
+          "expected": "Flanking does not trigger. The blocker stays 2/2. Both Benalish Cavalry deal 2 damage to each other and both move to their owners' graveyards."
+        },
+        {
+          "label": "attacker_without_flanking",
+          "polarity": "other",
+          "delta": "A's attacker is Grizzly Bears instead of Benalish Cavalry.",
+          "expected": "No flanking trigger. Both Grizzly Bears are 2/2, deal 2 damage to each other and both move to their owners' graveyards."
+        }
+      ],
+      "cards": [
+        "Benalish Cavalry",
+        "Grizzly Bears"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.25b-1",
+      "rules": [
+        "702.25b"
+      ],
+      "title": "Two instances of flanking trigger separately",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "declare_attackers",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Benalish Cavalry",
+              "summoning_sick": false
+            },
+            {
+              "card": "Cavalry Master",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Cavalry Master gives other creatures A controls with flanking flanking, so Benalish Cavalry has two instances. Only Benalish Cavalry attacks; Cavalry Master stays home."
+      },
+      "decisions": [
+        "A attacks player B with Benalish Cavalry only.",
+        "B blocks Benalish Cavalry with Grizzly Bears.",
+        "Both flanking triggers go on the stack; both players pass and both resolve.",
+        "No other spells or abilities are used."
+      ],
+      "variants": [
+        {
+          "label": "two_instances",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Two flanking triggers resolve and Grizzly Bears gets -1/-1 twice (-2/-2, 0/0). Grizzly Bears moves to B's graveyard before combat damage. Benalish Cavalry takes no damage; B takes no damage (Benalish Cavalry stays blocked)."
+        },
+        {
+          "label": "one_instance",
+          "polarity": "other",
+          "delta": "Cavalry Master is not on A's battlefield, so Benalish Cavalry has only its own flanking.",
+          "expected": "One flanking trigger: Grizzly Bears becomes 1/1. It deals 1 damage to Benalish Cavalry and dies to its 2 damage. Benalish Cavalry survives with 1 damage."
+        },
+        {
+          "label": "flanking_blocker",
+          "polarity": "does_not_fire",
+          "delta": "B's blocker is a Benalish Cavalry instead of Grizzly Bears.",
+          "expected": "Neither instance of flanking triggers because the blocker has flanking. The blocker stays 2/2; both Benalish Cavalry deal 2 damage to each other and die."
+        }
+      ],
+      "cards": [
+        "Benalish Cavalry",
+        "Cavalry Master",
+        "Grizzly Bears"
+      ],
+      "forge_notes": "Forge must treat the granted Flanking as a second instance; if it dedupes keywords, the two_instances variant degrades to one trigger."
+    }
+  ]
+}

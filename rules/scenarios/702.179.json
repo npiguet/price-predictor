@@ -1,0 +1,277 @@
+{
+  "unit": "702.179",
+  "verified": true,
+  "review": [
+    "702.179d-1, 702.179d-2: setup did not fix that the once-per-turn speed trigger had not yet triggered this turn; added to notes.",
+    "702.179f-1: expected strings carried reasoning; reduced to the observable speed outcomes."
+  ],
+  "skipped": [
+    {
+      "id": "702.179c",
+      "reason": "cannot be illustrated with cards Forge implements: no card in the Forge card corpus instructs a player to increase their speed by a value (the only increase is the inherent trigger of 702.179d, which exists only once the player already has speed), and the first-speed path through a start your engines permanent is covered by 702.179a-1"
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "702.179a-1",
+      "rules": [
+        "702.179a"
+      ],
+      "title": "A player with no speed who controls a start your engines permanent gets speed 1",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Forest",
+            "Forest"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Burnout Bashtronaut",
+            "Grizzly Bears"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Neither player has any speed."
+      },
+      "decisions": [
+        "A casts Burnout Bashtronaut (R), tapping Mountain.",
+        "Both players pass; Burnout Bashtronaut resolves and the next state-based check is performed."
+      ],
+      "variants": [
+        {
+          "label": "start_your_engines",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Burnout Bashtronaut enters the battlefield. In the state-based check A's speed becomes 1. B still has no speed."
+        },
+        {
+          "label": "no_keyword",
+          "polarity": "other",
+          "delta": "A casts Grizzly Bears (1G), tapping both Forests, instead of Burnout Bashtronaut.",
+          "expected": "Grizzly Bears enters the battlefield. A still has no speed. B still has no speed."
+        },
+        {
+          "label": "already_has_speed",
+          "polarity": "does_not_fire",
+          "delta": "A already has speed 3 before casting Burnout Bashtronaut.",
+          "expected": "Burnout Bashtronaut enters the battlefield. A's speed stays 3."
+        }
+      ],
+      "cards": [
+        "Burnout Bashtronaut",
+        "Grizzly Bears",
+        "Mountain",
+        "Forest"
+      ]
+    },
+    {
+      "id": "702.179d-1",
+      "rules": [
+        "702.179d"
+      ],
+      "title": "Speed rises when an opponent loses life during your turn",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Burnout Bashtronaut",
+              "summoning_sick": false
+            },
+            "Mountain"
+          ],
+          "B": [
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Shock"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "A's speed is 1 (A has had speed since Burnout Bashtronaut entered). B has no speed. It is A's turn. A's speed has not increased yet this turn."
+      },
+      "decisions": [
+        "A casts Shock targeting player B, tapping Mountain.",
+        "Both players pass; Shock resolves."
+      ],
+      "variants": [
+        {
+          "label": "opponent_loses_life",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "B loses 2 life (life 18). The speed trigger fires and A's speed becomes 2."
+        },
+        {
+          "label": "creature_target",
+          "polarity": "does_not_fire",
+          "delta": "Shock targets B's Grizzly Bears instead of player B.",
+          "expected": "Grizzly Bears moves to B's graveyard. B's life stays 20. The speed trigger does not fire and A's speed stays 1."
+        },
+        {
+          "label": "max_speed",
+          "polarity": "does_not_fire",
+          "delta": "A's speed is 4 instead of 1.",
+          "expected": "B loses 2 life (life 18). The speed trigger does not fire and A's speed stays 4."
+        },
+        {
+          "label": "opponents_turn",
+          "polarity": "does_not_fire",
+          "delta": "It is B's turn (B is the active player, main1) instead of A's turn; A casts Shock at instant speed.",
+          "expected": "B loses 2 life (life 18). The speed trigger does not fire and A's speed stays 1."
+        }
+      ],
+      "cards": [
+        "Burnout Bashtronaut",
+        "Shock",
+        "Grizzly Bears",
+        "Mountain"
+      ]
+    },
+    {
+      "id": "702.179d-2",
+      "rules": [
+        "702.179d"
+      ],
+      "title": "The speed trigger happens only once each turn",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            {
+              "card": "Burnout Bashtronaut",
+              "summoning_sick": false
+            }
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Shock",
+            "Shock"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "A's speed is 1. B has no speed. It is A's turn. A's speed has not increased yet this turn."
+      },
+      "decisions": [
+        "A casts Shock targeting player B, tapping a Mountain.",
+        "Both players pass; Shock resolves.",
+        "A casts a second Shock targeting player B, tapping the other Mountain.",
+        "Both players pass; the second Shock resolves."
+      ],
+      "variants": [
+        {
+          "label": "same_turn",
+          "polarity": "does_not_fire",
+          "delta": "",
+          "expected": "B loses 2 life twice (life 16). The speed trigger fires after the first Shock only: A's speed becomes 2 and stays 2 after the second Shock."
+        },
+        {
+          "label": "next_turn",
+          "polarity": "fires",
+          "delta": "The second Shock is cast on A's next turn instead of the same turn (A's Mountains untap, A's speed stays 2 in between).",
+          "expected": "B loses 2 life twice (life 16). The speed trigger fires on each of the two turns: A's speed becomes 2 after the first Shock and 3 after the second."
+        }
+      ],
+      "cards": [
+        "Burnout Bashtronaut",
+        "Shock",
+        "Mountain"
+      ],
+      "forge_notes": "The next_turn variant spans two of A's turns."
+    },
+    {
+      "id": "702.179f-1",
+      "rules": [
+        "702.179f"
+      ],
+      "title": "A player with no speed counts as speed 0 for an effect that compares speed",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island"
+          ],
+          "B": [
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Spikeshell Harrier"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "A has no speed. B has speed 2. Spikeshell Harrier's enters trigger returns target creature an opponent controls to hand, then if that opponent's speed is greater than each other player's speed, reduces it by 1 (never below 1)."
+      },
+      "decisions": [
+        "A casts Spikeshell Harrier (4U), tapping five Islands.",
+        "Both players pass; Spikeshell Harrier resolves.",
+        "Its enters trigger targets B's Grizzly Bears; both players pass and the trigger resolves."
+      ],
+      "variants": [
+        {
+          "label": "no_speed_counts_as_zero",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears returns to B's hand. B's speed becomes 1. A still has no speed."
+        },
+        {
+          "label": "equal_speed",
+          "polarity": "does_not_fire",
+          "delta": "A has speed 2 instead of no speed.",
+          "expected": "Grizzly Bears returns to B's hand. B's speed stays 2. A's speed stays 2."
+        }
+      ],
+      "cards": [
+        "Spikeshell Harrier",
+        "Grizzly Bears",
+        "Island"
+      ]
+    }
+  ]
+}

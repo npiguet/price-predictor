@@ -1,0 +1,3 @@
+{"id": "702.70", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.70a", "category": "mechanical", "observability": "direct", "record_kinds": ["combat", "trigger"], "outcome": "When a poisonous creature deals combat damage to a player, that player gets N poison counters.", "note": ""}
+{"id": "702.70b", "category": "mechanical", "observability": "direct", "record_kinds": ["trigger"], "outcome": "Each poisonous instance triggers separately.", "note": ""}

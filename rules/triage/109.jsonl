@@ -1,0 +1,16 @@
+{"id": "109.1", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "109.2", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "109.2a", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "109.2b", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "109.2c", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "109.2d", "category": "out_of_scope", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "109.3", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "109.4", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "109.4a", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "109.4b", "category": "mechanical", "observability": "indirect", "record_kinds": ["trigger", "resolution"], "outcome": "A triggered ability that has triggered is controlled by the player who controlled its source when it triggered, and that player receives its 'you' effects.", "note": ""}
+{"id": "109.4c", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "109.4d", "category": "out_of_scope", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "109.4e", "category": "out_of_scope", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "109.4f", "category": "out_of_scope", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "109.4g", "category": "out_of_scope", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "109.5", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution", "trigger", "continuous"], "outcome": "'You' and 'your' in an ability's text resolve to the ability's controller, so the effect happens to that player rather than the opponent.", "note": ""}

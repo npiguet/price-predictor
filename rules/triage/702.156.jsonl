@@ -1,0 +1,2 @@
+{"id": "702.156", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.156a", "category": "mechanical", "observability": "direct", "record_kinds": ["rewrite", "trigger"], "outcome": "A ravenous creature enters with X +1/+1 counters and draws a card on entering if X is 5 or more.", "note": ""}

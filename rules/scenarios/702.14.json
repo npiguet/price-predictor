@@ -1,0 +1,181 @@
+{
+  "unit": "702.14",
+  "verified": true,
+  "review": [],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.14c-1",
+      "rules": [
+        "702.14c"
+      ],
+      "title": "A creature with swampwalk cannot be blocked while the defending player controls a Swamp",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Bog Wraith",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            "Grizzly Bears",
+            "Swamp"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A attacks player B with Bog Wraith.",
+        "B declares Grizzly Bears as a blocker of Bog Wraith."
+      ],
+      "variants": [
+        {
+          "label": "defender_has_swamp",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Declaring Grizzly Bears as a blocker of Bog Wraith is illegal; Bog Wraith has no legal blockers."
+        },
+        {
+          "label": "defender_has_forest",
+          "polarity": "does_not_fire",
+          "delta": "B controls a Forest instead of the Swamp.",
+          "expected": "Declaring Grizzly Bears as a blocker of Bog Wraith is legal."
+        }
+      ],
+      "cards": [
+        "Bog Wraith",
+        "Grizzly Bears",
+        "Swamp",
+        "Forest"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.14c-2",
+      "rules": [
+        "702.14c"
+      ],
+      "title": "Nonbasic landwalk makes a creature unblockable while the defending player controls a nonbasic land",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Dryad Sophisticate",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            "Grizzly Bears",
+            "Evolving Wilds"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A attacks player B with Dryad Sophisticate.",
+        "B declares Grizzly Bears as a blocker of Dryad Sophisticate."
+      ],
+      "variants": [
+        {
+          "label": "defender_has_nonbasic",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Declaring Grizzly Bears as a blocker of Dryad Sophisticate is illegal; Dryad Sophisticate has no legal blockers."
+        },
+        {
+          "label": "defender_has_basic_only",
+          "polarity": "does_not_fire",
+          "delta": "B controls a Forest instead of Evolving Wilds.",
+          "expected": "Declaring Grizzly Bears as a blocker of Dryad Sophisticate is legal."
+        }
+      ],
+      "cards": [
+        "Dryad Sophisticate",
+        "Grizzly Bears",
+        "Evolving Wilds",
+        "Forest"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.14d-1",
+      "rules": [
+        "702.14d"
+      ],
+      "title": "Landwalk abilities do not cancel one another",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Bog Wraith",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            "Bog Wraith",
+            "Swamp"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A attacks player B with Bog Wraith.",
+        "B declares its own Bog Wraith (which also has swampwalk) as a blocker of A's Bog Wraith."
+      ],
+      "variants": [
+        {
+          "label": "defender_has_swamp",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Declaring B's Bog Wraith as a blocker of A's Bog Wraith is illegal."
+        },
+        {
+          "label": "defender_has_forest",
+          "polarity": "does_not_fire",
+          "delta": "B controls a Forest instead of the Swamp.",
+          "expected": "Declaring B's Bog Wraith as a blocker of A's Bog Wraith is legal."
+        }
+      ],
+      "cards": [
+        "Bog Wraith",
+        "Swamp",
+        "Forest"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

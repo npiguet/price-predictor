@@ -1,0 +1,5 @@
+{"id": "701.55", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "701.55a", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "The player chooses one option of a villainous choice and all its actions are performed.", "note": ""}
+{"id": "701.55b", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "A villainous choice may pick an impossible option, performing as much as possible.", "note": ""}
+{"id": "701.55c", "category": "mechanical", "observability": "indirect", "record_kinds": ["rewrite", "resolution"], "outcome": "A replacement effect can make a player face the villainous choice several additional times, one at a time.", "note": ""}
+{"id": "701.55d", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "Several players face villainous choices one at a time in APNAP order.", "note": ""}

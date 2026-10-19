@@ -1,0 +1,131 @@
+{
+  "unit": "701.51",
+  "verified": true,
+  "review": [
+    "701.51a: triage classed it legality/playability, but the instruction resolving and doing nothing without an Attraction deck is a resolution outcome; reclassified as mechanical/resolution, matching 701.51a-1."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "701.51a-1",
+      "rules": [
+        "701.51a",
+        "701.51b"
+      ],
+      "title": "Opening an Attraction puts the top Attraction card face up onto the battlefield, only with an Attraction deck",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Complaints Clerk"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "A's Attraction deck, top first: Kiddie Coaster (variant A, lit 2, 3, 6), Balloon Stand (variant A, lit 2, 6). The Attraction deck is not a zone the scenario format lists."
+      },
+      "decisions": [
+        "A casts Complaints Clerk, tapping four Plains.",
+        "Both players pass; Complaints Clerk resolves and its enters trigger goes on the stack.",
+        "Both players pass; the trigger resolves: A opens an Attraction."
+      ],
+      "variants": [
+        {
+          "label": "has_attraction_deck",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Kiddie Coaster, the top card of A's Attraction deck, moves to the battlefield face up under A's control. Balloon Stand stays in the Attraction deck. Complaints Clerk is on the battlefield."
+        },
+        {
+          "label": "no_attraction_deck",
+          "polarity": "does_not_fire",
+          "delta": "A is playing without an Attraction deck.",
+          "expected": "A cannot open an Attraction: nothing enters the battlefield other than Complaints Clerk, which still resolves and enters."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Complaints Clerk",
+        "Kiddie Coaster",
+        "Balloon Stand"
+      ],
+      "forge_notes": "Attraction decks need a deck file with an Attractions section; the Attraction variant (lit numbers) is chosen by the deck list."
+    },
+    {
+      "id": "701.51c-1",
+      "rules": [
+        "701.51c"
+      ],
+      "title": "An 'opens an Attraction' trigger fires only when the Attraction actually enters the battlefield",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Swamp",
+            "Swamp",
+            "Forest",
+            "Forest"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "The Most Dangerous Gamer"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "A's Attraction deck, top first: Kiddie Coaster (variant A, lit 2, 3, 6). The Attraction deck is not a zone the scenario format lists."
+      },
+      "decisions": [
+        "A casts The Most Dangerous Gamer, tapping two Swamps and two Forests.",
+        "Both players pass; The Most Dangerous Gamer resolves and its enters trigger goes on the stack.",
+        "Both players pass; the trigger resolves: A opens an Attraction. Gamer's 'whenever you open an Attraction' trigger resolves if it fired."
+      ],
+      "variants": [
+        {
+          "label": "attraction_enters",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Kiddie Coaster enters the battlefield under A's control, the open-an-Attraction trigger fires, and The Most Dangerous Gamer gets a +1/+1 counter and is a 3/3."
+        },
+        {
+          "label": "empty_attraction_deck",
+          "polarity": "does_not_fire",
+          "delta": "A's Attraction deck is empty.",
+          "expected": "No Attraction enters the battlefield, so the open-an-Attraction trigger does not fire. The Most Dangerous Gamer has no counter and is a 2/2."
+        }
+      ],
+      "cards": [
+        "Swamp",
+        "Forest",
+        "The Most Dangerous Gamer",
+        "Kiddie Coaster"
+      ],
+      "forge_notes": "The prevented/replaced-entry branch of 701.51c cannot be illustrated: no Forge card prevents or replaces an Attraction entering, so the non-entering case is shown with an empty Attraction deck."
+    }
+  ]
+}

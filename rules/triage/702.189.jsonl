@@ -1,0 +1,3 @@
+{"id": "702.189", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.189a", "category": "mechanical", "observability": "indirect", "record_kinds": ["trigger", "resolution"], "outcome": "When a creature with firebending N attacks, its controller adds N red mana that persists until end of combat.", "note": ""}
+{"id": "702.189b", "category": "mechanical", "observability": "indirect", "record_kinds": ["trigger"], "outcome": "An ability that triggers when a player firebends fires when a firebending ability that player controls resolves.", "note": ""}

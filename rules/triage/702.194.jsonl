@@ -1,0 +1,4 @@
+{"id": "702.194", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.194a", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "A spell cast with teamwork paid taps creatures with total power N or more as an additional cost, and teamwork-dependent effects occur on resolution.", "note": ""}
+{"id": "702.194b", "category": "mechanical", "observability": "needs_new_fields", "record_kinds": ["resolution"], "outcome": "A spell counts as cast using teamwork only if its controller declared the intention to pay the teamwork cost.", "note": ""}
+{"id": "702.194c", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "Targets of a teamwork-only part of a spell are chosen only if teamwork was used; otherwise the spell has no such targets.", "note": ""}

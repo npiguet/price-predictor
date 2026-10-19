@@ -1,0 +1,142 @@
+{
+  "unit": "702.72",
+  "verified": true,
+  "review": [],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.72a-1",
+      "rules": [
+        "702.72a"
+      ],
+      "title": "A champion permanent is sacrificed on entering unless it exiles another object of the right type",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Swamp",
+            "Swamp",
+            "Swamp",
+            "Swamp",
+            {
+              "card": "Goblin Piker",
+              "summoning_sick": false
+            }
+          ]
+        },
+        "hand": {
+          "A": [
+            "Boggart Mob"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Boggart Mob, tapping four Swamps.",
+        "Both players pass; Boggart Mob resolves and enters.",
+        "The champion trigger goes on the stack; A chooses to exile Goblin Piker.",
+        "Both players pass; the trigger resolves."
+      ],
+      "variants": [
+        {
+          "label": "goblin_available",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Goblin Piker is exiled and Boggart Mob (5/5) stays on the battlefield."
+        },
+        {
+          "label": "no_other_goblin",
+          "polarity": "does_not_fire",
+          "delta": "A controls Grizzly Bears instead of Goblin Piker.",
+          "expected": "A controls no other Goblin to exile, so Boggart Mob is sacrificed and goes to A's graveyard. Grizzly Bears stays on the battlefield."
+        }
+      ],
+      "cards": [
+        "Swamp",
+        "Goblin Piker",
+        "Boggart Mob",
+        "Grizzly Bears"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.72a-2",
+      "rules": [
+        "702.72a"
+      ],
+      "title": "When the champion permanent leaves the battlefield, the exiled card returns",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Swamp",
+            "Swamp",
+            "Swamp",
+            "Swamp",
+            {
+              "card": "Goblin Piker",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Boggart Mob"
+          ],
+          "B": [
+            "Unsummon"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Boggart Mob, tapping four Swamps; it resolves and A exiles Goblin Piker to the champion trigger.",
+        "With the stack empty, B casts Unsummon targeting Boggart Mob, tapping Island.",
+        "Both players pass; Unsummon resolves."
+      ],
+      "variants": [
+        {
+          "label": "champion_leaves",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Boggart Mob returns to A's hand. The leaves-the-battlefield trigger fires and Goblin Piker returns from exile to the battlefield under A's control."
+        },
+        {
+          "label": "champion_stays",
+          "polarity": "does_not_fire",
+          "delta": "B does not cast Unsummon.",
+          "expected": "Boggart Mob stays on the battlefield and the leaves-the-battlefield trigger does not fire. Goblin Piker stays in exile."
+        }
+      ],
+      "cards": [
+        "Swamp",
+        "Goblin Piker",
+        "Boggart Mob",
+        "Island",
+        "Unsummon"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

@@ -1,0 +1,5 @@
+{"id": "702.49", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.49a", "category": "mechanical", "observability": "direct", "record_kinds": ["resolution", "playability"], "outcome": "Activating ninjutsu returns an unblocked attacker to hand and puts the ninjutsu card onto the battlefield tapped and attacking.", "note": ""}
+{"id": "702.49b", "category": "decision", "observability": "none", "record_kinds": [], "outcome": "", "note": "reveal procedure"}
+{"id": "702.49c", "category": "mechanical", "observability": "indirect", "record_kinds": ["combat"], "outcome": "The ninjutsu creature attacks the same player, planeswalker or battle as the returned creature.", "note": ""}
+{"id": "702.49d", "category": "mechanical", "observability": "direct", "record_kinds": ["resolution", "playability"], "outcome": "Commander ninjutsu works as ninjutsu and also from the command zone.", "note": "the command zone does not occur in two-player collection, but the shared ninjutsu behavior is mechanical"}

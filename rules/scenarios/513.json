@@ -1,0 +1,136 @@
+{
+  "unit": "513",
+  "verified": true,
+  "review": [
+    "513.2-1: B's library was empty while the scenario runs through all of B's turn, so B would lose to the empty-library state-based action at B's draw step; gave B a one-card library.",
+    "513.2-2: B's library was empty while the scenario runs through all of B's turn, so B would lose to the empty-library state-based action at B's draw step; gave B a one-card library."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "513.2-1",
+      "rules": [
+        "513.2"
+      ],
+      "title": "A permanent with a beginning-of-the-end-step trigger that enters during the end step does not trigger until the next turn's end step",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "end",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            "Grizzly Bears"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Dress Down"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Island"
+          ],
+          "B": [
+            "Island"
+          ]
+        },
+        "exile": {},
+        "notes": "Dress Down ({1}{U} enchantment with flash): when it enters draw a card; creatures lose all abilities; at the beginning of the end step, sacrifice it. A's Grizzly Bears has no abilities and is inert. B's library holds one card so that B's draw step does not lose B the game."
+      },
+      "decisions": [
+        "The end step has begun and A, holding priority, casts Dress Down tapping both Islands; it resolves and its enter trigger draws the Island.",
+        "Both players pass priority every time they receive it, with no other action, through cleanup and all of B's turn."
+      ],
+      "variants": [
+        {
+          "label": "cast_in_end_step",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Dress Down does not trigger in this end step: it is still on the battlefield after cleanup and during B's turn, and is sacrificed (A's graveyard) only when B's end step begins."
+        },
+        {
+          "label": "cast_in_main2",
+          "polarity": "does_not_fire",
+          "delta": "The step is main2 instead of end: A casts Dress Down in the postcombat main phase.",
+          "expected": "Dress Down's trigger fires as this turn's end step begins and it is sacrificed to A's graveyard then; it is not on the battlefield during B's turn."
+        }
+      ],
+      "cards": [
+        "Dress Down",
+        "Island",
+        "Grizzly Bears"
+      ],
+      "forge_notes": "Check that a trigger on a permanent entering in the end step is not collected by Forge's already-run end-step trigger pass."
+    },
+    {
+      "id": "513.2-2",
+      "rules": [
+        "513.2"
+      ],
+      "title": "A delayed 'next end step' trigger created during the end step does not trigger until the next turn's end step",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "end",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Plains",
+            "Grizzly Bears"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Otherworldly Journey"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "B": [
+            "Plains"
+          ]
+        },
+        "exile": {},
+        "notes": "Otherworldly Journey ({1}{W} instant): exile target creature; at the beginning of the next end step, return that card to the battlefield under its owner's control with a +1/+1 counter on it. B's library holds one card so that B's draw step does not lose B the game."
+      },
+      "decisions": [
+        "The end step has begun and A, holding priority, casts Otherworldly Journey targeting its own Grizzly Bears, tapping both Plains; it resolves and exiles Grizzly Bears.",
+        "Both players pass priority every time they receive it, with no other action, through cleanup and all of B's turn."
+      ],
+      "variants": [
+        {
+          "label": "cast_in_end_step",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The delayed trigger does not fire in this end step: Grizzly Bears stays in exile through the rest of this turn and all of B's turn, and returns under A's control with a +1/+1 counter (3/3) only when B's end step begins."
+        },
+        {
+          "label": "cast_in_main2",
+          "polarity": "does_not_fire",
+          "delta": "The step is main2 instead of end: A casts Otherworldly Journey in the postcombat main phase.",
+          "expected": "The delayed trigger fires as this turn's end step begins: Grizzly Bears returns under A's control with a +1/+1 counter (3/3) at that moment and stays on the battlefield during B's turn."
+        }
+      ],
+      "cards": [
+        "Otherworldly Journey",
+        "Plains",
+        "Grizzly Bears"
+      ],
+      "forge_notes": "Forge implements the delayed trigger as Mode$ Phase | Phase$ End of Turn; confirm that one created during the end step waits for the next turn's end step."
+    }
+  ]
+}

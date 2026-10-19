@@ -1,0 +1,6 @@
+{"id": "702.6", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.6a", "category": "legality", "observability": "direct", "record_kinds": ["playability", "resolution"], "outcome": "Equip is activated only at sorcery speed targeting a creature its controller controls, and attaches the Equipment to that creature on resolution.", "note": ""}
+{"id": "702.6b", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": "Pointer to rule 301."}
+{"id": "702.6c", "category": "legality", "observability": "direct", "record_kinds": ["playability", "continuous"], "outcome": "An Equip [quality] ability can target only a creature its controller controls with that quality, but the Equipment stays attached if the creature later loses the quality.", "note": ""}
+{"id": "702.6d", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "Each of a permanent's equip abilities can be activated on its own.", "note": ""}
+{"id": "702.6e", "category": "legality", "observability": "direct", "record_kinds": ["playability", "resolution"], "outcome": "Equip planeswalker targets only a planeswalker its controller controls and attaches the Equipment to it.", "note": ""}

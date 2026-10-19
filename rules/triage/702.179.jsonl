@@ -1,0 +1,7 @@
+{"id": "702.179", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.179a", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "A player with no speed who controls a start-your-engines permanent has speed 1 in the next state-based check.", "note": ""}
+{"id": "702.179b", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.179c", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "A player with no speed who increases speed by a value gets that speed.", "note": ""}
+{"id": "702.179d", "category": "mechanical", "observability": "direct", "record_kinds": ["trigger"], "outcome": "When an opponent loses life during the speed holder's turn with speed under 4, speed increases by 1, once per turn.", "note": ""}
+{"id": "702.179e", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.179f", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "A player with no speed counts as speed 0 for effects that refer to speed.", "note": ""}

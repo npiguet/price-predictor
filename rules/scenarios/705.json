@@ -1,0 +1,203 @@
+{
+  "unit": "705",
+  "verified": true,
+  "review": [],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "705.2-1",
+      "rules": [
+        "705.2"
+      ],
+      "title": "A coin flip with a call is won when the call matches the result and lost otherwise, and the win or loss selects the branch",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Frenetic Efreet",
+              "summoning_sick": false
+            }
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "The coin result is fixed by the scenario, not random."
+      },
+      "decisions": [
+        "A activates Frenetic Efreet's {0} ability (flip a coin; win: it phases out; lose: sacrifice it). No mana is paid.",
+        "A calls heads.",
+        "Both players pass; the ability resolves and the coin lands heads."
+      ],
+      "variants": [
+        {
+          "label": "call matches",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "A wins the flip. Frenetic Efreet phases out and is not sacrificed; it is not in A's graveyard."
+        },
+        {
+          "label": "call misses",
+          "polarity": "does_not_fire",
+          "delta": "The coin lands tails instead of heads.",
+          "expected": "A loses the flip. Frenetic Efreet is sacrificed and moves to A's graveyard; it does not phase out."
+        }
+      ],
+      "cards": [
+        "Frenetic Efreet"
+      ],
+      "forge_notes": "Forge asks the flipper to call heads or tails and compares the call with a random result; the scenario needs the result forced."
+    },
+    {
+      "id": "705.2-2",
+      "rules": [
+        "705.2"
+      ],
+      "title": "A coin flip that only cares about heads or tails has no winner, so win-a-flip triggers stay quiet",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            {
+              "card": "Toothy and Zndrsplt",
+              "summoning_sick": false
+            },
+            {
+              "card": "Frenetic Efreet",
+              "summoning_sick": false
+            }
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Molten Sentry"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "The coin results are fixed by the scenario, not random."
+      },
+      "decisions": [
+        "A casts Molten Sentry, tapping four Mountains.",
+        "Both players pass; Molten Sentry resolves.",
+        "As Molten Sentry enters, its controller flips a coin without calling it; the coin lands heads."
+      ],
+      "variants": [
+        {
+          "label": "sentry heads",
+          "polarity": "does_not_fire",
+          "delta": "",
+          "expected": "Molten Sentry enters as a 5/2 creature with haste. Toothy and Zndrsplt's win-a-flip trigger does not fire; it stays a 2/2 with no counters."
+        },
+        {
+          "label": "sentry tails",
+          "polarity": "does_not_fire",
+          "delta": "The coin lands tails instead of heads.",
+          "expected": "Molten Sentry enters as a 2/5 creature with defender. Toothy and Zndrsplt's win-a-flip trigger does not fire; it stays a 2/2 with no counters."
+        },
+        {
+          "label": "flip with a call",
+          "polarity": "fires",
+          "delta": "A does not cast Molten Sentry. Instead A activates Frenetic Efreet's {0} ability, calls heads, and the coin lands heads.",
+          "expected": "A wins the flip. Toothy and Zndrsplt's trigger fires and it gets a +1/+1 counter (3/3). Frenetic Efreet phases out. Molten Sentry stays in A's hand."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Toothy and Zndrsplt",
+        "Frenetic Efreet",
+        "Molten Sentry"
+      ],
+      "forge_notes": "Forge's NoCall flips fire no FlippedCoin trigger; flips with a call fire one with Result true (win) or false (lose)."
+    },
+    {
+      "id": "705.3-1",
+      "rules": [
+        "705.3"
+      ],
+      "title": "An effect that states a flip result replaces the actual result, so a player wins a flip the coin would not have given",
+      "record_kind": "rewrite",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Edgar, King of Figaro",
+              "summoning_sick": false
+            },
+            {
+              "card": "Frenetic Efreet",
+              "summoning_sick": false
+            },
+            {
+              "card": "Frenetic Efreet",
+              "summoning_sick": false
+            }
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "A has not flipped a coin this turn. The natural coin results are fixed by the scenario: every flip would land tails."
+      },
+      "decisions": [
+        "A activates the first Frenetic Efreet's {0} ability (flip a coin; win: it phases out; lose: sacrifice it).",
+        "A calls heads.",
+        "Both players pass; the ability resolves. The coin would land tails."
+      ],
+      "variants": [
+        {
+          "label": "first flip of the turn",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Edgar's effect replaces the result: the coin comes up heads and A wins the flip. The first Frenetic Efreet phases out and is not sacrificed. The second Frenetic Efreet is untouched."
+        },
+        {
+          "label": "no Edgar",
+          "polarity": "other",
+          "delta": "Edgar, King of Figaro is not on the battlefield.",
+          "expected": "The coin lands tails and A loses the flip. The first Frenetic Efreet is sacrificed and moves to A's graveyard."
+        },
+        {
+          "label": "second flip of the turn",
+          "polarity": "does_not_fire",
+          "delta": "After the first Efreet's ability resolves, A activates the second Frenetic Efreet's {0} ability, calls heads, and the coin would land tails.",
+          "expected": "The first Frenetic Efreet phases out (forced win). Edgar no longer applies, so the second flip is lost: the second Frenetic Efreet is sacrificed and moves to A's graveyard."
+        }
+      ],
+      "cards": [
+        "Edgar, King of Figaro",
+        "Frenetic Efreet"
+      ],
+      "forge_notes": "Implemented as Mode$ FlipCoinMod with CheckSVar Count$YouFlipThisTurn EQ0; the natural result must be forced to tails."
+    }
+  ]
+}

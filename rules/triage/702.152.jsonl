@@ -1,0 +1,3 @@
+{"id": "702.152", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.152a", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution", "trigger", "continuous"], "outcome": "A permanent cast for its blitz cost has haste, draws a card when put into a graveyard from the battlefield, and is sacrificed at the beginning of the next end step.", "note": ""}
+{"id": "702.152b", "category": "decision", "observability": "none", "record_kinds": [], "outcome": "", "note": "Which instance of blitz is used is a casting choice."}

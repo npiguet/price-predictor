@@ -1,0 +1,515 @@
+{
+  "unit": "701.58",
+  "verified": true,
+  "review": [
+    "triage 701.58b/c/d: reclassified decision -> legality (playability, direct); each states which face-up procedures are permitted, an engine verdict, as in the verified 701.40 sibling; added 701.58b-1 (Grizzly Bears vs Shock), 701.58c-1 (Exalted Angel vs Serra Angel), 701.58d-1 (Bolrac-Clan Basher vs Craw Wurm)."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "701.58a-1",
+      "rules": [
+        "701.58a"
+      ],
+      "title": "A cloaked card enters the battlefield face down as a nameless 2/2 creature with ward {2}",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Ransom Note",
+            "Island",
+            "Island"
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Serra Angel",
+            "Forest",
+            "Forest"
+          ]
+        },
+        "exile": {},
+        "notes": "Library lists are ordered top first. "
+      },
+      "decisions": [
+        "A activates Ransom Note, paying {2} by tapping both Islands and sacrificing Ransom Note, choosing the mode 'Cloak the top card of your library'.",
+        "Both players pass; the ability resolves."
+      ],
+      "variants": [
+        {
+          "label": "creature_card",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Ransom Note is in A's graveyard. Serra Angel enters A's battlefield face down: a 2/2 colorless creature with no name, no subtypes, no mana cost and ward {2}; it has no flying or vigilance. A's library is Forest, Forest."
+        },
+        {
+          "label": "noncreature_card",
+          "polarity": "fires",
+          "delta": "The top card of A's library is Lightning Bolt instead of Serra Angel.",
+          "expected": "Lightning Bolt enters A's battlefield face down as a 2/2 colorless creature with no name, no subtypes, no mana cost and ward {2}; it is a creature, not an instant."
+        },
+        {
+          "label": "empty_library",
+          "polarity": "does_not_fire",
+          "delta": "A's library is empty.",
+          "expected": "Ransom Note is sacrificed and its ability resolves, but there is no card to cloak: A controls no face-down creature."
+        }
+      ],
+      "cards": [
+        "Ransom Note",
+        "Island",
+        "Serra Angel",
+        "Forest",
+        "Lightning Bolt"
+      ],
+      "forge_notes": "The cloaked permanent gets ward {2} from the cloak effect (Forge adds Ward:2 to the face-down state)."
+    },
+    {
+      "id": "701.58a-2",
+      "rules": [
+        "701.58a"
+      ],
+      "title": "A cloaked creature has ward {2}, so a spell targeting it is countered unless its controller pays {2}",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "B",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Serra Angel",
+              "face_down": true
+            }
+          ],
+          "B": [
+            "Mountain"
+          ]
+        },
+        "hand": {
+          "B": [
+            "Shock"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "A's face-down Serra Angel is a cloaked permanent (a 2/2 creature with ward {2})."
+      },
+      "decisions": [
+        "B casts Shock targeting A's face-down creature, tapping Mountain.",
+        "Ward's triggered ability goes on the stack above Shock; both players pass and it resolves.",
+        "If B has mana to pay {2}, B pays it."
+      ],
+      "variants": [
+        {
+          "label": "cannot_pay",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Ward triggers and B has no untapped mana to pay {2}, so Shock is countered: A's face-down creature has no damage and stays on the battlefield; Shock is in B's graveyard."
+        },
+        {
+          "label": "pays_ward",
+          "polarity": "does_not_fire",
+          "delta": "B controls two additional Mountains and pays {2} with them.",
+          "expected": "Ward triggers but B pays {2}, so Shock resolves and deals 2 damage to the 2/2 face-down creature; it dies and is put into A's graveyard face up as Serra Angel."
+        }
+      ],
+      "cards": [
+        "Shock",
+        "Mountain",
+        "Serra Angel"
+      ],
+      "forge_notes": "A pre-built cloaked permanent may not carry the Ward:2 that cloaking normally adds; reach the state by cloaking the card during the scenario if Forge's setup loses it."
+    },
+    {
+      "id": "701.58b-1",
+      "rules": [
+        "701.58b"
+      ],
+      "title": "A cloaked permanent can be turned face up for its mana cost only if its card is a creature card",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Forest",
+            {
+              "card": "Grizzly Bears",
+              "face_down": true,
+              "summoning_sick": false
+            }
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "The face-down permanent is a cloaked permanent (a 2/2 creature with ward {2}); its card is named in each variant."
+      },
+      "decisions": [
+        "A holds priority in main phase 1 and tries to turn the cloaked permanent face up by revealing its card and paying its mana cost with Mountain and Forest."
+      ],
+      "variants": [
+        {
+          "label": "creature_card",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Turning the permanent face up is legal. A pays {1}{G}; the permanent is turned face up and is Grizzly Bears, a green 2/2 Bear with no ward."
+        },
+        {
+          "label": "instant_card",
+          "polarity": "does_not_fire",
+          "delta": "The cloaked card is Shock instead of Grizzly Bears.",
+          "expected": "Turning the permanent face up for its mana cost is not legal although Mountain could pay {R}. It stays a face-down colorless 2/2 creature with ward {2} and no name."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Forest",
+        "Grizzly Bears",
+        "Shock"
+      ],
+      "forge_notes": "Forge offers turning a cloaked card face up as an ability of the face-down card, so the verdict appears as that candidate's can_play."
+    },
+    {
+      "id": "701.58c-1",
+      "rules": [
+        "701.58c"
+      ],
+      "title": "A cloaked card with morph can be turned face up for its morph cost",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            {
+              "card": "Exalted Angel",
+              "face_down": true,
+              "summoning_sick": false
+            }
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "The face-down permanent is a cloaked permanent; its card is named in each variant. A has exactly four Plains, so neither {4}{W}{W} nor {3}{W}{W} can be paid."
+      },
+      "decisions": [
+        "A holds priority in main phase 1 and tries to turn the cloaked permanent face up, paying {2}{W}{W} with the four Plains."
+      ],
+      "variants": [
+        {
+          "label": "morph_card",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Turning the permanent face up for its morph cost {2}{W}{W} is legal. A taps the four Plains and the permanent is Exalted Angel, a white 4/5 with flying."
+        },
+        {
+          "label": "no_morph",
+          "polarity": "does_not_fire",
+          "delta": "The cloaked card is Serra Angel (mana cost {3}{W}{W}, no morph) instead of Exalted Angel.",
+          "expected": "No way to turn the permanent face up is legal: Serra Angel has no morph cost and A's four Plains cannot pay {3}{W}{W}. It stays a face-down colorless 2/2 with ward {2}."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Exalted Angel",
+        "Serra Angel"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "701.58d-1",
+      "rules": [
+        "701.58d"
+      ],
+      "title": "A cloaked card with disguise can be turned face up for its disguise cost",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            {
+              "card": "Bolrac-Clan Basher",
+              "face_down": true,
+              "summoning_sick": false
+            }
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "The face-down permanent is a cloaked permanent; its card is named in each variant. A has exactly five Mountains, so a six-mana cost cannot be paid."
+      },
+      "decisions": [
+        "A holds priority in main phase 1 and tries to turn the cloaked permanent face up, paying {3}{R}{R} with the five Mountains."
+      ],
+      "variants": [
+        {
+          "label": "disguise_card",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Turning the permanent face up for its disguise cost {3}{R}{R} is legal. A taps the five Mountains and the permanent is Bolrac-Clan Basher, a red 3/2 with double strike and trample and no ward."
+        },
+        {
+          "label": "no_disguise",
+          "polarity": "does_not_fire",
+          "delta": "The cloaked card is Craw Wurm (mana cost {4}{G}{G}, no disguise) instead of Bolrac-Clan Basher.",
+          "expected": "No way to turn the permanent face up is legal: Craw Wurm has no disguise cost and A's five Mountains cannot pay {4}{G}{G}. It stays a face-down colorless 2/2 with ward {2}."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Bolrac-Clan Basher",
+        "Craw Wurm"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "701.58e-1",
+      "rules": [
+        "701.58e"
+      ],
+      "title": "Several cards cloaked from one library enter the battlefield face down one at a time",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Hide in Plain Sight"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Serra Angel",
+            "Grizzly Bears",
+            "Forest",
+            "Island",
+            "Plains",
+            "Mountain"
+          ]
+        },
+        "exile": {},
+        "notes": "Library lists are ordered top first. "
+      },
+      "decisions": [
+        "A casts Hide in Plain Sight, tapping four Forests.",
+        "Both players pass; it resolves. A looks at the top five cards, chooses Serra Angel and Grizzly Bears to cloak, and the other three go to the bottom in a random order."
+      ],
+      "variants": [
+        {
+          "label": "two_cards",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Serra Angel and Grizzly Bears each enter A's battlefield face down as separate 2/2 colorless creatures with no name and ward {2}. A's library is Mountain followed by Forest, Island and Plains in a random order; Hide in Plain Sight is in A's graveyard."
+        },
+        {
+          "label": "one_card_library",
+          "polarity": "other",
+          "delta": "A's library is only Serra Angel.",
+          "expected": "Only Serra Angel can be cloaked: one face-down 2/2 creature with ward {2} enters, and A's library is empty."
+        },
+        {
+          "label": "empty_library",
+          "polarity": "does_not_fire",
+          "delta": "A's library is empty.",
+          "expected": "Nothing is cloaked: A controls no face-down creature."
+        }
+      ],
+      "cards": [
+        "Hide in Plain Sight",
+        "Forest",
+        "Serra Angel",
+        "Grizzly Bears",
+        "Island",
+        "Plains",
+        "Mountain"
+      ],
+      "forge_notes": "The one-at-a-time entry is only visible as two separate enter-the-battlefield events."
+    },
+    {
+      "id": "701.58f-1",
+      "rules": [
+        "701.58f"
+      ],
+      "title": "A card that would be cloaked but cannot enter the battlefield stays in its zone unmodified",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Ransom Note",
+            "Island",
+            "Island"
+          ],
+          "B": [
+            "Grafdigger's Cage"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Serra Angel",
+            "Forest",
+            "Forest"
+          ]
+        },
+        "exile": {},
+        "notes": "Library lists are ordered top first. "
+      },
+      "decisions": [
+        "A activates Ransom Note, paying {2} by tapping both Islands and sacrificing Ransom Note, choosing the mode 'Cloak the top card of your library'.",
+        "Both players pass; the ability resolves."
+      ],
+      "variants": [
+        {
+          "label": "cage_on_battlefield",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Ransom Note is in A's graveyard. Grafdigger's Cage stops the face-down creature from entering the battlefield, so Serra Angel is not cloaked: it stays on top of A's library, face up with its normal characteristics. A controls no face-down creature."
+        },
+        {
+          "label": "cage_in_hand",
+          "polarity": "does_not_fire",
+          "delta": "Grafdigger's Cage is in B's hand instead of on B's battlefield.",
+          "expected": "Nothing prohibits the entry: Serra Angel enters A's battlefield face down as a 2/2 colorless creature with ward {2}. A's library is Forest, Forest."
+        }
+      ],
+      "cards": [
+        "Ransom Note",
+        "Island",
+        "Serra Angel",
+        "Forest",
+        "Grafdigger's Cage"
+      ],
+      "forge_notes": "Grafdigger's Cage is a Moved replacement keyed on the entering object being a creature; cloaking turns the card face down before it moves, so Forge should see a creature. In the cage_in_hand variant put Grafdigger's Cage in B's hand."
+    },
+    {
+      "id": "701.58g-1",
+      "rules": [
+        "701.58g"
+      ],
+      "title": "A cloaked instant or sorcery that would turn face up stays face down and turned-face-up triggers do not fire",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Lightning Bolt",
+              "face_down": true
+            },
+            "Aven Farseer",
+            "Mountain",
+            "Mountain"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Expose the Culprit"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "A's face-down Lightning Bolt is a cloaked permanent (a 2/2 creature with ward {2}). Aven Farseer is a 1/1 flier."
+      },
+      "decisions": [
+        "A casts Expose the Culprit choosing only the mode 'Turn target face-down creature face up', targeting the face-down Lightning Bolt, tapping both Mountains.",
+        "Both players pass; Expose the Culprit resolves."
+      ],
+      "variants": [
+        {
+          "label": "instant_card",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Lightning Bolt is revealed but is an instant card, so it stays face down as a 2/2 creature. Aven Farseer's turned-face-up trigger does not fire: Aven Farseer is still 1/1 with no counter."
+        },
+        {
+          "label": "creature_card",
+          "polarity": "does_not_fire",
+          "delta": "The cloaked card is Serra Angel instead of Lightning Bolt.",
+          "expected": "Serra Angel turns face up and is a 4/4 flying, vigilance Serra Angel again. Aven Farseer's trigger fires and Aven Farseer gets a +1/+1 counter (2/2)."
+        }
+      ],
+      "cards": [
+        "Expose the Culprit",
+        "Lightning Bolt",
+        "Aven Farseer",
+        "Mountain",
+        "Serra Angel"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

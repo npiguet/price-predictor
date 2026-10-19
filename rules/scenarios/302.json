@@ -1,0 +1,727 @@
+{
+  "unit": "302",
+  "verified": true,
+  "review": [
+    "302.1-1: the combat variant used a declare attackers step with no attackers, a step Forge may skip; moved it to the beginning of combat step.",
+    "302.5-2: the setup did not say Grizzly Bears could attack; stated it has been under A's control since the turn began."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "302.1-1",
+      "rules": [
+        "302.1"
+      ],
+      "title": "A creature can be cast only in a main phase of its controller's turn with an empty stack",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Forest",
+            "Forest",
+            "Mountain"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Grizzly Bears"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Grizzly Bears has no flash. A has priority."
+      },
+      "decisions": [
+        "A attempts to cast Grizzly Bears, tapping two Forests."
+      ],
+      "variants": [
+        {
+          "label": "main1_empty_stack",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Casting Grizzly Bears is legal: can_play is true in A's first main phase with an empty stack."
+        },
+        {
+          "label": "main2_empty_stack",
+          "polarity": "fires",
+          "delta": "It is A's second main phase (step main2).",
+          "expected": "Casting Grizzly Bears is legal: can_play is true."
+        },
+        {
+          "label": "combat",
+          "polarity": "does_not_fire",
+          "delta": "It is A's beginning of combat step (step beginning_of_combat) and A has priority.",
+          "expected": "Casting Grizzly Bears is not legal: can_play is false."
+        },
+        {
+          "label": "stack_not_empty",
+          "polarity": "does_not_fire",
+          "delta": "A has already cast Shock targeting B, tapping the Mountain. Shock is on the stack and A has priority.",
+          "expected": "Casting Grizzly Bears is not legal: can_play is false while Shock is on the stack."
+        },
+        {
+          "label": "opponents_turn",
+          "polarity": "does_not_fire",
+          "delta": "It is B's turn (active B), B's first main phase, the stack is empty and A has priority.",
+          "expected": "Casting Grizzly Bears is not legal: can_play is false on B's turn."
+        }
+      ],
+      "cards": [
+        "Forest",
+        "Grizzly Bears",
+        "Mountain",
+        "Shock"
+      ],
+      "forge_notes": "The stack_not_empty variant puts Shock on the stack with the stack field of the setup: [{\"card\": \"Shock\", \"controller\": \"A\", \"targets\": [\"B\"]}]."
+    },
+    {
+      "id": "302.2-1",
+      "rules": [
+        "302.2"
+      ],
+      "title": "A resolving creature spell is put onto the battlefield under its controller's control",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Forest",
+            "Forest"
+          ],
+          "B": [
+            "Island",
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Grizzly Bears"
+          ],
+          "B": [
+            "Counterspell"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Grizzly Bears, tapping two Forests.",
+        "B has priority, holds Counterspell and passes.",
+        "A passes; Grizzly Bears resolves."
+      ],
+      "variants": [
+        {
+          "label": "resolves",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears resolves and moves from the stack to the battlefield under A's control."
+        },
+        {
+          "label": "countered",
+          "polarity": "does_not_fire",
+          "delta": "B responds with Counterspell targeting Grizzly Bears, tapping both Islands; Counterspell resolves first.",
+          "expected": "Counterspell counters Grizzly Bears. Grizzly Bears moves to A's graveyard and never reaches the battlefield. Counterspell moves to B's graveyard."
+        }
+      ],
+      "cards": [
+        "Counterspell",
+        "Forest",
+        "Grizzly Bears",
+        "Island"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "302.4a-1",
+      "rules": [
+        "302.4a"
+      ],
+      "title": "A creature deals combat damage equal to its power",
+      "record_kind": "combat",
+      "setup": {
+        "active": "A",
+        "step": "declare_attackers",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Grizzly Bears",
+            "Ornithopter",
+            "Bonesplitter"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "No A permanent is summoning sick. Bonesplitter is on the battlefield unattached. B controls no creatures."
+      },
+      "decisions": [
+        "A attacks B with Grizzly Bears.",
+        "B has no blockers.",
+        "Combat damage is dealt."
+      ],
+      "variants": [
+        {
+          "label": "power_2",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears deals 2 combat damage to B, whose life is 18."
+        },
+        {
+          "label": "power_4",
+          "polarity": "fires",
+          "delta": "Bonesplitter is attached to Grizzly Bears.",
+          "expected": "Grizzly Bears has power 4 and deals 4 combat damage to B, whose life is 16."
+        },
+        {
+          "label": "power_0",
+          "polarity": "does_not_fire",
+          "delta": "A attacks with Ornithopter (0/2) instead of Grizzly Bears.",
+          "expected": "Ornithopter has power 0 and deals no combat damage. B's life stays 20."
+        }
+      ],
+      "cards": [
+        "Bonesplitter",
+        "Grizzly Bears",
+        "Ornithopter"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "302.4b-1",
+      "rules": [
+        "302.4b"
+      ],
+      "title": "A creature is destroyed when damage marked on it reaches its toughness",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain"
+          ],
+          "B": [
+            "Grizzly Bears",
+            "Centaur Courser"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Shock"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Shock targeting Grizzly Bears, tapping Mountain.",
+        "Both players pass; Shock resolves."
+      ],
+      "variants": [
+        {
+          "label": "toughness_2",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears (2/2) is dealt 2 damage, which equals its toughness. It is destroyed in the state-based check and moves to B's graveyard."
+        },
+        {
+          "label": "toughness_3",
+          "polarity": "does_not_fire",
+          "delta": "Shock targets Centaur Courser instead.",
+          "expected": "Centaur Courser (3/3) has 2 damage marked, less than its toughness, and stays on the battlefield."
+        }
+      ],
+      "cards": [
+        "Centaur Courser",
+        "Grizzly Bears",
+        "Mountain",
+        "Shock"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "302.4c-1",
+      "rules": [
+        "302.4c"
+      ],
+      "title": "Power and toughness are the printed numbers modified by continuous effects",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Grizzly Bears",
+            "Glorious Anthem"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Grizzly Bears has printed power and toughness 2/2. Glorious Anthem gives creatures its controller controls +1/+1."
+      },
+      "decisions": [
+        "No action is taken; the board is observed in A's first main phase."
+      ],
+      "variants": [
+        {
+          "label": "anthem_mine",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears is a 3/3."
+        },
+        {
+          "label": "anthem_opponents",
+          "polarity": "does_not_fire",
+          "delta": "Glorious Anthem is controlled by B instead of A.",
+          "expected": "Grizzly Bears is a 2/2, its printed values."
+        },
+        {
+          "label": "anthem_and_counter",
+          "polarity": "other",
+          "delta": "Grizzly Bears also has a +1/+1 counter.",
+          "expected": "Grizzly Bears is a 4/4: the printed 2/2, the +1/+1 counter and the +1/+1 from Glorious Anthem."
+        }
+      ],
+      "cards": [
+        "Glorious Anthem",
+        "Grizzly Bears"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "302.5-1",
+      "rules": [
+        "302.5"
+      ],
+      "title": "A creature can attack when no restriction applies; a non-creature cannot",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mutavault",
+            "Mountain"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Mutavault has been on the battlefield since before this turn began. The Mountain is untapped."
+      },
+      "decisions": [
+        "In main1, A activates Mutavault's animate ability {1}, tapping Mountain, and it resolves.",
+        "A moves to combat and attempts to declare Mutavault as an attacker."
+      ],
+      "variants": [
+        {
+          "label": "animated_attacker",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Mutavault is a 2/2 creature, and it is a legal attacker: Mutavault is among the legal attackers and the attack is allowed."
+        },
+        {
+          "label": "not_animated",
+          "polarity": "does_not_fire",
+          "delta": "A does not activate Mutavault before combat.",
+          "expected": "Mutavault is not a creature, so it is not a legal attacker. There are no legal attackers."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Mutavault"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "302.5-2",
+      "rules": [
+        "302.5"
+      ],
+      "title": "A creature can block when no restriction applies; a non-creature cannot",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "declare_attackers",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Grizzly Bears"
+          ],
+          "B": [
+            "Mutavault",
+            "Mountain"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Grizzly Bears has been under A's control since the turn began. B's Mutavault has been on the battlefield since before the turn began. B's Mountain is untapped."
+      },
+      "decisions": [
+        "A attacks B with Grizzly Bears.",
+        "In the declare attackers step, B activates Mutavault's animate ability {1}, tapping Mountain, and it resolves.",
+        "B attempts to block Grizzly Bears with Mutavault."
+      ],
+      "variants": [
+        {
+          "label": "animated_blocker",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Mutavault is a 2/2 creature and a legal blocker: the block is allowed."
+        },
+        {
+          "label": "not_animated",
+          "polarity": "does_not_fire",
+          "delta": "B does not activate Mutavault.",
+          "expected": "Mutavault is not a creature, so it is not a legal blocker. There are no legal blockers."
+        }
+      ],
+      "cards": [
+        "Grizzly Bears",
+        "Mountain",
+        "Mutavault"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "302.6-1",
+      "rules": [
+        "302.6"
+      ],
+      "title": "A creature cannot attack unless it has been under its controller's control since their turn began",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Forest",
+            "Forest",
+            "Mountain"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Grizzly Bears",
+            "Raging Goblin"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Grizzly Bears, tapping two Forests; it resolves.",
+        "A moves to combat and attempts to declare Grizzly Bears as an attacker."
+      ],
+      "variants": [
+        {
+          "label": "cast_this_turn",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears came under A's control this turn, so it is not a legal attacker. There are no legal attackers."
+        },
+        {
+          "label": "there_since_last_turn",
+          "polarity": "does_not_fire",
+          "delta": "Grizzly Bears has been on A's battlefield since before the turn began; A casts nothing.",
+          "expected": "Grizzly Bears is a legal attacker."
+        },
+        {
+          "label": "haste",
+          "polarity": "other",
+          "delta": "A casts Raging Goblin (haste), tapping the Mountain, instead of Grizzly Bears, and attempts to attack with it.",
+          "expected": "Raging Goblin is a legal attacker despite being cast this turn."
+        }
+      ],
+      "cards": [
+        "Forest",
+        "Grizzly Bears",
+        "Mountain",
+        "Raging Goblin"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "302.6-2",
+      "rules": [
+        "302.6"
+      ],
+      "title": "A creature's tap-symbol ability cannot be activated unless it has been under its controller's control since their turn began",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Forest",
+            "Forest"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Llanowar Elves",
+            "Dryad Arbor"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "A has not played a land this turn."
+      },
+      "decisions": [
+        "A casts Llanowar Elves, tapping a Forest; it resolves.",
+        "A attempts to activate Llanowar Elves' {T}: Add {G}."
+      ],
+      "variants": [
+        {
+          "label": "elves_cast_this_turn",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Llanowar Elves came under A's control this turn, so its tap ability cannot be activated: can_play is false."
+        },
+        {
+          "label": "elves_there_since_last_turn",
+          "polarity": "does_not_fire",
+          "delta": "Llanowar Elves has been on A's battlefield since before the turn began; A casts nothing.",
+          "expected": "The tap ability can be activated and adds {G}."
+        },
+        {
+          "label": "arbor_played_this_turn",
+          "polarity": "fires",
+          "delta": "A plays Dryad Arbor as a land instead of casting Llanowar Elves, then attempts to tap it for {G}.",
+          "expected": "Dryad Arbor is a land creature that came under A's control this turn, so it cannot be tapped for mana: the activation is not legal."
+        }
+      ],
+      "cards": [
+        "Dryad Arbor",
+        "Forest",
+        "Llanowar Elves"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "302.7-1",
+      "rules": [
+        "302.7"
+      ],
+      "title": "Damage stays marked for the turn, accumulates, and is removed in the cleanup step",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain"
+          ],
+          "B": [
+            "Hill Giant"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Shock",
+            "Shock"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Shock targeting Hill Giant, tapping a Mountain; it resolves.",
+        "In the same turn A casts the second Shock targeting Hill Giant, tapping the other Mountain; it resolves."
+      ],
+      "variants": [
+        {
+          "label": "same_turn",
+          "polarity": "does_not_fire",
+          "delta": "",
+          "expected": "After the first Shock Hill Giant (3/3) has 2 damage marked and survives. After the second Shock it has 4 damage marked, at least its toughness, and moves to B's graveyard."
+        },
+        {
+          "label": "next_turn",
+          "polarity": "fires",
+          "delta": "A casts the second Shock on A's next turn instead, after the cleanup step of this turn.",
+          "expected": "The 2 damage marked on Hill Giant is removed in the cleanup step. After the second Shock Hill Giant has 2 damage marked again and stays on the battlefield."
+        }
+      ],
+      "cards": [
+        "Hill Giant",
+        "Mountain",
+        "Shock"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "302.7-2",
+      "rules": [
+        "302.7"
+      ],
+      "title": "Damage from a source with infect is not marked on a creature",
+      "record_kind": "combat",
+      "setup": {
+        "active": "A",
+        "step": "declare_attackers",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Llanowar Elves",
+            "Glistener Elf"
+          ],
+          "B": [
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "No A permanent is summoning sick."
+      },
+      "decisions": [
+        "A attacks B with Llanowar Elves.",
+        "B blocks with Grizzly Bears.",
+        "Combat damage is dealt."
+      ],
+      "variants": [
+        {
+          "label": "plain_source",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Llanowar Elves deals 1 damage to Grizzly Bears, which has 1 damage marked and is a 2/2. Grizzly Bears deals 2 to Llanowar Elves, which dies."
+        },
+        {
+          "label": "infect_source",
+          "polarity": "does_not_fire",
+          "delta": "A attacks with Glistener Elf (1/1 infect) instead.",
+          "expected": "Glistener Elf deals 1 damage to Grizzly Bears as one -1/-1 counter. Grizzly Bears has no damage marked and is a 1/1. Glistener Elf takes 2 damage and dies."
+        }
+      ],
+      "cards": [
+        "Glistener Elf",
+        "Grizzly Bears",
+        "Llanowar Elves"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "302.7-3",
+      "rules": [
+        "302.7"
+      ],
+      "title": "Marked damage is removed when a creature regenerates",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain"
+          ],
+          "B": [
+            "Drudge Skeletons",
+            "Swamp"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Shock"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Shock targeting Drudge Skeletons, tapping Mountain.",
+        "B responds by activating Drudge Skeletons' regeneration {B}, tapping Swamp; it resolves, creating a regeneration shield.",
+        "Shock resolves."
+      ],
+      "variants": [
+        {
+          "label": "regenerates",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Shock deals 2 damage to Drudge Skeletons (1/1), which would be destroyed. The regeneration shield replaces the destruction: Drudge Skeletons becomes tapped, all damage marked on it is removed, and it stays on the battlefield."
+        },
+        {
+          "label": "no_regeneration",
+          "polarity": "does_not_fire",
+          "delta": "B does not activate regeneration.",
+          "expected": "Drudge Skeletons is destroyed in the state-based check and moves to B's graveyard."
+        }
+      ],
+      "cards": [
+        "Drudge Skeletons",
+        "Mountain",
+        "Shock",
+        "Swamp"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

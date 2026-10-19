@@ -1,0 +1,5 @@
+{"id": "702.62", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.62a", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution", "trigger", "playability"], "outcome": "A suspended card is exiled with N time counters, loses one each upkeep, and when the last is removed it may be cast free and a creature spell gains haste.", "note": ""}
+{"id": "702.62b", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.62c", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "A card with suspend cannot be suspended if an effect would prohibit casting it.", "note": ""}
+{"id": "702.62d", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "Cost increases and additional costs still apply when a card is cast from suspend without paying its mana cost, so the cast happens only if they can be paid.", "note": "Points to 601.2b and 601.2f-h; the observable consequence is the adjusted cost."}

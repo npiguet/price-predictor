@@ -1,0 +1,195 @@
+{
+  "unit": "702.65",
+  "verified": true,
+  "review": [],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.65a-1",
+      "rules": [
+        "702.65a"
+      ],
+      "title": "Aura swap exchanges the Aura with an Aura card in hand",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            "Island",
+            "Grizzly Bears",
+            {
+              "attached_to": "Grizzly Bears",
+              "card": "Arcanum Wings"
+            }
+          ]
+        },
+        "hand": {
+          "A": [
+            "Holy Strength"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A activates Arcanum Wings' aura swap ability, paying {2}{U} with Island, Island, Island.",
+        "Both players pass; the ability resolves and A chooses to exchange."
+      ],
+      "variants": [
+        {
+          "label": "aura_in_hand",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Arcanum Wings moves to A's hand. Holy Strength enters attached to Grizzly Bears, which is a 3/4 without flying."
+        },
+        {
+          "label": "no_aura_in_hand",
+          "polarity": "does_not_fire",
+          "delta": "A's hand holds Grizzly Bears instead of Holy Strength.",
+          "expected": "There is no Aura card to exchange. Arcanum Wings stays on Grizzly Bears (a 2/2 with flying) and A's hand is unchanged."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Grizzly Bears",
+        "Arcanum Wings",
+        "Holy Strength"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.65b-1",
+      "rules": [
+        "702.65b"
+      ],
+      "title": "The exchange fails if the Aura in hand cannot enchant the permanent",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            "Island",
+            "Grizzly Bears",
+            {
+              "attached_to": "Grizzly Bears",
+              "card": "Arcanum Wings"
+            }
+          ]
+        },
+        "hand": {
+          "A": [
+            "Wild Growth"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A activates Arcanum Wings' aura swap ability, paying {2}{U} with Island, Island, Island.",
+        "Both players pass; the ability resolves and A chooses to exchange with Wild Growth."
+      ],
+      "variants": [
+        {
+          "label": "cannot_enchant",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Wild Growth (enchant land) cannot enchant Grizzly Bears, so the ability has no effect. Arcanum Wings stays on Grizzly Bears and Wild Growth stays in A's hand."
+        },
+        {
+          "label": "can_enchant",
+          "polarity": "does_not_fire",
+          "delta": "A's hand holds Holy Strength (enchant creature) instead of Wild Growth.",
+          "expected": "The exchange succeeds. Arcanum Wings moves to A's hand and Holy Strength enters attached to Grizzly Bears."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Grizzly Bears",
+        "Arcanum Wings",
+        "Wild Growth",
+        "Holy Strength"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.65b-2",
+      "rules": [
+        "702.65b"
+      ],
+      "title": "The exchange fails if the Aura on the battlefield is controlled but not owned",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            "Island",
+            "Grizzly Bears",
+            {
+              "attached_to": "Grizzly Bears",
+              "card": "Arcanum Wings"
+            }
+          ]
+        },
+        "hand": {
+          "A": [
+            "Holy Strength"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Arcanum Wings is owned by B and controlled by A."
+      },
+      "decisions": [
+        "A activates Arcanum Wings' aura swap ability, paying {2}{U} with Island, Island, Island.",
+        "Both players pass; the ability resolves and A chooses to exchange with Holy Strength."
+      ],
+      "variants": [
+        {
+          "label": "not_owner",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The exchange cannot be completed, so the ability has no effect. Arcanum Wings stays on Grizzly Bears and Holy Strength stays in A's hand."
+        },
+        {
+          "label": "owner",
+          "polarity": "does_not_fire",
+          "delta": "Arcanum Wings is owned by A as well as controlled by A.",
+          "expected": "The exchange succeeds. Arcanum Wings moves to A's hand and Holy Strength enters attached to Grizzly Bears."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Grizzly Bears",
+        "Arcanum Wings",
+        "Holy Strength"
+      ],
+      "forge_notes": "Needs an Aura owned by one player and controlled by the other, for example after a control-changing effect on the Aura."
+    }
+  ]
+}

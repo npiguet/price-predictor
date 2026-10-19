@@ -1,0 +1,144 @@
+{
+  "unit": "702.87",
+  "verified": true,
+  "review": [],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.87a-1",
+      "rules": [
+        "702.87a"
+      ],
+      "title": "Level up puts a level counter on the permanent",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Plains",
+            {
+              "card": "Student of Warfare",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            "Mountain"
+          ]
+        },
+        "hand": {
+          "B": [
+            "Shock"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A activates level up on Student of Warfare, paying {W} with a Plains.",
+        "B does not respond unless the variant says so; the ability resolves."
+      ],
+      "variants": [
+        {
+          "label": "one_level",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Student of Warfare has one level counter and is still a 1/1 (level 2 has not been reached)."
+        },
+        {
+          "label": "two_levels",
+          "polarity": "fires",
+          "delta": "A activates level up a second time, paying {W} with the other Plains; it resolves.",
+          "expected": "Student of Warfare has two level counters and is a 3/3 with first strike."
+        },
+        {
+          "label": "killed_in_response",
+          "polarity": "does_not_fire",
+          "delta": "In response to the activation, B casts Shock targeting Student of Warfare, tapping Mountain.",
+          "expected": "Shock resolves first and Student of Warfare dies (A's graveyard). The level up ability then resolves and puts no counter anywhere."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Student of Warfare",
+        "Mountain",
+        "Shock"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.87a-2",
+      "rules": [
+        "702.87a"
+      ],
+      "title": "Level up can be activated only as a sorcery",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            {
+              "card": "Student of Warfare",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            "Mountain"
+          ]
+        },
+        "hand": {
+          "B": [
+            "Shock"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A has priority and considers activating level up ({W}) on Student of Warfare."
+      ],
+      "variants": [
+        {
+          "label": "main_phase_empty_stack",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Activating level up is legal (can_play true)."
+        },
+        {
+          "label": "combat_step",
+          "polarity": "does_not_fire",
+          "delta": "The step is beginning_of_combat instead of main1.",
+          "expected": "Level up can be activated only at sorcery timing, so activating it is not legal (can_play false)."
+        },
+        {
+          "label": "stack_not_empty",
+          "polarity": "does_not_fire",
+          "delta": "B's Shock (targeting A) is on the stack and A holds priority.",
+          "expected": "The stack is not empty, so level up cannot be activated (can_play false)."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Student of Warfare",
+        "Mountain",
+        "Shock"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

@@ -1,0 +1,27 @@
+{"id": "601.1", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "601.1a", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "601.2", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "A cast spell moves from its zone to the stack and its costs are paid; an illegal cast is reverted to the prior game state.", "note": ""}
+{"id": "601.2a", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "The spell moves to the top of the stack with the caster as controller and modified characteristics applied.", "note": ""}
+{"id": "601.2b", "category": "decision", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "601.2c", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "A spell cannot choose the same object twice for one instance of the word target, and its targets must be legal and obey must-target effects.", "note": ""}
+{"id": "601.2d", "category": "decision", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "601.2e", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "A proposed spell that is illegal is not cast and the game returns to the state before it was proposed.", "note": ""}
+{"id": "601.2f", "category": "mechanical", "observability": "direct", "record_kinds": ["playability"], "outcome": "The total cost is the base cost plus increases minus reductions, never below zero mana, and is locked in.", "note": ""}
+{"id": "601.2g", "category": "decision", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "601.2h", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "The locked-in total cost is paid in full, with the costs' zone changes and mana spent, and partial payment is not allowed.", "note": ""}
+{"id": "601.2i", "category": "mechanical", "observability": "direct", "record_kinds": ["trigger"], "outcome": "Abilities that trigger on a spell being cast or put onto the stack fire once the spell is cast.", "note": ""}
+{"id": "601.3", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "A player may begin casting a spell only if some rule or effect allows it and none prohibits it.", "note": ""}
+{"id": "601.3a", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "A prohibition that could be avoided by a choice made during proposal does not stop the player from beginning to cast.", "note": ""}
+{"id": "601.3b", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "Cast-as-though-flash permission applies if a choice made during proposal could trigger it.", "note": ""}
+{"id": "601.3c", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "A cast-as-though-flash permission conditional on an alternative or additional cost lets the player begin casting.", "note": ""}
+{"id": "601.3d", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "A spell with flash only when conditions hold can be begun at instant speed when they hold.", "note": ""}
+{"id": "601.3e", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "Alternative characteristics replace the object's characteristics when determining whether it is legal to cast.", "note": ""}
+{"id": "601.3f", "category": "legality", "observability": "indirect", "record_kinds": ["playability"], "outcome": "A face-down exiled card can be cast only if its controller can look at it.", "note": ""}
+{"id": "601.4", "category": "decision", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "601.5", "category": "decision", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "601.6", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "If the player is no longer allowed to cast after proposal the cast is reverted, but later changes during cost payment or after casting do not undo it.", "note": ""}
+{"id": "601.6a", "category": "legality", "observability": "indirect", "record_kinds": ["playability"], "outcome": "A spell begun with flash by a condition can finish being cast after the condition stops holding.", "note": ""}
+{"id": "601.7", "category": "decision", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "601.7a", "category": "decision", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "601.7b", "category": "decision", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "601.8", "category": "mechanical", "observability": "indirect", "record_kinds": ["playability"], "outcome": "A cost-altering spell on the stack does not change the cost of spells already on the stack.", "note": ""}

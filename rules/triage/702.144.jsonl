@@ -1,0 +1,2 @@
+{"id": "702.144", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.144a", "category": "mechanical", "observability": "indirect", "record_kinds": ["trigger", "resolution"], "outcome": "When a spell with demonstrate is cast, its trigger resolves by copying the spell and giving an opponent a copy as well.", "note": ""}

@@ -1,0 +1,118 @@
+{
+  "unit": "702.147",
+  "verified": true,
+  "review": [],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.147a-1",
+      "rules": [
+        "702.147a"
+      ],
+      "title": "A decayed creature is sacrificed at end of combat when it attacks",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Rot-Curse Rakshasa",
+              "summoning_sick": false
+            }
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A declares Rot-Curse Rakshasa as an attacker against B.",
+        "B declares no blockers; combat damage is dealt.",
+        "At the end of combat step the decayed delayed trigger resolves."
+      ],
+      "variants": [
+        {
+          "label": "attacks",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Rot-Curse Rakshasa deals 5 combat damage to B (life 15). At end of combat it is sacrificed and moves to A's graveyard."
+        },
+        {
+          "label": "stays_home",
+          "polarity": "does_not_fire",
+          "delta": "A declares no attackers.",
+          "expected": "Nothing is sacrificed. Rot-Curse Rakshasa stays on the battlefield and B's life stays 20."
+        }
+      ],
+      "cards": [
+        "Rot-Curse Rakshasa"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.147a-2",
+      "rules": [
+        "702.147a"
+      ],
+      "title": "A decayed creature can't block",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            "Rot-Curse Rakshasa"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A declares Grizzly Bears as an attacker against B.",
+        "B tries to declare Rot-Curse Rakshasa as a blocker of Grizzly Bears.",
+        "Combat damage is dealt."
+      ],
+      "variants": [
+        {
+          "label": "decayed_blocker",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Rot-Curse Rakshasa is not a legal blocker, so the block is not legal and Grizzly Bears is unblocked. B takes 2 damage (life 18) and Rot-Curse Rakshasa stays on the battlefield."
+        },
+        {
+          "label": "ordinary_blocker",
+          "polarity": "does_not_fire",
+          "delta": "B's creature is Hill Giant instead of Rot-Curse Rakshasa.",
+          "expected": "The block is legal. Hill Giant deals 3 damage to Grizzly Bears, which is destroyed, and takes 2 damage. B's life stays 20."
+        }
+      ],
+      "cards": [
+        "Grizzly Bears",
+        "Rot-Curse Rakshasa",
+        "Hill Giant"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

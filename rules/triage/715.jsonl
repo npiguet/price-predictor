@@ -1,0 +1,12 @@
+{"id": "715.1", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "715.2", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "715.2a", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "715.2b", "category": "mechanical", "observability": "needs_new_fields", "record_kinds": ["continuous"], "outcome": "A copy of an adventurer card has the same alternative Adventure characteristics as the original.", "note": ""}
+{"id": "715.2c", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "Drawing or discarding an adventurer card moves one card, not two.", "note": ""}
+{"id": "715.3", "category": "decision", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "715.3a", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "Casting as an Adventure is judged only on the Adventure's cost, type and targets, so can_play differs from casting the creature half.", "note": ""}
+{"id": "715.3b", "category": "mechanical", "observability": "needs_new_fields", "record_kinds": ["continuous"], "outcome": "A spell cast as an Adventure has only the Adventure's name, cost, type and text while on the stack.", "note": ""}
+{"id": "715.3c", "category": "mechanical", "observability": "needs_new_fields", "record_kinds": ["resolution"], "outcome": "A copy of an Adventure spell is an Adventure with the Adventure's characteristics.", "note": ""}
+{"id": "715.3d", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "An Adventure spell that resolves is exiled instead of going to the graveyard, and its controller may later cast the creature half from exile but not the Adventure.", "note": ""}
+{"id": "715.4", "category": "mechanical", "observability": "needs_new_fields", "record_kinds": ["continuous"], "outcome": "Outside the stack, and on the stack when not cast as an Adventure, the card has only its normal characteristics.", "note": ""}
+{"id": "715.5", "category": "decision", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}

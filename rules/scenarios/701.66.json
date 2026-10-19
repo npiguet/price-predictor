@@ -1,0 +1,91 @@
+{
+  "unit": "701.66",
+  "verified": true,
+  "review": [
+    "701.66a-1: the does_not_fire variant fizzled the spell with Boomerang, an outcome rule 608.2b decides, not 701.66a; replaced it with A choosing B's Island as the target, which 701.66a's 'target land you control' rejects (Forge: Land.YouCtrl), and dropped Boomerang from the setup and cards.",
+    "triage: rules/triage/701.66.jsonl was missing, so validate never checked this file; wrote it."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "701.66a-1",
+      "rules": ["701.66a"],
+      "title": "Earthbend turns a land you control into a hasty creature with counters",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {"A": 20, "B": 20},
+        "battlefield": {"A": ["Forest", "Forest", "Forest", "Forest", "Forest"], "B": ["Island", "Island"]},
+        "hand": {"A": ["Earthbending Lesson"]},
+        "graveyard": {}, "library": {}, "exile": {},
+        "notes": "B's Islands are untapped."
+      },
+      "decisions": [
+        "A casts Earthbending Lesson targeting the fifth Forest, tapping the other four Forests.",
+        "Both players pass; Earthbending Lesson resolves."
+      ],
+      "variants": [
+        {"label": "base", "polarity": "fires", "delta": "", "expected": "The targeted Forest is a 4/4 land creature with haste: it has four +1/+1 counters, is still a land that taps for {G}, and can attack this turn."},
+        {"label": "opponents_land", "polarity": "does_not_fire", "delta": "A chooses one of B's Islands as the target instead of the fifth Forest.", "expected": "B's Island is not a legal target, because earthbend targets only a land A controls. Earthbending Lesson cannot be cast with that target; no land becomes a creature and no counters are placed."}
+      ],
+      "cards": ["Forest", "Island", "Earthbending Lesson"],
+      "forge_notes": "Forge's EarthbendEffect applies the 0/0 base power and toughness, the Creature type and Haste with a fresh timestamp, then adds the counters."
+    },
+    {
+      "id": "701.66a-2",
+      "rules": ["701.66a"],
+      "title": "An earthbent land returns tapped when it dies or is exiled",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {"A": 20, "B": 20},
+        "battlefield": {"A": ["Forest", "Forest", "Forest", "Forest", "Forest"], "B": ["Swamp", "Swamp", "Plains", "Island"]},
+        "hand": {"A": ["Earthbending Lesson"], "B": ["Terror", "Swords to Plowshares", "Unsummon"]},
+        "graveyard": {}, "library": {}, "exile": {},
+        "notes": "B holds all three instants and has one land for each, but casts only one."
+      },
+      "decisions": [
+        "A casts Earthbending Lesson targeting the fifth Forest, tapping the other four Forests.",
+        "Both players pass; Earthbending Lesson resolves and the Forest is a 4/4 land creature with haste.",
+        "A passes priority. B casts Terror targeting the earthbent Forest, tapping both Swamps.",
+        "Both players pass; Terror resolves."
+      ],
+      "variants": [
+        {"label": "base", "polarity": "fires", "delta": "", "expected": "The earthbent Forest dies and moves to A's graveyard. Its delayed trigger fires and returns it to the battlefield tapped under A's control as a plain Forest: no counters, not a creature."},
+        {"label": "exiled", "polarity": "fires", "delta": "B casts Swords to Plowshares (tapping Plains) instead of Terror.", "expected": "The earthbent Forest is exiled and A gains 4 life (24). Its delayed trigger fires and returns it to the battlefield tapped under A's control as a plain Forest: no counters, not a creature."},
+        {"label": "bounced", "polarity": "does_not_fire", "delta": "B casts Unsummon (tapping Island) instead of Terror.", "expected": "The earthbent Forest returns to A's hand. It did not die and was not exiled, so no delayed trigger fires and nothing returns to the battlefield."}
+      ],
+      "cards": ["Forest", "Swamp", "Plains", "Island", "Earthbending Lesson", "Terror", "Swords to Plowshares", "Unsummon"],
+      "forge_notes": "The delayed triggers are registered by EarthbendEffect for the Graveyard and Exile destinations only."
+    },
+    {
+      "id": "701.66b-1",
+      "rules": ["701.66b"],
+      "title": "Earthbending triggers abilities only when the delayed trigger is created",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {"A": 20, "B": 20},
+        "battlefield": {"A": ["Avatar Aang", "Forest", "Forest", "Forest", "Forest", "Forest"], "B": ["Island", "Island"]},
+        "hand": {"A": ["Earthbending Lesson"], "B": ["Boomerang"]},
+        "graveyard": {},
+        "library": {"A": ["Plains", "Mountain"]},
+        "exile": {},
+        "notes": "Libraries are listed top first. Avatar Aang has 'Whenever you waterbend, earthbend, firebend, or airbend, draw a card' and is not summoning sick."
+      },
+      "decisions": [
+        "A casts Earthbending Lesson targeting the fifth Forest, tapping the other four Forests.",
+        "B passes priority; Earthbending Lesson resolves."
+      ],
+      "variants": [
+        {"label": "base", "polarity": "fires", "delta": "", "expected": "The targeted Forest becomes a 4/4 land creature with haste. Avatar Aang's trigger fires and A draws Plains."},
+        {"label": "target_removed", "polarity": "does_not_fire", "delta": "In response, B casts Boomerang targeting the targeted Forest, tapping both Islands.", "expected": "The Forest returns to A's hand and Earthbending Lesson fizzles. No earthbending happens, Avatar Aang's trigger does not fire and A draws no card."}
+      ],
+      "cards": ["Avatar Aang", "Forest", "Island", "Earthbending Lesson", "Boomerang", "Plains", "Mountain"],
+      "forge_notes": ""
+    }
+  ]
+}

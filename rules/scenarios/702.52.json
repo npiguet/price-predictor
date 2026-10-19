@@ -1,0 +1,124 @@
+{
+  "unit": "702.52",
+  "verified": true,
+  "review": [],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.52a-1",
+      "rules": [
+        "702.52a"
+      ],
+      "title": "Dredge replaces a draw with milling N and returning the card",
+      "record_kind": "rewrite",
+      "setup": {
+        "active": "A",
+        "step": "draw",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {},
+        "hand": {},
+        "graveyard": {
+          "A": [
+            "Life from the Loam"
+          ]
+        },
+        "library": {
+          "A": [
+            "Forest",
+            "Island",
+            "Mountain",
+            "Plains",
+            "Swamp"
+          ]
+        },
+        "exile": {},
+        "notes": "Library lists are ordered top first. Life from the Loam has dredge 3."
+      },
+      "decisions": [
+        "A would draw a card in the draw step; A chooses to replace the draw with dredging Life from the Loam."
+      ],
+      "variants": [
+        {
+          "label": "dredge",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "No card is drawn. Forest, Island and Mountain move from the library to A's graveyard, and Life from the Loam moves from A's graveyard to A's hand. The library is Plains, Swamp."
+        },
+        {
+          "label": "draw_instead",
+          "polarity": "does_not_fire",
+          "delta": "A declines to dredge and draws normally.",
+          "expected": "Forest moves from the library to A's hand. Life from the Loam stays in A's graveyard and no card is milled."
+        }
+      ],
+      "cards": [
+        "Life from the Loam",
+        "Forest",
+        "Island",
+        "Mountain",
+        "Plains",
+        "Swamp"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.52b-1",
+      "rules": [
+        "702.52b"
+      ],
+      "title": "A library smaller than the dredge number cannot be milled for dredging",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "draw",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {},
+        "hand": {},
+        "graveyard": {
+          "A": [
+            "Life from the Loam"
+          ]
+        },
+        "library": {
+          "A": [
+            "Forest",
+            "Island",
+            "Mountain"
+          ]
+        },
+        "exile": {},
+        "notes": "Library lists are ordered top first. Life from the Loam has dredge 3."
+      },
+      "decisions": [
+        "A would draw a card in the draw step and checks whether Life from the Loam can be dredged."
+      ],
+      "variants": [
+        {
+          "label": "three_cards",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Dredging Life from the Loam is available: the library holds exactly 3 cards."
+        },
+        {
+          "label": "two_cards",
+          "polarity": "does_not_fire",
+          "delta": "A's library is Forest, Island (2 cards).",
+          "expected": "Dredging is not available: the library holds fewer than 3 cards. A draws Forest normally and Life from the Loam stays in the graveyard."
+        }
+      ],
+      "cards": [
+        "Life from the Loam",
+        "Forest",
+        "Island",
+        "Mountain"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

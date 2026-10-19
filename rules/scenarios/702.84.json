@@ -1,0 +1,262 @@
+{
+  "unit": "702.84",
+  "verified": true,
+  "review": [],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.84a-1",
+      "rules": [
+        "702.84a"
+      ],
+      "title": "An unearthed creature is exiled at the beginning of the next end step",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Swamp",
+            "Swamp",
+            "Swamp",
+            "Swamp"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Zombify"
+          ]
+        },
+        "graveyard": {
+          "A": [
+            "Dregscape Zombie"
+          ]
+        },
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A activates unearth on Dregscape Zombie in A's graveyard, paying {B}.",
+        "Both players pass; the ability resolves and Dregscape Zombie returns to the battlefield.",
+        "The turn continues with no further actions until the beginning of the end step; the delayed trigger, if any, resolves."
+      ],
+      "variants": [
+        {
+          "label": "unearthed",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Dregscape Zombie returns to the battlefield and, at the beginning of the end step, is exiled by the delayed trigger. It is in A's exile zone, not the graveyard."
+        },
+        {
+          "label": "reanimated",
+          "polarity": "does_not_fire",
+          "delta": "A casts Zombify (paying {3}{B}) targeting Dregscape Zombie instead of activating unearth.",
+          "expected": "Dregscape Zombie returns to the battlefield with no delayed trigger and is still on the battlefield after the end step."
+        }
+      ],
+      "cards": [
+        "Swamp",
+        "Dregscape Zombie",
+        "Zombify"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.84a-2",
+      "rules": [
+        "702.84a"
+      ],
+      "title": "An unearthed creature that would leave the battlefield is exiled instead",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Swamp",
+            "Swamp",
+            "Swamp",
+            "Swamp"
+          ],
+          "B": [
+            "Mountain"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Zombify"
+          ],
+          "B": [
+            "Shock"
+          ]
+        },
+        "graveyard": {
+          "A": [
+            "Dregscape Zombie"
+          ]
+        },
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A activates unearth on Dregscape Zombie, paying {B}; the ability resolves and Dregscape Zombie returns to the battlefield.",
+        "A passes priority. B casts Shock targeting Dregscape Zombie, tapping Mountain.",
+        "Shock resolves and deals 2 damage to Dregscape Zombie (2/1)."
+      ],
+      "variants": [
+        {
+          "label": "unearthed",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Dregscape Zombie is destroyed by lethal damage but is exiled instead of going to the graveyard. A's graveyard is empty."
+        },
+        {
+          "label": "reanimated",
+          "polarity": "does_not_fire",
+          "delta": "A casts Zombify (paying {3}{B}) targeting Dregscape Zombie instead of activating unearth.",
+          "expected": "Dregscape Zombie dies normally and moves to A's graveyard. It is not in exile."
+        }
+      ],
+      "cards": [
+        "Swamp",
+        "Dregscape Zombie",
+        "Zombify",
+        "Mountain",
+        "Shock"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.84a-3",
+      "rules": [
+        "702.84a"
+      ],
+      "title": "An unearthed creature has haste",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Swamp",
+            "Swamp",
+            "Swamp",
+            "Swamp"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Zombify"
+          ]
+        },
+        "graveyard": {
+          "A": [
+            "Dregscape Zombie"
+          ]
+        },
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A activates unearth on Dregscape Zombie, paying {B}; the ability resolves and Dregscape Zombie returns to the battlefield.",
+        "A moves to combat; at the declare attackers step A considers attacking with Dregscape Zombie."
+      ],
+      "variants": [
+        {
+          "label": "unearthed",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Dregscape Zombie is a legal attacker (it has haste)."
+        },
+        {
+          "label": "reanimated",
+          "polarity": "does_not_fire",
+          "delta": "A casts Zombify (paying {3}{B}) targeting Dregscape Zombie instead of activating unearth.",
+          "expected": "Dregscape Zombie came under A's control this turn and has no haste, so it is not a legal attacker."
+        }
+      ],
+      "cards": [
+        "Swamp",
+        "Dregscape Zombie",
+        "Zombify"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.84a-4",
+      "rules": [
+        "702.84a"
+      ],
+      "title": "Unearth can be activated only as a sorcery and only from the graveyard",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Swamp"
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {
+          "A": [
+            "Dregscape Zombie"
+          ]
+        },
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A has priority with an empty stack and considers activating unearth ({B}) on Dregscape Zombie."
+      ],
+      "variants": [
+        {
+          "label": "main_phase_graveyard",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Activating unearth is legal (can_play true)."
+        },
+        {
+          "label": "combat_step",
+          "polarity": "does_not_fire",
+          "delta": "The step is beginning_of_combat instead of main1.",
+          "expected": "Unearth can be activated only at sorcery timing, so activating it is not legal (can_play false)."
+        },
+        {
+          "label": "card_in_hand",
+          "polarity": "does_not_fire",
+          "delta": "Dregscape Zombie is in A's hand instead of the graveyard.",
+          "expected": "Unearth functions only while the card is in the graveyard, so activating it is not legal (can_play false)."
+        }
+      ],
+      "cards": [
+        "Swamp",
+        "Dregscape Zombie"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

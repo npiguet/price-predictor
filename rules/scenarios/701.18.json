@@ -1,0 +1,145 @@
+{
+  "unit": "701.18",
+  "verified": true,
+  "review": [
+    "701.18a-1: the opponents_turn variant changed both the active player and the step; it now changes only the active player (main1 of B's turn, A holding priority).",
+    "701.18a: the sentence that putting a land onto the battlefield with an effect is not playing a land had no scenario; added 701.18a-2 (Rampant Growth then a land play)."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "701.18a-1",
+      "rules": [
+        "701.18a"
+      ],
+      "title": "A land can be played only with priority, in the player's own main phase, with an empty stack and a land drop left",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "B": [
+            "Mountain"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Forest"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "A has priority with an empty stack (except in stack_not_empty). A has not played a land this turn."
+      },
+      "decisions": [
+        "A considers playing Forest from hand."
+      ],
+      "variants": [
+        {
+          "label": "legal",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Playing Forest is legal. Forest enters the battlefield directly without using the stack, and the stack stays empty."
+        },
+        {
+          "label": "land_already_played",
+          "polarity": "does_not_fire",
+          "delta": "A has already played a land this turn.",
+          "expected": "Playing Forest is not legal. Forest stays in hand."
+        },
+        {
+          "label": "combat_step",
+          "polarity": "does_not_fire",
+          "delta": "The step is beginning_of_combat instead of main1.",
+          "expected": "Playing Forest is not legal. Forest stays in hand."
+        },
+        {
+          "label": "stack_not_empty",
+          "polarity": "does_not_fire",
+          "delta": "B's Shock targeting A is on the stack in A's main phase (B's Mountain is tapped for it), and A has priority.",
+          "expected": "Playing Forest is not legal. Forest stays in hand."
+        },
+        {
+          "label": "opponents_turn",
+          "polarity": "does_not_fire",
+          "delta": "B is the active player (the step is still main1); B has passed priority with an empty stack and A has priority.",
+          "expected": "Playing Forest is not legal on B's turn. Forest stays in hand."
+        }
+      ],
+      "cards": [
+        "Forest",
+        "Mountain",
+        "Shock"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "701.18a-2",
+      "rules": [
+        "701.18a"
+      ],
+      "title": "Putting a land onto the battlefield with a spell is not playing a land",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Forest",
+            "Forest"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Rampant Growth",
+            "Forest",
+            "Forest"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Forest",
+            "Island",
+            "Island"
+          ]
+        },
+        "exile": {},
+        "notes": "A has not played a land this turn."
+      },
+      "decisions": [
+        "A casts Rampant Growth, tapping both Forests; both players pass and it resolves: A searches for the Forest in A's library and puts it onto the battlefield tapped, then shuffles.",
+        "With an empty stack in main1, A considers playing a Forest from hand."
+      ],
+      "variants": [
+        {
+          "label": "land_put_by_spell",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Playing the Forest from hand is legal: the Forest Rampant Growth put onto the battlefield was not a land play."
+        },
+        {
+          "label": "land_played",
+          "polarity": "does_not_fire",
+          "delta": "Instead of casting Rampant Growth, A plays a Forest from hand first.",
+          "expected": "Playing the second Forest from hand is not legal; it stays in hand."
+        }
+      ],
+      "cards": [
+        "Forest",
+        "Island",
+        "Rampant Growth"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

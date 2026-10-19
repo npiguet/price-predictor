@@ -1,0 +1,83 @@
+{
+  "unit": "702.163",
+  "verified": true,
+  "review": [],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.163a-1",
+      "rules": [
+        "702.163a"
+      ],
+      "title": "For Mirrodin! creates a Rebel token and attaches the Equipment to it",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain"
+          ],
+          "B": [
+            "Island",
+            "Island",
+            "Mountain",
+            "Mountain"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Vulshok Splitter"
+          ],
+          "B": [
+            "Counterspell",
+            "Shatter"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Vulshok Splitter is {3}{R} Equipment with For Mirrodin! and 'equipped creature gets +2/+0'. B has Counterspell {U}{U} and Shatter {1}{R} in hand and passes in the base case."
+      },
+      "decisions": [
+        "A casts Vulshok Splitter, tapping four Mountains. B passes; it resolves and enters.",
+        "The For Mirrodin! trigger goes on the stack. B passes; it resolves."
+      ],
+      "variants": [
+        {
+          "label": "resolves",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The trigger fires. A 2/2 red Rebel creature token is created and Vulshok Splitter is attached to it: the token is a 4/2."
+        },
+        {
+          "label": "countered",
+          "polarity": "does_not_fire",
+          "delta": "B casts Counterspell on Vulshok Splitter, tapping two Islands.",
+          "expected": "Vulshok Splitter is countered and moves to A's graveyard. It never enters, so no trigger fires and no token is created."
+        },
+        {
+          "label": "destroyed_in_response",
+          "polarity": "other",
+          "delta": "B casts Shatter on Vulshok Splitter in response to the For Mirrodin! trigger, tapping two Mountains.",
+          "expected": "Vulshok Splitter is destroyed and moves to A's graveyard. The trigger still resolves and creates a 2/2 red Rebel token, which is not equipped, since the Equipment is no longer on the battlefield."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Island",
+        "Vulshok Splitter",
+        "Counterspell",
+        "Shatter"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

@@ -1,0 +1,1711 @@
+{
+  "unit": "613",
+  "verified": true,
+  "review": [
+    "613.1e-1: Turn to Frog also set base power and toughness 1/1, so the no-cast contrast mixed a layer 7b change with the color change; swapped in Cerulean Wisps (color change only) and rewrote the expected values (2/1 blue vs 3/2 white).",
+    "613.7a-2: the setup did not fix that Rune of Flight's timestamp is later than Colossus Hammer's attachment, which the outcome needs; added it to setup.notes and corrected the forge note that called the Rune's enters trigger a cast trigger.",
+    "613.2-1: copying a face-down permanent with Clone shows that the face-down characteristics are copiable values (613.2c, 707.2 example), not the order of sublayers 1a and 1b; renamed it 613.2c-1 listing 613.2c only and added a new 613.2-1 where Cytoshape makes a face-down permanent a copy and layer 1b still applies after layer 1a.",
+    "613.6: 613.6-1 showed only the first sentence (parts of one effect in different layers); added 613.6-2 (March of the Machines on Mind Stone vs Juggernaut) for the second sentence, that the effect keeps applying to the same set of objects in later layers.",
+    "613.10-1: with Land as the chosen type the Forest is a land whatever the continuous effects, so nothing showed that object characteristics are settled before the player effect; changed the chosen type to Creature, which the Forest is only through Natural Affinity's layer 4 effect.",
+    "613.11-1: the decisions mixed in the variant's actions; the decisions now hold only the base action and the Turn to Frog cast lives in the variant's delta."
+  ],
+  "skipped": [
+    {
+      "id": "613.7n",
+      "reason": "cannot be illustrated with simple Forge cards: it needs a card put onto the battlefield by an effect that also sets its characteristics, with the card's own static ability setting the same characteristic in the same layer, and no Forge script pairs such an effect with a vanilla or well-known creature; the later-wins ordering it refines is shown in 613.7-1"
+    },
+    {
+      "id": "613.8c",
+      "reason": "the re-evaluation after each applied effect changes the result only when at least three effects of one layer depend on each other, and no board of simple Forge cards produces that; the pairwise dependency it generalises is covered by 613.8-1"
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "613.4c-1",
+      "rules": [
+        "613.1",
+        "613.1g",
+        "613.4",
+        "613.4b",
+        "613.4c"
+      ],
+      "title": "Effects that set base power and toughness apply before pumps and counters, whatever the timestamp",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Forest",
+            "Island",
+            "Island",
+            {
+              "card": "Grizzly Bears",
+              "counters": {
+                "+1/+1": 1
+              }
+            }
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Giant Growth",
+            "Turn to Frog"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Giant Growth targeting Grizzly Bears, tapping Forest.",
+        "Both players pass; Giant Growth resolves.",
+        "A casts Turn to Frog targeting Grizzly Bears, tapping both Islands.",
+        "Both players pass; Turn to Frog resolves.",
+        "The board is read with both effects active."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears is a blue Frog with no abilities and is 5/5: base 1/1 from Turn to Frog, +1/+1 from the counter and +3/+3 from Giant Growth. Giant Growth and Turn to Frog are in A's graveyard."
+        },
+        {
+          "label": "frog_first",
+          "polarity": "other",
+          "delta": "A casts Turn to Frog first and Giant Growth second, so the setting effect has the earlier timestamp.",
+          "expected": "Grizzly Bears is a blue Frog and is 5/5, the same result as the base."
+        },
+        {
+          "label": "no_frog",
+          "polarity": "does_not_fire",
+          "delta": "A does not cast Turn to Frog.",
+          "expected": "Grizzly Bears is a green 6/6 Bear: base 2/2, +1/+1 from the counter and +3/+3 from Giant Growth."
+        }
+      ],
+      "cards": [
+        "Forest",
+        "Island",
+        "Grizzly Bears",
+        "Giant Growth",
+        "Turn to Frog"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "613.4a-1",
+      "rules": [
+        "613.4a"
+      ],
+      "title": "A characteristic-defining power and toughness is overridden by an effect that sets base power and toughness",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Swamp",
+            "Swamp",
+            "Swamp",
+            "Swamp",
+            "Island",
+            {
+              "card": "Nightmare",
+              "counters": {
+                "+1/+1": 1
+              }
+            }
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Diminish"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Diminish targeting Nightmare, tapping Island.",
+        "Both players pass; Diminish resolves.",
+        "The board is read."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Nightmare is 2/2: Diminish sets the base to 1/1 over the 4/4 its ability defines from four Swamps, and the +1/+1 counter is added on top. It keeps flying."
+        },
+        {
+          "label": "no_diminish",
+          "polarity": "does_not_fire",
+          "delta": "A does not cast Diminish.",
+          "expected": "Nightmare is 5/5: 4/4 from its characteristic-defining ability (four Swamps) plus the +1/+1 counter."
+        }
+      ],
+      "cards": [
+        "Swamp",
+        "Island",
+        "Nightmare",
+        "Diminish"
+      ],
+      "forge_notes": "Diminish in Forge is an Animate with Power and Toughness and no RemoveAllAbilities, so the creature keeps its abilities as on the printed card."
+    },
+    {
+      "id": "613.4d-1",
+      "rules": [
+        "613.4d"
+      ],
+      "title": "A switch effect swaps the power and toughness computed by the earlier sublayers",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Crag Puca"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Sure Strike"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A activates Crag Puca's switch ability ({U/R}), tapping one Mountain.",
+        "Both players pass; the ability resolves.",
+        "A casts Sure Strike targeting Crag Puca, tapping the other two Mountains.",
+        "Both players pass; Sure Strike resolves.",
+        "The board is read."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Crag Puca is 4/5: the unswitched 5/4 (base 2/4 plus +3/+0) is switched in the last sublayer, although Sure Strike resolved after the switch effect began. It has first strike."
+        },
+        {
+          "label": "no_switch",
+          "polarity": "does_not_fire",
+          "delta": "A does not activate the switch ability.",
+          "expected": "Crag Puca is 5/4 with first strike."
+        },
+        {
+          "label": "pump_first",
+          "polarity": "other",
+          "delta": "A casts Sure Strike first and activates the switch ability second.",
+          "expected": "Crag Puca is 4/5, the same result as the base."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Crag Puca",
+        "Sure Strike"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "613.1b-1",
+      "rules": [
+        "613.1b"
+      ],
+      "title": "A control change is applied before a power and toughness effect that depends on who controls the creature",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Honor of the Pure"
+          ],
+          "B": [
+            "Savannah Lions"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Act of Treason"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Act of Treason targeting Savannah Lions, tapping the three Mountains.",
+        "Both players pass; Act of Treason resolves.",
+        "The board is read."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "A controls Savannah Lions, which is a white 3/2: A's Honor of the Pure applies once A is its controller."
+        },
+        {
+          "label": "honor_is_b",
+          "polarity": "does_not_fire",
+          "delta": "Honor of the Pure is on B's battlefield instead of A's.",
+          "expected": "A controls Savannah Lions, which is 2/1: B's Honor of the Pure no longer applies to a creature B does not control."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Honor of the Pure",
+        "Savannah Lions",
+        "Act of Treason"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "613.6-1",
+      "rules": [
+        "613.6"
+      ],
+      "title": "Each part of one effect applies in its own layer to the same object",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Island",
+            "Island",
+            "Island",
+            "Island"
+          ],
+          "B": [
+            {
+              "card": "Savannah Lions",
+              "tapped": true
+            },
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Act of Treason"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Act of Treason targeting Savannah Lions, tapping the three Mountains.",
+        "Both players pass; Act of Treason resolves.",
+        "The board is read."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "A controls Savannah Lions (layer 2 part), and it is untapped and has haste (layer 6 part applied to the same creature although its controller changed). Grizzly Bears stays under B's control without haste."
+        },
+        {
+          "label": "control_only",
+          "polarity": "does_not_fire",
+          "delta": "A casts Control Magic on Savannah Lions (tapping the four Islands) instead of Act of Treason.",
+          "expected": "A controls Savannah Lions, which is still tapped and has no haste: only the layer 2 part exists."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Island",
+        "Savannah Lions",
+        "Grizzly Bears",
+        "Act of Treason",
+        "Control Magic"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "613.6-2",
+      "rules": [
+        "613.6"
+      ],
+      "title": "An effect that changes type and sets power and toughness keeps applying in layer 7b to the objects it affected in layer 4",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Mind Stone"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "March of the Machines"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts March of the Machines, tapping the four Islands.",
+        "Both players pass; March of the Machines resolves.",
+        "The board is read."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Mind Stone is a 2/2 artifact creature and stays on the battlefield: the power and toughness part applies in layer 7b to Mind Stone, although it is no longer a noncreature artifact after layer 4."
+        },
+        {
+          "label": "already_creature",
+          "polarity": "does_not_fire",
+          "delta": "A's artifact is Juggernaut (a 5/3 artifact creature with mana value 4) instead of Mind Stone.",
+          "expected": "Juggernaut stays 5/3: it was not a noncreature artifact in layer 4, so the layer 7b part does not apply to it either."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Mind Stone",
+        "March of the Machines",
+        "Juggernaut"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "613.1c-1",
+      "rules": [
+        "613.1c"
+      ],
+      "title": "A text-changing effect is applied before the characteristic-based effects it rewrites",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Honor of the Pure",
+            "Savannah Lions",
+            "Walking Corpse"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Mind Bend"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Mind Bend targeting Honor of the Pure, tapping Island. On resolution A chooses to change a color word, replacing white with black.",
+        "Both players pass; Mind Bend resolves.",
+        "The board is read."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Honor of the Pure reads 'Black creatures you control get +1/+1': Walking Corpse (black) is 3/3 and Savannah Lions (white) is 2/1."
+        },
+        {
+          "label": "no_change",
+          "polarity": "does_not_fire",
+          "delta": "A does not cast Mind Bend.",
+          "expected": "Savannah Lions is 3/2 and Walking Corpse is 2/2."
+        },
+        {
+          "label": "to_blue",
+          "polarity": "other",
+          "delta": "A replaces white with blue instead of black.",
+          "expected": "Honor of the Pure reads 'Blue creatures you control get +1/+1': neither creature is blue, so Savannah Lions is 2/1 and Walking Corpse is 2/2."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Honor of the Pure",
+        "Savannah Lions",
+        "Walking Corpse",
+        "Mind Bend"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "613.1d-1",
+      "rules": [
+        "613.1d"
+      ],
+      "title": "A type-changing effect is applied before the effects keyed to subtype",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            "Elvish Archdruid",
+            "Elvish Warrior"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Turn to Frog"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Turn to Frog targeting Elvish Warrior, tapping both Islands.",
+        "Both players pass; Turn to Frog resolves.",
+        "The board is read."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Elvish Warrior is a blue Frog, no longer an Elf, so it is 1/1 with no +1/+1 from Elvish Archdruid. Elvish Archdruid stays 2/2."
+        },
+        {
+          "label": "no_frog",
+          "polarity": "does_not_fire",
+          "delta": "A does not cast Turn to Frog.",
+          "expected": "Elvish Warrior is a green Elf Warrior and is 3/4: base 2/3 plus +1/+1 from Elvish Archdruid."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Elvish Archdruid",
+        "Elvish Warrior",
+        "Turn to Frog"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "613.1e-1",
+      "rules": [
+        "613.1e",
+        "613.5"
+      ],
+      "title": "A color-changing effect is applied before color-keyed effects, and the result updates as soon as the effect ends",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Honor of the Pure",
+            "Savannah Lions"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Cerulean Wisps"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Forest"
+          ]
+        },
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Cerulean Wisps targeting Savannah Lions, tapping Island.",
+        "Both players pass; Cerulean Wisps resolves: Savannah Lions becomes blue until end of turn, is untapped (it already was) and A draws Forest.",
+        "The board is read in main1."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Savannah Lions is blue and 2/1: it is no longer white, so Honor of the Pure gives it nothing."
+        },
+        {
+          "label": "no_wisps",
+          "polarity": "does_not_fire",
+          "delta": "A does not cast Cerulean Wisps.",
+          "expected": "Savannah Lions is white and 3/2 with Honor of the Pure."
+        },
+        {
+          "label": "after_cleanup",
+          "polarity": "other",
+          "delta": "The board is read after the cleanup step of the same turn instead of in main1.",
+          "expected": "Cerulean Wisps' effect has ended: Savannah Lions is white again and is 3/2, with the +1/+1 from Honor of the Pure applied again."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Honor of the Pure",
+        "Savannah Lions",
+        "Cerulean Wisps",
+        "Forest"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "613.1f-1",
+      "rules": [
+        "613.1f"
+      ],
+      "title": "Ability-removing effects are applied before power and toughness effects, so a static ability that is removed stops pumping",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            "Goblin King",
+            "Mons's Goblin Raiders"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Turn to Frog"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Turn to Frog targeting Goblin King, tapping both Islands.",
+        "Both players pass; Turn to Frog resolves.",
+        "The board is read."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Goblin King is a blue 1/1 Frog with no abilities. Mons's Goblin Raiders is 1/1 and has no mountainwalk."
+        },
+        {
+          "label": "no_frog",
+          "polarity": "does_not_fire",
+          "delta": "A does not cast Turn to Frog.",
+          "expected": "Goblin King is 2/2. Mons's Goblin Raiders is 2/2 and has mountainwalk."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Goblin King",
+        "Mons's Goblin Raiders",
+        "Turn to Frog"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "613.7-1",
+      "rules": [
+        "613.3",
+        "613.7",
+        "613.7a",
+        "613.7b",
+        "613.7d",
+        "613.9"
+      ],
+      "title": "Within a layer the later timestamp wins: an ability-removing spell resolved earlier loses to a static ability that enters later",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Grizzly Bears"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Turn to Frog",
+            "Levitation"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Turn to Frog targeting Grizzly Bears, tapping two Islands.",
+        "Both players pass; Turn to Frog resolves.",
+        "A casts Levitation, tapping the other four Islands.",
+        "Both players pass; Levitation resolves and enters the battlefield.",
+        "The board is read."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears is a blue 1/1 Frog with flying: Levitation's static ability has a later timestamp than the spell effect that removed all abilities, so the granted flying stays."
+        },
+        {
+          "label": "levitation_first",
+          "polarity": "does_not_fire",
+          "delta": "Levitation is already on the battlefield in the setup (A has two Islands untapped and casts only Turn to Frog).",
+          "expected": "Grizzly Bears is a blue 1/1 Frog without flying: Turn to Frog resolved after Levitation entered, so its ability removal has the later timestamp and wins."
+        },
+        {
+          "label": "no_frog",
+          "polarity": "other",
+          "delta": "A casts only Levitation.",
+          "expected": "Grizzly Bears is a green 2/2 Bear with flying."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Grizzly Bears",
+        "Turn to Frog",
+        "Levitation"
+      ],
+      "forge_notes": "Variant levitation_first moves Levitation from the hand to the battlefield in the setup; the cast of Levitation in the decisions is dropped there."
+    },
+    {
+      "id": "613.7a-1",
+      "rules": [
+        "613.7a"
+      ],
+      "title": "A static ability granted by an Aura takes the timestamp of the Aura when that is later than the object's own",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            {
+              "card": "Wind Drake"
+            },
+            {
+              "card": "Colossus Hammer",
+              "attached_to": "Wind Drake"
+            }
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Rune of Flight"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Forest"
+          ]
+        },
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Rune of Flight targeting Colossus Hammer, tapping both Islands.",
+        "Both players pass; Rune of Flight resolves and enters attached to Colossus Hammer.",
+        "Rune of Flight's enters trigger resolves: A draws Forest.",
+        "The board is read."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Wind Drake is 12/12 and has flying: the 'Equipped creature has flying' ability Colossus Hammer gains from Rune of Flight has Rune of Flight's later timestamp, so it wins over Colossus Hammer's 'loses flying'."
+        },
+        {
+          "label": "no_rune",
+          "polarity": "does_not_fire",
+          "delta": "A does not cast Rune of Flight.",
+          "expected": "Wind Drake is 12/12 and does not have flying: Colossus Hammer removes it."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Wind Drake",
+        "Colossus Hammer",
+        "Rune of Flight",
+        "Forest"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "613.7a-2",
+      "rules": [
+        "613.7a",
+        "613.7e"
+      ],
+      "title": "Re-attaching an Equipment gives all its abilities new timestamps but keeps their relative order",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Wind Drake",
+            "Grizzly Bears",
+            {
+              "card": "Colossus Hammer",
+              "attached_to": "Grizzly Bears"
+            },
+            {
+              "card": "Rune of Flight",
+              "attached_to": "Colossus Hammer"
+            }
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Rune of Flight became attached to Colossus Hammer after Colossus Hammer became attached to Grizzly Bears, so the ability Rune of Flight grants has the later timestamp before the equip."
+      },
+      "decisions": [
+        "A activates Colossus Hammer's equip ability ({8}) targeting Wind Drake, tapping all eight Mountains.",
+        "Both players pass; the ability resolves and Colossus Hammer becomes attached to Wind Drake.",
+        "The board is read."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Wind Drake is 12/12 and has flying: Colossus Hammer and its granted ability both got new timestamps with the same relative order, so Rune of Flight's granted flying still comes after Colossus Hammer's 'loses flying'. Grizzly Bears is 2/2."
+        },
+        {
+          "label": "no_rune",
+          "polarity": "does_not_fire",
+          "delta": "Rune of Flight is not on the battlefield.",
+          "expected": "Wind Drake is 12/12 and does not have flying. Grizzly Bears is 2/2."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Wind Drake",
+        "Grizzly Bears",
+        "Colossus Hammer",
+        "Rune of Flight"
+      ],
+      "forge_notes": "Rune of Flight's enters trigger resolved when it entered, before this setup; Colossus Hammer's equip cost in the Forge script is {8}."
+    },
+    {
+      "id": "613.7e-1",
+      "rules": [
+        "613.7e"
+      ],
+      "title": "Attaching an Equipment gives it a new timestamp, which decides a conflict with another Equipment",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            {
+              "card": "Grizzly Bears"
+            },
+            {
+              "card": "Colossus Hammer",
+              "attached_to": "Grizzly Bears"
+            },
+            "Bladed Pinions"
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A activates Bladed Pinions' equip ability ({2}) targeting Grizzly Bears, tapping two Mountains.",
+        "Both players pass; the ability resolves and Bladed Pinions becomes attached to Grizzly Bears.",
+        "The board is read."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears is 12/12 and has flying and first strike: Bladed Pinions was attached last, so its flying has the later timestamp than Colossus Hammer's 'loses flying'."
+        },
+        {
+          "label": "hammer_last",
+          "polarity": "does_not_fire",
+          "delta": "Bladed Pinions is already attached to Grizzly Bears in the setup, Colossus Hammer is unattached, and A activates Colossus Hammer's equip ability ({8}) targeting Grizzly Bears.",
+          "expected": "Grizzly Bears is 12/12 and has first strike but no flying: Colossus Hammer was attached last, so its 'loses flying' has the later timestamp."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Grizzly Bears",
+        "Colossus Hammer",
+        "Bladed Pinions"
+      ],
+      "forge_notes": "Colossus Hammer's equip cost in the Forge script is {8}, hence eight Mountains."
+    },
+    {
+      "id": "613.7c-1",
+      "rules": [
+        "613.7c"
+      ],
+      "title": "Putting a counter of a kind on an object gives every counter of that kind the new timestamp",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            "Island",
+            {
+              "card": "Grizzly Bears",
+              "counters": {
+                "flying": 1
+              }
+            }
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Turn to Frog",
+            "Where We're Going . . ."
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Forest",
+            "Forest"
+          ]
+        },
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Turn to Frog targeting Grizzly Bears, tapping two Islands.",
+        "Both players pass; Turn to Frog resolves.",
+        "A casts Where We're Going . . . targeting Grizzly Bears, tapping the last Island.",
+        "Both players pass; it resolves: Grizzly Bears gets a second flying counter and A draws a card.",
+        "The board is read."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears is a blue 1/1 Frog with two flying counters and has flying: both counters received the timestamp of the new one, which is later than Turn to Frog's ability removal."
+        },
+        {
+          "label": "no_second_counter",
+          "polarity": "does_not_fire",
+          "delta": "A does not cast Where We're Going . . .",
+          "expected": "Grizzly Bears is a blue 1/1 Frog with one flying counter and does not have flying: the counter is older than the ability removal."
+        },
+        {
+          "label": "no_first_counter",
+          "polarity": "other",
+          "delta": "Grizzly Bears has no flying counter in the setup.",
+          "expected": "Grizzly Bears is a blue 1/1 Frog with one flying counter and has flying: the counter was placed after Turn to Frog resolved."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Grizzly Bears",
+        "Turn to Frog",
+        "Where We're Going . . .",
+        "Forest"
+      ],
+      "forge_notes": "Forge may not keep per-counter timestamps for keyword counters; the base variant is the one that exposes it."
+    },
+    {
+      "id": "613.7f-1",
+      "rules": [
+        "613.7f"
+      ],
+      "title": "Turning a permanent face up gives it a new timestamp",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            "Mountain",
+            "Mountain",
+            "Plains",
+            {
+              "card": "Bayek of Siwa",
+              "face_down": true
+            },
+            {
+              "card": "Juggernaut",
+              "summoning_sick": false
+            }
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Turn to Frog"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Turn to Frog targeting Juggernaut, tapping both Islands.",
+        "Both players pass; Turn to Frog resolves.",
+        "A turns Bayek of Siwa face up by paying its disguise cost {1}{R}{W} with Mountain, Mountain and Plains.",
+        "The board is read during A's turn."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Juggernaut is a blue 1/1 Frog with no abilities of its own and has double strike: Bayek of Siwa turned face up after Turn to Frog resolved, so its granted double strike has the later timestamp. Juggernaut is still an artifact, so it is historic."
+        },
+        {
+          "label": "faceup_first",
+          "polarity": "does_not_fire",
+          "delta": "Bayek of Siwa is already face up in the setup, and A only casts Turn to Frog.",
+          "expected": "Juggernaut is a blue 1/1 Frog with no abilities and no double strike: Turn to Frog's ability removal has the later timestamp."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Mountain",
+        "Plains",
+        "Bayek of Siwa",
+        "Juggernaut",
+        "Turn to Frog"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "613.7g-1",
+      "rules": [
+        "613.7g"
+      ],
+      "title": "Transforming a permanent gives it a new timestamp",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            "Dormant Grove",
+            {
+              "card": "Grizzly Bears",
+              "counters": {
+                "+1/+1": 3
+              }
+            },
+            "Savannah Lions"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Turn to Frog"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Turn to Frog targeting Savannah Lions, tapping both Islands.",
+        "Both players pass; Turn to Frog resolves.",
+        "A moves to the beginning of combat. Dormant Grove's trigger targets Grizzly Bears: it gets a +1/+1 counter (6/6), so Dormant Grove transforms into Gnarled Grovestrider.",
+        "The board is read."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Savannah Lions is a blue 1/1 Frog and has vigilance: Gnarled Grovestrider transformed after Turn to Frog resolved, so its granted vigilance has the later timestamp. Grizzly Bears is 6/6 with vigilance."
+        },
+        {
+          "label": "already_transformed",
+          "polarity": "does_not_fire",
+          "delta": "Dormant Grove is already transformed into Gnarled Grovestrider in the setup, and A only casts Turn to Frog.",
+          "expected": "Savannah Lions is a blue 1/1 Frog without vigilance: Turn to Frog's ability removal has the later timestamp."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Dormant Grove",
+        "Grizzly Bears",
+        "Savannah Lions",
+        "Turn to Frog"
+      ],
+      "forge_notes": "The already_transformed variant needs the transformed face of Dormant Grove (Gnarled Grovestrider, a 3/6 with vigilance) on the battlefield; the scenario file names the front face."
+    },
+    {
+      "id": "613.3-1",
+      "rules": [
+        "613.3"
+      ],
+      "title": "A characteristic-defining ability applies before other effects of the same layer, whatever the timestamps",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Swamp",
+            "Swamp",
+            "Darkest Hour"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Culling Drone"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Culling Drone, tapping both Swamps.",
+        "Both players pass; Culling Drone resolves and enters the battlefield.",
+        "The board is read."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Culling Drone is a black 2/2: its devoid ability (a characteristic-defining ability making it colorless) applies first in layer 5, and Darkest Hour, which has the earlier timestamp, then makes it black."
+        },
+        {
+          "label": "no_darkest_hour",
+          "polarity": "does_not_fire",
+          "delta": "Darkest Hour is not on the battlefield.",
+          "expected": "Culling Drone is a colorless 2/2."
+        }
+      ],
+      "cards": [
+        "Swamp",
+        "Darkest Hour",
+        "Culling Drone"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "613.8-1",
+      "rules": [
+        "613.8",
+        "613.8a",
+        "613.8b"
+      ],
+      "title": "A dependent effect waits for the effect it depends on, overriding timestamp order",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Forest",
+            "Urborg, Tomb of Yawgmoth"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Blood Moon"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Blood Moon, tapping the three Mountains.",
+        "Both players pass; Blood Moon resolves.",
+        "The board is read."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Urborg, Tomb of Yawgmoth is a Mountain and has lost its ability; Forest is only a Forest, and the Mountains are only Mountains: Urborg's effect depends on Blood Moon (which changes whether it exists), so Blood Moon applies first although Urborg has the earlier timestamp."
+        },
+        {
+          "label": "blood_moon_first",
+          "polarity": "other",
+          "delta": "Blood Moon is already on the battlefield in the setup and Urborg, Tomb of Yawgmoth is in A's hand; A plays Urborg as a land drop.",
+          "expected": "The result is the same: Urborg is a Mountain without its ability and Forest is only a Forest."
+        },
+        {
+          "label": "no_dependency",
+          "polarity": "does_not_fire",
+          "delta": "A casts Prismatic Omen (tapping Forest and a Mountain) instead of Blood Moon.",
+          "expected": "Urborg keeps its ability: Forest, the Mountains and Urborg are all Swamps and every other basic land type too, since neither effect changes the other."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Forest",
+        "Urborg, Tomb of Yawgmoth",
+        "Blood Moon",
+        "Prismatic Omen"
+      ],
+      "forge_notes": "Forge's dependency handling for Blood Moon against Urborg may differ from the rules; the base variant is the one that exposes it."
+    },
+    {
+      "id": "613.2a-1",
+      "rules": [
+        "613.1a",
+        "613.2a",
+        "613.2c"
+      ],
+      "title": "A copy effect sets only the copiable values, and the later layers apply on top of them",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Forest"
+          ],
+          "B": [
+            {
+              "card": "Grizzly Bears",
+              "counters": {
+                "+1/+1": 1
+              }
+            }
+          ]
+        },
+        "hand": {
+          "A": [
+            "Clone",
+            "Giant Growth"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Clone, tapping the four Islands.",
+        "Both players pass; Clone resolves and A chooses to have it enter as a copy of Grizzly Bears.",
+        "The board is read."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "A's Clone is a green 2/2 named Grizzly Bears: the +1/+1 counter on B's Grizzly Bears is not copied."
+        },
+        {
+          "label": "no_creature",
+          "polarity": "does_not_fire",
+          "delta": "B's Grizzly Bears is not on the battlefield.",
+          "expected": "Clone has nothing to copy and enters as a 0/0, so it moves to A's graveyard in the state-based check."
+        },
+        {
+          "label": "growth_on_clone",
+          "polarity": "other",
+          "delta": "After Clone resolves, A also casts Giant Growth targeting Clone, tapping Forest, and it resolves.",
+          "expected": "A's Clone is a 5/5 Grizzly Bears: the layer 1 copy values come first and the +3/+3 from layer 7c is added to them."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Forest",
+        "Grizzly Bears",
+        "Clone",
+        "Giant Growth"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "613.2b-1",
+      "rules": [
+        "613.2b"
+      ],
+      "title": "A face-down permanent has the characteristics of a 2/2 creature with no name, color or abilities",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            {
+              "card": "Exalted Angel",
+              "face_down": true
+            }
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "No action is taken; the board is read."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The face-down permanent is a colorless 2/2 creature with no name, no subtypes, no flying and no life gain trigger."
+        },
+        {
+          "label": "turned_up",
+          "polarity": "does_not_fire",
+          "delta": "A turns the permanent face up by paying its morph cost {2}{W}{W} with the four Plains.",
+          "expected": "The permanent is Exalted Angel, a white 4/5 Angel with flying and the life gain trigger."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Exalted Angel"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "613.2-1",
+      "rules": [
+        "613.2"
+      ],
+      "title": "A copy effect (layer 1a) on a face-down permanent is overridden by its face-down characteristics (layer 1b)",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Forest",
+            "Island",
+            "Island",
+            {
+              "card": "Exalted Angel",
+              "face_down": true
+            }
+          ],
+          "B": [
+            "Hill Giant"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Cytoshape"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Cytoshape targeting A's face-down permanent, tapping Forest and both Islands.",
+        "Both players pass; Cytoshape resolves and A chooses Hill Giant as the creature to copy.",
+        "The board is read."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "A's permanent is still face down and is a colorless 2/2 creature with no name, no subtypes and no abilities: the copy effect applied in layer 1a and the face-down characteristics replaced it in layer 1b."
+        },
+        {
+          "label": "face_up",
+          "polarity": "does_not_fire",
+          "delta": "A's Exalted Angel is face up in the setup.",
+          "expected": "A's permanent is a red 3/3 Giant named Hill Giant with no flying and no abilities until end of turn."
+        }
+      ],
+      "cards": [
+        "Forest",
+        "Island",
+        "Exalted Angel",
+        "Hill Giant",
+        "Cytoshape"
+      ],
+      "forge_notes": "Forge may let the copy effect override the face-down state; the base variant exposes it."
+    },
+    {
+      "id": "613.2c-1",
+      "rules": [
+        "613.2c"
+      ],
+      "title": "A copy of a face-down permanent takes its copiable values, which include the face-down characteristics",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            "Island",
+            "Island"
+          ],
+          "B": [
+            {
+              "card": "Exalted Angel",
+              "face_down": true
+            }
+          ]
+        },
+        "hand": {
+          "A": [
+            "Clone"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Clone, tapping the four Islands.",
+        "Both players pass; Clone resolves and A chooses to have it enter as a copy of B's face-down permanent.",
+        "The board is read."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "A's Clone is a face-up colorless 2/2 creature with no name and no abilities: it copied the face-down characteristics, and it is not face down."
+        },
+        {
+          "label": "face_up",
+          "polarity": "does_not_fire",
+          "delta": "B's Exalted Angel is face up in the setup.",
+          "expected": "A's Clone is Exalted Angel, a white 4/5 Angel with flying and the life gain trigger."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Exalted Angel",
+        "Clone"
+      ],
+      "forge_notes": "Forge may copy the underlying card of a face-down permanent rather than its face-down characteristics; the base variant exposes it."
+    },
+    {
+      "id": "613.10-1",
+      "rules": [
+        "613.10"
+      ],
+      "title": "An effect on a player is applied after the characteristics of objects are determined",
+      "record_kind": "combat",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest"
+          ],
+          "B": [
+            "Serra's Emissary"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Natural Affinity"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Serra's Emissary entered with its chosen card type set to Creature, so B has protection from creatures. Lands that A controls have been under A's control since the start of the turn."
+      },
+      "decisions": [
+        "A casts Natural Affinity, tapping three Forests.",
+        "Both players pass; Natural Affinity resolves and every land becomes a 2/2 land creature until end of turn.",
+        "A declares the untapped Forest as its only attacker, attacking B.",
+        "B declares no blockers.",
+        "Combat damage is dealt."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The attacking Forest is a creature because of Natural Affinity, so B's protection from creatures applies: the 2 damage is prevented and B stays at 20 life."
+        },
+        {
+          "label": "chose_artifact",
+          "polarity": "does_not_fire",
+          "delta": "Serra's Emissary entered with its chosen card type set to Artifact.",
+          "expected": "The attacking Forest is not an artifact, so B's protection does not apply: B is dealt 2 damage and is at 18 life."
+        }
+      ],
+      "cards": [
+        "Forest",
+        "Serra's Emissary",
+        "Natural Affinity"
+      ],
+      "forge_notes": "The chosen card type is an ETB choice that the setup has to preset."
+    },
+    {
+      "id": "613.11-1",
+      "rules": [
+        "613.11"
+      ],
+      "title": "An effect on the game rules is applied after the characteristics of objects, so removing an ability removes the requirement",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            {
+              "card": "Juggernaut",
+              "summoning_sick": false
+            }
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Turn to Frog"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A moves to the declare attackers step and declares no attackers."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Declaring no attackers is illegal: Juggernaut is a legal attacker and must attack."
+        },
+        {
+          "label": "frog",
+          "polarity": "does_not_fire",
+          "delta": "In the beginning of combat step, before the declare attackers step, A casts Turn to Frog targeting Juggernaut, tapping both Islands, and both players pass so it resolves.",
+          "expected": "Declaring no attackers is legal: Juggernaut is a 1/1 Frog that lost its ability, so nothing requires it to attack."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Juggernaut",
+        "Turn to Frog"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

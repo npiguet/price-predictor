@@ -1,0 +1,2 @@
+{"id": "728.1", "category": "mechanical", "observability": "indirect", "record_kinds": ["trigger", "resolution"], "outcome": "At the beginning of a player's precombat main phase with rad counters, that player mills that many cards, and for each nonland card milled loses 1 life and removes a rad counter.", "note": "Forge has rad counter cards"}
+{"id": "728.1a", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}

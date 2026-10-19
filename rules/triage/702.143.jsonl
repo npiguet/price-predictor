@@ -1,0 +1,7 @@
+{"id": "702.143", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.143a", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "A foretold card can be cast from exile for its foretell cost only after the turn it was foretold has ended.", "note": ""}
+{"id": "702.143b", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": "Describes that foretelling uses no stack; the special action itself is a player decision."}
+{"id": "702.143c", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.143d", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "A card that becomes foretold by an effect is castable from exile for its foretell cost only after that turn has ended.", "note": ""}
+{"id": "702.143e", "category": "out_of_scope", "observability": "none", "record_kinds": [], "outcome": "", "note": "Physical card handling."}
+{"id": "702.143f", "category": "out_of_scope", "observability": "none", "record_kinds": [], "outcome": "", "note": "Hidden-information handling when a player leaves or the game ends."}

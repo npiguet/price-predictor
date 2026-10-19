@@ -1,0 +1,663 @@
+{
+  "unit": "602",
+  "verified": true,
+  "review": [
+    "602.5c-1: the first variant carried a delta, so the scenario had no base; made 'second_source' the base with an empty delta (activating U2 is now the final decision) and rewrote 'first_source_again' as the one-fact change to U1.",
+    "602.5e-1: 'during_payment' claimed can_play false for Giant Growth, which the rules do not decide (A could activate the Pendant at priority first); the expected now states only that the Pendant activation during payment is illegal and the cast is reversed with nothing milled."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "602.1e-1",
+      "rules": [
+        "602.1e"
+      ],
+      "title": "A payment modification applies to the total activation cost after an increase",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Heirloom Epic",
+            "Grizzly Bears",
+            "Grizzly Bears",
+            "Grizzly Bears",
+            "Grizzly Bears",
+            "Grizzly Bears",
+            "Grizzly Bears"
+          ],
+          "B": [
+            "Suppression Field"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Island"
+          ]
+        },
+        "exile": {},
+        "notes": "All six Grizzly Bears are untapped and have been under A's control since before this turn. Neither player has lands. Heirloom Epic: {4}, {T}: draw a card; for each mana in its activation cost A may tap an untapped creature rather than pay that mana. Suppression Field raises the cost of non-mana activated abilities by {2}."
+      },
+      "decisions": [
+        "A, holding priority in main1 with an empty stack, activates Heirloom Epic.",
+        "The total activation cost is {4} plus {2} from Suppression Field, six mana; A pays each of the six by tapping a different untapped Grizzly Bears, and taps Heirloom Epic for the {T} part.",
+        "Both players pass; the ability resolves."
+      ],
+      "variants": [
+        {
+          "label": "six_creatures",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Activating Heirloom Epic is legal (can_play true) at an adjusted cost of {6}; all six Grizzly Bears and Heirloom Epic become tapped and A draws 1 card (the Island) when the ability resolves."
+        },
+        {
+          "label": "five_creatures",
+          "polarity": "does_not_fire",
+          "delta": "A controls five Grizzly Bears instead of six.",
+          "expected": "Activating Heirloom Epic is not legal (can_play false): the adjusted cost is still {6} and only five of its mana can be replaced by tapping creatures; nothing is tapped and A draws no card."
+        },
+        {
+          "label": "no_field",
+          "polarity": "other",
+          "delta": "Suppression Field is not on the battlefield (A still controls six Grizzly Bears).",
+          "expected": "Activating Heirloom Epic is legal at an adjusted cost of {4}; A taps four Grizzly Bears (the other two stay untapped) and Heirloom Epic, and draws 1 card."
+        }
+      ],
+      "cards": [
+        "Heirloom Epic",
+        "Suppression Field",
+        "Grizzly Bears",
+        "Island"
+      ],
+      "forge_notes": "Heirloom Epic uses TapCreaturesForMana$ True; check that Forge counts the Suppression Field increase before offering creature taps."
+    },
+    {
+      "id": "602.2-1",
+      "rules": [
+        "602.2"
+      ],
+      "title": "Only the controller can activate an activated ability",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Prodigal Pyromancer"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "stack": [
+          {
+            "card": "Lightning Bolt",
+            "controller": "A",
+            "targets": [
+              "B"
+            ]
+          }
+        ],
+        "notes": "A cast Lightning Bolt targeting B earlier in main1; it is on the stack and A has just received priority. Prodigal Pyromancer has been under A's control since before this turn."
+      },
+      "decisions": [
+        "A, holding priority, activates Prodigal Pyromancer ({T}), targeting B.",
+        "Both players pass; the ability resolves, then Lightning Bolt resolves."
+      ],
+      "variants": [
+        {
+          "label": "controller_activates",
+          "polarity": "does_not_fire",
+          "delta": "",
+          "expected": "A's activation of Prodigal Pyromancer is legal (can_play true for A); the ability goes on the stack above Lightning Bolt and resolves first, dealing 1 damage to B, and Lightning Bolt then deals 3 so B ends at 16."
+        },
+        {
+          "label": "opponent_activates",
+          "polarity": "fires",
+          "delta": "A passes priority instead; B, now holding priority with Lightning Bolt on the stack, tries to activate A's Prodigal Pyromancer targeting A.",
+          "expected": "B's activation is not legal (can_play false for B): Prodigal Pyromancer stays untapped, no ability is put on the stack, and A's life is unchanged."
+        }
+      ],
+      "cards": [
+        "Prodigal Pyromancer",
+        "Lightning Bolt"
+      ],
+      "forge_notes": "The Lightning Bolt on the stack can be reached by A casting it from hand with a Mountain."
+    },
+    {
+      "id": "602.2a-1",
+      "rules": [
+        "602.2a"
+      ],
+      "title": "An activated ability on the stack is an object independent of its source",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Prodigal Pyromancer"
+          ],
+          "B": [
+            "Island",
+            "Mountain"
+          ]
+        },
+        "hand": {
+          "B": [
+            "Stifle",
+            "Shock"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Prodigal Pyromancer has been under A's control since before this turn."
+      },
+      "decisions": [
+        "A activates Prodigal Pyromancer ({T}), targeting B; the ability goes on the stack.",
+        "A passes priority; B passes priority (base variant); the ability resolves."
+      ],
+      "variants": [
+        {
+          "label": "resolves",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The ability resolves and deals 1 damage to B (B at 19); Prodigal Pyromancer stays tapped on the battlefield."
+        },
+        {
+          "label": "countered",
+          "polarity": "does_not_fire",
+          "delta": "In response B casts Stifle (tapping Island) targeting the ability; both players pass and Stifle resolves.",
+          "expected": "The ability is countered and does nothing: B stays at 20, Prodigal Pyromancer stays on the battlefield tapped, and Stifle is in B's graveyard."
+        },
+        {
+          "label": "source_dies",
+          "polarity": "fires",
+          "delta": "In response B casts Shock (tapping Mountain) targeting Prodigal Pyromancer; both players pass and Shock resolves first.",
+          "expected": "Shock resolves first and Prodigal Pyromancer moves to A's graveyard, yet the ability still on the stack then resolves and deals 1 damage to B (B at 19)."
+        }
+      ],
+      "cards": [
+        "Prodigal Pyromancer",
+        "Stifle",
+        "Shock",
+        "Island",
+        "Mountain"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "602.4-1",
+      "rules": [
+        "602.4"
+      ],
+      "title": "A cost-altering activated ability does not change a spell already on the stack",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Kaza, Roil Chaser",
+            "Island",
+            "Island",
+            "Island",
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Divination"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Island",
+            "Island"
+          ]
+        },
+        "exile": {},
+        "notes": "Kaza, Roil Chaser has haste. A controls one Wizard (Kaza), so its ability reduces the next instant or sorcery by {1}."
+      },
+      "decisions": [
+        "A casts Divination ({2}{U}) tapping three Islands; it goes on the stack.",
+        "A, holding priority, activates Kaza ({T}); the ability resolves and creates the cost reduction for the next instant or sorcery A casts this turn.",
+        "Both players pass; Divination resolves."
+      ],
+      "variants": [
+        {
+          "label": "activated_after_cast",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Divination was cast for the full {2}{U}: three Islands tapped and the fourth untapped, no mana refunded, and Divination resolves normally, A draws 2 cards."
+        },
+        {
+          "label": "activated_before_cast",
+          "polarity": "does_not_fire",
+          "delta": "A activates Kaza first and lets the ability resolve, then casts Divination.",
+          "expected": "Divination costs {1}{U}: only two Islands are tapped and two stay untapped; Divination resolves and A draws 2 cards."
+        }
+      ],
+      "cards": [
+        "Kaza, Roil Chaser",
+        "Divination",
+        "Island"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "602.5-1",
+      "rules": [
+        "602.5"
+      ],
+      "title": "An ability that is prohibited from being activated cannot be activated",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Prodigal Pyromancer"
+          ],
+          "B": [
+            "Pithing Needle"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Pithing Needle is controlled by B; as it entered, B chose the name 'Prodigal Pyromancer'. Prodigal Pyromancer has been under A's control since before this turn."
+      },
+      "decisions": [
+        "A, holding priority in main1 with an empty stack, tries to activate Prodigal Pyromancer ({T}) targeting B."
+      ],
+      "variants": [
+        {
+          "label": "named",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "A's activation is not legal (can_play false): Prodigal Pyromancer is not tapped, nothing goes on the stack, and B's life stays 20."
+        },
+        {
+          "label": "other_name",
+          "polarity": "does_not_fire",
+          "delta": "Pithing Needle's chosen name is 'Grizzly Bears' instead.",
+          "expected": "A's activation is legal (can_play true): Prodigal Pyromancer taps and its ability resolves, dealing 1 damage to B (B at 19)."
+        }
+      ],
+      "cards": [
+        "Prodigal Pyromancer",
+        "Pithing Needle"
+      ],
+      "forge_notes": "The name choice on Pithing Needle is set directly in the puzzle state."
+    },
+    {
+      "id": "602.5a-1",
+      "rules": [
+        "602.5a"
+      ],
+      "title": "A summoning-sick creature cannot use an ability with {T} in its cost",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Prodigal Pyromancer",
+              "summoning_sick": true
+            },
+            "Forest",
+            "Forest"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Prodigal Pyromancer came under A's control this turn and has no haste."
+      },
+      "decisions": [
+        "A, holding priority in main1 with an empty stack, tries to activate the creature's ability, targeting B."
+      ],
+      "variants": [
+        {
+          "label": "sick_tap_ability",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The activation of Prodigal Pyromancer's {T} ability is not legal (can_play false): it stays untapped and B's life stays 20."
+        },
+        {
+          "label": "not_sick",
+          "polarity": "does_not_fire",
+          "delta": "Prodigal Pyromancer has been under A's control since the start of A's turn (not summoning sick).",
+          "expected": "The activation is legal; Prodigal Pyromancer taps and its ability resolves, dealing 1 damage to B (B at 19)."
+        },
+        {
+          "label": "haste",
+          "polarity": "does_not_fire",
+          "delta": "The summoning-sick creature is Vulshok Sorcerer (haste, {T}: 1 damage to any target) instead of Prodigal Pyromancer.",
+          "expected": "The activation is legal despite the creature having come under A's control this turn; Vulshok Sorcerer taps and deals 1 damage to B (B at 19)."
+        },
+        {
+          "label": "no_tap_cost",
+          "polarity": "other",
+          "delta": "The summoning-sick creature is Basking Rootwalla and A activates its {1}{G} ability, tapping both Forests.",
+          "expected": "The activation is legal because the cost has no {T}; Basking Rootwalla gets +2/+2 until end of turn and is 3/3."
+        }
+      ],
+      "cards": [
+        "Prodigal Pyromancer",
+        "Vulshok Sorcerer",
+        "Basking Rootwalla",
+        "Forest"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "602.5b-1",
+      "rules": [
+        "602.5b"
+      ],
+      "title": "A use restriction continues to apply after the object changes controller",
+      "record_kind": "playability",
+      "setup": {
+        "active": "B",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Basking Rootwalla",
+            "Forest",
+            "Forest"
+          ],
+          "B": [
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Forest",
+            "Forest"
+          ]
+        },
+        "hand": {
+          "B": [
+            "Act of Treason"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Basking Rootwalla: {1}{G}: +2/+2 until end of turn. Activate only once each turn."
+      },
+      "decisions": [
+        "B casts Act of Treason targeting Basking Rootwalla, tapping three Mountains.",
+        "A receives priority and, in response, activates Basking Rootwalla ({1}{G}, tapping both Forests); both players pass and the ability resolves, making it 3/3 until end of turn.",
+        "Both players pass again; Act of Treason resolves: B gains control of Basking Rootwalla until end of turn, untaps it, and it gains haste.",
+        "B, holding priority, tries to activate Basking Rootwalla paying {1}{G} with B's two Forests."
+      ],
+      "variants": [
+        {
+          "label": "already_activated",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "B's activation is not legal (can_play false): the once-each-turn limit was already used while A controlled it; no ability goes on the stack and B's Forests stay untapped. Basking Rootwalla is 3/3 under B's control."
+        },
+        {
+          "label": "not_yet_activated",
+          "polarity": "does_not_fire",
+          "delta": "A does not respond to Act of Treason, so Basking Rootwalla has not been activated this turn.",
+          "expected": "B's activation is legal; B taps both Forests, the ability resolves and Basking Rootwalla is 3/3 until end of turn under B's control."
+        }
+      ],
+      "cards": [
+        "Basking Rootwalla",
+        "Act of Treason",
+        "Forest",
+        "Mountain"
+      ],
+      "forge_notes": "In the not_yet_activated variant A holds its two Forests unspent."
+    },
+    {
+      "id": "602.5c-1",
+      "rules": [
+        "602.5c"
+      ],
+      "title": "A restriction on an acquired ability applies only to the ability acquired from that object",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Prodigal Pyromancer",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Touch of Vitae",
+            "Touch of Vitae"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Forest",
+            "Forest"
+          ]
+        },
+        "exile": {},
+        "notes": "Prodigal Pyromancer has been under A's control since before this turn. Touch of Vitae: until end of turn, target creature gains haste and '{0}: Untap this creature. Activate only once.'"
+      },
+      "decisions": [
+        "A activates Prodigal Pyromancer ({T}) targeting B; it resolves (B at 19) and the Pyromancer is tapped.",
+        "A casts the first Touch of Vitae targeting Prodigal Pyromancer (three Forests); it resolves, granting untap ability U1.",
+        "A casts the second Touch of Vitae targeting Prodigal Pyromancer (three Forests); it resolves, granting untap ability U2.",
+        "A activates U1 ({0}); it resolves and the Pyromancer untaps.",
+        "A activates Prodigal Pyromancer ({T}) targeting B; it resolves (B at 18) and the Pyromancer is tapped.",
+        "A activates U2, the untap ability granted by the second Touch of Vitae ({0})."
+      ],
+      "variants": [
+        {
+          "label": "second_source",
+          "polarity": "does_not_fire",
+          "delta": "",
+          "expected": "The activation is legal (can_play true): U2 has not been used, so it goes on the stack, resolves, and Prodigal Pyromancer untaps."
+        },
+        {
+          "label": "first_source_again",
+          "polarity": "fires",
+          "delta": "A activates U1, the untap ability granted by the first Touch of Vitae, a second time instead of U2.",
+          "expected": "The activation is not legal (can_play false): U1 is limited to one activation; nothing goes on the stack and Prodigal Pyromancer stays tapped."
+        }
+      ],
+      "cards": [
+        "Prodigal Pyromancer",
+        "Touch of Vitae",
+        "Forest"
+      ],
+      "forge_notes": "Each Touch of Vitae animates its own copy of the ABUntap ability; confirm Forge keeps a separate GameActivationLimit count for each copy."
+    },
+    {
+      "id": "602.5d-1",
+      "rules": [
+        "602.5d"
+      ],
+      "title": "An 'activate only as a sorcery' ability needs sorcery timing",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Grizzly Bears",
+            "Bonesplitter"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Lightning Bolt"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Grizzly Bears has been under A's control since before this turn. Equip abilities can be activated only at sorcery timing."
+      },
+      "decisions": [
+        "A, holding priority, activates Bonesplitter's equip {1} targeting Grizzly Bears, tapping a Mountain.",
+        "Both players pass; the ability resolves."
+      ],
+      "variants": [
+        {
+          "label": "main_empty_stack",
+          "polarity": "does_not_fire",
+          "delta": "",
+          "expected": "The equip activation is legal (can_play true); it resolves and Bonesplitter is attached to Grizzly Bears, which is 4/2."
+        },
+        {
+          "label": "stack_not_empty",
+          "polarity": "fires",
+          "delta": "Before equipping, A casts Lightning Bolt targeting B (tapping a Mountain) and, still holding priority with it on the stack, tries to activate equip.",
+          "expected": "The equip activation is not legal (can_play false): Bonesplitter stays unattached while Lightning Bolt is on the stack."
+        },
+        {
+          "label": "combat",
+          "polarity": "fires",
+          "delta": "The step is beginning_of_combat instead of main1 and the stack is empty.",
+          "expected": "The equip activation is not legal (can_play false): Bonesplitter stays unattached and Grizzly Bears is 2/2."
+        }
+      ],
+      "cards": [
+        "Bonesplitter",
+        "Grizzly Bears",
+        "Lightning Bolt",
+        "Mountain"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "602.5e-1",
+      "rules": [
+        "602.5e"
+      ],
+      "title": "An 'activate only as an instant' ability can be activated at priority but not while paying a cost",
+      "record_kind": "playability",
+      "setup": {
+        "active": "B",
+        "step": "upkeep",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Charmed Pendant",
+            "Grizzly Bears"
+          ],
+          "B": [
+            "Mountain"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Giant Growth"
+          ],
+          "B": [
+            "Lightning Bolt"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Grizzly Bears",
+            "Grizzly Bears"
+          ]
+        },
+        "exile": {},
+        "notes": "A controls no lands. Charmed Pendant: {T}, mill a card: for each colored mana symbol in the milled card's mana cost add one mana of that color. Activate only as an instant."
+      },
+      "decisions": [
+        "B passes priority in B's upkeep with an empty stack.",
+        "A, holding priority, activates Charmed Pendant: taps it and mills the top card of A's library (Grizzly Bears, {1}{G}), adding {G}."
+      ],
+      "variants": [
+        {
+          "label": "priority_empty_stack",
+          "polarity": "does_not_fire",
+          "delta": "",
+          "expected": "The activation is legal (can_play true): Charmed Pendant taps, Grizzly Bears moves from A's library to A's graveyard and A adds {G}."
+        },
+        {
+          "label": "priority_stack_not_empty",
+          "polarity": "does_not_fire",
+          "delta": "B first casts Lightning Bolt targeting A's Grizzly Bears (tapping Mountain), and A activates Charmed Pendant with the Bolt on the stack.",
+          "expected": "The activation is still legal (can_play true): Charmed Pendant taps, the top Grizzly Bears is milled and A adds {G}; Lightning Bolt remains on the stack."
+        },
+        {
+          "label": "during_payment",
+          "polarity": "fires",
+          "delta": "A instead casts Giant Growth targeting its Grizzly Bears and tries to pay the {G} by activating Charmed Pendant while paying the cost.",
+          "expected": "A's activation of Charmed Pendant while paying Giant Growth's cost is not legal: no mana is added, the Giant Growth cast cannot be completed and is reversed, Giant Growth stays in A's hand, Charmed Pendant stays untapped and nothing is milled."
+        }
+      ],
+      "cards": [
+        "Charmed Pendant",
+        "Grizzly Bears",
+        "Giant Growth",
+        "Lightning Bolt",
+        "Mountain"
+      ],
+      "forge_notes": "SpellAbilityRestriction rejects an InstantSpeed mana ability while a cost payment is in progress."
+    }
+  ]
+}

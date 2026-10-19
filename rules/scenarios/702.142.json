@@ -1,0 +1,132 @@
+{
+  "unit": "702.142",
+  "verified": true,
+  "review": [],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.142a-1",
+      "rules": [
+        "702.142a"
+      ],
+      "title": "A boast ability can be activated only if its creature attacked this turn",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Fearless Liberator",
+              "summoning_sick": false
+            },
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            },
+            "Mountain",
+            "Mountain",
+            "Mountain"
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A declares Fearless Liberator and Grizzly Bears as attackers against B.",
+        "B declares no blockers.",
+        "In the declare blockers step A activates Fearless Liberator's boast ability ({2}{R}), tapping three Mountains.",
+        "Both players pass; the ability resolves."
+      ],
+      "variants": [
+        {
+          "label": "liberator_attacked",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The boast activation is legal. The ability resolves and A gets a 2/1 red Dwarf Berserker creature token. All three Mountains are tapped."
+        },
+        {
+          "label": "liberator_stayed_home",
+          "polarity": "does_not_fire",
+          "delta": "A declares only Grizzly Bears as an attacker; Fearless Liberator does not attack.",
+          "expected": "The boast activation is not legal (Fearless Liberator did not attack this turn). No token is created and the Mountains stay untapped."
+        }
+      ],
+      "cards": [
+        "Fearless Liberator",
+        "Grizzly Bears",
+        "Mountain"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.142a-2",
+      "rules": [
+        "702.142a"
+      ],
+      "title": "A boast ability can be activated only once each turn",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Fearless Liberator",
+              "summoning_sick": false
+            },
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain"
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A declares Fearless Liberator as an attacker against B.",
+        "B declares no blockers.",
+        "In the declare blockers step A activates Fearless Liberator's boast ability ({2}{R}), tapping three Mountains.",
+        "Both players pass; the ability resolves."
+      ],
+      "variants": [
+        {
+          "label": "first_activation",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The boast activation is legal and resolves: A gets one 2/1 red Dwarf Berserker creature token. Three Mountains are untapped."
+        },
+        {
+          "label": "second_activation",
+          "polarity": "does_not_fire",
+          "delta": "After the first boast ability resolves, A tries to activate it a second time this turn, tapping the other three Mountains.",
+          "expected": "The second activation is not legal (boast was already activated this turn). A still has exactly one Dwarf Berserker token and three untapped Mountains."
+        }
+      ],
+      "cards": [
+        "Fearless Liberator",
+        "Mountain"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

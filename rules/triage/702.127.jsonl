@@ -1,0 +1,2 @@
+{"id": "702.127", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.127a", "category": "mechanical", "observability": "direct", "record_kinds": ["playability", "resolution", "rewrite"], "outcome": "An aftermath half can be cast only from a graveyard, and when that spell leaves the stack it is exiled instead of going anywhere else.", "note": ""}

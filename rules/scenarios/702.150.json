@@ -1,0 +1,71 @@
+{
+  "unit": "702.150",
+  "verified": true,
+  "review": [],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.150a-1",
+      "rules": [
+        "702.150a"
+      ],
+      "title": "A compleated planeswalker enters with two fewer loyalty counters per symbol paid with life",
+      "record_kind": "rewrite",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Swamp",
+            "Swamp",
+            "Swamp",
+            "Swamp",
+            "Swamp",
+            "Swamp"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Vraska, Betrayal's Sting"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Swamp"
+          ]
+        },
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Vraska, Betrayal's Sting, paying 2 life for the {B/P} symbol and {4}{B} with five Swamps.",
+        "Both players pass; Vraska resolves."
+      ],
+      "variants": [
+        {
+          "label": "paid_life",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "A's life is 18. Vraska enters the battlefield with 4 loyalty counters (6 minus 2). One Swamp stays untapped."
+        },
+        {
+          "label": "paid_mana",
+          "polarity": "does_not_fire",
+          "delta": "A pays {B} for the {B/P} symbol with a sixth Swamp instead of paying 2 life.",
+          "expected": "A's life stays 20. Vraska enters the battlefield with 6 loyalty counters."
+        }
+      ],
+      "cards": [
+        "Vraska, Betrayal's Sting",
+        "Swamp"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

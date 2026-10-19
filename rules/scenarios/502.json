@@ -1,0 +1,305 @@
+{
+  "unit": "502",
+  "verified": true,
+  "review": [],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "502.1-1",
+      "rules": [
+        "502.1"
+      ],
+      "title": "Phasing permanents phase in or out in the active player's untap step",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "untap",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Tolarian Drake"
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Tolarian Drake is a 2/4 flyer with phasing, currently phased in."
+      },
+      "decisions": [
+        "The untap step begins; the phasing turn-based action happens with no choices to take."
+      ],
+      "variants": [
+        {
+          "label": "phases_out",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Tolarian Drake phases out in A's untap step: it is treated as though it does not exist (A controls no creature)."
+        },
+        {
+          "label": "phases_in",
+          "polarity": "fires",
+          "delta": "Tolarian Drake is phased out at the start of the untap step, having phased out while A controlled it.",
+          "expected": "Tolarian Drake phases in in A's untap step: it is on the battlefield again as a 2/4 flyer."
+        },
+        {
+          "label": "opponents_untap",
+          "polarity": "does_not_fire",
+          "delta": "The active player is B, so it is B's untap step (Tolarian Drake is phased in and A's).",
+          "expected": "Tolarian Drake does not phase: it stays phased in and A controls a 2/4 flyer."
+        }
+      ],
+      "cards": [
+        "Tolarian Drake"
+      ],
+      "forge_notes": "Variant phases_in needs a phased-out permanent in the starting state; Forge represents it as a permanent with phasedOut set."
+    },
+    {
+      "id": "502.2-1",
+      "rules": [
+        "502.2"
+      ],
+      "title": "It becomes night at the untap step if it was day and the previous active player cast no spells",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "untap",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Fearful Villager"
+          ],
+          "B": [
+            "Forest",
+            "Forest"
+          ]
+        },
+        "hand": {
+          "B": [
+            "Grizzly Bears"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "It is day, so Fearful Villager (daybound) is on its front face, a 2/3. The previous turn was B's turn. B did not cast any spell during it; Grizzly Bears stayed in B's hand."
+      },
+      "decisions": [
+        "The untap step begins; the day/night check happens as a turn-based action with no choices to take."
+      ],
+      "variants": [
+        {
+          "label": "no_spell",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "It becomes night: Fearful Villager transforms into Fearsome Werewolf, a 4/3 with menace."
+        },
+        {
+          "label": "one_spell",
+          "polarity": "does_not_fire",
+          "delta": "B had cast Grizzly Bears during its previous turn (it is on B's battlefield, not in hand).",
+          "expected": "It stays day: Fearful Villager remains a 2/3 on its front face."
+        }
+      ],
+      "cards": [
+        "Fearful Villager",
+        "Fearsome Werewolf",
+        "Forest",
+        "Grizzly Bears"
+      ],
+      "forge_notes": "The day/night state and B's cast count of the previous turn are starting history fixed by the notes, not setup fields."
+    },
+    {
+      "id": "502.2-2",
+      "rules": [
+        "502.2"
+      ],
+      "title": "It becomes day at the untap step if it was night and the previous active player cast two or more spells",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "untap",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Fearful Villager"
+          ],
+          "B": [
+            "Forest",
+            "Forest",
+            "Grizzly Bears",
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "It is night, so Fearful Villager (daybound) is on its night face, the 4/3 Fearsome Werewolf. The previous turn was B's turn. B cast both Grizzly Bears during it."
+      },
+      "decisions": [
+        "The untap step begins; the day/night check happens as a turn-based action with no choices to take."
+      ],
+      "variants": [
+        {
+          "label": "two_spells",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "It becomes day: Fearful Villager transforms back to its front face, a 2/3 with menace."
+        },
+        {
+          "label": "one_spell",
+          "polarity": "does_not_fire",
+          "delta": "B cast only one Grizzly Bears during its previous turn (the other is in B's hand, not on the battlefield).",
+          "expected": "It stays night: the permanent remains the 4/3 Fearsome Werewolf."
+        }
+      ],
+      "cards": [
+        "Fearful Villager",
+        "Fearsome Werewolf",
+        "Forest",
+        "Grizzly Bears"
+      ],
+      "forge_notes": "In the one_spell variant the second Grizzly Bears is in B's hand."
+    },
+    {
+      "id": "502.3-1",
+      "rules": [
+        "502.3"
+      ],
+      "title": "The active player's permanents untap simultaneously except those an effect keeps from untapping",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "untap",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Grizzly Bears",
+              "tapped": true
+            },
+            {
+              "card": "Runeclaw Bear",
+              "tapped": true
+            },
+            {
+              "card": "Claustrophobia",
+              "attached_to": "Runeclaw Bear"
+            }
+          ],
+          "B": [
+            {
+              "card": "Island",
+              "tapped": true
+            }
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Claustrophobia: enchanted creature doesn't untap during its controller's untap step."
+      },
+      "decisions": [
+        "The untap step begins; the untap turn-based action happens with no choices to take."
+      ],
+      "variants": [
+        {
+          "label": "aura_on_runeclaw",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears untaps; Runeclaw Bear (enchanted) stays tapped; B's Island stays tapped because B is not the active player."
+        },
+        {
+          "label": "aura_on_grizzly",
+          "polarity": "does_not_fire",
+          "delta": "Claustrophobia is attached to Grizzly Bears instead of Runeclaw Bear.",
+          "expected": "Runeclaw Bear untaps; Grizzly Bears (enchanted) stays tapped."
+        },
+        {
+          "label": "opponents_untap",
+          "polarity": "other",
+          "delta": "The active player is B, so it is B's untap step.",
+          "expected": "B's Island untaps; A's Grizzly Bears and Runeclaw Bear stay tapped."
+        }
+      ],
+      "cards": [
+        "Grizzly Bears",
+        "Runeclaw Bear",
+        "Claustrophobia",
+        "Island"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "502.4-1",
+      "rules": [
+        "502.4"
+      ],
+      "title": "No player receives priority during the untap step, so no spell can be cast",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "untap",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain"
+          ],
+          "B": [
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Lightning Bolt"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Mountain is untapped. A is asked whether Lightning Bolt targeting Grizzly Bears can be cast at this point."
+      },
+      "decisions": [
+        "A attempts to cast Lightning Bolt targeting B's Grizzly Bears, tapping Mountain, at the point named by the variant."
+      ],
+      "variants": [
+        {
+          "label": "untap_step",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Casting Lightning Bolt is not legal (can_play false): no one receives priority in the untap step."
+        },
+        {
+          "label": "upkeep_step",
+          "polarity": "does_not_fire",
+          "delta": "The attempt happens in the upkeep step (setup.step upkeep), where A receives priority.",
+          "expected": "Casting Lightning Bolt is legal (can_play true) with Grizzly Bears as a legal target."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Lightning Bolt",
+        "Grizzly Bears"
+      ],
+      "forge_notes": "The untap step has no priority in Forge; a playability query there may need to be modeled as the first priority of the upkeep. The second half of 502.4 (triggers waiting) is shown by scenario 503.1a-1."
+    }
+  ]
+}

@@ -1,0 +1,142 @@
+{
+  "unit": "702.123",
+  "verified": true,
+  "review": [],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.123a-1",
+      "rules": [
+        "702.123a"
+      ],
+      "title": "Fabricate puts counters on the permanent or creates Servo tokens when it enters",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Swamp",
+            "Swamp",
+            "Swamp"
+          ],
+          "B": [
+            "Island",
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Weaponcraft Enthusiast"
+          ],
+          "B": [
+            "Counterspell"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Weaponcraft Enthusiast, tapping the three Swamps.",
+        "B has priority with the spell on the stack and passes; A passes. Weaponcraft Enthusiast resolves and enters the battlefield.",
+        "The fabricate trigger goes on the stack; both players pass. On resolution A chooses to put two +1/+1 counters on Weaponcraft Enthusiast."
+      ],
+      "variants": [
+        {
+          "label": "counters",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The fabricate trigger fires on entering. Weaponcraft Enthusiast has two +1/+1 counters and is 2/3. No tokens are created."
+        },
+        {
+          "label": "servos",
+          "polarity": "other",
+          "delta": "On resolution of the fabricate trigger A chooses not to put counters on it.",
+          "expected": "Weaponcraft Enthusiast has no counters and stays 0/1. A creates two 1/1 colorless Servo artifact creature tokens."
+        },
+        {
+          "label": "spell_countered",
+          "polarity": "does_not_fire",
+          "delta": "B responds by casting Counterspell with both Islands, targeting Weaponcraft Enthusiast.",
+          "expected": "Weaponcraft Enthusiast is countered and moves to A's graveyard. It never enters the battlefield, so the fabricate trigger does not fire and no counters or tokens appear."
+        }
+      ],
+      "cards": [
+        "Swamp",
+        "Island",
+        "Weaponcraft Enthusiast",
+        "Counterspell"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.123b-1",
+      "rules": [
+        "702.123b"
+      ],
+      "title": "Each instance of fabricate triggers separately",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Swamp",
+            "Swamp",
+            "Swamp",
+            {
+              "card": "Cayth, Famed Mechanist",
+              "summoning_sick": false
+            }
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Weaponcraft Enthusiast"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Weaponcraft Enthusiast, tapping the three Swamps; it resolves and enters the battlefield.",
+        "Its fabricate 2 trigger and the fabricate 1 trigger from Cayth, Famed Mechanist both go on the stack.",
+        "On resolution of the fabricate 2 trigger A puts two +1/+1 counters on Weaponcraft Enthusiast.",
+        "On resolution of the fabricate 1 trigger A chooses not to put a counter on it."
+      ],
+      "variants": [
+        {
+          "label": "two_instances",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Two separate fabricate triggers fire. Weaponcraft Enthusiast has two +1/+1 counters and is 2/3, and A creates one 1/1 colorless Servo artifact creature token."
+        },
+        {
+          "label": "one_instance",
+          "polarity": "does_not_fire",
+          "delta": "Cayth, Famed Mechanist is controlled by B instead of A.",
+          "expected": "Weaponcraft Enthusiast has only its own fabricate 2, so one trigger fires. It has two +1/+1 counters and is 2/3, and no Servo is created."
+        }
+      ],
+      "cards": [
+        "Swamp",
+        "Cayth, Famed Mechanist",
+        "Weaponcraft Enthusiast"
+      ],
+      "forge_notes": "Variant one_instance moves Cayth, Famed Mechanist to B's battlefield; its granted fabricate applies only to its controller's creatures."
+    }
+  ]
+}

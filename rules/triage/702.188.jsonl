@@ -1,0 +1,2 @@
+{"id": "702.188", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.188a", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "A spell with web-slinging can be cast for its web-slinging cost only if the player returns a tapped creature they control to hand.", "note": "Returning the creature is part of the cost; the verdict is whether the alternative cast is permitted."}

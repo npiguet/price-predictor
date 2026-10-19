@@ -1,0 +1,10 @@
+{"id": "718.1", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "718.2", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "718.2a", "category": "mechanical", "observability": "needs_new_fields", "record_kinds": ["continuous"], "outcome": "A copy of a prototype card has the same alternative mana cost, power and toughness available.", "note": ""}
+{"id": "718.3", "category": "decision", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "718.3a", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "A prototyped spell is judged for casting using only the alternative mana cost, so can_play and cost differ from casting normally.", "note": ""}
+{"id": "718.3b", "category": "mechanical", "observability": "direct", "record_kinds": ["continuous"], "outcome": "A prototyped spell and its permanent have the alternative power, toughness and mana cost, and the colors of that cost.", "note": ""}
+{"id": "718.3c", "category": "mechanical", "observability": "needs_new_fields", "record_kinds": ["resolution"], "outcome": "A copy of a prototyped spell is prototyped and has the alternative power, toughness and mana cost.", "note": ""}
+{"id": "718.3d", "category": "mechanical", "observability": "direct", "record_kinds": ["continuous"], "outcome": "A copy of a permanent that was a prototyped spell has the alternative power, toughness and mana cost.", "note": ""}
+{"id": "718.4", "category": "mechanical", "observability": "direct", "record_kinds": ["continuous"], "outcome": "A prototype card not cast as a prototyped spell, and in every other zone, has only its normal characteristics.", "note": ""}
+{"id": "718.5", "category": "mechanical", "observability": "direct", "record_kinds": ["continuous"], "outcome": "A prototyped permanent keeps its other characteristics, such as types and abilities, unchanged apart from power, toughness, mana cost and color.", "note": ""}

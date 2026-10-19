@@ -1,0 +1,252 @@
+{
+  "unit": "717",
+  "verified": true,
+  "review": [],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "717.3-1",
+      "rules": [
+        "717.3"
+      ],
+      "title": "An effect opens an Attraction from the Attraction deck onto the battlefield",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Swamp",
+            "Swamp"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Deadbeat Attendant"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "A's Attraction deck (in the command zone) holds exactly one card, Concession Stand (the variant lit on 2 and 6)."
+      },
+      "decisions": [
+        "A casts Deadbeat Attendant, tapping both Swamps.",
+        "Both players pass; Deadbeat Attendant resolves and enters.",
+        "Its enters trigger (open an Attraction) goes on the stack; both players pass; it resolves."
+      ],
+      "variants": [
+        {
+          "label": "deck_has_attraction",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Concession Stand moves from A's Attraction deck to the battlefield under A's control, untapped. A's Attraction deck is empty."
+        },
+        {
+          "label": "deck_empty",
+          "polarity": "does_not_fire",
+          "delta": "A's Attraction deck is empty.",
+          "expected": "The trigger resolves and nothing happens: no Attraction is on the battlefield. Deadbeat Attendant stays on the battlefield."
+        }
+      ],
+      "cards": [
+        "Swamp",
+        "Deadbeat Attendant",
+        "Concession Stand"
+      ],
+      "forge_notes": "Needs a registered Attraction deck for player A; an empty deck is the default."
+    },
+    {
+      "id": "717.4-1",
+      "rules": [
+        "717.4"
+      ],
+      "title": "The active player rolls to visit their Attractions as the precombat main phase begins",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "draw",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Complaints Clerk",
+            "Concession Stand"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Mountain",
+            "Mountain"
+          ],
+          "B": [
+            "Mountain",
+            "Mountain"
+          ]
+        },
+        "exile": {},
+        "notes": "Concession Stand is the variant lit on 2 and 6. The die rolled is fixed to 1, which lights no number. Complaints Clerk's trigger (whenever you roll a 1) makes the roll visible."
+      },
+      "decisions": [
+        "Both players pass priority in the draw step; the precombat main phase begins.",
+        "A, controlling an Attraction, rolls to visit (the die shows 1).",
+        "Complaints Clerk's trigger goes on the stack; both players pass; it resolves."
+      ],
+      "variants": [
+        {
+          "label": "controls_attraction",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "A rolls a die as main1 begins. Complaints Clerk triggers on the roll of 1 and A creates a 1/1 white Clown Robot artifact creature token. Concession Stand does not trigger, so no Food token is created."
+        },
+        {
+          "label": "attraction_controlled_by_opponent",
+          "polarity": "does_not_fire",
+          "delta": "Concession Stand is controlled by B instead of A.",
+          "expected": "A controls no Attraction, so no die is rolled as main1 begins. Complaints Clerk does not trigger and no token is created."
+        }
+      ],
+      "cards": [
+        "Complaints Clerk",
+        "Concession Stand",
+        "Mountain"
+      ],
+      "forge_notes": "Needs the die result fixed (seeded or forced roll)."
+    },
+    {
+      "id": "717.5-1",
+      "rules": [
+        "717.5"
+      ],
+      "title": "A visit ability triggers only when the visit roll matches a lit-up number",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "draw",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Concession Stand"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Mountain",
+            "Mountain"
+          ],
+          "B": [
+            "Mountain",
+            "Mountain"
+          ]
+        },
+        "exile": {},
+        "notes": "Concession Stand is the variant lit on 2 and 6. Visit: create a Food token."
+      },
+      "decisions": [
+        "Both players pass priority in the draw step; the precombat main phase begins.",
+        "A rolls to visit (the die shows 2).",
+        "If Concession Stand's visit ability triggered, both players pass and it resolves."
+      ],
+      "variants": [
+        {
+          "label": "roll_2",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The roll matches a lit number: the visit ability triggers and A creates a Food token."
+        },
+        {
+          "label": "roll_6",
+          "polarity": "fires",
+          "delta": "The die shows 6.",
+          "expected": "6 is also lit: the visit ability triggers and A creates a Food token."
+        },
+        {
+          "label": "roll_3",
+          "polarity": "does_not_fire",
+          "delta": "The die shows 3.",
+          "expected": "3 is not lit: the visit ability does not trigger and A creates no Food token."
+        }
+      ],
+      "cards": [
+        "Concession Stand",
+        "Mountain"
+      ],
+      "forge_notes": "Needs the die result fixed (seeded or forced roll)."
+    },
+    {
+      "id": "717.6-1",
+      "rules": [
+        "717.6"
+      ],
+      "title": "An Attraction leaving the battlefield goes to the command zone instead of the graveyard, unless it is exiled",
+      "record_kind": "rewrite",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Plains",
+            "Plains"
+          ],
+          "B": [
+            "Concession Stand"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Shatter",
+            "Banishing Light"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Concession Stand is owned by B."
+      },
+      "decisions": [
+        "A casts Shatter targeting Concession Stand, tapping Mountain and one Plains.",
+        "Both players pass; Shatter resolves."
+      ],
+      "variants": [
+        {
+          "label": "destroyed",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Concession Stand would go to B's graveyard but B puts it into the command zone (B's junkyard) instead. B's graveyard is empty."
+        },
+        {
+          "label": "exiled",
+          "polarity": "does_not_fire",
+          "delta": "A casts Banishing Light (tapping Mountain and both Plains) instead of Shatter; its enters trigger targets Concession Stand and resolves.",
+          "expected": "Exile is excepted: Concession Stand is exiled, not put into the command zone. The replacement does not apply."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Plains",
+        "Shatter",
+        "Banishing Light",
+        "Concession Stand"
+      ],
+      "forge_notes": "Forge moves the card to the Junkyard zone in GameAction.changeZone; exile is explicitly excepted."
+    }
+  ]
+}

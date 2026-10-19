@@ -1,0 +1,739 @@
+{
+  "unit": "310",
+  "verified": true,
+  "review": [
+    "310.7-1: trigger_pending variant stopped with the trigger still on the stack although its decisions let it resolve; rewrote delta and expected to the resolved outcome (exiled, Kyren Flamewright cast, never in the graveyard).",
+    "310.9c-1: blocker_tapped variant flipped tapped-creature legality (509.1a), not 310.9c; replaced it with a does_not_fire variant where the only potential blocker belongs to the battle's controller, and added A's non-attacking Grizzly Bears to the setup."
+  ],
+  "skipped": [
+    {
+      "id": "310.8",
+      "reason": "no non-Siege battle has been printed, so no Forge card can illustrate it"
+    },
+    {
+      "id": "310.9g",
+      "reason": "a battle's protector is not observable while the permanent is not a battle, and in a two-player game it is re-derived to the same opponent when it becomes one again, so no Forge outcome differs"
+    },
+    {
+      "id": "310.10",
+      "reason": "no Forge card is a battle that is also an Aura, Equipment or Fortification, and no effect attaches a battle to a permanent, so it cannot arise"
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "310.1-1",
+      "rules": [
+        "310.1"
+      ],
+      "title": "A battle card can be cast only in a main phase of its owner's turn with an empty stack",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Mountain"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Invasion of Mercadia",
+            "Lightning Bolt"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Three untapped Mountains, so mana is never the reason a cast is illegal."
+      },
+      "decisions": [
+        "A holds priority with an empty stack; the legality of casting Invasion of Mercadia from hand is recorded."
+      ],
+      "variants": [
+        {
+          "label": "main_empty_stack",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Casting Invasion of Mercadia is legal (can_play true)."
+        },
+        {
+          "label": "combat",
+          "polarity": "does_not_fire",
+          "delta": "The step is beginning_of_combat instead of main1.",
+          "expected": "Casting Invasion of Mercadia is not legal (can_play false)."
+        },
+        {
+          "label": "opponents_turn",
+          "polarity": "does_not_fire",
+          "delta": "B is the active player and the step is main1 of B's turn; A has priority.",
+          "expected": "Casting Invasion of Mercadia is not legal (can_play false)."
+        },
+        {
+          "label": "stack_not_empty",
+          "polarity": "does_not_fire",
+          "delta": "Before the legality is recorded, A casts Lightning Bolt targeting B, tapping one Mountain, and holds priority with Lightning Bolt on the stack.",
+          "expected": "Casting Invasion of Mercadia is not legal (can_play false) even though two Mountains remain untapped."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Invasion of Mercadia",
+        "Lightning Bolt"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "310.2-1",
+      "rules": [
+        "310.2"
+      ],
+      "title": "A resolving battle spell enters the battlefield under its controller's control",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain"
+          ],
+          "B": [
+            "Island",
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Invasion of Mercadia"
+          ],
+          "B": [
+            "Counterspell"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "A's hand holds no other card, so the enters trigger of Invasion of Mercadia (discard a card, then draw two) has nothing to discard."
+      },
+      "decisions": [
+        "A casts Invasion of Mercadia, tapping both Mountains.",
+        "B passes priority; A passes priority; Invasion of Mercadia resolves."
+      ],
+      "variants": [
+        {
+          "label": "resolves",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Invasion of Mercadia moves from the stack to the battlefield under A's control; nothing is in A's graveyard."
+        },
+        {
+          "label": "countered",
+          "polarity": "does_not_fire",
+          "delta": "B casts Counterspell targeting Invasion of Mercadia, tapping both Islands, before Invasion of Mercadia resolves.",
+          "expected": "Invasion of Mercadia is countered and moves to A's graveyard; it never reaches the battlefield. Counterspell moves to B's graveyard."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Island",
+        "Invasion of Mercadia",
+        "Counterspell"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "310.4b-1",
+      "rules": [
+        "310.4b"
+      ],
+      "title": "A battle enters with defense counters equal to its printed defense",
+      "record_kind": "rewrite",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Plains"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Invasion of Mercadia"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "A's hand holds no other card, so the enters trigger finds nothing to discard."
+      },
+      "decisions": [
+        "A casts Invasion of Mercadia (printed defense 4), tapping Mountain and Plains.",
+        "Both players pass; Invasion of Mercadia resolves and enters."
+      ],
+      "variants": [
+        {
+          "label": "defense_4",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Invasion of Mercadia enters with 4 defense counters on it."
+        },
+        {
+          "label": "defense_3",
+          "polarity": "fires",
+          "delta": "A casts Invasion of Gobakhan (printed defense 3) instead of Invasion of Mercadia.",
+          "expected": "Invasion of Gobakhan enters with 3 defense counters on it."
+        },
+        {
+          "label": "doubling_season",
+          "polarity": "other",
+          "delta": "A also controls Doubling Season, which was on the battlefield before the cast.",
+          "expected": "Invasion of Mercadia enters with 8 defense counters, the 4 counters it would enter with doubled by Doubling Season."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Plains",
+        "Invasion of Mercadia",
+        "Invasion of Gobakhan",
+        "Doubling Season"
+      ],
+      "forge_notes": "The doubling_season variant needs Doubling Season already on A's battlefield and an extra card in the setup; Forge's Doubling Season script restricts to counters on a permanent already in the battlefield zone, so it may not double a battle's enters-with counters. Invasion of Gobakhan's enters trigger targets B, whose hand is empty, so nothing is exiled."
+    },
+    {
+      "id": "310.5-1",
+      "rules": [
+        "310.5",
+        "310.9b"
+      ],
+      "title": "A Siege can be attacked by its controller, but never by its protector",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "declare_attackers",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            },
+            {
+              "card": "Invasion of Mercadia",
+              "counters": {
+                "defense": 4
+              }
+            }
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "B is the protector of A's Invasion of Mercadia, since only an opponent of a Siege's controller can protect it."
+      },
+      "decisions": [
+        "A moves to the declare attackers step; the legal attack targets of Grizzly Bears are recorded."
+      ],
+      "variants": [
+        {
+          "label": "controller_attacks",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears can legally attack B or Invasion of Mercadia."
+        },
+        {
+          "label": "protector_attacks",
+          "polarity": "does_not_fire",
+          "delta": "Invasion of Mercadia is on B's battlefield (B controls it and A is its protector) instead of A's.",
+          "expected": "Grizzly Bears can legally attack only B; Invasion of Mercadia is not a legal attack target because A, its protector, is the attacking player."
+        }
+      ],
+      "cards": [
+        "Grizzly Bears",
+        "Invasion of Mercadia"
+      ],
+      "forge_notes": "Which player protects a Siege is not a record field; it shows in the legal attack targets."
+    },
+    {
+      "id": "310.6-1",
+      "rules": [
+        "310.6"
+      ],
+      "title": "Combat damage dealt to a battle removes that many defense counters",
+      "record_kind": "combat",
+      "setup": {
+        "active": "A",
+        "step": "declare_attackers",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            },
+            {
+              "card": "Invasion of Mercadia",
+              "counters": {
+                "defense": 4
+              }
+            }
+          ],
+          "B": [
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            }
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "B is the protector of A's Invasion of Mercadia."
+      },
+      "decisions": [
+        "A declares Grizzly Bears as an attacker, attacking Invasion of Mercadia.",
+        "B declares no blockers.",
+        "Combat damage is dealt."
+      ],
+      "variants": [
+        {
+          "label": "unblocked",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears deals 2 damage to Invasion of Mercadia, removing 2 defense counters; it has 2 defense counters left and stays on the battlefield."
+        },
+        {
+          "label": "blocked",
+          "polarity": "does_not_fire",
+          "delta": "B declares B's Grizzly Bears as a blocker of the attacking Grizzly Bears.",
+          "expected": "The attacking Grizzly Bears deals its 2 damage to the blocking Grizzly Bears, not to the battle; Invasion of Mercadia keeps 4 defense counters. Both Grizzly Bears die."
+        }
+      ],
+      "cards": [
+        "Grizzly Bears",
+        "Invasion of Mercadia"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "310.6-2",
+      "rules": [
+        "310.6"
+      ],
+      "title": "Damage from a spell dealt to a battle removes that many defense counters",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            {
+              "card": "Invasion of Mercadia",
+              "counters": {
+                "defense": 4
+              }
+            }
+          ],
+          "B": [
+            "Island",
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Lightning Bolt"
+          ],
+          "B": [
+            "Counterspell"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "B is the protector of A's Invasion of Mercadia."
+      },
+      "decisions": [
+        "A casts Lightning Bolt targeting Invasion of Mercadia, tapping Mountain.",
+        "B passes priority; A passes priority; Lightning Bolt resolves."
+      ],
+      "variants": [
+        {
+          "label": "bolt_resolves",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Lightning Bolt deals 3 damage to Invasion of Mercadia, removing 3 defense counters; it has 1 defense counter left and stays on the battlefield."
+        },
+        {
+          "label": "bolt_countered",
+          "polarity": "does_not_fire",
+          "delta": "B casts Counterspell targeting Lightning Bolt, tapping both Islands.",
+          "expected": "Lightning Bolt is countered and deals no damage; Invasion of Mercadia keeps 4 defense counters."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Island",
+        "Invasion of Mercadia",
+        "Lightning Bolt",
+        "Counterspell"
+      ],
+      "forge_notes": "Lightning Bolt's 'Any' target must include battles in Forge's target validation."
+    },
+    {
+      "id": "310.7-1",
+      "rules": [
+        "310.7"
+      ],
+      "title": "A Siege with 0 defense goes to the graveyard only when no ability it is the source of is pending",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Island",
+            {
+              "card": "Invasion of Mercadia",
+              "counters": {
+                "defense": 3
+              }
+            }
+          ]
+        },
+        "hand": {
+          "A": [
+            "Lightning Bolt",
+            "Stifle"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "B is the protector of A's Invasion of Mercadia."
+      },
+      "decisions": [
+        "A casts Lightning Bolt targeting Invasion of Mercadia, tapping Mountain.",
+        "Both players pass; Lightning Bolt resolves and removes the last 3 defense counters; Invasion of Mercadia's defeat trigger goes on the stack.",
+        "A casts Stifle targeting the defeat trigger, tapping Island.",
+        "Both players pass; Stifle resolves."
+      ],
+      "variants": [
+        {
+          "label": "trigger_stifled",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The defeat trigger is countered. Invasion of Mercadia has 0 defense counters and is the source of no ability on the stack, so it moves to A's graveyard in the state-based check."
+        },
+        {
+          "label": "trigger_pending",
+          "polarity": "does_not_fire",
+          "delta": "A does not cast Stifle; both players pass, the defeat trigger resolves, and A casts Invasion of Mercadia transformed without paying its mana cost.",
+          "expected": "Invasion of Mercadia is not put into the graveyard in the state-based checks while its defeat trigger is pending; the trigger exiles it and Kyren Flamewright (3/3) enters A's battlefield. A's graveyard holds only Lightning Bolt."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Island",
+        "Invasion of Mercadia",
+        "Lightning Bolt",
+        "Stifle"
+      ],
+      "forge_notes": "Forge may implement the Siege's defeat trigger engine-side rather than in the card script."
+    },
+    {
+      "id": "310.12b-1",
+      "rules": [
+        "310.12b"
+      ],
+      "title": "Removing a Siege's last defense counter triggers exiling it and casting it transformed",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            {
+              "card": "Invasion of Mercadia",
+              "counters": {
+                "defense": 3
+              }
+            }
+          ]
+        },
+        "hand": {
+          "A": [
+            "Lightning Bolt"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "B is the protector of A's Invasion of Mercadia."
+      },
+      "decisions": [
+        "A casts Lightning Bolt targeting Invasion of Mercadia, tapping Mountain.",
+        "Both players pass; Lightning Bolt resolves and removes 3 defense counters.",
+        "If the defeat trigger goes on the stack, both players pass and it resolves; A casts the exiled Siege transformed without paying its mana cost."
+      ],
+      "variants": [
+        {
+          "label": "last_counter",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The last defense counter is removed, so the defeat trigger fires. Invasion of Mercadia is exiled and cast transformed: Kyren Flamewright (3/3 Goblin Spellshaper) enters A's battlefield; the Siege is not in any graveyard."
+        },
+        {
+          "label": "counters_remain",
+          "polarity": "does_not_fire",
+          "delta": "Invasion of Mercadia has 4 defense counters instead of 3.",
+          "expected": "Lightning Bolt removes 3 counters, leaving 1; the defeat trigger does not fire and Invasion of Mercadia stays on the battlefield."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Invasion of Mercadia",
+        "Lightning Bolt"
+      ],
+      "forge_notes": "Kyren Flamewright is the back face of Invasion of Mercadia."
+    },
+    {
+      "id": "310.9c-1",
+      "rules": [
+        "310.9c"
+      ],
+      "title": "The protector may block creatures attacking the battle",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "declare_attackers",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            },
+            {
+              "card": "Invasion of Mercadia",
+              "counters": {
+                "defense": 4
+              }
+            },
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            }
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "B is the protector of A's Invasion of Mercadia. A controls two untapped Grizzly Bears; only one attacks."
+      },
+      "decisions": [
+        "A declares one Grizzly Bears as an attacker, attacking Invasion of Mercadia; A's other Grizzly Bears does not attack.",
+        "The legal blockers of the attacking Grizzly Bears are recorded."
+      ],
+      "variants": [
+        {
+          "label": "protector_creature",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "B's untapped Grizzly Bears is a legal blocker of the creature attacking Invasion of Mercadia; A's non-attacking Grizzly Bears is not."
+        },
+        {
+          "label": "controller_creature_only",
+          "polarity": "does_not_fire",
+          "delta": "B's Grizzly Bears is not on the battlefield, so the only untapped non-attacking creature is A's, controlled by the battle's controller rather than its protector.",
+          "expected": "The creature attacking Invasion of Mercadia has no legal blocker; A's untapped Grizzly Bears cannot block it."
+        }
+      ],
+      "cards": [
+        "Grizzly Bears",
+        "Invasion of Mercadia"
+      ],
+      "forge_notes": "In a two-player game the battle's controller is the attacking player, so Forge never offers A a block; the does_not_fire variant shows as no legal blocker for the attacker."
+    },
+    {
+      "id": "310.9d-1",
+      "rules": [
+        "310.9d"
+      ],
+      "title": "The defending player for an attacked battle is its protector",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "declare_attackers",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Falkenrath Perforator",
+              "summoning_sick": false
+            },
+            {
+              "card": "Invasion of Mercadia",
+              "counters": {
+                "defense": 4
+              }
+            }
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "B is the protector of A's Invasion of Mercadia."
+      },
+      "decisions": [
+        "A declares Falkenrath Perforator as an attacker, attacking Invasion of Mercadia.",
+        "Both players pass; Falkenrath Perforator's attack trigger resolves."
+      ],
+      "variants": [
+        {
+          "label": "attacks_battle",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Falkenrath Perforator's trigger deals 1 damage to the defending player, B, the protector of the attacked battle: B is at 19 life and A stays at 20."
+        },
+        {
+          "label": "attacks_player",
+          "polarity": "other",
+          "delta": "Falkenrath Perforator attacks B directly instead of Invasion of Mercadia.",
+          "expected": "The trigger deals 1 damage to the defending player, B: B is at 19 life and A stays at 20."
+        }
+      ],
+      "cards": [
+        "Falkenrath Perforator",
+        "Invasion of Mercadia"
+      ],
+      "forge_notes": "In a two-player game the protector of a Siege the attacker controls is always the attacked player, so the two variants agree; the protector is not a record field."
+    },
+    {
+      "id": "310.11-1",
+      "rules": [
+        "310.9f",
+        "310.11"
+      ],
+      "title": "A Siege whose controller becomes its protector gets a new protector",
+      "record_kind": "playability",
+      "setup": {
+        "active": "B",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            {
+              "card": "Invasion of Mercadia",
+              "counters": {
+                "defense": 4
+              }
+            }
+          ],
+          "B": [
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            }
+          ]
+        },
+        "hand": {
+          "B": [
+            "Confiscate"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "B is the protector of A's Invasion of Mercadia."
+      },
+      "decisions": [
+        "B casts Confiscate targeting Invasion of Mercadia, tapping six Islands.",
+        "Both players pass; Confiscate resolves.",
+        "B moves to the declare attackers step; the legal attack targets of Grizzly Bears are recorded."
+      ],
+      "variants": [
+        {
+          "label": "stolen_siege",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "B controls Invasion of Mercadia and can no longer protect it, so A becomes its protector and B stops being it. Grizzly Bears can legally attack A or Invasion of Mercadia."
+        },
+        {
+          "label": "stolen_land",
+          "polarity": "does_not_fire",
+          "delta": "Confiscate targets A's Mountain instead of Invasion of Mercadia.",
+          "expected": "A still controls Invasion of Mercadia and B is still its protector. Grizzly Bears can legally attack only A."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Island",
+        "Invasion of Mercadia",
+        "Grizzly Bears",
+        "Confiscate"
+      ],
+      "forge_notes": "Protector is not a record field; the reassignment shows in the legal attack targets. The graveyard branch of 310.11 (no player can be chosen) cannot arise in a two-player game."
+    }
+  ]
+}

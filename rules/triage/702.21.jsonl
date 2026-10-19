@@ -1,0 +1,3 @@
+{"id": "702.21", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.21a", "category": "mechanical", "observability": "direct", "record_kinds": ["trigger", "resolution"], "outcome": "When an opponent's spell or ability targets a permanent with ward, a trigger fires and counters that spell or ability unless its controller pays the ward cost.", "note": ""}
+{"id": "702.21b", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "A ward cost containing X takes its value when the ward ability resolves, not when it triggers.", "note": ""}

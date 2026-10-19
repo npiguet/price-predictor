@@ -1,0 +1,1075 @@
+{
+  "unit": "115",
+  "verified": true,
+  "review": [
+    "115.7a-1: base said Grizzly Bears was 'undamaged' after a destroy effect it never faced; reworded to 'stays on the battlefield'.",
+    "115.7f-1: 'declines' variant retargets nothing, so 115.7f does not apply to it; polarity does_not_fire changed to other (a division cannot be changed, so no does_not_fire exists).",
+    "115.8-1: the Izzet Charm variant retargeted to a player, which no mode of Izzet Charm can target, so it never tested that the mode is kept; rebuilt with Rakdos Charm (destroy target artifact) where the rejected new target, player A, fits the unchosen graveyard-exile mode."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "115.2-1",
+      "rules": [
+        "115.2"
+      ],
+      "title": "Only permanents are legal targets unless the spell names another zone",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Forest",
+            "Swamp",
+            "Grizzly Bears"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Giant Growth",
+            "Raise Dead"
+          ],
+          "B": []
+        },
+        "graveyard": {
+          "A": [
+            "Runeclaw Bear"
+          ]
+        },
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A's playable candidates are evaluated with Giant Growth as the candidate spell; no spell is cast."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Giant Growth (target creature) has exactly one legal target, Grizzly Bears on the battlefield; Runeclaw Bear in A's graveyard is not offered; can_play is true."
+        },
+        {
+          "label": "no-permanent",
+          "polarity": "fires",
+          "delta": "Grizzly Bears is not on the battlefield, so the only creature is Runeclaw Bear in the graveyard.",
+          "expected": "Giant Growth has no legal target (the graveyard card is not a permanent); has_legal_target is false and can_play is false."
+        },
+        {
+          "label": "graveyard-spell",
+          "polarity": "does_not_fire",
+          "delta": "The candidate spell is Raise Dead (target creature card in your graveyard) instead of Giant Growth.",
+          "expected": "Raise Dead's legal target list is exactly Runeclaw Bear in the graveyard; Grizzly Bears on the battlefield is not offered; can_play is true."
+        }
+      ],
+      "cards": [
+        "Forest",
+        "Swamp",
+        "Grizzly Bears",
+        "Runeclaw Bear",
+        "Giant Growth",
+        "Raise Dead"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "115.3-1",
+      "rules": [
+        "115.3"
+      ],
+      "title": "One instance of the word target cannot choose the same object twice",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Mountain"
+          ],
+          "B": [
+            "Grizzly Bears",
+            "Llanowar Elves"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Arc Lightning"
+          ],
+          "B": []
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A considers casting Arc Lightning (3 damage divided among one, two or three targets) tapping three Mountains, with the division 2 and 1 between two chosen targets."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "With the target list [Grizzly Bears, Grizzly Bears] the second pick is not legal: one instance of the word target cannot choose the same creature twice, so Arc Lightning cannot be cast with that list."
+        },
+        {
+          "label": "distinct",
+          "polarity": "does_not_fire",
+          "delta": "The two targets are Grizzly Bears (2 damage) and Llanowar Elves (1 damage).",
+          "expected": "The target list [Grizzly Bears, Llanowar Elves] is legal and Arc Lightning can be cast with it."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Arc Lightning",
+        "Grizzly Bears",
+        "Llanowar Elves"
+      ],
+      "forge_notes": "Forge builds divided-damage targets one at a time, so the verdict shows up as the second pick not being offered."
+    },
+    {
+      "id": "115.3-2",
+      "rules": [
+        "115.3"
+      ],
+      "title": "Separate instances of the word target may choose the same object",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Swamp"
+          ],
+          "B": [
+            "Grizzly Bears",
+            "Llanowar Elves"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Agony Warp"
+          ],
+          "B": []
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Agony Warp, tapping Island and Swamp, choosing Grizzly Bears as the target of both the -3/-0 and the -0/-3 instances.",
+        "Both players pass; Agony Warp resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears is a legal target of both instances, gets -3/-0 and -0/-3 until end of turn (-1/-1), and moves to B's graveyard in the state-based check; Llanowar Elves is untouched."
+        },
+        {
+          "label": "different",
+          "polarity": "does_not_fire",
+          "delta": "The -0/-3 instance targets Llanowar Elves instead of Grizzly Bears.",
+          "expected": "Grizzly Bears becomes -1/2 until end of turn and stays on the battlefield; Llanowar Elves becomes 1/-2 and moves to B's graveyard."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Swamp",
+        "Agony Warp",
+        "Grizzly Bears",
+        "Llanowar Elves"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "115.4-1",
+      "rules": [
+        "115.4"
+      ],
+      "title": "Any target offers only creatures, players, planeswalkers and battles",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain"
+          ],
+          "B": [
+            "Grizzly Bears",
+            "Sol Ring",
+            "Jace Beleren"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Lightning Bolt"
+          ],
+          "B": []
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A considers casting Lightning Bolt, tapping Mountain, with one chosen target; the chosen target is Sol Ring."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Sol Ring (a noncreature artifact) is not a legal target of Lightning Bolt and is not in its legal target list."
+        },
+        {
+          "label": "creature",
+          "polarity": "does_not_fire",
+          "delta": "The chosen target is Grizzly Bears.",
+          "expected": "Grizzly Bears is a legal target of Lightning Bolt."
+        },
+        {
+          "label": "player",
+          "polarity": "does_not_fire",
+          "delta": "The chosen target is player B.",
+          "expected": "Player B is a legal target of Lightning Bolt."
+        },
+        {
+          "label": "planeswalker",
+          "polarity": "does_not_fire",
+          "delta": "The chosen target is Jace Beleren.",
+          "expected": "Jace Beleren is a legal target of Lightning Bolt."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Lightning Bolt",
+        "Grizzly Bears",
+        "Sol Ring",
+        "Jace Beleren"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "115.5-1",
+      "rules": [
+        "115.5"
+      ],
+      "title": "A spell on the stack is not a legal target for itself",
+      "record_kind": "playability",
+      "setup": {
+        "active": "B",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain"
+          ],
+          "B": [
+            "Island",
+            "Island",
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "A": [],
+          "B": [
+            "Counterspell"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "B considers casting Counterspell, tapping two Islands, with priority and the stack as described."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The stack is empty, so Counterspell has no legal target (it is not a target for itself); has_legal_target is false and can_play is false."
+        },
+        {
+          "label": "other-spell",
+          "polarity": "does_not_fire",
+          "delta": "Lightning Bolt controlled by A, targeting Grizzly Bears, is on the stack.",
+          "expected": "Counterspell's legal target list is exactly Lightning Bolt; Counterspell itself is not offered; can_play is true."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Island",
+        "Grizzly Bears",
+        "Counterspell",
+        "Lightning Bolt"
+      ],
+      "forge_notes": "In the second variant the stack object is placed on the stack in setup as {\"card\": \"Lightning Bolt\", \"controller\": \"A\", \"targets\": [\"Grizzly Bears\"]}."
+    },
+    {
+      "id": "115.7a-1",
+      "rules": [
+        "115.7a"
+      ],
+      "title": "A target change succeeds only when another legal target exists",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Swamp",
+            "Swamp",
+            "Hill Giant"
+          ],
+          "B": [
+            "Island",
+            "Mountain",
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Doom Blade"
+          ],
+          "B": [
+            "Swerve"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Doom Blade, tapping both Swamps, targeting Grizzly Bears. A passes priority.",
+        "B casts Swerve, tapping Island and Mountain, targeting Doom Blade, and passes; A passes.",
+        "Swerve resolves: B changes Doom Blade's target to another legal target if one exists.",
+        "Both players pass; Doom Blade resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Doom Blade's target is changed to Hill Giant; Hill Giant moves to A's graveyard and Grizzly Bears stays on the battlefield."
+        },
+        {
+          "label": "no-other-target",
+          "polarity": "does_not_fire",
+          "delta": "A's other creature is Typhoid Rats (black) instead of Hill Giant.",
+          "expected": "Typhoid Rats is not a legal target of Doom Blade, so no other legal target exists and the original target is unchanged; Grizzly Bears moves to B's graveyard and Typhoid Rats stays on the battlefield."
+        }
+      ],
+      "cards": [
+        "Swamp",
+        "Island",
+        "Mountain",
+        "Hill Giant",
+        "Typhoid Rats",
+        "Grizzly Bears",
+        "Doom Blade",
+        "Swerve"
+      ],
+      "forge_notes": "A's own creature is a legal retarget for A's Doom Blade; B (the Swerve controller) chooses the new target."
+    },
+    {
+      "id": "115.7b-1",
+      "rules": [
+        "115.7b"
+      ],
+      "title": "Changing a target alters only one target, and only to a legal one",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain"
+          ],
+          "B": [
+            "Island",
+            "Spellskite",
+            "Grizzly Bears",
+            "Llanowar Elves"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Arc Trail"
+          ],
+          "B": []
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Arc Trail, tapping both Mountains: 2 damage to Grizzly Bears, 1 damage to Llanowar Elves. A passes priority.",
+        "B activates Spellskite paying {U/P} with Island, targeting Arc Trail, changing the first target (Grizzly Bears) to Spellskite, and passes; A passes.",
+        "Spellskite's ability resolves; both players pass; Arc Trail resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Only the first target changes: Spellskite is dealt 2 damage and survives (0/4), Llanowar Elves is dealt 1 damage and moves to B's graveyard, Grizzly Bears is undamaged."
+        },
+        {
+          "label": "already-target",
+          "polarity": "does_not_fire",
+          "delta": "Arc Trail's second target is Spellskite instead of Llanowar Elves.",
+          "expected": "Changing the first target to Spellskite would leave both targets as Spellskite, which is illegal, so no target changes: Grizzly Bears is dealt 2 damage and moves to B's graveyard, Spellskite is dealt 1 damage and survives, Llanowar Elves is undamaged."
+        },
+        {
+          "label": "second-target",
+          "polarity": "fires",
+          "delta": "B changes the second target (Llanowar Elves) to Spellskite instead of the first.",
+          "expected": "Only the second target changes: Grizzly Bears is dealt 2 damage and moves to B's graveyard, Spellskite is dealt 1 damage and survives, Llanowar Elves is undamaged."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Island",
+        "Spellskite",
+        "Grizzly Bears",
+        "Llanowar Elves",
+        "Arc Trail"
+      ],
+      "forge_notes": "In the already-target variant Llanowar Elves stays on B's battlefield as in the base setup."
+    },
+    {
+      "id": "115.7c-1",
+      "rules": [
+        "115.7c"
+      ],
+      "title": "Changing any targets lets any number of targets change",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            "Island",
+            "Hill Giant"
+          ],
+          "B": [
+            "Mountain",
+            "Mountain",
+            "Grizzly Bears",
+            "Llanowar Elves"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Toils of Night and Day"
+          ],
+          "B": [
+            "Sideswipe"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Toils of Night and Day, tapping three Islands: first target Grizzly Bears, second target Llanowar Elves, choosing to tap each. A passes priority.",
+        "B casts Sideswipe, tapping both Mountains, targeting Toils of Night and Day, and passes; A passes.",
+        "Sideswipe resolves: B changes the first target (Grizzly Bears) to Hill Giant and leaves the second target.",
+        "Both players pass; Toils of Night and Day resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "One of two targets changed: Hill Giant becomes tapped, Llanowar Elves becomes tapped, Grizzly Bears stays untapped."
+        },
+        {
+          "label": "both",
+          "polarity": "fires",
+          "delta": "B changes the first target to Hill Giant and the second target to Grizzly Bears.",
+          "expected": "Both targets changed: Hill Giant becomes tapped, Grizzly Bears becomes tapped, Llanowar Elves stays untapped."
+        },
+        {
+          "label": "illegal-change",
+          "polarity": "does_not_fire",
+          "delta": "B tries to change the first target to Llanowar Elves and leaves the second target Llanowar Elves.",
+          "expected": "The final target set (Llanowar Elves twice) is illegal for Toils of Night and Day's 'another target', so no target changes: Grizzly Bears and Llanowar Elves become tapped, Hill Giant stays untapped."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Mountain",
+        "Hill Giant",
+        "Grizzly Bears",
+        "Llanowar Elves",
+        "Toils of Night and Day",
+        "Sideswipe"
+      ],
+      "forge_notes": "Toils of Night and Day is an Arcane instant, the only kind of spell Sideswipe can target."
+    },
+    {
+      "id": "115.7d-1",
+      "rules": [
+        "115.7d"
+      ],
+      "title": "Choosing new targets may leave an illegal target unchanged",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain"
+          ],
+          "B": [
+            "Forest",
+            "Island",
+            "Island",
+            "Grizzly Bears",
+            "Llanowar Elves",
+            "Sol Ring"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Arc Trail"
+          ],
+          "B": [
+            "Vines of Vastwood",
+            "Redirect"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Arc Trail, tapping both Mountains: 2 damage to Grizzly Bears, 1 damage to Llanowar Elves. A passes priority.",
+        "B casts Vines of Vastwood (unkicked) with Forest targeting Grizzly Bears, and passes; A passes; Vines of Vastwood resolves, so A's spells can no longer target Grizzly Bears.",
+        "A passes priority; B casts Redirect, tapping both Islands, targeting Arc Trail, and passes; A passes.",
+        "Redirect resolves: B leaves the first target (Grizzly Bears, now illegal) unchanged and changes the second target (Llanowar Elves) to player A.",
+        "Both players pass; Arc Trail resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Redirect succeeds with the illegal first target kept: Grizzly Bears is not dealt damage (illegal target), player A is dealt 1 damage (life 19), Llanowar Elves is undamaged; Arc Trail partially fizzles."
+        },
+        {
+          "label": "illegal-new-target",
+          "polarity": "does_not_fire",
+          "delta": "B tries to change the second target to Sol Ring instead of player A.",
+          "expected": "Sol Ring is not a legal target for 'any other target', so the change is not made and the targets stay Grizzly Bears and Llanowar Elves: Grizzly Bears is not dealt damage (illegal), Llanowar Elves is dealt 1 damage and moves to B's graveyard."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Forest",
+        "Island",
+        "Grizzly Bears",
+        "Llanowar Elves",
+        "Sol Ring",
+        "Arc Trail",
+        "Vines of Vastwood",
+        "Redirect"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "115.7e-1",
+      "rules": [
+        "115.7e"
+      ],
+      "title": "Targets may be swapped because only the final target set is checked",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain"
+          ],
+          "B": [
+            "Island",
+            "Island",
+            "Grizzly Bears",
+            "Llanowar Elves"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Arc Trail"
+          ],
+          "B": [
+            "Redirect"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Arc Trail, tapping both Mountains: 2 damage to Grizzly Bears, 1 damage to Llanowar Elves. A passes priority.",
+        "B casts Redirect, tapping both Islands, targeting Arc Trail, and passes; A passes.",
+        "Redirect resolves: B chooses Llanowar Elves as the new first target and Grizzly Bears as the new second target.",
+        "Both players pass; Arc Trail resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The swap is allowed: Llanowar Elves is dealt 2 damage and moves to B's graveyard, Grizzly Bears is dealt 1 damage and stays with 1 damage marked."
+        },
+        {
+          "label": "same-twice",
+          "polarity": "does_not_fire",
+          "delta": "B chooses Llanowar Elves as the new first target and leaves the second target Llanowar Elves.",
+          "expected": "The final set (Llanowar Elves twice) is illegal for 'any other target', so no target changes: Grizzly Bears is dealt 2 damage and moves to B's graveyard, Llanowar Elves is dealt 1 damage and moves to B's graveyard."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Island",
+        "Grizzly Bears",
+        "Llanowar Elves",
+        "Arc Trail",
+        "Redirect"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "115.7f-1",
+      "rules": [
+        "115.7f"
+      ],
+      "title": "Retargeting a divided effect keeps its original division",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Mountain"
+          ],
+          "B": [
+            "Island",
+            "Island",
+            "Grizzly Bears",
+            "Llanowar Elves"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Arc Lightning"
+          ],
+          "B": [
+            "Redirect"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Arc Lightning, tapping three Mountains: 2 damage to Grizzly Bears, 1 damage to Llanowar Elves. A passes priority.",
+        "B casts Redirect, tapping both Islands, targeting Arc Lightning, and passes; A passes.",
+        "Redirect resolves: B changes the first target (Grizzly Bears) to player A.",
+        "Both players pass; Arc Lightning resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The 2-damage share moves with the first target: player A is dealt 2 damage (life 18), Llanowar Elves is dealt 1 damage and moves to B's graveyard, Grizzly Bears is undamaged."
+        },
+        {
+          "label": "second-slot",
+          "polarity": "fires",
+          "delta": "B changes the second target (Llanowar Elves) to player A instead.",
+          "expected": "The 1-damage share moves with the second target: Grizzly Bears is dealt 2 damage and moves to B's graveyard, player A is dealt 1 damage (life 19), Llanowar Elves is undamaged."
+        },
+        {
+          "label": "declines",
+          "polarity": "other",
+          "delta": "B chooses to leave both targets unchanged.",
+          "expected": "Nothing is retargeted: Grizzly Bears is dealt 2 damage and moves to B's graveyard, Llanowar Elves is dealt 1 damage and moves to B's graveyard, player A's life stays 20."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Island",
+        "Grizzly Bears",
+        "Llanowar Elves",
+        "Arc Lightning",
+        "Redirect"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "115.8-1",
+      "rules": [
+        "115.8"
+      ],
+      "title": "Retargeting a modal spell cannot switch it to another mode's target",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Swamp",
+            "Mountain",
+            "Mind Stone"
+          ],
+          "B": [
+            "Island",
+            "Island",
+            "Sol Ring"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Rakdos Charm"
+          ],
+          "B": [
+            "Redirect"
+          ]
+        },
+        "graveyard": {
+          "A": [
+            "Grizzly Bears"
+          ]
+        },
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Rakdos Charm, tapping Swamp and Mountain, choosing the mode 'Destroy target artifact' and targeting Sol Ring. A passes priority.",
+        "B casts Redirect, tapping both Islands, targeting Rakdos Charm, and passes; A passes.",
+        "Redirect resolves: B chooses Mind Stone as the new target.",
+        "Both players pass; Rakdos Charm resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The mode is unchanged and only the target changes: Mind Stone moves to A's graveyard, Sol Ring stays on the battlefield, Grizzly Bears stays in A's graveyard."
+        },
+        {
+          "label": "other-mode-target",
+          "polarity": "does_not_fire",
+          "delta": "B tries to choose player A as the new target instead of Mind Stone.",
+          "expected": "Player A is a legal target only of the unchosen graveyard-exile mode, so the target is not changed: Sol Ring moves to B's graveyard, Mind Stone stays on the battlefield, Grizzly Bears stays in A's graveyard."
+        }
+      ],
+      "cards": [
+        "Swamp",
+        "Mountain",
+        "Island",
+        "Mind Stone",
+        "Sol Ring",
+        "Grizzly Bears",
+        "Rakdos Charm",
+        "Redirect"
+      ],
+      "forge_notes": "Rakdos Charm's chosen Smash mode targets Artifact; its Exile mode targets Player."
+    },
+    {
+      "id": "115.9a-1",
+      "rules": [
+        "115.9a"
+      ],
+      "title": "A spell with a single target counts the targets chosen, repeats included",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Spinerock Tyrant",
+            "Mountain",
+            "Island",
+            "Swamp"
+          ],
+          "B": [
+            "Grizzly Bears",
+            "Llanowar Elves"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Shock",
+            "Agony Warp"
+          ],
+          "B": []
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Shock, tapping Mountain, targeting Grizzly Bears.",
+        "Spinerock Tyrant's trigger goes on the stack; A copies Shock and chooses Llanowar Elves as the copy's target; both spells gain wither.",
+        "Both players pass; the copy resolves, then Shock resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Shock has a single target, so Spinerock Tyrant's trigger fires and creates a copy: Llanowar Elves and Grizzly Bears each get two -1/-1 counters (wither) and move to B's graveyard."
+        },
+        {
+          "label": "two-targets-same-creature",
+          "polarity": "does_not_fire",
+          "delta": "A casts Agony Warp (tapping Island and Swamp) choosing Grizzly Bears as the target of both instances instead of casting Shock.",
+          "expected": "The spell has two targets even though both are the same creature, so Spinerock Tyrant's trigger does not fire; Grizzly Bears gets -3/-0 and -0/-3 and moves to B's graveyard, Llanowar Elves is untouched."
+        },
+        {
+          "label": "two-different-targets",
+          "polarity": "does_not_fire",
+          "delta": "A casts Agony Warp choosing Grizzly Bears for -3/-0 and Llanowar Elves for -0/-3 instead of casting Shock.",
+          "expected": "The spell has two targets, so the trigger does not fire; Grizzly Bears becomes -1/2 and stays, Llanowar Elves moves to B's graveyard."
+        }
+      ],
+      "cards": [
+        "Spinerock Tyrant",
+        "Mountain",
+        "Island",
+        "Swamp",
+        "Grizzly Bears",
+        "Llanowar Elves",
+        "Shock",
+        "Agony Warp"
+      ],
+      "forge_notes": "The trigger is optional ('you may copy it'); the scenario assumes A takes it. Spinerock Tyrant tests the number of chosen targets through the .singleTarget filter on ValidSA."
+    },
+    {
+      "id": "115.9b-1",
+      "rules": [
+        "115.9b"
+      ],
+      "title": "A check for a spell that targets something uses the targets' current state",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Island"
+          ],
+          "B": [
+            "Plains",
+            "Forest",
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Shock",
+            "Unsummon"
+          ],
+          "B": [
+            "Rebuff the Wicked",
+            "Vines of Vastwood"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Shock, tapping Mountain, targeting Grizzly Bears. A passes priority.",
+        "B casts Rebuff the Wicked, tapping Plains, targeting Shock (a spell that targets a permanent B controls), and passes; A passes.",
+        "Rebuff the Wicked resolves, then both players pass."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Rebuff the Wicked resolves and counters Shock; Shock moves to A's graveyard without dealing damage, and Grizzly Bears is undamaged."
+        },
+        {
+          "label": "target-leaves",
+          "polarity": "does_not_fire",
+          "delta": "After B casts Rebuff the Wicked and passes, A casts Unsummon with Island on Grizzly Bears, and Grizzly Bears returns to B's hand before Rebuff resolves.",
+          "expected": "Shock no longer targets a permanent B controls (the departed target is ignored), so Rebuff the Wicked's target is illegal and it fizzles; Shock then fizzles because its target is gone; both go to the graveyard and no damage is dealt."
+        },
+        {
+          "label": "target-illegal-but-present",
+          "polarity": "fires",
+          "delta": "Before casting Rebuff the Wicked, B casts Vines of Vastwood with Forest on Grizzly Bears and it resolves, so A's Shock can no longer legally target Grizzly Bears.",
+          "expected": "Grizzly Bears is still on the battlefield, so Shock still targets a permanent B controls and Rebuff the Wicked is legal and resolves: Shock is countered (not fizzled) and goes to A's graveyard; Grizzly Bears is undamaged."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Island",
+        "Plains",
+        "Forest",
+        "Grizzly Bears",
+        "Shock",
+        "Unsummon",
+        "Rebuff the Wicked",
+        "Vines of Vastwood"
+      ],
+      "forge_notes": "Rebuff the Wicked is implemented with TargetValidTargeting$ Permanent.YouCtrl+inRealZoneBattlefield. No stock Forge trigger tests a spell's targets at resolution, so the check is shown through the target restriction of a spell, hence record_kind resolution."
+    },
+    {
+      "id": "115.9c-1",
+      "rules": [
+        "115.9c"
+      ],
+      "title": "A spell that targets only something counts distinct targets",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Swamp",
+            "Grizzly Bears"
+          ],
+          "B": [
+            "Mirrorwing Dragon",
+            "Llanowar Elves"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Agony Warp"
+          ],
+          "B": []
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Agony Warp, tapping Island and Swamp, choosing Mirrorwing Dragon as the target of both the -3/-0 and the -0/-3 instances.",
+        "Mirrorwing Dragon's trigger goes on the stack; A copies Agony Warp for each other creature A controls that it could target (Grizzly Bears).",
+        "Both players pass; the copy resolves, then Agony Warp resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Agony Warp targets only Mirrorwing Dragon (one distinct object, targeted twice), so the trigger fires: a copy of Agony Warp targeting Grizzly Bears is created and Grizzly Bears moves to A's graveyard; Mirrorwing Dragon becomes 1/2 until end of turn and stays."
+        },
+        {
+          "label": "two-objects",
+          "polarity": "does_not_fire",
+          "delta": "Agony Warp's -0/-3 instance targets Llanowar Elves instead of Mirrorwing Dragon.",
+          "expected": "The spell targets two different objects, so the trigger does not fire and no copy is made: Mirrorwing Dragon becomes 1/5 and stays, Llanowar Elves moves to B's graveyard, Grizzly Bears is untouched."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Swamp",
+        "Grizzly Bears",
+        "Mirrorwing Dragon",
+        "Llanowar Elves",
+        "Agony Warp"
+      ],
+      "forge_notes": "Forge's CopyForEachCanTarget may set only the first target of a two-target copy; if so the copy leaves Grizzly Bears alive as a -1/2 rather than killing it."
+    }
+  ]
+}

@@ -1,0 +1,22 @@
+{"id": "201.1", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "201.2", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "201.2a", "category": "mechanical", "observability": "indirect", "record_kinds": ["trigger"], "outcome": "An object with no name shares a name with no other object, nameless ones included, so a 'doesn't have the same name' trigger such as Guardian Project's fires for a face-down creature.", "note": "The first sentence is definitional; the second has an observable consequence."}
+{"id": "201.2b", "category": "mechanical", "observability": "indirect", "record_kinds": ["trigger"], "outcome": "A count of objects with different names excludes objects with no name, so a Liliana's Contract-style trigger does not fire when one counted creature is nameless.", "note": ""}
+{"id": "201.2c", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "An object with no name does not have a different name than any other object, so a check for a different name fails for it.", "note": ""}
+{"id": "201.3", "category": "out_of_scope", "observability": "none", "record_kinds": [], "outcome": "", "note": "Forge has no interchangeable-name mechanic; grep of cardsfolder for 'interchangeable' finds nothing."}
+{"id": "201.3a", "category": "out_of_scope", "observability": "none", "record_kinds": [], "outcome": "", "note": "Forge has no interchangeable-name mechanic; grep of cardsfolder for 'interchangeable' finds nothing."}
+{"id": "201.3b", "category": "out_of_scope", "observability": "none", "record_kinds": [], "outcome": "", "note": "Deck construction or physical card marking."}
+{"id": "201.3c", "category": "out_of_scope", "observability": "none", "record_kinds": [], "outcome": "", "note": "Deck construction or physical card marking."}
+{"id": "201.4", "category": "decision", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "201.4a", "category": "decision", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "201.4b", "category": "decision", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "201.4c", "category": "decision", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "201.4d", "category": "decision", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "201.4e", "category": "decision", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "201.4f", "category": "decision", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "201.4g", "category": "decision", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "201.5", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "An ability naming its own source acts only on that object, not on another object sharing the name, even after the source's name changes.", "note": ""}
+{"id": "201.5a", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "A granted ability that names the original source acts only on that specific object and not on a same-named permanent.", "note": ""}
+{"id": "201.5b", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "A gained ability that names its original holder acts on the object that now has it.", "note": ""}
+{"id": "201.5c", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "201.6", "category": "out_of_scope", "observability": "none", "record_kinds": [], "outcome": "", "note": "Alternate-art title bars are printing cosmetics with no effect on play."}

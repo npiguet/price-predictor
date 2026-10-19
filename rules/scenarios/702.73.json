@@ -1,0 +1,65 @@
+{
+  "unit": "702.73",
+  "verified": true,
+  "review": [],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.73a-1",
+      "rules": [
+        "702.73a"
+      ],
+      "title": "A changeling is every creature type",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Goblin King",
+              "summoning_sick": false
+            },
+            {
+              "card": "Avian Changeling",
+              "summoning_sick": false
+            }
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "No actions; the stable battlefield is evaluated."
+      ],
+      "variants": [
+        {
+          "label": "changeling",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Avian Changeling has every creature type, including Goblin. Goblin King's bonus applies: Avian Changeling is 3/3 with flying and mountainwalk."
+        },
+        {
+          "label": "non_goblin",
+          "polarity": "does_not_fire",
+          "delta": "A controls Grizzly Bears instead of Avian Changeling.",
+          "expected": "Grizzly Bears is a Bear, not a Goblin, so Goblin King's bonus does not apply. Grizzly Bears is 2/2 with no mountainwalk."
+        }
+      ],
+      "cards": [
+        "Goblin King",
+        "Avian Changeling",
+        "Grizzly Bears"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

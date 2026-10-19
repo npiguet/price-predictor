@@ -1,0 +1,75 @@
+{
+  "unit": "702.18",
+  "verified": true,
+  "review": [
+    "702.18a-1: the own_shroud_creature variant changed the spell, the land and the target at once; it now changes only the target (A's own Humble Budoka for the same Lightning Bolt), and Giant Growth and Forest are dropped."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.18a-1",
+      "rules": [
+        "702.18a"
+      ],
+      "title": "A permanent with shroud cannot be the target of any spell or ability, even its controller's",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Humble Budoka"
+          ],
+          "B": [
+            "Humble Budoka",
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Lightning Bolt"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A attempts to cast Lightning Bolt targeting B's Humble Budoka, tapping Mountain."
+      ],
+      "variants": [
+        {
+          "label": "opposing_shroud_creature",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "B's Humble Budoka (shroud) is not a legal target for Lightning Bolt; the cast is illegal."
+        },
+        {
+          "label": "no_shroud_creature",
+          "polarity": "does_not_fire",
+          "delta": "A attempts to target B's Grizzly Bears instead of Humble Budoka.",
+          "expected": "Grizzly Bears is a legal target for Lightning Bolt; the cast is legal."
+        },
+        {
+          "label": "own_shroud_creature",
+          "polarity": "fires",
+          "delta": "A attempts to target A's own Humble Budoka instead of B's.",
+          "expected": "A's Humble Budoka (shroud) is not a legal target for A's Lightning Bolt; the cast is illegal."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Humble Budoka",
+        "Grizzly Bears",
+        "Lightning Bolt"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

@@ -1,0 +1,3 @@
+{"id": "702.58", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.58a", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution", "trigger"], "outcome": "A permanent with graft enters with N +1/+1 counters, and when another creature enters it may move a counter onto that creature.", "note": ""}
+{"id": "702.58b", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution", "trigger"], "outcome": "Each graft instance works separately, entering with its own counters and triggering its own move.", "note": ""}

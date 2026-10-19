@@ -1,0 +1,4 @@
+{"id": "702.88", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.88a", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution", "trigger"], "outcome": "A rebound spell cast from hand is exiled as it resolves and may be cast free at the next upkeep.", "note": ""}
+{"id": "702.88b", "category": "decision", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.88c", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}

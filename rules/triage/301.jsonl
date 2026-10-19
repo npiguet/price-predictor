@@ -1,0 +1,15 @@
+{"id": "301.1", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "An artifact card can be cast from hand only in a main phase of its controller's turn with an empty stack.", "note": ""}
+{"id": "301.2", "category": "mechanical", "observability": "direct", "record_kinds": ["resolution"], "outcome": "A resolving artifact spell moves to the battlefield under its controller's control.", "note": ""}
+{"id": "301.3", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "301.4", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "301.5", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "An attempt to attach an Equipment to a non-creature leaves the Equipment where it is.", "note": ""}
+{"id": "301.5a", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "301.5b", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "An Equipment enters the battlefield unattached; an effect attaching it to an object it cannot equip leaves it unmoved.", "note": ""}
+{"id": "301.5c", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "An Equipment attached to an illegal or nonexistent permanent becomes unattached in the state-based check and stays on the battlefield.", "note": ""}
+{"id": "301.5d", "category": "mechanical", "observability": "indirect", "record_kinds": ["continuous", "playability"], "outcome": "Changing control of an Equipment or its creature does not change the other's controller, and only the Equipment's controller can activate its abilities.", "note": ""}
+{"id": "301.5e", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "An Equipment put onto the battlefield attached to an object it cannot legally equip enters unattached.", "note": ""}
+{"id": "301.5f", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "301.6", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "A Fortification attaches only to lands; the Equipment attachment outcomes apply to it with lands.", "note": ""}
+{"id": "301.7", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "301.7a", "category": "mechanical", "observability": "direct", "record_kinds": ["continuous"], "outcome": "A Vehicle has power and toughness only while it is a creature.", "note": ""}
+{"id": "301.7b", "category": "mechanical", "observability": "direct", "record_kinds": ["continuous"], "outcome": "A Vehicle that becomes a creature immediately has its printed power and toughness, modified by applicable effects.", "note": ""}

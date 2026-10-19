@@ -1,0 +1,449 @@
+{
+  "unit": "701.40",
+  "verified": true,
+  "review": [
+    "triage 701.40b/c/d: reclassified decision -> legality (playability); each states which face-up procedures are permitted, an engine verdict rather than only a choice; added 701.40b-1 (Grizzly Bears vs Shock), 701.40c-1 (Exalted Angel vs Serra Angel), 701.40d-1 (Bolrac-Clan Basher vs Craw Wurm).",
+    "701.40a-1: instant_card_top polarity fires -> other; it shows manifest ignores the card's type, not a second instance of the rule's effect."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "701.40a-1",
+      "rules": [
+        "701.40a"
+      ],
+      "title": "Manifesting puts the top card onto the battlefield face down as a 2/2 creature",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Plains"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Soul Summons"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Serra Angel",
+            "Forest"
+          ]
+        },
+        "exile": {},
+        "notes": "Library lists are ordered top card first."
+      },
+      "decisions": [
+        "A casts Soul Summons, tapping both Plains.",
+        "Both players pass; Soul Summons resolves and A manifests the top card of A's library."
+      ],
+      "variants": [
+        {
+          "label": "creature_card_top",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Soul Summons resolves. Serra Angel moves from A's library to the battlefield face down under A's control as a 2/2 colorless face-down creature with no name, no subtypes, no abilities and no mana cost. It has neither flying nor vigilance and is not named Serra Angel. A's library holds only Forest."
+        },
+        {
+          "label": "instant_card_top",
+          "polarity": "other",
+          "delta": "The top card of A's library is Shock instead of Serra Angel.",
+          "expected": "Soul Summons resolves. Shock moves from A's library to the battlefield face down under A's control as a 2/2 colorless face-down creature with no name, no subtypes, no abilities and no mana cost. A's library holds only Forest."
+        },
+        {
+          "label": "empty_library",
+          "polarity": "does_not_fire",
+          "delta": "A's library is empty.",
+          "expected": "Soul Summons resolves and nothing is manifested. A controls no new permanent. Soul Summons is in A's graveyard."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Soul Summons",
+        "Serra Angel",
+        "Forest",
+        "Shock"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "701.40b-1",
+      "rules": [
+        "701.40b"
+      ],
+      "title": "A manifested permanent can be turned face up for its mana cost only if its card is a creature card",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Forest",
+            {
+              "card": "Grizzly Bears",
+              "face_down": true,
+              "summoning_sick": false
+            }
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "The face-down permanent is a manifested permanent; its card is named in each variant."
+      },
+      "decisions": [
+        "A holds priority in main phase 1 and tries to turn the manifested permanent face up by revealing its card and paying its mana cost with Mountain and Forest."
+      ],
+      "variants": [
+        {
+          "label": "creature_card",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Turning the permanent face up is legal. A pays {1}{G}; the permanent is turned face up and is Grizzly Bears, a green 2/2 Bear named Grizzly Bears."
+        },
+        {
+          "label": "instant_card",
+          "polarity": "does_not_fire",
+          "delta": "The manifested card is Shock instead of Grizzly Bears.",
+          "expected": "Turning the permanent face up for its mana cost is not legal although Mountain could pay {R}. It stays a face-down colorless 2/2 creature with no name."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Forest",
+        "Grizzly Bears",
+        "Shock"
+      ],
+      "forge_notes": "Forge offers turning a manifested card face up as an ability of the face-down card, so the verdict appears as that candidate's can_play."
+    },
+    {
+      "id": "701.40c-1",
+      "rules": [
+        "701.40c"
+      ],
+      "title": "A manifested card with morph can be turned face up for its morph cost",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            {
+              "card": "Exalted Angel",
+              "face_down": true,
+              "summoning_sick": false
+            }
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "The face-down permanent is a manifested permanent; its card is named in each variant. A has exactly four Plains, so {4}{W}{W} cannot be paid."
+      },
+      "decisions": [
+        "A holds priority in main phase 1 and tries to turn the manifested permanent face up, paying {2}{W}{W} with the four Plains."
+      ],
+      "variants": [
+        {
+          "label": "morph_card",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Turning the permanent face up for its morph cost {2}{W}{W} is legal. A taps the four Plains and the permanent is Exalted Angel, a white 4/5 with flying."
+        },
+        {
+          "label": "no_morph",
+          "polarity": "does_not_fire",
+          "delta": "The manifested card is Serra Angel (mana cost {3}{W}{W}, no morph) instead of Exalted Angel.",
+          "expected": "No way to turn the permanent face up is legal: Serra Angel has no morph cost and A's four Plains cannot pay {3}{W}{W}. It stays a face-down colorless 2/2."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Exalted Angel",
+        "Serra Angel"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "701.40d-1",
+      "rules": [
+        "701.40d"
+      ],
+      "title": "A manifested card with disguise can be turned face up for its disguise cost",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            {
+              "card": "Bolrac-Clan Basher",
+              "face_down": true,
+              "summoning_sick": false
+            }
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "The face-down permanent is a manifested permanent; its card is named in each variant. A has exactly five Mountains, so {4}{R}{R} cannot be paid."
+      },
+      "decisions": [
+        "A holds priority in main phase 1 and tries to turn the manifested permanent face up, paying {3}{R}{R} with the five Mountains."
+      ],
+      "variants": [
+        {
+          "label": "disguise_card",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Turning the permanent face up for its disguise cost {3}{R}{R} is legal. A taps the five Mountains and the permanent is Bolrac-Clan Basher, a red 3/2 with double strike and trample."
+        },
+        {
+          "label": "no_disguise",
+          "polarity": "does_not_fire",
+          "delta": "The manifested card is Craw Wurm (mana cost {4}{G}{G}, no disguise) instead of Bolrac-Clan Basher.",
+          "expected": "No way to turn the permanent face up is legal: Craw Wurm has no disguise cost and A's five Mountains cannot pay {4}{G}{G}. It stays a face-down colorless 2/2."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Bolrac-Clan Basher",
+        "Craw Wurm"
+      ],
+      "forge_notes": "A manifested disguise card has no ward {2}: ward comes only from casting it face down with disguise."
+    },
+    {
+      "id": "701.40e-1",
+      "rules": [
+        "701.40e"
+      ],
+      "title": "Manifesting several cards from a library happens one card at a time",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Forest",
+            "Forest",
+            "Forest",
+            "Island",
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Ethereal Ambush"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Forest",
+            "Hill Giant",
+            "Grizzly Bears"
+          ]
+        },
+        "exile": {},
+        "notes": "Library lists are ordered top card first."
+      },
+      "decisions": [
+        "A casts Ethereal Ambush, tapping all five lands.",
+        "Both players pass; Ethereal Ambush resolves and A manifests the top two cards of A's library."
+      ],
+      "variants": [
+        {
+          "label": "two_cards",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Ethereal Ambush resolves. Forest is manifested first; Hill Giant, the new top card, is manifested second. A controls two face-down permanents, each a 2/2 colorless face-down creature with no name, no subtypes, no abilities and no mana cost. A's library holds only Grizzly Bears."
+        },
+        {
+          "label": "one_card_library",
+          "polarity": "does_not_fire",
+          "delta": "A's library holds only Forest.",
+          "expected": "Ethereal Ambush resolves. Forest is manifested as a 2/2 colorless face-down creature with no name, no subtypes, no abilities and no mana cost. The second manifest finds no card, so A controls exactly one face-down permanent and A's library is empty."
+        }
+      ],
+      "cards": [
+        "Forest",
+        "Island",
+        "Ethereal Ambush",
+        "Hill Giant",
+        "Grizzly Bears"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "701.40f-1",
+      "rules": [
+        "701.40f"
+      ],
+      "title": "A manifest the face-down object cannot perform leaves the card in the library unmodified",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Plains",
+            "Grafdigger's Cage"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Soul Summons"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Serra Angel",
+            "Forest"
+          ]
+        },
+        "exile": {},
+        "notes": "Library lists are ordered top card first."
+      },
+      "decisions": [
+        "A casts Soul Summons, tapping both Plains.",
+        "Both players pass; Soul Summons resolves and A tries to manifest the top card of A's library."
+      ],
+      "variants": [
+        {
+          "label": "cage_creature_top",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Soul Summons resolves. The face-down creature cannot enter the battlefield from the library because of Grafdigger's Cage, so nothing is manifested. Serra Angel stays on top of A's library, face up with its normal characteristics. A controls no new permanent."
+        },
+        {
+          "label": "cage_instant_top",
+          "polarity": "fires",
+          "delta": "The top card of A's library is Shock instead of Serra Angel.",
+          "expected": "Soul Summons resolves. The face-down object would be a creature, so Grafdigger's Cage still prevents it from entering. Shock stays on top of A's library and A controls no new permanent."
+        },
+        {
+          "label": "no_cage",
+          "polarity": "does_not_fire",
+          "delta": "Grafdigger's Cage is not on the battlefield.",
+          "expected": "Soul Summons resolves. Serra Angel enters the battlefield face down as a 2/2 colorless face-down creature with no name, no subtypes, no abilities and no mana cost. A's library holds only Forest."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Grafdigger's Cage",
+        "Soul Summons",
+        "Serra Angel",
+        "Forest",
+        "Shock"
+      ],
+      "forge_notes": "The prohibition applies to the face-down object, which is a creature even when the manifested card is an instant; Forge's Cage replacement tests the creature type of the moving card, so the instant variant may differ."
+    },
+    {
+      "id": "701.40g-1",
+      "rules": [
+        "701.40g"
+      ],
+      "title": "A manifested instant or sorcery that would turn face up stays face down and triggers nothing",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Ugin's Mastery",
+            {
+              "card": "Craw Wurm",
+              "summoning_sick": false
+            },
+            "Aven Farseer",
+            {
+              "card": "Grizzly Bears",
+              "face_down": true,
+              "summoning_sick": false
+            }
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "The face-down permanent is a manifested permanent whose card is Grizzly Bears."
+      },
+      "decisions": [
+        "A attacks B with Craw Wurm only. Total power attacking is 6.",
+        "Ugin's Mastery's second ability triggers; A chooses to turn the face-down creature A controls face up. The trigger resolves.",
+        "No blocks are declared."
+      ],
+      "variants": [
+        {
+          "label": "creature_card",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The manifested permanent turns face up and is Grizzly Bears, a 2/2 named Grizzly Bears. Aven Farseer's turned-face-up trigger fires and Farseer gets a +1/+1 counter (2/2). Craw Wurm deals 6 damage and B is at 14."
+        },
+        {
+          "label": "instant_card",
+          "polarity": "does_not_fire",
+          "delta": "The manifested card is Shock instead of Grizzly Bears.",
+          "expected": "The trigger resolves; A reveals Shock and the permanent stays face down as a 2/2. Aven Farseer's trigger does not fire and Farseer stays 1/1 with no counter. Craw Wurm deals 6 damage and B is at 14."
+        }
+      ],
+      "cards": [
+        "Ugin's Mastery",
+        "Craw Wurm",
+        "Aven Farseer",
+        "Grizzly Bears",
+        "Shock"
+      ],
+      "forge_notes": "In the instant variant the face-down card is Shock; no cost is paid because Ugin's Mastery turns it face up without the special action."
+    }
+  ]
+}

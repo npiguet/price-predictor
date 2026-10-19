@@ -1,0 +1,142 @@
+{
+  "unit": "702.175",
+  "verified": true,
+  "review": [
+    "702.175b: the skip claimed no Forge card can have two instances of offspring, but Zinnia, Valley's Voice grants offspring {2} to creature spells; replaced the skip with scenario 702.175b-1 (Steampath Charger cast under Zinnia, both instances paid vs. only one)."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.175a-1",
+      "rules": [
+        "702.175a"
+      ],
+      "title": "With the offspring cost paid, the creature's enters trigger creates a 1/1 token copy of it",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain"
+          ],
+          "B": [
+            "Island",
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Steampath Charger"
+          ],
+          "B": [
+            "Counterspell"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Steampath Charger, paying its offspring cost {2} as well, so the total is {1}{R}{2}, by tapping four Mountains.",
+        "B passes with Counterspell unused; Steampath Charger resolves and enters, and the offspring trigger resolves."
+      ],
+      "variants": [
+        {
+          "label": "offspring_paid",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The offspring enters trigger fires and creates a token copy of Steampath Charger that is 1/1, so A controls Steampath Charger (2/1) and a Steampath Charger token (1/1)."
+        },
+        {
+          "label": "offspring_not_paid",
+          "polarity": "does_not_fire",
+          "delta": "A does not pay the offspring cost and taps only two Mountains for {1}{R}.",
+          "expected": "No offspring trigger fires. A controls only Steampath Charger (2/1) and no token."
+        },
+        {
+          "label": "countered",
+          "polarity": "does_not_fire",
+          "delta": "A pays the offspring cost, but B casts Counterspell on Steampath Charger, tapping both Islands.",
+          "expected": "Steampath Charger is countered and moves to A's graveyard. It never enters, so no offspring trigger fires and there is no token."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Island",
+        "Steampath Charger",
+        "Counterspell"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.175b-1",
+      "rules": [
+        "702.175b"
+      ],
+      "title": "Each instance of offspring triggers only for its own payment",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Zinnia, Valley's Voice"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Steampath Charger"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Zinnia, Valley's Voice gives Steampath Charger a second instance of offspring {2} while it is on the stack."
+      },
+      "decisions": [
+        "A casts Steampath Charger, paying both its printed offspring {2} and the offspring {2} granted by Zinnia, Valley's Voice, for a total of {1}{R}{2}{2}, by tapping six Mountains.",
+        "Both players pass; Steampath Charger resolves and enters, and every offspring trigger that fired resolves."
+      ],
+      "variants": [
+        {
+          "label": "both_paid",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Two offspring triggers fire and each creates a 1/1 token copy of Steampath Charger: A controls Steampath Charger (2/1) and two Steampath Charger tokens (1/1). Zinnia, Valley's Voice is 3/3."
+        },
+        {
+          "label": "one_paid",
+          "polarity": "does_not_fire",
+          "delta": "A pays only the printed offspring {2}, not the one granted by Zinnia, Valley's Voice, tapping four Mountains for {1}{R}{2}.",
+          "expected": "Only the paid instance triggers: A controls Steampath Charger (2/1) and one Steampath Charger token (1/1). Zinnia, Valley's Voice is 2/3. Two Mountains stay untapped."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Zinnia, Valley's Voice",
+        "Steampath Charger"
+      ],
+      "forge_notes": "Zinnia grants Offspring:2 to creature spells A casts (AddKeyword on the stack). Zinnia gets +1/+0 per other creature A controls with base power 1, which counts the 1/1 tokens."
+    }
+  ]
+}

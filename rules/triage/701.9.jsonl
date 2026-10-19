@@ -1,0 +1,4 @@
+{"id": "701.9", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "701.9a", "category": "mechanical", "observability": "direct", "record_kinds": ["resolution"], "outcome": "A discarded card moves from its owner's hand to their graveyard.", "note": ""}
+{"id": "701.9b", "category": "decision", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "701.9c", "category": "mechanical", "observability": "indirect", "record_kinds": ["rewrite", "resolution"], "outcome": "A discarded card redirected to a hidden zone unrevealed has undefined characteristics, making a cost that needs a characteristic of it illegal.", "note": ""}

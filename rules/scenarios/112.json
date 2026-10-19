@@ -1,0 +1,602 @@
+{
+  "unit": "112",
+  "verified": true,
+  "review": [
+    "112.3-1: Painter's Servant makes itself red, so Blue Elemental Blast's destroy mode targets it and the base's castability verdict did not hinge on the spell's color; the decision and expected now name the counter mode's legal targets."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "112.1-1",
+      "rules": [
+        "112.1"
+      ],
+      "title": "A cast card is a spell on the stack, so spell-targeting effects can target it, and a card in hand or on the battlefield is not",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Forest",
+            "Forest"
+          ],
+          "B": [
+            "Island",
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Grizzly Bears"
+          ],
+          "B": [
+            "Essence Scatter"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Grizzly Bears, tapping both Forests.",
+        "A passes priority; B receives priority with Grizzly Bears on the stack and is asked whether Essence Scatter can be cast (it is not cast in this scenario)."
+      ],
+      "variants": [
+        {
+          "label": "on-the-stack",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "While Grizzly Bears is on the stack it is a creature spell: Essence Scatter is castable by B with Grizzly Bears as its legal target."
+        },
+        {
+          "label": "already-resolved",
+          "polarity": "does_not_fire",
+          "delta": "B passes priority with Grizzly Bears on the stack, so it resolves; B is then asked about Essence Scatter in the beginning of combat step.",
+          "expected": "Grizzly Bears is a permanent on the battlefield, no longer a spell: Essence Scatter has no legal target and cannot be cast."
+        },
+        {
+          "label": "not-cast",
+          "polarity": "does_not_fire",
+          "delta": "A does not cast Grizzly Bears; it stays in A's hand and A passes priority with an empty stack to the beginning of combat step, where B is asked about Essence Scatter.",
+          "expected": "Grizzly Bears is a card in hand, not a spell: Essence Scatter has no legal target and cannot be cast."
+        }
+      ],
+      "cards": [
+        "Forest",
+        "Island",
+        "Grizzly Bears",
+        "Essence Scatter"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "112.1-2",
+      "rules": [
+        "112.1"
+      ],
+      "title": "A spell stays on the stack until it resolves or is countered",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Forest",
+            "Forest"
+          ],
+          "B": [
+            "Island",
+            "Island",
+            "Mountain"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Grizzly Bears"
+          ],
+          "B": [
+            "Essence Scatter",
+            "Shock"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Grizzly Bears, tapping both Forests.",
+        "B casts Essence Scatter targeting the Grizzly Bears spell, tapping both Islands.",
+        "Both players pass; Essence Scatter resolves."
+      ],
+      "variants": [
+        {
+          "label": "countered",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Essence Scatter resolves and counters the Grizzly Bears spell: Grizzly Bears moves from the stack to A's graveyard and never reaches the battlefield. Essence Scatter moves to B's graveyard."
+        },
+        {
+          "label": "unrelated-response",
+          "polarity": "does_not_fire",
+          "delta": "B casts Shock targeting A's face, tapping the Mountain, instead of casting Essence Scatter.",
+          "expected": "Shock resolves first and A is at 18 life. Grizzly Bears stays on the stack through that resolution, then resolves and enters the battlefield under A's control. It is not countered."
+        },
+        {
+          "label": "no-response",
+          "polarity": "other",
+          "delta": "B casts nothing and passes priority.",
+          "expected": "The Grizzly Bears spell resolves and enters the battlefield under A's control; A's and B's graveyards are empty."
+        }
+      ],
+      "cards": [
+        "Forest",
+        "Island",
+        "Mountain",
+        "Grizzly Bears",
+        "Essence Scatter",
+        "Shock"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "112.1a-1",
+      "rules": [
+        "112.1a"
+      ],
+      "title": "A copy of a spell is itself a spell and can be countered as one",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Island",
+            "Island"
+          ],
+          "B": [
+            "Island",
+            "Island",
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Shock",
+            "Twincast"
+          ],
+          "B": [
+            "Negate"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Shock targeting Grizzly Bears, tapping Mountain, and keeps priority.",
+        "A casts Twincast targeting the Shock spell, tapping both Islands.",
+        "Both players pass; Twincast resolves and creates a copy of Shock; A keeps the target Grizzly Bears for the copy.",
+        "A passes priority with the Shock copy on top of the stack.",
+        "B casts Negate targeting the Shock copy, tapping both Islands.",
+        "Both players pass; Negate resolves."
+      ],
+      "variants": [
+        {
+          "label": "copy-negated",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Negate legally targets the Shock copy and counters it: the copy leaves the stack and ceases to exist, it is not put into any graveyard. The original Shock then resolves and Grizzly Bears (2/2) takes 2 damage and moves to B's graveyard. Negate is in B's graveyard; Twincast and Shock are in A's graveyard."
+        },
+        {
+          "label": "no-negate",
+          "polarity": "other",
+          "delta": "B does not cast Negate and passes priority.",
+          "expected": "The Shock copy resolves and deals 2 damage to Grizzly Bears, which moves to B's graveyard in the state-based check. The original Shock then resolves with Grizzly Bears already gone, so it fizzles. Twincast and the original Shock are in A's graveyard, and the copy ceases to exist."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Island",
+        "Grizzly Bears",
+        "Shock",
+        "Twincast",
+        "Negate"
+      ],
+      "forge_notes": "Twincast's copy is created on the stack by CopySpellAbility; Negate's ValidTgts is Card.nonCreature, so the copy must count as a noncreature spell on the stack."
+    },
+    {
+      "id": "112.1b-1",
+      "rules": [
+        "112.1b"
+      ],
+      "title": "A copy of a card that a player casts is a spell",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Isochron Scepter",
+            "Mountain",
+            "Mountain"
+          ],
+          "B": [
+            "Island",
+            "Island",
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "B": [
+            "Negate"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {
+          "A": [
+            "Shock"
+          ]
+        },
+        "notes": "Isochron Scepter has A's exiled Shock imprinted on it (exiled with it)."
+      },
+      "decisions": [
+        "A activates Isochron Scepter ({2}, {T}), tapping both Mountains.",
+        "Both players pass; the ability resolves: A copies the imprinted Shock and casts the copy without paying its mana cost, targeting Grizzly Bears.",
+        "A passes priority with the Shock copy on the stack.",
+        "B casts Negate targeting the Shock copy, tapping both Islands.",
+        "Both players pass; Negate resolves."
+      ],
+      "variants": [
+        {
+          "label": "copy-negated",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The cast copy is a spell, so Negate legally targets it and counters it. The copy ceases to exist and is not put into a graveyard. Grizzly Bears is undamaged and stays on the battlefield. The original Shock card remains in exile with Isochron Scepter."
+        },
+        {
+          "label": "no-response",
+          "polarity": "other",
+          "delta": "B does not cast Negate and passes priority.",
+          "expected": "The Shock copy resolves and deals 2 damage to Grizzly Bears, which moves to B's graveyard in the state-based check. The copy ceases to exist and the original Shock card remains in exile."
+        },
+        {
+          "label": "copy-declined",
+          "polarity": "does_not_fire",
+          "delta": "When the Scepter ability resolves, A chooses not to copy the card, so no copy is cast.",
+          "expected": "No spell is put on the stack; Negate has no legal target and cannot be cast. Grizzly Bears is undamaged and the Shock card remains in exile."
+        }
+      ],
+      "cards": [
+        "Isochron Scepter",
+        "Mountain",
+        "Island",
+        "Grizzly Bears",
+        "Shock",
+        "Negate"
+      ],
+      "forge_notes": "The Scepter's imprint is normally set by its enters trigger; the setup needs the exiled card remembered as imprinted and exiled with the Scepter."
+    },
+    {
+      "id": "112.2-1",
+      "rules": [
+        "112.2"
+      ],
+      "title": "A spell's controller is the player who put it on the stack, including a copy of an opponent's spell",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "B",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island"
+          ],
+          "B": [
+            "Island",
+            "Island",
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Twincast"
+          ],
+          "B": [
+            "Divination"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Mountain"
+          ],
+          "B": [
+            "Forest",
+            "Forest",
+            "Forest"
+          ]
+        },
+        "exile": {},
+        "notes": "Libraries are listed top first."
+      },
+      "decisions": [
+        "B casts Divination, tapping all three Islands.",
+        "B passes priority; A casts Twincast targeting the Divination spell, tapping both Islands.",
+        "Both players pass; Twincast resolves and creates a copy of Divination controlled by A.",
+        "Both players pass; the copy resolves, then both players pass and the original Divination resolves."
+      ],
+      "variants": [
+        {
+          "label": "copied",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The copy is controlled by A, so A draws two cards (hand: Mountain, Mountain). The original is controlled by B, so B draws two cards (hand: Forest, Forest). The copy ceases to exist; B's Divination moves to B's graveyard and Twincast to A's graveyard."
+        },
+        {
+          "label": "no-copy",
+          "polarity": "does_not_fire",
+          "delta": "A does not cast Twincast and passes priority.",
+          "expected": "Only the original Divination resolves: B draws two cards and A draws none. A's hand still holds Twincast and B's Divination moves to B's graveyard."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Twincast",
+        "Divination",
+        "Mountain",
+        "Forest"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "112.2a-1",
+      "rules": [
+        "112.2a"
+      ],
+      "title": "A copy of an opponent's card that a player is instructed to create and cast belongs to that player",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Spelltwine"
+          ]
+        },
+        "graveyard": {
+          "A": [
+            "Shock"
+          ],
+          "B": [
+            "Divination"
+          ]
+        },
+        "library": {
+          "A": [
+            "Forest",
+            "Forest",
+            "Forest"
+          ],
+          "B": [
+            "Mountain",
+            "Mountain",
+            "Mountain"
+          ]
+        },
+        "exile": {},
+        "notes": "Libraries are listed top first. Divination is owned by B and sits in B's graveyard."
+      },
+      "decisions": [
+        "A casts Spelltwine targeting Shock in A's graveyard and Divination in B's graveyard, tapping all six Islands.",
+        "Both players pass; Spelltwine resolves: both cards are exiled and A creates a copy of each.",
+        "A casts the copy of Shock without paying its mana cost, targeting B's face.",
+        "A casts the copy of Divination without paying its mana cost.",
+        "Both players pass; the Divination copy resolves, then both players pass and the Shock copy resolves."
+      ],
+      "variants": [
+        {
+          "label": "copy-of-divination",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "A is the owner and controller of the Divination copy, so A draws two cards (hand: Forest, Forest) and B draws none. B is at 18 life. Both original cards are in exile and Spelltwine is exiled; neither graveyard gains a card, since the copies cease to exist."
+        },
+        {
+          "label": "copy-of-shock",
+          "polarity": "other",
+          "delta": "The card in B's graveyard is Shock instead of Divination.",
+          "expected": "A casts two copies of Shock, both owned and controlled by A, each targeting B's face. B is at 16 life and A draws no cards. Both original Shock cards and Spelltwine are exiled."
+        },
+        {
+          "label": "no-opposing-card",
+          "polarity": "does_not_fire",
+          "delta": "B's graveyard is empty.",
+          "expected": "Spelltwine cannot be cast: it has no legal target in an opponent's graveyard, so no copy is ever created and nothing changes."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Spelltwine",
+        "Shock",
+        "Divination",
+        "Forest",
+        "Mountain"
+      ],
+      "forge_notes": "Spelltwine plays its copies through Play with CopyCard and WithoutManaCost; the second target is Instant.OppOwn or Sorcery.OppOwn."
+    },
+    {
+      "id": "112.3-1",
+      "rules": [
+        "112.3"
+      ],
+      "title": "A spell's characteristics are its printed ones as modified by continuous effects",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Forest",
+            "Forest",
+            "Painter's Servant"
+          ],
+          "B": [
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Grizzly Bears"
+          ],
+          "B": [
+            "Blue Elemental Blast"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Painter's Servant entered with red chosen as its color. Grizzly Bears is a green creature."
+      },
+      "decisions": [
+        "A casts Grizzly Bears, tapping both Forests.",
+        "A passes priority; B receives priority with the Grizzly Bears spell on the stack and is asked whether Blue Elemental Blast can be cast with its counter-target-red-spell mode; it is not cast in this scenario."
+      ],
+      "variants": [
+        {
+          "label": "servant-red",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The Grizzly Bears spell is green and red. Blue Elemental Blast's counter mode has the Grizzly Bears spell as a legal target. (Its destroy mode also has Painter's Servant, now a red permanent, as a legal target.)"
+        },
+        {
+          "label": "no-servant",
+          "polarity": "does_not_fire",
+          "delta": "Painter's Servant is not on the battlefield.",
+          "expected": "The Grizzly Bears spell is only green. Blue Elemental Blast's counter mode has no legal target, its destroy mode has none either, and it cannot be cast."
+        }
+      ],
+      "cards": [
+        "Forest",
+        "Island",
+        "Painter's Servant",
+        "Grizzly Bears",
+        "Blue Elemental Blast"
+      ],
+      "forge_notes": "Painter's Servant's AddColor applies to AffectedZone All, which must include the stack; its color is chosen as it enters, so the setup must preset ChosenColor to red."
+    },
+    {
+      "id": "112.4-1",
+      "rules": [
+        "112.4"
+      ],
+      "title": "A characteristic change applied to a permanent spell persists on the permanent",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Swamp",
+            "Swamp"
+          ],
+          "B": [
+            "Island",
+            "Mountain"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Black Knight"
+          ],
+          "B": [
+            "Sleight of Mind",
+            "Shock"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Black Knight, tapping both Swamps.",
+        "B casts Sleight of Mind targeting the Black Knight spell, tapping Island, and changes the color word white to red.",
+        "Both players pass; Sleight of Mind resolves, then both players pass and the Black Knight spell resolves.",
+        "Both players pass with an empty stack until the beginning of combat step; B is asked whether Shock can be cast targeting Black Knight (the cast is not made in this scenario)."
+      ],
+      "variants": [
+        {
+          "label": "text-changed",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The text change made to the spell continues to apply to the permanent: Black Knight on the battlefield has protection from red, so Shock cannot legally target it and is not castable at it."
+        },
+        {
+          "label": "no-change",
+          "polarity": "does_not_fire",
+          "delta": "B does not cast Sleight of Mind.",
+          "expected": "Black Knight keeps its printed protection from white, so the red Shock can legally target it and is castable at it."
+        }
+      ],
+      "cards": [
+        "Swamp",
+        "Island",
+        "Mountain",
+        "Black Knight",
+        "Sleight of Mind",
+        "Shock"
+      ],
+      "forge_notes": "Needs Forge's ChangeText with Duration Permanent on a spell on the stack to carry over to the permanent, including the keyword's color word."
+    }
+  ]
+}

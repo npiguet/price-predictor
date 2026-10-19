@@ -1,0 +1,125 @@
+{
+  "unit": "702.177",
+  "verified": true,
+  "review": [],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.177a-1",
+      "rules": [
+        "702.177a"
+      ],
+      "title": "An exhaust ability can be activated only once",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Afterburner Expert",
+              "summoning_sick": false
+            },
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A, with priority in the main phase, considers activating Afterburner Expert's exhaust ability {2}{G}{G}."
+      ],
+      "variants": [
+        {
+          "label": "first_activation",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Activating the exhaust ability is legal; if activated and resolved, Afterburner Expert gets two +1/+1 counters (6/4)."
+        },
+        {
+          "label": "already_activated",
+          "polarity": "does_not_fire",
+          "delta": "The exhaust ability was already activated on an earlier turn.",
+          "expected": "Activating the exhaust ability is not legal, even with four untapped Forests."
+        }
+      ],
+      "cards": [
+        "Afterburner Expert",
+        "Forest"
+      ],
+      "forge_notes": "Forge tracks the Exhaust$ True parameter with an activation limit on the ability; the earlier activation needs puzzle-style setup."
+    },
+    {
+      "id": "702.177b-1",
+      "rules": [
+        "702.177b"
+      ],
+      "title": "An effect that allows reactivation applies only before any exhaust ability has been activated this turn",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Elvish Refueler",
+              "summoning_sick": false
+            },
+            {
+              "card": "Afterburner Expert",
+              "summoning_sick": false
+            },
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Elvish Refueler's exhaust ability was already activated on an earlier turn. Afterburner Expert's was not."
+      },
+      "decisions": [
+        "A, with priority in the main phase and no exhaust ability activated yet this turn, considers activating Elvish Refueler's exhaust ability {1}{G}."
+      ],
+      "variants": [
+        {
+          "label": "none_activated_yet",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Activating Elvish Refueler's exhaust ability is legal: its static ability lets A activate it as though it had not been activated, because no exhaust ability has been activated this turn."
+        },
+        {
+          "label": "expert_activated_first",
+          "polarity": "does_not_fire",
+          "delta": "Earlier this turn A activated Afterburner Expert's exhaust ability {2}{G}{G} (tapping four Forests), and it resolved.",
+          "expected": "Activating Elvish Refueler's exhaust ability is not legal, even with two untapped Forests: an exhaust ability has already been activated this turn, so the static ability no longer applies."
+        }
+      ],
+      "cards": [
+        "Elvish Refueler",
+        "Afterburner Expert",
+        "Forest"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

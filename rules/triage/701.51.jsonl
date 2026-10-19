@@ -1,0 +1,4 @@
+{"id": "701.51", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "701.51a", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "Opening an Attraction without an Attraction deck does nothing.", "note": "The instruction still resolves; only its effect is impossible."}
+{"id": "701.51b", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "Opening an Attraction moves the top Attraction card face up onto the battlefield under the player's control.", "note": ""}
+{"id": "701.51c", "category": "mechanical", "observability": "indirect", "record_kinds": ["trigger"], "outcome": "An open-an-Attraction trigger fires only if the Attraction actually enters the battlefield.", "note": ""}

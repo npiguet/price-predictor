@@ -1,0 +1,207 @@
+{
+  "unit": "702.21",
+  "verified": true,
+  "review": [],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.21a-1",
+      "rules": [
+        "702.21a"
+      ],
+      "title": "Ward counters a spell that targets the permanent unless its controller pays the ward cost",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Mountain"
+          ],
+          "B": [
+            {
+              "card": "Tomakul Honor Guard",
+              "summoning_sick": false
+            }
+          ]
+        },
+        "hand": {
+          "A": [
+            "Shock"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Shock targeting Tomakul Honor Guard, tapping one Mountain.",
+        "Tomakul Honor Guard becomes the target of a spell an opponent controls; its ward trigger goes on the stack above Shock.",
+        "Both players pass; the ward trigger resolves. A declines to pay {2} (A could pay with the two untapped Mountains).",
+        "Both players pass until the stack is empty."
+      ],
+      "variants": [
+        {
+          "label": "declines_to_pay",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Ward triggers when Shock targets Tomakul Honor Guard. A does not pay {2}, so Shock is countered and put into A's graveyard. Tomakul Honor Guard (3/1) stays on the battlefield with no damage. Two of A's Mountains stay untapped."
+        },
+        {
+          "label": "pays_ward",
+          "polarity": "does_not_fire",
+          "delta": "At the ward trigger's resolution A pays {2}, tapping the other two Mountains, instead of declining.",
+          "expected": "The ward trigger resolves and does not counter Shock. Shock resolves and deals 2 damage to Tomakul Honor Guard (3/1), which is destroyed and moves to B's graveyard. All three of A's Mountains are tapped."
+        },
+        {
+          "label": "own_creature",
+          "polarity": "does_not_fire",
+          "delta": "Tomakul Honor Guard is on A's battlefield instead of B's, and A casts Shock targeting their own creature.",
+          "expected": "Ward does not trigger, because the spell is not controlled by an opponent of the permanent's controller. Shock resolves and deals 2 damage to Tomakul Honor Guard, which is destroyed and moves to A's graveyard. No payment is asked; two of A's Mountains stay untapped."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Tomakul Honor Guard",
+        "Shock"
+      ],
+      "forge_notes": "In own_creature the creature moves to A's side of the battlefield and B's side is empty; the decision to decline payment never comes up."
+    },
+    {
+      "id": "702.21a-2",
+      "rules": [
+        "702.21a"
+      ],
+      "title": "Ward counters an activated ability that targets the permanent unless its controller pays the ward cost",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Prodigal Sorcerer",
+              "summoning_sick": false
+            },
+            "Island",
+            "Island"
+          ],
+          "B": [
+            {
+              "card": "Tomakul Honor Guard",
+              "summoning_sick": false
+            }
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A activates Prodigal Sorcerer ({T}) targeting Tomakul Honor Guard.",
+        "Tomakul Honor Guard becomes the target of an ability an opponent controls; its ward trigger goes on the stack above the activated ability.",
+        "Both players pass; the ward trigger resolves. A declines to pay {2} (A could pay with the two untapped Islands).",
+        "Both players pass until the stack is empty."
+      ],
+      "variants": [
+        {
+          "label": "declines_to_pay",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Ward triggers. A does not pay {2}, so the Prodigal Sorcerer ability is countered. Tomakul Honor Guard has no damage and stays on the battlefield. Prodigal Sorcerer stays tapped and both Islands stay untapped."
+        },
+        {
+          "label": "pays_ward",
+          "polarity": "does_not_fire",
+          "delta": "At the ward trigger's resolution A pays {2}, tapping both Islands, instead of declining.",
+          "expected": "The ward trigger resolves and does not counter the ability. The ability resolves and deals 1 damage to Tomakul Honor Guard (3/1), which is destroyed and moves to B's graveyard. Both Islands are tapped."
+        }
+      ],
+      "cards": [
+        "Prodigal Sorcerer",
+        "Island",
+        "Tomakul Honor Guard"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.21b-1",
+      "rules": [
+        "702.21b"
+      ],
+      "title": "A ward cost containing X takes its value when the ward trigger resolves",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 4,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain"
+          ],
+          "B": [
+            "Forest",
+            "Raubahn, Bull of Ala Mhigo"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Lightning Bolt"
+          ],
+          "B": [
+            "Giant Growth"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Lightning Bolt targeting Raubahn, Bull of Ala Mhigo (2/2), tapping Mountain.",
+        "Raubahn's ward trigger (pay life equal to Raubahn's power) goes on the stack above Lightning Bolt.",
+        "B has priority with the ward trigger on the stack. Base: B passes. Variant: B casts Giant Growth on Raubahn, tapping Forest, and it resolves before the ward trigger.",
+        "The ward trigger resolves. A pays the ward cost if A has enough life, and declines otherwise.",
+        "Both players pass until the stack is empty."
+      ],
+      "variants": [
+        {
+          "label": "no_response",
+          "polarity": "does_not_fire",
+          "delta": "",
+          "expected": "Raubahn is 2/2 when the ward trigger resolves, so the ward cost is 2 life. A (4 life) pays it and goes to 2 life. Lightning Bolt is not countered; it resolves and deals 3 damage to Raubahn, which is destroyed and moves to B's graveyard."
+        },
+        {
+          "label": "giant_growth_in_response",
+          "polarity": "fires",
+          "delta": "B casts Giant Growth on Raubahn in response to the ward trigger.",
+          "expected": "Raubahn is 5/5 when the ward trigger resolves, so the ward cost is 5 life. A has only 4 life and cannot pay, so Lightning Bolt is countered and put into A's graveyard. A stays at 4 life. Raubahn stays on the battlefield as a 5/5 with no damage."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Forest",
+        "Raubahn, Bull of Ala Mhigo",
+        "Lightning Bolt",
+        "Giant Growth"
+      ],
+      "forge_notes": "Raubahn's ward is Ward:PayLife<X/...> with X = Count$CardPower, evaluated when the cost is paid."
+    }
+  ]
+}

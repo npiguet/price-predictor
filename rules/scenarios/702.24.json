@@ -1,0 +1,148 @@
+{
+  "unit": "702.24",
+  "verified": true,
+  "review": [
+    "702.24a-1: the decision fixed payment by tapping both Islands, which the one_island_tapped variant makes impossible; reworded it as a choice to pay that the variant can fail to complete."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.24a-1",
+      "rules": [
+        "702.24a"
+      ],
+      "title": "Cumulative upkeep adds an age counter and must be paid in full for every counter",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "upkeep",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Illusionary Wall",
+              "counters": {
+                "age": 1
+              },
+              "summoning_sick": false
+            },
+            "Island",
+            "Island"
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Illusionary Wall (cumulative upkeep {U}) has one age counter. Its cumulative upkeep trigger has just triggered at the beginning of A's upkeep."
+      },
+      "decisions": [
+        "The cumulative upkeep trigger of Illusionary Wall is on the stack; both players pass and it resolves.",
+        "A puts an age counter on Illusionary Wall (2 counters), then chooses to pay {U}{U} for the 2 counters, tapping both Islands if both are untapped."
+      ],
+      "variants": [
+        {
+          "label": "full_payment",
+          "polarity": "does_not_fire",
+          "delta": "",
+          "expected": "Illusionary Wall has 2 age counters and stays on the battlefield. Both Islands are tapped."
+        },
+        {
+          "label": "one_island_tapped",
+          "polarity": "fires",
+          "delta": "One of A's Islands is tapped, so only {U} is available.",
+          "expected": "A cannot pay the whole {U}{U}; a partial payment is not allowed. Illusionary Wall moves to A's graveyard (sacrificed) and no mana is spent."
+        },
+        {
+          "label": "declines_to_pay",
+          "polarity": "fires",
+          "delta": "A chooses not to pay although both Islands are untapped.",
+          "expected": "Illusionary Wall moves to A's graveyard (sacrificed). Both Islands stay untapped."
+        },
+        {
+          "label": "no_prior_counters",
+          "polarity": "other",
+          "delta": "Illusionary Wall has no age counters before the trigger.",
+          "expected": "Illusionary Wall gets its first age counter (1 counter) and A pays only {U} (one Island tapped); Illusionary Wall stays on the battlefield."
+        }
+      ],
+      "cards": [
+        "Illusionary Wall",
+        "Island"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.24b-1",
+      "rules": [
+        "702.24b"
+      ],
+      "title": "Each instance of cumulative upkeep triggers separately and counts all age counters at resolution",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "upkeep",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Illusionary Wall",
+              "summoning_sick": false
+            },
+            {
+              "card": "Mana Chains",
+              "attached_to": "Illusionary Wall"
+            },
+            "Island",
+            "Island",
+            "Island"
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Illusionary Wall has no age counters. It has two instances of cumulative upkeep: its own ({U}) and one granted by Mana Chains ({1}). Both trigger at the beginning of A's upkeep."
+      },
+      "decisions": [
+        "Both cumulative upkeep triggers are on the stack; A orders them so Illusionary Wall's own {U} trigger resolves first. Both players pass.",
+        "The first trigger resolves: A puts an age counter on Illusionary Wall (1 counter) and pays {U} by tapping one Island.",
+        "The Mana Chains trigger resolves: A puts an age counter on Illusionary Wall (2 counters) and pays {1}{1} for the 2 counters by tapping the other two Islands."
+      ],
+      "variants": [
+        {
+          "label": "both_paid",
+          "polarity": "does_not_fire",
+          "delta": "",
+          "expected": "Illusionary Wall has 2 age counters (one per resolved trigger) and stays on the battlefield. All three Islands are tapped."
+        },
+        {
+          "label": "one_island_tapped",
+          "polarity": "fires",
+          "delta": "One of A's three Islands is tapped at the start of the upkeep.",
+          "expected": "The first trigger resolves and is paid ({U}, 1 counter). The second trigger puts the 2nd counter, needs {1}{1} but only one Island is untapped, so A cannot pay and Illusionary Wall moves to A's graveyard (sacrificed)."
+        },
+        {
+          "label": "single_instance",
+          "polarity": "other",
+          "delta": "Mana Chains is not on the battlefield, so Illusionary Wall has only its own instance.",
+          "expected": "Only one trigger: Illusionary Wall gets 1 age counter, A pays {U}, and Illusionary Wall stays on the battlefield with 1 age counter."
+        }
+      ],
+      "cards": [
+        "Illusionary Wall",
+        "Mana Chains",
+        "Island"
+      ],
+      "forge_notes": "Mana Chains grants 'Cumulative upkeep:1' as a second keyword instance; Forge should trigger it separately from the printed keyword."
+    }
+  ]
+}

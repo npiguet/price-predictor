@@ -1,0 +1,193 @@
+{
+  "unit": "701.7",
+  "verified": true,
+  "review": [
+    "701.7b-1: grumgully_theirs flipped the outcome through Grumgully's 'you control' condition, not through the continuous effect 701.7b orders; replaced it with no_march, which removes the type-changing effect so the entering replacement no longer sees a creature."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "701.7a-1",
+      "rules": [
+        "701.7a"
+      ],
+      "title": "A token-creating spell puts the specified tokens onto the battlefield",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Plains"
+          ],
+          "B": [
+            "Island",
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Raise the Alarm"
+          ],
+          "B": [
+            "Counterspell"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Both libraries are non-empty and irrelevant."
+      },
+      "decisions": [
+        "A casts Raise the Alarm, tapping both Plains.",
+        "B passes priority.",
+        "Both players pass; Raise the Alarm resolves."
+      ],
+      "variants": [
+        {
+          "label": "resolves",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Two 1/1 white Soldier creature tokens enter the battlefield under A's control. Raise the Alarm is in A's graveyard."
+        },
+        {
+          "label": "countered",
+          "polarity": "does_not_fire",
+          "delta": "Instead of passing, B responds by casting Counterspell targeting Raise the Alarm, tapping both Islands.",
+          "expected": "Raise the Alarm is countered and moves to A's graveyard. No tokens are created."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Island",
+        "Raise the Alarm",
+        "Counterspell"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "701.7b-1",
+      "rules": [
+        "701.7b"
+      ],
+      "title": "A replacement effect on a token entering applies after continuous effects have modified the token",
+      "record_kind": "rewrite",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "March of the Machines",
+            "Grumgully, the Generous"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Strike It Rich"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "March of the Machines makes each noncreature artifact an artifact creature with power and toughness equal to its mana value. A Treasure token has mana value 0. Both libraries are non-empty and irrelevant."
+      },
+      "decisions": [
+        "A casts Strike It Rich, tapping Mountain.",
+        "Both players pass; Strike It Rich resolves and creates a Treasure token."
+      ],
+      "variants": [
+        {
+          "label": "grumgully_yours",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The Treasure token is already an artifact creature (from March of the Machines) when it enters, so Grumgully's replacement gives it an additional +1/+1 counter: it enters as a 1/1 artifact creature with one +1/+1 counter and stays on the battlefield."
+        },
+        {
+          "label": "no_march",
+          "polarity": "does_not_fire",
+          "delta": "March of the Machines is not on the battlefield.",
+          "expected": "The Treasure token enters as a noncreature artifact with no +1/+1 counter and stays on the battlefield."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "March of the Machines",
+        "Grumgully, the Generous",
+        "Strike It Rich"
+      ],
+      "forge_notes": "The token must be seen as a creature by the entering replacement; confirm Forge applies the static type change to the token before evaluating the ETBReplacement."
+    },
+    {
+      "id": "701.7b-2",
+      "rules": [
+        "701.7b"
+      ],
+      "title": "A replacement effect on token creation applies before continuous effects modify the token",
+      "record_kind": "rewrite",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Plains",
+            "Plains",
+            "March of the Machines",
+            "Divine Visitation"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Strike It Rich",
+            "Raise the Alarm"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Divine Visitation: if one or more creature tokens would be created under your control, that many 4/4 white Angel creature tokens with flying and vigilance are created instead. March of the Machines makes a Treasure token (mana value 0) a 0/0 artifact creature. Both libraries are non-empty and irrelevant."
+      },
+      "decisions": [
+        "A casts Strike It Rich, tapping Mountain.",
+        "Both players pass; Strike It Rich resolves and creates a Treasure token."
+      ],
+      "variants": [
+        {
+          "label": "treasure",
+          "polarity": "does_not_fire",
+          "delta": "",
+          "expected": "When the Treasure token is created it is not yet a creature, because March of the Machines is considered afterwards, so Divine Visitation does not replace it: one Treasure token is created. March of the Machines then makes it a 0/0 artifact creature and it is put into the graveyard (ceases to exist) in the next state-based check."
+        },
+        {
+          "label": "soldiers",
+          "polarity": "fires",
+          "delta": "A casts Raise the Alarm instead of Strike It Rich, tapping both Plains.",
+          "expected": "The two tokens are creature tokens as created, so Divine Visitation replaces them: two 4/4 white Angel creature tokens with flying and vigilance enter instead of the Soldiers."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Plains",
+        "March of the Machines",
+        "Divine Visitation",
+        "Strike It Rich",
+        "Raise the Alarm"
+      ],
+      "forge_notes": "Confirm Forge evaluates ValidToken$ Creature.YouCtrl on the token before static abilities apply."
+    }
+  ]
+}

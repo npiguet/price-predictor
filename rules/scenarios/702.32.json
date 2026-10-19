@@ -1,0 +1,139 @@
+{
+  "unit": "702.32",
+  "verified": true,
+  "review": [],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.32a-1",
+      "rules": [
+        "702.32a"
+      ],
+      "title": "A permanent with fading enters with fade counters",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest"
+          ],
+          "B": [
+            "Island",
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Blastoderm"
+          ],
+          "B": [
+            "Counterspell"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Blastoderm, tapping four Forests.",
+        "B does not respond with Counterspell; both players pass and Blastoderm resolves."
+      ],
+      "variants": [
+        {
+          "label": "resolves",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Blastoderm resolves and enters the battlefield with 3 fade counters on it."
+        },
+        {
+          "label": "countered",
+          "polarity": "does_not_fire",
+          "delta": "B responds with Counterspell (tapping both Islands) and counters Blastoderm.",
+          "expected": "Blastoderm is countered and goes to A's graveyard; it never enters the battlefield, so no fade counters are put on anything."
+        }
+      ],
+      "cards": [
+        "Blastoderm",
+        "Counterspell",
+        "Forest",
+        "Island"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.32a-2",
+      "rules": [
+        "702.32a"
+      ],
+      "title": "At its controller's upkeep a fading permanent loses a fade counter, and is sacrificed if it cannot",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "upkeep",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Blastoderm",
+              "counters": {
+                "fade": 2
+              }
+            }
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "The beginning of A's upkeep: the fading trigger goes on the stack.",
+        "Both players pass; the trigger resolves."
+      ],
+      "variants": [
+        {
+          "label": "two_counters",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "A fade counter is removed: Blastoderm has 1 fade counter and stays on the battlefield."
+        },
+        {
+          "label": "last_counter",
+          "polarity": "other",
+          "delta": "Blastoderm has 1 fade counter.",
+          "expected": "The last fade counter is removed: Blastoderm has 0 fade counters and stays on the battlefield (it is sacrificed only when no counter can be removed)."
+        },
+        {
+          "label": "no_counters",
+          "polarity": "other",
+          "delta": "Blastoderm has no fade counters.",
+          "expected": "No counter can be removed, so Blastoderm is sacrificed and is in A's graveyard."
+        },
+        {
+          "label": "opponents_upkeep",
+          "polarity": "does_not_fire",
+          "delta": "It is B's upkeep: B is the active player.",
+          "expected": "The fading trigger does not fire: Blastoderm keeps its 2 fade counters and stays on the battlefield."
+        }
+      ],
+      "cards": [
+        "Blastoderm"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

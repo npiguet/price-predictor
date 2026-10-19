@@ -1,0 +1,222 @@
+{
+  "unit": "702.54",
+  "verified": true,
+  "review": [
+    "702.54c: skip reason was false (Bloodlord of Vaasgoth grants a second bloodthirst instance to a Vampire spell); replaced the skip with scenario 702.54c-1."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.54a-1",
+      "rules": [
+        "702.54a"
+      ],
+      "title": "Bloodthirst N gives N counters if an opponent was dealt damage this turn",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain"
+          ],
+          "B": [
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Shock",
+            "Gorehorn Minotaurs"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Gorehorn Minotaurs is a 3/3 with bloodthirst 2."
+      },
+      "decisions": [
+        "A casts Shock targeting player B, tapping a Mountain. Both players pass; Shock resolves.",
+        "A casts Gorehorn Minotaurs, tapping four Mountains. Both players pass; it resolves."
+      ],
+      "variants": [
+        {
+          "label": "opponent_damaged",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "B is at 18. Gorehorn Minotaurs enters with two +1/+1 counters and is a 5/5."
+        },
+        {
+          "label": "creature_damaged",
+          "polarity": "does_not_fire",
+          "delta": "Shock targets Grizzly Bears instead of player B.",
+          "expected": "Grizzly Bears dies, B stays at 20, and Gorehorn Minotaurs enters with no counters as a 3/3."
+        },
+        {
+          "label": "self_damaged",
+          "polarity": "does_not_fire",
+          "delta": "Shock targets player A instead of player B.",
+          "expected": "A is at 18, B stays at 20, and Gorehorn Minotaurs enters with no counters as a 3/3."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Grizzly Bears",
+        "Shock",
+        "Gorehorn Minotaurs"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.54b-1",
+      "rules": [
+        "702.54b"
+      ],
+      "title": "Bloodthirst X gives counters equal to the damage dealt to opponents this turn",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest"
+          ],
+          "B": [
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Shock",
+            "Petrified Wood-Kin"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Petrified Wood-Kin is a 3/3 with bloodthirst X that costs {6}{G}."
+      },
+      "decisions": [
+        "A casts Shock targeting player B, tapping the Mountain. Both players pass; Shock resolves.",
+        "A casts Petrified Wood-Kin, tapping seven Forests. Both players pass; it resolves."
+      ],
+      "variants": [
+        {
+          "label": "shock_to_face",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "B is at 18. Petrified Wood-Kin enters with two +1/+1 counters and is a 5/5."
+        },
+        {
+          "label": "bolt_to_face",
+          "polarity": "fires",
+          "delta": "A holds Lightning Bolt instead of Shock and casts it at player B.",
+          "expected": "B is at 17. Petrified Wood-Kin enters with three +1/+1 counters and is a 6/6."
+        },
+        {
+          "label": "creature_damaged",
+          "polarity": "does_not_fire",
+          "delta": "Shock targets Grizzly Bears instead of player B.",
+          "expected": "Grizzly Bears dies, B stays at 20, and Petrified Wood-Kin enters with no counters as a 3/3."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Forest",
+        "Grizzly Bears",
+        "Shock",
+        "Lightning Bolt",
+        "Petrified Wood-Kin"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.54c-1",
+      "rules": [
+        "702.54c"
+      ],
+      "title": "Two bloodthirst instances each add their counters",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Bloodlord of Vaasgoth",
+            "Mountain",
+            "Swamp",
+            "Swamp",
+            "Swamp"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Shock",
+            "Bloodrage Vampire"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Bloodlord of Vaasgoth: whenever A casts a Vampire creature spell, it gains bloodthirst 3. Bloodrage Vampire is a 3/1 Vampire with bloodthirst 1 costing {2}{B}."
+      },
+      "decisions": [
+        "A casts Shock targeting player B, tapping the Mountain. Both players pass; Shock resolves.",
+        "A casts Bloodrage Vampire, tapping three Swamps. Bloodlord of Vaasgoth's trigger goes on the stack above it; both players pass and the trigger resolves.",
+        "Both players pass; Bloodrage Vampire resolves."
+      ],
+      "variants": [
+        {
+          "label": "two_instances",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "B is at 18. Bloodrage Vampire enters with four +1/+1 counters (1 from its own bloodthirst 1, 3 from the granted bloodthirst 3) and is a 7/5."
+        },
+        {
+          "label": "no_bloodlord",
+          "polarity": "does_not_fire",
+          "delta": "Bloodlord of Vaasgoth is not on the battlefield.",
+          "expected": "B is at 18. Bloodrage Vampire enters with one +1/+1 counter and is a 4/2."
+        },
+        {
+          "label": "opponent_not_damaged",
+          "polarity": "other",
+          "delta": "Shock targets player A instead of player B.",
+          "expected": "A is at 18, B stays at 20. Bloodrage Vampire enters with no counters as a 3/1."
+        }
+      ],
+      "cards": [
+        "Bloodlord of Vaasgoth",
+        "Mountain",
+        "Swamp",
+        "Shock",
+        "Bloodrage Vampire"
+      ],
+      "forge_notes": "Forge grants the keyword through Animate on TriggeredCardLKICopy with Duration Permanent; check that the granted bloodthirst reaches the spell and applies as it enters."
+    }
+  ]
+}

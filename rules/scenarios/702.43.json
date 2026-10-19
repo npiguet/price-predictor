@@ -1,0 +1,210 @@
+{
+  "unit": "702.43",
+  "verified": true,
+  "review": [
+    "702.43b: the skip claimed no Forge creature can have two instances of modular, but Blaster, Combat DJ grants modular 1 to Arcbound Worker, which already has it. Removed the skip and added scenario 702.43b-1."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.43a-1",
+      "rules": [
+        "702.43a"
+      ],
+      "title": "A dying modular permanent moves its +1/+1 counters onto a target artifact creature",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Arcbound Worker",
+              "counters": {
+                "+1/+1": 1
+              }
+            },
+            "Ornithopter"
+          ],
+          "B": [
+            "Mountain"
+          ]
+        },
+        "hand": {
+          "B": [
+            "Lightning Bolt"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A passes priority in main1.",
+        "B casts Lightning Bolt targeting Arcbound Worker, tapping Mountain; both players pass and it resolves.",
+        "Arcbound Worker dies in the state-based check; its modular trigger targets Ornithopter and A chooses to put the counters on it; the trigger resolves."
+      ],
+      "variants": [
+        {
+          "label": "artifact_target",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Arcbound Worker is put into A's graveyard. The modular trigger fires and Ornithopter gets one +1/+1 counter, a 1/3."
+        },
+        {
+          "label": "no_artifact_creature",
+          "polarity": "does_not_fire",
+          "delta": "A controls Grizzly Bears instead of Ornithopter.",
+          "expected": "Arcbound Worker dies. The trigger has no legal target (Grizzly Bears is not an artifact creature) and is not put on the stack; Grizzly Bears stays a 2/2."
+        },
+        {
+          "label": "three_counters",
+          "polarity": "fires",
+          "delta": "Arcbound Worker has three +1/+1 counters, a 3/3 that Lightning Bolt still kills.",
+          "expected": "Arcbound Worker dies and Ornithopter gets three +1/+1 counters, a 3/5."
+        }
+      ],
+      "cards": [
+        "Arcbound Worker",
+        "Ornithopter",
+        "Grizzly Bears",
+        "Mountain",
+        "Lightning Bolt"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.43a-2",
+      "rules": [
+        "702.43a"
+      ],
+      "title": "A modular permanent enters with N +1/+1 counters",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Arcbound Worker"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts the creature in hand, paying its cost from the Mountains.",
+        "Both players pass; the spell resolves."
+      ],
+      "variants": [
+        {
+          "label": "modular_1",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Arcbound Worker enters with one +1/+1 counter, a 1/1."
+        },
+        {
+          "label": "modular_3",
+          "polarity": "fires",
+          "delta": "The card in hand is Arcbound Bruiser (modular 3), cast for {5}.",
+          "expected": "Arcbound Bruiser enters with three +1/+1 counters, a 3/3."
+        },
+        {
+          "label": "counters_prevented",
+          "polarity": "does_not_fire",
+          "delta": "B controls Solemnity, and the card in hand is Arcbound Worker.",
+          "expected": "Arcbound Worker enters without its counter, a 0/0, and dies in the state-based check; nothing is left on the battlefield."
+        },
+        {
+          "label": "no_modular",
+          "polarity": "other",
+          "delta": "The card in hand is Memnite, cast for {0}.",
+          "expected": "Memnite enters as a 1/1 with no counters; modular is not involved."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Arcbound Worker",
+        "Arcbound Bruiser",
+        "Memnite",
+        "Solemnity"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.43b-1",
+      "rules": [
+        "702.43b"
+      ],
+      "title": "A creature with two instances of modular enters with the counters of each",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Blaster, Combat DJ"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Arcbound Worker"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Blaster, Combat DJ is on its front face and gives other nontoken artifact creatures A controls modular 1, so Arcbound Worker has modular 1 twice."
+      },
+      "decisions": [
+        "A casts Arcbound Worker, tapping Mountain.",
+        "Both players pass; Arcbound Worker resolves."
+      ],
+      "variants": [
+        {
+          "label": "two_instances",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Arcbound Worker enters with two +1/+1 counters, a 2/2."
+        },
+        {
+          "label": "one_instance",
+          "polarity": "does_not_fire",
+          "delta": "A does not control Blaster, Combat DJ.",
+          "expected": "Arcbound Worker enters with one +1/+1 counter, a 1/1."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Blaster, Combat DJ",
+        "Arcbound Worker"
+      ],
+      "forge_notes": "Depends on Forge applying a granted modular's enters-with-counters replacement to a permanent entering under the granting static (rule 614.12)."
+    }
+  ]
+}

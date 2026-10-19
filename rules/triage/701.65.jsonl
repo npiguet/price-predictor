@@ -1,0 +1,3 @@
+{"id": "701.65", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "701.65a", "category": "mechanical", "observability": "direct", "record_kinds": ["resolution", "playability"], "outcome": "The airbent objects are exiled, and each exiled card's owner may cast it for {2} while it stays exiled.", "note": ""}
+{"id": "701.65b", "category": "mechanical", "observability": "direct", "record_kinds": ["trigger"], "outcome": "A whenever-you-airbend trigger fires only when an instruction to airbend exiled at least one object.", "note": ""}

@@ -1,0 +1,357 @@
+{
+  "unit": "726",
+  "verified": true,
+  "review": [
+    "726.2-2: A held the initiative without ever having ventured (unreachable, taking it always ventures) and the 'nobody holds it' variant was unreachable with progress; put A's marker on Secret Entrance, made the upkeep venture move to Forge with counters on a new Grizzly Bears, rewrote the B-holds and never-taken variants to reachable states, dropped unused Plains.",
+    "726.2-3: B held the initiative with no dungeon progress (unreachable) and the no-holder variant kept that history; gave B a marker on Secret Entrance and reworded the no-holder variant as a game that never had the initiative.",
+    "726.3-1: B held the initiative without dungeon progress (unreachable) and the base expected claimed an event in B's later upkeep outside the scenario; gave B a Secret Entrance marker, restated the base outcome within the scenario, made the no-previous-holder variant a game that never had the initiative.",
+    "726.5-1: the opponent-holds variant left B holding the initiative with no history; stated that B took it by combat damage and ventured to Secret Entrance so the board is reachable."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "726.2-1",
+      "rules": [
+        "726.2"
+      ],
+      "title": "Whenever a player takes the initiative, that player ventures into Undercity",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest"
+          ],
+          "B": [
+            "Mountain"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Undermountain Adventurer"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Plains"
+          ]
+        },
+        "exile": {},
+        "notes": "Nobody has the initiative and neither player has ventured into any dungeon. A's library holds a single basic land, Plains."
+      },
+      "decisions": [
+        "A casts Undermountain Adventurer, tapping four Forests.",
+        "Both players pass; Undermountain Adventurer resolves and enters the battlefield.",
+        "Its enters trigger goes on the stack; both players pass; A takes the initiative.",
+        "The inherent trigger 'whenever a player takes the initiative, that player ventures into Undercity' goes on the stack; both players pass; A ventures and enters the first room, Secret Entrance.",
+        "A searches the library for a basic land card, choosing Plains, reveals it and puts it into hand."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "A has the initiative. The venture trigger fires, A enters Secret Entrance in the Undercity dungeon, and A's hand contains Plains while the library is empty."
+        },
+        {
+          "label": "no_initiative_taken",
+          "polarity": "does_not_fire",
+          "delta": "A casts Grizzly Bears (with two of the four Forests) instead of Undermountain Adventurer, so no player takes the initiative.",
+          "expected": "Nobody has the initiative. No venture trigger fires, A has not entered any dungeon, and Plains is still in A's library."
+        }
+      ],
+      "cards": [
+        "Forest",
+        "Mountain",
+        "Plains",
+        "Undermountain Adventurer",
+        "Grizzly Bears"
+      ],
+      "forge_notes": "The initiative designation has no zone field in the setup schema, so it is stated in notes. Undermountain Adventurer's enters trigger is a TakeInitiative effect."
+    },
+    {
+      "id": "726.2-2",
+      "rules": [
+        "726.2"
+      ],
+      "title": "At the beginning of the initiative holder's upkeep, that player ventures into Undercity",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "upkeep",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Grizzly Bears"
+          ],
+          "B": [
+            "Mountain"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "A has the initiative and A's venture marker is on Secret Entrance in Undercity (A ventured once when taking it). B has not ventured. Grizzly Bears has no counters."
+      },
+      "decisions": [
+        "The beginning-of-upkeep trigger of the initiative holder goes on the stack, controlled by A; both players pass; it resolves.",
+        "A ventures into Undercity and moves from Secret Entrance to the room Forge.",
+        "Forge's room ability targets Grizzly Bears; both players pass; it resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The upkeep trigger fires. A's venture marker moves to Forge and Grizzly Bears becomes 4/4 with two +1/+1 counters. A still has the initiative."
+        },
+        {
+          "label": "opponent_holds_it",
+          "polarity": "does_not_fire",
+          "delta": "B has the initiative instead of A (B took it from A by combat damage, and B's venture marker is on Secret Entrance).",
+          "expected": "No initiative trigger fires in A's upkeep. A's marker stays on Secret Entrance and Grizzly Bears stays 2/2 with no counters. B still has the initiative."
+        },
+        {
+          "label": "never_taken",
+          "polarity": "other",
+          "delta": "The initiative has never entered this game: nobody holds it and A has no dungeon progress.",
+          "expected": "No initiative trigger fires in A's upkeep. A is in no dungeon and Grizzly Bears stays 2/2 with no counters."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Grizzly Bears"
+      ],
+      "forge_notes": "Needs the initiative designation set directly, for example through a puzzle-state or by scripting a prior TakeInitiative effect."
+    },
+    {
+      "id": "726.2-3",
+      "rules": [
+        "726.2"
+      ],
+      "title": "Combat damage to the initiative holder transfers the initiative to the damaging player",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "declare_attackers",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Grizzly Bears"
+          ],
+          "B": [
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Plains"
+          ]
+        },
+        "exile": {},
+        "notes": "B has the initiative and B's venture marker is on Secret Entrance in Undercity (B ventured once when taking it). A has not ventured. Both Grizzly Bears have been under their controllers' control since before the turn began. A's library holds a single basic land, Plains."
+      },
+      "decisions": [
+        "A attacks B with Grizzly Bears.",
+        "B declares no blockers.",
+        "Combat damage is dealt: A's Grizzly Bears deals 2 damage to B.",
+        "The inherent trigger 'whenever one or more creatures a player controls deal combat damage to the player who has the initiative' goes on the stack, controlled by A; both players pass and it resolves; A takes the initiative.",
+        "The trigger 'whenever a player takes the initiative' goes on the stack; both players pass; A ventures into Undercity, enters Secret Entrance, searches for a basic land and takes Plains into hand."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "B is at 18 life. The damage trigger fires, controlled by A, and A takes the initiative; B no longer has it. The take-the-initiative trigger fires: A enters Secret Entrance and A's hand contains Plains."
+        },
+        {
+          "label": "blocked",
+          "polarity": "does_not_fire",
+          "delta": "B's Grizzly Bears blocks A's Grizzly Bears.",
+          "expected": "B stays at 20 life; both Grizzly Bears die. No damage trigger fires, B keeps the initiative, and A has not entered any dungeon."
+        },
+        {
+          "label": "never_taken",
+          "polarity": "other",
+          "delta": "The initiative has never entered this game: nobody holds it and B has no dungeon progress.",
+          "expected": "B is at 18 life. No initiative trigger fires, nobody has the initiative, and A has not entered any dungeon; Plains stays in A's library."
+        }
+      ],
+      "cards": [
+        "Grizzly Bears",
+        "Plains"
+      ],
+      "forge_notes": "Needs the initiative designation set directly on B. Forge implements the combat-damage transfer as a built-in game-state trigger."
+    },
+    {
+      "id": "726.3-1",
+      "rules": [
+        "726.3"
+      ],
+      "title": "A player taking the initiative takes it away from the previous holder",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest"
+          ],
+          "B": [
+            "Mountain"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Undermountain Adventurer"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Plains"
+          ]
+        },
+        "exile": {},
+        "notes": "B has the initiative and B's venture marker is on Secret Entrance in Undercity (B ventured once when taking it). A has not ventured. A's library holds a single basic land, Plains."
+      },
+      "decisions": [
+        "A casts Undermountain Adventurer, tapping four Forests.",
+        "Both players pass; Undermountain Adventurer resolves.",
+        "Its enters trigger goes on the stack; both players pass; A takes the initiative.",
+        "The venture trigger goes on the stack; both players pass; A ventures into Undercity, entering Secret Entrance, and takes Plains into hand."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "A has the initiative and B no longer has it. A enters Secret Entrance and takes Plains into hand; B's marker stays on Secret Entrance."
+        },
+        {
+          "label": "no_take",
+          "polarity": "does_not_fire",
+          "delta": "A casts Grizzly Bears (with two of the four Forests) instead of Undermountain Adventurer, so nobody takes the initiative.",
+          "expected": "B still has the initiative and A does not. A has not entered any dungeon and Plains stays in A's library."
+        },
+        {
+          "label": "no_previous_holder",
+          "polarity": "other",
+          "delta": "The initiative has never entered this game before Undermountain Adventurer's trigger: nobody holds it and B has no dungeon progress.",
+          "expected": "A has the initiative; nobody lost it. A enters Secret Entrance and takes Plains into hand."
+        }
+      ],
+      "cards": [
+        "Forest",
+        "Mountain",
+        "Plains",
+        "Undermountain Adventurer",
+        "Grizzly Bears"
+      ],
+      "forge_notes": "Needs the initiative designation set directly on B."
+    },
+    {
+      "id": "726.5-1",
+      "rules": [
+        "726.5"
+      ],
+      "title": "Taking the initiative while holding it triggers the venture ability again",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Grizzly Bears"
+          ],
+          "B": [
+            "Mountain"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Undermountain Adventurer"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Plains"
+          ]
+        },
+        "exile": {},
+        "notes": "A has the initiative and A's venture marker is already on Secret Entrance in Undercity (A ventured once when taking it). B has not ventured. Grizzly Bears has no counters; A's library holds Plains."
+      },
+      "decisions": [
+        "A casts Undermountain Adventurer, tapping four Forests.",
+        "Both players pass; Undermountain Adventurer resolves.",
+        "Its enters trigger goes on the stack; both players pass; A takes the initiative while already holding it.",
+        "The trigger 'whenever a player takes the initiative' goes on the stack; both players pass; A ventures into Undercity and moves from Secret Entrance to the room Forge.",
+        "Forge's ability targets Grizzly Bears; both players pass; it resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "A still has the initiative (a single designation). The venture trigger fires: A moves to Forge and Grizzly Bears becomes 4/4 with two +1/+1 counters."
+        },
+        {
+          "label": "no_take",
+          "polarity": "does_not_fire",
+          "delta": "A's hand holds a second Grizzly Bears (cast with two of the four Forests) instead of Undermountain Adventurer, so no take-the-initiative instruction is performed.",
+          "expected": "No venture trigger fires. A stays in Secret Entrance and the original Grizzly Bears has no counters."
+        },
+        {
+          "label": "opponent_holds_it",
+          "polarity": "other",
+          "delta": "B has the initiative instead of A (B took it from A by combat damage, and B's venture marker is on Secret Entrance); A's marker is still on Secret Entrance.",
+          "expected": "A takes the initiative from B; the venture trigger fires and A moves to Forge, with Grizzly Bears becoming 4/4. B no longer has the initiative."
+        }
+      ],
+      "cards": [
+        "Forest",
+        "Mountain",
+        "Plains",
+        "Undermountain Adventurer",
+        "Grizzly Bears"
+      ],
+      "forge_notes": "Needs the initiative designation and A's dungeon progress set directly."
+    }
+  ]
+}

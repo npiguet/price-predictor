@@ -1,0 +1,3 @@
+{"id": "702.146", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.146a", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "A card with disturb can be cast transformed from its graveyard for the disturb cost, and not otherwise from the graveyard.", "note": ""}
+{"id": "702.146b", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution", "continuous"], "outcome": "A double-faced spell cast with disturb resolves onto the battlefield with its back face up.", "note": ""}

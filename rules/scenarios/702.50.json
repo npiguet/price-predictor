@@ -1,0 +1,180 @@
+{
+  "unit": "702.50",
+  "verified": true,
+  "review": [
+    "702.50a-1: B's library was empty, so B would lose the game drawing in B's draw step before A's next upkeep; gave B two Islands. The base variant carried a delta and the decisions left B's response open; fixed both.",
+    "702.50b-1: the base variant carried a delta and the decisions left B's response open; moved B's pass into the decisions and the Counterspell into the variant delta."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.50a-1",
+      "rules": [
+        "702.50a",
+        "702.50b"
+      ],
+      "title": "A resolved epic spell is copied at each of its controller's upkeeps even though they cannot cast spells",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain"
+          ],
+          "B": [
+            "Island",
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Undying Flames",
+            "Shock"
+          ],
+          "B": [
+            "Counterspell"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Grizzly Bears",
+            "Centaur Courser",
+            "Forest",
+            "Forest"
+          ],
+          "B": [
+            "Island",
+            "Island"
+          ]
+        },
+        "exile": {},
+        "notes": "Library lists the top card first. Undying Flames exiles cards from the top of A's library until it exiles a nonland card and deals damage to any target equal to that card's mana value. B's library holds two Islands so that B's draw step does not lose B the game."
+      },
+      "decisions": [
+        "A casts Undying Flames targeting B, paying {4}{R}{R} with six Mountains.",
+        "B passes priority; Undying Flames resolves.",
+        "A and B take no further actions in the turn; B takes their turn and does nothing.",
+        "At A's next upkeep the epic delayed trigger puts a copy of Undying Flames on the stack; A targets B with the copy and both players pass."
+      ],
+      "variants": [
+        {
+          "label": "resolves",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Undying Flames resolves: Grizzly Bears (mana value 2) is exiled and B takes 2 damage, so B's life total is 18. At A's next upkeep a copy is put on the stack without being cast, resolves, and exiles Centaur Courser (mana value 3), so B takes 3 damage and B's life total is 15."
+        },
+        {
+          "label": "countered",
+          "polarity": "does_not_fire",
+          "delta": "B casts Counterspell on Undying Flames, paying {U}{U} with both Islands, instead of passing priority.",
+          "expected": "Undying Flames is countered and moves to A's graveyard. No card is exiled from A's library, B's life total stays 20 and no epic delayed trigger is created, so nothing is put on the stack at A's next upkeep."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Island",
+        "Undying Flames",
+        "Shock",
+        "Counterspell",
+        "Grizzly Bears",
+        "Centaur Courser",
+        "Forest"
+      ],
+      "forge_notes": "The copy created by the epic trigger is not cast and does not carry the epic ability."
+    },
+    {
+      "id": "702.50b-1",
+      "rules": [
+        "702.50a",
+        "702.50b"
+      ],
+      "title": "After an epic spell resolves its controller cannot cast spells",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain"
+          ],
+          "B": [
+            "Island",
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Undying Flames",
+            "Shock"
+          ],
+          "B": [
+            "Counterspell"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Grizzly Bears",
+            "Centaur Courser",
+            "Forest",
+            "Forest"
+          ]
+        },
+        "exile": {},
+        "notes": "A has one untapped Mountain after paying for Undying Flames."
+      },
+      "decisions": [
+        "A casts Undying Flames targeting B, paying {4}{R}{R} with six Mountains.",
+        "B passes priority; Undying Flames resolves.",
+        "A receives priority with an empty stack in main phase 1 and considers casting Shock targeting B with the seventh Mountain."
+      ],
+      "variants": [
+        {
+          "label": "epic_resolved",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Undying Flames resolves and B takes 2 damage. Casting Shock is not legal for A: A cannot cast spells for the rest of the game."
+        },
+        {
+          "label": "epic_countered",
+          "polarity": "does_not_fire",
+          "delta": "B casts Counterspell on Undying Flames, paying {U}{U} with both Islands, instead of passing priority.",
+          "expected": "Undying Flames is countered. Casting Shock targeting B is legal for A with the seventh Mountain."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Island",
+        "Undying Flames",
+        "Shock",
+        "Counterspell",
+        "Grizzly Bears",
+        "Centaur Courser",
+        "Forest"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

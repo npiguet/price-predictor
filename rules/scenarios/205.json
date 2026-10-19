@@ -1,0 +1,606 @@
+{
+  "unit": "205",
+  "verified": true,
+  "review": [
+    "205.1a-1: Dryad Arbor expected carried reasoning and credited Forest to retention though Song sets Forest itself; reworded to the observable outcome.",
+    "205.1a-1: the clause that counters stay on an object whose card type is set was uncovered; added a counter-kept variant with a +1/+1 counter on Grizzly Bears.",
+    "205.1b-1: polarities were inverted; the Song of the Dryads variant, where prior types are not retained, is now does_not_fire and the aura-removed variant, where no type-changing effect applies, is other.",
+    "205.1b-1: replace variant's mana payment was underspecified ('three lands, at least one Forest'); it now taps both Forests and one Island."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "205.1a-1",
+      "rules": [
+        "205.1a"
+      ],
+      "title": "An effect that sets card type replaces the existing types and the subtypes correlated with them",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest"
+          ],
+          "B": [
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Song of the Dryads",
+            "Naturalize"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Nothing else on the board. Naturalize is held for the aura-removed variant only."
+      },
+      "decisions": [
+        "A casts Song of the Dryads targeting Grizzly Bears, tapping three Forests.",
+        "Both players pass; Song of the Dryads resolves and attaches to Grizzly Bears.",
+        "Both players pass with an empty stack; the continuous effect has been applied."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears is a colorless Land - Forest and no longer a creature: it has no creature type Bear and no power or toughness, and it is not a legal attacker or blocker."
+        },
+        {
+          "label": "land-creature",
+          "polarity": "other",
+          "delta": "B's permanent is Dryad Arbor (Land Creature - Forest Dryad) instead of Grizzly Bears.",
+          "expected": "Dryad Arbor is a colorless Land - Forest only: it has neither the Creature type nor the creature type Dryad, and it has no power or toughness."
+        },
+        {
+          "label": "aura-removed",
+          "polarity": "does_not_fire",
+          "delta": "After Song of the Dryads resolves, A casts Naturalize targeting Song of the Dryads (tapping two Forests) and it resolves.",
+          "expected": "Song of the Dryads goes to A's graveyard; Grizzly Bears is a green 2/2 Creature - Bear again and no longer a land."
+        },
+        {
+          "label": "counter-kept",
+          "polarity": "other",
+          "delta": "Grizzly Bears has one +1/+1 counter on it.",
+          "expected": "Grizzly Bears is a colorless Land - Forest with no power or toughness, and the +1/+1 counter stays on it."
+        }
+      ],
+      "cards": [
+        "Forest",
+        "Grizzly Bears",
+        "Dryad Arbor",
+        "Song of the Dryads",
+        "Naturalize"
+      ],
+      "forge_notes": "The clause that an instant or sorcery retains its type cannot be reached: no Forge card sets the card type of an instant or sorcery object on the battlefield or stack. Song of the Dryads is scripted with RemoveCardTypes and RemoveLandTypes, then adds Land and Forest."
+    },
+    {
+      "id": "205.1b-1",
+      "rules": [
+        "205.1b"
+      ],
+      "title": "An effect that adds a type 'in addition to its other types' keeps every prior type and subtype",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            "Forest",
+            "Forest"
+          ],
+          "B": [
+            "Darksteel Citadel"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Ensoul Artifact",
+            "Song of the Dryads",
+            "Naturalize"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Darksteel Citadel is an Artifact Land. Song of the Dryads and Naturalize are held for the variants only."
+      },
+      "decisions": [
+        "A casts Ensoul Artifact targeting Darksteel Citadel, tapping two Islands.",
+        "Both players pass; Ensoul Artifact resolves and attaches to Darksteel Citadel.",
+        "Both players pass with an empty stack; the continuous effect has been applied."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Darksteel Citadel is an Artifact Land Creature with power and toughness 5/5: it keeps the artifact and land types and gains creature."
+        },
+        {
+          "label": "replace",
+          "polarity": "does_not_fire",
+          "delta": "A casts Song of the Dryads (tapping both Forests and one Island) targeting Darksteel Citadel instead of Ensoul Artifact.",
+          "expected": "Darksteel Citadel is a colorless Land - Forest only: it is no longer an artifact and not a creature."
+        },
+        {
+          "label": "aura-removed",
+          "polarity": "other",
+          "delta": "After Ensoul Artifact resolves, A casts Naturalize targeting Ensoul Artifact (tapping two Forests) and it resolves.",
+          "expected": "Ensoul Artifact goes to A's graveyard; Darksteel Citadel is an Artifact Land again, not a creature, with no power or toughness."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Forest",
+        "Darksteel Citadel",
+        "Ensoul Artifact",
+        "Song of the Dryads",
+        "Naturalize"
+      ],
+      "forge_notes": "Ensoul Artifact is scripted with AddType Creature and SetPower/SetToughness 5, with no removal flags."
+    },
+    {
+      "id": "205.2b-1",
+      "rules": [
+        "205.2b"
+      ],
+      "title": "An artifact creature satisfies an effect that applies to artifacts",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain"
+          ],
+          "B": [
+            "Ornithopter"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Shatter"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Ornithopter is an Artifact Creature - Thopter 0/2."
+      },
+      "decisions": [
+        "A considers casting Shatter (tapping two Mountains) targeting each permanent B controls.",
+        "A casts Shatter targeting the legal target, if any, and both players pass."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Shatter has a legal target: Ornithopter, which is an artifact because it is an artifact creature. Shatter resolves and Ornithopter moves to B's graveyard."
+        },
+        {
+          "label": "creature-only",
+          "polarity": "does_not_fire",
+          "delta": "B's permanent is Grizzly Bears (a creature that is not an artifact) instead of Ornithopter.",
+          "expected": "Shatter has no legal target: has_legal_target is false and it cannot be cast."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Ornithopter",
+        "Grizzly Bears",
+        "Shatter"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "205.2b-2",
+      "rules": [
+        "205.2b"
+      ],
+      "title": "An artifact creature satisfies an effect that applies to creatures",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Swamp",
+            "Swamp"
+          ],
+          "B": [
+            "Ornithopter"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Doom Blade"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Ornithopter is a colorless Artifact Creature - Thopter 0/2, so it is nonblack."
+      },
+      "decisions": [
+        "A considers casting Doom Blade (tapping two Swamps) targeting each permanent B controls.",
+        "A casts Doom Blade targeting the legal target, if any, and both players pass."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Doom Blade has a legal target: Ornithopter, which is a creature because it is an artifact creature. Doom Blade resolves and Ornithopter moves to B's graveyard."
+        },
+        {
+          "label": "artifact-only",
+          "polarity": "does_not_fire",
+          "delta": "B's permanent is Sol Ring (an artifact that is not a creature) instead of Ornithopter.",
+          "expected": "Doom Blade has no legal target: has_legal_target is false and it cannot be cast."
+        }
+      ],
+      "cards": [
+        "Swamp",
+        "Ornithopter",
+        "Sol Ring",
+        "Doom Blade"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "205.3d-1",
+      "rules": [
+        "205.3d"
+      ],
+      "title": "An object that is not a creature cannot gain creature types, not even from changeling",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Forest",
+            "Forest",
+            "Forest",
+            "Mountain",
+            "Changeling Outcast"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Song of the Dryads",
+            "Goblin Grenade"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Changeling Outcast is a Creature - Shapeshifter with changeling, so it is every creature type, Goblin included, while it is a creature. It is A's only creature. Goblin Grenade requires sacrificing a Goblin."
+      },
+      "decisions": [
+        "A casts Song of the Dryads targeting Changeling Outcast, tapping three Forests.",
+        "Both players pass; Song of the Dryads resolves.",
+        "A considers casting Goblin Grenade with the Mountain, sacrificing a Goblin as the additional cost."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Changeling Outcast is a colorless Land - Forest with no creature types, so it is not a Goblin: Goblin Grenade has no Goblin to sacrifice and can_play is false."
+        },
+        {
+          "label": "no-song",
+          "polarity": "does_not_fire",
+          "delta": "A does not cast Song of the Dryads and goes straight to considering Goblin Grenade.",
+          "expected": "Changeling Outcast is a creature and every creature type, so it is a Goblin: Goblin Grenade can be cast by sacrificing it, and can_play is true."
+        }
+      ],
+      "cards": [
+        "Forest",
+        "Mountain",
+        "Changeling Outcast",
+        "Song of the Dryads",
+        "Goblin Grenade"
+      ],
+      "forge_notes": "Depends on Forge dropping the all-creature-types flag when the Creature type is removed; if Forge keeps the flag, the base variant would wrongly allow the sacrifice."
+    },
+    {
+      "id": "205.4b-1",
+      "rules": [
+        "205.4b"
+      ],
+      "title": "Changing an object's card types leaves its supertypes unchanged",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Plains",
+            "Isamaru, Hound of Konda"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Song of the Dryads",
+            "Isamaru, Hound of Konda",
+            "Mirri, Cat Warrior"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "A controls one Isamaru, Hound of Konda (Legendary Creature - Dog 2/2) on the battlefield and holds a second copy and Mirri, Cat Warrior (a differently named legendary creature) in hand."
+      },
+      "decisions": [
+        "A casts Song of the Dryads targeting the Isamaru on the battlefield, tapping three Forests.",
+        "Both players pass; Song of the Dryads resolves.",
+        "A casts the second Isamaru, Hound of Konda, tapping the Plains.",
+        "Both players pass; the second Isamaru resolves and enters the battlefield.",
+        "The legend rule is applied; if a choice is offered, A keeps the second Isamaru."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The first Isamaru is a colorless Legendary Land - Forest and is still legendary, so the legend rule applies: it moves to A's graveyard, and the second Isamaru stays as a 2/2 creature."
+        },
+        {
+          "label": "different-legend",
+          "polarity": "does_not_fire",
+          "delta": "A casts Mirri, Cat Warrior (tapping two Forests and the Plains) instead of the second Isamaru, Hound of Konda.",
+          "expected": "No legend rule applies since the names differ: the Forest Isamaru, Song of the Dryads and Mirri all stay on the battlefield."
+        }
+      ],
+      "cards": [
+        "Forest",
+        "Plains",
+        "Isamaru, Hound of Konda",
+        "Mirri, Cat Warrior",
+        "Song of the Dryads"
+      ],
+      "forge_notes": "The first Isamaru must keep its Legendary supertype and its name under Song of the Dryads, which removes card types only."
+    },
+    {
+      "id": "205.4d-1",
+      "rules": [
+        "205.4d"
+      ],
+      "title": "The legend rule: a controller of two legendary permanents with the same name keeps one",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Isamaru, Hound of Konda"
+          ],
+          "B": [
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Isamaru, Hound of Konda"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "The variant moves the first Isamaru to the other player's side."
+      },
+      "decisions": [
+        "A casts the second Isamaru, Hound of Konda, tapping the Plains.",
+        "Both players pass; the second Isamaru resolves and enters the battlefield.",
+        "The legend rule is applied; A keeps the newly cast Isamaru."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "A controls two legendary permanents named Isamaru, Hound of Konda: A keeps the new one and the other moves to A's graveyard in the state-based check."
+        },
+        {
+          "label": "opponent-controls-first",
+          "polarity": "does_not_fire",
+          "delta": "The first Isamaru, Hound of Konda is on B's battlefield instead of A's.",
+          "expected": "The legend rule looks at one controller at a time: both Isamarus stay on the battlefield, one under each player."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Isamaru, Hound of Konda",
+        "Grizzly Bears"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "205.4e-1",
+      "rules": [
+        "205.4e"
+      ],
+      "title": "A legendary sorcery needs a legendary creature or planeswalker under the caster's control",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Urza's Ruinous Blast"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Urza's Ruinous Blast is a Legendary Sorcery costing {4}{W}; A has exactly enough mana."
+      },
+      "decisions": [
+        "A considers casting Urza's Ruinous Blast, tapping five Plains."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "A controls only a nonlegendary creature: casting Urza's Ruinous Blast is not permitted and can_play is false."
+        },
+        {
+          "label": "legendary-creature",
+          "polarity": "does_not_fire",
+          "delta": "A's creature is Isamaru, Hound of Konda instead of Grizzly Bears.",
+          "expected": "A controls a legendary creature: Urza's Ruinous Blast can be cast and can_play is true."
+        },
+        {
+          "label": "legendary-planeswalker",
+          "polarity": "does_not_fire",
+          "delta": "A controls Jace Beleren (a legendary planeswalker) in addition to Grizzly Bears.",
+          "expected": "A controls a legendary planeswalker: Urza's Ruinous Blast can be cast and can_play is true."
+        },
+        {
+          "label": "opponent-legend",
+          "polarity": "fires",
+          "delta": "B controls Isamaru, Hound of Konda; A's creature is still Grizzly Bears.",
+          "expected": "Only the caster's own legendary permanents count: casting is not permitted and can_play is false."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Grizzly Bears",
+        "Isamaru, Hound of Konda",
+        "Jace Beleren",
+        "Urza's Ruinous Blast"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "205.4f-1",
+      "rules": [
+        "205.4f"
+      ],
+      "title": "The world rule: all world permanents but the newest go to the graveyard",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Forest",
+            "Plains",
+            "Plains",
+            "Concordant Crossroads"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Concordant Crossroads",
+            "Glorious Anthem"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Concordant Crossroads is a World Enchantment ({G}). Glorious Anthem is an ordinary enchantment held for the last variant only."
+      },
+      "decisions": [
+        "A casts the second Concordant Crossroads, tapping the Forest.",
+        "Both players pass; it resolves and enters the battlefield.",
+        "The world rule is applied in the state-based check."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The Concordant Crossroads that was on the battlefield first moves to A's graveyard and the newly entered one stays: only the world permanent that has been one for the shortest time remains."
+        },
+        {
+          "label": "opponent-owns-older",
+          "polarity": "fires",
+          "delta": "The older Concordant Crossroads is on B's battlefield instead of A's.",
+          "expected": "The rule ignores controller: B's Concordant Crossroads moves to B's graveyard and A's new one stays."
+        },
+        {
+          "label": "not-a-world",
+          "polarity": "does_not_fire",
+          "delta": "A casts Glorious Anthem (tapping the Forest and two Plains) instead of the second Concordant Crossroads.",
+          "expected": "Glorious Anthem is not a world permanent: both it and the original Concordant Crossroads stay on the battlefield."
+        }
+      ],
+      "cards": [
+        "Forest",
+        "Plains",
+        "Concordant Crossroads",
+        "Glorious Anthem"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

@@ -1,0 +1,2 @@
+{"id": "702.117", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.117a", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "A spell with surge can be cast for its surge cost only if its caster or a teammate has cast another spell this turn; otherwise the cost is not available.", "note": ""}

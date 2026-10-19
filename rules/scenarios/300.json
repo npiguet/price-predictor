@@ -1,0 +1,128 @@
+{
+  "unit": "300",
+  "verified": true,
+  "review": [
+    "300.2a-1: Dryad Arbor has no mana cost, so the base 'cannot cast' was also explained by 118.6 and did not isolate 300.2a; added Omniscience (free casting of nonland cards) to remove that confound, replaced the Forests, added a Llanowar Elves does_not_fire variant and made play_as_land the 'other' branch.",
+    "300.2: triaged definitional, but 'subject to spells and abilities that affect either card type' is an observable targeting verdict; reclassified as legality/direct/playability and added scenario 300.2-1 (Shatter targeting Ornithopter vs Grizzly Bears)."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "300.2a-1",
+      "rules": [
+        "300.2a"
+      ],
+      "title": "A land that is also a creature can only be played as a land, never cast",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Omniscience"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Dryad Arbor"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "A has not played a land this turn. Omniscience lets A cast nonland spells from hand without paying their mana costs, so Dryad Arbor's lack of a mana cost (118.6) is not what stops a cast; only 300.2a is."
+      },
+      "decisions": [
+        "A attempts to cast Dryad Arbor as a spell, using Omniscience's permission."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Casting Dryad Arbor is not legal: can_play is false for the cast action. Dryad Arbor stays in A's hand and the stack stays empty."
+        },
+        {
+          "label": "nonland_creature",
+          "polarity": "does_not_fire",
+          "delta": "The card in A's hand is Llanowar Elves (a creature that is not a land) instead of Dryad Arbor.",
+          "expected": "Casting Llanowar Elves without paying its mana cost is legal: can_play is true."
+        },
+        {
+          "label": "play_as_land",
+          "polarity": "other",
+          "delta": "A plays Dryad Arbor as a land instead of attempting to cast it.",
+          "expected": "Playing Dryad Arbor as a land is legal. It does not use the stack and enters the battlefield under A's control as a 1/1 green land creature."
+        }
+      ],
+      "cards": [
+        "Dryad Arbor",
+        "Llanowar Elves",
+        "Omniscience"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "300.2-1",
+      "rules": [
+        "300.2"
+      ],
+      "title": "An artifact creature is subject to spells that affect artifacts",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain"
+          ],
+          "B": [
+            "Ornithopter"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Shatter"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Ornithopter is an Artifact Creature. No other artifact is on the battlefield."
+      },
+      "decisions": [
+        "A attempts to cast Shatter targeting Ornithopter, tapping both Mountains."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Ornithopter is a legal target for Shatter: has_legal_target is true and can_play is true."
+        },
+        {
+          "label": "nonartifact_creature",
+          "polarity": "does_not_fire",
+          "delta": "B's creature is Grizzly Bears (a creature that is not an artifact) instead of Ornithopter.",
+          "expected": "Shatter has no legal target: has_legal_target is false and can_play is false."
+        }
+      ],
+      "cards": [
+        "Grizzly Bears",
+        "Mountain",
+        "Ornithopter",
+        "Shatter"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

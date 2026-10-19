@@ -1,0 +1,178 @@
+{
+  "unit": "209",
+  "verified": true,
+  "review": [
+    "209.2-1: libraries were empty, so the other_walker_activated variant's Jace +2 (each player draws) would make both players lose to 704.5b; gave each player a two-card library, and put 3 loyalty counters on both planeswalkers explicitly."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "209.1-1",
+      "rules": [
+        "209.1"
+      ],
+      "title": "A planeswalker enters with loyalty counters equal to its printed loyalty",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Swamp",
+            "Swamp",
+            "Swamp"
+          ],
+          "B": [
+            "Island",
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Liliana of the Veil"
+          ],
+          "B": [
+            "Counterspell"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Liliana of the Veil, tapping three Swamps.",
+        "B passes priority; Liliana of the Veil resolves."
+      ],
+      "variants": [
+        {
+          "label": "resolves",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Liliana of the Veil enters the battlefield with 3 loyalty counters, her printed loyalty."
+        },
+        {
+          "label": "countered",
+          "polarity": "does_not_fire",
+          "delta": "B responds with Counterspell, tapping two Islands.",
+          "expected": "Liliana of the Veil is countered and moves to A's graveyard; she never enters the battlefield, so no loyalty counters are placed."
+        }
+      ],
+      "cards": [
+        "Swamp",
+        "Island",
+        "Liliana of the Veil",
+        "Counterspell"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "209.2-1",
+      "rules": [
+        "209.2"
+      ],
+      "title": "A loyalty ability is playable only at sorcery timing and once per permanent per turn",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Jace Beleren",
+              "counters": {
+                "loyalty": 3
+              }
+            },
+            {
+              "card": "Liliana of the Veil",
+              "counters": {
+                "loyalty": 3
+              }
+            },
+            "Mountain"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Shock"
+          ],
+          "B": [
+            "Island"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Island",
+            "Island"
+          ],
+          "B": [
+            "Island",
+            "Island"
+          ]
+        },
+        "exile": {},
+        "notes": "A has priority with an empty stack, and neither planeswalker has had a loyalty ability activated this turn."
+      },
+      "decisions": [
+        "The engine is asked whether A can activate Liliana of the Veil's +1 with the current priority and stack."
+      ],
+      "variants": [
+        {
+          "label": "main_empty_stack",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Activating Liliana's +1 is legal."
+        },
+        {
+          "label": "already_activated",
+          "polarity": "does_not_fire",
+          "delta": "Earlier this turn A activated Liliana's +1 and it resolved.",
+          "expected": "Activating Liliana's +1 again is not legal, because one of her loyalty abilities was already activated this turn."
+        },
+        {
+          "label": "other_walker_activated",
+          "polarity": "other",
+          "delta": "Earlier this turn A activated Jace Beleren's +2 and it resolved.",
+          "expected": "Activating Liliana's +1 is legal, since only the activating permanent's own earlier activations count."
+        },
+        {
+          "label": "opponent_turn",
+          "polarity": "does_not_fire",
+          "delta": "B is the active player and it is B's main phase; A has priority.",
+          "expected": "Activating Liliana's +1 is not legal, because it is not A's turn."
+        },
+        {
+          "label": "combat_step",
+          "polarity": "does_not_fire",
+          "delta": "The step is beginning of combat instead of main phase.",
+          "expected": "Activating Liliana's +1 is not legal, because it is not a main phase."
+        },
+        {
+          "label": "stack_not_empty",
+          "polarity": "does_not_fire",
+          "delta": "A has cast Shock targeting B, tapping Mountain, and it is still on the stack.",
+          "expected": "Activating Liliana's +1 is not legal, because the stack is not empty."
+        }
+      ],
+      "cards": [
+        "Jace Beleren",
+        "Liliana of the Veil",
+        "Mountain",
+        "Shock",
+        "Island"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

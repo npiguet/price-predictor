@@ -1,0 +1,9 @@
+{"id": "717.1", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "717.2", "category": "out_of_scope", "observability": "none", "record_kinds": [], "outcome": "", "note": "deck construction and game start"}
+{"id": "717.2a", "category": "out_of_scope", "observability": "none", "record_kinds": [], "outcome": "", "note": "deck construction"}
+{"id": "717.2b", "category": "out_of_scope", "observability": "none", "record_kinds": [], "outcome": "", "note": "deck construction"}
+{"id": "717.3", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "Opening an Attraction puts an Attraction card from the command zone onto the battlefield.", "note": ""}
+{"id": "717.4", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution", "trigger"], "outcome": "At the start of a precombat main phase the active player, if they control an Attraction, rolls a die to visit their Attractions.", "note": ""}
+{"id": "717.5", "category": "mechanical", "observability": "indirect", "record_kinds": ["trigger"], "outcome": "A visit ability triggers when the roll to visit matches one of the Attraction's lit-up numbers, and does not otherwise.", "note": ""}
+{"id": "717.6", "category": "mechanical", "observability": "indirect", "record_kinds": ["rewrite"], "outcome": "A card with an Astrotorium back that would go to a zone other than the battlefield, exile or command zone goes to its owner's command zone instead.", "note": ""}
+{"id": "717.6a", "category": "out_of_scope", "observability": "none", "record_kinds": [], "outcome": "", "note": "the junkyard pile is a physical arrangement and not a zone"}

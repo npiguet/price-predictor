@@ -1,0 +1,385 @@
+{
+  "unit": "307",
+  "verified": true,
+  "review": [
+    "307.5a-1: opponents_turn changed two facts (active player and step to end step); now changes only the active player, keeping main1, which isolates 'not their own main phase'. Also dropped the misleading 'flash-like' wording from the base cast, which is at sorcery timing."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "307.1-1",
+      "rules": [
+        "307.1"
+      ],
+      "title": "A sorcery can be cast only from hand, in a main phase of its owner's turn, with an empty stack",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            {
+              "card": "Mountain",
+              "tapped": true
+            }
+          ]
+        },
+        "hand": {
+          "A": [
+            "Lava Spike"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "A has priority. A's second Mountain is tapped; it paid for the Lightning Bolt that is on the stack in the stack_not_empty variant and is inert elsewhere."
+      },
+      "decisions": [
+        "A has priority. The engine evaluates whether A may cast Lava Spike (paying {R} with the untapped Mountain, targeting B)."
+      ],
+      "variants": [
+        {
+          "label": "main1_empty_stack",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Casting Lava Spike is legal: can_play is true and B is a legal target."
+        },
+        {
+          "label": "main2_empty_stack",
+          "polarity": "fires",
+          "delta": "The step is main2 instead of main1.",
+          "expected": "Casting Lava Spike is legal: can_play is true and B is a legal target."
+        },
+        {
+          "label": "combat_step",
+          "polarity": "does_not_fire",
+          "delta": "The step is beginning_of_combat instead of main1.",
+          "expected": "Casting Lava Spike is not legal: can_play is false."
+        },
+        {
+          "label": "opponents_turn",
+          "polarity": "does_not_fire",
+          "delta": "The active player is B (step main1; B has passed priority so A holds it) instead of A.",
+          "expected": "Casting Lava Spike is not legal: can_play is false."
+        },
+        {
+          "label": "stack_not_empty",
+          "polarity": "does_not_fire",
+          "delta": "Lightning Bolt, cast by A and targeting B, is on the stack and A has just received priority.",
+          "expected": "Casting Lava Spike is not legal: can_play is false."
+        },
+        {
+          "label": "from_graveyard",
+          "polarity": "does_not_fire",
+          "delta": "Lava Spike is in A's graveyard instead of A's hand.",
+          "expected": "Casting Lava Spike is not legal: it is not offered as a castable card."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Lava Spike",
+        "Lightning Bolt"
+      ],
+      "forge_notes": "The stack_not_empty variant needs Lightning Bolt already on the stack with A holding priority, a state that must be built as a puzzle state or an interventional fork."
+    },
+    {
+      "id": "307.2-1",
+      "rules": [
+        "307.2"
+      ],
+      "title": "A resolving sorcery follows its text, then goes to its owner's graveyard",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain"
+          ],
+          "B": [
+            "Island",
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Lava Spike"
+          ],
+          "B": [
+            "Counterspell"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Lava Spike targeting B, tapping Mountain.",
+        "B passes priority without responding; both players pass and Lava Spike resolves."
+      ],
+      "variants": [
+        {
+          "label": "resolves",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Lava Spike deals 3 damage to B (B at 17). Lava Spike then moves from the stack to A's graveyard."
+        },
+        {
+          "label": "countered",
+          "polarity": "does_not_fire",
+          "delta": "B casts Counterspell targeting Lava Spike, tapping both Islands, instead of passing.",
+          "expected": "Counterspell resolves and Lava Spike is countered. Its text is not followed: B stays at 20. Lava Spike is put into A's graveyard as it is countered and Counterspell into B's graveyard."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Island",
+        "Lava Spike",
+        "Counterspell"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "307.4-1",
+      "rules": [
+        "307.4"
+      ],
+      "title": "A sorcery that would enter the battlefield stays in its previous zone",
+      "record_kind": "rewrite",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Swamp",
+            "Swamp",
+            "Forest",
+            "Forest"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Harald Unites the Elves"
+          ]
+        },
+        "graveyard": {
+          "A": [
+            "Elvish Promenade"
+          ]
+        },
+        "library": {
+          "A": [
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest"
+          ]
+        },
+        "exile": {},
+        "notes": "Elvish Promenade is a Kindred Sorcery -- Elf, so it is an Elf card. Harald's chapter I mills three, so the graveyard also holds three Forests when the choice is made."
+      },
+      "decisions": [
+        "A casts Harald Unites the Elves, tapping all four lands; it resolves and enters with a lore counter.",
+        "Chapter I triggers; both players pass and it resolves: A mills three cards, then chooses to put the Elf card from the graveyard onto the battlefield."
+      ],
+      "variants": [
+        {
+          "label": "sorcery_elf",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Elvish Promenade does not enter the battlefield and remains in A's graveyard with the three milled Forests. Harald stays on the battlefield with one lore counter."
+        },
+        {
+          "label": "creature_elf",
+          "polarity": "does_not_fire",
+          "delta": "A's graveyard holds Llanowar Elves instead of Elvish Promenade.",
+          "expected": "Llanowar Elves moves from A's graveyard to the battlefield. The graveyard keeps the three milled Forests."
+        }
+      ],
+      "cards": [
+        "Swamp",
+        "Forest",
+        "Harald Unites the Elves",
+        "Elvish Promenade",
+        "Llanowar Elves"
+      ],
+      "forge_notes": "Harald's chapter I uses a hidden-origin ChangeZone with ChangeType Elf.YouOwn. Whether Forge offers the Kindred Sorcery as a choice or filters it out before the move is unverified; either way it ends in the graveyard."
+    },
+    {
+      "id": "307.5-1",
+      "rules": [
+        "307.5"
+      ],
+      "title": "An only-as-a-sorcery action is legal exactly when the player has priority in their main phase with an empty stack, even if sorceries cannot be cast",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            {
+              "card": "Mountain",
+              "tapped": true
+            },
+            "Bonesplitter",
+            "Grizzly Bears"
+          ],
+          "B": [
+            "Archon of Valor's Reach"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Lava Spike"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "A has priority. Archon of Valor's Reach, controlled by B, entered with the chosen type sorcery, so players cannot cast sorcery spells. A's third Mountain is tapped; it paid for the Lightning Bolt on the stack in the stack_not_empty variant and is inert elsewhere."
+      },
+      "decisions": [
+        "A has priority. The engine evaluates whether A may activate Bonesplitter's equip ability ({1}, equip only as a sorcery) targeting Grizzly Bears, and whether A may cast Lava Spike."
+      ],
+      "variants": [
+        {
+          "label": "sorceries_prohibited",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Equipping Bonesplitter to Grizzly Bears is legal (can_play true). Casting Lava Spike is not legal."
+        },
+        {
+          "label": "sorceries_allowed",
+          "polarity": "fires",
+          "delta": "Archon of Valor's Reach entered with the chosen type enchantment instead of sorcery.",
+          "expected": "Equipping Bonesplitter to Grizzly Bears is legal. Casting Lava Spike is also legal."
+        },
+        {
+          "label": "combat_step",
+          "polarity": "does_not_fire",
+          "delta": "The step is beginning_of_combat instead of main1.",
+          "expected": "Equipping Bonesplitter is not legal (can_play false)."
+        },
+        {
+          "label": "stack_not_empty",
+          "polarity": "does_not_fire",
+          "delta": "Lightning Bolt, cast by A and targeting B, is on the stack and A has just received priority.",
+          "expected": "Equipping Bonesplitter is not legal (can_play false)."
+        },
+        {
+          "label": "opponents_turn",
+          "polarity": "does_not_fire",
+          "delta": "The active player is B (step main1; B has passed priority so A holds it) instead of A.",
+          "expected": "Equipping Bonesplitter is not legal (can_play false)."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Bonesplitter",
+        "Grizzly Bears",
+        "Lava Spike",
+        "Archon of Valor's Reach",
+        "Lightning Bolt"
+      ],
+      "forge_notes": "Archon's chosen type is made as it enters (an ETBReplacement ChooseType), so the state must be reached by casting it or through a puzzle file that sets the chosen type. The stack_not_empty variant needs Lightning Bolt already on the stack with A holding priority."
+    },
+    {
+      "id": "307.5a-1",
+      "rules": [
+        "307.5a"
+      ],
+      "title": "A spell cast any time a sorcery could not have been cast triggers Soar's sacrifice clause",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            "Grizzly Bears"
+          ],
+          "B": [
+            "Mountain"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Soar"
+          ],
+          "B": [
+            "Lightning Bolt"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Soar: 'If you cast it any time a sorcery couldn't have been cast, the controller of the permanent it becomes sacrifices it at the beginning of the next cleanup step.' B's Lightning Bolt is used only in the bolt_on_stack variant."
+      },
+      "decisions": [
+        "A casts Soar targeting Grizzly Bears, tapping both Islands; both players pass and Soar resolves and enchants Grizzly Bears.",
+        "In the bolt_on_stack variant A first passes priority with an empty stack, B casts Lightning Bolt targeting A, tapping Mountain, and A casts Soar in response; Soar resolves first, then Bolt.",
+        "Play continues through the next cleanup step."
+      ],
+      "variants": [
+        {
+          "label": "main1_empty_stack",
+          "polarity": "does_not_fire",
+          "delta": "",
+          "expected": "Soar stays attached to Grizzly Bears (2/3 with flying) through the cleanup step; nothing is sacrificed."
+        },
+        {
+          "label": "beginning_of_combat",
+          "polarity": "fires",
+          "delta": "Soar is cast in the beginning_of_combat step instead of main1.",
+          "expected": "Grizzly Bears is 2/3 with flying until the next cleanup step, when A sacrifices Soar and it moves to A's graveyard."
+        },
+        {
+          "label": "bolt_on_stack",
+          "polarity": "fires",
+          "delta": "Soar is cast in main1 while B's Lightning Bolt targeting A is on the stack.",
+          "expected": "Soar resolves onto Grizzly Bears, then Bolt deals 3 damage to A (17). At the next cleanup step A sacrifices Soar and it moves to A's graveyard."
+        },
+        {
+          "label": "opponents_turn",
+          "polarity": "fires",
+          "delta": "The active player is B (step main1; B has passed priority so A holds it) instead of A, so Soar is cast during B's main phase.",
+          "expected": "Soar enchants Grizzly Bears (2/3 with flying) until the cleanup step of B's turn, when A, its controller, sacrifices Soar and it moves to A's graveyard."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Grizzly Bears",
+        "Soar",
+        "Mountain",
+        "Lightning Bolt"
+      ],
+      "forge_notes": "Forge implements the clause with the MayFlashSac keyword. The cast timing is not a field of any record today; the sacrifice at cleanup is the observable."
+    }
+  ]
+}

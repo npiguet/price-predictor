@@ -1,0 +1,5 @@
+{"id": "701.60", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "701.60a", "category": "mechanical", "observability": "indirect", "record_kinds": ["continuous", "playability"], "outcome": "A suspected creature stays suspected until it leaves the battlefield or an effect ends its suspicion.", "note": ""}
+{"id": "701.60b", "category": "mechanical", "observability": "indirect", "record_kinds": ["continuous"], "outcome": "A copy of a suspected permanent is not suspected.", "note": "Mostly definitional, but the copiable-values clause has an observable outcome."}
+{"id": "701.60c", "category": "mechanical", "observability": "direct", "record_kinds": ["continuous", "playability"], "outcome": "A suspected creature has menace and cannot be declared as a blocker.", "note": ""}
+{"id": "701.60d", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution", "continuous"], "outcome": "Suspecting an already suspected permanent does not happen, so an effect conditioned on having done so does not apply.", "note": ""}

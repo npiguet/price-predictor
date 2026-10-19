@@ -1,0 +1,87 @@
+{
+  "unit": "702.75",
+  "verified": true,
+  "review": [
+    "702.75a-1: the expected library order depends on the library listing being top first, which was not stated; added it to setup.notes."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.75a-1",
+      "rules": [
+        "702.75a"
+      ],
+      "title": "Hideaway exiles one of the top N cards face down and puts the rest on the bottom",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Plains"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Collector's Cage"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Lightning Bolt",
+            "Grizzly Bears",
+            "Mountain",
+            "Island",
+            "Forest",
+            "Plains",
+            "Swamp"
+          ]
+        },
+        "exile": {},
+        "notes": "Libraries are listed top first."
+      },
+      "decisions": [
+        "A casts Collector's Cage, tapping two Plains.",
+        "Both players pass; Collector's Cage resolves and enters. The hideaway trigger goes on the stack.",
+        "Both players pass; the trigger resolves. A looks at the top five cards and exiles Lightning Bolt face down; the other four go to the bottom in a random order."
+      ],
+      "variants": [
+        {
+          "label": "full_library",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Lightning Bolt is in exile face down, linked to Collector's Cage. A's library has six cards: Plains and Swamp on top, then Grizzly Bears, Mountain, Island and Forest in some order."
+        },
+        {
+          "label": "short_library",
+          "polarity": "other",
+          "delta": "A's library is only Lightning Bolt and Grizzly Bears.",
+          "expected": "A looks at both cards and exiles Lightning Bolt face down. Grizzly Bears goes to the bottom of the library and is the only card in it."
+        },
+        {
+          "label": "empty_library",
+          "polarity": "does_not_fire",
+          "delta": "A's library is empty.",
+          "expected": "The hideaway trigger resolves with no cards to look at. Nothing is exiled and Collector's Cage stays on the battlefield."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Collector's Cage",
+        "Lightning Bolt",
+        "Grizzly Bears",
+        "Mountain",
+        "Island",
+        "Forest",
+        "Swamp"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

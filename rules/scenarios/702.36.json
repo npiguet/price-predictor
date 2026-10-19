@@ -1,0 +1,146 @@
+{
+  "unit": "702.36",
+  "verified": true,
+  "review": [],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.36b-1",
+      "rules": [
+        "702.36b"
+      ],
+      "title": "A creature with fear can be blocked only by artifact creatures and/or black creatures",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Severed Legion",
+              "summoning_sick": false
+            },
+            {
+              "card": "Hill Giant",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            "Grizzly Bears",
+            "Walking Corpse",
+            "Phyrexian Walker"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Severed Legion is a 2/2 black Zombie with fear; Walking Corpse is a black 2/2; Phyrexian Walker is a colorless 0/3 artifact creature; Grizzly Bears is a green 2/2."
+      },
+      "decisions": [
+        "A attacks player B with Severed Legion and Hill Giant.",
+        "B declares Grizzly Bears blocking Severed Legion; the other creatures do not block."
+      ],
+      "variants": [
+        {
+          "label": "green_blocker",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The block is illegal: Grizzly Bears is neither an artifact creature nor a black creature."
+        },
+        {
+          "label": "black_blocker",
+          "polarity": "does_not_fire",
+          "delta": "B declares Walking Corpse blocking Severed Legion instead (Grizzly Bears does not block).",
+          "expected": "The block is legal: Walking Corpse is a black creature."
+        },
+        {
+          "label": "artifact_blocker",
+          "polarity": "does_not_fire",
+          "delta": "B declares Phyrexian Walker blocking Severed Legion instead (Grizzly Bears does not block).",
+          "expected": "The block is legal: Phyrexian Walker is an artifact creature."
+        },
+        {
+          "label": "green_blocks_plain",
+          "polarity": "other",
+          "delta": "B declares Grizzly Bears blocking Hill Giant instead.",
+          "expected": "The block is legal: Hill Giant has no fear."
+        }
+      ],
+      "cards": [
+        "Severed Legion",
+        "Hill Giant",
+        "Grizzly Bears",
+        "Walking Corpse",
+        "Phyrexian Walker"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.36c-1",
+      "rules": [
+        "702.36c"
+      ],
+      "title": "A second instance of fear does not change the blocking restriction",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Severed Legion",
+              "summoning_sick": false
+            },
+            {
+              "card": "Fear",
+              "attached_to": "Severed Legion"
+            }
+          ],
+          "B": [
+            "Grizzly Bears",
+            "Walking Corpse"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "The Aura Fear is attached to Severed Legion, which already has fear, so it has two instances of fear."
+      },
+      "decisions": [
+        "A attacks player B with Severed Legion.",
+        "B declares Grizzly Bears blocking Severed Legion; Walking Corpse does not block."
+      ],
+      "variants": [
+        {
+          "label": "green_blocker",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The block is illegal: with two instances of fear Severed Legion is still blockable only by artifact and/or black creatures."
+        },
+        {
+          "label": "black_blocker",
+          "polarity": "does_not_fire",
+          "delta": "B declares Walking Corpse blocking Severed Legion instead (Grizzly Bears does not block).",
+          "expected": "The block is legal: Walking Corpse is a black creature."
+        }
+      ],
+      "cards": [
+        "Severed Legion",
+        "Fear",
+        "Grizzly Bears",
+        "Walking Corpse"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

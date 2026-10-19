@@ -1,0 +1,193 @@
+{
+  "unit": "702.57",
+  "verified": true,
+  "review": [],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.57a-1",
+      "rules": [
+        "702.57a"
+      ],
+      "title": "A forecast ability can be activated only from hand",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "upkeep",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Plains"
+          ],
+          "B": [
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Spirit en-Dal"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Spirit en-Dal's forecast costs {1}{W}: target creature gains shadow until end of turn."
+      },
+      "decisions": [
+        "A checks whether the forecast ability of Spirit en-Dal can be activated targeting Grizzly Bears, with two Plains available."
+      ],
+      "variants": [
+        {
+          "label": "in_hand",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Activating the forecast ability is legal."
+        },
+        {
+          "label": "on_battlefield",
+          "polarity": "does_not_fire",
+          "delta": "Spirit en-Dal is on A's battlefield instead of in A's hand.",
+          "expected": "Activating the forecast ability is not legal."
+        },
+        {
+          "label": "in_graveyard",
+          "polarity": "does_not_fire",
+          "delta": "Spirit en-Dal is in A's graveyard instead of in A's hand.",
+          "expected": "Activating the forecast ability is not legal."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Grizzly Bears",
+        "Spirit en-Dal"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.57b-1",
+      "rules": [
+        "702.57b"
+      ],
+      "title": "A forecast ability can be activated only during its owner's upkeep",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "upkeep",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Plains"
+          ],
+          "B": [
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Spirit en-Dal"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Spirit en-Dal's forecast costs {1}{W}: target creature gains shadow until end of turn."
+      },
+      "decisions": [
+        "A checks whether the forecast ability of Spirit en-Dal can be activated targeting Grizzly Bears, with two Plains available."
+      ],
+      "variants": [
+        {
+          "label": "owner_upkeep",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Activating the forecast ability is legal."
+        },
+        {
+          "label": "draw_step",
+          "polarity": "does_not_fire",
+          "delta": "The step is draw instead of upkeep.",
+          "expected": "Activating the forecast ability is not legal."
+        },
+        {
+          "label": "opponent_upkeep",
+          "polarity": "does_not_fire",
+          "delta": "B is the active player and it is B's upkeep.",
+          "expected": "Activating the forecast ability is not legal."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Grizzly Bears",
+        "Spirit en-Dal"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.57b-2",
+      "rules": [
+        "702.57b"
+      ],
+      "title": "A forecast ability can be activated only once each turn",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "upkeep",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains"
+          ],
+          "B": [
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Spirit en-Dal"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Spirit en-Dal's forecast costs {1}{W}: target creature gains shadow until end of turn."
+      },
+      "decisions": [
+        "A checks whether the forecast ability of Spirit en-Dal can be activated targeting Grizzly Bears, with four Plains available."
+      ],
+      "variants": [
+        {
+          "label": "first_activation",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Activating the forecast ability is legal."
+        },
+        {
+          "label": "second_activation",
+          "polarity": "does_not_fire",
+          "delta": "A already activated the forecast ability of Spirit en-Dal earlier this turn (two Plains are already tapped for it; two remain untapped).",
+          "expected": "Activating the forecast ability a second time this turn is not legal."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Grizzly Bears",
+        "Spirit en-Dal"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

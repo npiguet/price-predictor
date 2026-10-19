@@ -1,0 +1,2 @@
+{"id": "702.92", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.92a", "category": "mechanical", "observability": "direct", "record_kinds": ["trigger", "resolution"], "outcome": "When the Equipment enters, its trigger creates a 0/0 black Phyrexian Germ token and attaches the Equipment to it, so the Germ survives the state-based check.", "note": ""}

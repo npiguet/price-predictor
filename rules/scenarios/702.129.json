@@ -1,0 +1,134 @@
+{
+  "unit": "702.129",
+  "verified": true,
+  "review": [],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.129a-1",
+      "rules": [
+        "702.129a"
+      ],
+      "title": "Eternalize exiles the card as a cost and creates a black 4/4 Zombie token copy with no mana cost",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island"
+          ],
+          "B": [
+            "Island"
+          ]
+        },
+        "hand": {
+          "B": [
+            "Stifle"
+          ]
+        },
+        "graveyard": {
+          "A": [
+            "Proven Combatant"
+          ]
+        },
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A activates eternalize {4}{U}{U} of Proven Combatant from the graveyard, tapping all six Islands and exiling Proven Combatant as part of the cost.",
+        "B has priority with the ability on the stack and passes; A passes.",
+        "The eternalize ability resolves."
+      ],
+      "variants": [
+        {
+          "label": "resolves",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Proven Combatant is in exile, not in the graveyard. A token copy of Proven Combatant is created on the battlefield: a black 4/4 Zombie Human Warrior with no mana cost."
+        },
+        {
+          "label": "ability_countered",
+          "polarity": "does_not_fire",
+          "delta": "B responds by casting Stifle with its Island, targeting the eternalize ability.",
+          "expected": "The eternalize ability is countered. Proven Combatant stays in exile because exiling was a cost, and no token is created. Stifle is in B's graveyard."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Proven Combatant",
+        "Stifle"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.129a-2",
+      "rules": [
+        "702.129a"
+      ],
+      "title": "Eternalize can be activated only as a sorcery",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island"
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {
+          "A": [
+            "Proven Combatant"
+          ]
+        },
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A tries to activate eternalize {4}{U}{U} of Proven Combatant from the graveyard, tapping all six Islands.",
+        "Both players pass; if the ability was activated, it resolves."
+      ],
+      "variants": [
+        {
+          "label": "main_phase",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Activation is legal with an empty stack during A's main phase. After resolution a black 4/4 Zombie Human Warrior token copy of Proven Combatant is on the battlefield and the card is in exile."
+        },
+        {
+          "label": "end_step",
+          "polarity": "does_not_fire",
+          "delta": "It is A's end step instead of the first main phase.",
+          "expected": "Activation is not legal outside a main phase. Proven Combatant stays in A's graveyard and the Islands stay untapped."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Proven Combatant"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

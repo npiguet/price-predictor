@@ -1,0 +1,14 @@
+{"id": "110.1", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "110.2", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "A permanent enters the battlefield under the control of the player under whose control it entered, and its owner is the card's owner.", "note": ""}
+{"id": "110.2a", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "An object an effect puts onto the battlefield enters under the instructed player's control unless the effect says otherwise.", "note": ""}
+{"id": "110.2b", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "After a player gains control of a permanent spell, the permanent it becomes enters under that player's control.", "note": ""}
+{"id": "110.3", "category": "mechanical", "observability": "direct", "record_kinds": ["continuous"], "outcome": "A nontoken permanent has its printed characteristics as modified by continuous effects.", "note": ""}
+{"id": "110.4", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "110.4a", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "110.4b", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "110.4c", "category": "mechanical", "observability": "direct", "record_kinds": ["continuous"], "outcome": "A permanent that loses all its permanent types stays on the battlefield.", "note": ""}
+{"id": "110.5", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "110.5a", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "110.5b", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "A permanent enters the battlefield untapped, unflipped, face up and phased in unless a spell or ability says otherwise.", "note": ""}
+{"id": "110.5c", "category": "mechanical", "observability": "needs_new_fields", "record_kinds": ["continuous"], "outcome": "A permanent keeps its status (such as flipped) through changes that make the status irrelevant, and it applies again when relevant.", "note": ""}
+{"id": "110.5d", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}

@@ -1,0 +1,61 @@
+{
+  "unit": "701.64",
+  "verified": true,
+  "review": [
+    "triage: rules/triage/701.64.jsonl was missing, so validate never checked this file; wrote it."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "701.64a-1",
+      "rules": ["701.64a", "701.64b"],
+      "title": "Harnessing a permanent marks it so abilities that check for it apply",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {"A": 20, "B": 20},
+        "battlefield": {"A": ["The Mind Stone", {"card": "Grizzly Bears", "counters": {"+1/+1": 1}}, "Plains", "Plains", "Plains", "Plains", "Plains", "Plains"], "B": []},
+        "hand": {}, "graveyard": {}, "library": {}, "exile": {},
+        "notes": "The Mind Stone is not harnessed and is untapped. Grizzly Bears is a 3/3 with one +1/+1 counter."
+      },
+      "decisions": [
+        "A activates The Mind Stone's harness ability ({5}{W}, {T}), tapping all six Plains.",
+        "Both players pass; the ability resolves and The Mind Stone becomes harnessed.",
+        "Both players pass priority through combat and second main phase to A's end step.",
+        "The Mind Stone's end-step trigger targets Grizzly Bears; both players pass."
+      ],
+      "variants": [
+        {"label": "base", "polarity": "fires", "delta": "", "expected": "At the beginning of A's end step The Mind Stone's trigger fires. Grizzly Bears is exiled and returns to the battlefield as a new object, so it is a 2/2 with no counter."},
+        {"label": "not_harnessed", "polarity": "does_not_fire", "delta": "A does not activate the harness ability.", "expected": "At the beginning of A's end step The Mind Stone's trigger does not fire. Grizzly Bears stays on the battlefield as a 3/3 with its counter."}
+      ],
+      "cards": ["The Mind Stone", "Grizzly Bears", "Plains"],
+      "forge_notes": "Forge implements harness as an AlterAttribute effect with Attributes$ Harnessed, and the end-step trigger has IsPresent$ Card.Self+harnessed."
+    },
+    {
+      "id": "701.64b-1",
+      "rules": ["701.64b"],
+      "title": "A permanent stays harnessed until it leaves the battlefield",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {"A": 20, "B": 20},
+        "battlefield": {"A": ["The Mind Stone", {"card": "Grizzly Bears", "counters": {"+1/+1": 1}}, "Island", "Island", "Plains", "Plains"], "B": []},
+        "hand": {"A": ["Into the Roil"]},
+        "graveyard": {}, "library": {}, "exile": {},
+        "notes": "The Mind Stone was harnessed on an earlier turn and is untapped. Grizzly Bears is a 3/3 with one +1/+1 counter."
+      },
+      "decisions": [
+        "A passes priority through combat and second main phase to A's end step without casting Into the Roil.",
+        "The Mind Stone's end-step trigger targets Grizzly Bears; both players pass."
+      ],
+      "variants": [
+        {"label": "base", "polarity": "fires", "delta": "", "expected": "At the beginning of A's end step The Mind Stone, still harnessed, triggers. Grizzly Bears is exiled and returns as a 2/2 with no counter."},
+        {"label": "bounced_and_recast", "polarity": "does_not_fire", "delta": "In main phase 1 A casts Into the Roil (tapping both Islands) on The Mind Stone, then recasts The Mind Stone (tapping both Plains).", "expected": "The Mind Stone returns to hand and re-enters as a new object that is not harnessed. At the beginning of A's end step its trigger does not fire and Grizzly Bears stays a 3/3 with its counter."}
+      ],
+      "cards": ["The Mind Stone", "Grizzly Bears", "Island", "Plains", "Into the Roil"],
+      "forge_notes": "The harnessed designation of the base setup cannot be written in the card state; it is reached by a harness activation on an earlier turn."
+    }
+  ]
+}

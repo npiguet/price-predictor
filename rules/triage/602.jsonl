@@ -1,0 +1,19 @@
+{"id": "602.1", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "602.1a", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "602.1b", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "602.1c", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "602.1d", "category": "out_of_scope", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "602.1e", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "An effect that modifies how the activation cost may be paid applies to the total cost after increases and reductions, which the playability record's adjusted cost shows.", "note": ""}
+{"id": "602.2", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "Only the object's controller (or owner if it has no controller) can activate its ability unless the object says otherwise, which the playability verdict shows.", "note": ""}
+{"id": "602.2a", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "Activating an ability puts it on the stack as a non-card object controlled by the activating player, and it later resolves, is countered or is moved.", "note": ""}
+{"id": "602.2b", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "602.3", "category": "decision", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "602.3a", "category": "decision", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "602.3b", "category": "decision", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "602.4", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "Activating a cost-altering ability does not change the costs already paid for spells and abilities on the stack, which resolve as announced.", "note": ""}
+{"id": "602.5", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "An ability that is prohibited from being activated is not offered as playable.", "note": ""}
+{"id": "602.5a", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "A creature's ability with {T} or {Q} in its cost is not playable unless the creature has been under its controller's control since the start of their most recent turn, or has haste.", "note": ""}
+{"id": "602.5b", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "A use restriction on an activated ability keeps applying after the object changes controller.", "note": ""}
+{"id": "602.5c", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "A use restriction on an acquired ability applies only to that ability as acquired from that object, not to identical abilities from other sources.", "note": ""}
+{"id": "602.5d", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "An 'Activate only as a sorcery' ability is playable only at sorcery timing: own main phase with an empty stack.", "note": ""}
+{"id": "602.5e", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "An 'Activate only as an instant' ability is playable whenever the player could cast an instant.", "note": ""}

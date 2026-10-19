@@ -1,0 +1,4 @@
+{"id": "702.118", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.118a", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.118b", "category": "legality", "observability": "direct", "record_kinds": ["playability", "combat"], "outcome": "A creature with skulk cannot be blocked by creatures with greater power but can be blocked by creatures with equal or lesser power.", "note": ""}
+{"id": "702.118c", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": "Redundancy of instances has no separate outcome; 702.118b covers it."}

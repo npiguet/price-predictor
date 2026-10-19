@@ -1,0 +1,288 @@
+{
+  "unit": "702.131",
+  "verified": true,
+  "review": [
+    "702.131d: skip reason was false (an entering token can both raise the count to ten and meet a power-conditioned enters trigger); removed the skip and added 702.131d-1 with Illustrious Wanderglyph's Gnome and Garruk's Packleader."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.131a-1",
+      "rules": [
+        "702.131a"
+      ],
+      "title": "Resolving a spell with ascend gives the city's blessing at ten permanents",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island"
+          ],
+          "B": [
+            "Mountain",
+            "Mountain",
+            "Mountain"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Secrets of the Golden City"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains"
+          ]
+        },
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Secrets of the Golden City, tapping three Islands.",
+        "Both players pass; Secrets of the Golden City resolves."
+      ],
+      "variants": [
+        {
+          "label": "ten_permanents",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "A controls ten permanents when the spell resolves, gets the city's blessing and draws three cards: A's hand holds 3 Plains, A's library holds 2. Secrets of the Golden City goes to A's graveyard."
+        },
+        {
+          "label": "nine_permanents",
+          "polarity": "does_not_fire",
+          "delta": "A controls 9 Islands instead of 10.",
+          "expected": "A controls nine permanents when the spell resolves, does not get the city's blessing and draws two cards: A's hand holds 2 Plains, A's library holds 3. B's three Mountains do not count. Secrets of the Golden City goes to A's graveyard."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Mountain",
+        "Plains",
+        "Secrets of the Golden City"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.131b-1",
+      "rules": [
+        "702.131b"
+      ],
+      "title": "A permanent with ascend gives the blessing as soon as its controller has ten permanents",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Snubhorn Sentry",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains"
+          ],
+          "B": [
+            "Mountain",
+            "Mountain"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "No spells or abilities are used; the board is observed in A's first main phase after state-based actions."
+      ],
+      "variants": [
+        {
+          "label": "ten_permanents",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "A controls ten permanents (Snubhorn Sentry and nine Plains), has the city's blessing, and Snubhorn Sentry is a 3/3."
+        },
+        {
+          "label": "nine_permanents",
+          "polarity": "does_not_fire",
+          "delta": "A controls 8 Plains instead of 9.",
+          "expected": "A controls nine permanents and does not have the city's blessing; Snubhorn Sentry stays a 0/3. B's two Mountains do not count."
+        }
+      ],
+      "cards": [
+        "Snubhorn Sentry",
+        "Plains",
+        "Mountain"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.131b-2",
+      "rules": [
+        "702.131b"
+      ],
+      "title": "The city's blessing stays after the controller drops below ten permanents",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "B",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Snubhorn Sentry",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains"
+          ],
+          "B": [
+            "Mountain",
+            "Mountain",
+            "Mountain"
+          ]
+        },
+        "hand": {
+          "B": [
+            "Stone Rain"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "B casts Stone Rain targeting one of A's Plains, tapping three Mountains.",
+        "Both players pass; Stone Rain resolves and the state-based check follows."
+      ],
+      "variants": [
+        {
+          "label": "already_blessed",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The targeted Plains moves to A's graveyard and A controls nine permanents, but A already has the city's blessing, so Snubhorn Sentry stays a 3/3."
+        },
+        {
+          "label": "never_blessed",
+          "polarity": "does_not_fire",
+          "delta": "A starts with 8 Plains instead of 9, so A never had ten permanents.",
+          "expected": "The targeted Plains moves to A's graveyard and A controls eight permanents. A has never had the city's blessing, so Snubhorn Sentry stays a 0/3."
+        }
+      ],
+      "cards": [
+        "Snubhorn Sentry",
+        "Plains",
+        "Mountain",
+        "Stone Rain"
+      ],
+      "forge_notes": "The blessing is granted by a state check on the opening board, so the base variant relies on Forge granting it before B's spell resolves."
+    },
+    {
+      "id": "702.131d-1",
+      "rules": [
+        "702.131d"
+      ],
+      "title": "The blessing's continuous effects apply before the entering token is checked against a trigger",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "upkeep",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Illustrious Wanderglyph",
+              "summoning_sick": false
+            },
+            {
+              "card": "Garruk's Packleader",
+              "summoning_sick": false
+            },
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Forest",
+            "Forest"
+          ]
+        },
+        "exile": {},
+        "notes": "A controls nine permanents and does not have the city's blessing at the start of A's upkeep."
+      },
+      "decisions": [
+        "Illustrious Wanderglyph's upkeep trigger goes on the stack; both players pass and it resolves, creating a 1/1 colorless Gnome artifact creature token for A.",
+        "If Garruk's Packleader triggers, A chooses to draw; both players pass and the trigger resolves."
+      ],
+      "variants": [
+        {
+          "label": "tenth_permanent",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The Gnome token is A's tenth permanent: A gets the city's blessing and the token is a 3/3 when triggers are checked, so Garruk's Packleader's trigger fires and A draws a Forest (library 1 card)."
+        },
+        {
+          "label": "ninth_permanent",
+          "polarity": "does_not_fire",
+          "delta": "A controls six Plains instead of seven.",
+          "expected": "The Gnome token is A's ninth permanent: A does not get the city's blessing, the token stays a 1/1, Garruk's Packleader's trigger does not fire and A's library keeps 2 cards."
+        }
+      ],
+      "cards": [
+        "Illustrious Wanderglyph",
+        "Garruk's Packleader",
+        "Plains",
+        "Forest"
+      ],
+      "forge_notes": "Relies on Forge granting the blessing and applying Wanderglyph's static bonus before it evaluates the powerGE3 condition of Packleader's ChangesZone trigger."
+    }
+  ]
+}

@@ -1,0 +1,864 @@
+{
+  "unit": "202",
+  "verified": true,
+  "review": [
+    "202.2f-1: variant already_colorless changed two facts (spell and target) and was not a real does_not_fire case, and added_color was marked other although blue is added; replaced already_colorless with a no-cast does_not_fire variant and set added_color to fires.",
+    "202.3f-1: the only does_not_fire variant changed the cast spell, so nothing isolated the hybrid symbol counting as 2 rather than as the 1 mana paid; added variant revealed_spent_amount revealing Gray Ogre (mana value 3), which leaves Beseech the Queen uncountered."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "202.1a-1",
+      "rules": [
+        "202.1a"
+      ],
+      "title": "A spell can be cast only when the mana spent matches the colored symbols and covers the generic part of its mana cost",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Forest",
+            "Mountain"
+          ],
+          "B": [
+            "Forest"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Grizzly Bears"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A considers casting Grizzly Bears ({1}{G}) with the untapped lands A controls; the verdict is read before any mana is spent."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Casting Grizzly Bears is legal: Forest pays {G} and Mountain pays the generic {1}."
+        },
+        {
+          "label": "wrong_colors",
+          "polarity": "does_not_fire",
+          "delta": "A controls Mountain and Mountain instead of Forest and Mountain.",
+          "expected": "Casting Grizzly Bears is not legal: two mana are available but none is green."
+        },
+        {
+          "label": "too_little_mana",
+          "polarity": "does_not_fire",
+          "delta": "A controls only Forest; the Mountain is absent.",
+          "expected": "Casting Grizzly Bears is not legal: the one available mana covers {G} but not the generic {1}."
+        }
+      ],
+      "cards": [
+        "Forest",
+        "Mountain",
+        "Grizzly Bears"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "202.1b-1",
+      "rules": [
+        "202.1b"
+      ],
+      "title": "A card with no mana cost cannot be cast from hand by paying its mana cost",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            "Island"
+          ],
+          "B": [
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Ancestral Vision",
+            "Divination"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Ancestral Vision has no mana cost (it has suspend, which is a special action rather than casting)."
+      },
+      "decisions": [
+        "A considers casting the candidate card from hand with three untapped Islands available; the verdict is read before any mana is spent. The candidate in the base variant is Ancestral Vision."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Casting Ancestral Vision from hand is not legal: it has no mana cost, which is an unpayable cost, even with three untapped Islands."
+        },
+        {
+          "label": "with_mana_cost",
+          "polarity": "does_not_fire",
+          "delta": "The candidate is Divination ({2}{U}) instead of Ancestral Vision.",
+          "expected": "Casting Divination is legal: its mana cost is payable with the three Islands."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Ancestral Vision",
+        "Divination"
+      ],
+      "forge_notes": "Forge treats a card with ManaCost:no cost as uncastable from hand; its suspend ability is the only way to play it from hand."
+    },
+    {
+      "id": "202.2-1",
+      "rules": [
+        "202.2",
+        "202.2b",
+        "202.2c",
+        "202.2d"
+      ],
+      "title": "An object's colors are the colors of the mana symbols in its mana cost, whatever its frame",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Grizzly Bears"
+          ],
+          "B": [
+            "Forest"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "No spells or abilities are used; both players pass priority with an empty stack."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears, with mana cost {1}{G}, is green and only green."
+        },
+        {
+          "label": "two_colors",
+          "polarity": "fires",
+          "delta": "A's permanent is Watchwolf (mana cost {G}{W}) instead of Grizzly Bears.",
+          "expected": "Watchwolf is green and white."
+        },
+        {
+          "label": "hybrid",
+          "polarity": "fires",
+          "delta": "A's permanent is Kitchen Finks (mana cost {1}{G/W}{G/W}) instead of Grizzly Bears.",
+          "expected": "Kitchen Finks is green and white."
+        },
+        {
+          "label": "phyrexian",
+          "polarity": "fires",
+          "delta": "A's permanent is Birthing Pod (an artifact with mana cost {3}{G/P}) instead of Grizzly Bears.",
+          "expected": "Birthing Pod is green although it is an artifact."
+        },
+        {
+          "label": "no_colored_symbol",
+          "polarity": "does_not_fire",
+          "delta": "A's permanent is Wurmcoil Engine (mana cost {6}) instead of Grizzly Bears.",
+          "expected": "Wurmcoil Engine has no colored symbol in its mana cost and is colorless."
+        }
+      ],
+      "cards": [
+        "Grizzly Bears",
+        "Forest",
+        "Watchwolf",
+        "Kitchen Finks",
+        "Birthing Pod",
+        "Wurmcoil Engine"
+      ],
+      "forge_notes": "Each variant swaps the single permanent on A's battlefield."
+    },
+    {
+      "id": "202.2e-1",
+      "rules": [
+        "202.2e"
+      ],
+      "title": "An object with a color indicator is each color the indicator denotes",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Dryad Arbor"
+          ],
+          "B": [
+            "Forest"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Dryad Arbor has no mana cost and a green color indicator."
+      },
+      "decisions": [
+        "No spells or abilities are used; both players pass priority with an empty stack."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Dryad Arbor is green and is a land creature, although it has no mana cost."
+        },
+        {
+          "label": "back_face",
+          "polarity": "fires",
+          "delta": "A's permanent is Delver of Secrets already transformed into Insectile Aberration (no mana cost, blue color indicator) instead of Dryad Arbor.",
+          "expected": "Insectile Aberration is blue."
+        },
+        {
+          "label": "no_indicator",
+          "polarity": "does_not_fire",
+          "delta": "A's permanent is Forest (no mana cost, no color indicator) instead of Dryad Arbor.",
+          "expected": "Forest is colorless."
+        }
+      ],
+      "cards": [
+        "Dryad Arbor",
+        "Forest",
+        "Delver of Secrets"
+      ],
+      "forge_notes": "Insectile Aberration is the back face of the card Forge names Delver of Secrets; the puzzle state must put it on the battlefield transformed."
+    },
+    {
+      "id": "202.2f-1",
+      "rules": [
+        "202.2f"
+      ],
+      "title": "Effects can change an object's color, add a color, or make it colorless",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            "Grizzly Bears",
+            "Ornithopter"
+          ],
+          "B": [
+            "Forest"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Prismatic Lace",
+            "Moonlace",
+            "Painter's Servant"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Prismatic Lace targeting Grizzly Bears, choosing blue only, tapping one Island.",
+        "Both players pass priority; Prismatic Lace resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears becomes blue only; its green is replaced."
+        },
+        {
+          "label": "colorless",
+          "polarity": "fires",
+          "delta": "A casts Moonlace targeting Grizzly Bears, tapping one Island, instead of casting Prismatic Lace.",
+          "expected": "Grizzly Bears becomes colorless."
+        },
+        {
+          "label": "added_color",
+          "polarity": "fires",
+          "delta": "A casts Painter's Servant (tapping two Islands) and chooses blue as it enters, instead of casting Prismatic Lace.",
+          "expected": "Grizzly Bears is green and blue; blue is added to its green."
+        },
+        {
+          "label": "no_effect",
+          "polarity": "does_not_fire",
+          "delta": "A casts no spell; both players pass priority with an empty stack instead of A casting Prismatic Lace.",
+          "expected": "Grizzly Bears stays green and only green; Ornithopter stays colorless."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Grizzly Bears",
+        "Ornithopter",
+        "Forest",
+        "Prismatic Lace",
+        "Moonlace",
+        "Painter's Servant"
+      ],
+      "forge_notes": "Prismatic Lace and Moonlace apply a permanent-duration Animate effect that overwrites colors. Painter's Servant's static ability adds the chosen color to every permanent, so with it on the battlefield Ornithopter and Painter's Servant itself are blue too."
+    },
+    {
+      "id": "202.3-1",
+      "rules": [
+        "202.3",
+        "202.3g"
+      ],
+      "title": "A spell's mana value is the total mana in its mana cost, and a Phyrexian symbol counts as 1",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "B",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Counterbalance"
+          ],
+          "B": [
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Forest"
+          ]
+        },
+        "hand": {
+          "B": [
+            "Hill Giant",
+            "Grizzly Bears",
+            "Birthing Pod"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Giant Spider",
+            "Island"
+          ]
+        },
+        "exile": {},
+        "notes": "Counterbalance is on A's battlefield. A's library is listed top card first. Whenever B casts a spell, A reveals the top card of A's library, and the spell is countered if its mana value equals the revealed card's. The revealed card stays on top."
+      },
+      "decisions": [
+        "B casts Hill Giant ({3}{R}), tapping four Mountains.",
+        "Counterbalance triggers; A chooses to reveal the top card of A's library, Giant Spider (mana value 4).",
+        "Both players pass priority; the Counterbalance trigger resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Hill Giant has mana value 4, the same as Giant Spider, so it is countered and put into B's graveyard."
+        },
+        {
+          "label": "different_value",
+          "polarity": "does_not_fire",
+          "delta": "B casts Grizzly Bears ({1}{G}), tapping Forest and a Mountain, instead of Hill Giant.",
+          "expected": "Grizzly Bears has mana value 2, not 4, so it is not countered and resolves onto B's battlefield."
+        },
+        {
+          "label": "phyrexian_symbol",
+          "polarity": "fires",
+          "delta": "B casts Birthing Pod ({3}{G/P}), tapping three Mountains and paying 2 life for {G/P}, instead of Hill Giant.",
+          "expected": "Birthing Pod has mana value 4 although only three mana were spent, so it is countered and put into B's graveyard; B is at 18 life."
+        }
+      ],
+      "cards": [
+        "Counterbalance",
+        "Mountain",
+        "Forest",
+        "Island",
+        "Hill Giant",
+        "Grizzly Bears",
+        "Birthing Pod",
+        "Giant Spider"
+      ],
+      "forge_notes": "Counterbalance's reveal is optional; the scenario has A reveal."
+    },
+    {
+      "id": "202.3a-1",
+      "rules": [
+        "202.3a"
+      ],
+      "title": "An object with no mana cost has mana value 0",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "B",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Counterbalance"
+          ],
+          "B": [
+            "Mountain",
+            "Forest"
+          ]
+        },
+        "hand": {
+          "B": [
+            "Ornithopter",
+            "Grizzly Bears"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Dryad Arbor",
+            "Island"
+          ]
+        },
+        "exile": {},
+        "notes": "Counterbalance is on A's battlefield. A's library is listed top card first. Whenever B casts a spell, A reveals the top card of A's library, and the spell is countered if its mana value equals the revealed card's. The revealed card stays on top. Dryad Arbor has no mana cost."
+      },
+      "decisions": [
+        "B casts Ornithopter ({0}).",
+        "Counterbalance triggers; A chooses to reveal the top card of A's library, Dryad Arbor (no mana cost).",
+        "Both players pass priority; the Counterbalance trigger resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Dryad Arbor has mana value 0, the same as Ornithopter, so Ornithopter is countered and put into B's graveyard."
+        },
+        {
+          "label": "nonzero_value",
+          "polarity": "does_not_fire",
+          "delta": "B casts Grizzly Bears ({1}{G}), tapping Forest and Mountain, instead of Ornithopter.",
+          "expected": "Grizzly Bears has mana value 2, not 0, so it is not countered and resolves onto B's battlefield."
+        }
+      ],
+      "cards": [
+        "Counterbalance",
+        "Mountain",
+        "Forest",
+        "Island",
+        "Ornithopter",
+        "Grizzly Bears",
+        "Dryad Arbor"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "202.3b-1",
+      "rules": [
+        "202.3b"
+      ],
+      "title": "A transformed nonmodal double-faced permanent keeps its front face's mana value, and a copy of it has mana value 0",
+      "record_kind": "playability",
+      "setup": {
+        "active": "B",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Swamp",
+            "Swamp"
+          ],
+          "B": [
+            "Huntmaster of the Fells"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Smother"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Huntmaster of the Fells ({2}{R}{G}) is on B's battlefield transformed to Ravager of the Fells. Smother can target only a creature with mana value 3 or less. A has priority with Smother in hand and both Swamps untapped."
+      },
+      "decisions": [
+        "A considers casting Smother ({1}{B}) at B's creatures; the verdict is read before any mana is spent."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Ravager of the Fells has mana value 4, the mana value of Huntmaster of the Fells, so it is not a legal target; Smother has no legal target and cannot be cast."
+        },
+        {
+          "label": "copy",
+          "polarity": "does_not_fire",
+          "delta": "B also controls a Clone that entered as a copy of Ravager of the Fells.",
+          "expected": "The Clone copy has mana value 0, so it is a legal target; Smother can be cast targeting it, and Ravager of the Fells is still not a legal target."
+        }
+      ],
+      "cards": [
+        "Swamp",
+        "Smother",
+        "Huntmaster of the Fells",
+        "Clone"
+      ],
+      "forge_notes": "The puzzle state puts Huntmaster of the Fells on the battlefield transformed. Ravager of the Fells is its alternate face, so Forge's card name for it is Huntmaster of the Fells."
+    },
+    {
+      "id": "202.3c-1",
+      "rules": [
+        "202.3c"
+      ],
+      "title": "A melded permanent's mana value is the combined mana value of its front faces, and a copy of it has mana value 0",
+      "record_kind": "playability",
+      "setup": {
+        "active": "B",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Swamp",
+            "Swamp"
+          ],
+          "B": [
+            "Graf Rats"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Smother"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Graf Rats ({1}{B}) and Midnight Scavengers ({4}{B}) are melded into Chittering Host on B's battlefield; the permanent is listed as Graf Rats, the front card of the meld pair. Smother can target only a creature with mana value 3 or less. A has priority with Smother in hand and both Swamps untapped."
+      },
+      "decisions": [
+        "A considers casting Smother ({1}{B}) at B's creatures; the verdict is read before any mana is spent."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Chittering Host has mana value 7 (2 + 5), so it is not a legal target; Smother has no legal target and cannot be cast."
+        },
+        {
+          "label": "unmelded",
+          "polarity": "does_not_fire",
+          "delta": "Graf Rats and Midnight Scavengers are two separate creatures on B's battlefield instead of the melded Chittering Host.",
+          "expected": "Graf Rats (mana value 2) is a legal target and Midnight Scavengers (mana value 5) is not; Smother can be cast targeting Graf Rats."
+        },
+        {
+          "label": "copy",
+          "polarity": "other",
+          "delta": "B also controls a Clone that entered as a copy of Chittering Host.",
+          "expected": "The Clone copy has mana value 0, so it is a legal target; Smother can be cast targeting it, and Chittering Host is still not a legal target."
+        }
+      ],
+      "cards": [
+        "Swamp",
+        "Smother",
+        "Graf Rats",
+        "Midnight Scavengers",
+        "Clone"
+      ],
+      "forge_notes": "Forge's script graf_rats_chittering_host.txt holds Graf Rats with Chittering Host as the meld alternate. The puzzle state must put the melded permanent on the battlefield; Forge's mana value for melded permanents and their copies is not confirmed."
+    },
+    {
+      "id": "202.3d-1",
+      "rules": [
+        "202.3d"
+      ],
+      "title": "A split card's mana value is both halves combined off the stack, and the cast half's (or both halves' if fused) on the stack",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "B",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Counterbalance",
+            "Ornithopter",
+            {
+              "card": "Pacifism",
+              "attached_to": "Ornithopter"
+            }
+          ],
+          "B": [
+            "Mountain",
+            "Mountain",
+            "Plains",
+            "Forest"
+          ]
+        },
+        "hand": {
+          "B": [
+            "Gray Ogre",
+            "Grizzly Bears",
+            "Wear"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Wear",
+            "Island"
+          ]
+        },
+        "exile": {},
+        "notes": "Counterbalance is on A's battlefield. A's library is listed top card first. Whenever B casts a spell, A reveals the top card of A's library, and the spell is countered if its mana value equals the revealed card's. The revealed card stays on top. The card named Wear in the zones is the split card Wear // Tear, with halves Wear ({1}{R}) and Tear ({W}). Its mana value in the library is 3. A also controls Pacifism enchanting A's Ornithopter."
+      },
+      "decisions": [
+        "B casts Gray Ogre ({2}{R}), tapping Mountain, Mountain and Forest.",
+        "Counterbalance triggers; A chooses to reveal the top card of A's library, Wear // Tear.",
+        "Both players pass priority; the Counterbalance trigger resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Wear // Tear in the library has mana value 3, the same as Gray Ogre, so Gray Ogre is countered and put into B's graveyard."
+        },
+        {
+          "label": "half_value_not_used",
+          "polarity": "does_not_fire",
+          "delta": "B casts Grizzly Bears ({1}{G}), tapping Forest and a Mountain, instead of Gray Ogre.",
+          "expected": "Grizzly Bears has mana value 2, which is Wear's half alone but not the card's, so it is not countered and resolves onto B's battlefield."
+        },
+        {
+          "label": "one_half_cast",
+          "polarity": "does_not_fire",
+          "delta": "B casts only the Wear half of Wear // Tear targeting Ornithopter, tapping two Mountains, instead of Gray Ogre.",
+          "expected": "On the stack the spell has mana value 2, that of Wear alone, not 3, so it is not countered and resolves: Ornithopter is destroyed and Pacifism goes to A's graveyard."
+        },
+        {
+          "label": "fused",
+          "polarity": "fires",
+          "delta": "B casts Wear // Tear fused, Wear targeting Ornithopter and Tear targeting Pacifism, tapping two Mountains and Plains, instead of Gray Ogre.",
+          "expected": "On the stack the fused spell has mana value 3 (2 + 1), the same as the revealed card, so it is countered and put into B's graveyard; Ornithopter and Pacifism stay on A's battlefield."
+        }
+      ],
+      "cards": [
+        "Counterbalance",
+        "Ornithopter",
+        "Pacifism",
+        "Mountain",
+        "Plains",
+        "Forest",
+        "Island",
+        "Gray Ogre",
+        "Grizzly Bears",
+        "Wear",
+        "Tear"
+      ],
+      "forge_notes": "Forge names a split card by its first half's Name: line, so Wear // Tear appears as 'Wear' in zones; its second half is the ALTERNATE Name: line."
+    },
+    {
+      "id": "202.3e-1",
+      "rules": [
+        "202.3e"
+      ],
+      "title": "X counts as 0 in a mana value off the stack and as the chosen number on the stack",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "B",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Counterbalance"
+          ],
+          "B": [
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain"
+          ]
+        },
+        "hand": {
+          "B": [
+            "Lightning Bolt",
+            "Fireball"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Fireball",
+            "Island"
+          ]
+        },
+        "exile": {},
+        "notes": "Counterbalance is on A's battlefield. A's library is listed top card first. Whenever B casts a spell, A reveals the top card of A's library, and the spell is countered if its mana value equals the revealed card's. The revealed card stays on top. The top card of A's library is Fireball ({X}{R}), so its mana value there is 1."
+      },
+      "decisions": [
+        "B casts Lightning Bolt ({R}) targeting A, tapping one Mountain.",
+        "Counterbalance triggers; A chooses to reveal the top card of A's library, Fireball.",
+        "Both players pass priority; the Counterbalance trigger resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Fireball in the library has mana value 1 (X is 0), the same as Lightning Bolt, so Lightning Bolt is countered and put into B's graveyard; A stays at 20 life."
+        },
+        {
+          "label": "x_equals_3",
+          "polarity": "does_not_fire",
+          "delta": "B casts Fireball with X=3 targeting A, tapping four Mountains, instead of Lightning Bolt.",
+          "expected": "On the stack Fireball has mana value 4 (X is 3), not 1, so it is not countered and resolves: A takes 3 damage and is at 17 life."
+        },
+        {
+          "label": "x_equals_0",
+          "polarity": "fires",
+          "delta": "B casts Fireball with X=0 targeting A, tapping one Mountain, instead of Lightning Bolt.",
+          "expected": "On the stack Fireball has mana value 1 (X is 0), the same as the revealed Fireball, so it is countered and put into B's graveyard; A stays at 20 life."
+        }
+      ],
+      "cards": [
+        "Counterbalance",
+        "Mountain",
+        "Island",
+        "Lightning Bolt",
+        "Fireball"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "202.3f-1",
+      "rules": [
+        "202.3f"
+      ],
+      "title": "A hybrid symbol contributes its largest component to mana value",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "B",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Counterbalance"
+          ],
+          "B": [
+            "Swamp",
+            "Swamp",
+            "Swamp",
+            "Forest"
+          ]
+        },
+        "hand": {
+          "B": [
+            "Beseech the Queen",
+            "Giant Spider"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Craw Wurm",
+            "Island"
+          ]
+        },
+        "exile": {},
+        "notes": "Counterbalance is on A's battlefield. A's library is listed top card first. Whenever B casts a spell, A reveals the top card of A's library, and the spell is countered if its mana value equals the revealed card's. The revealed card stays on top. Beseech the Queen costs {2/B}{2/B}{2/B}."
+      },
+      "decisions": [
+        "B casts Beseech the Queen, paying {B} for each of its three {2/B} symbols and tapping three Swamps.",
+        "Counterbalance triggers; A chooses to reveal the top card of A's library, Craw Wurm (mana value 6).",
+        "Both players pass priority; the Counterbalance trigger resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Beseech the Queen has mana value 6 (2 + 2 + 2) although only three mana were spent, the same as Craw Wurm, so it is countered and put into B's graveyard."
+        },
+        {
+          "label": "smaller_value",
+          "polarity": "does_not_fire",
+          "delta": "B casts Giant Spider ({3}{G}), tapping three Swamps and Forest, instead of Beseech the Queen.",
+          "expected": "Giant Spider has mana value 4, not 6, so it is not countered and resolves onto B's battlefield."
+        },
+        {
+          "label": "revealed_spent_amount",
+          "polarity": "does_not_fire",
+          "delta": "The top card of A's library is Gray Ogre (mana value 3, the amount of mana actually spent) instead of Craw Wurm.",
+          "expected": "Beseech the Queen has mana value 6, not 3, so it is not countered and resolves; B searches an empty library and finds nothing."
+        }
+      ],
+      "cards": [
+        "Counterbalance",
+        "Swamp",
+        "Forest",
+        "Island",
+        "Beseech the Queen",
+        "Giant Spider",
+        "Craw Wurm",
+        "Gray Ogre"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

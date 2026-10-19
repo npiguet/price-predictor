@@ -1,0 +1,10 @@
+{"id": "208.1", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "208.2", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "208.2a", "category": "mechanical", "observability": "direct", "record_kinds": ["continuous"], "outcome": "A creature whose characteristic-defining ability sets its power or toughness shows the computed value, using 0 for any undeterminable number, including off the battlefield.", "note": ""}
+{"id": "208.2b", "category": "mechanical", "observability": "indirect", "record_kinds": ["continuous", "rewrite"], "outcome": "A creature with an \"as enters\" power/toughness choice enters with the chosen values, and shows 0/0 while not on the battlefield.", "note": ""}
+{"id": "208.3", "category": "mechanical", "observability": "direct", "record_kinds": ["continuous"], "outcome": "A noncreature permanent, such as an uncrewed Vehicle, has no power or toughness on the battlefield.", "note": ""}
+{"id": "208.3a", "category": "mechanical", "observability": "direct", "record_kinds": ["continuous"], "outcome": "A power or toughness modification aimed at a noncreature permanent is created and applies once that permanent becomes a creature.", "note": ""}
+{"id": "208.4", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "208.4a", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "208.4b", "category": "mechanical", "observability": "needs_new_fields", "record_kinds": ["continuous"], "outcome": "An effect that checks base power or toughness sees the value after characteristic-defining and setting effects, ignoring modifying effects and counters.", "note": "records show final P/T, not base"}
+{"id": "208.5", "category": "mechanical", "observability": "direct", "record_kinds": ["continuous"], "outcome": "A creature with no value for power or toughness has that characteristic equal to 0.", "note": ""}

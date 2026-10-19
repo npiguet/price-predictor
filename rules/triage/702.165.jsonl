@@ -1,0 +1,5 @@
+{"id": "702.165", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.165a", "category": "mechanical", "observability": "direct", "record_kinds": ["trigger", "resolution"], "outcome": "When the backup creature enters, N +1/+1 counters go on the target creature, which if another gains the abilities printed below backup until end of turn.", "note": ""}
+{"id": "702.165b", "category": "mechanical", "observability": "indirect", "record_kinds": ["continuous"], "outcome": "A copy of a backup permanent keeps the order of printed abilities, so the same abilities are granted below backup.", "note": ""}
+{"id": "702.165c", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "Only abilities printed on the backup object are granted, not abilities it gained.", "note": ""}
+{"id": "702.165d", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "The granted abilities are fixed as the backup ability is put on the stack, even if the source loses abilities before resolution.", "note": ""}

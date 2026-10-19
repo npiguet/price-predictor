@@ -1,0 +1,2 @@
+{"id": "702.132", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.132a", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "Another player can pay any amount of the generic mana in the total cost of a spell with assist, which lets the caster afford it.", "note": "Choosing the helper and mana payment are decisions; the affordability verdict is the observable part."}

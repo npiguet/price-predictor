@@ -1,0 +1,148 @@
+{
+  "unit": "702.133",
+  "verified": true,
+  "review": [
+    "702.133a-1: variant one_island only tested ordinary mana payment, not what jump-start decides; dropped it."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.133a-1",
+      "rules": [
+        "702.133a"
+      ],
+      "title": "Jump-start allows casting from the graveyard only with a card to discard",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Forest"
+          ]
+        },
+        "graveyard": {
+          "A": [
+            "Radical Idea"
+          ]
+        },
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A considers casting Radical Idea from the graveyard, discarding Forest as the additional cost and tapping two Islands."
+      ],
+      "variants": [
+        {
+          "label": "card_to_discard",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Casting Radical Idea from A's graveyard is legal."
+        },
+        {
+          "label": "empty_hand",
+          "polarity": "does_not_fire",
+          "delta": "A's hand is empty.",
+          "expected": "Casting Radical Idea from A's graveyard is not legal: there is no card to discard."
+        }
+      ],
+      "cards": [
+        "Radical Idea",
+        "Island",
+        "Forest"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.133a-2",
+      "rules": [
+        "702.133a"
+      ],
+      "title": "A spell cast with jump-start is exiled instead of going anywhere else when it leaves the stack",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island"
+          ],
+          "B": [
+            "Island",
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Forest"
+          ],
+          "B": [
+            "Counterspell"
+          ]
+        },
+        "graveyard": {
+          "A": [
+            "Radical Idea"
+          ]
+        },
+        "library": {
+          "A": [
+            "Plains",
+            "Plains",
+            "Plains"
+          ]
+        },
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Radical Idea from the graveyard, discarding Forest and tapping two Islands.",
+        "B passes without responding; Radical Idea resolves."
+      ],
+      "variants": [
+        {
+          "label": "resolves",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Radical Idea resolves and A draws a card (hand: 1 Plains). Radical Idea is in A's exile zone, not the graveyard. Forest is in A's graveyard."
+        },
+        {
+          "label": "countered",
+          "polarity": "fires",
+          "delta": "In response, B casts Counterspell targeting Radical Idea, tapping two Islands.",
+          "expected": "Counterspell resolves and Radical Idea is countered: A draws nothing, and Radical Idea is in A's exile zone, not the graveyard. Forest is in A's graveyard."
+        },
+        {
+          "label": "cast_from_hand",
+          "polarity": "does_not_fire",
+          "delta": "Radical Idea starts in A's hand instead of the graveyard and is cast from there with no discard.",
+          "expected": "Radical Idea resolves and A draws a card. Radical Idea is in A's graveyard, not in exile. Forest stays in A's hand."
+        }
+      ],
+      "cards": [
+        "Radical Idea",
+        "Island",
+        "Forest",
+        "Plains",
+        "Counterspell"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

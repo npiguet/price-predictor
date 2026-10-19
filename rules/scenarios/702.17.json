@@ -1,0 +1,72 @@
+{
+  "unit": "702.17",
+  "verified": true,
+  "review": [],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.17b-1",
+      "rules": [
+        "702.17b"
+      ],
+      "title": "A creature with flying can be blocked only by creatures with flying or reach",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Wind Drake",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            "Grizzly Bears",
+            "Giant Spider",
+            "Wind Drake"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A attacks player B with its Wind Drake.",
+        "B declares Grizzly Bears as a blocker of A's Wind Drake."
+      ],
+      "variants": [
+        {
+          "label": "ground_blocker",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Declaring Grizzly Bears (no flying or reach) as a blocker of A's Wind Drake is illegal."
+        },
+        {
+          "label": "reach_blocker",
+          "polarity": "does_not_fire",
+          "delta": "B declares Giant Spider (reach) as the blocker instead of Grizzly Bears.",
+          "expected": "Declaring Giant Spider as a blocker of A's Wind Drake is legal."
+        },
+        {
+          "label": "flying_blocker",
+          "polarity": "does_not_fire",
+          "delta": "B declares its own Wind Drake (flying) as the blocker instead of Grizzly Bears.",
+          "expected": "Declaring B's Wind Drake as a blocker of A's Wind Drake is legal."
+        }
+      ],
+      "cards": [
+        "Wind Drake",
+        "Grizzly Bears",
+        "Giant Spider"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

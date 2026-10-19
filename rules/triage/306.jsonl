@@ -1,0 +1,13 @@
+{"id": "306.1", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "A planeswalker card can be cast only from hand in a main phase of its owner's turn with an empty stack.", "note": ""}
+{"id": "306.2", "category": "mechanical", "observability": "direct", "record_kinds": ["resolution"], "outcome": "A resolving planeswalker spell enters the battlefield under its controller's control.", "note": ""}
+{"id": "306.3", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "306.4", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "Two legendary planeswalkers with the same name are subject to the legend rule, so one goes to the graveyard.", "note": "Subsumed by the legend rule 704.5j."}
+{"id": "306.5", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "306.5a", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "306.5b", "category": "mechanical", "observability": "direct", "record_kinds": ["rewrite"], "outcome": "A planeswalker enters with loyalty counters equal to its printed loyalty.", "note": ""}
+{"id": "306.5c", "category": "mechanical", "observability": "needs_new_fields", "record_kinds": [], "outcome": "A planeswalker's loyalty on the battlefield equals its loyalty counters.", "note": "Continuous records do not report loyalty."}
+{"id": "306.5d", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "A loyalty ability can be activated only in a main phase of its controller's turn with an empty stack and only if none of that permanent's loyalty abilities was activated this turn.", "note": ""}
+{"id": "306.6", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "Planeswalkers are legal attack targets.", "note": ""}
+{"id": "306.7", "category": "out_of_scope", "observability": "none", "record_kinds": [], "outcome": "", "note": "Historical note about a removed redirection rule."}
+{"id": "306.8", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "Damage dealt to a planeswalker removes that many loyalty counters from it.", "note": ""}
+{"id": "306.9", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "A planeswalker with 0 loyalty moves to its owner's graveyard in the state-based check.", "note": ""}

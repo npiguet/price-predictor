@@ -1,0 +1,149 @@
+{
+  "unit": "702.96",
+  "verified": true,
+  "review": [],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.96a-1",
+      "rules": [
+        "702.96a",
+        "702.96c"
+      ],
+      "title": "Overload changes 'target' to 'each'",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            {
+              "card": "Runeclaw Bear",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            {
+              "card": "Hill Giant",
+              "summoning_sick": false
+            },
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            }
+          ]
+        },
+        "hand": {
+          "A": [
+            "Mizzium Mortars"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Mizzium Mortars for its overload cost {3}{R}{R}{R}, tapping all six Mountains; no targets are chosen.",
+        "Both players pass; Mizzium Mortars resolves."
+      ],
+      "variants": [
+        {
+          "label": "overloaded",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Mizzium Mortars deals 4 damage to each creature A does not control. Hill Giant and Grizzly Bears are destroyed and go to B's graveyard. Runeclaw Bear is unharmed."
+        },
+        {
+          "label": "normal_cast",
+          "polarity": "does_not_fire",
+          "delta": "A casts Mizzium Mortars for {1}{R} (tapping two Mountains) targeting Hill Giant instead of paying the overload cost.",
+          "expected": "Mizzium Mortars deals 4 damage to Hill Giant only, which is destroyed. Grizzly Bears has no damage; Runeclaw Bear is unharmed."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Runeclaw Bear",
+        "Hill Giant",
+        "Grizzly Bears",
+        "Mizzium Mortars"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.96b-1",
+      "rules": [
+        "702.96b"
+      ],
+      "title": "An overloaded spell has no targets and can affect objects that could not be targeted",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain"
+          ],
+          "B": [
+            {
+              "card": "Gladecover Scout",
+              "summoning_sick": false
+            }
+          ]
+        },
+        "hand": {
+          "A": [
+            "Mizzium Mortars"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Mizzium Mortars for its overload cost {3}{R}{R}{R}, tapping all six Mountains; no targets are chosen.",
+        "If the cast is legal, both players pass and Mizzium Mortars resolves."
+      ],
+      "variants": [
+        {
+          "label": "overloaded",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The cast is legal because the spell requires no targets. Mizzium Mortars deals 4 damage to Gladecover Scout (hexproof), which is destroyed and goes to B's graveyard."
+        },
+        {
+          "label": "normal_cast",
+          "polarity": "does_not_fire",
+          "delta": "A tries to cast Mizzium Mortars for {1}{R} targeting Gladecover Scout instead of paying the overload cost.",
+          "expected": "The cast is illegal: Gladecover Scout has hexproof and is the only creature A does not control, so Mizzium Mortars has no legal target and cannot be cast."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Gladecover Scout",
+        "Mizzium Mortars"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

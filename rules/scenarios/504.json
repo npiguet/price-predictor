@@ -1,0 +1,75 @@
+{
+  "unit": "504",
+  "verified": true,
+  "review": [
+    "504.1-1: the does_not_fire variant changed two facts (active player, and whom B's Necropotence already in the base skips); removed Necropotence from the base, added variant b_active (B draws) and made draw_step_skipped put Necropotence on A's side"
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "504.1-1",
+      "rules": [
+        "504.1"
+      ],
+      "title": "The active player draws a card at the start of the draw step",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "draw",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Island",
+            "Mountain"
+          ],
+          "B": [
+            "Forest",
+            "Swamp"
+          ]
+        },
+        "exile": {},
+        "notes": "A's library has Island on top and B's has Forest on top. Both hands are empty."
+      },
+      "decisions": [
+        "The draw step begins and the active player draws as a turn-based action; players then receive priority and pass."
+      ],
+      "variants": [
+        {
+          "label": "active_draws",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "A draws Island (hand 1 card, library 1 card). B draws nothing (hand 0, library 2 cards)."
+        },
+        {
+          "label": "b_active",
+          "polarity": "other",
+          "delta": "The active player is B, so the draw step is B's.",
+          "expected": "B draws Forest (hand 1 card, library 1 card). A draws nothing (hand 0, library 2 cards)."
+        },
+        {
+          "label": "draw_step_skipped",
+          "polarity": "does_not_fire",
+          "delta": "A controls Necropotence.",
+          "expected": "A's draw step is skipped, so A draws nothing (hand 0, library 2 cards, Island still on top); B draws nothing either."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Mountain",
+        "Forest",
+        "Swamp",
+        "Necropotence"
+      ],
+      "forge_notes": "Necropotence ('Skip your draw step') is a BeginPhase replacement with Skip$ True; in variant draw_step_skipped it is on A's battlefield."
+    }
+  ]
+}

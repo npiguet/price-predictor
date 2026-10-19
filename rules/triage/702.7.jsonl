@@ -1,0 +1,5 @@
+{"id": "702.7", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.7a", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": "Static-ability description; 702.7b carries the outcome."}
+{"id": "702.7b", "category": "mechanical", "observability": "indirect", "record_kinds": ["combat"], "outcome": "Creatures with first strike deal combat damage in a first combat damage step and creatures without it in a second step, so a first striker can kill its blocker before taking damage.", "note": ""}
+{"id": "702.7c", "category": "mechanical", "observability": "indirect", "record_kinds": ["combat"], "outcome": "Which creatures deal damage in the second combat damage step is fixed by first strike as the first step began, so gaining first strike late does not stop a creature dealing damage and losing it late does not let it deal damage twice.", "note": ""}
+{"id": "702.7d", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": "Redundancy of instances has no separate outcome."}

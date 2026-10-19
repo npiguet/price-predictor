@@ -1,0 +1,6 @@
+{"id": "702.122", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.122a", "category": "mechanical", "observability": "direct", "record_kinds": ["resolution", "playability"], "outcome": "Resolving crew makes the Vehicle an artifact creature until end of turn after other untapped creatures with enough total power are tapped.", "note": ""}
+{"id": "702.122b", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.122c", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.122d", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "A creature that can't crew Vehicles is not a legal creature to tap for a crew cost.", "note": ""}
+{"id": "702.122e", "category": "mechanical", "observability": "direct", "record_kinds": ["trigger"], "outcome": "A \"becomes crewed\" trigger fires when a crew ability of that Vehicle resolves, and an intervening-if clause looks only at the creatures that paid that crew cost.", "note": ""}

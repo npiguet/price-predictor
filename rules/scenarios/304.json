@@ -1,0 +1,269 @@
+{
+  "unit": "304",
+  "verified": true,
+  "review": [
+    "304.4: skip reason was wrong (a manifested instant exiled and returned, e.g. by Cloudshift, would enter the battlefield face up); added scenario 304.4-1 and removed the skip.",
+    "304.5-1: setup notes said Silence had already resolved while Silence was still in B's hand and cast in the decisions; notes corrected."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "304.1-1",
+      "rules": [
+        "304.1"
+      ],
+      "title": "An instant can be cast whenever its controller has priority; a sorcery cannot",
+      "record_kind": "playability",
+      "setup": {
+        "active": "B",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain"
+          ],
+          "B": [
+            "Mountain"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Lightning Bolt",
+            "Lava Axe"
+          ],
+          "B": [
+            "Shock"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "B is the active player; B has passed priority with an empty stack and A has priority."
+      },
+      "decisions": [
+        "The candidate action is A casting Lightning Bolt from hand, paying {R} with a Mountain."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Casting Lightning Bolt is legal: can_play is true, though it is B's turn and a combat step."
+        },
+        {
+          "label": "with-stack",
+          "polarity": "fires",
+          "delta": "B has first cast Shock targeting A, tapping B's Mountain, and A has priority with Shock on the stack.",
+          "expected": "Casting Lightning Bolt is legal: can_play is true while Shock is on the stack."
+        },
+        {
+          "label": "sorcery",
+          "polarity": "does_not_fire",
+          "delta": "The candidate is A casting Lava Axe (a sorcery) instead of Lightning Bolt, paying {4}{R} with the five Mountains.",
+          "expected": "Casting Lava Axe is not legal: can_play is false, because it is not a main phase of A's turn."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Lightning Bolt",
+        "Lava Axe",
+        "Shock"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "304.2-1",
+      "rules": [
+        "304.2"
+      ],
+      "title": "A resolving instant follows its text and then goes to its owner's graveyard",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain"
+          ],
+          "B": [
+            "Island",
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Shock"
+          ],
+          "B": [
+            "Counterspell"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Shock targeting B, tapping the Mountain.",
+        "A passes priority; B passes priority; Shock resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Shock deals 2 damage to B, whose life total is 18, and then moves from the stack to A's graveyard."
+        },
+        {
+          "label": "countered",
+          "polarity": "does_not_fire",
+          "delta": "After A passes priority B casts Counterspell targeting Shock, tapping both Islands, then both players pass.",
+          "expected": "Shock is countered: its text is not followed, B's life total stays 20, and Shock moves from the stack to A's graveyard; Counterspell goes to B's graveyard."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Island",
+        "Shock",
+        "Counterspell"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "304.4-1",
+      "rules": [
+        "304.4"
+      ],
+      "title": "A manifested instant that is exiled and returned to the battlefield stays in exile",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            {
+              "card": "Lightning Bolt",
+              "face_down": true,
+              "summoning_sick": false
+            }
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Cloudshift"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "The face-down card was manifested by A on an earlier turn (a 2/2 face-down creature, not turned face up)."
+      },
+      "decisions": [
+        "A casts Cloudshift targeting the face-down creature, tapping the Plains.",
+        "A passes priority; B passes priority; Cloudshift resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The face-down creature is exiled and turns face up as Lightning Bolt; Lightning Bolt cannot enter the battlefield and stays in A's exile; Cloudshift goes to A's graveyard."
+        },
+        {
+          "label": "creature-card",
+          "polarity": "does_not_fire",
+          "delta": "The manifested card is Grizzly Bears instead of Lightning Bolt.",
+          "expected": "Grizzly Bears is exiled and returns to the battlefield face up under A's control as a 2/2; Cloudshift goes to A's graveyard."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Lightning Bolt",
+        "Cloudshift",
+        "Grizzly Bears"
+      ],
+      "forge_notes": "GameAction.changeZone refuses instants and sorceries moving to the battlefield. The face-down state must be a manifest, not a morph."
+    },
+    {
+      "id": "304.5-1",
+      "rules": [
+        "304.5"
+      ],
+      "title": "An action usable 'only as an instant' needs priority, even when the player cannot cast spells",
+      "record_kind": "playability",
+      "setup": {
+        "active": "B",
+        "step": "upkeep",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Lion's Eye Diamond",
+            "Mountain"
+          ],
+          "B": [
+            "Plains"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Shock"
+          ],
+          "B": [
+            "Silence"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "It is B's upkeep and B has priority with an empty stack; Silence is still in B's hand and is cast in the decisions."
+      },
+      "decisions": [
+        "B casts Silence, tapping the Plains; both players pass; Silence resolves.",
+        "B passes priority and A receives priority.",
+        "The candidate action is A activating Lion's Eye Diamond ('Sacrifice, discard your hand: add three mana of any one color. Activate only as an instant')."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The activation is legal: can_play is true, because A has priority, although A cannot cast spells."
+        },
+        {
+          "label": "cast-instant",
+          "polarity": "does_not_fire",
+          "delta": "The candidate is A casting the instant Shock with the Mountain instead.",
+          "expected": "Casting Shock is not legal: can_play is false, because Silence stops A from casting spells."
+        }
+      ],
+      "cards": [
+        "Lion's Eye Diamond",
+        "Mountain",
+        "Plains",
+        "Shock",
+        "Silence"
+      ],
+      "forge_notes": "Lion's Eye Diamond is a mana ability, so the activation does not use the stack; its playability verdict is the legality of activating it."
+    }
+  ]
+}

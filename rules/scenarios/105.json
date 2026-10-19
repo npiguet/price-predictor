@@ -1,0 +1,159 @@
+{
+  "unit": "105",
+  "verified": true,
+  "review": [],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "105.2-1",
+      "rules": [
+        "105.2"
+      ],
+      "title": "An object's color comes from its mana cost, a color indicator or a characteristic-defining ability, not its frame",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Grizzly Bears"
+          ],
+          "B": [
+            "Forest"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "No spells or abilities are used; both players pass priority with an empty stack."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears, with mana cost {1}{G}, is green and only green (monocolored)."
+        },
+        {
+          "label": "multicolor",
+          "polarity": "fires",
+          "delta": "A's permanent is Watchwolf (mana cost {G}{W}) instead of Grizzly Bears.",
+          "expected": "Watchwolf is green and white (multicolored)."
+        },
+        {
+          "label": "colorless_cost",
+          "polarity": "does_not_fire",
+          "delta": "A's permanent is Wurmcoil Engine (mana cost {6}, an artifact) instead of Grizzly Bears.",
+          "expected": "Wurmcoil Engine has no color symbol in its mana cost and is colorless."
+        },
+        {
+          "label": "color_indicator",
+          "polarity": "fires",
+          "delta": "A's permanent is Dryad Arbor (no mana cost, color indicator green) instead of Grizzly Bears.",
+          "expected": "Dryad Arbor is green even though it has no mana cost."
+        },
+        {
+          "label": "cda",
+          "polarity": "fires",
+          "delta": "A's permanent is Transguild Courier (mana cost {4}, characteristic-defining ability making it all colors) instead of Grizzly Bears.",
+          "expected": "Transguild Courier is white, blue, black, red and green."
+        }
+      ],
+      "cards": [
+        "Grizzly Bears",
+        "Forest",
+        "Watchwolf",
+        "Wurmcoil Engine",
+        "Dryad Arbor",
+        "Transguild Courier"
+      ],
+      "forge_notes": "Each variant swaps the single permanent on A's battlefield."
+    },
+    {
+      "id": "105.3-1",
+      "rules": [
+        "105.3"
+      ],
+      "title": "An effect that gives an object a new color replaces its colors unless it adds the color or makes the object colorless",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            "Grizzly Bears",
+            "Ornithopter"
+          ],
+          "B": [
+            "Forest"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Prismatic Lace",
+            "Moonlace",
+            "Painter's Servant"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Prismatic Lace targeting Grizzly Bears, choosing blue, tapping one Island.",
+        "Both players pass priority; Prismatic Lace resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears becomes blue only; its green is replaced."
+        },
+        {
+          "label": "in_addition",
+          "polarity": "does_not_fire",
+          "delta": "A casts Painter's Servant (tapping two Islands) and chooses blue, instead of casting Prismatic Lace.",
+          "expected": "Grizzly Bears is green and blue; its green is kept because the new color is added in addition."
+        },
+        {
+          "label": "colorless",
+          "polarity": "other",
+          "delta": "A casts Moonlace targeting Grizzly Bears, tapping one Island, instead of casting Prismatic Lace.",
+          "expected": "Grizzly Bears becomes colorless and loses green."
+        },
+        {
+          "label": "colorless_target",
+          "polarity": "fires",
+          "delta": "Prismatic Lace targets Ornithopter and A chooses blue.",
+          "expected": "Ornithopter, a colorless artifact creature, becomes blue."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Grizzly Bears",
+        "Ornithopter",
+        "Forest",
+        "Prismatic Lace",
+        "Moonlace",
+        "Painter's Servant"
+      ],
+      "forge_notes": "Prismatic Lace and Moonlace apply an Animate effect with permanent duration. Painter's Servant's static ability colors every permanent, so once it enters Ornithopter and Painter's Servant itself are blue too."
+    }
+  ]
+}

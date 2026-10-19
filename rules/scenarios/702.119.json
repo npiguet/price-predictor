@@ -1,0 +1,161 @@
+{
+  "unit": "702.119",
+  "verified": true,
+  "review": [
+    "702.119a-1: the base expected omitted the cast trigger that the decisions resolve; added B 17 and A 23 life.",
+    "702.119b-1: the decisions left Crabomination's enters trigger (target opponent) unresolved; added the decision targeting B with B's library, graveyard and hand empty so it exiles nothing."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.119a-1",
+      "rules": [
+        "702.119a"
+      ],
+      "title": "Emerge reduces the total cost by the sacrificed creature's mana value",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Swamp",
+            "Swamp",
+            "Swamp",
+            "Swamp",
+            "Swamp",
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            },
+            {
+              "card": "Mons's Goblin Raiders",
+              "summoning_sick": false
+            }
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Abundant Maw"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A chooses to cast Abundant Maw for its emerge cost {6}{B}, choosing Grizzly Bears as the creature to sacrifice.",
+        "A sacrifices Grizzly Bears and pays the reduced total cost by tapping all five Swamps.",
+        "The cast trigger of Abundant Maw targets B; both players pass and the trigger and then Abundant Maw resolve."
+      ],
+      "variants": [
+        {
+          "label": "sacrifice_mv2",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Casting Abundant Maw for its emerge cost is legal: the total cost is {6}{B} reduced by 2 (the mana value of Grizzly Bears) to {4}{B}, five mana, paid with the five Swamps. Grizzly Bears is sacrificed and moves to A's graveyard. Abundant Maw ends on the battlefield. The cast trigger resolves first: B loses 3 life (17) and A gains 3 life (23)."
+        },
+        {
+          "label": "sacrifice_mv1",
+          "polarity": "does_not_fire",
+          "delta": "A chooses Mons's Goblin Raiders (mana value 1) as the creature to sacrifice instead of Grizzly Bears.",
+          "expected": "Casting Abundant Maw by sacrificing Mons's Goblin Raiders is not payable: the total cost is {6}{B} reduced by 1 to {5}{B}, six mana, and A has only five lands. Abundant Maw stays in A's hand, and nothing is sacrificed."
+        }
+      ],
+      "cards": [
+        "Swamp",
+        "Grizzly Bears",
+        "Mons's Goblin Raiders",
+        "Abundant Maw"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.119b-1",
+      "rules": [
+        "702.119b"
+      ],
+      "title": "Emerge from a quality accepts only a permanent of that quality and reduces the cost by its mana value",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Swamp",
+            "Swamp",
+            "Swamp",
+            "Swamp",
+            "Swamp",
+            {
+              "card": "Bronze Sable",
+              "summoning_sick": false
+            },
+            {
+              "card": "Ornithopter",
+              "summoning_sick": false
+            },
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            }
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Crabomination"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A chooses to cast Crabomination for its emerge from artifact cost {5}{B}{B}, choosing Bronze Sable as the artifact to sacrifice.",
+        "A sacrifices Bronze Sable and pays the reduced total cost by tapping all five Swamps.",
+        "Both players pass; Crabomination resolves and enters the battlefield.",
+        "Its enters trigger targets B; both players pass and it resolves. B's library, graveyard and hand are empty, so nothing is exiled and A casts nothing."
+      ],
+      "variants": [
+        {
+          "label": "sacrifice_artifact_mv2",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Casting Crabomination for its emerge cost is legal: the total cost is {5}{B}{B} reduced by 2 (the mana value of Bronze Sable) to {3}{B}{B}, five mana, paid with the five Swamps. Bronze Sable is sacrificed and moves to A's graveyard. Crabomination ends on the battlefield. Its enters trigger resolves and exiles nothing."
+        },
+        {
+          "label": "sacrifice_nonartifact",
+          "polarity": "does_not_fire",
+          "delta": "A tries to sacrifice Grizzly Bears (a mana value 2 creature that is not an artifact) instead of Bronze Sable.",
+          "expected": "Grizzly Bears is not a legal choice for emerge from artifact, so the emerge cost cannot be paid. Crabomination, costing {4}{B}{B} (six mana) with no emerge, cannot be cast with five lands and stays in A's hand."
+        },
+        {
+          "label": "sacrifice_artifact_mv0",
+          "polarity": "does_not_fire",
+          "delta": "A sacrifices Ornithopter (an artifact with mana value 0) instead of Bronze Sable.",
+          "expected": "The emerge cost is reduced by 0, so the total cost is {5}{B}{B}, seven mana, and A has only five lands. Crabomination stays in A's hand and nothing is sacrificed."
+        }
+      ],
+      "cards": [
+        "Swamp",
+        "Bronze Sable",
+        "Ornithopter",
+        "Grizzly Bears",
+        "Crabomination"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

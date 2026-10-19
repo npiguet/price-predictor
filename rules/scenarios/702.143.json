@@ -1,0 +1,199 @@
+{
+  "unit": "702.143",
+  "verified": true,
+  "review": [
+    "702.143a-2: 702.143a's own-turn restriction on the foretell special action was not exercised; added a scenario contrasting foretelling on A's turn with trying on B's turn."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.143a-1",
+      "rules": [
+        "702.143a"
+      ],
+      "title": "A foretold card can be cast for its foretell cost only after the turn it was foretold",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain"
+          ],
+          "B": [
+            "Hill Giant"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Demon Bolt"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A takes the foretell special action on Demon Bolt, paying {2} with two Mountains; Demon Bolt is exiled face down.",
+        "In the same turn A tries to cast Demon Bolt from exile for its foretell cost {R}, targeting Hill Giant, tapping a third Mountain."
+      ],
+      "variants": [
+        {
+          "label": "same_turn",
+          "polarity": "does_not_fire",
+          "delta": "",
+          "expected": "The cast is not legal: Demon Bolt stays face down in exile, Hill Giant takes no damage, and only the two Mountains paid for foretelling are tapped."
+        },
+        {
+          "label": "own_next_turn",
+          "polarity": "fires",
+          "delta": "A makes the cast attempt in the first main phase of A's next turn, after the turn in which Demon Bolt was foretold has ended.",
+          "expected": "The cast is legal for {R}. Demon Bolt deals 4 damage to Hill Giant, which is destroyed and moves to B's graveyard. Demon Bolt moves to A's graveyard."
+        },
+        {
+          "label": "opponents_next_turn",
+          "polarity": "fires",
+          "delta": "A makes the cast attempt during B's next turn, with one Mountain still untapped from the foretelling turn.",
+          "expected": "The cast is legal for {R}. Demon Bolt deals 4 damage to Hill Giant, which is destroyed. Demon Bolt moves to A's graveyard."
+        }
+      ],
+      "cards": [
+        "Demon Bolt",
+        "Hill Giant",
+        "Mountain"
+      ],
+      "forge_notes": "Only A's own untap step untaps the Mountains tapped for foretelling, so the opponents_next_turn variant uses one of the two Mountains that were not tapped for it."
+    },
+    {
+      "id": "702.143d-1",
+      "rules": [
+        "702.143d"
+      ],
+      "title": "A card that becomes foretold through an effect is castable for its foretell cost only after that turn ends",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Ethereal Valkyrie",
+              "summoning_sick": false
+            },
+            "Forest",
+            "Forest"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Grizzly Bears"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Island",
+            "Plains"
+          ]
+        },
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A declares Ethereal Valkyrie as an attacker against B.",
+        "Ethereal Valkyrie's attack trigger resolves: A draws Island, then exiles Grizzly Bears from hand face down; it becomes foretold with foretell cost {G}.",
+        "B declares no blockers; combat damage is dealt.",
+        "In main phase 2 A tries to cast Grizzly Bears from exile for {G}, tapping a Forest."
+      ],
+      "variants": [
+        {
+          "label": "same_turn",
+          "polarity": "does_not_fire",
+          "delta": "",
+          "expected": "The cast is not legal: Grizzly Bears stays face down in exile and the Forest stays untapped. B's life is 16."
+        },
+        {
+          "label": "next_turn",
+          "polarity": "fires",
+          "delta": "A makes the cast attempt in the first main phase of A's next turn instead of main phase 2 of this turn.",
+          "expected": "The cast is legal for {G}. Grizzly Bears resolves and enters the battlefield under A's control."
+        }
+      ],
+      "cards": [
+        "Ethereal Valkyrie",
+        "Grizzly Bears",
+        "Forest",
+        "Island",
+        "Plains"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.143a-2",
+      "rules": [
+        "702.143a"
+      ],
+      "title": "A card can be foretold only while its owner has priority during their own turn",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Demon Bolt"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "With priority in A's first main phase, A takes the foretell special action on Demon Bolt, paying {2} with two Mountains."
+      ],
+      "variants": [
+        {
+          "label": "own_turn",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The foretell action is legal: Demon Bolt moves from A's hand to exile face down and both Mountains are tapped."
+        },
+        {
+          "label": "opponents_turn",
+          "polarity": "does_not_fire",
+          "delta": "B is the active player; A tries the foretell action while holding priority in B's first main phase.",
+          "expected": "The foretell action is not legal: Demon Bolt stays in A's hand and both Mountains stay untapped."
+        }
+      ],
+      "cards": [
+        "Demon Bolt",
+        "Mountain"
+      ],
+      "forge_notes": "Foretelling is a special action, not a cast or activation; the playability record may need a candidate entry for it."
+    }
+  ]
+}

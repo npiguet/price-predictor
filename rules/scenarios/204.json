@@ -1,0 +1,73 @@
+{
+  "unit": "204",
+  "verified": true,
+  "review": [],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "204.2-1",
+      "rules": [
+        "204.2"
+      ],
+      "title": "An object with a color indicator is each color the indicator denotes",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Dryad Arbor"
+          ],
+          "B": [
+            "Forest"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Dryad Arbor has no mana cost and a green color indicator."
+      },
+      "decisions": [
+        "No spells or abilities are used; both players pass priority with an empty stack."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Dryad Arbor is green, although it has no mana cost."
+        },
+        {
+          "label": "back_face",
+          "polarity": "fires",
+          "delta": "A's permanent is Delver of Secrets already transformed into Insectile Aberration (no mana cost, blue color indicator) instead of Dryad Arbor.",
+          "expected": "Insectile Aberration is blue."
+        },
+        {
+          "label": "no_indicator",
+          "polarity": "does_not_fire",
+          "delta": "A's permanent is Forest (no mana cost, no color indicator) instead of Dryad Arbor.",
+          "expected": "Forest is colorless."
+        },
+        {
+          "label": "mana_cost_not_indicator",
+          "polarity": "does_not_fire",
+          "delta": "A's permanent is Ornithopter (mana cost {0}, no color indicator) instead of Dryad Arbor.",
+          "expected": "Ornithopter is colorless."
+        }
+      ],
+      "cards": [
+        "Dryad Arbor",
+        "Forest",
+        "Delver of Secrets",
+        "Ornithopter"
+      ],
+      "forge_notes": "Insectile Aberration is the back face of the card Forge names Delver of Secrets; the puzzle state must put it on the battlefield transformed."
+    }
+  ]
+}

@@ -1,0 +1,5 @@
+{"id": "702.100", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.100a", "category": "mechanical", "observability": "direct", "record_kinds": ["trigger", "resolution"], "outcome": "When a creature with greater power and/or toughness enters under its controller, evolve fires and puts a +1/+1 counter on the evolving creature; if neither stat is greater, it does not fire.", "note": ""}
+{"id": "702.100b", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.100c", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": "Comparison convention for noncreature permanents; the outcome is covered by 702.100a."}
+{"id": "702.100d", "category": "mechanical", "observability": "direct", "record_kinds": ["trigger"], "outcome": "Each instance of evolve triggers separately.", "note": ""}

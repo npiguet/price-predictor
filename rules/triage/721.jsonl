@@ -1,0 +1,7 @@
+{"id": "721.1", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "721.2", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "721.2a", "category": "mechanical", "observability": "indirect", "record_kinds": ["continuous"], "outcome": "A permanent with N or more charge counters has the station symbol's abilities; with fewer it lacks them.", "note": ""}
+{"id": "721.2b", "category": "mechanical", "observability": "indirect", "record_kinds": ["continuous"], "outcome": "A permanent with N or more charge counters has the abilities and is a creature with the printed base power and toughness; with fewer it is not a creature.", "note": ""}
+{"id": "721.2c", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "721.3", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "721.4", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "The station ability of a station card is activatable at any charge counter count, while striated abilities need the counters.", "note": ""}

@@ -1,0 +1,4 @@
+{"id": "702.111", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.111a", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.111b", "category": "legality", "observability": "direct", "record_kinds": ["playability", "combat"], "outcome": "A creature with menace is legally blocked only by two or more creatures; a single blocker declaration is illegal.", "note": ""}
+{"id": "702.111c", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": "Redundancy of instances has no separate outcome; 702.111b covers it."}

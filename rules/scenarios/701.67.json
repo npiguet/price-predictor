@@ -1,0 +1,92 @@
+{
+  "unit": "701.67",
+  "verified": true,
+  "review": [
+    "triage: rules/triage/701.67.jsonl was missing, so validate never checked this file; wrote it."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "701.67a-1",
+      "rules": ["701.67a"],
+      "title": "Each generic mana of a waterbend cost can be paid by tapping an artifact or creature",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {"A": 20, "B": 20},
+        "battlefield": {"A": ["Aang's Iceberg", "Grizzly Bears", "Grizzly Bears", "Grizzly Bears"], "B": []},
+        "hand": {},
+        "graveyard": {},
+        "library": {"A": ["Forest", "Mountain", "Island"]},
+        "exile": {},
+        "notes": "A controls no lands. All Grizzly Bears are untapped. Library is listed top first."
+      },
+      "decisions": [
+        "A activates Aang's Iceberg's ability (waterbend {3}: sacrifice it, then scry 2), paying the {3} by tapping the Grizzly Bears A controls.",
+        "Both players pass; the ability resolves. A looks at Forest and Mountain and keeps both on top."
+      ],
+      "variants": [
+        {"label": "base", "polarity": "fires", "delta": "", "expected": "The activation is legal: tapping three Grizzly Bears pays the {3}. Aang's Iceberg is sacrificed and moves to A's graveyard, and the three Grizzly Bears are tapped."},
+        {"label": "too_few_creatures", "polarity": "does_not_fire", "delta": "A controls only two Grizzly Bears.", "expected": "The activation is not legal: two tapped creatures pay only {2} of the {3} and A has no mana. Aang's Iceberg stays on the battlefield and both Grizzly Bears stay untapped."},
+        {"label": "mixed_payment", "polarity": "fires", "delta": "A controls two Grizzly Bears and one untapped Plains.", "expected": "The activation is legal: two Grizzly Bears are tapped and the Plains is tapped for {W} to pay the rest of the {3}. Aang's Iceberg is sacrificed."}
+      ],
+      "cards": ["Aang's Iceberg", "Grizzly Bears", "Forest", "Mountain", "Island", "Plains"],
+      "forge_notes": "Forge handles waterbend in CostAdjustment with the convoke and improvise helper, limited to the waterbend amount."
+    },
+    {
+      "id": "701.67b-1",
+      "rules": ["701.67b"],
+      "title": "A waterbend additional cost lets creatures pay only its own generic mana",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {"A": 20, "B": 20},
+        "battlefield": {"A": ["Island", "Island", "Grizzly Bears", "Grizzly Bears", "Grizzly Bears", "Grizzly Bears", "Grizzly Bears", "Grizzly Bears", "Grizzly Bears"], "B": []},
+        "hand": {"A": ["Spirit Water Revival"]},
+        "graveyard": {},
+        "library": {"A": ["Forest", "Forest", "Forest", "Forest", "Forest", "Forest", "Forest", "Forest"]},
+        "exile": {},
+        "notes": "Spirit Water Revival costs {1}{U}{U} with an optional additional cost of waterbend {6}. All seven Grizzly Bears are untapped."
+      },
+      "decisions": [
+        "A attempts to cast Spirit Water Revival, paying the optional waterbend {6} by tapping six Grizzly Bears and the {1}{U}{U} with the lands A controls and the seventh Grizzly Bear."
+      ],
+      "variants": [
+        {"label": "base", "polarity": "fires", "delta": "", "expected": "The cast is not legal: the seventh Grizzly Bear cannot pay for the {1} of the spell's own mana cost, so the {1}{U}{U} is short one mana. Spirit Water Revival stays in A's hand and nothing is tapped."},
+        {"label": "third_land", "polarity": "does_not_fire", "delta": "A controls a third Island.", "expected": "The cast is legal: six Grizzly Bears pay the waterbend {6} and the three Islands pay the {1}{U}{U}. One Grizzly Bear stays untapped. Spirit Water Revival goes on the stack with its additional cost paid."}
+      ],
+      "cards": ["Island", "Grizzly Bears", "Spirit Water Revival", "Forest"],
+      "forge_notes": "Forge limits waterbend payment through the maximum waterbend amount set on the spell ability."
+    },
+    {
+      "id": "701.67c-1",
+      "rules": ["701.67c"],
+      "title": "Waterbending triggers however the cost was paid",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {"A": 20, "B": 20},
+        "battlefield": {"A": ["Avatar Aang", "Island", "Island", "Island", "Island", "Island", "Island", "Island", "Island", "Island", "Grizzly Bears", "Grizzly Bears", "Grizzly Bears", "Grizzly Bears", "Grizzly Bears", "Grizzly Bears"], "B": []},
+        "hand": {"A": ["Spirit Water Revival"]},
+        "graveyard": {},
+        "library": {"A": ["Forest", "Forest", "Forest", "Forest", "Forest", "Forest", "Forest", "Forest", "Forest"]},
+        "exile": {},
+        "notes": "Avatar Aang has 'Whenever you waterbend, earthbend, firebend, or airbend, draw a card' and is not summoning sick. A controls nine Islands and six Grizzly Bears, all untapped."
+      },
+      "decisions": [
+        "A casts Spirit Water Revival, choosing to pay the optional waterbend {6} by tapping the six Grizzly Bears, and pays {1}{U}{U} by tapping three Islands.",
+        "Avatar Aang's trigger resolves; both players pass and Spirit Water Revival resolves."
+      ],
+      "variants": [
+        {"label": "paid_with_creatures", "polarity": "fires", "delta": "", "expected": "Avatar Aang's trigger fires when the cost is paid and A draws one card. Spirit Water Revival then resolves with its additional cost paid: A shuffles the graveyard into the library and draws seven cards, so A's hand holds eight cards, and Spirit Water Revival is exiled."},
+        {"label": "paid_with_mana", "polarity": "fires", "delta": "A pays the waterbend {6} by tapping six more Islands instead of the Grizzly Bears.", "expected": "Avatar Aang's trigger fires and A draws one card. Spirit Water Revival resolves with its additional cost paid and A draws seven more, so A's hand holds eight cards. All nine Islands are tapped and the Grizzly Bears stay untapped."},
+        {"label": "cost_declined", "polarity": "does_not_fire", "delta": "A does not pay the optional waterbend {6}.", "expected": "Avatar Aang's trigger does not fire. Spirit Water Revival resolves without its additional cost paid and A draws two cards, so A's hand holds two cards. Spirit Water Revival is exiled."}
+      ],
+      "cards": ["Avatar Aang", "Island", "Grizzly Bears", "Spirit Water Revival", "Forest"],
+      "forge_notes": "Forge runs the Waterbend elemental-bend trigger from MagicStack whenever the spell ability has a maximum waterbend amount set, which may include a spell where the optional waterbend cost was declined."
+    }
+  ]
+}

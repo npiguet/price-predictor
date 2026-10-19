@@ -1,0 +1,77 @@
+{
+  "unit": "702.132",
+  "verified": true,
+  "review": [],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.132a-1",
+      "rules": [
+        "702.132a"
+      ],
+      "title": "Another player can pay the generic part of a spell with assist",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain"
+          ],
+          "B": [
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Magma Hellion"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A considers casting Magma Hellion (cost {6}{R}), choosing B as the assisting player.",
+        "B taps six Forests for the generic mana, then A taps the Mountain for {R} (the verdict is read before the cast is made)."
+      ],
+      "variants": [
+        {
+          "label": "six_untapped",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Casting Magma Hellion is legal: B can pay all six generic mana and A pays {R}."
+        },
+        {
+          "label": "five_untapped",
+          "polarity": "does_not_fire",
+          "delta": "One of B's Forests is tapped, so B has 5 untapped lands.",
+          "expected": "Casting Magma Hellion is not legal: B can pay at most 5 generic mana and A can pay only {R}, leaving {1} unpaid."
+        },
+        {
+          "label": "no_red_source",
+          "polarity": "does_not_fire",
+          "delta": "A's land is a Plains instead of a Mountain.",
+          "expected": "Casting Magma Hellion is not legal: assist covers only generic mana, and neither A's Plains nor B's Forests can pay {R}."
+        }
+      ],
+      "cards": [
+        "Magma Hellion",
+        "Mountain",
+        "Plains",
+        "Forest"
+      ],
+      "forge_notes": "Forge's can_play for the caster may not count the assisting player's lands; the verdict may need to be read from the assisted payment itself. In a two-player game the only possible assisting player is the opponent."
+    }
+  ]
+}

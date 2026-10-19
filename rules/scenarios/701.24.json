@@ -1,0 +1,527 @@
+{
+  "unit": "701.24",
+  "verified": true,
+  "review": [
+    "701.24e-1: the base variant shuffled an empty library, the same as the zero-cards variant, so no one-card library was ever shuffled; B's library now holds Forest and Grizzly Bears so the base shuffles one card and the zero-cards variant starts with only the Forest.",
+    "triage 701.24b: outcome names shuffle triggers but record_kinds lacked trigger; added it."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "701.24b-1",
+      "rules": [
+        "701.24b"
+      ],
+      "title": "A found card is left out of the shuffle but the shuffle still triggers",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Cosi's Trickster",
+              "summoning_sick": false
+            },
+            "Island",
+            "Forest"
+          ],
+          "B": [
+            "Forest"
+          ]
+        },
+        "hand": {
+          "B": [
+            "Worldly Tutor"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Forest",
+            "Grizzly Bears",
+            "Forest",
+            "Forest"
+          ],
+          "B": [
+            "Forest",
+            "Forest",
+            "Grizzly Bears",
+            "Forest"
+          ]
+        },
+        "exile": {},
+        "notes": "Library lists are top first."
+      },
+      "decisions": [
+        "A passes priority with an empty stack.",
+        "B casts Worldly Tutor, tapping Forest.",
+        "Both players pass; Worldly Tutor resolves.",
+        "B searches the library for a creature card and chooses Grizzly Bears.",
+        "Cosi's Trickster triggers; A chooses to put the counter on it; the trigger resolves."
+      ],
+      "variants": [
+        {
+          "label": "opponent-shuffles",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears is the top card of B's library, which holds four cards. B's library was shuffled apart from Grizzly Bears, so Cosi's Trickster triggers and becomes 2/2 with a +1/+1 counter."
+        },
+        {
+          "label": "own-shuffle",
+          "polarity": "does_not_fire",
+          "delta": "Worldly Tutor is in A's hand instead of B's and A casts it, tapping A's Forest, choosing A's Grizzly Bears.",
+          "expected": "Grizzly Bears is the top card of A's library. A shuffled A's own library, which does not trigger Cosi's Trickster: it stays 1/1 with no counter."
+        }
+      ],
+      "cards": [
+        "Cosi's Trickster",
+        "Island",
+        "Forest",
+        "Worldly Tutor",
+        "Grizzly Bears"
+      ],
+      "forge_notes": "Worldly Tutor is ChangeZone Library to Library with LibraryPosition 0; check that Forge runs the shuffle that fires Shuffled triggers."
+    },
+    {
+      "id": "701.24c-1",
+      "rules": [
+        "701.24c"
+      ],
+      "title": "Shuffling a specific object into a library shuffles even when it has left the graveyard",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Guile",
+              "summoning_sick": false
+            },
+            "Relic of Progenitus"
+          ],
+          "B": [
+            {
+              "card": "Cosi's Trickster",
+              "summoning_sick": false
+            },
+            "Swamp",
+            "Swamp"
+          ]
+        },
+        "hand": {
+          "B": [
+            "Diabolic Edict"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Forest",
+            "Forest",
+            "Forest"
+          ]
+        },
+        "exile": {},
+        "notes": "Library lists are top first."
+      },
+      "decisions": [
+        "A passes priority with an empty stack.",
+        "B casts Diabolic Edict targeting A, tapping Swamp and Swamp.",
+        "Both players pass; Diabolic Edict resolves and A sacrifices Guile.",
+        "Guile's trigger goes on the stack.",
+        "In response A activates Relic of Progenitus targeting A, tapping it; A exiles Guile from the graveyard.",
+        "Both players pass; the Relic ability resolves, then Guile's trigger resolves.",
+        "Cosi's Trickster's trigger resolves; B puts the counter on it."
+      ],
+      "variants": [
+        {
+          "label": "exiled-in-response",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Guile is in exile, not in A's graveyard or library. A's library (still three Forests) is shuffled anyway, so Cosi's Trickster triggers and becomes 2/2."
+        },
+        {
+          "label": "no-response",
+          "polarity": "other",
+          "delta": "A does not activate Relic of Progenitus.",
+          "expected": "Guile moves from the graveyard to A's library, which is shuffled and now holds four cards. Cosi's Trickster triggers and becomes 2/2."
+        },
+        {
+          "label": "own-trickster",
+          "polarity": "does_not_fire",
+          "delta": "Cosi's Trickster is under A's control instead of B's.",
+          "expected": "Guile is exiled by the Relic and A's library is shuffled, which does not trigger A's own Cosi's Trickster: it stays 1/1."
+        }
+      ],
+      "cards": [
+        "Guile",
+        "Relic of Progenitus",
+        "Cosi's Trickster",
+        "Swamp",
+        "Diabolic Edict",
+        "Forest"
+      ],
+      "forge_notes": "Guile's trigger uses Defined$ TriggeredCardLKICopy with Origin$ Graveyard; if the card is no longer there Forge may skip the move and the shuffle, which would diverge from the rule. In the own-trickster variant A sacrifices Guile to Diabolic Edict by choice (Cosi's Trickster is also A's creature)."
+    },
+    {
+      "id": "701.24d-1",
+      "rules": [
+        "701.24d"
+      ],
+      "title": "Shuffling an empty set of cards into a library still shuffles it",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Cosi's Trickster",
+              "summoning_sick": false
+            },
+            "Forest",
+            "Forest",
+            "Forest"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Loaming Shaman"
+          ]
+        },
+        "graveyard": {
+          "B": [
+            "Grizzly Bears"
+          ]
+        },
+        "library": {
+          "B": [
+            "Forest",
+            "Forest",
+            "Forest"
+          ]
+        },
+        "exile": {},
+        "notes": "Library lists are top first."
+      },
+      "decisions": [
+        "A casts Loaming Shaman, tapping Forest, Forest and Forest.",
+        "Both players pass; Loaming Shaman enters and its trigger targets player B and no cards.",
+        "Both players pass; the trigger resolves.",
+        "Cosi's Trickster triggers; A puts the counter on it."
+      ],
+      "variants": [
+        {
+          "label": "zero-cards",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "B's library (three Forests) is shuffled although no card was targeted. B's Grizzly Bears stays in the graveyard. Cosi's Trickster triggers and becomes 2/2."
+        },
+        {
+          "label": "one-card",
+          "polarity": "fires",
+          "delta": "The trigger also targets B's Grizzly Bears.",
+          "expected": "Grizzly Bears moves from B's graveyard to B's library, which is shuffled with four cards. Cosi's Trickster becomes 2/2."
+        },
+        {
+          "label": "own-trickster",
+          "polarity": "does_not_fire",
+          "delta": "Cosi's Trickster is under B's control instead of A's.",
+          "expected": "B's library is shuffled, which does not trigger B's own Cosi's Trickster: it stays 1/1."
+        }
+      ],
+      "cards": [
+        "Cosi's Trickster",
+        "Forest",
+        "Loaming Shaman",
+        "Grizzly Bears"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "701.24e-1",
+      "rules": [
+        "701.24e"
+      ],
+      "title": "Shuffling a library of zero or one card still triggers shuffle abilities",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "B",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Cosi's Trickster",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            "Swamp",
+            "Swamp"
+          ]
+        },
+        "hand": {
+          "B": [
+            "Demonic Tutor"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "B": [
+            "Forest",
+            "Grizzly Bears"
+          ]
+        },
+        "exile": {},
+        "notes": "Library lists are top first."
+      },
+      "decisions": [
+        "B casts Demonic Tutor, tapping Swamp and Swamp.",
+        "Both players pass; Demonic Tutor resolves.",
+        "B searches the library for a card and chooses the Forest.",
+        "Cosi's Trickster triggers; A puts the counter on it."
+      ],
+      "variants": [
+        {
+          "label": "one-card",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The Forest moves to B's hand and B's library, now holding only Grizzly Bears, is shuffled. Cosi's Trickster triggers and becomes 2/2."
+        },
+        {
+          "label": "zero-cards",
+          "polarity": "fires",
+          "delta": "B's library holds only the Forest.",
+          "expected": "The Forest moves to B's hand and the now empty library is shuffled. Cosi's Trickster triggers and becomes 2/2."
+        },
+        {
+          "label": "own-trickster",
+          "polarity": "does_not_fire",
+          "delta": "Cosi's Trickster is under B's control instead of A's.",
+          "expected": "B's library of one card is shuffled, which does not trigger B's own Cosi's Trickster: it stays 1/1."
+        }
+      ],
+      "cards": [
+        "Cosi's Trickster",
+        "Swamp",
+        "Demonic Tutor",
+        "Forest",
+        "Grizzly Bears"
+      ],
+      "forge_notes": "Forge may skip the Shuffled trigger for a library of fewer than two cards, which the rule forbids."
+    },
+    {
+      "id": "701.24f-1",
+      "rules": [
+        "701.24f"
+      ],
+      "title": "Two simultaneous shuffles of one library fire shuffle triggers twice",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "B",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Darksteel Colossus",
+              "summoning_sick": false
+            },
+            {
+              "card": "Darksteel Colossus",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            {
+              "card": "Cosi's Trickster",
+              "summoning_sick": false
+            },
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            },
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            },
+            "Swamp",
+            "Swamp",
+            "Swamp",
+            "Swamp"
+          ]
+        },
+        "hand": {
+          "B": [
+            "Barter in Blood"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Forest",
+            "Forest",
+            "Forest"
+          ]
+        },
+        "exile": {},
+        "notes": "Library lists are top first."
+      },
+      "decisions": [
+        "B casts Barter in Blood, tapping four Swamps.",
+        "Both players pass; Barter in Blood resolves.",
+        "A sacrifices both Darksteel Colossi and B sacrifices both Grizzly Bears.",
+        "Each Darksteel Colossus is revealed and shuffled into A's library by its replacement effect, at the same time.",
+        "Cosi's Trickster triggers once per shuffle; B puts each counter on it."
+      ],
+      "variants": [
+        {
+          "label": "two-colossi",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Both Darksteel Colossi are in A's library (five cards) and none is in the graveyard. A's library was shuffled twice, so Cosi's Trickster triggers twice and becomes 3/3."
+        },
+        {
+          "label": "one-colossus",
+          "polarity": "other",
+          "delta": "A controls one Darksteel Colossus and one Grizzly Bears instead of the second Colossus.",
+          "expected": "The Colossus is shuffled into A's library (four cards) and the Grizzly Bears goes to A's graveyard. One shuffle, so Cosi's Trickster triggers once and becomes 2/2."
+        },
+        {
+          "label": "own-trickster",
+          "polarity": "does_not_fire",
+          "delta": "Cosi's Trickster is under A's control instead of B's (A sacrifices both Colossi; B keeps nothing to protect, sacrificing both Grizzly Bears).",
+          "expected": "Both Colossi are shuffled into A's library, which does not trigger A's own Cosi's Trickster: it stays 1/1."
+        }
+      ],
+      "cards": [
+        "Darksteel Colossus",
+        "Cosi's Trickster",
+        "Grizzly Bears",
+        "Swamp",
+        "Barter in Blood",
+        "Forest"
+      ],
+      "forge_notes": "Each Darksteel Colossus replacement shuffles on its own; Forge may count two sequential shuffles rather than one simultaneous event, with the same trigger count. Barter in Blood does not target, and Indestructible does not matter for sacrifice. In the own-trickster variant B has only the two Grizzly Bears to sacrifice."
+    },
+    {
+      "id": "701.24g-1",
+      "rules": [
+        "701.24g"
+      ],
+      "title": "A shuffle and a put-on-top at the same time leave the placed card on top",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "B",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Darksteel Colossus",
+              "summoning_sick": false
+            },
+            {
+              "card": "Gravebane Zombie",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            {
+              "card": "Cosi's Trickster",
+              "summoning_sick": false
+            },
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            },
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            },
+            "Swamp",
+            "Swamp",
+            "Swamp",
+            "Swamp"
+          ]
+        },
+        "hand": {
+          "B": [
+            "Barter in Blood"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Forest",
+            "Forest",
+            "Forest"
+          ]
+        },
+        "exile": {},
+        "notes": "Library lists are top first."
+      },
+      "decisions": [
+        "B casts Barter in Blood, tapping four Swamps.",
+        "Both players pass; Barter in Blood resolves.",
+        "A sacrifices Darksteel Colossus and Gravebane Zombie; B sacrifices both Grizzly Bears.",
+        "Darksteel Colossus is shuffled into A's library while Gravebane Zombie is put on top of it, at the same time.",
+        "Cosi's Trickster triggers; B puts the counter on it."
+      ],
+      "variants": [
+        {
+          "label": "colossus-and-zombie",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "A's library holds five cards with Gravebane Zombie on top and Darksteel Colossus somewhere among the cards below it. A's graveyard is empty. Cosi's Trickster triggers once and becomes 2/2."
+        },
+        {
+          "label": "zombie-only",
+          "polarity": "does_not_fire",
+          "delta": "A controls a Grizzly Bears instead of Darksteel Colossus.",
+          "expected": "Gravebane Zombie is on top of A's library (four cards: Zombie then three Forests). Nothing was shuffled, so Cosi's Trickster stays 1/1. The Grizzly Bears is in A's graveyard."
+        },
+        {
+          "label": "colossus-only",
+          "polarity": "other",
+          "delta": "A controls a Grizzly Bears instead of Gravebane Zombie.",
+          "expected": "Darksteel Colossus is shuffled into A's library (four cards) and no card is forced on top. Cosi's Trickster becomes 2/2. The Grizzly Bears is in A's graveyard."
+        }
+      ],
+      "cards": [
+        "Darksteel Colossus",
+        "Gravebane Zombie",
+        "Cosi's Trickster",
+        "Grizzly Bears",
+        "Swamp",
+        "Barter in Blood",
+        "Forest"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

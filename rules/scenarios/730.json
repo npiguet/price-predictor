@@ -1,0 +1,1202 @@
+{
+  "unit": "730",
+  "verified": true,
+  "review": [
+    "730.2e-1: base expected omitted the abilities the face-up Battering Craghorn component contributes under 702.140e; added first strike and morph.",
+    "730.2g-1: the instant was the manifested top component, so manifest rule 701.40g alone kept it face down and 730.2g decided nothing; rebuilt with Cloudpiercer on top of the manifested Shock and Ixidron turning the merged permanent face down before Break Open, Aven Farseer cast after Ixidron so it stays face up; polarities swapped so 'fires' is the rule's effect (stays face down).",
+    "730.2i-1: cloudpiercer-on-top was labelled does_not_fire though the double-faced component does transform; relabelled fires and added the ability change. The rule has no does_not_fire branch, since transforming always turns every double-faced component."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "730.2-1",
+      "rules": [
+        "730.2"
+      ],
+      "title": "An object that merges with a permanent and that permanent become one merged permanent",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Grizzly Bears"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Cloudpiercer"
+          ],
+          "B": []
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Cloudpiercer for its mutate cost {3}{R}, targeting Grizzly Bears, tapping 4 Mountains.",
+        "Both players pass; Cloudpiercer resolves and A puts it on top of Grizzly Bears.",
+        "A has no other card in hand, so A cannot pay the optional discard of Cloudpiercer's mutate trigger and declines it."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "A controls exactly one creature permanent, represented by two cards (Cloudpiercer and Grizzly Bears). Cloudpiercer is not a separate permanent and A's hand, graveyard and exile are empty."
+        },
+        {
+          "label": "cast-normally",
+          "polarity": "does_not_fire",
+          "delta": "A casts Cloudpiercer for its mana cost {4}{R}, tapping 5 Mountains, instead of its mutate cost.",
+          "expected": "Nothing merges: A controls two separate creature permanents, Grizzly Bears (2/2) and Cloudpiercer (5/4)."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Cloudpiercer",
+        "Grizzly Bears"
+      ],
+      "forge_notes": "Forge's MutateEffect moves the mutating card into the Merged zone and keeps the target card as the battlefield object."
+    },
+    {
+      "id": "730.2a-1",
+      "rules": [
+        "730.2a"
+      ],
+      "title": "A merged permanent has the characteristics of its topmost component",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Grizzly Bears"
+          ],
+          "B": [
+            "Mountain"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Cloudpiercer"
+          ],
+          "B": [
+            "Shock"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Cloudpiercer is a red 5/4 Dinosaur with reach; Grizzly Bears is a green 2/2 Bear."
+      },
+      "decisions": [
+        "A casts Cloudpiercer for its mutate cost {3}{R}, targeting Grizzly Bears, tapping 4 Mountains.",
+        "B passes; Cloudpiercer resolves and A puts it on top of Grizzly Bears.",
+        "A has no other card in hand, so A cannot pay the optional discard of Cloudpiercer's mutate trigger and declines it."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The merged permanent is named Cloudpiercer, is red, a Dinosaur, 5/4 with reach; it has none of Grizzly Bears's characteristics."
+        },
+        {
+          "label": "under",
+          "polarity": "fires",
+          "delta": "A puts Cloudpiercer under Grizzly Bears instead of on top.",
+          "expected": "The merged permanent is named Grizzly Bears, is green, a Bear, 2/2, and it also has reach from the component under it; it has none of Cloudpiercer's name, color, type or power and toughness."
+        },
+        {
+          "label": "target-killed",
+          "polarity": "does_not_fire",
+          "delta": "B casts Shock on Grizzly Bears in response to Cloudpiercer; Shock resolves first.",
+          "expected": "Grizzly Bears dies, nothing merges, and Cloudpiercer enters as its own 5/4 red Dinosaur with reach."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Cloudpiercer",
+        "Grizzly Bears",
+        "Shock"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "730.2b-1",
+      "rules": [
+        "730.2b"
+      ],
+      "title": "Merging does not make the merged permanent enter the battlefield",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Grizzly Bears",
+            "Soul Warden"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Cloudpiercer"
+          ],
+          "B": []
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Cloudpiercer for its mutate cost {3}{R}, targeting Grizzly Bears, tapping 4 Mountains.",
+        "Both players pass; Cloudpiercer resolves and A puts it on top of Grizzly Bears.",
+        "A has no other card in hand, so A cannot pay the optional discard of Cloudpiercer's mutate trigger and declines it."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "does_not_fire",
+          "delta": "",
+          "expected": "Soul Warden's trigger (whenever another creature enters) does not fire; A stays at 20 life."
+        },
+        {
+          "label": "cast-normally",
+          "polarity": "fires",
+          "delta": "A casts Cloudpiercer for its mana cost {4}{R}, tapping 5 Mountains, instead of its mutate cost.",
+          "expected": "Cloudpiercer enters the battlefield as its own creature; Soul Warden's trigger fires and resolves; A is at 21 life."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Cloudpiercer",
+        "Grizzly Bears",
+        "Soul Warden"
+      ],
+      "forge_notes": "Soul Warden's trigger is Mode$ ChangesZone with Destination$ Battlefield; Forge moves the mutating card to its Merged zone, so it should not fire."
+    },
+    {
+      "id": "730.2c-1",
+      "rules": [
+        "730.2c"
+      ],
+      "title": "A merged permanent is the same object: it keeps its summoning sickness status and the effects on it",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            }
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Cloudpiercer"
+          ],
+          "B": []
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Grizzly Bears has been under A's control since before this turn. Only 4 Mountains are tapped for the mutate cost; the fifth is needed for the cast-normally variant."
+      },
+      "decisions": [
+        "A casts Cloudpiercer for its mutate cost {3}{R}, targeting Grizzly Bears, tapping 4 Mountains.",
+        "Both players pass; Cloudpiercer resolves and A puts it on top of Grizzly Bears.",
+        "A has no other card in hand, so A cannot pay the optional discard of Cloudpiercer's mutate trigger and declines it.",
+        "A moves to the declare attackers step and tries to declare the merged permanent as an attacker."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The merged permanent is a legal attacker: it has not just come under A's control, so it is not summoning sick."
+        },
+        {
+          "label": "summoning-sick-target",
+          "polarity": "does_not_fire",
+          "delta": "Grizzly Bears came under A's control this turn (summoning sick).",
+          "expected": "The merged permanent is not a legal attacker: it is still the summoning-sick object it was before merging."
+        },
+        {
+          "label": "pacified-target",
+          "polarity": "does_not_fire",
+          "delta": "Grizzly Bears is enchanted by Pacifism, which is on A's battlefield attached to it before the mutate spell is cast.",
+          "expected": "The merged permanent is not a legal attacker: Pacifism still enchants it and still stops it attacking."
+        },
+        {
+          "label": "cast-normally",
+          "polarity": "other",
+          "delta": "A casts Cloudpiercer for its mana cost {4}{R}, tapping 5 Mountains, instead of its mutate cost; A tries to attack with the separate Cloudpiercer.",
+          "expected": "Cloudpiercer, a new permanent, is summoning sick and not a legal attacker; no merged permanent exists."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Cloudpiercer",
+        "Grizzly Bears",
+        "Pacifism"
+      ],
+      "forge_notes": "The pacified-target variant adds {\"card\": \"Pacifism\", \"attached_to\": \"Grizzly Bears\"} to A's battlefield list."
+    },
+    {
+      "id": "730.2d-1",
+      "rules": [
+        "730.2d"
+      ],
+      "title": "A merged permanent is a token only if its topmost component is a token",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            {
+              "card": "Grizzly Bears",
+              "token": true,
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            {
+              "card": "Dogged Hunter",
+              "summoning_sick": false
+            }
+          ]
+        },
+        "hand": {
+          "A": [
+            "Cloudpiercer"
+          ],
+          "B": []
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "The token is a copy token of Grizzly Bears that A owns. Dogged Hunter has '{T}: Destroy target creature token.'"
+      },
+      "decisions": [
+        "A casts Cloudpiercer for its mutate cost {3}{R}, targeting the Grizzly Bears token, tapping 4 Mountains.",
+        "Both players pass; Cloudpiercer resolves and A puts it under the token.",
+        "A has no other card in hand, so A cannot pay the optional discard of Cloudpiercer's mutate trigger and declines it.",
+        "A passes priority; B considers activating Dogged Hunter."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The merged permanent is a token (its topmost component is the token): Dogged Hunter's ability has a legal target, the merged permanent."
+        },
+        {
+          "label": "card-on-top",
+          "polarity": "does_not_fire",
+          "delta": "A puts Cloudpiercer on top of the token instead of under it.",
+          "expected": "The merged permanent is not a token (its topmost component is a card): Dogged Hunter's ability has no legal target."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Cloudpiercer",
+        "Grizzly Bears",
+        "Dogged Hunter"
+      ],
+      "forge_notes": "Needs the harness to create a token from a card's script. Forge decides token-ness from the card object that stays on the battlefield, which is the target token in both variants, so the card-on-top variant may differ from the rules."
+    },
+    {
+      "id": "730.2e-1",
+      "rules": [
+        "730.2e"
+      ],
+      "title": "A merged permanent is face up or face down as its topmost component is, and merging does not count as turning it face up",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            {
+              "card": "Battering Craghorn",
+              "face_down": true,
+              "summoning_sick": false
+            },
+            "Aven Farseer"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Cloudpiercer"
+          ],
+          "B": []
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Aven Farseer: whenever a permanent is turned face up, put a +1/+1 counter on it. Battering Craghorn is a red 3/1 first strike Goat Beast with morph {1}{R}{R}; face down it is a colorless 2/2."
+      },
+      "decisions": [
+        "A casts Cloudpiercer for its mutate cost {3}{R}, targeting the face-down Battering Craghorn, tapping 4 Mountains.",
+        "Both players pass; Cloudpiercer resolves and A puts it on top of the face-down creature.",
+        "A has no other card in hand, so A cannot pay the optional discard of Cloudpiercer's mutate trigger and declines it."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "does_not_fire",
+          "delta": "",
+          "expected": "The merged permanent is face up with its topmost component's characteristics: red 5/4 Dinosaur Cloudpiercer with reach, plus first strike and morph from the now face-up Battering Craghorn component. It was not turned face up, so Aven Farseer's trigger does not fire and Aven Farseer is a 1/1."
+        },
+        {
+          "label": "under",
+          "polarity": "does_not_fire",
+          "delta": "A puts Cloudpiercer under the face-down creature instead of on top.",
+          "expected": "The merged permanent stays face down, a colorless 2/2 creature. Aven Farseer's trigger does not fire."
+        },
+        {
+          "label": "turn-face-up",
+          "polarity": "fires",
+          "delta": "Instead of casting Cloudpiercer, A turns Battering Craghorn face up by paying its morph cost {1}{R}{R}, tapping 3 Mountains.",
+          "expected": "Battering Craghorn is turned face up (a 3/1 first strike red creature); Aven Farseer's trigger fires and Aven Farseer gets a +1/+1 counter (2/2)."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Cloudpiercer",
+        "Battering Craghorn",
+        "Aven Farseer"
+      ],
+      "forge_notes": "Setup needs a face-down permanent on the battlefield. Forge's MutateEffect runs face-up commands rather than a TurnFaceUp trigger when the merged permanent stops being face down."
+    },
+    {
+      "id": "730.2f-1",
+      "rules": [
+        "730.2f"
+      ],
+      "title": "Turning a face-down merged permanent face up turns each of its components face up",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            {
+              "card": "Battering Craghorn",
+              "face_down": true,
+              "summoning_sick": false
+            },
+            "Aven Farseer"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Cloudpiercer"
+          ],
+          "B": []
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Aven Farseer: whenever a permanent is turned face up, put a +1/+1 counter on it."
+      },
+      "decisions": [
+        "A casts Cloudpiercer for its mutate cost {3}{R}, targeting the face-down Battering Craghorn, tapping 4 Mountains.",
+        "Both players pass; Cloudpiercer resolves and A puts it under the face-down creature.",
+        "A has no other card in hand, so A cannot pay the optional discard of Cloudpiercer's mutate trigger and declines it.",
+        "A turns the merged permanent face up by paying Battering Craghorn's morph cost {1}{R}{R}, tapping 3 Mountains."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Both components are turned face up: the merged permanent is Battering Craghorn, a red 3/1 first strike Goat Beast, with reach from the component under it. Aven Farseer's trigger fires once and Aven Farseer is a 2/2."
+        },
+        {
+          "label": "cloudpiercer-on-top",
+          "polarity": "does_not_fire",
+          "delta": "A puts Cloudpiercer on top of the face-down creature instead of under it.",
+          "expected": "The merged permanent is already face up after merging and no component can be turned face up: A has no morph action and Aven Farseer's trigger does not fire."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Cloudpiercer",
+        "Battering Craghorn",
+        "Aven Farseer"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "730.2f-2",
+      "rules": [
+        "730.2f"
+      ],
+      "title": "Turning a face-up merged permanent face down turns each of its components face down",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            {
+              "card": "Grizzly Bears",
+              "token": true,
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            {
+              "card": "Battering Craghorn",
+              "face_down": true,
+              "summoning_sick": false
+            }
+          ]
+        },
+        "hand": {
+          "A": [
+            "Cloudpiercer",
+            "Ixidron"
+          ],
+          "B": []
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Ixidron: as it enters, turn all other nontoken creatures face down. Its power and toughness equal the number of face-down creatures. B's face-down Battering Craghorn keeps Ixidron alive in every variant."
+      },
+      "decisions": [
+        "A casts Cloudpiercer for its mutate cost {3}{R}, targeting the Grizzly Bears token, tapping 4 Mountains.",
+        "Both players pass; Cloudpiercer resolves and A puts it on top of the token.",
+        "A has Ixidron in hand, but declines the optional discard of Cloudpiercer's mutate trigger.",
+        "A casts Ixidron, tapping 5 Islands. Both players pass; Ixidron resolves and turns the other nontoken face-up creatures face down as it enters."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The merged permanent has a card (Cloudpiercer) on top, so it is not a token and is turned face down: a colorless 2/2 creature with no name, both components face down. Ixidron is a 2/2 (two face-down creatures)."
+        },
+        {
+          "label": "token-on-top",
+          "polarity": "does_not_fire",
+          "delta": "A puts Cloudpiercer under the Grizzly Bears token instead of on top.",
+          "expected": "The merged permanent is a token and stays face up as a green 2/2 Grizzly Bears with reach. Ixidron is a 1/1 (one face-down creature)."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Island",
+        "Cloudpiercer",
+        "Ixidron",
+        "Grizzly Bears",
+        "Battering Craghorn"
+      ],
+      "forge_notes": "Needs a token and a face-down permanent in setup. Forge may decide token-ness from the target card even when Cloudpiercer is on top."
+    },
+    {
+      "id": "730.2g-1",
+      "rules": [
+        "730.2g"
+      ],
+      "title": "A face-down merged permanent containing an instant or sorcery card cannot be turned face up",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island"
+          ],
+          "B": [
+            "Mountain",
+            "Mountain"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Soul Summons",
+            "Cloudpiercer",
+            "Ixidron",
+            "Aven Farseer"
+          ],
+          "B": [
+            "Break Open"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Shock",
+            "Mountain"
+          ]
+        },
+        "exile": {},
+        "notes": "The first library card is the top card. Soul Summons manifests it. In the creature-card variant the top card is Grizzly Bears, followed by Mountain. The instant sits under a creature card, and the permanent is face down because Ixidron turned it face down, not because it was manifested, so the manifest rule 701.40g cannot be what keeps it face down."
+      },
+      "decisions": [
+        "A casts Soul Summons, tapping 2 Plains; it resolves and manifests the top card of A's library face down as a 2/2 creature.",
+        "A casts Cloudpiercer for its mutate cost {3}{R}, targeting the manifested creature, tapping 4 Mountains. Both players pass; Cloudpiercer resolves and A puts it on top, so the merged permanent is face up as Cloudpiercer.",
+        "A declines the optional discard of Cloudpiercer's mutate trigger.",
+        "A casts Ixidron, tapping 5 Islands. Both players pass; Ixidron resolves and turns the merged permanent face down as it enters.",
+        "A casts Aven Farseer, tapping 2 Plains; it resolves.",
+        "A passes priority. B casts Break Open targeting the face-down merged permanent, tapping 2 Mountains; Break Open resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The merged permanent contains an instant card (Shock) and is not turned face up: A reveals it and it stays a face-down colorless 2/2 creature. Aven Farseer's trigger does not fire and Aven Farseer is a 1/1. Ixidron stays a 1/1."
+        },
+        {
+          "label": "creature-card",
+          "polarity": "does_not_fire",
+          "delta": "The top card of A's library is Grizzly Bears instead of Shock.",
+          "expected": "The merged permanent is turned face up as red 5/4 Dinosaur Cloudpiercer with reach. Aven Farseer's trigger fires and Aven Farseer is a 2/2. Ixidron becomes 0/0 and is put into A's graveyard in the next state-based check."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Mountain",
+        "Island",
+        "Soul Summons",
+        "Cloudpiercer",
+        "Ixidron",
+        "Aven Farseer",
+        "Shock",
+        "Grizzly Bears",
+        "Break Open"
+      ],
+      "forge_notes": "Forge may not allow a manifested noncreature card as a mutate target, and may not apply the 730.2g exception to a merged permanent whose top component is a creature card."
+    },
+    {
+      "id": "730.2h-1",
+      "rules": [
+        "730.2h"
+      ],
+      "title": "Flipping a merged permanent that contains a flip card uses that component's alternative characteristics",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            {
+              "card": "Akki Lavarunner",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            "Wall of Wood"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Cloudpiercer"
+          ],
+          "B": []
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Akki Lavarunner is a 1/1 red haste Goblin Warrior with 'Whenever it deals damage to an opponent, flip it'; flipped it is Tok-Tok, Volcano Born, a legendary 2/2 red Goblin Shaman with protection from red. Wall of Wood is a 0/3 defender."
+      },
+      "decisions": [
+        "A casts Cloudpiercer for its mutate cost {3}{R}, targeting Akki Lavarunner, tapping 4 Mountains.",
+        "Both players pass; Cloudpiercer resolves and A puts it under Akki Lavarunner. A has no card in hand and cannot pay the optional discard of the mutate trigger.",
+        "A attacks B with the merged permanent.",
+        "B declares no blockers. Combat damage is dealt."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The merged permanent deals 1 damage to B (B at 19); Akki Lavarunner's trigger flips it and the permanent uses Tok-Tok, Volcano Born's characteristics: a legendary red 2/2 Goblin Shaman with protection from red (and reach from the component under it)."
+        },
+        {
+          "label": "blocked",
+          "polarity": "does_not_fire",
+          "delta": "B blocks with Wall of Wood.",
+          "expected": "The merged permanent deals its damage to Wall of Wood, none to B (B at 20); no flip happens and it stays Akki Lavarunner, a 1/1 haste Goblin Warrior."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Cloudpiercer",
+        "Akki Lavarunner",
+        "Wall of Wood"
+      ],
+      "forge_notes": "MutateEffect copies the target's flipped state onto the mutating card (host.setFlipped(target.isFlipped())). Needs the top-component flip card to keep its alternate state."
+    },
+    {
+      "id": "730.2i-1",
+      "rules": [
+        "730.2i"
+      ],
+      "title": "Transforming a merged permanent turns each double-faced component to its other face",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest",
+            {
+              "card": "Kessig Prowler",
+              "summoning_sick": false
+            }
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Cloudpiercer"
+          ],
+          "B": []
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Kessig Prowler is a green 2/1 Werewolf Horror, '{4}{G}: Transform Kessig Prowler'; its other face is Sinuous Predator, a colorless 4/4 Eldrazi Werewolf."
+      },
+      "decisions": [
+        "A casts Cloudpiercer for its mutate cost {3}{R}, targeting Kessig Prowler, tapping 4 Mountains.",
+        "Both players pass; Cloudpiercer resolves and A puts it under Kessig Prowler. A has no card in hand and cannot pay the optional discard of the mutate trigger.",
+        "A activates the transform ability of the merged permanent, tapping 5 Forests; it resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The Kessig Prowler component is turned to its other face: the merged permanent is Sinuous Predator, a colorless 4/4 Eldrazi Werewolf, with reach from the component under it."
+        },
+        {
+          "label": "cloudpiercer-on-top",
+          "polarity": "fires",
+          "delta": "A puts Cloudpiercer on top of Kessig Prowler instead of under it.",
+          "expected": "The Kessig Prowler component is turned to its Sinuous Predator face, but the merged permanent keeps its topmost component's characteristics: red 5/4 Dinosaur Cloudpiercer with reach. It now has 'can't be blocked by more than one creature' and no longer has the transform ability."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Forest",
+        "Cloudpiercer",
+        "Kessig Prowler"
+      ],
+      "forge_notes": "Whether Forge keeps the transform ability on the merged permanent and transforms the correct component when the non-double-faced card is on top is untested. Kessig Prowler's green and colorless faces are checked against its script (mana cost G, no color on the back)."
+    },
+    {
+      "id": "730.2j-1",
+      "rules": [
+        "730.2j"
+      ],
+      "title": "A face-up merged permanent containing a double-faced component cannot be turned face down",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            {
+              "card": "Kessig Prowler",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            {
+              "card": "Battering Craghorn",
+              "face_down": true,
+              "summoning_sick": false
+            }
+          ]
+        },
+        "hand": {
+          "A": [
+            "Cloudpiercer",
+            "Ixidron"
+          ],
+          "B": []
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Ixidron: as it enters, turn all other nontoken creatures face down; its power and toughness equal the number of face-down creatures. B's face-down Battering Craghorn keeps Ixidron alive in every variant."
+      },
+      "decisions": [
+        "A casts Cloudpiercer for its mutate cost {3}{R}, targeting Kessig Prowler, tapping 4 Mountains.",
+        "Both players pass; Cloudpiercer resolves and A puts it on top of Kessig Prowler. A declines the optional discard of the mutate trigger.",
+        "A casts Ixidron, tapping 5 Islands. Both players pass; Ixidron resolves and tries to turn the other nontoken face-up creatures face down as it enters."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The merged permanent contains a double-faced component, so nothing happens to it: it stays face up as red 5/4 Cloudpiercer. Ixidron is a 1/1 (only B's creature is face down)."
+        },
+        {
+          "label": "no-double-faced-component",
+          "polarity": "does_not_fire",
+          "delta": "The creature A mutates onto is Grizzly Bears (on A's battlefield in place of Kessig Prowler).",
+          "expected": "The merged permanent is turned face down, a colorless 2/2 creature. Ixidron is a 2/2 (two face-down creatures)."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Island",
+        "Cloudpiercer",
+        "Ixidron",
+        "Kessig Prowler",
+        "Grizzly Bears",
+        "Battering Craghorn"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "730.3-1",
+      "rules": [
+        "730.3"
+      ],
+      "title": "When a merged permanent leaves the battlefield, one permanent leaves and every component goes to the new zone",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Grizzly Bears"
+          ],
+          "B": [
+            "Swamp",
+            "Swamp",
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Cloudpiercer"
+          ],
+          "B": [
+            "Doom Blade"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Cloudpiercer for its mutate cost {3}{R}, targeting Grizzly Bears, tapping 4 Mountains.",
+        "Both players pass; Cloudpiercer resolves and A puts it on top of Grizzly Bears.",
+        "A has no other card in hand, so A cannot pay the optional discard of Cloudpiercer's mutate trigger and declines it.",
+        "A passes priority. B casts Doom Blade targeting the merged permanent, tapping 2 Swamps; Doom Blade resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "One permanent is destroyed and both Cloudpiercer and Grizzly Bears are in A's graveyard; A controls no creature."
+        },
+        {
+          "label": "bounce",
+          "polarity": "fires",
+          "delta": "B's card is Unsummon instead of Doom Blade, targeting the merged permanent and tapping the Island.",
+          "expected": "One permanent leaves and both Cloudpiercer and Grizzly Bears are in A's hand."
+        },
+        {
+          "label": "not-merged",
+          "polarity": "does_not_fire",
+          "delta": "A casts Cloudpiercer for its mana cost {4}{R}, tapping 5 Mountains, instead of its mutate cost; B's Doom Blade targets Grizzly Bears.",
+          "expected": "Only Grizzly Bears goes to A's graveyard; Cloudpiercer stays on the battlefield."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Swamp",
+        "Island",
+        "Cloudpiercer",
+        "Grizzly Bears",
+        "Doom Blade",
+        "Unsummon"
+      ],
+      "forge_notes": "In the bounce variant B's hand holds Unsummon in place of Doom Blade. Doom Blade can legally target the merged permanent because it is red or green, not black."
+    },
+    {
+      "id": "730.3c-1",
+      "rules": [
+        "730.3c"
+      ],
+      "title": "An effect that finds the new object of a merged permanent that left the battlefield acts on every component",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Grizzly Bears"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Cloudpiercer",
+            "Restoration Angel"
+          ],
+          "B": []
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Restoration Angel has flash and 'When it enters, you may exile target non-Angel creature you control, then return that card to the battlefield under your control.'"
+      },
+      "decisions": [
+        "A casts Cloudpiercer for its mutate cost {3}{R}, targeting Grizzly Bears, tapping 4 Mountains.",
+        "Both players pass; Cloudpiercer resolves and A puts it on top of Grizzly Bears. A declines the optional discard of the mutate trigger.",
+        "A casts Restoration Angel (flash), tapping 4 Plains; it resolves. Its enters trigger targets the merged permanent and A chooses to exile and return it.",
+        "Both players pass; the trigger resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The merged permanent is exiled and the effect returns every component: Cloudpiercer (5/4) and Grizzly Bears (2/2) each enter the battlefield as separate permanents, not merged, with Restoration Angel (3/4). A controls three creatures."
+        },
+        {
+          "label": "not-merged",
+          "polarity": "does_not_fire",
+          "delta": "A does not cast Cloudpiercer; Restoration Angel's trigger targets Grizzly Bears.",
+          "expected": "Only Grizzly Bears is exiled and returned; Cloudpiercer stays in A's hand. A controls two creatures."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Plains",
+        "Cloudpiercer",
+        "Grizzly Bears",
+        "Restoration Angel"
+      ],
+      "forge_notes": "Restoration Angel remembers the targeted card; Forge must return all merged components, not just the card that represented the permanent."
+    },
+    {
+      "id": "730.3d-1",
+      "rules": [
+        "730.3d"
+      ],
+      "title": "A replacement effect applied to a leaving merged permanent applies to all its components",
+      "record_kind": "rewrite",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Grizzly Bears",
+            "Rest in Peace"
+          ],
+          "B": [
+            "Swamp",
+            "Swamp"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Cloudpiercer"
+          ],
+          "B": [
+            "Doom Blade"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Rest in Peace: if a card or token would be put into a graveyard from anywhere, exile it instead."
+      },
+      "decisions": [
+        "A casts Cloudpiercer for its mutate cost {3}{R}, targeting Grizzly Bears, tapping 4 Mountains.",
+        "Both players pass; Cloudpiercer resolves and A puts it on top of Grizzly Bears.",
+        "A has no other card in hand, so A cannot pay the optional discard of Cloudpiercer's mutate trigger and declines it.",
+        "A passes priority. B casts Doom Blade targeting the merged permanent, tapping 2 Swamps; Doom Blade resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Rest in Peace's replacement applies to the destroyed merged permanent and to every component: both Cloudpiercer and Grizzly Bears are exiled; A's graveyard is empty."
+        },
+        {
+          "label": "no-replacement",
+          "polarity": "does_not_fire",
+          "delta": "Rest in Peace is not on the battlefield.",
+          "expected": "Both Cloudpiercer and Grizzly Bears are put into A's graveyard; nothing is exiled."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Swamp",
+        "Cloudpiercer",
+        "Grizzly Bears",
+        "Rest in Peace",
+        "Doom Blade"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "730.3e-1",
+      "rules": [
+        "730.3e"
+      ],
+      "title": "A replacement effect for cards applies to the card components of a merged token permanent",
+      "record_kind": "rewrite",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            {
+              "card": "Grizzly Bears",
+              "token": true,
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            "Swamp",
+            "Swamp",
+            "Leyline of the Void"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Cloudpiercer"
+          ],
+          "B": [
+            "Doom Blade"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Leyline of the Void (B's): if a card would be put into an opponent's graveyard from anywhere, exile it instead. It does not apply to tokens."
+      },
+      "decisions": [
+        "A casts Cloudpiercer for its mutate cost {3}{R}, targeting the Grizzly Bears token, tapping 4 Mountains.",
+        "Both players pass; Cloudpiercer resolves and A puts it under the token. A declines the optional discard of the mutate trigger.",
+        "A passes priority. B casts Doom Blade targeting the merged permanent, tapping 2 Swamps; Doom Blade resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The merged permanent is a token; it is put into the graveyard and ceases to exist, but Leyline of the Void's replacement applies to its card component: Cloudpiercer is exiled and A's graveyard is empty."
+        },
+        {
+          "label": "no-replacement",
+          "polarity": "does_not_fire",
+          "delta": "Leyline of the Void is not on the battlefield.",
+          "expected": "The token ceases to exist and Cloudpiercer is put into A's graveyard."
+        },
+        {
+          "label": "own-leyline",
+          "polarity": "does_not_fire",
+          "delta": "Leyline of the Void is on A's battlefield instead of B's.",
+          "expected": "The replacement does not apply to cards going to A's own graveyard: Cloudpiercer is put into A's graveyard."
+        },
+        {
+          "label": "card-on-top",
+          "polarity": "fires",
+          "delta": "A puts Cloudpiercer on top of the token instead of under it.",
+          "expected": "The merged permanent is a card; the replacement applies to all its components: Cloudpiercer is exiled, the token component ceases to exist, and A's graveyard is empty."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Swamp",
+        "Cloudpiercer",
+        "Grizzly Bears",
+        "Leyline of the Void",
+        "Doom Blade"
+      ],
+      "forge_notes": "Leyline's ValidCard is Card.!token+OppOwn, so Forge must evaluate each component separately for a merged token."
+    }
+  ]
+}

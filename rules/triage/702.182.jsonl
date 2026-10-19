@@ -1,0 +1,2 @@
+{"id": "702.182", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.182a", "category": "mechanical", "observability": "direct", "record_kinds": ["trigger", "resolution"], "outcome": "When the Equipment enters, a 1/1 Hero token is created and the Equipment attaches to it.", "note": ""}

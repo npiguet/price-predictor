@@ -1,0 +1,75 @@
+{
+  "unit": "702.137",
+  "verified": true,
+  "review": [],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.137a-1",
+      "rules": [
+        "702.137a"
+      ],
+      "title": "Spectacle can be paid only if an opponent lost life this turn",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain"
+          ],
+          "B": [
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Shock",
+            "Skewer the Critics"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Shock targeting player B, tapping one Mountain.",
+        "Both players pass; Shock resolves.",
+        "A considers casting Skewer the Critics with the second Mountain."
+      ],
+      "variants": [
+        {
+          "label": "opponent_lost_life",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "B's life goes from 20 to 18. Casting Skewer the Critics for its spectacle cost {R} is legal."
+        },
+        {
+          "label": "no_life_lost",
+          "polarity": "does_not_fire",
+          "delta": "Shock targets Grizzly Bears instead of player B.",
+          "expected": "Grizzly Bears dies and B's life stays 20. Casting Skewer the Critics is not legal: the spectacle cost is unavailable and {2}{R} cannot be paid with one Mountain."
+        },
+        {
+          "label": "own_life_lost",
+          "polarity": "does_not_fire",
+          "delta": "Shock targets player A instead of player B.",
+          "expected": "A's life goes from 20 to 18 and B's stays 20. Casting Skewer the Critics is not legal: the spectacle cost is unavailable because no opponent lost life."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Shock",
+        "Skewer the Critics",
+        "Grizzly Bears"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

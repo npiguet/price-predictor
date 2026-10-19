@@ -1,0 +1,140 @@
+{
+  "unit": "702.108",
+  "verified": true,
+  "review": [],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.108a-1",
+      "rules": [
+        "702.108a"
+      ],
+      "title": "Prowess triggers when its controller casts a noncreature spell",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Forest",
+            "Monastery Swiftspear"
+          ],
+          "B": [
+            "Mountain"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Shock",
+            "Grizzly Bears"
+          ],
+          "B": [
+            "Shock"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Monastery Swiftspear is a 1/2 with haste and prowess."
+      },
+      "decisions": [
+        "A casts Shock targeting B, tapping Mountain.",
+        "Both players pass; the prowess trigger resolves, then Shock resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Prowess triggers on the cast: Monastery Swiftspear is 2/3 until end of turn. B takes 2 damage and is at 18."
+        },
+        {
+          "label": "creature-spell",
+          "polarity": "does_not_fire",
+          "delta": "A casts Grizzly Bears (tapping Forest and Mountain) instead of Shock.",
+          "expected": "Prowess does not trigger: Monastery Swiftspear stays 1/2. Grizzly Bears enters the battlefield."
+        },
+        {
+          "label": "opponent-casts",
+          "polarity": "does_not_fire",
+          "delta": "A casts nothing; B casts Shock targeting A, tapping Mountain.",
+          "expected": "Prowess does not trigger on B's spell: Monastery Swiftspear stays 1/2. A takes 2 damage and is at 18."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Forest",
+        "Monastery Swiftspear",
+        "Shock",
+        "Grizzly Bears"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.108b-1",
+      "rules": [
+        "702.108b"
+      ],
+      "title": "Each instance of prowess triggers separately",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Monastery Swiftspear",
+            {
+              "card": "Triton Wavebreaker",
+              "attached_to": "Monastery Swiftspear"
+            }
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Shock"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Triton Wavebreaker was cast bestowed earlier and is a bestowed Aura on Monastery Swiftspear: enchanted creature gets +1/+1 and has prowess, so Swiftspear has two instances of prowess and is 2/3. Remove Triton Wavebreaker in the single-instance variant, where Swiftspear is 1/2."
+      },
+      "decisions": [
+        "A casts Shock targeting B, tapping Mountain.",
+        "Both players pass; the prowess triggers resolve, then Shock resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Two prowess triggers resolve: Monastery Swiftspear gets +2/+2 until end of turn and is 4/5. B is at 18."
+        },
+        {
+          "label": "single-instance",
+          "polarity": "does_not_fire",
+          "delta": "Triton Wavebreaker is not on the battlefield.",
+          "expected": "One prowess trigger resolves: Monastery Swiftspear is 2/3 until end of turn. B is at 18."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Monastery Swiftspear",
+        "Triton Wavebreaker",
+        "Shock"
+      ],
+      "forge_notes": "The bestowed state of the pre-placed Aura is not expressible in the zone list; the harness must set it up as if cast bestowed."
+    }
+  ]
+}

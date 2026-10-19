@@ -1,0 +1,167 @@
+{
+  "unit": "702.140",
+  "verified": true,
+  "review": [
+    "702.140b-1: the no-response variant left the over/under placement undecided; added a decision putting Cloudpiercer on top and made its expected name the resulting 5/4 Dinosaur and the mutates trigger."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.140a-1",
+      "rules": ["702.140a"],
+      "title": "A creature with mutate can be cast for its mutate cost only with a non-Human creature of the same owner as target",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {"A": 20, "B": 20},
+        "battlefield": {"A": ["Mountain", "Mountain", "Mountain", "Mountain", "Grizzly Bears"], "B": []},
+        "hand": {"A": ["Cloudpiercer"], "B": []},
+        "graveyard": {}, "library": {}, "exile": {},
+        "notes": "Cloudpiercer costs {4}{R} to cast normally and has Mutate {3}{R}. A has only four lands, so the normal cost cannot be paid and the mutate cost is the only castable way."
+      },
+      "decisions": ["A considers casting Cloudpiercer with 4 untapped Mountains, either for its mana cost or for its mutate cost targeting a creature A owns."],
+      "variants": [
+        {"label": "base", "polarity": "fires", "delta": "", "expected": "Cloudpiercer is castable for its mutate cost {3}{R}, targeting Grizzly Bears (a non-Human creature A owns); its normal cost {4}{R} is not payable."},
+        {"label": "human-target", "polarity": "does_not_fire", "delta": "A's creature is Elite Vanguard (a Human) instead of Grizzly Bears.", "expected": "Cloudpiercer is not castable: mutate has no legal target because Elite Vanguard is a Human, and the normal cost {4}{R} is not payable."},
+        {"label": "opponent-owned-target", "polarity": "does_not_fire", "delta": "Grizzly Bears is on B's battlefield instead of A's; A controls no creature.", "expected": "Cloudpiercer is not castable: Grizzly Bears has a different owner than the spell, so mutate has no legal target."}
+      ],
+      "cards": ["Mountain", "Cloudpiercer", "Grizzly Bears", "Elite Vanguard"],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.140b-1",
+      "rules": ["702.140b"],
+      "title": "A mutating creature spell whose target is illegal as it resolves becomes a plain creature spell",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {"A": 20, "B": 20},
+        "battlefield": {"A": ["Mountain", "Mountain", "Mountain", "Mountain", "Grizzly Bears"], "B": ["Mountain"]},
+        "hand": {"A": ["Cloudpiercer"], "B": ["Shock"]},
+        "graveyard": {}, "library": {}, "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Cloudpiercer for its mutate cost {3}{R}, targeting Grizzly Bears, tapping 4 Mountains.",
+        "B responds by casting Shock targeting Grizzly Bears, tapping Mountain.",
+        "Both players pass; Shock resolves and Grizzly Bears moves to A's graveyard.",
+        "Both players pass; Cloudpiercer begins resolving.",
+        "If Cloudpiercer merges, A puts it on top of Grizzly Bears; A's hand is empty, so its mutates trigger's optional discard is not paid."
+      ],
+      "variants": [
+        {"label": "base", "polarity": "fires", "delta": "", "expected": "Cloudpiercer's target is gone, so it ceases to be a mutating creature spell and enters the battlefield as a separate 5/4 reach creature under A's control; Grizzly Bears is in A's graveyard; Cloudpiercer's mutate trigger does not fire."},
+        {"label": "no-response", "polarity": "does_not_fire", "delta": "B passes instead of casting Shock; Grizzly Bears stays on the battlefield.", "expected": "The target is still legal, so Cloudpiercer does not become a plain creature spell: it merges with Grizzly Bears into one mutated permanent, a red 5/4 Dinosaur with reach, and no separate Cloudpiercer enters the battlefield; the mutates trigger fires."}
+      ],
+      "cards": ["Mountain", "Cloudpiercer", "Grizzly Bears", "Shock"],
+      "forge_notes": "Forge resolves a mutating spell with an illegal target as a regular creature spell; check that it does not simply fizzle."
+    },
+    {
+      "id": "702.140c-1",
+      "rules": ["702.140c"],
+      "title": "A mutating creature spell with a legal target merges with it instead of entering the battlefield",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {"A": 20, "B": 20},
+        "battlefield": {"A": ["Mountain", "Mountain", "Mountain", "Mountain", "Grizzly Bears"], "B": ["Mountain"]},
+        "hand": {"A": ["Cloudpiercer"], "B": ["Shock"]},
+        "graveyard": {}, "library": {}, "exile": {},
+        "notes": "A's hand holds only Cloudpiercer, so the optional discard of Cloudpiercer's mutate trigger cannot be paid."
+      },
+      "decisions": [
+        "A casts Cloudpiercer for its mutate cost {3}{R}, targeting Grizzly Bears, tapping 4 Mountains.",
+        "Both players pass; Cloudpiercer resolves and A chooses to put it on top of Grizzly Bears.",
+        "A declines to discard for the mutate trigger (no card in hand)."
+      ],
+      "variants": [
+        {"label": "base", "polarity": "fires", "delta": "", "expected": "Cloudpiercer does not enter the battlefield as its own permanent; it merges with Grizzly Bears into one mutated permanent, a red 5/4 Dinosaur with reach, represented by two cards (Cloudpiercer on top). A controls one creature."},
+        {"label": "under", "polarity": "fires", "delta": "A chooses to put Cloudpiercer under Grizzly Bears instead of on top.", "expected": "Cloudpiercer merges with Grizzly Bears into one mutated permanent, now a green 2/2 Bear with reach (Grizzly Bears on top). A controls one creature."},
+        {"label": "target-killed", "polarity": "does_not_fire", "delta": "B casts Shock on Grizzly Bears in response to Cloudpiercer, before it resolves.", "expected": "Nothing merges: Grizzly Bears dies, and Cloudpiercer enters the battlefield as a separate 5/4 Dinosaur with reach."}
+      ],
+      "cards": ["Mountain", "Cloudpiercer", "Grizzly Bears", "Shock"],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.140d-1",
+      "rules": ["702.140d"],
+      "title": "A whenever-this-creature-mutates ability triggers only when a spell merges with a creature on resolution",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {"A": 20, "B": 20},
+        "battlefield": {"A": ["Plains", "Plains", "Plains", "Plains", "Grizzly Bears"], "B": ["Mountain"]},
+        "hand": {"A": ["Cubwarden"], "B": ["Shock"]},
+        "graveyard": {}, "library": {}, "exile": {},
+        "notes": "Cubwarden has Mutate {2}{W}{W} and a normal cost of {3}{W}; both are payable with 4 Plains."
+      },
+      "decisions": [
+        "A casts Cubwarden for its mutate cost {2}{W}{W}, targeting Grizzly Bears, tapping 4 Plains.",
+        "Both players pass; Cubwarden resolves and A chooses to put it on top of Grizzly Bears."
+      ],
+      "variants": [
+        {"label": "base", "polarity": "fires", "delta": "", "expected": "Cubwarden merges with Grizzly Bears; the mutates trigger fires and A creates two 1/1 white Cat creature tokens with lifelink. A controls the mutated 3/5 Cat with lifelink plus the two tokens."},
+        {"label": "hard-cast", "polarity": "does_not_fire", "delta": "A casts Cubwarden for its mana cost {3}{W} instead of its mutate cost, with no target.", "expected": "Cubwarden enters the battlefield as its own 3/5 creature next to Grizzly Bears; the mutates trigger does not fire and no tokens are created."},
+        {"label": "target-killed", "polarity": "does_not_fire", "delta": "B casts Shock on Grizzly Bears in response to the mutating Cubwarden.", "expected": "Grizzly Bears dies, Cubwarden enters as its own 3/5 creature, nothing mutates, the mutates trigger does not fire and no tokens are created."}
+      ],
+      "cards": ["Plains", "Mountain", "Cubwarden", "Grizzly Bears", "Shock"],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.140e-1",
+      "rules": ["702.140e"],
+      "title": "A mutated permanent has the abilities of all its cards and the other characteristics of the top one",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {"A": 20, "B": 20},
+        "battlefield": {"A": ["Mountain", "Mountain", "Mountain", "Mountain", "Mountain", "Serra Angel"], "B": []},
+        "hand": {"A": ["Cloudpiercer"], "B": []},
+        "graveyard": {}, "library": {}, "exile": {},
+        "notes": "Serra Angel is a white 4/4 Angel with flying and vigilance; Cloudpiercer is a red 5/4 Dinosaur with reach. A has five Mountains, enough for either cost of Cloudpiercer."
+      },
+      "decisions": [
+        "A casts Cloudpiercer for its mutate cost {3}{R}, targeting Serra Angel, tapping 4 Mountains.",
+        "Both players pass; Cloudpiercer resolves and A chooses to put it on top of Serra Angel.",
+        "A declines to discard for the mutate trigger (no card in hand)."
+      ],
+      "variants": [
+        {"label": "base", "polarity": "fires", "delta": "", "expected": "One permanent: a red 5/4 Dinosaur (types and power/toughness from Cloudpiercer, the top card) with flying, vigilance and reach (abilities of both cards)."},
+        {"label": "under", "polarity": "fires", "delta": "A chooses to put Cloudpiercer under Serra Angel.", "expected": "One permanent: a white 4/4 Angel (types and power/toughness from Serra Angel, the top card) with flying, vigilance and reach (abilities of both cards)."},
+        {"label": "hard-cast", "polarity": "does_not_fire", "delta": "A casts Cloudpiercer for its mana cost {4}{R} using all 5 Mountains, without mutating.", "expected": "Two permanents: Serra Angel stays a 4/4 with flying and vigilance and no reach; Cloudpiercer is a 5/4 with reach and no flying or vigilance."}
+      ],
+      "cards": ["Mountain", "Cloudpiercer", "Serra Angel"],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.140f-1",
+      "rules": ["702.140f"],
+      "title": "An effect modifying the mutating creature spell modifies the mutated permanent it merges with",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {"A": 20, "B": 20},
+        "battlefield": {"A": ["Mountain", "Mountain", "Mountain", "Mountain", "Thundermane Dragon", {"card": "Grizzly Bears", "summoning_sick": false}], "B": []},
+        "hand": {"A": [], "B": []},
+        "graveyard": {}, "library": {"A": ["Cloudpiercer", "Mountain"]}, "exile": {},
+        "notes": "Library lists are top first. Thundermane Dragon lets A cast creature spells with power 4 or greater from the top of the library, and the spell gains haste until end of turn."
+      },
+      "decisions": [
+        "A casts Cloudpiercer from the top of A's library for its mutate cost {3}{R}, targeting Grizzly Bears, tapping 4 Mountains.",
+        "Both players pass; Cloudpiercer resolves and A chooses to put it on top of Grizzly Bears.",
+        "A declines to discard for the mutate trigger (no card in hand)."
+      ],
+      "variants": [
+        {"label": "base", "polarity": "fires", "delta": "", "expected": "The mutated permanent (red 5/4 Dinosaur with reach) has haste until end of turn, because the haste granted to the mutating creature spell applies to the permanent it merged with."},
+        {"label": "from-hand", "polarity": "does_not_fire", "delta": "Cloudpiercer is in A's hand instead of on top of A's library, and A casts it from hand for its mutate cost.", "expected": "Thundermane Dragon's effect does not apply to the spell, so the mutated permanent (red 5/4 Dinosaur with reach) has no haste."}
+      ],
+      "cards": ["Mountain", "Thundermane Dragon", "Grizzly Bears", "Cloudpiercer"],
+      "forge_notes": "Needs Forge to allow casting Cloudpiercer for its mutate alternative cost through Thundermane Dragon's MayPlay from the library, and to carry the Animate haste (applied to the spell) over to the merged permanent; if Forge drops it, record the observed outcome."
+    }
+  ]
+}

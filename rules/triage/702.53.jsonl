@@ -1,0 +1,3 @@
+{"id": "702.53", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.53a", "category": "mechanical", "observability": "direct", "record_kinds": ["resolution", "playability"], "outcome": "Activating transmute discards the card and searches the library for a card with the same mana value, putting it in hand, at sorcery speed.", "note": ""}
+{"id": "702.53b", "category": "mechanical", "observability": "indirect", "record_kinds": ["continuous"], "outcome": "A transmute card on the battlefield or elsewhere still counts as having an activated ability for effects that check that.", "note": ""}

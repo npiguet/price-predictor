@@ -1,0 +1,719 @@
+{
+  "unit": "500",
+  "verified": true,
+  "review": [
+    "500.10a skip: reason named only Obeka; checked every Forge AddPhase card granting 'you get' and widened the reason to cover them",
+    "500.4-1: decisions said Sol Ring untaps though it is untapped, and the only contrast moved the observation point; fixed the wording and added variant poltergeist_is_Bs, where A's upkeep is not the named upkeep",
+    "500.6-2: A's library was empty and the draw unstated; gave A a library and stated the draw already happened",
+    "500.7-1: the observed turns include draw steps for both players with empty libraries, so a player would lose on drawing; gave both a library",
+    "500.9-1: the scenario runs into A's draw step with an empty library (A would lose); gave A a library",
+    "500.11-1: the scenario runs into A's draw step with an empty library (A would lose); gave A a library",
+    "500.11-2: B's turns draw from an empty library, so B would lose before the turn order is observed; gave B a library"
+  ],
+  "skipped": [
+    {
+      "id": "500.10a",
+      "reason": "cannot occur in a two-player Forge game: every Forge card that says 'you get' an additional step or phase (Obeka, Splitter of Seconds; The Ninth Doctor) triggers only on its controller's own turn, Obeka on combat damage it deals as an attacker, and the attacking player is always the active player"
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "500.4-1",
+      "rules": [
+        "500.4"
+      ],
+      "title": "An effect lasting until a player's next upkeep expires as that upkeep begins",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "B",
+        "step": "end",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Xenic Poltergeist",
+            "Sol Ring"
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "It is B's turn now and A's turn is next. During A's previous turn A activated Xenic Poltergeist targeting Sol Ring, so Sol Ring is a 1/1 artifact creature (power and toughness equal to its mana value 1) until A's next upkeep. Xenic Poltergeist is tapped from that activation and untaps in A's untap step."
+      },
+      "decisions": [
+        "B's turn ends: A and B pass in the end step, cleanup happens.",
+        "A's next turn begins: the untap step, in which A untaps Xenic Poltergeist, then the upkeep step begins and A would receive priority.",
+        "The board is observed at the point named by the variant; no other decisions are taken."
+      ],
+      "variants": [
+        {
+          "label": "at_upkeep",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "As A's upkeep begins, the animation effect has ended: Sol Ring is a noncreature artifact (no power or toughness) when A first receives priority in the upkeep step."
+        },
+        {
+          "label": "in_untap_step",
+          "polarity": "does_not_fire",
+          "delta": "The board is observed in A's untap step, before the upkeep step begins.",
+          "expected": "Sol Ring is still a 1/1 artifact creature: A's upkeep has not begun, so the effect has not ended."
+        },
+        {
+          "label": "poltergeist_is_Bs",
+          "polarity": "does_not_fire",
+          "delta": "Xenic Poltergeist is B's: B activated it targeting Sol Ring during A's previous turn, so the effect lasts until B's next upkeep.",
+          "expected": "Sol Ring is still a 1/1 artifact creature when A first receives priority in A's upkeep step: the effect waits for B's upkeep, not A's."
+        }
+      ],
+      "cards": [
+        "Xenic Poltergeist",
+        "Sol Ring"
+      ],
+      "forge_notes": "Uses Duration$ UntilYourNextUpkeep. Check Forge removes the animation at the start of the upkeep step, not at the start of the untap step."
+    },
+    {
+      "id": "500.5-1",
+      "rules": [
+        "500.5"
+      ],
+      "title": "Unspent mana empties from the mana pool as a phase ends",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Omnath, Locus of Mana",
+            "Swamp",
+            "Forest"
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Omnath, Locus of Mana is a 1/1 that gets +1/+1 for each unspent green mana A has and lets A keep unspent green mana as steps and phases end. A has no spells to cast; the mana is simply left in the pool."
+      },
+      "decisions": [
+        "A taps Swamp for {B} and does not spend it.",
+        "A passes priority with an empty stack and B passes: the precombat main phase ends and the beginning of combat step begins.",
+        "The mana pool and Omnath's power and toughness are observed at the beginning of combat step."
+      ],
+      "variants": [
+        {
+          "label": "black_mana",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The {B} left in A's pool is gone when the precombat main phase ended: A's mana pool is empty and Omnath is a 1/1."
+        },
+        {
+          "label": "green_mana",
+          "polarity": "does_not_fire",
+          "delta": "A taps Forest for {G} instead of Swamp for {B}.",
+          "expected": "The {G} is still in A's mana pool at the beginning of combat step because Omnath says A does not lose unspent green mana, so Omnath is a 2/2."
+        }
+      ],
+      "cards": [
+        "Omnath, Locus of Mana",
+        "Swamp",
+        "Forest"
+      ],
+      "forge_notes": "Omnath uses Mode$ UnspentMana; check Forge empties the pool at the end of each step and phase, not once per turn."
+    },
+    {
+      "id": "500.5a-1",
+      "rules": [
+        "500.5a"
+      ],
+      "title": "An effect lasting until end of combat expires at the end of the combat phase, not when the end of combat step begins",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Battering Ram",
+              "summoning_sick": false
+            }
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Battering Ram has 'At the beginning of combat on your turn, Battering Ram gains banding until end of combat.'"
+      },
+      "decisions": [
+        "A passes priority in the precombat main phase with an empty stack, B passes, and the beginning of combat step begins.",
+        "Battering Ram's beginning-of-combat trigger goes on the stack; both players pass and it resolves: Battering Ram has banding until end of combat.",
+        "A declares Battering Ram as an attacker against B; B declares no blockers; combat damage is dealt.",
+        "The end of combat step begins. Both players pass priority with an empty stack in the end of combat step, then the postcombat main phase begins."
+      ],
+      "variants": [
+        {
+          "label": "main2",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "In the postcombat main phase Battering Ram no longer has banding: the effect ended at the end of the combat phase. B took 1 combat damage (life 19)."
+        },
+        {
+          "label": "end_of_combat_step",
+          "polarity": "does_not_fire",
+          "delta": "The board is observed while A holds priority in the end of combat step, before the combat phase ends.",
+          "expected": "Battering Ram still has banding in the end of combat step: the effect lasts until the end of the combat phase, not the beginning of that step."
+        }
+      ],
+      "cards": [
+        "Battering Ram"
+      ],
+      "forge_notes": "Uses Duration$ UntilEndOfCombat. Check that Forge removes the keyword when the end of combat step ends and not when it begins."
+    },
+    {
+      "id": "500.6-1",
+      "rules": [
+        "500.6"
+      ],
+      "title": "A beginning-of-upkeep trigger fires when the upkeep step begins and goes on the stack before anyone receives priority",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "upkeep",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Juzám Djinn"
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "The upkeep step begins; no one has received priority yet.",
+        "Juzám Djinn's trigger is put on the stack before A receives priority; both players pass and it resolves."
+      ],
+      "variants": [
+        {
+          "label": "own_upkeep",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Juzám Djinn's trigger fired as the upkeep began and was on the stack when A first received priority; it resolves and deals 1 damage to A (life 19)."
+        },
+        {
+          "label": "opponents_djinn",
+          "polarity": "does_not_fire",
+          "delta": "Juzám Djinn is on B's battlefield instead of A's, so it is A's upkeep but not its controller's.",
+          "expected": "No trigger: the stack stays empty and both life totals stay at 20."
+        },
+        {
+          "label": "opponents_turn",
+          "polarity": "does_not_fire",
+          "delta": "Juzám Djinn is A's but the active player is B, so it is B's upkeep.",
+          "expected": "No trigger: the condition 'your upkeep' is not met in B's upkeep, so the stack stays empty and A's life stays 20."
+        }
+      ],
+      "cards": [
+        "Juzám Djinn"
+      ],
+      "forge_notes": "Variant opponents_turn has B as active player (setup.active B)."
+    },
+    {
+      "id": "500.6-2",
+      "rules": [
+        "500.6"
+      ],
+      "title": "A beginning-of-first-main-phase trigger fires when the precombat main phase begins, not the postcombat one",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "draw",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Abstract Paintmage"
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Island",
+            "Island",
+            "Island"
+          ]
+        },
+        "exile": {},
+        "notes": "Abstract Paintmage: 'At the beginning of your first main phase, add {U}{R}. Spend this mana only to cast instant and sorcery spells.' A has already drawn for the turn in this draw step."
+      },
+      "decisions": [
+        "A passes priority in the draw step with an empty stack and B passes: the precombat main phase begins.",
+        "The Paintmage's trigger is put on the stack before A receives priority; both players pass and it resolves."
+      ],
+      "variants": [
+        {
+          "label": "precombat_main",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The trigger fired when the precombat main phase began and resolves: A has {U}{R} in the mana pool."
+        },
+        {
+          "label": "postcombat_main",
+          "polarity": "does_not_fire",
+          "delta": "The phase that begins is A's postcombat main phase (setup.step end_of_combat, combat has just ended with no attackers declared), not the precombat main phase.",
+          "expected": "No trigger fired and A's mana pool stays empty."
+        }
+      ],
+      "cards": [
+        "Abstract Paintmage"
+      ],
+      "forge_notes": "The Paintmage's trigger checks Phase$ Main1. In the postcombat variant the main2 phase begins."
+    },
+    {
+      "id": "500.7-1",
+      "rules": [
+        "500.7"
+      ],
+      "title": "An extra turn is taken directly after the current turn and the most recently created extra turn comes first",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island"
+          ],
+          "B": [
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Time Walk"
+          ],
+          "B": [
+            "Nexus of Fate",
+            "Counterspell"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island"
+          ],
+          "B": [
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island"
+          ]
+        },
+        "exile": {},
+        "notes": "All Islands untapped. Time Walk is a sorcery, Nexus of Fate an instant that also gives an extra turn, Counterspell an instant."
+      },
+      "decisions": [
+        "A casts Time Walk, tapping both Islands.",
+        "B's response is named by the variant (no response in the base).",
+        "Both players pass until the stack is empty; the precombat main phase and the rest of A's turn proceed with no further actions."
+      ],
+      "variants": [
+        {
+          "label": "time_walk_alone",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Time Walk resolves. The turns that follow this one are: A (extra turn), B, A."
+        },
+        {
+          "label": "nexus_after",
+          "polarity": "fires",
+          "delta": "After Time Walk resolves, A passes priority and B casts Nexus of Fate, tapping seven Islands; it resolves.",
+          "expected": "B's extra turn was created after A's, so it is taken first. The turns that follow this one are: B (extra turn), A (extra turn), B, A."
+        },
+        {
+          "label": "nexus_in_response",
+          "polarity": "fires",
+          "delta": "B casts Nexus of Fate in response to Time Walk, tapping seven Islands. Nexus resolves first, then Time Walk.",
+          "expected": "Time Walk's extra turn was created last, so it is taken first. The turns that follow this one are: A (extra turn), B (extra turn), B, A."
+        },
+        {
+          "label": "countered",
+          "polarity": "does_not_fire",
+          "delta": "B casts Counterspell on Time Walk, tapping two Islands.",
+          "expected": "Time Walk is countered and no extra turn is added. The turns that follow this one are: B, A."
+        }
+      ],
+      "cards": [
+        "Time Walk",
+        "Nexus of Fate",
+        "Counterspell",
+        "Island"
+      ],
+      "forge_notes": "Nexus of Fate shuffles itself into its owner's library instead of going to the graveyard; this does not affect turn order."
+    },
+    {
+      "id": "500.8-1",
+      "rules": [
+        "500.8"
+      ],
+      "title": "An effect that adds phases inserts them directly after the specified main phase",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain"
+          ],
+          "B": [
+            "Island",
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Relentless Assault"
+          ],
+          "B": [
+            "Counterspell"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "All lands untapped. A has no creatures; the phase order is the only thing observed."
+      },
+      "decisions": [
+        "A casts Relentless Assault in the precombat main phase, tapping four Mountains.",
+        "B's response is named by the variant (no response in the base).",
+        "Both players pass until the stack is empty and then pass priority in every following phase and step without taking any action."
+      ],
+      "variants": [
+        {
+          "label": "main1",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Relentless Assault resolves. The remaining phases of the turn in order are: additional combat phase, additional postcombat main phase, combat phase, postcombat main phase, ending phase."
+        },
+        {
+          "label": "main2",
+          "polarity": "fires",
+          "delta": "A casts Relentless Assault in the postcombat main phase instead (setup.step main2).",
+          "expected": "Relentless Assault resolves. The remaining phases of the turn in order are: additional combat phase, additional postcombat main phase, ending phase."
+        },
+        {
+          "label": "countered",
+          "polarity": "does_not_fire",
+          "delta": "B casts Counterspell on Relentless Assault, tapping both Islands.",
+          "expected": "Relentless Assault is countered and no phase is added. The remaining phases are: combat phase, postcombat main phase, ending phase."
+        }
+      ],
+      "cards": [
+        "Relentless Assault",
+        "Counterspell",
+        "Mountain",
+        "Island"
+      ],
+      "forge_notes": "Relentless Assault uses AddPhase with ConditionPhases$ Main1,Main2; check that casting it in main2 adds the phases after main2."
+    },
+    {
+      "id": "500.9-1",
+      "rules": [
+        "500.9"
+      ],
+      "title": "An effect that adds a step inserts it directly after the specified step",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "untap",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Juzám Djinn",
+            {
+              "card": "Paradox Haze",
+              "attached_to": "A"
+            }
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Island",
+            "Island",
+            "Island"
+          ]
+        },
+        "exile": {},
+        "notes": "Paradox Haze is an Aura on player A: 'At the beginning of enchanted player's first upkeep each turn, that player gets an additional upkeep step after this step.' It is controlled by A."
+      },
+      "decisions": [
+        "The untap step passes with nothing to untap; the upkeep step begins.",
+        "Paradox Haze's trigger and Juzám Djinn's trigger are put on the stack; A orders them with Paradox Haze's trigger resolving first, and both resolve.",
+        "A passes priority at the end of the first upkeep step with an empty stack, B passes; the additional upkeep step begins.",
+        "Any triggers go on the stack and resolve; A passes priority with an empty stack, B passes, and the draw step begins."
+      ],
+      "variants": [
+        {
+          "label": "haze_on_a",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "A gets an additional upkeep step directly after the first one, before the draw step, and Juzám Djinn triggers again at its beginning (Paradox Haze does not trigger again, it says 'first upkeep'). A takes 2 damage in total (life 18)."
+        },
+        {
+          "label": "haze_on_b",
+          "polarity": "does_not_fire",
+          "delta": "Paradox Haze enchants B instead of A.",
+          "expected": "A's upkeep is not B's first upkeep, so no step is added: A has only one upkeep step, Juzám Djinn triggers once, and A's life is 19."
+        }
+      ],
+      "cards": [
+        "Juzám Djinn",
+        "Paradox Haze"
+      ],
+      "forge_notes": "Paradox Haze uses AddPhase with ExtraPhase$ Upkeep."
+    },
+    {
+      "id": "500.10-1",
+      "rules": [
+        "500.10"
+      ],
+      "title": "An effect that adds a step after a phase creates a phase that holds only that step",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "declare_attackers",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Obeka, Splitter of Seconds",
+              "summoning_sick": false
+            },
+            "Juzám Djinn"
+          ],
+          "B": [
+            "Grizzly Bears",
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Obeka has menace and 'Whenever Obeka deals combat damage to a player, you get that many additional upkeep steps after this phase.' A's library holds enough cards that nothing is drawn from an empty library."
+      },
+      "decisions": [
+        "A attacks B with Obeka, Splitter of Seconds.",
+        "B declares blockers as named by the variant (no blockers in the base).",
+        "If damage assignment is needed, Obeka assigns its 2 damage to the first Grizzly Bears.",
+        "Combat damage is dealt, any triggers resolve, and both players pass priority in every following step without taking any action."
+      ],
+      "variants": [
+        {
+          "label": "unblocked",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Obeka deals 2 combat damage to B (life 18) and its trigger gives A 2 additional upkeep steps after the combat phase. Each comes in its own additional beginning phase that holds only an upkeep step (no untap step, no draw step): Obeka stays tapped, A draws no extra card, and Juzám Djinn triggers twice (A life 18)."
+        },
+        {
+          "label": "double_blocked",
+          "polarity": "does_not_fire",
+          "delta": "Both Grizzly Bears block Obeka (menace allows two blockers).",
+          "expected": "Obeka deals no damage to a player (one Grizzly Bears dies, the other is undamaged; Obeka has 4 damage and survives). The trigger does not fire, no extra upkeep step occurs, and both life totals are 20."
+        }
+      ],
+      "cards": [
+        "Obeka, Splitter of Seconds",
+        "Juzám Djinn",
+        "Grizzly Bears"
+      ],
+      "forge_notes": "Obeka's AddPhase uses AfterPhase$ EndCombat and NumPhases from the damage amount; check that each added phase contains only the upkeep step."
+    },
+    {
+      "id": "500.11-1",
+      "rules": [
+        "500.11"
+      ],
+      "title": "A skipped step is passed as though it did not exist, so nothing in it happens",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "untap",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Juzám Djinn"
+          ],
+          "B": [
+            "Eon Hub"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Island",
+            "Island",
+            "Island"
+          ]
+        },
+        "exile": {},
+        "notes": "Eon Hub: 'Players skip their upkeep steps.'"
+      },
+      "decisions": [
+        "The untap step passes with nothing to untap.",
+        "The next step is the upkeep step: with Eon Hub on the battlefield it is skipped. The draw step follows.",
+        "A and B pass priority in the draw step."
+      ],
+      "variants": [
+        {
+          "label": "with_eon_hub",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "A's upkeep step is skipped: Juzám Djinn's beginning-of-upkeep trigger never happens and A's life stays 20; the draw step follows the untap step directly."
+        },
+        {
+          "label": "no_eon_hub",
+          "polarity": "does_not_fire",
+          "delta": "Eon Hub is not on the battlefield.",
+          "expected": "The upkeep step happens, Juzám Djinn's trigger resolves and A's life is 19."
+        }
+      ],
+      "cards": [
+        "Juzám Djinn",
+        "Eon Hub"
+      ],
+      "forge_notes": "Eon Hub is a BeginPhase replacement effect with Skip$ True."
+    },
+    {
+      "id": "500.11-2",
+      "rules": [
+        "500.11"
+      ],
+      "title": "A skipped turn is passed as though it did not exist",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            "Island"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Meditate"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island"
+          ],
+          "B": [
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island"
+          ]
+        },
+        "exile": {},
+        "notes": "All lands untapped. The turn order observed is that of the turns after this one."
+      },
+      "decisions": [
+        "A casts Meditate, tapping three Islands; B passes and Meditate resolves.",
+        "Both players pass priority in every remaining step of the turn and in later turns without taking any action."
+      ],
+      "variants": [
+        {
+          "label": "meditate",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "A draws four cards and skips A's next turn. The turns that follow this one are: B, B, A."
+        },
+        {
+          "label": "no_meditate",
+          "polarity": "does_not_fire",
+          "delta": "A does not cast Meditate.",
+          "expected": "Nothing is skipped and A draws no extra cards. The turns that follow this one are: B, A, B."
+        }
+      ],
+      "cards": [
+        "Meditate",
+        "Island"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

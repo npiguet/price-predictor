@@ -1,0 +1,74 @@
+{
+  "unit": "702.188",
+  "verified": true,
+  "review": [],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.188a-1",
+      "rules": [
+        "702.188a"
+      ],
+      "title": "A spell with web-slinging can be cast for its web-slinging cost by returning a tapped creature to hand",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            {
+              "card": "Grizzly Bears",
+              "tapped": true,
+              "summoning_sick": false
+            }
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Spider-Man, Web-Slinger"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Spider-Man, Web-Slinger using web-slinging: pays {W} by tapping Plains and returns the tapped Grizzly Bears to A's hand.",
+        "Both players pass; Spider-Man, Web-Slinger resolves."
+      ],
+      "variants": [
+        {
+          "label": "tapped_creature_returned",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Casting for the web-slinging cost is legal. Grizzly Bears moves from the battlefield to A's hand, and Spider-Man, Web-Slinger (3/3) enters the battlefield."
+        },
+        {
+          "label": "creature_untapped",
+          "polarity": "does_not_fire",
+          "delta": "Grizzly Bears is untapped.",
+          "expected": "Casting for the web-slinging cost is not legal: A controls no tapped creature to return, and {W} alone cannot pay the mana cost {2}{W}. Spider-Man stays in A's hand."
+        },
+        {
+          "label": "no_mana_for_web_slinging_cost",
+          "polarity": "does_not_fire",
+          "delta": "Plains is tapped.",
+          "expected": "Casting for the web-slinging cost is not legal: the {W} of the web-slinging cost cannot be paid. Spider-Man stays in A's hand and Grizzly Bears stays on the battlefield."
+        }
+      ],
+      "cards": [
+        "Spider-Man, Web-Slinger",
+        "Plains",
+        "Grizzly Bears"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

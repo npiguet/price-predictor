@@ -1,0 +1,5 @@
+{"id": "702.5", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.5a", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "An Aura spell can target, and an Aura can enchant, only what its enchant ability names.", "note": ""}
+{"id": "702.5b", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": "Pointer to rule 303."}
+{"id": "702.5c", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "An Aura with several enchant abilities can target and enchant only what matches all of them.", "note": ""}
+{"id": "702.5d", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "An Aura with enchant player can target players and cannot target permanents.", "note": ""}

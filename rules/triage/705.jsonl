@@ -1,0 +1,3 @@
+{"id": "705.1", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "705.2", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "An effect that asks for a call has the flipping player win the flip when the call matches the result and lose it otherwise, and a win or loss selects which branch of the effect happens; an effect that only cares about heads or tails has no winner.", "note": ""}
+{"id": "705.3", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution", "rewrite"], "outcome": "An effect that states a flip result or a flip winner replaces the actual result, so a player can win a flip the coin would not have given them.", "note": ""}

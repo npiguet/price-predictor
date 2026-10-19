@@ -1,0 +1,86 @@
+{
+  "unit": "702.89",
+  "verified": true,
+  "review": [
+    "702.89a-1: the base variant carried the Lightning Bolt cast as its delta; moved it into decisions, base delta now empty, other variants name the lands they tap."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.89a-1",
+      "rules": [
+        "702.89a"
+      ],
+      "title": "Umbra armor replaces destruction by removing damage and destroying the Aura",
+      "record_kind": "rewrite",
+      "setup": {
+        "active": "B",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Grizzly Bears",
+            {
+              "card": "Hyena Umbra",
+              "attached_to": "Grizzly Bears"
+            }
+          ],
+          "B": [
+            "Mountain",
+            "Swamp"
+          ]
+        },
+        "hand": {
+          "B": [
+            "Lightning Bolt",
+            "Last Gasp",
+            "Shock"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "B casts Lightning Bolt targeting Grizzly Bears (enchanted by Hyena Umbra: a 3/3 with first strike), tapping Mountain.",
+        "A does not respond; the spell resolves and state-based actions are checked."
+      ],
+      "variants": [
+        {
+          "label": "lethal_damage",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears would be destroyed by lethal damage; instead all damage is removed from it and Hyena Umbra is destroyed. Grizzly Bears stays on the battlefield as a 2/2 with no damage marked; Hyena Umbra is in A's graveyard."
+        },
+        {
+          "label": "not_lethal",
+          "polarity": "does_not_fire",
+          "delta": "B casts Shock (2 damage), tapping Mountain, instead of Lightning Bolt.",
+          "expected": "The damage is not lethal. Grizzly Bears (3/3) has 2 damage marked and Hyena Umbra stays attached."
+        },
+        {
+          "label": "not_destruction",
+          "polarity": "does_not_fire",
+          "delta": "B casts Last Gasp (-3/-3), tapping Mountain and Swamp, instead of Lightning Bolt.",
+          "expected": "Grizzly Bears has toughness 0 and is put into A's graveyard by state-based actions; this is not destruction, so umbra armor does not apply. Hyena Umbra, no longer attached, is put into A's graveyard."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Grizzly Bears",
+        "Hyena Umbra",
+        "Mountain",
+        "Swamp",
+        "Lightning Bolt",
+        "Last Gasp",
+        "Shock"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

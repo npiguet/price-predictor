@@ -1,0 +1,4 @@
+{"id": "701.8", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "701.8a", "category": "mechanical", "observability": "direct", "record_kinds": ["resolution"], "outcome": "A destroyed permanent moves from the battlefield to its owner's graveyard.", "note": ""}
+{"id": "701.8b", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "A permanent counts as destroyed only through a destroy effect or lethal or deathtouch damage state-based actions, not other graveyard moves such as sacrifice or toughness 0.", "note": ""}
+{"id": "701.8c", "category": "mechanical", "observability": "direct", "record_kinds": ["rewrite"], "outcome": "A regeneration shield replaces a destruction event: the permanent is tapped, removed from combat and its damage removed instead of dying.", "note": ""}

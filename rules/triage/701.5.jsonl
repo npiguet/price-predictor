@@ -1,0 +1,3 @@
+{"id": "701.5", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "701.5a", "category": "mechanical", "observability": "direct", "record_kinds": ["resolution"], "outcome": "A cast spell moves from its zone to the stack and, once costs are paid, resolves and has its effect.", "note": ""}
+{"id": "701.5b", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}

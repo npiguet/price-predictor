@@ -1,0 +1,3 @@
+{"id": "702.151", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.151a", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution", "playability"], "outcome": "Reconfigure attaches the permanent to another target creature or unattaches it, only at sorcery timing.", "note": ""}
+{"id": "702.151b", "category": "mechanical", "observability": "direct", "record_kinds": ["continuous"], "outcome": "An Equipment with reconfigure stops being a creature while attached to a creature and is a creature again once unattached.", "note": ""}

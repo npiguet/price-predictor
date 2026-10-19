@@ -1,0 +1,657 @@
+{
+  "unit": "702.22",
+  "verified": true,
+  "review": [
+    "702.22b-1: Black Widow, Natasha Romanoff and Happy Hogan, Dauntless Driver have placeholder Forge scripts with no Oracle text (their real abilities are unknown and may interfere); swapped for the vanilla red legendary creatures Lady Orca and The Lady of the Mountain, and noted that Tolaria names bands-with-other explicitly.",
+    "702.22e-1, 702.22f-1: the response's timing was implicit; the decisions now name the declare attackers step, and 702.22f-1's expected outcomes state B's life.",
+    "702.22c: triaged as decision, but its band-composition limits (at most one creature without banding per band) are an engine legality verdict like 702.22d's; reclassified as legality/direct/playability and added scenario 702.22c-1 (Benalish Hero with two Grizzly Bears vs with Mesa Pegasus and one Grizzly Bears)."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.22b-1",
+      "rules": [
+        "702.22b"
+      ],
+      "title": "A permanent that loses banding also loses its bands-with-other abilities",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "upkeep",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Tolaria",
+            "Mountain Stronghold",
+            {
+              "card": "Lady Orca",
+              "summoning_sick": false
+            },
+            {
+              "card": "The Lady of the Mountain",
+              "summoning_sick": false
+            }
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A activates Tolaria ({T}) during A's upkeep, targeting Lady Orca.",
+        "Both players pass; the ability resolves.",
+        "The state is read after resolution, still during the upkeep."
+      ],
+      "variants": [
+        {
+          "label": "tolaria_on_black_widow",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Lady Orca (black-red legendary, 7/4) has lost the 'bands with other legendary creatures' ability that Mountain Stronghold gives her, until end of turn. The Lady of the Mountain (red-green legendary, 5/5) still has 'bands with other legendary creatures'. Tolaria is tapped."
+        },
+        {
+          "label": "no_activation",
+          "polarity": "does_not_fire",
+          "delta": "A does not activate Tolaria.",
+          "expected": "Both Lady Orca and The Lady of the Mountain have 'bands with other legendary creatures' from Mountain Stronghold. Tolaria is untapped."
+        }
+      ],
+      "cards": [
+        "Tolaria",
+        "Mountain Stronghold",
+        "Lady Orca",
+        "The Lady of the Mountain"
+      ],
+      "forge_notes": "Mountain Stronghold grants 'Bands with other:Creature.Legendary'; Tolaria's Debuff lists Banding and Bands with other, and the scenario depends on Forge's Debuff matching the parameterised keyword. Tolaria is the only Forge card that removes banding, and its text names 'bands with other' explicitly, so the scenario shows the outcome 702.22b requires rather than isolating the rule's implication."
+    },
+    {
+      "id": "702.22c-1",
+      "rules": [
+        "702.22c"
+      ],
+      "title": "An attacking band may hold at most one creature without banding",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Benalish Hero",
+              "summoning_sick": false
+            },
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            },
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            }
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A declares an attack on player B with Benalish Hero (banding) and both Grizzly Bears.",
+        "A declares all three attackers as one band. The verdict on the band declaration is read."
+      ],
+      "variants": [
+        {
+          "label": "two_without_banding",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The band declaration is illegal: the band holds two creatures without banding (both Grizzly Bears)."
+        },
+        {
+          "label": "second_member_has_banding",
+          "polarity": "does_not_fire",
+          "delta": "A's second Grizzly Bears is Mesa Pegasus (flying, banding) instead.",
+          "expected": "The band declaration is legal: Benalish Hero and Mesa Pegasus have banding, and Grizzly Bears is the only member without it."
+        }
+      ],
+      "cards": [
+        "Benalish Hero",
+        "Grizzly Bears",
+        "Mesa Pegasus"
+      ],
+      "forge_notes": "Forge asks for bands as part of the attack declaration; the scenario assumes the declaration can name the band and that Forge rejects an illegal band composition."
+    },
+    {
+      "id": "702.22d-1",
+      "rules": [
+        "702.22d"
+      ],
+      "title": "All creatures in an attacking band must attack the same player or planeswalker",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Benalish Hero",
+              "summoning_sick": false
+            },
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            "Jace Beleren"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A declares an attack with Benalish Hero (banding) and Grizzly Bears.",
+        "A declares Benalish Hero and Grizzly Bears as one band.",
+        "Base: Benalish Hero attacks Jace Beleren and Grizzly Bears attacks player B. The verdict on the declaration is read."
+      ],
+      "variants": [
+        {
+          "label": "band_split_between_player_and_walker",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The declaration is illegal: the creatures in one band attack different defenders (Jace Beleren and player B)."
+        },
+        {
+          "label": "band_same_defender",
+          "polarity": "does_not_fire",
+          "delta": "Both Benalish Hero and Grizzly Bears attack player B.",
+          "expected": "The declaration is legal: both band members attack player B."
+        },
+        {
+          "label": "no_band_split_attack",
+          "polarity": "other",
+          "delta": "A declares no band; Benalish Hero attacks Jace Beleren and Grizzly Bears attacks player B, as before.",
+          "expected": "The declaration is legal: with no band, each creature may attack a different defender."
+        }
+      ],
+      "cards": [
+        "Benalish Hero",
+        "Grizzly Bears",
+        "Jace Beleren"
+      ],
+      "forge_notes": "Forge asks for bands as part of the attack declaration; the scenario assumes the declaration can name the band. Forge may not enforce the restriction when a band is declared from the UI, so this scenario may need a direct validity check."
+    },
+    {
+      "id": "702.22e-1",
+      "rules": [
+        "702.22e"
+      ],
+      "title": "An announced band lasts for the rest of combat even if banding is removed",
+      "record_kind": "combat",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Benalish Hero",
+              "summoning_sick": false
+            },
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            "Wall of Wood",
+            "Island",
+            "Island"
+          ]
+        },
+        "hand": {
+          "B": [
+            "Turn to Frog"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A attacks player B with Benalish Hero and Grizzly Bears, declaring them as a band (base).",
+        "In the declare attackers step, after attackers are declared, B casts Turn to Frog targeting Benalish Hero, tapping both Islands; it resolves, so Benalish Hero loses all abilities, including banding, and becomes a 1/1 blue Frog until end of turn.",
+        "B blocks Grizzly Bears with Wall of Wood (a 0/3 with defender).",
+        "Combat damage is dealt."
+      ],
+      "variants": [
+        {
+          "label": "band_declared",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Benalish Hero (now a 1/1 Frog without banding) is still in the band, so it becomes blocked by Wall of Wood along with Grizzly Bears. Wall of Wood takes 1 + 2 = 3 damage and is destroyed. B takes no combat damage and stays at 20 life."
+        },
+        {
+          "label": "no_band",
+          "polarity": "does_not_fire",
+          "delta": "A declares no band; Benalish Hero and Grizzly Bears attack separately.",
+          "expected": "Wall of Wood blocks only Grizzly Bears and takes 2 damage, surviving. The Frog is unblocked and deals 1 damage to B, who goes to 19 life."
+        }
+      ],
+      "cards": [
+        "Benalish Hero",
+        "Grizzly Bears",
+        "Wall of Wood",
+        "Island",
+        "Turn to Frog"
+      ],
+      "forge_notes": "Forge asks for bands as part of the attack declaration; the scenario assumes the declaration can name the band."
+    },
+    {
+      "id": "702.22f-1",
+      "rules": [
+        "702.22f"
+      ],
+      "title": "An attacking creature removed from combat is removed from its band",
+      "record_kind": "combat",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Benalish Hero",
+              "summoning_sick": false
+            },
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            },
+            "Mountain",
+            "Mountain",
+            "Mountain"
+          ],
+          "B": [
+            "Wall of Wood"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Disharmony"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A attacks player B with Benalish Hero and Grizzly Bears, declaring them as a band.",
+        "In the declare attackers step, A casts Disharmony targeting Benalish Hero, tapping three Mountains; it resolves, untapping Benalish Hero and removing it from combat (A already controls it). Variant: A does not cast Disharmony.",
+        "B blocks Grizzly Bears with Wall of Wood (a 0/3 with defender).",
+        "Combat damage is dealt."
+      ],
+      "variants": [
+        {
+          "label": "hero_removed",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Benalish Hero is out of combat and out of the band, so only Grizzly Bears is blocked. Wall of Wood takes 2 damage and survives. Benalish Hero is untapped and undamaged. B takes no combat damage and stays at 20 life."
+        },
+        {
+          "label": "hero_stays",
+          "polarity": "does_not_fire",
+          "delta": "A does not cast Disharmony, so Benalish Hero stays in the band.",
+          "expected": "Benalish Hero is blocked by Wall of Wood together with Grizzly Bears. Wall of Wood takes 1 + 2 = 3 damage and is destroyed. Benalish Hero stays tapped. B takes no combat damage and stays at 20 life."
+        }
+      ],
+      "cards": [
+        "Benalish Hero",
+        "Grizzly Bears",
+        "Mountain",
+        "Wall of Wood",
+        "Disharmony"
+      ],
+      "forge_notes": "Forge asks for bands as part of the attack declaration; the scenario assumes the declaration can name the band."
+    },
+    {
+      "id": "702.22g-1",
+      "rules": [
+        "702.22g"
+      ],
+      "title": "Banding does not make band members share abilities",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Mesa Pegasus",
+              "summoning_sick": false
+            },
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            "Hill Giant"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A attacks player B with Mesa Pegasus (flying, banding) and Grizzly Bears, declaring them as a band.",
+        "Base: B declares Hill Giant (no flying, no reach) blocking Mesa Pegasus. The verdict on the block is read."
+      ],
+      "variants": [
+        {
+          "label": "giant_blocks_pegasus",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The block is illegal: Mesa Pegasus keeps its own flying as a separate permanent, and Hill Giant has neither flying nor reach."
+        },
+        {
+          "label": "giant_blocks_bears",
+          "polarity": "does_not_fire",
+          "delta": "Hill Giant is declared blocking Grizzly Bears instead of Mesa Pegasus.",
+          "expected": "The block is legal: Grizzly Bears did not gain flying from Mesa Pegasus, so Hill Giant can block it."
+        }
+      ],
+      "cards": [
+        "Mesa Pegasus",
+        "Grizzly Bears",
+        "Hill Giant"
+      ],
+      "forge_notes": "Forge asks for bands as part of the attack declaration; the scenario assumes the declaration can name the band."
+    },
+    {
+      "id": "702.22h-1",
+      "rules": [
+        "702.22h"
+      ],
+      "title": "When one band member becomes blocked, every member is blocked by the same blocker",
+      "record_kind": "combat",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Mesa Pegasus",
+              "summoning_sick": false
+            },
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            "Wall of Wood"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A attacks player B with Mesa Pegasus (1/1 flying, banding) and Grizzly Bears, declaring them as a band (base).",
+        "B blocks Grizzly Bears with Wall of Wood (a 0/3 with defender).",
+        "Combat damage is dealt."
+      ],
+      "variants": [
+        {
+          "label": "band_declared",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Mesa Pegasus also becomes blocked by Wall of Wood, even though it has flying. Wall of Wood takes 1 + 2 = 3 damage and is destroyed. B takes no combat damage and stays at 20 life."
+        },
+        {
+          "label": "no_band",
+          "polarity": "does_not_fire",
+          "delta": "A declares no band; Mesa Pegasus and Grizzly Bears attack separately.",
+          "expected": "Wall of Wood blocks only Grizzly Bears and takes 2 damage, surviving. Mesa Pegasus is unblocked and deals 1 damage to B, who goes to 19 life."
+        }
+      ],
+      "cards": [
+        "Mesa Pegasus",
+        "Grizzly Bears",
+        "Wall of Wood"
+      ],
+      "forge_notes": "Forge asks for bands as part of the attack declaration; the scenario assumes the declaration can name the band."
+    },
+    {
+      "id": "702.22i-1",
+      "rules": [
+        "702.22i"
+      ],
+      "title": "An effect that makes one band member blocked makes the entire band blocked",
+      "record_kind": "combat",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Benalish Hero",
+              "summoning_sick": false
+            },
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            "Plains",
+            "Plains"
+          ]
+        },
+        "hand": {
+          "B": [
+            "Curtain of Light"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "B": [
+            "Plains"
+          ]
+        },
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A attacks player B with Benalish Hero and Grizzly Bears, declaring them as a band (base).",
+        "B declares no blockers.",
+        "After blockers are declared, B casts Curtain of Light targeting Benalish Hero, tapping both Plains; it resolves, so Benalish Hero becomes blocked and B draws a card.",
+        "Combat damage is dealt."
+      ],
+      "variants": [
+        {
+          "label": "band_declared",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Benalish Hero becomes blocked, and so does Grizzly Bears because it is in the same band. Neither is blocked by a creature, so neither deals damage. B stays at 20 life."
+        },
+        {
+          "label": "no_band",
+          "polarity": "does_not_fire",
+          "delta": "A declares no band; Benalish Hero and Grizzly Bears attack separately.",
+          "expected": "Only Benalish Hero becomes blocked and deals no damage. Grizzly Bears stays unblocked and deals 2 damage to B, who goes to 18 life."
+        }
+      ],
+      "cards": [
+        "Benalish Hero",
+        "Grizzly Bears",
+        "Plains",
+        "Curtain of Light"
+      ],
+      "forge_notes": "Forge asks for bands as part of the attack declaration; the scenario assumes the declaration can name the band."
+    },
+    {
+      "id": "702.22j-1",
+      "rules": [
+        "702.22j"
+      ],
+      "title": "The defending player divides the damage of an attacker blocked by a banding creature",
+      "record_kind": "combat",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Hill Giant",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            "Benalish Hero",
+            "Grizzly Bears",
+            "Mons's Goblin Raiders"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A attacks player B with Hill Giant (3/3).",
+        "B blocks Hill Giant with Benalish Hero (banding) and Grizzly Bears. Mons's Goblin Raiders does not block.",
+        "Combat damage: the player who divides Hill Giant's 3 damage does it to their own best advantage. In the base case that is B, who assigns all 3 damage to Benalish Hero."
+      ],
+      "variants": [
+        {
+          "label": "banding_blocker",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "B divides Hill Giant's damage: all 3 goes to Benalish Hero, which is destroyed. Grizzly Bears takes no damage. Hill Giant takes 1 + 2 = 3 damage and is destroyed."
+        },
+        {
+          "label": "no_banding_blocker",
+          "polarity": "does_not_fire",
+          "delta": "Mons's Goblin Raiders (no banding) blocks together with Grizzly Bears, and Benalish Hero does not block. The dividing player is now A, who assigns 1 damage to Mons's Goblin Raiders and 2 to Grizzly Bears.",
+          "expected": "A divides Hill Giant's damage: Mons's Goblin Raiders and Grizzly Bears are both destroyed. Benalish Hero is unharmed. Hill Giant takes 1 + 2 = 3 damage and is destroyed."
+        }
+      ],
+      "cards": [
+        "Hill Giant",
+        "Benalish Hero",
+        "Grizzly Bears",
+        "Mons's Goblin Raiders"
+      ],
+      "forge_notes": "The damage division is a decision, which the scenario fixes; the rule decides who makes it. Forge asks for bands as part of the attack declaration; the scenario assumes the declaration can name the band."
+    },
+    {
+      "id": "702.22k-1",
+      "rules": [
+        "702.22k"
+      ],
+      "title": "The active player divides the damage of a blocker blocking a banding creature",
+      "record_kind": "combat",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Benalish Hero",
+              "summoning_sick": false
+            },
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            "Hill Giant"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A attacks player B with Benalish Hero (banding) and Grizzly Bears, declaring them as a band (base).",
+        "B blocks Grizzly Bears with Hill Giant (3/3).",
+        "Combat damage: the player who divides Hill Giant's 3 damage does it to their own best advantage. In the base case that is A, who assigns all 3 damage to Benalish Hero."
+      ],
+      "variants": [
+        {
+          "label": "band_declared",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Benalish Hero is also blocked by Hill Giant, and A divides Hill Giant's damage: all 3 goes to Benalish Hero, which is destroyed. Grizzly Bears takes no damage. Hill Giant takes 1 + 2 = 3 damage and is destroyed."
+        },
+        {
+          "label": "no_band",
+          "polarity": "does_not_fire",
+          "delta": "A declares no band; Benalish Hero and Grizzly Bears attack separately.",
+          "expected": "Hill Giant blocks only Grizzly Bears and deals all 3 damage to it; Grizzly Bears is destroyed. Benalish Hero is unblocked and deals 1 damage to B, who goes to 19 life. Hill Giant takes 2 damage and survives."
+        }
+      ],
+      "cards": [
+        "Benalish Hero",
+        "Grizzly Bears",
+        "Hill Giant"
+      ],
+      "forge_notes": "Forge asks for bands as part of the attack declaration; the scenario assumes the declaration can name the band."
+    }
+  ]
+}

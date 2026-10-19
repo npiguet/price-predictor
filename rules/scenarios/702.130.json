@@ -1,0 +1,131 @@
+{
+  "unit": "702.130",
+  "verified": true,
+  "review": [],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.130a-1",
+      "rules": [
+        "702.130a"
+      ],
+      "title": "Afflict makes the defending player lose life when the creature becomes blocked",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Khenra Eternal",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A attacks player B with Khenra Eternal.",
+        "B blocks Khenra Eternal with Grizzly Bears.",
+        "The afflict trigger goes on the stack and resolves; no other spells or abilities are used; combat damage is dealt."
+      ],
+      "variants": [
+        {
+          "label": "blocked",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The afflict trigger fires when Khenra Eternal becomes blocked and resolves: B's life goes from 20 to 19 before combat damage. Khenra Eternal and Grizzly Bears deal 2 damage to each other and both are destroyed. B's life stays 19."
+        },
+        {
+          "label": "unblocked",
+          "polarity": "does_not_fire",
+          "delta": "B declares no blockers.",
+          "expected": "The afflict trigger does not fire. Khenra Eternal deals 2 combat damage to B, whose life goes from 20 to 18. Grizzly Bears stays on the battlefield undamaged."
+        }
+      ],
+      "cards": [
+        "Khenra Eternal",
+        "Grizzly Bears"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.130b-1",
+      "rules": [
+        "702.130b"
+      ],
+      "title": "Two instances of afflict trigger separately",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Khenra Eternal",
+              "summoning_sick": false
+            },
+            {
+              "card": "Dagger of the Worthy",
+              "attached_to": "Khenra Eternal"
+            }
+          ],
+          "B": [
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A attacks player B with Khenra Eternal (4/2 with Dagger of the Worthy attached).",
+        "B blocks Khenra Eternal with Grizzly Bears.",
+        "Both afflict triggers go on the stack and resolve; no other spells or abilities are used; combat damage is dealt."
+      ],
+      "variants": [
+        {
+          "label": "two_instances",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Khenra Eternal has afflict 1 printed and afflict 1 from the Dagger, so two afflict triggers fire and resolve separately: B's life goes from 20 to 18 before combat damage. Khenra Eternal and Grizzly Bears destroy each other; B's life stays 18."
+        },
+        {
+          "label": "one_instance",
+          "polarity": "does_not_fire",
+          "delta": "Dagger of the Worthy is on A's battlefield but not attached to Khenra Eternal.",
+          "expected": "Only the printed afflict triggers: B's life goes from 20 to 19. Khenra Eternal (2/2) and Grizzly Bears destroy each other; B's life stays 19."
+        },
+        {
+          "label": "unblocked",
+          "polarity": "does_not_fire",
+          "delta": "B declares no blockers.",
+          "expected": "Neither afflict trigger fires. Khenra Eternal deals 4 combat damage to B, whose life goes from 20 to 16."
+        }
+      ],
+      "cards": [
+        "Khenra Eternal",
+        "Dagger of the Worthy",
+        "Grizzly Bears"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

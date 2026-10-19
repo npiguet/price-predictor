@@ -1,0 +1,73 @@
+{
+  "unit": "702.111",
+  "verified": true,
+  "review": [
+    "702.111b-1: variant one_creature_only did not flip the outcome (still illegal, like the base); replaced it with no_menace (attacker is vanilla Hill Giant, single block legal)."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.111b-1",
+      "rules": [
+        "702.111b"
+      ],
+      "title": "A creature with menace can be blocked only by two or more creatures",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "declare_blockers",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Boggart Brute",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            "Grizzly Bears",
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Boggart Brute (3/2 menace) has been declared as an attacker against B and the declare blockers step has begun. B's two Grizzly Bears are untapped."
+      },
+      "decisions": [
+        "A attacks B with Boggart Brute in the declare attackers step.",
+        "B proposes to block Boggart Brute with exactly one Grizzly Bears and declares no other blocker; the engine's verdict on that block declaration is read."
+      ],
+      "variants": [
+        {
+          "label": "single_blocker",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The block declaration is illegal: Boggart Brute cannot be blocked by only one creature, so a lone Grizzly Bears is rejected as its blocker."
+        },
+        {
+          "label": "two_blockers",
+          "polarity": "does_not_fire",
+          "delta": "B declares both Grizzly Bears as blockers of Boggart Brute instead of one.",
+          "expected": "The block declaration is legal: Boggart Brute is blocked by both Grizzly Bears."
+        },
+        {
+          "label": "no_menace",
+          "polarity": "does_not_fire",
+          "delta": "A's attacker is Hill Giant (3/3, no menace) instead of Boggart Brute.",
+          "expected": "The block declaration is legal: Hill Giant is blocked by the single Grizzly Bears."
+        }
+      ],
+      "cards": [
+        "Boggart Brute",
+        "Grizzly Bears",
+        "Hill Giant"
+      ],
+      "forge_notes": "Forge enforces menace when validating the whole block declaration, so each blocker alone looks like a legal blocker individually while the combined declaration is rejected."
+    }
+  ]
+}

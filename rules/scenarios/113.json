@@ -1,0 +1,1337 @@
+{
+  "unit": "113",
+  "verified": true,
+  "review": [
+    "113.2c-1: the land_enters variant tested Soul Warden's creature-only trigger condition, not 113.2c; dropped it (and the Forest in hand it needed) and made one_warden the does_not_fire variant (a single instance yields no second trigger).",
+    "113.5-1: loyalty was left implicit though expected values depend on it; set Jace Beleren to 3 and Chandra Nalaar to 6 loyalty counters.",
+    "113.6a-1: decisions re-cast Lightning Bolt though setup already had it on the stack with Mountain tapped; decisions now start from that stack.",
+    "113.6e-1: Fog Patch costs {1}{G} but A had one Forest, so the castable variant could not pay; added a second Forest, marked Grizzly Bears not summoning sick, and made the attack declaration part of the setup.",
+    "113.6p-1: Gideon's loyalty was implicit; set 4 loyalty counters on it. The does_not_fire variant (no emblem made) is the only contrast the rule admits, since an emblem's ability cannot fail to function in the command zone.",
+    "113.7a-1: marked Karplusan Yeti not summoning sick in the zone entry; kept no_response as polarity other, because 113.7a admits no case where removing the source stops the ability.",
+    "113.9-1: reworded the Counterspell decision as an offer (it cannot be cast with no spell on the stack) and marked Prodigal Pyromancer not summoning sick.",
+    "113.10b-1: jump_after tested timestamp order (113.10c's scenario) and printed_only gave the same outcome as the base, so neither isolated 113.10b; replaced both with a no_removal does_not_fire variant.",
+    "113.11-1: noted that Archetype's own 'lose flying' clause also removes flying, so 113.11-2 is the isolating scenario.",
+    "113.12: triaged definitional, but it decides an observable continuous outcome (the rule's own Muraganda Petroglyphs example); reclassified as mechanical and added scenario 113.12-1 (Chaoslace vs Jump under Muraganda Petroglyphs)."
+  ],
+  "skipped": [
+    {
+      "id": "113.6c",
+      "reason": "no card in Forge's cardsfolder has an ability that states zones it does not function in (Oracle text searched), so the situation cannot be built"
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "113.2c-1",
+      "rules": [
+        "113.2c"
+      ],
+      "title": "Two instances of the same triggered ability each trigger independently",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Soul Warden",
+            "Soul Warden",
+            "Forest",
+            "Forest"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Grizzly Bears"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Soul Warden reads: whenever another creature enters, you gain 1 life. Both Soul Wardens have been on the battlefield since a previous turn."
+      },
+      "decisions": [
+        "A casts Grizzly Bears, tapping Forest and Forest.",
+        "Both players pass; Grizzly Bears resolves and enters the battlefield.",
+        "Each Soul Warden's trigger is put on the stack; both players pass until the stack is empty."
+      ],
+      "variants": [
+        {
+          "label": "two_wardens",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Two separate Soul Warden triggers go on the stack and each resolves; A gains 1 life twice and ends at 22 life."
+        },
+        {
+          "label": "one_warden",
+          "polarity": "does_not_fire",
+          "delta": "A controls only one Soul Warden.",
+          "expected": "One Soul Warden trigger resolves; A ends at 21 life."
+        }
+      ],
+      "cards": [
+        "Soul Warden",
+        "Forest",
+        "Grizzly Bears"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "113.5-1",
+      "rules": [
+        "113.5"
+      ],
+      "title": "A planeswalker's second loyalty ability in a turn is not playable",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Jace Beleren",
+              "counters": {
+                "LOYALTY": 3
+              }
+            },
+            {
+              "card": "Chandra Nalaar",
+              "counters": {
+                "LOYALTY": 6
+              }
+            }
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Both planeswalkers have been under A's control since a previous turn. Each library holds at least 10 cards. The stack is empty."
+      },
+      "decisions": [
+        "A activates Jace Beleren's +2 (each player draws a card); both players pass and it resolves.",
+        "With the stack empty in the same main phase, A is offered a second loyalty ability: first Jace Beleren's -1 targeting B."
+      ],
+      "variants": [
+        {
+          "label": "same_permanent",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Jace Beleren has 5 loyalty and A and B each drew a card. Activating Jace Beleren's -1 is not playable (a loyalty ability of that permanent was already activated this turn)."
+        },
+        {
+          "label": "other_permanent",
+          "polarity": "does_not_fire",
+          "delta": "The second activation offered is Chandra Nalaar's +1 targeting B instead.",
+          "expected": "Chandra Nalaar's +1 is playable (no loyalty ability of Chandra Nalaar was activated this turn); it resolves, Chandra Nalaar has 7 loyalty and B has 19 life."
+        }
+      ],
+      "cards": [
+        "Jace Beleren",
+        "Chandra Nalaar"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "113.6a-1",
+      "rules": [
+        "113.6a"
+      ],
+      "title": "A characteristic-defining ability applies in the hand",
+      "record_kind": "playability",
+      "setup": {
+        "active": "B",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "B": [
+            {
+              "card": "Mountain",
+              "tapped": true
+            }
+          ]
+        },
+        "hand": {
+          "A": [
+            "Force of Will",
+            "Transguild Courier"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "A controls no lands. Transguild Courier is all colors by a characteristic-defining ability, so it is a blue card while in A's hand.",
+        "stack": [
+          {
+            "card": "Lightning Bolt",
+            "controller": "B",
+            "targets": [
+              "A"
+            ]
+          }
+        ]
+      },
+      "decisions": [
+        "Lightning Bolt (cast by B, Mountain already tapped) is on the stack targeting A; B passes priority and A receives priority.",
+        "A is offered Force of Will targeting Lightning Bolt, paying its alternative cost (1 life and exile a blue card from hand)."
+      ],
+      "variants": [
+        {
+          "label": "courier_in_hand",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Force of Will is castable: Transguild Courier is a blue card, so exiling it and paying 1 life pays the alternative cost (cost after adjustment is 1 life plus exiling Transguild Courier)."
+        },
+        {
+          "label": "green_card_in_hand",
+          "polarity": "does_not_fire",
+          "delta": "The second card in A's hand is Grizzly Bears (green) instead of Transguild Courier.",
+          "expected": "Force of Will is not castable: A has no blue card to exile and no mana for its mana cost."
+        }
+      ],
+      "cards": [
+        "Force of Will",
+        "Transguild Courier",
+        "Lightning Bolt",
+        "Mountain",
+        "Grizzly Bears"
+      ],
+      "forge_notes": "Forge applies Transguild Courier's SetColor static as a characteristic-defining ability (CharacteristicDefining$ True), which is what makes it blue in the hand."
+    },
+    {
+      "id": "113.6b-1",
+      "rules": [
+        "113.6b"
+      ],
+      "title": "A graveyard-only trigger works from the graveyard and not from the hand",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {},
+        "hand": {
+          "A": [
+            "Swamp"
+          ]
+        },
+        "graveyard": {
+          "A": [
+            "Bloodghast"
+          ]
+        },
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A plays Swamp as a land drop.",
+        "If Bloodghast's landfall trigger is put on the stack, A chooses to return it; both players pass and it resolves."
+      ],
+      "variants": [
+        {
+          "label": "in_graveyard",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Bloodghast's landfall trigger fires from the graveyard and, on resolution, Bloodghast moves from the graveyard to the battlefield."
+        },
+        {
+          "label": "in_hand",
+          "polarity": "does_not_fire",
+          "delta": "Bloodghast is in A's hand instead of A's graveyard.",
+          "expected": "Bloodghast's landfall ability does not function in the hand: no trigger fires and Bloodghast stays in A's hand."
+        }
+      ],
+      "cards": [
+        "Bloodghast",
+        "Swamp"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "113.6d-1",
+      "rules": [
+        "113.6d"
+      ],
+      "title": "An alternative cost of a spell can be paid when casting it",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Fireblast"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Fireblast's mana cost is {4}{R}{R}; A has only two lands."
+      },
+      "decisions": [
+        "A casts Fireblast targeting B, paying the alternative cost: sacrifice Mountain and Mountain.",
+        "Both players pass; Fireblast resolves."
+      ],
+      "variants": [
+        {
+          "label": "two_mountains",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Fireblast is castable for its alternative cost with no mana: both Mountains are sacrificed and B takes 4 damage (16 life)."
+        },
+        {
+          "label": "one_mountain",
+          "polarity": "does_not_fire",
+          "delta": "A controls only one Mountain.",
+          "expected": "Fireblast is not castable: the alternative cost (sacrifice two Mountains) cannot be paid and neither can the {4}{R}{R} mana cost."
+        }
+      ],
+      "cards": [
+        "Fireblast",
+        "Mountain"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "113.6d-2",
+      "rules": [
+        "113.6d"
+      ],
+      "title": "A cost-modifying ability of a spell applies while it is cast",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Craw Wurm",
+            "Earth Elemental",
+            "Forest",
+            "Forest"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Ghalta, Primal Hunger"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Craw Wurm is 6/4 and Earth Elemental is 4/5. Ghalta's mana cost is {10}{G}{G} and it costs {X} less, X being the total power of creatures A controls."
+      },
+      "decisions": [
+        "A casts Ghalta, Primal Hunger, tapping Forest and Forest.",
+        "Both players pass; Ghalta resolves."
+      ],
+      "variants": [
+        {
+          "label": "power_ten",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Total power is 10, so the cost after adjustment is {G}{G}; Ghalta is castable and enters the battlefield."
+        },
+        {
+          "label": "power_eight",
+          "polarity": "does_not_fire",
+          "delta": "Earth Elemental is replaced by Grizzly Bears (power 2).",
+          "expected": "Total power is 8, so the cost after adjustment is {2}{G}{G}; with two Forests Ghalta is not castable."
+        }
+      ],
+      "cards": [
+        "Ghalta, Primal Hunger",
+        "Craw Wurm",
+        "Earth Elemental",
+        "Grizzly Bears",
+        "Forest"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "113.6e-1",
+      "rules": [
+        "113.6e"
+      ],
+      "title": "A casting-timing restriction on a spell applies to it in hand",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "declare_attackers",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            },
+            "Forest",
+            "Forest"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Fog Patch"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Grizzly Bears has been under A's control since a previous turn and is attacking B. B controls no creatures. The stack is empty and A has priority."
+      },
+      "decisions": [
+        "A has declared Grizzly Bears as an attacker.",
+        "A, with priority, is offered Fog Patch (cast only during the declare blockers step), tapping Forest and Forest."
+      ],
+      "variants": [
+        {
+          "label": "declare_attackers_step",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Fog Patch is not castable in the declare attackers step."
+        },
+        {
+          "label": "declare_blockers_step",
+          "polarity": "does_not_fire",
+          "delta": "B has declared no blockers and A has priority in the declare blockers step instead (setup step declare_blockers).",
+          "expected": "Fog Patch is castable; it resolves and Grizzly Bears becomes blocked."
+        }
+      ],
+      "cards": [
+        "Fog Patch",
+        "Grizzly Bears",
+        "Forest"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "113.6f-1",
+      "rules": [
+        "113.6f"
+      ],
+      "title": "A cast-from-exile permission applies in exile only",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            "Island",
+            "Island"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {
+          "A": [
+            "Misthollow Griffin"
+          ]
+        },
+        "notes": "The stack is empty."
+      },
+      "decisions": [
+        "A casts Misthollow Griffin, tapping four Islands.",
+        "Both players pass; Misthollow Griffin resolves."
+      ],
+      "variants": [
+        {
+          "label": "in_exile",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Misthollow Griffin is castable from exile; it resolves and enters the battlefield."
+        },
+        {
+          "label": "in_graveyard",
+          "polarity": "does_not_fire",
+          "delta": "Misthollow Griffin is in A's graveyard instead of exile.",
+          "expected": "Misthollow Griffin is not castable from the graveyard."
+        }
+      ],
+      "cards": [
+        "Misthollow Griffin",
+        "Island"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "113.6g-1",
+      "rules": [
+        "113.6g"
+      ],
+      "title": "A spell that can't be countered resolves despite a counterspell",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Swamp",
+            "Forest"
+          ],
+          "B": [
+            "Grizzly Bears",
+            "Island",
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Abrupt Decay",
+            "Doom Blade"
+          ],
+          "B": [
+            "Counterspell"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Abrupt Decay targeting Grizzly Bears, tapping Swamp and Forest.",
+        "B casts Counterspell targeting Abrupt Decay, tapping both Islands.",
+        "Both players pass until the stack is empty."
+      ],
+      "variants": [
+        {
+          "label": "abrupt_decay",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Counterspell resolves but does not counter Abrupt Decay; Abrupt Decay resolves and Grizzly Bears moves to B's graveyard."
+        },
+        {
+          "label": "doom_blade",
+          "polarity": "does_not_fire",
+          "delta": "A casts Doom Blade targeting Grizzly Bears (tapping Swamp and Forest) instead of Abrupt Decay.",
+          "expected": "Counterspell counters Doom Blade, which moves to A's graveyard; Grizzly Bears stays on the battlefield."
+        }
+      ],
+      "cards": [
+        "Abrupt Decay",
+        "Doom Blade",
+        "Counterspell",
+        "Grizzly Bears",
+        "Swamp",
+        "Forest",
+        "Island"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "113.6h-1",
+      "rules": [
+        "113.6h"
+      ],
+      "title": "An enters-tapped ability applies as the permanent enters",
+      "record_kind": "rewrite",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Swamp",
+            "Forest",
+            "Forest"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Diregraf Ghoul",
+            "Grizzly Bears"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Diregraf Ghoul, tapping Swamp.",
+        "Both players pass; Diregraf Ghoul resolves."
+      ],
+      "variants": [
+        {
+          "label": "diregraf_ghoul",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Diregraf Ghoul enters the battlefield tapped (the replacement effect modifies the entry itself; it is never untapped on the battlefield)."
+        },
+        {
+          "label": "grizzly_bears",
+          "polarity": "does_not_fire",
+          "delta": "A casts Grizzly Bears, tapping Forest and Forest, instead of Diregraf Ghoul.",
+          "expected": "Grizzly Bears enters the battlefield untapped."
+        }
+      ],
+      "cards": [
+        "Diregraf Ghoul",
+        "Grizzly Bears",
+        "Swamp",
+        "Forest"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "113.6i-1",
+      "rules": [
+        "113.6i"
+      ],
+      "title": "A permanent that can't have counters put on it gets none",
+      "record_kind": "rewrite",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Melira's Keepers",
+            "Grizzly Bears",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Dragonscale Boon"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Melira's Keepers is 4/4."
+      },
+      "decisions": [
+        "A casts Dragonscale Boon targeting Melira's Keepers, tapping four Forests.",
+        "Both players pass; Dragonscale Boon resolves."
+      ],
+      "variants": [
+        {
+          "label": "keepers_target",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "No counters are put on Melira's Keepers, which stays 4/4 with no counters."
+        },
+        {
+          "label": "bears_target",
+          "polarity": "does_not_fire",
+          "delta": "Dragonscale Boon targets Grizzly Bears instead.",
+          "expected": "Two +1/+1 counters are put on Grizzly Bears, which is 4/4."
+        }
+      ],
+      "cards": [
+        "Melira's Keepers",
+        "Grizzly Bears",
+        "Dragonscale Boon",
+        "Forest"
+      ],
+      "forge_notes": "Forge's CantPutCounter static for Melira's Keepers is limited to Card.Self+inZoneBattlefield, so the 'as it enters' half of the rule is not illustrated."
+    },
+    {
+      "id": "113.6j-1",
+      "rules": [
+        "113.6j"
+      ],
+      "title": "Cycling works from the hand because its discard cost can't be paid on the battlefield",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Forest",
+            "Forest"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Barkhide Mauler"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Each library holds at least 10 cards."
+      },
+      "decisions": [
+        "A is offered Barkhide Mauler's cycling ability (cost: {2}, discard Barkhide Mauler), tapping Forest and Forest."
+      ],
+      "variants": [
+        {
+          "label": "in_hand",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Cycling is playable from the hand: Barkhide Mauler is discarded to A's graveyard and A draws a card."
+        },
+        {
+          "label": "on_battlefield",
+          "polarity": "does_not_fire",
+          "delta": "Barkhide Mauler is on the battlefield instead of A's hand.",
+          "expected": "Cycling is not playable: its cost (discard this card) cannot be paid from the battlefield."
+        },
+        {
+          "label": "in_graveyard",
+          "polarity": "does_not_fire",
+          "delta": "Barkhide Mauler is in A's graveyard instead of A's hand.",
+          "expected": "Cycling is not playable from the graveyard: the card cannot be discarded from there."
+        }
+      ],
+      "cards": [
+        "Barkhide Mauler",
+        "Forest"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "113.6k-1",
+      "rules": [
+        "113.6k"
+      ],
+      "title": "A cycling trigger fires from the graveyard where the cycled card sits",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Goblin Piker",
+            "Raging Goblin"
+          ],
+          "B": [
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Gempalm Incinerator",
+            "Tormenting Voice"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "A's library holds at least 10 cards. Goblin Piker and Raging Goblin are the only Goblins on the battlefield."
+      },
+      "decisions": [
+        "A cycles Gempalm Incinerator, tapping both Mountains.",
+        "Gempalm Incinerator's cycling trigger is put on the stack targeting Grizzly Bears; A chooses to have it deal damage; both players pass and it resolves."
+      ],
+      "variants": [
+        {
+          "label": "cycled",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The cycling trigger fires from the graveyard; X is 2 (two Goblins on the battlefield), so Gempalm Incinerator deals 2 damage to Grizzly Bears, which moves to B's graveyard."
+        },
+        {
+          "label": "discarded",
+          "polarity": "does_not_fire",
+          "delta": "A casts Tormenting Voice (tapping both Mountains) discarding Gempalm Incinerator instead of cycling it.",
+          "expected": "Gempalm Incinerator is discarded, not cycled: no trigger fires and Grizzly Bears stays on the battlefield undamaged."
+        }
+      ],
+      "cards": [
+        "Gempalm Incinerator",
+        "Tormenting Voice",
+        "Goblin Piker",
+        "Raging Goblin",
+        "Grizzly Bears",
+        "Mountain"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "113.6m-1",
+      "rules": [
+        "113.6m"
+      ],
+      "title": "A return-from-graveyard ability is activatable only from the graveyard",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Swamp",
+            "Swamp"
+          ]
+        },
+        "hand": {},
+        "graveyard": {
+          "A": [
+            "Reassembling Skeleton"
+          ]
+        },
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A is offered Reassembling Skeleton's ability ({1}{B}: return it from your graveyard to the battlefield tapped), tapping Swamp and Swamp."
+      ],
+      "variants": [
+        {
+          "label": "in_graveyard",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The ability is playable; on resolution Reassembling Skeleton moves from the graveyard to the battlefield tapped."
+        },
+        {
+          "label": "on_battlefield",
+          "polarity": "does_not_fire",
+          "delta": "Reassembling Skeleton is on the battlefield instead of A's graveyard.",
+          "expected": "The ability is not playable: it functions only in the graveyard."
+        },
+        {
+          "label": "in_hand",
+          "polarity": "does_not_fire",
+          "delta": "Reassembling Skeleton is in A's hand instead of A's graveyard.",
+          "expected": "The ability is not playable from the hand."
+        }
+      ],
+      "cards": [
+        "Reassembling Skeleton",
+        "Swamp"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "113.6p-1",
+      "rules": [
+        "113.6p"
+      ],
+      "title": "An emblem's static ability functions in the command zone",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Gideon, Ally of Zendikar",
+              "counters": {
+                "LOYALTY": 4
+              }
+            },
+            "Grizzly Bears"
+          ],
+          "B": [
+            "Hill Giant"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Gideon, Ally of Zendikar has its starting loyalty of 4 and has not been activated this turn."
+      },
+      "decisions": [
+        "A activates Gideon's -4: A gets an emblem with 'Creatures you control get +1/+1.'",
+        "Both players pass; the ability resolves."
+      ],
+      "variants": [
+        {
+          "label": "emblem",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "A has the emblem in the command zone; Gideon has 0 loyalty and moves to A's graveyard, yet Grizzly Bears is 3/3. Hill Giant stays 3/3."
+        },
+        {
+          "label": "knight_token",
+          "polarity": "does_not_fire",
+          "delta": "A activates Gideon's 0 (create a 2/2 Knight Ally token) instead.",
+          "expected": "No emblem is created; Grizzly Bears stays 2/2, A has a 2/2 Knight Ally token, and Gideon stays on the battlefield with 4 loyalty."
+        }
+      ],
+      "cards": [
+        "Gideon, Ally of Zendikar",
+        "Grizzly Bears",
+        "Hill Giant"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "113.7a-1",
+      "rules": [
+        "113.7a"
+      ],
+      "title": "An activated ability on the stack resolves after its source is gone",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Karplusan Yeti",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            "Hill Giant",
+            "Mountain"
+          ]
+        },
+        "hand": {
+          "B": [
+            "Lightning Bolt"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Karplusan Yeti is 3/3 and has been under A's control since a previous turn."
+      },
+      "decisions": [
+        "A activates Karplusan Yeti's ability ({T}) targeting Hill Giant.",
+        "B, with the ability on the stack, casts Lightning Bolt targeting Karplusan Yeti, tapping Mountain.",
+        "Both players pass until the stack is empty."
+      ],
+      "variants": [
+        {
+          "label": "source_killed",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Lightning Bolt resolves first and Karplusan Yeti dies; the ability then still resolves using the Yeti's last known power of 3: Hill Giant is dealt 3 damage and dies, and the Yeti (already gone) takes no damage back."
+        },
+        {
+          "label": "no_response",
+          "polarity": "other",
+          "delta": "B does not cast Lightning Bolt.",
+          "expected": "The ability resolves with the Yeti on the battlefield: Hill Giant is dealt 3 damage and the Yeti is dealt 3 damage in return; both die."
+        }
+      ],
+      "cards": [
+        "Karplusan Yeti",
+        "Hill Giant",
+        "Lightning Bolt",
+        "Mountain"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "113.9-1",
+      "rules": [
+        "113.9"
+      ],
+      "title": "A spell-only counterspell can't counter an ability, while an ability counterspell can",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Prodigal Pyromancer",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            "Island",
+            "Island",
+            "Island"
+          ]
+        },
+        "hand": {
+          "B": [
+            "Counterspell",
+            "Stifle"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Prodigal Pyromancer has been under A's control since a previous turn."
+      },
+      "decisions": [
+        "A activates Prodigal Pyromancer's ability ({T}) targeting B.",
+        "B, with the ability on the stack and no spell on the stack, is offered Counterspell targeting the ability, tapping two Islands.",
+        "Both players pass until the stack is empty."
+      ],
+      "variants": [
+        {
+          "label": "counterspell",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Counterspell can't target the ability (it is not a spell), so it is not castable; the ability resolves and B has 19 life."
+        },
+        {
+          "label": "stifle",
+          "polarity": "does_not_fire",
+          "delta": "B casts Stifle (tapping one Island) targeting the ability instead of Counterspell.",
+          "expected": "Stifle counters the ability; it doesn't resolve and B stays at 20 life."
+        }
+      ],
+      "cards": [
+        "Prodigal Pyromancer",
+        "Counterspell",
+        "Stifle",
+        "Island"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "113.10b-1",
+      "rules": [
+        "113.10b"
+      ],
+      "title": "Removing an ability removes every instance of it",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Wind Drake",
+            "Island",
+            "Island",
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Jump",
+            "Turn to Frog"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Wind Drake has flying printed on it."
+      },
+      "decisions": [
+        "A casts Jump targeting Wind Drake, tapping Island; Jump resolves (a second instance of flying until end of turn).",
+        "A casts Turn to Frog targeting Wind Drake, tapping Island and Island; Turn to Frog resolves."
+      ],
+      "variants": [
+        {
+          "label": "two_instances",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Wind Drake is a 1/1 blue Frog with no flying: both its printed flying and the flying from Jump were removed."
+        },
+        {
+          "label": "no_removal",
+          "polarity": "does_not_fire",
+          "delta": "A does not cast Turn to Frog.",
+          "expected": "Wind Drake is a 2/2 Drake with flying (its printed instance and Jump's instance)."
+        }
+      ],
+      "cards": [
+        "Wind Drake",
+        "Jump",
+        "Turn to Frog",
+        "Island"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "113.10c-1",
+      "rules": [
+        "113.10c"
+      ],
+      "title": "When effects add and remove the same ability, the most recent prevails",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Grizzly Bears",
+            "Island",
+            "Island",
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Jump",
+            "Turn to Frog"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Turn to Frog targeting Grizzly Bears, tapping Island and Island; Turn to Frog resolves.",
+        "A casts Jump targeting Grizzly Bears, tapping Island; Jump resolves."
+      ],
+      "variants": [
+        {
+          "label": "add_last",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears is a 1/1 blue Frog with flying: the later effect (Jump) prevails over the earlier removal."
+        },
+        {
+          "label": "remove_last",
+          "polarity": "does_not_fire",
+          "delta": "A casts Jump first and then Turn to Frog.",
+          "expected": "Grizzly Bears is a 1/1 blue Frog with no flying: the later effect (Turn to Frog) prevails."
+        }
+      ],
+      "cards": [
+        "Grizzly Bears",
+        "Jump",
+        "Turn to Frog",
+        "Island"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "113.11-1",
+      "rules": [
+        "113.11"
+      ],
+      "title": "An object that can't have an ability loses it",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Archetype of Imagination"
+          ],
+          "B": [
+            "Wind Drake"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Wind Drake has flying printed on it."
+      },
+      "decisions": [
+        "No decisions are needed; the board is stable."
+      ],
+      "variants": [
+        {
+          "label": "opponents_creature",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Wind Drake has no flying; Archetype of Imagination has flying."
+        },
+        {
+          "label": "own_creature",
+          "polarity": "does_not_fire",
+          "delta": "B controls Archetype of Imagination instead of A.",
+          "expected": "Wind Drake has flying."
+        }
+      ],
+      "cards": [
+        "Archetype of Imagination",
+        "Wind Drake"
+      ],
+      "forge_notes": "Archetype of Imagination also says opponents' creatures lose flying, so this scenario shows the loss jointly with that clause; 113.11-2 isolates the can't-have clause."
+    },
+    {
+      "id": "113.11-2",
+      "rules": [
+        "113.11"
+      ],
+      "title": "An object that can't have an ability can't gain it",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "B",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Archetype of Imagination"
+          ],
+          "B": [
+            "Grizzly Bears",
+            "Island"
+          ]
+        },
+        "hand": {
+          "B": [
+            "Jump"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "B casts Jump targeting Grizzly Bears, tapping Island.",
+        "Both players pass; Jump resolves."
+      ],
+      "variants": [
+        {
+          "label": "archetype_present",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Jump resolves but Grizzly Bears does not gain flying."
+        },
+        {
+          "label": "archetype_absent",
+          "polarity": "does_not_fire",
+          "delta": "Archetype of Imagination is in A's graveyard instead of on the battlefield.",
+          "expected": "Grizzly Bears gains flying until end of turn."
+        }
+      ],
+      "cards": [
+        "Archetype of Imagination",
+        "Grizzly Bears",
+        "Jump",
+        "Island"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "113.12-1",
+      "rules": [
+        "113.12"
+      ],
+      "title": "An effect that sets a color is not an ability, while a granted keyword is",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Muraganda Petroglyphs",
+            "Grizzly Bears",
+            "Mountain",
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Chaoslace",
+            "Jump"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Grizzly Bears has no abilities, so Muraganda Petroglyphs makes it 4/4 before anything is cast."
+      },
+      "decisions": [
+        "A casts Chaoslace targeting Grizzly Bears, tapping Mountain.",
+        "Both players pass; Chaoslace resolves."
+      ],
+      "variants": [
+        {
+          "label": "becomes_red",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears is red and still has no abilities, so it stays 4/4."
+        },
+        {
+          "label": "gains_flying",
+          "polarity": "does_not_fire",
+          "delta": "A casts Jump targeting Grizzly Bears, tapping Island, instead of Chaoslace.",
+          "expected": "Grizzly Bears gains flying, now has an ability, and is 2/2."
+        }
+      ],
+      "cards": [
+        "Muraganda Petroglyphs",
+        "Grizzly Bears",
+        "Chaoslace",
+        "Jump",
+        "Mountain",
+        "Island"
+      ],
+      "forge_notes": "Forge implements Chaoslace as an Animate effect with only Colors$; check that Creature.NoAbilities still matches after it."
+    }
+  ]
+}

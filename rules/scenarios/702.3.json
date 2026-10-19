@@ -1,0 +1,69 @@
+{
+  "unit": "702.3",
+  "verified": true,
+  "review": [],
+  "skipped": [
+    {
+      "id": "702.3c",
+      "reason": "redundancy of multiple instances has no observable outcome: a creature with two defender abilities is exactly as unable to attack as one with a single instance, which 702.3b-1 already shows"
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "702.3b-1",
+      "rules": [
+        "702.3b"
+      ],
+      "title": "A creature with defender cannot attack",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Hill Giant",
+              "summoning_sick": false
+            },
+            {
+              "card": "Guard Duty",
+              "attached_to": "Hill Giant"
+            }
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A is about to declare attackers and tries to attack player B with Hill Giant."
+      ],
+      "variants": [
+        {
+          "label": "defender",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Hill Giant (enchanted by Guard Duty, so it has defender) is not a legal attacker; the attack declaration is illegal."
+        },
+        {
+          "label": "no_defender",
+          "polarity": "does_not_fire",
+          "delta": "Guard Duty is not on the battlefield.",
+          "expected": "Hill Giant is a legal attacker; attacking player B is legal."
+        }
+      ],
+      "cards": [
+        "Hill Giant",
+        "Guard Duty"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

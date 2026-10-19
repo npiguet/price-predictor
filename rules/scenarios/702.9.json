@@ -1,0 +1,90 @@
+{
+  "unit": "702.9",
+  "verified": true,
+  "review": [
+    "skipped: removed 702.9c, which the triage classifies definitional (redundancy), so they need neither a scenario nor a skip.",
+    "702.9b-1: the base carried a non-empty delta and every variant was defined only by its delta, so the flier-blocks-ground and ground-blocks-ground variants each differed from the base in two facts; rebuilt around a fixed base (B's Wind Drake blocks A's Wind Drake) with three one-fact variants and dropped ground_blocks_ground, which involves no flying.",
+    "triage/702.9.jsonl: was missing; wrote it (702.9b legality/playability, the rest definitional)."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.9b-1",
+      "rules": [
+        "702.9b"
+      ],
+      "title": "A creature with flying can be blocked only by creatures with flying or reach, and a flier can block any creature",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Wind Drake",
+              "summoning_sick": false
+            },
+            {
+              "card": "Hill Giant",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            "Grizzly Bears",
+            "Giant Spider",
+            "Wind Drake"
+          ]
+        },
+        "hand": {
+          "A": [],
+          "B": []
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A attacks player B with Wind Drake and Hill Giant.",
+        "B declares its Wind Drake as the only blocker, blocking A's Wind Drake."
+      ],
+      "variants": [
+        {
+          "label": "flier_blocks_flier",
+          "polarity": "does_not_fire",
+          "delta": "",
+          "expected": "Legal: B's Wind Drake is among the legal blockers of A's Wind Drake."
+        },
+        {
+          "label": "ground_blocks_flier",
+          "polarity": "fires",
+          "delta": "B's blocker is Grizzly Bears instead of Wind Drake.",
+          "expected": "Illegal: Grizzly Bears is not among the legal blockers of Wind Drake."
+        },
+        {
+          "label": "reach_blocks_flier",
+          "polarity": "does_not_fire",
+          "delta": "B's blocker is Giant Spider (reach) instead of Wind Drake.",
+          "expected": "Legal: Giant Spider is among the legal blockers of Wind Drake."
+        },
+        {
+          "label": "flier_blocks_ground",
+          "polarity": "other",
+          "delta": "B's Wind Drake blocks Hill Giant instead of A's Wind Drake.",
+          "expected": "Legal: B's Wind Drake is among the legal blockers of Hill Giant."
+        }
+      ],
+      "cards": [
+        "Wind Drake",
+        "Hill Giant",
+        "Grizzly Bears",
+        "Giant Spider"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

@@ -1,0 +1,22 @@
+{"id": "709.1", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "709.2", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "Drawing or discarding a split card moves exactly one card.", "note": ""}
+{"id": "709.3", "category": "decision", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "709.3a", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "Only the chosen half is evaluated for castability and put on the stack.", "note": ""}
+{"id": "709.3b", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "A split spell on the stack has only the characteristics of the half being cast.", "note": ""}
+{"id": "709.3c", "category": "mechanical", "observability": "needs_new_fields", "record_kinds": ["resolution"], "outcome": "A copy of a split card cast as a copy keeps the characteristics of both halves.", "note": ""}
+{"id": "709.4", "category": "mechanical", "observability": "indirect", "record_kinds": ["continuous"], "outcome": "In every zone except the stack, a split card has the combined characteristics of its two halves.", "note": ""}
+{"id": "709.4a", "category": "mechanical", "observability": "needs_new_fields", "record_kinds": ["continuous"], "outcome": "A split card has the chosen name if either of its two names is the chosen name.", "note": ""}
+{"id": "709.4b", "category": "mechanical", "observability": "indirect", "record_kinds": ["continuous"], "outcome": "A split card outside the stack has the combined mana cost, colors and mana value of its halves, while the spell has only its half.", "note": ""}
+{"id": "709.4c", "category": "mechanical", "observability": "indirect", "record_kinds": ["continuous"], "outcome": "A split card has each card type and ability of both halves.", "note": ""}
+{"id": "709.4d", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "A fused split spell on the stack has the combined characteristics of both halves.", "note": ""}
+{"id": "709.5", "category": "mechanical", "observability": "needs_new_fields", "record_kinds": ["continuous"], "outcome": "A permanent with a shared type line lacks the name, mana cost and rules text of each half that is not unlocked.", "note": ""}
+{"id": "709.5a", "category": "mechanical", "observability": "indirect", "record_kinds": ["continuous"], "outcome": "Both halves of a shared-type-line card have the shared types and subtypes.", "note": ""}
+{"id": "709.5b", "category": "mechanical", "observability": "needs_new_fields", "record_kinds": ["resolution"], "outcome": "A shared-type-line spell on the stack keeps both halves as copiable values.", "note": ""}
+{"id": "709.5c", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "709.5d", "category": "mechanical", "observability": "needs_new_fields", "record_kinds": ["continuous"], "outcome": "A shared-type-line permanent enters with the unlocked designation of the half cast, or neither if not cast.", "note": ""}
+{"id": "709.5e", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "A player may pay a locked half's cost as a special action only with priority, an empty stack and a main phase of their turn.", "note": ""}
+{"id": "709.5f", "category": "mechanical", "observability": "needs_new_fields", "record_kinds": ["resolution"], "outcome": "Unlocking a locked half gives the permanent the matching unlocked designation.", "note": ""}
+{"id": "709.5g", "category": "mechanical", "observability": "needs_new_fields", "record_kinds": ["resolution"], "outcome": "Locking an unlocked half removes the matching unlocked designation.", "note": ""}
+{"id": "709.5h", "category": "mechanical", "observability": "direct", "record_kinds": ["trigger"], "outcome": "A \"when you unlock this door\" ability triggers when the designation is given, whether on entering or later.", "note": ""}
+{"id": "709.5i", "category": "mechanical", "observability": "direct", "record_kinds": ["trigger"], "outcome": "A \"fully unlock\" ability triggers when the permanent goes from one designation or none to having both.", "note": ""}
+{"id": "709.5j", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}

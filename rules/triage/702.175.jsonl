@@ -1,0 +1,3 @@
+{"id": "702.175", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.175a", "category": "mechanical", "observability": "direct", "record_kinds": ["trigger", "resolution"], "outcome": "With the offspring cost paid, the permanent's enters trigger creates a 1/1 token copy of it.", "note": ""}
+{"id": "702.175b", "category": "mechanical", "observability": "indirect", "record_kinds": ["trigger"], "outcome": "Each offspring instance triggers only on its own payment, creating one token copy per paid instance.", "note": ""}

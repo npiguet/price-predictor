@@ -1,0 +1,3 @@
+{"id": "702.91", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.91a", "category": "mechanical", "observability": "direct", "record_kinds": ["trigger", "resolution"], "outcome": "When a creature with battle cry attacks, its trigger fires and on resolution each other attacking creature gets +1/+0 until end of turn.", "note": ""}
+{"id": "702.91b", "category": "mechanical", "observability": "direct", "record_kinds": ["trigger"], "outcome": "Each instance of battle cry triggers separately, so two instances give each other attacker +2/+0.", "note": ""}

@@ -1,0 +1,7 @@
+{"id": "702.170", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.170a", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "A card with plot can be exiled from hand for its cost only during its owner's main phase with an empty stack, and becomes plotted.", "note": ""}
+{"id": "702.170b", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "Plotting is a special action: the card moves to exile without using the stack.", "note": ""}
+{"id": "702.170c", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "Certain spells and abilities make an exiled card plotted.", "note": ""}
+{"id": "702.170d", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "A plotted card can be cast from exile for free during its owner's main phase with an empty stack, only on a later turn than the one it became plotted.", "note": ""}
+{"id": "702.170e", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.170f", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "If an effect lets plot function from another zone, the card is exiled from that zone when plotted.", "note": ""}

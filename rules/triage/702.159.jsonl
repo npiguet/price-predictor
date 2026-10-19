@@ -1,0 +1,3 @@
+{"id": "702.159", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.159a", "category": "mechanical", "observability": "indirect", "record_kinds": ["trigger", "resolution"], "outcome": "When a player rolls to visit and the result is lit up on the Attraction, its visit effect triggers and resolves.", "note": ""}
+{"id": "702.159b", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}

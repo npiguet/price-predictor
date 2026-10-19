@@ -1,0 +1,283 @@
+{
+  "unit": "702.122",
+  "verified": true,
+  "review": [
+    "702.122e: the intervening-if half of the rule (only the creatures that paid that crew cost count) had no scenario; added 702.122e-2 with Mighty Servant of Leuk-o crewed by exactly two versus three creatures."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.122a-1",
+      "rules": [
+        "702.122a"
+      ],
+      "title": "Crew taps untapped creatures with enough total power and makes the Vehicle an artifact creature",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Smuggler's Copter",
+              "summoning_sick": false
+            },
+            {
+              "card": "Mons's Goblin Raiders",
+              "summoning_sick": false
+            },
+            {
+              "card": "Ornithopter",
+              "summoning_sick": false
+            }
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A activates the crew 1 ability of Smuggler's Copter, tapping Mons's Goblin Raiders (power 1) as the cost.",
+        "Both players pass; the crew ability resolves."
+      ],
+      "variants": [
+        {
+          "label": "enough_power",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The crew ability resolves: Smuggler's Copter is a 3/3 flying artifact creature until end of turn. Mons's Goblin Raiders is tapped."
+        },
+        {
+          "label": "not_enough_power",
+          "polarity": "does_not_fire",
+          "delta": "A taps Ornithopter (power 0) instead of Mons's Goblin Raiders.",
+          "expected": "Total power 0 is less than 1, so the crew ability cannot be activated. Smuggler's Copter stays a noncreature artifact and Ornithopter stays untapped."
+        }
+      ],
+      "cards": [
+        "Smuggler's Copter",
+        "Mons's Goblin Raiders",
+        "Ornithopter"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.122d-1",
+      "rules": [
+        "702.122d"
+      ],
+      "title": "A creature that can't crew Vehicles can't be tapped to pay a crew cost",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Smuggler's Copter",
+              "summoning_sick": false
+            },
+            {
+              "card": "Mons's Goblin Raiders",
+              "summoning_sick": false
+            },
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            {
+              "card": "Revoke Privileges",
+              "attached_to": "Mons's Goblin Raiders"
+            }
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Revoke Privileges is controlled by B and enchants A's Mons's Goblin Raiders."
+      },
+      "decisions": [
+        "A tries to activate the crew 1 ability of Smuggler's Copter, tapping Mons's Goblin Raiders as the cost.",
+        "Both players pass; if the ability was activated, it resolves."
+      ],
+      "variants": [
+        {
+          "label": "enchanted_creature_taps",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Mons's Goblin Raiders can't crew Vehicles, so it is not a legal choice to pay the crew cost. The crew ability is not activated and Smuggler's Copter stays a noncreature artifact."
+        },
+        {
+          "label": "other_creature_taps",
+          "polarity": "does_not_fire",
+          "delta": "A taps Grizzly Bears (power 2, not enchanted) instead of Mons's Goblin Raiders.",
+          "expected": "Grizzly Bears can crew. The crew ability is activated and resolves: Smuggler's Copter is a 3/3 flying artifact creature until end of turn and Grizzly Bears is tapped."
+        }
+      ],
+      "cards": [
+        "Smuggler's Copter",
+        "Mons's Goblin Raiders",
+        "Grizzly Bears",
+        "Revoke Privileges"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.122e-1",
+      "rules": [
+        "702.122e"
+      ],
+      "title": "A becomes-crewed trigger fires when the crew ability resolves",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Mobilizer Mech",
+              "summoning_sick": false
+            },
+            {
+              "card": "Smuggler's Copter",
+              "summoning_sick": false
+            },
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            },
+            {
+              "card": "Mons's Goblin Raiders",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            "Island"
+          ]
+        },
+        "hand": {
+          "B": [
+            "Stifle"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A activates the crew 3 ability of Mobilizer Mech, tapping Grizzly Bears (power 2) and Mons's Goblin Raiders (power 1) as the cost.",
+        "B has priority with the crew ability on the stack and passes; A passes.",
+        "The crew ability resolves. If Mobilizer Mech became crewed, its trigger targets Smuggler's Copter; both players pass and it resolves."
+      ],
+      "variants": [
+        {
+          "label": "crew_resolves",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The crew ability resolves and Mobilizer Mech becomes crewed: its trigger fires and resolves, so both Mobilizer Mech (3/4 flying) and Smuggler's Copter (3/3 flying) are artifact creatures until end of turn. Grizzly Bears and Mons's Goblin Raiders are tapped."
+        },
+        {
+          "label": "crew_countered",
+          "polarity": "does_not_fire",
+          "delta": "B responds by casting Stifle with the Island, targeting the crew ability.",
+          "expected": "The crew ability is countered, so it never resolves and the trigger does not fire. Mobilizer Mech and Smuggler's Copter stay noncreature artifacts. Grizzly Bears and Mons's Goblin Raiders stay tapped as a paid cost. Stifle is in B's graveyard."
+        }
+      ],
+      "cards": [
+        "Mobilizer Mech",
+        "Smuggler's Copter",
+        "Grizzly Bears",
+        "Mons's Goblin Raiders",
+        "Island",
+        "Stifle"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.122e-2",
+      "rules": [
+        "702.122e"
+      ],
+      "title": "A becomes-crewed intervening-if clause looks only at the creatures that paid that crew cost",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Mighty Servant of Leuk-o",
+              "summoning_sick": false
+            },
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            },
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            },
+            {
+              "card": "Mons's Goblin Raiders",
+              "summoning_sick": false
+            }
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Mighty Servant of Leuk-o has not been crewed this turn."
+      },
+      "decisions": [
+        "A activates the crew 4 ability of Mighty Servant of Leuk-o, tapping both Grizzly Bears (total power 4) as the cost.",
+        "Both players pass; the crew ability resolves.",
+        "If the becomes-crewed trigger fires, both players pass and it resolves."
+      ],
+      "variants": [
+        {
+          "label": "two_crew",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Mighty Servant of Leuk-o is a 6/6 trample artifact creature until end of turn. Its becomes-crewed trigger fires because exactly two creatures crewed it, and it resolves: Mighty Servant of Leuk-o has \"Whenever this creature deals combat damage to a player, draw two cards\" until end of turn. Both Grizzly Bears are tapped."
+        },
+        {
+          "label": "three_crew",
+          "polarity": "does_not_fire",
+          "delta": "A also taps Mons's Goblin Raiders as part of the crew cost, so three creatures (total power 5) crew it.",
+          "expected": "Mighty Servant of Leuk-o is a 6/6 trample artifact creature until end of turn, but its becomes-crewed trigger does not fire because three creatures crewed it. It does not gain the draw ability. Both Grizzly Bears and Mons's Goblin Raiders are tapped."
+        }
+      ],
+      "cards": [
+        "Mighty Servant of Leuk-o",
+        "Grizzly Bears",
+        "Mons's Goblin Raiders"
+      ],
+      "forge_notes": "Forge checks the clause through ValidCrewAmount on the creatures paid for the resolving crew ability."
+    }
+  ]
+}

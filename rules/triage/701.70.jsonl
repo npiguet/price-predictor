@@ -1,0 +1,2 @@
+{"id": "701.70", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "701.70a", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "Recruit draws a card, discards a card, and creates a 1/1 white Human Soldier token only if the discarded card is a nonland card.", "note": ""}

@@ -1,0 +1,7 @@
+{"id": "702.168", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.168a", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "A disguise card can be cast face down for {3} as a 2/2 creature with ward {2}, no name, subtypes or mana cost.", "note": ""}
+{"id": "702.168b", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution", "continuous"], "outcome": "A card cast with disguise is a face-down 2/2 ward {2} spell and enters the battlefield with those characteristics until turned face up.", "note": ""}
+{"id": "702.168c", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.168d", "category": "mechanical", "observability": "indirect", "record_kinds": ["continuous"], "outcome": "Turning a disguised permanent face up pays its disguise cost without the stack, restores its characteristics and triggers no enters-the-battlefield abilities.", "note": ""}
+{"id": "702.168e", "category": "mechanical", "observability": "indirect", "record_kinds": ["continuous"], "outcome": "X in a disguise cost carries over to other abilities of the permanent as the value chosen when turned face up.", "note": ""}
+{"id": "702.168f", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}

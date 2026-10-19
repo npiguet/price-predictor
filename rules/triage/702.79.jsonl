@@ -1,0 +1,2 @@
+{"id": "702.79", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.79a", "category": "mechanical", "observability": "direct", "record_kinds": ["resolution", "trigger"], "outcome": "A persist permanent that dies without a -1/-1 counter returns to the battlefield with a -1/-1 counter.", "note": ""}

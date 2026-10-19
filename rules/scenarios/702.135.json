@@ -1,0 +1,142 @@
+{
+  "unit": "702.135",
+  "verified": true,
+  "review": [],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.135a-1",
+      "rules": [
+        "702.135a"
+      ],
+      "title": "Afterlife creates Spirit tokens when the permanent is put into a graveyard from the battlefield",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Island"
+          ],
+          "B": [
+            "Ministrant of Obligation"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Shock",
+            "Unsummon"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Shock targeting Ministrant of Obligation, tapping the Mountain.",
+        "Both players pass; Shock resolves."
+      ],
+      "variants": [
+        {
+          "label": "dies",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Ministrant of Obligation (2/1) is dealt 2 damage and dies; its afterlife 2 trigger fires and B gets two 1/1 white and black Spirit creature tokens with flying."
+        },
+        {
+          "label": "survives",
+          "polarity": "does_not_fire",
+          "delta": "B's creature is Syndicate Messenger (2/3) instead of Ministrant of Obligation.",
+          "expected": "Syndicate Messenger survives with 2 damage marked; its afterlife trigger does not fire and B has no Spirit tokens."
+        },
+        {
+          "label": "bounced",
+          "polarity": "does_not_fire",
+          "delta": "A casts Unsummon (tapping the Island) instead of Shock.",
+          "expected": "Ministrant of Obligation returns to B's hand and is never put into a graveyard; its afterlife trigger does not fire and B has no Spirit tokens."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Island",
+        "Shock",
+        "Unsummon",
+        "Ministrant of Obligation",
+        "Syndicate Messenger"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.135b-1",
+      "rules": [
+        "702.135b"
+      ],
+      "title": "Two instances of afterlife trigger separately",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Orzhov Enforcer",
+            "Plains",
+            "Plains",
+            "Mountain"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Afterlife Insurance",
+            "Shock"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Plains",
+            "Plains"
+          ]
+        },
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Afterlife Insurance, tapping two Plains; it resolves and A draws a card.",
+        "A casts Shock targeting Orzhov Enforcer (their own creature), tapping the Mountain.",
+        "Both players pass; Shock resolves."
+      ],
+      "variants": [
+        {
+          "label": "two_instances",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Orzhov Enforcer (1/2) has afterlife 1 printed and afterlife 1 from Afterlife Insurance; it dies, two afterlife triggers fire and resolve separately, and A gets two 1/1 white and black Spirit tokens with flying."
+        },
+        {
+          "label": "one_instance",
+          "polarity": "does_not_fire",
+          "delta": "A does not cast Afterlife Insurance; A casts only Shock.",
+          "expected": "Orzhov Enforcer dies and its single afterlife trigger resolves: A gets one Spirit token."
+        }
+      ],
+      "cards": [
+        "Orzhov Enforcer",
+        "Afterlife Insurance",
+        "Shock",
+        "Plains",
+        "Mountain"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

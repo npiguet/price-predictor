@@ -1,0 +1,3 @@
+{"id": "702.123", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.123a", "category": "mechanical", "observability": "direct", "record_kinds": ["trigger", "resolution"], "outcome": "When a permanent with fabricate enters, it gets N +1/+1 counters or its controller creates N 1/1 Servo artifact creature tokens instead.", "note": "The choice is a decision; each branch has an observable consequence."}
+{"id": "702.123b", "category": "mechanical", "observability": "indirect", "record_kinds": ["trigger"], "outcome": "Each instance of fabricate triggers separately.", "note": ""}

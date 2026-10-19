@@ -1,0 +1,151 @@
+{
+  "unit": "702.97",
+  "verified": true,
+  "review": [],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.97a-1",
+      "rules": [
+        "702.97a"
+      ],
+      "title": "Scavenge exiles the card and puts counters equal to its power on the target creature",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Swamp",
+            "Forest",
+            "Island",
+            "Island",
+            "Island",
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            "Mountain"
+          ]
+        },
+        "hand": {
+          "B": [
+            "Shock"
+          ]
+        },
+        "graveyard": {
+          "A": [
+            "Dreg Mangler"
+          ]
+        },
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A activates scavenge of Dreg Mangler from the graveyard, paying {3}{B}{G} (tapping all five lands) and exiling Dreg Mangler as a cost, targeting Grizzly Bears.",
+        "B passes or responds as the variant states; then the ability resolves."
+      ],
+      "variants": [
+        {
+          "label": "resolves",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Dreg Mangler is in exile. The ability resolves and puts three +1/+1 counters (Dreg Mangler's power) on Grizzly Bears, which is 5/5."
+        },
+        {
+          "label": "target_killed_in_response",
+          "polarity": "does_not_fire",
+          "delta": "In response, B casts Shock targeting Grizzly Bears, tapping Mountain.",
+          "expected": "Shock resolves first and Grizzly Bears is destroyed. Dreg Mangler stays exiled because the cost was already paid. The scavenge ability has no legal target and fizzles; no counters are placed."
+        }
+      ],
+      "cards": [
+        "Swamp",
+        "Forest",
+        "Island",
+        "Grizzly Bears",
+        "Mountain",
+        "Shock",
+        "Dreg Mangler"
+      ],
+      "forge_notes": "Dreg Mangler's power for the counter count must come from last known information after it is exiled as a cost."
+    },
+    {
+      "id": "702.97a-2",
+      "rules": [
+        "702.97a"
+      ],
+      "title": "Scavenge can be activated only from the graveyard and only at sorcery timing",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Swamp",
+            "Forest",
+            "Island",
+            "Island",
+            "Island",
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            }
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {
+          "A": [
+            "Dreg Mangler"
+          ]
+        },
+        "library": {},
+        "exile": {},
+        "notes": "The stack is empty and A has priority."
+      },
+      "decisions": [
+        "A tries to activate scavenge of Dreg Mangler targeting Grizzly Bears, paying {3}{B}{G} with the five lands."
+      ],
+      "variants": [
+        {
+          "label": "graveyard_main_phase",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The activation is legal: Dreg Mangler is in the graveyard, it is A's main phase and the stack is empty."
+        },
+        {
+          "label": "combat_step",
+          "polarity": "does_not_fire",
+          "delta": "It is A's declare_attackers step instead of main1.",
+          "expected": "The activation is illegal: scavenge can be activated only as a sorcery, and it is not a main phase."
+        },
+        {
+          "label": "card_in_hand",
+          "polarity": "does_not_fire",
+          "delta": "Dreg Mangler is in A's hand instead of the graveyard.",
+          "expected": "The activation is illegal: scavenge works only while the card is in a graveyard. A can only cast Dreg Mangler."
+        }
+      ],
+      "cards": [
+        "Swamp",
+        "Forest",
+        "Island",
+        "Grizzly Bears",
+        "Dreg Mangler"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

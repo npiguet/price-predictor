@@ -1,0 +1,4 @@
+{"id": "702.66", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.66a", "category": "mechanical", "observability": "direct", "record_kinds": ["playability"], "outcome": "A spell with delve can have each generic mana of its total cost paid by exiling a card from the graveyard.", "note": ""}
+{"id": "702.66b", "category": "mechanical", "observability": "direct", "record_kinds": ["playability"], "outcome": "Delve applies after total cost is determined and is neither an additional nor an alternative cost.", "note": ""}
+{"id": "702.66c", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}

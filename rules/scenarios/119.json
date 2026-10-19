@@ -1,0 +1,342 @@
+{
+  "unit": "119",
+  "verified": true,
+  "review": [
+    "119.4b-1: variant no-emperion had the same outcome as the base and flipped nothing; dropped it.",
+    "119.8-2: had no does_not_fire variant; no-emperion (the exchange happens) relabelled from other to does_not_fire.",
+    "119.5-1: base expected a +1/+1 counter from Ajani's Pridemate but no decision resolved its trigger; added that decision.",
+    "119.6-1: nothing exercised the 'or less' half of 119.6; added variant below-zero (B at 1 life ends at -1 and loses)."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "119.2-1",
+      "rules": ["119.2"],
+      "title": "Combat damage dealt to a player makes that player lose that much life",
+      "record_kind": "combat",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {"A": 20, "B": 20},
+        "battlefield": {
+          "A": [
+            {"card": "Grizzly Bears", "summoning_sick": false},
+            {"card": "Glistener Elf", "summoning_sick": false}
+          ],
+          "B": [
+            {"card": "Grizzly Bears", "summoning_sick": false}
+          ]
+        },
+        "hand": {}, "graveyard": {}, "library": {}, "exile": {},
+        "notes": "Neither player has any poison counters."
+      },
+      "decisions": [
+        "A attacks B with A's Grizzly Bears only.",
+        "B declares no blockers.",
+        "Both players pass through the declare blockers step; combat damage is dealt."
+      ],
+      "variants": [
+        {"label": "base", "polarity": "fires", "delta": "", "expected": "A's Grizzly Bears deals 2 combat damage to B; B's life total goes from 20 to 18 and B has no poison counters."},
+        {"label": "infect-attacker", "polarity": "does_not_fire", "delta": "A attacks with Glistener Elf (1/1 infect) instead of Grizzly Bears.", "expected": "Glistener Elf deals 1 combat damage to B; B's life total stays 20 and B gets 1 poison counter."},
+        {"label": "blocked", "polarity": "other", "delta": "B declares B's Grizzly Bears as a blocker of A's attacking Grizzly Bears.", "expected": "The damage goes to the blocking creature, not to B; B's life total stays 20; both Grizzly Bears have lethal damage and move to their owners' graveyards."}
+      ],
+      "cards": ["Grizzly Bears", "Glistener Elf"],
+      "forge_notes": ""
+    },
+    {
+      "id": "119.3-1",
+      "rules": ["119.3"],
+      "title": "An effect that causes life loss and life gain adjusts the life totals by the amounts",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {"A": 20, "B": 20},
+        "battlefield": {"A": ["Swamp", "Swamp", "Swamp", "Swamp", "Swamp"], "B": []},
+        "hand": {"A": ["Exsanguinate"]},
+        "graveyard": {}, "library": {}, "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Exsanguinate with X=3, tapping all five Swamps.",
+        "Both players pass; Exsanguinate resolves."
+      ],
+      "variants": [
+        {"label": "base", "polarity": "fires", "delta": "", "expected": "Exsanguinate resolves: B loses 3 life (20 to 17) and A gains the 3 life lost (20 to 23)."},
+        {"label": "x-zero", "polarity": "does_not_fire", "delta": "A casts Exsanguinate with X=0, tapping two Swamps.", "expected": "Exsanguinate resolves: B loses 0 life and A gains 0 life; both life totals stay 20."}
+      ],
+      "cards": ["Swamp", "Exsanguinate"],
+      "forge_notes": ""
+    },
+    {
+      "id": "119.4-1",
+      "rules": ["119.4"],
+      "title": "A life payment is allowed only if the life total is at least the payment (Phyrexian mana)",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {"A": 5, "B": 20},
+        "battlefield": {"A": [{"card": "Grizzly Bears", "summoning_sick": false}], "B": []},
+        "hand": {"A": ["Mutagenic Growth"]},
+        "graveyard": {}, "library": {}, "exile": {},
+        "notes": "A controls no lands and has no other mana source, so the {G/P} in Mutagenic Growth's cost can only be paid with 2 life."
+      },
+      "decisions": [
+        "A tries to cast Mutagenic Growth targeting A's Grizzly Bears, paying {G/P} with 2 life."
+      ],
+      "variants": [
+        {"label": "base", "polarity": "fires", "delta": "", "expected": "Casting is legal (A has 5 life, at least 2). Paying lowers A's life total to 3, and Mutagenic Growth goes on the stack."},
+        {"label": "exactly-enough", "polarity": "fires", "delta": "A's life total is 2.", "expected": "Casting is legal (A has 2 life, equal to the payment). Paying lowers A's life total to 0, so A loses the game in the next state-based check."},
+        {"label": "one-short", "polarity": "does_not_fire", "delta": "A's life total is 1.", "expected": "Casting is not legal: A has 1 life, less than the 2 life payment. Mutagenic Growth stays in hand and A's life total stays 1."}
+      ],
+      "cards": ["Grizzly Bears", "Mutagenic Growth"],
+      "forge_notes": "Forge lets the human pay Phyrexian mana with life only if getLife() >= 2; the AI may decline to do so even when legal."
+    },
+    {
+      "id": "119.4-2",
+      "rules": ["119.4"],
+      "title": "A pay-X-life additional cost is allowed only if the life total is at least X",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {"A": 3, "B": 20},
+        "battlefield": {
+          "A": ["Swamp", "Swamp", "Swamp", "Swamp", "Swamp", {"card": "Grizzly Bears", "summoning_sick": false}],
+          "B": []
+        },
+        "hand": {"A": ["Hatred"]},
+        "graveyard": {}, "library": {}, "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A tries to cast Hatred with X=3 targeting A's Grizzly Bears, tapping all five Swamps and paying 3 life."
+      ],
+      "variants": [
+        {"label": "base", "polarity": "fires", "delta": "", "expected": "Casting is legal (A has 3 life, equal to X). A's life total becomes 0, Hatred is on the stack, and A loses the game in the next state-based check."},
+        {"label": "x-too-large", "polarity": "does_not_fire", "delta": "A tries to cast Hatred with X=4 instead of X=3.", "expected": "Casting is not legal: the 4 life payment exceeds A's 3 life. Hatred stays in hand, the Swamps stay untapped and A's life total stays 3."}
+      ],
+      "cards": ["Swamp", "Grizzly Bears", "Hatred"],
+      "forge_notes": "Forge bounds the announced X by what the life payment allows; the verdict may appear as X being unselectable rather than as a rejected cast."
+    },
+    {
+      "id": "119.4b-1",
+      "rules": ["119.4b"],
+      "title": "Paying 0 life is always possible, even when the player's life total cannot change",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {"A": 20, "B": 20},
+        "battlefield": {
+          "A": ["Swamp", "Swamp", "Swamp", "Swamp", "Swamp", "Platinum Emperion"],
+          "B": [{"card": "Grizzly Bears", "summoning_sick": false}]
+        },
+        "hand": {"A": ["Hatred"]},
+        "graveyard": {}, "library": {}, "exile": {},
+        "notes": "Platinum Emperion: A's life total can't change, so A can't pay any life except 0."
+      },
+      "decisions": [
+        "A tries to cast Hatred with X=0 targeting B's Grizzly Bears, tapping all five Swamps."
+      ],
+      "variants": [
+        {"label": "base", "polarity": "fires", "delta": "", "expected": "Casting is legal: the payment of 0 life is allowed. Hatred goes on the stack and A's life total stays 20."},
+        {"label": "pay-one", "polarity": "does_not_fire", "delta": "A tries to cast Hatred with X=1 instead of X=0.", "expected": "Casting is not legal: A can't pay 1 life while Platinum Emperion keeps A's life total from changing. Hatred stays in hand."}
+      ],
+      "cards": ["Swamp", "Platinum Emperion", "Grizzly Bears", "Hatred"],
+      "forge_notes": "Forge may hide X=1 from the announcement instead of rejecting the cast."
+    },
+    {
+      "id": "119.5-1",
+      "rules": ["119.5"],
+      "title": "Setting a life total makes the player gain or lose the difference",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {"A": 8, "B": 20},
+        "battlefield": {
+          "A": ["Plains", "Plains", "Plains", "Plains", "Plains", "Plains", "Plains", "Plains", "Plains", "Ajani's Pridemate"],
+          "B": []
+        },
+        "hand": {"A": ["Blessed Wind"]},
+        "graveyard": {}, "library": {}, "exile": {},
+        "notes": "Ajani's Pridemate (2/2) shows whether a life gain event occurred."
+      },
+      "decisions": [
+        "A casts Blessed Wind targeting A, tapping all nine Plains.",
+        "Both players pass; Blessed Wind resolves.",
+        "If Ajani's Pridemate triggers, both players pass and the trigger resolves."
+      ],
+      "variants": [
+        {"label": "base", "polarity": "fires", "delta": "", "expected": "A's life total becomes 20 by gaining 12 life (8 to 20). Ajani's Pridemate triggers and gets a +1/+1 counter (3/3)."},
+        {"label": "above", "polarity": "fires", "delta": "A's life total is 30.", "expected": "A's life total becomes 20 by losing 10 life (30 to 20). Ajani's Pridemate does not trigger and stays 2/2."},
+        {"label": "equal", "polarity": "does_not_fire", "delta": "A's life total is 20.", "expected": "A's life total stays 20: no life is gained or lost. Ajani's Pridemate does not trigger and stays 2/2."}
+      ],
+      "cards": ["Plains", "Ajani's Pridemate", "Blessed Wind"],
+      "forge_notes": ""
+    },
+    {
+      "id": "119.6-1",
+      "rules": ["119.6"],
+      "title": "A player with 0 or less life loses the game as a state-based action",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {"A": 20, "B": 2},
+        "battlefield": {"A": ["Mountain"], "B": []},
+        "hand": {"A": ["Shock"]},
+        "graveyard": {}, "library": {}, "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Shock targeting B, tapping Mountain.",
+        "Both players pass; Shock resolves."
+      ],
+      "variants": [
+        {"label": "base", "polarity": "fires", "delta": "", "expected": "Shock deals 2 damage to B; B's life total is 0 and B loses the game in the next state-based check."},
+        {"label": "one-life-left", "polarity": "does_not_fire", "delta": "B's life total is 3.", "expected": "Shock deals 2 damage to B; B's life total is 1 and the game continues."},
+        {"label": "below-zero", "polarity": "fires", "delta": "B's life total is 1.", "expected": "Shock deals 2 damage to B; B's life total is -1 and B loses the game in the next state-based check."}
+      ],
+      "cards": ["Mountain", "Shock"],
+      "forge_notes": ""
+    },
+    {
+      "id": "119.7-1",
+      "rules": ["119.7"],
+      "title": "With a can't-gain-life effect, an exchange that would raise the life total does not happen",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {"A": 5, "B": 20},
+        "battlefield": {
+          "A": [{"card": "Tree of Redemption", "summoning_sick": false}, "Leyline of Punishment"],
+          "B": []
+        },
+        "hand": {}, "graveyard": {}, "library": {}, "exile": {},
+        "notes": "Tree of Redemption is a 0/13. Leyline of Punishment: players can't gain life."
+      },
+      "decisions": [
+        "A activates Tree of Redemption ({T}: exchange A's life total with its toughness).",
+        "Both players pass; the ability resolves."
+      ],
+      "variants": [
+        {"label": "base", "polarity": "fires", "delta": "", "expected": "The exchange would raise A's life total from 5 to 13, so it does not happen: A's life total stays 5 and Tree of Redemption's toughness stays 13."},
+        {"label": "exchange-lowers", "polarity": "does_not_fire", "delta": "A's life total is 20.", "expected": "The exchange would lower A's life total, so it happens: A's life total becomes 13 and Tree of Redemption's toughness becomes 20."},
+        {"label": "no-leyline", "polarity": "other", "delta": "Leyline of Punishment is not on the battlefield (A's life total is 5 as in the base).", "expected": "The exchange happens: A's life total becomes 13 and Tree of Redemption's toughness becomes 5."}
+      ],
+      "cards": ["Tree of Redemption", "Leyline of Punishment"],
+      "forge_notes": "LifeExchangeVariantEffect checks canGainLife and canLoseLife before exchanging."
+    },
+    {
+      "id": "119.8-1",
+      "rules": ["119.8"],
+      "title": "A cost that involves paying life can't be paid by a player who can't lose life",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {"A": 20, "B": 20},
+        "battlefield": {
+          "A": ["Platinum Emperion", {"card": "Grizzly Bears", "summoning_sick": false}],
+          "B": []
+        },
+        "hand": {"A": ["Mutagenic Growth"]},
+        "graveyard": {}, "library": {}, "exile": {},
+        "notes": "A controls no lands, so the {G/P} in Mutagenic Growth's cost can only be paid with 2 life. Platinum Emperion: A's life total can't change."
+      },
+      "decisions": [
+        "A tries to cast Mutagenic Growth targeting A's Grizzly Bears, paying {G/P} with 2 life."
+      ],
+      "variants": [
+        {"label": "base", "polarity": "fires", "delta": "", "expected": "Casting is not legal: the 2 life payment can't be made. Mutagenic Growth stays in hand and A's life total stays 20."},
+        {"label": "no-emperion", "polarity": "does_not_fire", "delta": "Platinum Emperion is not on the battlefield.", "expected": "Casting is legal. Paying lowers A's life total to 18 and Mutagenic Growth goes on the stack."}
+      ],
+      "cards": ["Platinum Emperion", "Grizzly Bears", "Mutagenic Growth"],
+      "forge_notes": ""
+    },
+    {
+      "id": "119.8-2",
+      "rules": ["119.8"],
+      "title": "With a can't-lose-life effect, an exchange that would lower the life total does not happen",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {"A": 20, "B": 20},
+        "battlefield": {
+          "A": [{"card": "Tree of Perdition", "summoning_sick": false}],
+          "B": ["Platinum Emperion"]
+        },
+        "hand": {}, "graveyard": {}, "library": {}, "exile": {},
+        "notes": "Tree of Perdition is a 0/13. Platinum Emperion: B's life total can't change."
+      },
+      "decisions": [
+        "A activates Tree of Perdition ({T}: exchange target opponent's life total with its toughness), targeting B.",
+        "Both players pass; the ability resolves."
+      ],
+      "variants": [
+        {"label": "base", "polarity": "fires", "delta": "", "expected": "The exchange would lower B's life total from 20 to 13, so it does not happen: B's life total stays 20 and Tree of Perdition's toughness stays 13."},
+        {"label": "no-emperion", "polarity": "does_not_fire", "delta": "Platinum Emperion is not on the battlefield.", "expected": "The exchange happens: B's life total becomes 13 and Tree of Perdition's toughness becomes 20."}
+      ],
+      "cards": ["Tree of Perdition", "Platinum Emperion"],
+      "forge_notes": "Forge has no pure can't-lose-life effect, so Platinum Emperion (CantChangeLife) is used; it also stops gains, which is irrelevant because the exchange here would only lower."
+    },
+    {
+      "id": "119.9-1",
+      "rules": ["119.9"],
+      "title": "A whenever-you-gain-life trigger fires on a gain of more than 0 life and not on a gain of 0",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {"A": 20, "B": 20},
+        "battlefield": {"A": ["Swamp", "Swamp", "Swamp", "Swamp", "Sanguine Bond"], "B": []},
+        "hand": {"A": ["Exsanguinate"]},
+        "graveyard": {}, "library": {}, "exile": {},
+        "notes": "Sanguine Bond: whenever you gain life, target opponent loses that much life."
+      },
+      "decisions": [
+        "A casts Exsanguinate with X=2, tapping all four Swamps.",
+        "Both players pass; Exsanguinate resolves.",
+        "If Sanguine Bond triggers, it targets B; both players pass and it resolves."
+      ],
+      "variants": [
+        {"label": "base", "polarity": "fires", "delta": "", "expected": "Exsanguinate makes B lose 2 and A gain 2 (A 22, B 18). Sanguine Bond triggers on the gain of 2 and B loses 2 more life, ending at 16."},
+        {"label": "gain-zero", "polarity": "does_not_fire", "delta": "A casts Exsanguinate with X=0, tapping two Swamps.", "expected": "Exsanguinate makes B lose 0 and A gain 0 life. Sanguine Bond does not trigger; both life totals stay 20."},
+        {"label": "other-controller", "polarity": "does_not_fire", "delta": "Sanguine Bond is controlled by B instead of A.", "expected": "A gains 2 and B loses 2 (A 22, B 18). Sanguine Bond does not trigger because B did not gain life; life totals stay at 22 and 18."}
+      ],
+      "cards": ["Swamp", "Sanguine Bond", "Exsanguinate"],
+      "forge_notes": ""
+    },
+    {
+      "id": "119.10-1",
+      "rules": ["119.10"],
+      "title": "A would-gain-life replacement effect applies to a gain of more than 0 life and does nothing on a gain of 0",
+      "record_kind": "rewrite",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {"A": 20, "B": 20},
+        "battlefield": {"A": ["Swamp", "Swamp", "Swamp", "Swamp", "Angel of Vitality"], "B": []},
+        "hand": {"A": ["Exsanguinate"]},
+        "graveyard": {}, "library": {}, "exile": {},
+        "notes": "Angel of Vitality: if you would gain life, you gain that much life plus 1 instead."
+      },
+      "decisions": [
+        "A casts Exsanguinate with X=2, tapping all four Swamps.",
+        "Both players pass; Exsanguinate resolves."
+      ],
+      "variants": [
+        {"label": "base", "polarity": "fires", "delta": "", "expected": "B loses 2 life (20 to 18). The gain of 2 is replaced: A gains 3 life instead (20 to 23)."},
+        {"label": "gain-zero", "polarity": "does_not_fire", "delta": "A casts Exsanguinate with X=0, tapping two Swamps.", "expected": "B loses 0 life and no life gain event occurs, so the replacement does not apply: A's life total stays 20 (not 21)."},
+        {"label": "other-controller", "polarity": "does_not_fire", "delta": "Angel of Vitality is controlled by B instead of A.", "expected": "A gains exactly 2 life (20 to 22) and B loses 2 (20 to 18); the replacement does not apply to A."}
+      ],
+      "cards": ["Swamp", "Angel of Vitality", "Exsanguinate"],
+      "forge_notes": ""
+    }
+  ]
+}

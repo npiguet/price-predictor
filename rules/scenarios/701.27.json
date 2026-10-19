@@ -1,0 +1,349 @@
+{
+  "unit": "701.27",
+  "verified": true,
+  "review": [
+    "skipped 701.27d: the reason claimed every non-self transform selects Humans; Waxing Moon, the Incubator transformers and The Golden-Gear Colossus also exist, reworded the reason to name them (none reaches an instant or sorcery back face)"
+  ],
+  "skipped": [
+    {
+      "id": "701.27d",
+      "reason": "no Forge effect can transform a permanent whose other face is an instant or sorcery: the transform effects that act on another permanent select Humans (Moonmist), Werewolves (Waxing Moon), Incubator tokens (Elvish Vatkeeper and others) or double-faced artifacts (The Golden-Gear Colossus), and the only double-faced permanents with a sorcery back face, the Invasion battles, are none of these and carry no transform instruction of their own"
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "701.27a-1",
+      "rules": [
+        "701.27a",
+        "701.27c"
+      ],
+      "title": "Transforming turns a double-faced permanent over; a permanent that is not double-faced is unchanged",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Forest",
+            "Forest",
+            {
+              "card": "Delver of Secrets",
+              "summoning_sick": false
+            }
+          ]
+        },
+        "hand": {
+          "A": [
+            "Moonmist"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Delver of Secrets is a Human Wizard 1/1 on its front face (Insectile Aberration, a 3/2 flyer, on its back)."
+      },
+      "decisions": [
+        "A casts Moonmist, tapping both Forests.",
+        "Both players pass; Moonmist resolves, transforming all Humans."
+      ],
+      "variants": [
+        {
+          "label": "double_faced",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Delver of Secrets turns over and is Insectile Aberration, a blue 3/2 Human Insect with flying. Moonmist is in A's graveyard."
+        },
+        {
+          "label": "not_double_faced",
+          "polarity": "does_not_fire",
+          "delta": "A controls Elite Vanguard (a Human, not double-faced) instead of Delver of Secrets.",
+          "expected": "Elite Vanguard stays a 2/1 white Human Soldier; it has no other face to show. Moonmist is in A's graveyard."
+        }
+      ],
+      "cards": [
+        "Forest",
+        "Delver of Secrets",
+        "Moonmist",
+        "Elite Vanguard"
+      ],
+      "forge_notes": "Moonmist selects Humans with Defined$ Valid Creature.Human; the non-double-faced Human is simply skipped by SetState."
+    },
+    {
+      "id": "701.27b-1",
+      "rules": [
+        "701.27b"
+      ],
+      "title": "Transforming does not trigger 'turned face up' abilities",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Plains",
+            "Forest",
+            "Forest",
+            {
+              "card": "Aven Farseer",
+              "summoning_sick": false
+            },
+            {
+              "card": "Delver of Secrets",
+              "summoning_sick": false
+            },
+            {
+              "card": "Daru Lancer",
+              "face_down": true,
+              "summoning_sick": false
+            }
+          ]
+        },
+        "hand": {
+          "A": [
+            "Moonmist"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Daru Lancer is a face-down 2/2 creature with no types. Aven Farseer is a 1/1 flyer with no counters."
+      },
+      "decisions": [
+        "A casts Moonmist, tapping both Forests.",
+        "Both players pass; Moonmist resolves and Delver of Secrets transforms."
+      ],
+      "variants": [
+        {
+          "label": "transform",
+          "polarity": "does_not_fire",
+          "delta": "",
+          "expected": "Delver of Secrets is Insectile Aberration. Aven Farseer's turned-face-up trigger does not fire; Aven Farseer is a 1/1 with no counters. Daru Lancer is still face down."
+        },
+        {
+          "label": "turn_face_up",
+          "polarity": "fires",
+          "delta": "Instead of casting Moonmist, A turns Daru Lancer face up by paying its morph cost {2}{W}{W} with all four lands.",
+          "expected": "Daru Lancer is face up (3/4 first strike). Aven Farseer's trigger fires and resolves: Aven Farseer has one +1/+1 counter and is 2/2. Delver of Secrets stays on its front face."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Forest",
+        "Aven Farseer",
+        "Delver of Secrets",
+        "Daru Lancer",
+        "Moonmist"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "701.27e-1",
+      "rules": [
+        "701.27e"
+      ],
+      "title": "A 'transforms into a non-Human creature' trigger fires only when the new face has that characteristic",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Forest",
+            "Forest",
+            {
+              "card": "Cult of the Waxing Moon",
+              "summoning_sick": false
+            },
+            {
+              "card": "Villagers of Estwald",
+              "summoning_sick": false
+            }
+          ]
+        },
+        "hand": {
+          "A": [
+            "Moonmist"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Cult of the Waxing Moon is a Human Shaman 5/4 and is not double-faced. Villagers of Estwald is a Human Werewolf 2/3 whose back face, Howlpack of Estwald, is a 4/6 Werewolf."
+      },
+      "decisions": [
+        "A casts Moonmist, tapping both Forests.",
+        "Both players pass; Moonmist resolves and transforms all Humans.",
+        "Cult of the Waxing Moon's trigger, if it fired, goes on the stack and A passes priority to resolve it."
+      ],
+      "variants": [
+        {
+          "label": "into_non_human",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Villagers of Estwald is Howlpack of Estwald, a 4/6 Werewolf. Cult of the Waxing Moon's trigger fires and A gets a 2/2 green Wolf creature token."
+        },
+        {
+          "label": "into_human",
+          "polarity": "does_not_fire",
+          "delta": "A controls Delver of Secrets instead of Villagers of Estwald.",
+          "expected": "Delver of Secrets is Insectile Aberration, a Human Insect. Cult of the Waxing Moon's trigger does not fire and A has no Wolf token."
+        }
+      ],
+      "cards": [
+        "Forest",
+        "Cult of the Waxing Moon",
+        "Villagers of Estwald",
+        "Delver of Secrets",
+        "Moonmist"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "701.27e-2",
+      "rules": [
+        "701.27e"
+      ],
+      "title": "A 'transforms into' trigger also fires when a permanent converts, if the new face has the characteristic",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            {
+              "card": "Cult of the Waxing Moon",
+              "summoning_sick": false
+            },
+            {
+              "card": "Arcee, Sharpshooter",
+              "counters": {
+                "+1/+1": 1
+              },
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            }
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Arcee, Sharpshooter is a 2/2 artifact creature Robot; converted it is Arcee, Acrobatic Coupe, a Vehicle with living metal (a creature only during A's turn)."
+      },
+      "decisions": [
+        "A activates Arcee's ability, paying {1} with Mountain and removing the +1/+1 counter (X=1), targeting Grizzly Bears.",
+        "Both players pass; the ability resolves and Arcee converts.",
+        "Cult of the Waxing Moon's trigger, if it fired, goes on the stack and A passes priority to resolve it."
+      ],
+      "variants": [
+        {
+          "label": "converts_to_creature",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears has 1 damage marked. Arcee is Arcee, Acrobatic Coupe, a non-Human Vehicle that is a creature on A's turn. Cult's trigger fires and A gets a 2/2 Wolf token."
+        },
+        {
+          "label": "converts_to_non_creature",
+          "polarity": "does_not_fire",
+          "delta": "It is B's turn (B's main phase 1), and A activates Arcee's ability at instant speed after B passes priority.",
+          "expected": "Grizzly Bears has 1 damage marked. Arcee is Arcee, Acrobatic Coupe, a Vehicle that is not a creature on B's turn. Cult's trigger does not fire and A has no Wolf token."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Cult of the Waxing Moon",
+        "Arcee, Sharpshooter",
+        "Grizzly Bears"
+      ],
+      "forge_notes": "Forge fires its Transformed trigger for Mode$ Transform whatever the effect's wording. Arcee's living metal makes it a creature only on A's turn."
+    },
+    {
+      "id": "701.27f-1",
+      "rules": [
+        "701.27f"
+      ],
+      "title": "A transform instruction from a triggered ability is ignored if the permanent already transformed since the ability went on the stack",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "upkeep",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Forest",
+            "Forest",
+            {
+              "card": "Delver of Secrets",
+              "summoning_sick": false
+            }
+          ]
+        },
+        "hand": {
+          "A": [
+            "Moonmist"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Lightning Bolt",
+            "Forest"
+          ]
+        },
+        "exile": {},
+        "notes": "Library lists are ordered top first. Delver of Secrets' upkeep trigger has just been put on the stack."
+      },
+      "decisions": [
+        "Delver of Secrets' trigger is on the stack.",
+        "A passes priority and, when the trigger resolves, looks at Lightning Bolt and reveals it."
+      ],
+      "variants": [
+        {
+          "label": "single_transform",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Lightning Bolt is revealed and Delver of Secrets transforms: it is Insectile Aberration, a 3/2 flyer."
+        },
+        {
+          "label": "transformed_in_response",
+          "polarity": "does_not_fire",
+          "delta": "With the trigger on the stack, A casts Moonmist in response (tapping both Forests) and it resolves first; then the trigger resolves, A revealing Lightning Bolt.",
+          "expected": "Moonmist transforms Delver of Secrets to Insectile Aberration. The trigger resolves, Lightning Bolt is revealed, and the transform instruction is ignored: Insectile Aberration stays face up and does not turn back into Delver of Secrets."
+        }
+      ],
+      "cards": [
+        "Forest",
+        "Delver of Secrets",
+        "Moonmist",
+        "Lightning Bolt"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

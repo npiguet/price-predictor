@@ -1,0 +1,7 @@
+{"id": "701.50", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "701.50a", "category": "mechanical", "observability": "direct", "record_kinds": ["resolution"], "outcome": "Connive draws a card then discards a card, and the permanent gets a +1/+1 counter if the discarded card is nonland.", "note": ""}
+{"id": "701.50b", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "A permanent that left the battlefield still connives, using last known information.", "note": ""}
+{"id": "701.50c", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "Simultaneous connives happen one at a time, in APNAP order of the permanents' controllers.", "note": ""}
+{"id": "701.50d", "category": "mechanical", "observability": "direct", "record_kinds": ["resolution"], "outcome": "Connive N draws N, discards N, and adds counters equal to the number of nonland cards discarded.", "note": ""}
+{"id": "701.50e", "category": "mechanical", "observability": "indirect", "record_kinds": ["trigger"], "outcome": "Connive 0 is no event and connive triggers do not fire.", "note": ""}
+{"id": "701.50f", "category": "mechanical", "observability": "indirect", "record_kinds": ["trigger"], "outcome": "A permanent connives, firing connive triggers, even if some of the actions were impossible.", "note": ""}

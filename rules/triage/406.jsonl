@@ -1,0 +1,10 @@
+{"id": "406.1", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "406.2", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "The object moves from its current zone to the exile zone and the card is then an exiled card.", "note": ""}
+{"id": "406.3", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "406.3a", "category": "mechanical", "observability": "needs_new_fields", "record_kinds": ["resolution", "playability"], "outcome": "A card exiled face down has no characteristics, and when played from exile it is turned face up just before it is cast, unless it is cast face down.", "note": ""}
+{"id": "406.3b", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "A spell may be cast from among face-down exiled cards only if the player may look at the card and the resulting spell has the specified qualities.", "note": ""}
+{"id": "406.4", "category": "decision", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "406.5", "category": "out_of_scope", "observability": "none", "record_kinds": [], "outcome": "", "note": "Physical card handling."}
+{"id": "406.6", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "A linked ability refers only to the cards exiled by the first ability of the same object, not to cards exiled by other effects.", "note": ""}
+{"id": "406.7", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution", "trigger"], "outcome": "An exiled card that is exiled again does not change zones but becomes a new object that has just been exiled, so it loses its link to earlier effects.", "note": ""}
+{"id": "406.8", "category": "out_of_scope", "observability": "none", "record_kinds": [], "outcome": "", "note": "Historical terminology note."}

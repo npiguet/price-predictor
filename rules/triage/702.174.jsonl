@@ -1,0 +1,13 @@
+{"id": "702.174", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.174a", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "A spell with gift can be cast with an opponent chosen as an additional cost, which promises the gift.", "note": ""}
+{"id": "702.174b", "category": "mechanical", "observability": "indirect", "record_kinds": ["trigger", "resolution"], "outcome": "A gift permanent triggers on entering only if its gift cost was paid, and a gift instant or sorcery applies its gift effect only if it was.", "note": ""}
+{"id": "702.174c", "category": "mechanical", "observability": "direct", "record_kinds": ["trigger"], "outcome": "A give-a-gift trigger fires when a gifted spell resolves or a gift triggered ability resolves.", "note": ""}
+{"id": "702.174d", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "The chosen player creates a Food token.", "note": ""}
+{"id": "702.174e", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "The chosen player draws a card.", "note": ""}
+{"id": "702.174f", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "The chosen player creates a tapped 1/1 blue Fish token.", "note": ""}
+{"id": "702.174g", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "The chosen player takes an extra turn after this one.", "note": ""}
+{"id": "702.174h", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "The chosen player creates a Treasure token.", "note": ""}
+{"id": "702.174i", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "The chosen player creates an 8/8 blue Octopus token.", "note": ""}
+{"id": "702.174j", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "A gifted instant or sorcery applies its gift effect before its other effects, and not at all if countered.", "note": ""}
+{"id": "702.174k", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "A spell cast with the gift cost declared has its gift promised.", "note": ""}
+{"id": "702.174m", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "A gift-conditional part of a spell with targets only has those targets when the gift was promised.", "note": ""}

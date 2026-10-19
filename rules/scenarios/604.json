@@ -1,0 +1,371 @@
+{
+  "unit": "604",
+  "verified": true,
+  "review": [
+    "604.2-1: variant opponent_controls_anthem flipped the outcome through the Anthem's own 'you control' wording, not through 604.2's source-on-battlefield condition; dropped it.",
+    "604.6-1: variant main2 left open whether a combat damage step had happened this turn (with no attackers it is skipped, making 'before the combat damage step' ambiguous); the delta now states that Grizzly Bears attacked and combat damage was dealt."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "604.2-1",
+      "rules": [
+        "604.2"
+      ],
+      "title": "A static ability's continuous effect lasts only while its source is on the battlefield",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Glorious Anthem",
+            "Grizzly Bears"
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Stable board, nobody acts."
+      },
+      "decisions": [
+        "Both players pass priority with an empty stack; the board is read."
+      ],
+      "variants": [
+        {
+          "label": "anthem_on_battlefield",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears is 3/3 (Glorious Anthem gives creatures A controls +1/+1)."
+        },
+        {
+          "label": "anthem_in_graveyard",
+          "polarity": "does_not_fire",
+          "delta": "Glorious Anthem is in A's graveyard instead of on the battlefield.",
+          "expected": "Grizzly Bears is 2/2."
+        }
+      ],
+      "cards": [
+        "Glorious Anthem",
+        "Grizzly Bears"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "604.4-1",
+      "rules": [
+        "604.4"
+      ],
+      "title": "An Equipment's static ability modifies the object it is attached to and follows it when moved",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Bonesplitter",
+              "attached_to": "Grizzly Bears"
+            },
+            "Grizzly Bears",
+            "Runeclaw Bear",
+            "Mountain"
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Bonesplitter is attached to Grizzly Bears. The Mountain is untapped. Bonesplitter: equipped creature gets +2/+0; Equip {1}."
+      },
+      "decisions": [
+        "A activates Bonesplitter's equip ability targeting Runeclaw Bear, tapping Mountain.",
+        "Both players pass; the equip ability resolves."
+      ],
+      "variants": [
+        {
+          "label": "moved",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Bonesplitter is attached to Runeclaw Bear, which is 4/2; Grizzly Bears is back to 2/2."
+        },
+        {
+          "label": "not_moved",
+          "polarity": "does_not_fire",
+          "delta": "A does not activate the equip ability; both players just pass priority.",
+          "expected": "Bonesplitter stays attached to Grizzly Bears, which is 4/2; Runeclaw Bear is 2/2."
+        }
+      ],
+      "cards": [
+        "Bonesplitter",
+        "Grizzly Bears",
+        "Runeclaw Bear",
+        "Mountain"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "604.5-1",
+      "rules": [
+        "604.5"
+      ],
+      "title": "A can't-be-countered static ability works while its spell is on the stack",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Swamp",
+            "Forest"
+          ],
+          "B": [
+            "Grizzly Bears",
+            "Island",
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Abrupt Decay",
+            "Terror"
+          ],
+          "B": [
+            "Counterspell"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Abrupt Decay targeting B's Grizzly Bears, tapping Swamp and Forest.",
+        "B responds by casting Counterspell targeting Abrupt Decay, tapping both Islands.",
+        "Both players pass; Counterspell resolves, then (if still on the stack) Abrupt Decay resolves."
+      ],
+      "variants": [
+        {
+          "label": "abrupt_decay",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Counterspell resolves but does not counter Abrupt Decay (it can't be countered); Abrupt Decay resolves and Grizzly Bears moves to B's graveyard."
+        },
+        {
+          "label": "terror",
+          "polarity": "does_not_fire",
+          "delta": "A casts Terror (paying Swamp and Forest) targeting Grizzly Bears instead of Abrupt Decay.",
+          "expected": "Counterspell counters Terror, which moves to A's graveyard; Grizzly Bears stays on the battlefield."
+        }
+      ],
+      "cards": [
+        "Swamp",
+        "Forest",
+        "Island",
+        "Grizzly Bears",
+        "Abrupt Decay",
+        "Terror",
+        "Counterspell"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "604.5-2",
+      "rules": [
+        "604.5"
+      ],
+      "title": "An alternative-cost static ability applies to a spell being cast",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Gush"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Forest",
+            "Forest"
+          ]
+        },
+        "exile": {},
+        "notes": "A has only the two lands listed. Gush costs {4}{U} normally, which A cannot pay; its alternative cost is to return two Islands A controls to hand."
+      },
+      "decisions": [
+        "A casts Gush, choosing to return two Islands A controls to hand rather than pay its mana cost.",
+        "Both players pass; Gush resolves."
+      ],
+      "variants": [
+        {
+          "label": "two_islands",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Casting Gush is legal (can_play true) at no mana cost; both Islands return to A's hand and A draws two cards."
+        },
+        {
+          "label": "one_island",
+          "polarity": "does_not_fire",
+          "delta": "A's battlefield is one Island and one Mountain instead of two Islands.",
+          "expected": "Casting Gush is illegal (can_play false): the alternative cost needs two Islands and the {4}{U} cost cannot be paid."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Mountain",
+        "Gush",
+        "Forest"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "604.6-1",
+      "rules": [
+        "604.6"
+      ],
+      "title": "A 'cast only before the combat damage step' static ability restricts casting from hand",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Forest",
+            "Grizzly Bears"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Berserk"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Berserk: 'Cast this spell only before the combat damage step.' Grizzly Bears has been under A's control since before this turn."
+      },
+      "decisions": [
+        "A casts Berserk targeting Grizzly Bears, tapping Forest.",
+        "Both players pass; Berserk resolves."
+      ],
+      "variants": [
+        {
+          "label": "main1",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Casting Berserk is legal (can_play true); Grizzly Bears gets +2/+0 and trample until end of turn (4/2)."
+        },
+        {
+          "label": "main2",
+          "polarity": "does_not_fire",
+          "delta": "The step is main2 instead of main1; earlier this turn Grizzly Bears attacked B, went unblocked and dealt its combat damage, so the combat damage step has passed (Grizzly Bears is tapped, B is at 18 life).",
+          "expected": "Casting Berserk is illegal (can_play false); Berserk stays in A's hand and Grizzly Bears is 2/2."
+        }
+      ],
+      "cards": [
+        "Forest",
+        "Grizzly Bears",
+        "Berserk"
+      ],
+      "forge_notes": "Forge implements this restriction as an ActivationPhases parameter on the spell, not as a static ability."
+    },
+    {
+      "id": "604.7-1",
+      "rules": [
+        "604.7"
+      ],
+      "title": "A static ability stops applying the moment its source leaves the battlefield",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "B",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Glorious Anthem",
+            "Grizzly Bears"
+          ],
+          "B": [
+            "Mountain",
+            "Plains",
+            "Plains"
+          ]
+        },
+        "hand": {
+          "B": [
+            "Shock",
+            "Disenchant"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Grizzly Bears is 3/3 while Glorious Anthem is on the battlefield. B has no creatures."
+      },
+      "decisions": [
+        "B casts Shock targeting A's Grizzly Bears, tapping Mountain, and keeps priority.",
+        "B casts Disenchant targeting Glorious Anthem, tapping both Plains.",
+        "Both players pass; Disenchant resolves, then Shock resolves."
+      ],
+      "variants": [
+        {
+          "label": "anthem_destroyed",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Disenchant resolves and Glorious Anthem moves to A's graveyard; Grizzly Bears is 2/2 when Shock resolves, takes 2 damage and moves to A's graveyard."
+        },
+        {
+          "label": "anthem_kept",
+          "polarity": "does_not_fire",
+          "delta": "B does not cast Disenchant; Glorious Anthem stays on the battlefield.",
+          "expected": "Shock resolves and deals 2 damage to Grizzly Bears (3/3), which stays on the battlefield with 2 damage marked."
+        }
+      ],
+      "cards": [
+        "Glorious Anthem",
+        "Grizzly Bears",
+        "Mountain",
+        "Plains",
+        "Shock",
+        "Disenchant"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

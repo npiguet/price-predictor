@@ -1,0 +1,3 @@
+{"id": "702.191", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.191a", "category": "mechanical", "observability": "indirect", "record_kinds": ["trigger", "resolution"], "outcome": "When its controller casts a spell with more mana spent than the creature's power or toughness, the creature gets a +1/+1 counter.", "note": ""}
+{"id": "702.191b", "category": "mechanical", "observability": "indirect", "record_kinds": ["trigger"], "outcome": "A creature with two instances of increment triggers each separately, gaining a counter for each trigger that resolves.", "note": ""}

@@ -1,0 +1,69 @@
+{
+  "unit": "701.62",
+  "verified": true,
+  "review": [
+    "triage: rules/triage/701.62.jsonl was missing, so validate never checked this file; wrote it."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "701.62a-1",
+      "rules": ["701.62a"],
+      "title": "Manifest dread manifests one of the top two cards and mills the other",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {"A": 20, "B": 20},
+        "battlefield": {"A": ["Forest", "Forest", "Forest"], "B": []},
+        "hand": {"A": ["Break Down the Door"]},
+        "graveyard": {},
+        "library": {"A": ["Grizzly Bears", "Forest", "Mountain"]},
+        "exile": {},
+        "notes": "Library is listed top first."
+      },
+      "decisions": [
+        "A casts Break Down the Door choosing the manifest dread mode, tapping the three Forests.",
+        "Both players pass; the spell resolves.",
+        "A looks at the top two cards, manifests Grizzly Bears and puts Forest into the graveyard."
+      ],
+      "variants": [
+        {"label": "base", "polarity": "fires", "delta": "", "expected": "Grizzly Bears enters the battlefield face down as a 2/2 creature under A's control, Forest moves from the library to A's graveyard, and Mountain stays as the top card of the library."},
+        {"label": "one_card_library", "polarity": "other", "delta": "A's library holds only Grizzly Bears.", "expected": "Grizzly Bears enters the battlefield face down as a 2/2 creature. Nothing is put into the graveyard and the library is empty."},
+        {"label": "empty_library", "polarity": "does_not_fire", "delta": "A's library is empty.", "expected": "No card is manifested and none is put into the graveyard; the spell resolves and A has no new creature."}
+      ],
+      "cards": ["Forest", "Break Down the Door", "Grizzly Bears", "Mountain"],
+      "forge_notes": "The face-down creature can be turned up for its mana cost if it is a creature card; that is not exercised here."
+    },
+    {
+      "id": "701.62b-1",
+      "rules": ["701.62b"],
+      "title": "Manifest dread triggers after the process, even when parts were impossible",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {"A": 20, "B": 20},
+        "battlefield": {"A": ["Paranormal Analyst", "Forest", "Forest", "Forest"], "B": ["Forest", "Forest", "Forest"]},
+        "hand": {"A": ["Break Down the Door"], "B": ["Break Down the Door"]},
+        "graveyard": {},
+        "library": {"A": ["Grizzly Bears", "Forest", "Mountain"], "B": ["Grizzly Bears", "Forest", "Mountain"]},
+        "exile": {},
+        "notes": "Libraries are listed top first. Paranormal Analyst is not summoning sick and is A's."
+      },
+      "decisions": [
+        "A casts Break Down the Door choosing the manifest dread mode, tapping the three Forests.",
+        "Both players pass; the spell resolves.",
+        "A manifests Grizzly Bears and puts Forest into the graveyard.",
+        "Paranormal Analyst's trigger resolves and A returns the Forest from the graveyard to hand."
+      ],
+      "variants": [
+        {"label": "base", "polarity": "fires", "delta": "", "expected": "Paranormal Analyst's trigger fires after the manifest dread completes. Grizzly Bears is a face-down 2/2 under A's control and Forest moves from A's graveyard to A's hand."},
+        {"label": "one_card_library", "polarity": "fires", "delta": "A's library holds only Grizzly Bears.", "expected": "Paranormal Analyst's trigger still fires, although no card was put into the graveyard. Grizzly Bears is a face-down 2/2 under A's control, nothing moves to A's hand and the library is empty."},
+        {"label": "opponent_manifests", "polarity": "does_not_fire", "delta": "A does not cast Break Down the Door; A passes priority and B casts B's own Break Down the Door choosing manifest dread, manifesting Grizzly Bears and putting Forest into B's graveyard.", "expected": "Paranormal Analyst's trigger does not fire, because only A manifesting dread triggers it. B has a face-down 2/2 and Forest in B's graveyard; A's hand and graveyard are unchanged."}
+      ],
+      "cards": ["Paranormal Analyst", "Forest", "Break Down the Door", "Grizzly Bears", "Mountain"],
+      "forge_notes": "Forge's ManifestDread trigger is TriggerManifestDread. B's cards are used only in the opponent_manifests variant."
+    }
+  ]
+}

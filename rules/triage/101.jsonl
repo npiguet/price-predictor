@@ -1,0 +1,10 @@
+{"id": "101.1", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "101.2", "category": "mechanical", "observability": "direct", "record_kinds": ["playability", "resolution"], "outcome": "When one effect allows or directs an action and another says it can't happen, the action is not permitted or does not happen.", "note": ""}
+{"id": "101.2a", "category": "mechanical", "observability": "indirect", "record_kinds": ["continuous"], "outcome": "Adding or removing abilities is not overridden by 'can't'; the result follows timestamp and layer order.", "note": ""}
+{"id": "101.3", "category": "mechanical", "observability": "direct", "record_kinds": ["resolution"], "outcome": "The impossible part of an instruction is skipped and the remaining parts still resolve.", "note": ""}
+{"id": "101.4", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "When several players choose and act at once, the chosen objects are all affected simultaneously after choices are made in APNAP order.", "note": ""}
+{"id": "101.4a", "category": "out_of_scope", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "101.4b", "category": "decision", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "101.4c", "category": "decision", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "101.4d", "category": "decision", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "101.4e", "category": "out_of_scope", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}

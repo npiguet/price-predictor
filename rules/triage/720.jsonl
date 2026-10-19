@@ -1,0 +1,12 @@
+{"id": "720.1", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "720.2", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "720.2a", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "720.2b", "category": "mechanical", "observability": "needs_new_fields", "record_kinds": ["continuous"], "outcome": "A copy of an omen card has the same alternative Omen characteristics as the original.", "note": ""}
+{"id": "720.2c", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "Drawing or discarding an omen card moves one card, not two.", "note": ""}
+{"id": "720.3", "category": "decision", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "720.3a", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "Casting as an Omen is judged only on the Omen's cost, type and targets.", "note": ""}
+{"id": "720.3b", "category": "mechanical", "observability": "needs_new_fields", "record_kinds": ["continuous"], "outcome": "A spell cast as an Omen has only the Omen's characteristics while on the stack.", "note": ""}
+{"id": "720.3c", "category": "mechanical", "observability": "needs_new_fields", "record_kinds": ["resolution"], "outcome": "A copy of an Omen spell is an Omen with the Omen's characteristics.", "note": ""}
+{"id": "720.3d", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "An Omen spell that resolves is shuffled into its owner's library instead of going to the graveyard.", "note": ""}
+{"id": "720.4", "category": "mechanical", "observability": "needs_new_fields", "record_kinds": ["continuous"], "outcome": "Outside the stack, and on the stack when not cast as an Omen, the card has only its normal characteristics.", "note": ""}
+{"id": "720.5", "category": "decision", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}

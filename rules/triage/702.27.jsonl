@@ -1,0 +1,2 @@
+{"id": "702.27", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.27a", "category": "mechanical", "observability": "direct", "record_kinds": ["resolution"], "outcome": "A spell cast with its buyback cost paid returns to its owner's hand as it resolves instead of going to the graveyard; if not paid, or if the spell is countered or fizzles, it goes to the graveyard.", "note": "the optional payment is a decision; the zone outcome is mechanical"}

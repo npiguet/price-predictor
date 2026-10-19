@@ -1,0 +1,596 @@
+{
+  "unit": "708",
+  "verified": true,
+  "review": [
+    "708.4-1: polarities inverted; the face-up cast is where 708.4 does not apply (now does_not_fire) and the Essence Scatter check still applies the face-down characteristics (now other).",
+    "708.7-1: dropped variant cannot_pay; whether the morph cost can be paid is decided by cost-payment rules, not 708.7.",
+    "708.12-1: base expected implied the turned-up permanent is a plain Grizzly Bears; Song of the Dryads keeps applying (708.8), so it now states the permanent is a colorless Forest land."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "708.2-1",
+      "rules": [
+        "708.2",
+        "708.2a"
+      ],
+      "title": "A face-down permanent has only the characteristics the effect lists, or 2/2 with nothing else when it lists none",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island"
+          ],
+          "B": [
+            "Exalted Angel",
+            "Island",
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Backslide",
+            "Cyber Conversion"
+          ],
+          "B": [
+            "Counterspell"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Exalted Angel is a face-up 4/5 white Angel with flying and a morph ability. B holds Counterspell with two untapped Islands and casts it only in the variant that says so."
+      },
+      "decisions": [
+        "A casts Backslide targeting Exalted Angel, tapping both Islands.",
+        "B passes; Backslide resolves."
+      ],
+      "variants": [
+        {
+          "label": "backslide",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Exalted Angel is turned face down by an effect that lists no characteristics. It is a 2/2 creature with no name, no mana cost, no color, no subtypes, no flying and no other abilities."
+        },
+        {
+          "label": "cyber_conversion",
+          "polarity": "other",
+          "delta": "A casts Cyber Conversion targeting Exalted Angel instead of Backslide.",
+          "expected": "Exalted Angel is face down with exactly the characteristics Cyber Conversion lists: a 2/2 artifact creature of subtype Cyberman. It has no name, no mana cost, no color, no flying and no other abilities."
+        },
+        {
+          "label": "countered",
+          "polarity": "does_not_fire",
+          "delta": "In response to Backslide, B casts Counterspell targeting it, tapping both of B's Islands.",
+          "expected": "Backslide is countered and goes to A's graveyard. Exalted Angel stays face up on the battlefield as a 4/5 white Angel with flying."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Backslide",
+        "Cyber Conversion",
+        "Counterspell",
+        "Exalted Angel"
+      ],
+      "forge_notes": "Backslide requires a target creature with a morph ability, which face-up Exalted Angel has. The Cyber Conversion variant relies on Forge honouring FaceDownSetType, FaceDownPower and FaceDownToughness."
+    },
+    {
+      "id": "708.2b-1",
+      "rules": [
+        "708.2b"
+      ],
+      "title": "A face-down permanent can't be turned face down again",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island"
+          ],
+          "B": [
+            "Exalted Angel"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Cyber Conversion"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Exalted Angel is face up."
+      },
+      "decisions": [
+        "A casts Cyber Conversion targeting Exalted Angel, tapping both Islands.",
+        "B passes; Cyber Conversion resolves."
+      ],
+      "variants": [
+        {
+          "label": "face_up_target",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Cyber Conversion resolves. Exalted Angel is turned face down and is a 2/2 artifact creature of subtype Cyberman with no name, no flying and no other abilities."
+        },
+        {
+          "label": "face_down_target",
+          "polarity": "does_not_fire",
+          "delta": "Exalted Angel is already face down on the battlefield.",
+          "expected": "Cyber Conversion resolves and nothing happens. The permanent stays a plain 2/2 face-down creature: it is not an artifact and has no Cyberman subtype."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Cyber Conversion",
+        "Exalted Angel"
+      ],
+      "forge_notes": "The face-down variant needs Forge to place Exalted Angel face down on the battlefield in the initial state (for example through a puzzle file)."
+    },
+    {
+      "id": "708.3-1",
+      "rules": [
+        "708.3"
+      ],
+      "title": "A permanent that enters face down doesn't trigger its enters-the-battlefield ability",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Swamp",
+            "Swamp",
+            "Swamp",
+            "Swamp"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Nightdrinker Moroii"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Nightdrinker Moroii (4/2 flying, 'When Nightdrinker Moroii enters, you lose 3 life', disguise {B}{B}) may be cast face down for {3}. Face down it is a 2/2 with ward {2}."
+      },
+      "decisions": [
+        "A casts Nightdrinker Moroii face down for its disguise alternative cost of {3}, tapping three Swamps.",
+        "Both players pass; the face-down spell resolves."
+      ],
+      "variants": [
+        {
+          "label": "face_down",
+          "polarity": "does_not_fire",
+          "delta": "",
+          "expected": "Nightdrinker Moroii enters the battlefield face down as a 2/2 creature. Its enters-the-battlefield trigger does not fire. A's life total stays 20."
+        },
+        {
+          "label": "face_up",
+          "polarity": "fires",
+          "delta": "A casts Nightdrinker Moroii face up for its mana cost {3}{B}, tapping all four Swamps.",
+          "expected": "Nightdrinker Moroii enters face up as a 4/2 flyer. Its enters-the-battlefield trigger fires and resolves. A's life total is 17."
+        }
+      ],
+      "cards": [
+        "Swamp",
+        "Nightdrinker Moroii"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "708.4-1",
+      "rules": [
+        "708.4"
+      ],
+      "title": "A spell cast face down has only face-down characteristics for targeting",
+      "record_kind": "playability",
+      "setup": {
+        "active": "B",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Island",
+            "Island"
+          ],
+          "B": [
+            "Island",
+            "Island",
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Red Elemental Blast",
+            "Essence Scatter"
+          ],
+          "B": [
+            "Echo Tracer"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Echo Tracer is a blue 2/2 Human Wizard with morph {2}{U}. B has priority first and casts it; A then receives priority with it on the stack."
+      },
+      "decisions": [
+        "B casts Echo Tracer face down for {3}, tapping three Islands.",
+        "B passes priority.",
+        "A, with priority, is checked for casting Red Elemental Blast (counter target blue spell) targeting the Echo Tracer spell, using Mountain."
+      ],
+      "variants": [
+        {
+          "label": "face_down_blast",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Casting Red Elemental Blast is not legal against the face-down spell: the spell is colorless, so Red Elemental Blast has no legal target in its counter mode."
+        },
+        {
+          "label": "face_up_blast",
+          "polarity": "does_not_fire",
+          "delta": "B casts Echo Tracer face up for {2}{U} instead of face down.",
+          "expected": "Casting Red Elemental Blast is legal: the blue Echo Tracer spell is a legal target for its counter mode."
+        },
+        {
+          "label": "face_down_scatter",
+          "polarity": "other",
+          "delta": "A checks Essence Scatter (counter target creature spell), tapping both of A's Islands, instead of Red Elemental Blast.",
+          "expected": "Casting Essence Scatter is legal: the face-down spell is a creature spell, so the Echo Tracer spell is a legal target."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Island",
+        "Red Elemental Blast",
+        "Essence Scatter",
+        "Echo Tracer"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "708.7-1",
+      "rules": [
+        "708.7"
+      ],
+      "title": "Only a face-down permanent's controller may turn it face up, and only while the rules allow it",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            {
+              "card": "Exalted Angel",
+              "face_down": true,
+              "summoning_sick": false
+            }
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Exalted Angel was cast face down and has morph {2}{W}{W}. A holds priority with an empty stack."
+      },
+      "decisions": [
+        "A is checked for turning the face-down Exalted Angel face up by paying its morph cost {2}{W}{W} with four Plains."
+      ],
+      "variants": [
+        {
+          "label": "own_permanent",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Turning Exalted Angel face up is legal. A may do it any time A has priority."
+        },
+        {
+          "label": "opponents_permanent",
+          "polarity": "does_not_fire",
+          "delta": "The face-down Exalted Angel is controlled by B.",
+          "expected": "Turning the face-down Exalted Angel face up is not legal for A."
+        },
+        {
+          "label": "face_down_spell",
+          "polarity": "does_not_fire",
+          "delta": "The face-down Exalted Angel is a spell on the stack controlled by A instead of a permanent on the battlefield.",
+          "expected": "Turning the face-down Exalted Angel face up is not legal while it is a spell; spells can't be turned face up."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Exalted Angel"
+      ],
+      "forge_notes": "Whether a morph is offered for turning face up is a playability verdict only; the stack variant needs the face-down spell placed on the stack in the initial state."
+    },
+    {
+      "id": "708.8-1",
+      "rules": [
+        "708.8"
+      ],
+      "title": "Turning a permanent face up restores its normal characteristics, keeps earlier effects and triggers no enters-the-battlefield ability",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Swamp",
+            "Swamp",
+            "Forest",
+            {
+              "card": "Nightdrinker Moroii",
+              "face_down": true,
+              "summoning_sick": false
+            }
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Giant Growth"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "The face-down Nightdrinker Moroii is a 2/2 with ward {2} and disguise {B}{B}. Face up it is a 4/2 flyer whose enters-the-battlefield ability makes its controller lose 3 life."
+      },
+      "decisions": [
+        "A casts Giant Growth targeting the face-down creature, tapping Forest.",
+        "B passes; Giant Growth resolves.",
+        "A turns the creature face up by paying its disguise cost {B}{B}, tapping both Swamps."
+      ],
+      "variants": [
+        {
+          "label": "turned_up",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The permanent is Nightdrinker Moroii, a 7/5 flying creature (4/2 plus the +3/+3 from Giant Growth, still applying until end of turn). Its enters-the-battlefield ability does not trigger. A's life total stays 20."
+        },
+        {
+          "label": "stays_down",
+          "polarity": "does_not_fire",
+          "delta": "A does not turn the creature face up.",
+          "expected": "The permanent is still face down: a nameless 5/5 creature (2/2 plus +3/+3) with ward {2} and no flying. A's life total stays 20."
+        }
+      ],
+      "cards": [
+        "Swamp",
+        "Forest",
+        "Giant Growth",
+        "Nightdrinker Moroii"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "708.10-1",
+      "rules": [
+        "708.10"
+      ],
+      "title": "A face-down permanent that becomes a copy stays face down and takes the copied values when turned face up",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "B",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain"
+          ],
+          "B": [
+            "Forest",
+            "Island",
+            "Island",
+            {
+              "card": "Exalted Angel",
+              "face_down": true,
+              "summoning_sick": false
+            },
+            "Serra Angel"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Break Open"
+          ],
+          "B": [
+            "Cytoshape"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Exalted Angel is a 4/5 flyer when face up whose controller gains life whenever it deals damage; Serra Angel is a 4/4 with flying and vigilance."
+      },
+      "decisions": [
+        "B casts Cytoshape targeting the face-down creature and choosing Serra Angel as the creature to copy, tapping Forest and both Islands.",
+        "A passes; Cytoshape resolves. B passes priority with an empty stack.",
+        "A casts Break Open targeting the face-down creature, tapping both Mountains.",
+        "B passes; Break Open resolves."
+      ],
+      "variants": [
+        {
+          "label": "turned_up",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "After Cytoshape resolves the permanent is still a face-down 2/2 with no name and no abilities. After Break Open resolves it is face up and has the copied values until end of turn: Serra Angel, a 4/4 with flying and vigilance, without Exalted Angel's lifegain ability."
+        },
+        {
+          "label": "stays_down",
+          "polarity": "does_not_fire",
+          "delta": "A does not cast Break Open.",
+          "expected": "The permanent is still a face-down 2/2 with no name and no abilities after Cytoshape resolves and stays that way."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Forest",
+        "Island",
+        "Exalted Angel",
+        "Serra Angel",
+        "Break Open",
+        "Cytoshape"
+      ],
+      "forge_notes": "Cytoshape's copy lasts until end of turn, so the turned-up values revert to Exalted Angel at the cleanup step."
+    },
+    {
+      "id": "708.11-1",
+      "rules": [
+        "708.11"
+      ],
+      "title": "An 'as this is turned face up' ability applies while the permanent is being turned face up",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest",
+            {
+              "card": "Hooded Hydra",
+              "face_down": true,
+              "summoning_sick": false
+            }
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Hooded Hydra is a 0/0 face up and has morph {3}{G}{G} and 'As Hooded Hydra is turned face up, put five +1/+1 counters on it.' Face down it is a 2/2."
+      },
+      "decisions": [
+        "A turns Hooded Hydra face up by paying its morph cost {3}{G}{G}, tapping all five Forests."
+      ],
+      "variants": [
+        {
+          "label": "turned_up",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Hooded Hydra is face up with five +1/+1 counters and is a 5/5. It is never a 0/0 permanent, so no state-based action puts it into the graveyard, and its dies trigger does not fire."
+        },
+        {
+          "label": "stays_down",
+          "polarity": "does_not_fire",
+          "delta": "A does not turn Hooded Hydra face up.",
+          "expected": "Hooded Hydra stays face down as a nameless 2/2 with no counters."
+        }
+      ],
+      "cards": [
+        "Forest",
+        "Hooded Hydra"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "708.12-1",
+      "rules": [
+        "708.12"
+      ],
+      "title": "Revealing a face-down permanent reads its card, ignoring continuous effects on it",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Hauntwoods Shrieker",
+            "Forest",
+            "Forest",
+            {
+              "card": "Grizzly Bears",
+              "face_down": true,
+              "summoning_sick": false
+            },
+            {
+              "card": "Song of the Dryads",
+              "attached_to": "Grizzly Bears"
+            }
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "The face-down permanent is the card Grizzly Bears, manifested. Song of the Dryads makes it a colorless Forest land, so as a permanent it is not a creature. Hauntwoods Shrieker's ability: '{1}{G}: Reveal target face-down permanent. If it's a creature card, you may turn it face up.'"
+      },
+      "decisions": [
+        "A activates Hauntwoods Shrieker's ability targeting the face-down permanent, paying {1}{G} with both Forests.",
+        "B passes; the ability resolves. A chooses to turn the permanent face up if allowed."
+      ],
+      "variants": [
+        {
+          "label": "creature_card",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The permanent is revealed as Grizzly Bears, which is a creature card, because the reveal ignores Song of the Dryads. A turns it face up; it is Grizzly Bears, still enchanted by Song of the Dryads, and so a colorless Forest land that is not a creature."
+        },
+        {
+          "label": "land_card",
+          "polarity": "does_not_fire",
+          "delta": "The face-down card is a Forest instead of Grizzly Bears.",
+          "expected": "The permanent is revealed as a Forest, which is not a creature card. A can't turn it face up and it stays face down."
+        }
+      ],
+      "cards": [
+        "Forest",
+        "Hauntwoods Shrieker",
+        "Grizzly Bears",
+        "Song of the Dryads"
+      ],
+      "forge_notes": "Needs Forge to reach a manifested face-down card as initial state. Forge's reveal check on the face-down permanent may read the current (overridden) types rather than the card's own."
+    }
+  ]
+}

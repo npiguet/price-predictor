@@ -1,0 +1,8 @@
+{"id": "702.37", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.37a", "category": "mechanical", "observability": "direct", "record_kinds": ["continuous"], "outcome": "A card cast with morph is a 2/2 face-down creature with no name, text, subtypes or mana cost, and its caster pays {3} instead of its mana cost.", "note": ""}
+{"id": "702.37b", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "A megamorph permanent turned face up by paying its cost gets a +1/+1 counter; a morph turned up gets none.", "note": ""}
+{"id": "702.37c", "category": "mechanical", "observability": "direct", "record_kinds": ["continuous"], "outcome": "The morph spell resolves into a 2/2 face-down permanent with the face-down characteristics, which end when it is turned face up.", "note": ""}
+{"id": "702.37d", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "A card can be cast face down only through a morph ability.", "note": "borderline: states a permission"}
+{"id": "702.37e", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution", "trigger"], "outcome": "Turning a face-down permanent face up restores its characteristics and enters-the-battlefield abilities do not trigger.", "note": ""}
+{"id": "702.37f", "category": "mechanical", "observability": "needs_new_fields", "record_kinds": ["resolution"], "outcome": "Abilities of the permanent that refer to X use the X paid for the morph cost when it is turned face up.", "note": ""}
+{"id": "702.37g", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": "cross-reference"}

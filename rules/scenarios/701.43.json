@@ -1,0 +1,187 @@
+{
+  "unit": "701.43",
+  "verified": true,
+  "review": [
+    "701.43b-1: forge_notes claimed exerting twice is unreachable; it is reachable (vigilance plus an additional combat) but has no observable contrast, and the note now says so."
+  ],
+  "skipped": [
+    {
+      "id": "701.43c",
+      "reason": "An object can only be exerted as an attack cost or as part of an ability cost paid on the battlefield, so no two-player Forge game offers to exert an object in another zone; nothing can be illustrated."
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "701.43a-1",
+      "rules": [
+        "701.43a"
+      ],
+      "title": "An exerted permanent does not untap during its controller's next untap step",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Ahn-Crop Crasher",
+              "summoning_sick": false
+            }
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A attacks B with Ahn-Crop Crasher, exerting it; its trigger targets Ahn-Crop Crasher; the trigger resolves.",
+        "B has no blockers; combat damage is dealt. The rest of A's turn passes.",
+        "B passes through B's turn without acting.",
+        "A's next turn begins and A's untap step is performed."
+      ],
+      "variants": [
+        {
+          "label": "exerted",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Combat damage leaves B at 17. After A's next untap step Ahn-Crop Crasher is still tapped."
+        },
+        {
+          "label": "not_exerted",
+          "polarity": "does_not_fire",
+          "delta": "A attacks without exerting Ahn-Crop Crasher (no trigger).",
+          "expected": "Combat damage leaves B at 17. After A's next untap step Ahn-Crop Crasher is untapped."
+        }
+      ],
+      "cards": [
+        "Ahn-Crop Crasher"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "701.43b-1",
+      "rules": [
+        "701.43b"
+      ],
+      "title": "A permanent that is not tapped can be exerted",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Ahn-Crop Crasher",
+              "summoning_sick": false
+            },
+            {
+              "card": "Cathar's Shield",
+              "attached_to": "Ahn-Crop Crasher"
+            }
+          ],
+          "B": [
+            "Icy Manipulator",
+            "Island"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Cathar's Shield gives the equipped Crasher vigilance, so it stays untapped when it attacks."
+      },
+      "decisions": [
+        "A attacks B with Ahn-Crop Crasher, exerting it; its trigger targets Ahn-Crop Crasher; the trigger resolves. Ahn-Crop Crasher stays untapped.",
+        "B has no blockers; combat damage is dealt. The rest of A's turn passes.",
+        "In B's upkeep B activates Icy Manipulator with the Island, tapping Ahn-Crop Crasher. B's turn otherwise passes.",
+        "A's next turn begins and A's untap step is performed."
+      ],
+      "variants": [
+        {
+          "label": "exerted_untapped",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Ahn-Crop Crasher attacks without becoming tapped. After A's next untap step it is still tapped."
+        },
+        {
+          "label": "not_exerted",
+          "polarity": "does_not_fire",
+          "delta": "A attacks without exerting Ahn-Crop Crasher (no trigger).",
+          "expected": "After A's next untap step Ahn-Crop Crasher is untapped."
+        }
+      ],
+      "cards": [
+        "Ahn-Crop Crasher",
+        "Cathar's Shield",
+        "Icy Manipulator",
+        "Island"
+      ],
+      "forge_notes": "Only the not-yet-tapped branch of 701.43b is exercised. Exerting twice before one untap step is reachable (vigilance plus an additional combat), but it has no observable contrast: both effects expire at the same untap step either way."
+    },
+    {
+      "id": "701.43d-1",
+      "rules": [
+        "701.43d"
+      ],
+      "title": "A creature exerted as it attacks fires its linked when-you-do trigger",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Ahn-Crop Crasher",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A attacks B with Ahn-Crop Crasher and chooses whether to exert it as shown in each variant. If exerted, the trigger targets Grizzly Bears and resolves.",
+        "B blocks Ahn-Crop Crasher with Grizzly Bears if able; combat damage is dealt."
+      ],
+      "variants": [
+        {
+          "label": "exerted",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The linked trigger fires and Grizzly Bears cannot block this turn. Ahn-Crop Crasher is unblocked, B is at 17, and both creatures are undamaged."
+        },
+        {
+          "label": "not_exerted",
+          "polarity": "does_not_fire",
+          "delta": "A attacks without exerting Ahn-Crop Crasher.",
+          "expected": "The trigger does not fire. Grizzly Bears blocks: Ahn-Crop Crasher (3/2) deals 3 damage to Grizzly Bears and Grizzly Bears deals 2 to it. Both creatures die. B is at 20."
+        }
+      ],
+      "cards": [
+        "Ahn-Crop Crasher",
+        "Grizzly Bears"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

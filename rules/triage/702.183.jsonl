@@ -1,0 +1,2 @@
+{"id": "702.183", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.183a", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution", "playability"], "outcome": "A tiered spell is cast with one mode chosen and that mode's cost added; on resolution only that mode happens.", "note": ""}

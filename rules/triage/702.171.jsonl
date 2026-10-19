@@ -1,0 +1,4 @@
+{"id": "702.171", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.171a", "category": "mechanical", "observability": "direct", "record_kinds": ["resolution"], "outcome": "Saddling taps other creatures with total power N or more as cost, and the permanent becomes saddled until end of turn; sorcery speed only.", "note": ""}
+{"id": "702.171b", "category": "mechanical", "observability": "indirect", "record_kinds": ["continuous"], "outcome": "A saddled permanent stays saddled until end of turn or until it leaves the battlefield, and the designation is not copied.", "note": ""}
+{"id": "702.171c", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}

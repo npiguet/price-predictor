@@ -1,0 +1,3 @@
+{"id": "702.50", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.50a", "category": "mechanical", "observability": "direct", "record_kinds": ["resolution", "trigger"], "outcome": "After an epic spell resolves its controller cannot cast spells, and at each of their upkeeps a copy of the spell is put on the stack.", "note": ""}
+{"id": "702.50b", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "A player with a resolved epic spell cannot cast spells, though copies can still be put on the stack.", "note": ""}

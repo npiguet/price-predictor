@@ -1,0 +1,80 @@
+{
+  "unit": "702.152",
+  "verified": true,
+  "review": [],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.152a-1",
+      "rules": [
+        "702.152a"
+      ],
+      "title": "A creature cast for its blitz cost has haste, is sacrificed at the end step and draws a card when it dies",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Mountain"
+          ],
+          "B": [
+            "Barkweave Crusher"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Riveteers Requisitioner"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Mountain",
+            "Mountain"
+          ]
+        },
+        "exile": {},
+        "notes": "Riveteers Requisitioner (3/1) has blitz {2}{R}. Barkweave Crusher (2/5) is B's only creature and has been under B's control since earlier turns."
+      },
+      "decisions": [
+        "A casts Riveteers Requisitioner for its blitz cost {2}{R}, tapping three Mountains. Both players pass; it resolves.",
+        "A moves to combat and declares Riveteers Requisitioner as an attacker.",
+        "B declares no blockers.",
+        "Combat damage is dealt. Both players pass priority through the rest of the turn, including the end step."
+      ],
+      "variants": [
+        {
+          "label": "blitz_unblocked",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Riveteers Requisitioner is a legal attacker despite entering this turn (haste) and deals 3 combat damage: B is at 17. At the beginning of the end step it is sacrificed and moves to A's graveyard; A draws a card (hand: Mountain, library: 1 card) from the blitz dies-trigger and a Treasure token is created from its own dies-trigger."
+        },
+        {
+          "label": "hard_cast",
+          "polarity": "does_not_fire",
+          "delta": "A casts Riveteers Requisitioner for its mana cost {1}{R}, tapping two Mountains, instead of its blitz cost.",
+          "expected": "Riveteers Requisitioner has no haste and cannot be declared as an attacker (summoning sick). B stays at 20. It is not sacrificed at the end step, stays on the battlefield and A draws no card."
+        },
+        {
+          "label": "blitz_blocked",
+          "polarity": "other",
+          "delta": "B declares Barkweave Crusher as a blocker of Riveteers Requisitioner.",
+          "expected": "Barkweave Crusher deals 2 damage to the 3/1 Requisitioner, which dies in the combat damage step; A draws a card from the blitz dies-trigger at that moment and a Treasure token is created. Crusher survives with 3 damage. B stays at 20. At the end step there is nothing left to sacrifice."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Riveteers Requisitioner",
+        "Barkweave Crusher"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

@@ -1,0 +1,71 @@
+{
+  "unit": "702.118",
+  "verified": true,
+  "review": [],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.118b-1",
+      "rules": [
+        "702.118b"
+      ],
+      "title": "A creature with skulk cannot be blocked by a creature with greater power",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "declare_blockers",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Furtive Homunculus",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            "Centaur Courser"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Furtive Homunculus (2/1 skulk) has been declared as an attacker against B and the declare blockers step has begun. B's only creature is untapped."
+      },
+      "decisions": [
+        "A attacks B with Furtive Homunculus in the declare attackers step.",
+        "B proposes to block Furtive Homunculus with its one creature; the engine's verdict on that block is read."
+      ],
+      "variants": [
+        {
+          "label": "greater_power",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The block is illegal: Centaur Courser (power 3) has greater power than Furtive Homunculus (power 2), so it is not a legal blocker."
+        },
+        {
+          "label": "equal_power",
+          "polarity": "does_not_fire",
+          "delta": "B's creature is Grizzly Bears (power 2) instead of Centaur Courser (power 3).",
+          "expected": "The block is legal: Grizzly Bears has power equal to Furtive Homunculus's, which skulk does not restrict."
+        },
+        {
+          "label": "lesser_power",
+          "polarity": "does_not_fire",
+          "delta": "B's creature is Llanowar Elves (power 1) instead of Centaur Courser (power 3).",
+          "expected": "The block is legal: Llanowar Elves has less power than Furtive Homunculus."
+        }
+      ],
+      "cards": [
+        "Furtive Homunculus",
+        "Centaur Courser",
+        "Grizzly Bears",
+        "Llanowar Elves"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

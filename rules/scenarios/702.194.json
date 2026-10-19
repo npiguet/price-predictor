@@ -1,0 +1,211 @@
+{
+  "unit": "702.194",
+  "verified": true,
+  "review": [
+    "702.194a-1: variant power_short assumed the engine silently casts without teamwork after an insufficient payment; rewrote its expected outcome as the payment being illegal.",
+    "702.194b-1: the token has flying (Forge script c_1_1_a_robot_hero_flying); added it to the expected outcome and dropped the forge_note asking to check the script."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.194a-1",
+      "rules": [
+        "702.194a"
+      ],
+      "title": "Teamwork taps creatures with total power N or more as an additional cost and enables the teamwork effect",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            },
+            {
+              "card": "Llanowar Elves",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            "Hill Giant"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Repulsor Blast"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Repulsor Blast has teamwork 2: it deals 5 damage to target creature, and 2 damage to that creature's controller if cast using teamwork."
+      },
+      "decisions": [
+        "A casts Repulsor Blast targeting Hill Giant, declaring teamwork by tapping Grizzly Bears (power 2) and paying {3}{R} with four Mountains.",
+        "Both players pass; Repulsor Blast resolves."
+      ],
+      "variants": [
+        {
+          "label": "teamwork_paid",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears becomes tapped as the additional cost. Repulsor Blast deals 5 damage to Hill Giant, which moves to B's graveyard, and 2 damage to B (18)."
+        },
+        {
+          "label": "no_teamwork",
+          "polarity": "does_not_fire",
+          "delta": "A does not declare teamwork, and no creature is tapped.",
+          "expected": "Grizzly Bears stays untapped. Repulsor Blast deals 5 damage to Hill Giant, which moves to B's graveyard. B's life stays 20."
+        },
+        {
+          "label": "power_short",
+          "polarity": "does_not_fire",
+          "delta": "A declares teamwork by tapping only Llanowar Elves (power 1) instead of Grizzly Bears.",
+          "expected": "Tapping creatures with total power 1 does not pay teamwork 2, so casting Repulsor Blast with that teamwork payment is not legal. Llanowar Elves stays untapped and Hill Giant takes no damage."
+        }
+      ],
+      "cards": [
+        "Repulsor Blast",
+        "Mountain",
+        "Grizzly Bears",
+        "Llanowar Elves",
+        "Hill Giant"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.194b-1",
+      "rules": [
+        "702.194b"
+      ],
+      "title": "A spell counts as cast using teamwork only if its controller declared the intention to pay the teamwork cost",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Virtual Assistant",
+            "Forest",
+            "Forest",
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            }
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Beast Mode"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Virtual Assistant is a 3/3 defender: 'whenever you cast a spell using teamwork, you may create a 1/1 colorless Robot Hero artifact creature token'. Beast Mode has teamwork 1: target creature gets +2/+2 and trample until end of turn, and a +1/+1 counter if cast using teamwork."
+      },
+      "decisions": [
+        "A casts Beast Mode targeting Virtual Assistant, declaring teamwork by tapping Grizzly Bears (power 2) and paying {1}{G} with two Forests.",
+        "Virtual Assistant's trigger goes on the stack; A chooses to create the token. Both players pass; the trigger resolves, then Beast Mode resolves."
+      ],
+      "variants": [
+        {
+          "label": "teamwork_declared",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Virtual Assistant's trigger fires: A creates a 1/1 colorless Robot Hero artifact creature token with flying. Beast Mode gives Virtual Assistant +2/+2 and trample until end of turn and a +1/+1 counter (6/6 this turn)."
+        },
+        {
+          "label": "teamwork_not_declared",
+          "polarity": "does_not_fire",
+          "delta": "A does not declare teamwork when casting Beast Mode, and Grizzly Bears is not tapped.",
+          "expected": "Virtual Assistant's trigger does not fire and A creates no token. Beast Mode gives Virtual Assistant +2/+2 and trample until end of turn (5/5) and no counter."
+        }
+      ],
+      "cards": [
+        "Virtual Assistant",
+        "Forest",
+        "Grizzly Bears",
+        "Beast Mode"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.194c-1",
+      "rules": [
+        "702.194c"
+      ],
+      "title": "A target belonging to a teamwork-only part of a spell is chosen only if teamwork was used",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Swamp",
+            "Swamp",
+            "Swamp",
+            {
+              "card": "Hill Giant",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            "Hill Giant"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Cruel Alliance"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Cruel Alliance has teamwork 2: exile target creature with mana value 3 or less; if cast using teamwork, instead exile target creature and gain 3 life. Hill Giant has mana value 4."
+      },
+      "decisions": [
+        "A checks whether Cruel Alliance can be cast targeting B's Hill Giant, declaring teamwork by tapping A's Hill Giant (power 3) and paying {2}{B} with three Swamps."
+      ],
+      "variants": [
+        {
+          "label": "teamwork_declared",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Casting is legal: A's Hill Giant is tapped as the additional cost and A chooses target creature B's Hill Giant. On resolution B's Hill Giant is exiled and A gains 3 life (23)."
+        },
+        {
+          "label": "teamwork_not_declared",
+          "polarity": "does_not_fire",
+          "delta": "A does not declare teamwork.",
+          "expected": "Casting is not legal: only the target 'creature with mana value 3 or less' is chosen, and no such creature is on the battlefield, so Cruel Alliance has no legal target and stays in A's hand."
+        }
+      ],
+      "cards": [
+        "Cruel Alliance",
+        "Swamp",
+        "Hill Giant"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

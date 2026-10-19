@@ -1,0 +1,82 @@
+{
+  "unit": "701.34",
+  "verified": true,
+  "review": [
+    "701.34a-1 no_counters: the expected outcome carried reasoning and the decision to choose Grizzly Bears was impossible without a counter; the delta now says A chooses only B and the expected lists outcomes only"
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "701.34a-1",
+      "rules": [
+        "701.34a"
+      ],
+      "title": "Proliferate gives each chosen permanent or player one more counter of each kind it already has",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Karn's Bastion",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            {
+              "card": "Grizzly Bears",
+              "counters": {
+                "+1/+1": 1
+              },
+              "summoning_sick": false
+            },
+            {
+              "card": "Hill Giant",
+              "summoning_sick": false
+            }
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Grizzly Bears has one +1/+1 counter (a 3/3). Player B has one poison counter."
+      },
+      "decisions": [
+        "A activates Karn's Bastion's proliferate ability, paying {4} with the Mountains and tapping Karn's Bastion.",
+        "Both players pass; the ability resolves. A chooses Grizzly Bears and player B."
+      ],
+      "variants": [
+        {
+          "label": "chosen",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears has two +1/+1 counters (a 4/4). B has two poison counters. Hill Giant has no counters."
+        },
+        {
+          "label": "none_chosen",
+          "polarity": "does_not_fire",
+          "delta": "A chooses no permanent and no player.",
+          "expected": "Grizzly Bears still has one +1/+1 counter (a 3/3). B still has one poison counter."
+        },
+        {
+          "label": "no_counters",
+          "polarity": "other",
+          "delta": "Grizzly Bears has no counters, so A chooses only player B.",
+          "expected": "Grizzly Bears is a 2/2 with no counters. B has two poison counters. Hill Giant has no counters."
+        }
+      ],
+      "cards": [
+        "Karn's Bastion",
+        "Mountain",
+        "Grizzly Bears",
+        "Hill Giant"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

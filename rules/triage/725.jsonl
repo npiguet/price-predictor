@@ -1,0 +1,5 @@
+{"id": "725.1", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "725.2", "category": "mechanical", "observability": "needs_new_fields", "record_kinds": ["trigger"], "outcome": "At the monarch's end step the monarch draws a card; when a creature deals combat damage to the monarch its controller becomes the monarch.", "note": ""}
+{"id": "725.3", "category": "mechanical", "observability": "needs_new_fields", "record_kinds": ["resolution"], "outcome": "A player becoming the monarch ends the previous monarch's designation.", "note": ""}
+{"id": "725.4", "category": "out_of_scope", "observability": "none", "record_kinds": [], "outcome": "", "note": "Only occurs when a player leaves a multiplayer game; a two-player game ends instead."}
+{"id": "725.5", "category": "mechanical", "observability": "needs_new_fields", "record_kinds": ["continuous"], "outcome": "A static effect depending on the monarch does nothing until a player becomes the monarch.", "note": ""}

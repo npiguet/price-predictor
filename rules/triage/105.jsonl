@@ -1,0 +1,8 @@
+{"id": "105.1", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": "five colors"}
+{"id": "105.2", "category": "mechanical", "observability": "direct", "record_kinds": ["continuous"], "outcome": "An object's colors are those of the mana symbols in its mana cost, or its color indicator or characteristic-defining ability.", "note": ""}
+{"id": "105.2a", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": "defines monocolored"}
+{"id": "105.2b", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": "defines multicolored"}
+{"id": "105.2c", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": "defines colorless"}
+{"id": "105.3", "category": "mechanical", "observability": "direct", "record_kinds": ["continuous"], "outcome": "An effect that gives an object a new color replaces its previous colors unless it adds the color in addition, and may make it colorless.", "note": ""}
+{"id": "105.4", "category": "decision", "observability": "none", "record_kinds": [], "outcome": "", "note": "choice of color"}
+{"id": "105.5", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": "defines color pairs"}

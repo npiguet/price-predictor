@@ -1,0 +1,2 @@
+{"id": "507.1", "category": "out_of_scope", "observability": "none", "record_kinds": [], "outcome": "", "note": "multiplayer only; two-player defending player is automatic"}
+{"id": "507.2", "category": "decision", "observability": "none", "record_kinds": [], "outcome": "", "note": "active player receiving priority is a procedure; triggers of the step are covered by their own rules"}

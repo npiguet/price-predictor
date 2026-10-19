@@ -1,0 +1,2 @@
+{"id": "701.69", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "701.69a", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution", "rewrite"], "outcome": "Healing removes marked damage from a permanent; damage that 'is healed' is all removed.", "note": ""}

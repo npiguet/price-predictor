@@ -1,0 +1,244 @@
+{
+  "unit": "701.57",
+  "verified": true,
+  "review": [],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "701.57a-1",
+      "rules": [
+        "701.57a"
+      ],
+      "title": "Discover exiles until a nonland card of mana value N or less, casts it free or puts it in hand, and bottoms the rest",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Geological Appraiser"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Forest",
+            "Centaur Courser",
+            "Grizzly Bears",
+            "Island"
+          ]
+        },
+        "exile": {},
+        "notes": "Library lists are ordered top first. "
+      },
+      "decisions": [
+        "A casts Geological Appraiser, tapping four Mountains; it resolves and enters the battlefield.",
+        "Its enters trigger ('if you cast it, discover 3') goes on the stack; both players pass and it resolves.",
+        "A discovers 3: cards are exiled from the top of A's library until a nonland card with mana value 3 or less is exiled. A chooses to cast that card without paying its mana cost; it resolves."
+      ],
+      "variants": [
+        {
+          "label": "cast_free",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Forest and Centaur Courser (mana value 3) are exiled. A casts Centaur Courser for free and it enters the battlefield. Forest goes to the bottom of A's library; A's library is Grizzly Bears, Island, Forest. A's hand is empty."
+        },
+        {
+          "label": "put_in_hand",
+          "polarity": "other",
+          "delta": "A chooses to put the discovered card into their hand instead of casting it.",
+          "expected": "Centaur Courser is put into A's hand and is not on the battlefield. Forest goes to the bottom of A's library; A's library is Grizzly Bears, Island, Forest."
+        },
+        {
+          "label": "first_card_too_big",
+          "polarity": "does_not_fire",
+          "delta": "The second card of A's library is Hill Giant (mana value 4) instead of Centaur Courser.",
+          "expected": "Forest and Hill Giant are exiled but Hill Giant is not discovered, so the exiling continues: Grizzly Bears (mana value 2) is exiled and A casts it for free. Forest and Hill Giant go to the bottom of A's library in a random order; A's library is Island followed by Forest and Hill Giant."
+        }
+      ],
+      "cards": [
+        "Geological Appraiser",
+        "Mountain",
+        "Forest",
+        "Centaur Courser",
+        "Grizzly Bears",
+        "Island",
+        "Hill Giant"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "701.57b-1",
+      "rules": [
+        "701.57b"
+      ],
+      "title": "A player has discovered, and discover triggers fire, even when no card could be found",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Val, Marooned Surveyor"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Geological Appraiser"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Forest",
+            "Hill Giant",
+            "Island"
+          ]
+        },
+        "exile": {},
+        "notes": "Library lists are ordered top first. Val, Marooned Surveyor is on the battlefield."
+      },
+      "decisions": [
+        "A casts Geological Appraiser, tapping four Mountains; it resolves and enters the battlefield.",
+        "Its enters trigger ('if you cast it, discover 3') goes on the stack; both players pass and it resolves.",
+        "A discovers 3; if a card is found, A casts it without paying its mana cost. Both players pass until Val's trigger, if any, resolves."
+      ],
+      "variants": [
+        {
+          "label": "nothing_found",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "No card in A's library is a nonland card of mana value 3 or less, so all three cards are exiled and put back on the bottom in a random order; nothing is cast and nothing goes to A's hand. A has still discovered: Val triggers, dealing 2 damage to B (B at 18) and A gains 2 life (A at 22)."
+        },
+        {
+          "label": "card_found",
+          "polarity": "fires",
+          "delta": "The second card of A's library is Grizzly Bears instead of Hill Giant.",
+          "expected": "Forest and Grizzly Bears are exiled; A casts Grizzly Bears for free and it enters the battlefield. A has discovered: Val triggers, B is at 18 and A is at 22."
+        },
+        {
+          "label": "val_controlled_by_B",
+          "polarity": "does_not_fire",
+          "delta": "Val, Marooned Surveyor is on B's battlefield instead of A's.",
+          "expected": "A discovers and nothing is found, but Val triggers only when its controller discovers, so it does not trigger: both players stay at 20."
+        }
+      ],
+      "cards": [
+        "Geological Appraiser",
+        "Val, Marooned Surveyor",
+        "Mountain",
+        "Forest",
+        "Hill Giant",
+        "Island",
+        "Grizzly Bears"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "701.57c-1",
+      "rules": [
+        "701.57c"
+      ],
+      "title": "The final exiled card is the discovered card whether it was cast or put into hand",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Hit the Mother Lode"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Forest",
+            "Serra Angel",
+            "Island"
+          ]
+        },
+        "exile": {},
+        "notes": "Library lists are ordered top first. "
+      },
+      "decisions": [
+        "A casts Hit the Mother Lode, tapping seven Mountains.",
+        "Both players pass; it resolves and A discovers 10: cards are exiled from the top of A's library until a nonland card with mana value 10 or less is exiled.",
+        "A chooses to cast the discovered card without paying its mana cost; both players pass and it resolves."
+      ],
+      "variants": [
+        {
+          "label": "cast",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Forest and Serra Angel (mana value 5) are exiled; Serra Angel is the discovered card and is cast and enters the battlefield. Hit the Mother Lode creates 10 - 5 = 5 tapped Treasure tokens under A's control."
+        },
+        {
+          "label": "put_in_hand",
+          "polarity": "fires",
+          "delta": "A chooses to put the discovered card into their hand instead of casting it.",
+          "expected": "Serra Angel is put into A's hand. It is still the discovered card, so A still gets 5 tapped Treasure tokens."
+        },
+        {
+          "label": "cheaper_card",
+          "polarity": "other",
+          "delta": "The second card of A's library is Grizzly Bears (mana value 2) instead of Serra Angel.",
+          "expected": "Grizzly Bears is the discovered card and is cast; A gets 10 - 2 = 8 tapped Treasure tokens."
+        },
+        {
+          "label": "no_card_found",
+          "polarity": "does_not_fire",
+          "delta": "The second card of A's library is Plains instead of Serra Angel, so A's library holds only lands.",
+          "expected": "Every card is exiled and put back on the bottom in a random order; no card is cast or put into hand and there is no discovered card, so A gets no Treasure tokens."
+        }
+      ],
+      "cards": [
+        "Hit the Mother Lode",
+        "Mountain",
+        "Forest",
+        "Serra Angel",
+        "Island",
+        "Grizzly Bears",
+        "Plains"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

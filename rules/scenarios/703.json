@@ -1,0 +1,746 @@
+{
+  "unit": "703",
+  "verified": true,
+  "review": [
+    "703.3-1: expected strings carried reasoning; reduced to observable outcomes. Kept the library-size pair: 703.3's ordering holds whenever a step with a turn-based action begins, so no variant can switch it off; the base shows the loss before the trigger reaches the stack.",
+    "703.4a-1: A's library was empty, so A would lose at the next draw step; added one Mountain to A's library. Trimmed reasoning from an expected string.",
+    "703.4c-1: same empty-library fix (added a Mountain to A's library); trimmed reasoning from two expected strings.",
+    "703.4g-1: the die result was left random and the visit's target unset, so the base outcome was not determined; fixed the roll at 5, added the targeting decision (B's Grizzly Bears) and stated the phase-out outcome.",
+    "703.4n-1: trimmed reasoning from the no_maximum expected string.",
+    "703.4p-1: trimmed reasoning from the base expected string.",
+    "703.4q-1: expected strings carried reasoning and a stray Omnath power claim; reduced to playability verdicts and the resolution result."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "703.3-1",
+      "rules": [
+        "703.3"
+      ],
+      "title": "The draw-step turn-based action happens before state-based actions and before the draw-step trigger goes on the stack",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "upkeep",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Howling Mine"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {
+          "A": []
+        },
+        "exile": {},
+        "notes": "Not the first turn of the game. Howling Mine is untapped. A's library is empty in the base case."
+      },
+      "decisions": [
+        "Both players pass priority in A's upkeep; the draw step begins.",
+        "Turn-based action: A draws a card for the turn. State-based actions are checked, then triggered abilities are put on the stack.",
+        "If Howling Mine's trigger is on the stack, both players pass and it resolves."
+      ],
+      "variants": [
+        {
+          "label": "empty_library",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "A attempts to draw from an empty library and loses the game in the state-based check; Howling Mine's trigger is never put on the stack."
+        },
+        {
+          "label": "one_card",
+          "polarity": "other",
+          "delta": "A's library holds one Mountain.",
+          "expected": "A draws the Mountain and stays in the game through the state-based check. Howling Mine's trigger is put on the stack and resolves; A attempts to draw from an empty library and loses the game in the next state-based check."
+        },
+        {
+          "label": "two_cards",
+          "polarity": "does_not_fire",
+          "delta": "A's library holds two Mountains.",
+          "expected": "A draws a Mountain, Howling Mine's trigger is put on the stack and resolves, and A draws the second Mountain. A has two cards in hand and the game continues."
+        }
+      ],
+      "cards": [
+        "Howling Mine",
+        "Mountain"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "703.4a-1",
+      "rules": [
+        "703.4a"
+      ],
+      "title": "Phasing permanents of the active player phase out or in at the start of the untap step",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "B",
+        "step": "end",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Breezekeeper"
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Mountain"
+          ]
+        },
+        "exile": {},
+        "notes": "Breezekeeper has phasing and is phased in. The next turn is A's."
+      },
+      "decisions": [
+        "Both players pass priority through B's end step and cleanup.",
+        "A's turn begins; the untap step begins and the turn-based action phasing is carried out."
+      ],
+      "variants": [
+        {
+          "label": "phases_out",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "A's Breezekeeper phases out and is treated as not existing."
+        },
+        {
+          "label": "phases_in",
+          "polarity": "fires",
+          "delta": "Breezekeeper starts phased out, controlled by A when it phased out.",
+          "expected": "Breezekeeper phases in and stays phased in; it does not phase out again in the same untap step."
+        },
+        {
+          "label": "opponents_creature",
+          "polarity": "does_not_fire",
+          "delta": "The Breezekeeper is controlled by B instead of A.",
+          "expected": "B's Breezekeeper stays phased in."
+        }
+      ],
+      "cards": [
+        "Breezekeeper",
+        "Mountain"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "703.4b-1",
+      "rules": [
+        "703.4b"
+      ],
+      "title": "Day becomes night when the previous turn's active player cast no spells",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "B",
+        "step": "main2",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Avabruck Caretaker"
+          ],
+          "B": [
+            "Forest",
+            "Forest"
+          ]
+        },
+        "hand": {
+          "B": [
+            "Grizzly Bears"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "It is day. B has cast no spells this turn so far. Avabruck Caretaker has daybound. The next turn is A's."
+      },
+      "decisions": [
+        "Base: B casts nothing; both players pass through B's end step and cleanup.",
+        "A's turn begins; the untap step begins, phasing is done, and the day/night check is made."
+      ],
+      "variants": [
+        {
+          "label": "no_spells",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "It becomes night. A's Avabruck Caretaker transforms into Hollowhenge Huntmaster (6/6)."
+        },
+        {
+          "label": "one_spell",
+          "polarity": "does_not_fire",
+          "delta": "B casts Grizzly Bears, tapping both Forests, in main2 and it resolves.",
+          "expected": "It stays day. Avabruck Caretaker stays a 4/4."
+        }
+      ],
+      "cards": [
+        "Avabruck Caretaker",
+        "Hollowhenge Huntmaster",
+        "Forest",
+        "Grizzly Bears"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "703.4b-2",
+      "rules": [
+        "703.4b"
+      ],
+      "title": "Night becomes day when the previous turn's active player cast two or more spells",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "B",
+        "step": "main2",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Avabruck Caretaker"
+          ],
+          "B": [
+            "Mountain",
+            "Mountain"
+          ]
+        },
+        "hand": {
+          "B": [
+            "Dwarven Trader",
+            "Dwarven Trader"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "It is night, and A's Avabruck Caretaker is on its night face, Hollowhenge Huntmaster (6/6). B has cast no spells this turn so far. The next turn is A's."
+      },
+      "decisions": [
+        "B casts Dwarven Trader, tapping a Mountain; both players pass; it resolves.",
+        "B casts the second Dwarven Trader, tapping the other Mountain; both players pass; it resolves.",
+        "Both players pass through B's end step and cleanup; A's untap step begins and the day/night check is made."
+      ],
+      "variants": [
+        {
+          "label": "two_spells",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "It becomes day. A's Hollowhenge Huntmaster transforms into Avabruck Caretaker (4/4)."
+        },
+        {
+          "label": "one_spell",
+          "polarity": "does_not_fire",
+          "delta": "B casts only one Dwarven Trader.",
+          "expected": "It stays night. A's creature stays Hollowhenge Huntmaster (6/6)."
+        }
+      ],
+      "cards": [
+        "Avabruck Caretaker",
+        "Hollowhenge Huntmaster",
+        "Mountain",
+        "Dwarven Trader"
+      ],
+      "forge_notes": "Setup requires the night designation and the back face on the battlefield."
+    },
+    {
+      "id": "703.4c-1",
+      "rules": [
+        "703.4c"
+      ],
+      "title": "The active player untaps their permanents during the untap step",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "B",
+        "step": "end",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Grizzly Bears",
+              "tapped": true
+            }
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Mountain"
+          ]
+        },
+        "exile": {},
+        "notes": "The next turn is A's."
+      },
+      "decisions": [
+        "Both players pass priority through B's end step and cleanup.",
+        "A's turn begins; the untap step turn-based action untaps A's permanents."
+      ],
+      "variants": [
+        {
+          "label": "own_permanent",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "A's Grizzly Bears untaps."
+        },
+        {
+          "label": "opponents_permanent",
+          "polarity": "does_not_fire",
+          "delta": "The tapped Grizzly Bears is controlled by B, not A.",
+          "expected": "B's Grizzly Bears stays tapped."
+        },
+        {
+          "label": "does_not_untap",
+          "polarity": "does_not_fire",
+          "delta": "A's tapped permanent is Grim Monolith instead of Grizzly Bears.",
+          "expected": "Grim Monolith stays tapped."
+        }
+      ],
+      "cards": [
+        "Grizzly Bears",
+        "Grim Monolith",
+        "Mountain"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "703.4d-1",
+      "rules": [
+        "703.4d"
+      ],
+      "title": "The active player draws a card as the draw step begins",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "upkeep",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [],
+          "B": [
+            "Necropotence"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Mountain",
+            "Mountain"
+          ]
+        },
+        "exile": {},
+        "notes": "Not the first turn of the game. Necropotence says \"Skip your draw step\" and refers to its controller, B."
+      },
+      "decisions": [
+        "Both players pass priority in A's upkeep.",
+        "The draw step begins and the turn-based action is carried out."
+      ],
+      "variants": [
+        {
+          "label": "draw_step",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "A draws one Mountain: A has one card in hand and one in library."
+        },
+        {
+          "label": "skipped",
+          "polarity": "does_not_fire",
+          "delta": "Necropotence is controlled by A instead of B.",
+          "expected": "A's draw step is skipped: A has no cards in hand and two in library."
+        }
+      ],
+      "cards": [
+        "Necropotence",
+        "Mountain"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "703.4f-1",
+      "rules": [
+        "703.4f"
+      ],
+      "title": "The active player adds a lore counter to each of their Sagas as the precombat main phase begins",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "draw",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "History of Benalia",
+              "counters": {
+                "lore": 1
+              }
+            }
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Mountain"
+          ]
+        },
+        "exile": {},
+        "notes": "History of Benalia has chapters I, II and III; it has one lore counter and chapter I has already resolved."
+      },
+      "decisions": [
+        "Both players pass priority in A's draw step.",
+        "A's precombat main phase begins; the turn-based action adds lore counters.",
+        "Chapter II's trigger goes on the stack; both players pass; it resolves."
+      ],
+      "variants": [
+        {
+          "label": "own_saga",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "History of Benalia gets a second lore counter. Chapter II triggers and creates a 2/2 white Knight token with vigilance under A's control."
+        },
+        {
+          "label": "opponents_saga",
+          "polarity": "does_not_fire",
+          "delta": "The History of Benalia is controlled by B.",
+          "expected": "B's History of Benalia keeps one lore counter and no chapter ability triggers."
+        }
+      ],
+      "cards": [
+        "History of Benalia",
+        "Mountain"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "703.4g-1",
+      "rules": [
+        "703.4g"
+      ],
+      "title": "The active player rolls to visit their Attractions as the precombat main phase begins",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "draw",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Ferris Wheel"
+          ],
+          "B": [
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Mountain"
+          ]
+        },
+        "exile": {},
+        "notes": "Ferris Wheel is an Attraction with lights 4, 5 and 6. The die result is fixed at 5. B's Grizzly Bears is the only creature on the battlefield."
+      },
+      "decisions": [
+        "Both players pass priority in A's draw step.",
+        "A's precombat main phase begins; lore counters are placed (none), then A rolls to visit their Attractions and the die shows 5.",
+        "If Ferris Wheel's visit ability triggers, A targets Grizzly Bears; both players pass; it resolves."
+      ],
+      "variants": [
+        {
+          "label": "controls_attraction",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "A rolls a six-sided die (5). Ferris Wheel's visit ability triggers and resolves: B's Grizzly Bears phases out."
+        },
+        {
+          "label": "opponents_attraction",
+          "polarity": "does_not_fire",
+          "delta": "Ferris Wheel is controlled by B.",
+          "expected": "A rolls no die; no visit ability triggers and Grizzly Bears stays phased in."
+        }
+      ],
+      "cards": [
+        "Ferris Wheel",
+        "Grizzly Bears",
+        "Mountain"
+      ],
+      "forge_notes": "The roll is random in Forge; a harness must fix the die result at 5."
+    },
+    {
+      "id": "703.4m-1",
+      "rules": [
+        "703.4m"
+      ],
+      "title": "Combat damage is dealt simultaneously",
+      "record_kind": "combat",
+      "setup": {
+        "active": "A",
+        "step": "declare_attackers",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Grizzly Bears"
+          ],
+          "B": [
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A attacks B with Grizzly Bears.",
+        "B blocks it with Grizzly Bears.",
+        "Both players pass through the declare blockers step; the combat damage step begins and each creature assigns its 2 damage to the other."
+      ],
+      "variants": [
+        {
+          "label": "both_deal_damage",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Both Grizzly Bears deal 2 damage at the same time; both have lethal damage and both are put into their owners' graveyards."
+        },
+        {
+          "label": "first_strike_blocker",
+          "polarity": "does_not_fire",
+          "delta": "B's blocker is Youthful Knight (first strike) instead of Grizzly Bears.",
+          "expected": "Youthful Knight deals 2 damage in the first-strike damage step and A's Grizzly Bears is destroyed; it deals no damage and Youthful Knight survives undamaged."
+        }
+      ],
+      "cards": [
+        "Grizzly Bears",
+        "Youthful Knight"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "703.4n-1",
+      "rules": [
+        "703.4n"
+      ],
+      "title": "The active player discards down to maximum hand size in the cleanup step",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "end",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [],
+          "B": [
+            "Reliquary Tower"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Grizzly Bears",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Reliquary Tower says \"You have no maximum hand size\" and refers to its controller, B."
+      },
+      "decisions": [
+        "Both players pass priority in A's end step.",
+        "The cleanup step begins; A discards down to the maximum hand size, choosing to discard Grizzly Bears if a discard is needed."
+      ],
+      "variants": [
+        {
+          "label": "eight_cards",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "A has eight cards and discards Grizzly Bears: seven cards remain in hand and Grizzly Bears is in A's graveyard."
+        },
+        {
+          "label": "seven_cards",
+          "polarity": "does_not_fire",
+          "delta": "A's hand has only seven cards (six Mountains and Grizzly Bears).",
+          "expected": "A discards nothing and keeps all seven cards."
+        },
+        {
+          "label": "no_maximum",
+          "polarity": "does_not_fire",
+          "delta": "Reliquary Tower is controlled by A instead of B.",
+          "expected": "A discards nothing and keeps all eight cards."
+        }
+      ],
+      "cards": [
+        "Grizzly Bears",
+        "Mountain",
+        "Reliquary Tower"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "703.4p-1",
+      "rules": [
+        "703.4p"
+      ],
+      "title": "Damage is removed and until-end-of-turn effects end simultaneously in the cleanup step",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Grizzly Bears",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest"
+          ],
+          "B": [
+            "Mountain"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Giant Growth"
+          ],
+          "B": [
+            "Lightning Bolt"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Giant Growth targeting Grizzly Bears, tapping a Forest; both players pass; it resolves.",
+        "B casts Lightning Bolt targeting Grizzly Bears, tapping the Mountain; both players pass; it resolves.",
+        "Both players pass priority through the rest of the turn; the cleanup step begins."
+      ],
+      "variants": [
+        {
+          "label": "until_end_of_turn",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Before cleanup Grizzly Bears is 5/5 with 3 damage. In the cleanup step it becomes a 2/2 with no damage marked and stays on the battlefield."
+        },
+        {
+          "label": "counters",
+          "polarity": "does_not_fire",
+          "delta": "A's spell is Dragonscale Boon (tapping four Forests) instead of Giant Growth.",
+          "expected": "Before cleanup Grizzly Bears is 4/4 with 3 damage. In the cleanup step the damage is removed but the two +1/+1 counters stay: it is a 4/4 with no damage."
+        }
+      ],
+      "cards": [
+        "Grizzly Bears",
+        "Forest",
+        "Mountain",
+        "Giant Growth",
+        "Lightning Bolt",
+        "Dragonscale Boon"
+      ],
+      "forge_notes": "If the +3/+3 ended before the damage was removed, the 2/2 with 3 damage would die; the scenario checks that it does not."
+    },
+    {
+      "id": "703.4q-1",
+      "rules": [
+        "703.4q"
+      ],
+      "title": "Unspent mana empties from mana pools as each step and phase ends",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Forest",
+            "Grizzly Bears"
+          ],
+          "B": [
+            "Omnath, Locus of Mana"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Giant Growth"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Omnath's ability applies to its controller's mana, B."
+      },
+      "decisions": [
+        "A taps the Forest for G in the precombat main phase; the G stays in A's mana pool.",
+        "Both players pass with an empty stack; the beginning of combat step begins.",
+        "A tries to cast Giant Growth targeting Grizzly Bears, paying with the mana already in the pool."
+      ],
+      "variants": [
+        {
+          "label": "next_step",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "A's mana pool is empty in the beginning of combat step: casting Giant Growth is not playable (its cost cannot be paid)."
+        },
+        {
+          "label": "same_step",
+          "polarity": "does_not_fire",
+          "delta": "A casts Giant Growth in the precombat main phase, in the same phase the mana was added.",
+          "expected": "Casting Giant Growth is playable; it resolves and Grizzly Bears is 5/5 until end of turn."
+        },
+        {
+          "label": "mana_does_not_empty",
+          "polarity": "does_not_fire",
+          "delta": "Omnath, Locus of Mana is controlled by A instead of B.",
+          "expected": "The G stays in A's mana pool into the beginning of combat step: casting Giant Growth is playable; it resolves and Grizzly Bears is 5/5 until end of turn."
+        }
+      ],
+      "cards": [
+        "Forest",
+        "Grizzly Bears",
+        "Giant Growth",
+        "Omnath, Locus of Mana"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

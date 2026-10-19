@@ -1,0 +1,201 @@
+{
+  "unit": "702.184",
+  "verified": true,
+  "review": [
+    "702.184a-2: variant summoning_sick_creature did not change the outcome (still legal), so it was no minimal pair; replaced it with creature_controlled_by_opponent, which flips legality on the 'you control' requirement."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.184a-1",
+      "rules": [
+        "702.184a"
+      ],
+      "title": "Station taps another creature and puts charge counters equal to its power on the permanent",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Galvanizing Sawship",
+            {
+              "card": "Hill Giant",
+              "summoning_sick": false
+            },
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            },
+            {
+              "card": "Wall of Wood",
+              "summoning_sick": false
+            }
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Galvanizing Sawship is a noncreature Spacecraft with no counters. It becomes an artifact creature with flying and haste at 3 or more charge counters."
+      },
+      "decisions": [
+        "A activates the station ability of Galvanizing Sawship, tapping Hill Giant as the cost.",
+        "Both players pass; the ability resolves."
+      ],
+      "variants": [
+        {
+          "label": "tap_hill_giant",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Hill Giant becomes tapped as the cost. Galvanizing Sawship gets 3 charge counters (Hill Giant's power) and, being at station 3, is an artifact creature 6/5 with flying and haste. Grizzly Bears and Wall of Wood stay untapped."
+        },
+        {
+          "label": "tap_grizzly_bears",
+          "polarity": "other",
+          "delta": "A taps Grizzly Bears (power 2) as the cost instead of Hill Giant.",
+          "expected": "Grizzly Bears becomes tapped. Galvanizing Sawship gets 2 charge counters and, being below station 3, remains a noncreature artifact. Hill Giant stays untapped."
+        },
+        {
+          "label": "tap_wall_of_wood",
+          "polarity": "does_not_fire",
+          "delta": "A taps Wall of Wood (power 0) as the cost instead of Hill Giant.",
+          "expected": "Wall of Wood becomes tapped. The ability resolves and puts 0 charge counters on Galvanizing Sawship, which stays a noncreature artifact with no counters."
+        }
+      ],
+      "cards": [
+        "Galvanizing Sawship",
+        "Hill Giant",
+        "Grizzly Bears",
+        "Wall of Wood"
+      ],
+      "forge_notes": "Counter type is CHARGE. Station is implemented as a PutCounter ability with cost tapXType<1/Creature.Other> and SorcerySpeed."
+    },
+    {
+      "id": "702.184a-2",
+      "rules": [
+        "702.184a"
+      ],
+      "title": "Station can be activated only as a sorcery and only by tapping another untapped creature",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Galvanizing Sawship",
+            {
+              "card": "Hill Giant",
+              "summoning_sick": false
+            }
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A checks whether the station ability of Galvanizing Sawship can be activated, with Hill Giant as the creature to tap."
+      ],
+      "variants": [
+        {
+          "label": "untapped_creature_main_phase",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The activation is legal: Hill Giant is another untapped creature A controls and it is A's main phase with an empty stack."
+        },
+        {
+          "label": "creature_already_tapped",
+          "polarity": "does_not_fire",
+          "delta": "Hill Giant is already tapped.",
+          "expected": "The activation is not legal: A controls no other untapped creature to tap."
+        },
+        {
+          "label": "not_sorcery_timing",
+          "polarity": "does_not_fire",
+          "delta": "The step is A's end step instead of main1.",
+          "expected": "The activation is not legal: station can be activated only as a sorcery, and it is not a main phase."
+        },
+        {
+          "label": "creature_controlled_by_opponent",
+          "polarity": "does_not_fire",
+          "delta": "Hill Giant is on B's battlefield instead of A's.",
+          "expected": "The activation is not legal: A controls no other untapped creature to tap."
+        }
+      ],
+      "cards": [
+        "Galvanizing Sawship",
+        "Hill Giant"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.184c-1",
+      "rules": [
+        "702.184c"
+      ],
+      "title": "A static ability makes station use toughness instead of power",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Galvanizing Sawship",
+            "Tapestry Warden",
+            {
+              "card": "Wall of Wood",
+              "summoning_sick": false
+            }
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Tapestry Warden's second ability makes each creature its controller has with toughness greater than power station permanents using its toughness. Wall of Wood is 0/3."
+      },
+      "decisions": [
+        "A activates the station ability of Galvanizing Sawship, tapping Wall of Wood as the cost.",
+        "Both players pass; the ability resolves."
+      ],
+      "variants": [
+        {
+          "label": "warden_under_your_control",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Wall of Wood becomes tapped. Galvanizing Sawship gets 3 charge counters (Wall of Wood's toughness) and is an artifact creature 6/5 with flying and haste."
+        },
+        {
+          "label": "warden_under_opponents_control",
+          "polarity": "does_not_fire",
+          "delta": "Tapestry Warden is on B's battlefield instead of A's.",
+          "expected": "Wall of Wood becomes tapped. Galvanizing Sawship gets 0 charge counters (Wall of Wood's power) and stays a noncreature artifact."
+        }
+      ],
+      "cards": [
+        "Galvanizing Sawship",
+        "Tapestry Warden",
+        "Wall of Wood"
+      ],
+      "forge_notes": "The static ability is Mode$ TapPowerValue with ValidSA$ Activated.Station."
+    }
+  ]
+}

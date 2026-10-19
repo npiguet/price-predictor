@@ -1,0 +1,194 @@
+{
+  "unit": "702.45",
+  "verified": true,
+  "review": [],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.45a-1",
+      "rules": [
+        "702.45a"
+      ],
+      "title": "A creature with bushido gets +N/+N when it blocks",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "declare_attackers",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            "Jade Avenger"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Jade Avenger is a 2/2 with bushido 2."
+      },
+      "decisions": [
+        "A declares Grizzly Bears as an attacker against B.",
+        "B declares Jade Avenger as a blocker of Grizzly Bears.",
+        "Bushido triggers; both players pass and it resolves.",
+        "Combat damage is dealt."
+      ],
+      "variants": [
+        {
+          "label": "blocks",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Bushido triggers when Jade Avenger blocks and it becomes a 4/4 until end of turn. Grizzly Bears deals 2 damage to Jade Avenger, which survives with 2 damage marked. Jade Avenger deals 4 damage to Grizzly Bears, which moves to A's graveyard."
+        },
+        {
+          "label": "no_block",
+          "polarity": "does_not_fire",
+          "delta": "B declares no blockers.",
+          "expected": "Bushido does not trigger and Jade Avenger stays a 2/2. Grizzly Bears is unblocked and deals 2 damage to B, whose life total is 18."
+        }
+      ],
+      "cards": [
+        "Grizzly Bears",
+        "Jade Avenger"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.45a-2",
+      "rules": [
+        "702.45a"
+      ],
+      "title": "A creature with bushido gets +N/+N when it becomes blocked",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "declare_attackers",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Jade Avenger",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Jade Avenger is a 2/2 with bushido 2."
+      },
+      "decisions": [
+        "A declares Jade Avenger as an attacker against B.",
+        "B declares Grizzly Bears as a blocker of Jade Avenger.",
+        "Bushido triggers; both players pass and it resolves.",
+        "Combat damage is dealt."
+      ],
+      "variants": [
+        {
+          "label": "becomes_blocked",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Bushido triggers when Jade Avenger becomes blocked and it becomes a 4/4 until end of turn. Grizzly Bears deals 2 damage to Jade Avenger, which survives with 2 damage marked. Jade Avenger deals 4 damage to Grizzly Bears, which moves to B's graveyard."
+        },
+        {
+          "label": "unblocked",
+          "polarity": "does_not_fire",
+          "delta": "B declares no blockers.",
+          "expected": "Bushido does not trigger and Jade Avenger stays a 2/2. Jade Avenger is unblocked and deals 2 damage to B, whose life total is 18."
+        }
+      ],
+      "cards": [
+        "Jade Avenger",
+        "Grizzly Bears"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.45b-1",
+      "rules": [
+        "702.45b"
+      ],
+      "title": "Each instance of bushido triggers separately",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Sensei Golden-Tail",
+              "summoning_sick": false
+            },
+            {
+              "card": "Devoted Retainer",
+              "summoning_sick": false
+            },
+            "Plains",
+            "Plains"
+          ],
+          "B": [
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Devoted Retainer is a 1/1 with bushido 1. Sensei Golden-Tail's ability gives the target creature a second, permanent instance of bushido 1."
+      },
+      "decisions": [
+        "A activates Sensei Golden-Tail ({1}{W}, {T}) targeting Devoted Retainer, paying with both Plains. Both players pass; the ability resolves.",
+        "A declares Devoted Retainer as an attacker against B.",
+        "B declares Grizzly Bears as a blocker of Devoted Retainer.",
+        "Every bushido trigger that was put on the stack resolves.",
+        "Combat damage is dealt."
+      ],
+      "variants": [
+        {
+          "label": "two_instances",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Devoted Retainer has two instances of bushido 1 and two bushido triggers resolve, making it a 3/3 until end of turn. Grizzly Bears deals 2 damage to it and it survives with 2 damage marked. Devoted Retainer deals 3 damage to Grizzly Bears, which moves to B's graveyard."
+        },
+        {
+          "label": "one_instance",
+          "polarity": "other",
+          "delta": "A does not activate Sensei Golden-Tail.",
+          "expected": "Devoted Retainer has one instance of bushido 1 and one trigger resolves, making it a 2/2 until end of turn. The two creatures deal 2 damage to each other and both move to their owners' graveyards."
+        },
+        {
+          "label": "unblocked",
+          "polarity": "does_not_fire",
+          "delta": "B declares no blockers.",
+          "expected": "Neither bushido trigger fires and Devoted Retainer stays a 1/1. It is unblocked and deals 1 damage to B, whose life total is 19."
+        }
+      ],
+      "cards": [
+        "Sensei Golden-Tail",
+        "Devoted Retainer",
+        "Plains",
+        "Grizzly Bears"
+      ],
+      "forge_notes": "Sensei Golden-Tail's ability is sorcery speed, so it is activated in main phase 1 before attackers are declared."
+    }
+  ]
+}

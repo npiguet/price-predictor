@@ -1,0 +1,142 @@
+{
+  "unit": "701.48",
+  "verified": true,
+  "review": [
+    "701.48a-2: the Lesson-from-outside-the-game branch of 701.48a was left uncovered although Forge's learnLesson supports it through the sideboard; added a scenario with Environmental Sciences in the sideboard and an empty-sideboard contrast.",
+    "701.48a-1: forge_notes claimed the Lesson branch was unreachable in Forge; rewrote it to point to 701.48a-2."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "701.48a-1",
+      "rules": [
+        "701.48a"
+      ],
+      "title": "Learn lets the player discard a card to draw a card",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Forest",
+            "Forest"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Cram Session",
+            "Grizzly Bears"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Mountain"
+          ]
+        },
+        "exile": {},
+        "notes": "A's sideboard is empty, so no Lesson card is available outside the game. Library lists are top first; cards below the listed ones are irrelevant Forests."
+      },
+      "decisions": [
+        "A casts Cram Session, tapping both Forests (the hybrid {B/G} is paid with Forest mana).",
+        "Both players pass; Cram Session resolves: A gains 4 life, then learns.",
+        "A chooses to discard Grizzly Bears to Learn."
+      ],
+      "variants": [
+        {
+          "label": "discard_draw",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "A's life is 24. Grizzly Bears moves from A's hand to A's graveyard and A draws Mountain from the top of the library. A's hand is [Mountain]; A's graveyard holds Grizzly Bears and Cram Session."
+        },
+        {
+          "label": "empty_hand",
+          "polarity": "does_not_fire",
+          "delta": "A's hand holds only Cram Session, so after it is cast A has no other card to discard.",
+          "expected": "A's life is 24. A has no card to discard, so nothing is discarded and nothing is drawn. A's hand is empty and Mountain stays on top of A's library. No Lesson is fetched because A has none outside the game."
+        },
+        {
+          "label": "declined",
+          "polarity": "other",
+          "delta": "A chooses not to discard Grizzly Bears when Learn resolves.",
+          "expected": "A's life is 24. No card is discarded and none is drawn. Grizzly Bears stays in A's hand and Mountain stays on top of A's library. No Lesson is fetched because A has none outside the game."
+        }
+      ],
+      "cards": [
+        "Forest",
+        "Cram Session",
+        "Grizzly Bears",
+        "Mountain"
+      ],
+      "forge_notes": "Forge's learnLesson offers sideboard Lessons and hand cards together; with an empty sideboard only the discard-and-draw branch and the no-op remain. The Lesson branch is 701.48a-2."
+    },
+    {
+      "id": "701.48a-2",
+      "rules": [
+        "701.48a"
+      ],
+      "title": "Learn without a discard puts a Lesson from outside the game into the hand",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Forest",
+            "Forest"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Cram Session"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Mountain"
+          ]
+        },
+        "exile": {},
+        "notes": "A's sideboard holds Environmental Sciences (a Lesson) and nothing else. After Cram Session is cast A's hand is empty, so A cannot discard. Library lists are top first; cards below the listed ones are irrelevant Forests. The sideboard is not a zone the scenario format lists."
+      },
+      "decisions": [
+        "A casts Cram Session, tapping both Forests (the hybrid {B/G} is paid with Forest mana).",
+        "Both players pass; Cram Session resolves: A gains 4 life, then learns.",
+        "A has no card to discard and chooses to reveal Environmental Sciences from the sideboard."
+      ],
+      "variants": [
+        {
+          "label": "lesson_available",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "A's life is 24. Environmental Sciences is revealed and moves from A's sideboard to A's hand. Nothing is discarded or drawn; Mountain stays on top of A's library."
+        },
+        {
+          "label": "no_lesson",
+          "polarity": "does_not_fire",
+          "delta": "A's sideboard is empty.",
+          "expected": "A's life is 24. No card moves to A's hand and nothing is discarded or drawn; A's hand is empty and Mountain stays on top of A's library."
+        }
+      ],
+      "cards": [
+        "Forest",
+        "Cram Session",
+        "Environmental Sciences",
+        "Mountain"
+      ],
+      "forge_notes": "Player.learnLesson reads Lesson cards from the Sideboard zone; the match must be started with Environmental Sciences in A's sideboard."
+    }
+  ]
+}

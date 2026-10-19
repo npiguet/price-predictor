@@ -1,0 +1,126 @@
+{
+  "unit": "308",
+  "verified": true,
+  "review": [
+    "No scenario changes: card types, costs, timing and outcomes of 308.1-1 and 308.1-2 check out against the Forge scripts. Triage 308.1 record_kinds gained playability, since 308.1-1 shows casting timing through playability verdicts."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "308.1-1",
+      "rules": [
+        "308.1"
+      ],
+      "title": "A kindred card is cast with the timing of its other card type",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Island"
+          ],
+          "B": [
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Tarfire",
+            "Aquitect's Will"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Tarfire is a Kindred Instant -- Goblin. Aquitect's Will is a Kindred Sorcery -- Merfolk. A has priority."
+      },
+      "decisions": [
+        "A has priority. The engine evaluates whether A may cast Tarfire (paying {R} with Mountain, targeting B) and whether A may cast Aquitect's Will (paying {U} with Island, targeting Mountain)."
+      ],
+      "variants": [
+        {
+          "label": "own_main1",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Both Tarfire and Aquitect's Will are legal to cast (can_play true)."
+        },
+        {
+          "label": "opponents_turn",
+          "polarity": "does_not_fire",
+          "delta": "The active player is B (step main1; B has passed priority so A holds it) instead of A.",
+          "expected": "Tarfire is legal to cast (can_play true). Aquitect's Will is not legal (can_play false)."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Island",
+        "Grizzly Bears",
+        "Tarfire",
+        "Aquitect's Will"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "308.1-2",
+      "rules": [
+        "308.1"
+      ],
+      "title": "A kindred card resolves as its other card type does",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Cloak and Dagger",
+            "Tarfire"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Cloak and Dagger is a Kindred Artifact -- Rogue Equipment. Tarfire is a Kindred Instant -- Goblin."
+      },
+      "decisions": [
+        "A casts Cloak and Dagger, tapping both Mountains.",
+        "Both players pass; the spell resolves."
+      ],
+      "variants": [
+        {
+          "label": "kindred_artifact",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Cloak and Dagger resolves and enters the battlefield under A's control as an artifact."
+        },
+        {
+          "label": "kindred_instant",
+          "polarity": "does_not_fire",
+          "delta": "A casts Tarfire targeting B, tapping one Mountain, instead of Cloak and Dagger.",
+          "expected": "Tarfire resolves and deals 2 damage to B (18). It does not enter the battlefield and is put into A's graveyard."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Cloak and Dagger",
+        "Tarfire"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

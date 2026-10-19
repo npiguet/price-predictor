@@ -1,0 +1,80 @@
+{
+  "unit": "702.38",
+  "verified": true,
+  "review": [],
+  "skipped": [
+    {
+      "id": "702.38b",
+      "reason": "no Forge card has two instances of amplify, so separate working of several instances cannot occur in a Forge game; 702.38a-1 covers the single-instance behaviour"
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "702.38a-1",
+      "rules": [
+        "702.38a"
+      ],
+      "title": "A creature with amplify enters with counters for each shared-type card revealed from hand",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Daru Stinger",
+            "Elite Vanguard",
+            "Grizzly Bears"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Daru Stinger, paying {3}{W} with the four Plains.",
+        "Both players pass; Daru Stinger starts to enter the battlefield.",
+        "As it enters, A reveals every Soldier card in hand (the amplify choice)."
+      ],
+      "variants": [
+        {
+          "label": "one_soldier",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "A reveals Elite Vanguard. Daru Stinger enters with one +1/+1 counter, a 2/2. The revealed card stays in A's hand."
+        },
+        {
+          "label": "no_soldier_in_hand",
+          "polarity": "does_not_fire",
+          "delta": "Elite Vanguard is in A's graveyard instead of A's hand, so A's hand holds no other Soldier.",
+          "expected": "No card can be revealed. Daru Stinger enters with no counters, a 1/1."
+        },
+        {
+          "label": "two_soldiers",
+          "polarity": "fires",
+          "delta": "A's hand holds a second Elite Vanguard and A reveals both.",
+          "expected": "Daru Stinger enters with two +1/+1 counters, a 3/3."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Daru Stinger",
+        "Elite Vanguard",
+        "Grizzly Bears"
+      ],
+      "forge_notes": "The reveal is a choice the harness fixes."
+    }
+  ]
+}

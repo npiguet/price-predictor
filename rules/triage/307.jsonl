@@ -1,0 +1,6 @@
+{"id": "307.1", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "A sorcery card can be cast only from hand in a main phase of its owner's turn with an empty stack.", "note": ""}
+{"id": "307.2", "category": "mechanical", "observability": "direct", "record_kinds": ["resolution"], "outcome": "A resolving sorcery follows its text and then goes to its owner's graveyard.", "note": ""}
+{"id": "307.3", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "307.4", "category": "mechanical", "observability": "indirect", "record_kinds": ["rewrite"], "outcome": "A sorcery that would enter the battlefield stays in its previous zone.", "note": ""}
+{"id": "307.5", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "An only-as-a-sorcery action is legal exactly when the player has priority in their own main phase with an empty stack, whether or not sorcery casting is prohibited.", "note": ""}
+{"id": "307.5a", "category": "mechanical", "observability": "needs_new_fields", "record_kinds": [], "outcome": "A check for a spell cast when a sorcery could not have been cast is true if it was cast without priority, outside its controller's main phase or with a nonempty stack.", "note": "Needs the cast timing on the spell."}

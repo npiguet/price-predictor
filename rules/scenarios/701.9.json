@@ -1,0 +1,130 @@
+{
+  "unit": "701.9",
+  "verified": true,
+  "review": [],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "701.9a-1",
+      "rules": [
+        "701.9a"
+      ],
+      "title": "A discarded card moves from its owner's hand to their graveyard",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Swamp",
+            "Swamp",
+            "Swamp"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Mind Rot"
+          ],
+          "B": [
+            "Mountain",
+            "Grizzly Bears"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Both libraries are non-empty and irrelevant."
+      },
+      "decisions": [
+        "A casts Mind Rot targeting B, tapping three Swamps.",
+        "Both players pass; Mind Rot resolves and B discards two cards."
+      ],
+      "variants": [
+        {
+          "label": "two_cards",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Mountain and Grizzly Bears move from B's hand to B's graveyard. B's hand is empty."
+        },
+        {
+          "label": "empty_hand",
+          "polarity": "does_not_fire",
+          "delta": "B's hand is empty.",
+          "expected": "Nothing is discarded; B's graveyard stays empty. Mind Rot resolved and is in A's graveyard."
+        }
+      ],
+      "cards": [
+        "Swamp",
+        "Mind Rot",
+        "Mountain",
+        "Grizzly Bears"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "701.9c-1",
+      "rules": [
+        "701.9c"
+      ],
+      "title": "A discarded card put into a hidden zone has undefined characteristics",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Library of Leng"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Cragganwick Cremator",
+            "Grizzly Bears"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Library of Leng: if an effect causes you to discard a card, you may put it on top of your library instead of into your graveyard. Both libraries are non-empty."
+      },
+      "decisions": [
+        "A casts Cragganwick Cremator, tapping four Mountains; both players pass and it resolves.",
+        "Its enters trigger goes on the stack and A chooses B as the target for the damage; both players pass and the trigger resolves: A discards a card at random, which can only be Grizzly Bears.",
+        "A applies Library of Leng's replacement and puts Grizzly Bears on top of A's library."
+      ],
+      "variants": [
+        {
+          "label": "to_library",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears goes on top of A's library, a hidden zone, without being revealed, so its characteristics are undefined: it is not a creature card, and Cragganwick Cremator deals no damage. B stays at 20 life."
+        },
+        {
+          "label": "to_graveyard",
+          "polarity": "does_not_fire",
+          "delta": "A declines Library of Leng's replacement.",
+          "expected": "Grizzly Bears goes to A's graveyard as a creature card with power 2, so Cragganwick Cremator deals 2 damage to B. B is at 18 life."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Library of Leng",
+        "Cragganwick Cremator",
+        "Grizzly Bears"
+      ],
+      "forge_notes": "The cost half of 701.9c (an illegal cost payment) cannot be reached: Library of Leng replaces only discards caused by an effect, not discards paid as a cost. Forge's script applies the replacement to any discard (Discard$ True); confirm it hides the card's characteristics from the follow-up condition."
+    }
+  ]
+}

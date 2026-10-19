@@ -1,0 +1,4 @@
+{"id": "702.85", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.85a", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution", "trigger"], "outcome": "Casting a cascade spell exiles cards until a cheaper nonland card appears, which may be cast free, and the rest go to the library bottom.", "note": ""}
+{"id": "702.85b", "category": "decision", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.85c", "category": "mechanical", "observability": "indirect", "record_kinds": ["trigger"], "outcome": "Each cascade instance triggers separately.", "note": ""}

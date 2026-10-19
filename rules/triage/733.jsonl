@@ -1,0 +1,2 @@
+{"id":"733.1","category":"out_of_scope","observability":"none","record_kinds":[],"outcome":"","note":"Forge's interface only offers legal actions and rolls back an incomplete one before any trigger or effect applies, so no illegal action reaches a record."}
+{"id":"733.2","category":"decision","observability":"none","record_kinds":[],"outcome":"","note":""}

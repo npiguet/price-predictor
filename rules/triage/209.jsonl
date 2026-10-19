@@ -1,0 +1,2 @@
+{"id": "209.1", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "A planeswalker enters the battlefield with loyalty counters equal to its printed loyalty.", "note": ""}
+{"id": "209.2", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "A loyalty ability is playable only with priority, an empty stack, in its controller's main phase, and only if none of that permanent's loyalty abilities was activated this turn.", "note": ""}

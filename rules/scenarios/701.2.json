@@ -1,0 +1,172 @@
+{
+  "unit": "701.2",
+  "verified": true,
+  "review": [
+    "701.2a-2: the opponent_hand variant changed two facts (Sandbar moved to B's hand and a Plains moved to A's); removed the irrelevant Plains so the variant moves only Lonely Sandbar, and gave A a library card for cycling to draw."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "701.2a-1",
+      "rules": [
+        "701.2a"
+      ],
+      "title": "Only the controller of an object can activate its activated ability",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Prodigal Sorcerer",
+              "summoning_sick": false
+            }
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A has priority in main phase 1 with an empty stack and considers activating Prodigal Sorcerer's ability ({T}: 1 damage to any target)."
+      ],
+      "variants": [
+        {
+          "label": "controller_has_priority",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "A controls Prodigal Sorcerer and has priority, so the activation is legal (can_play true)."
+        },
+        {
+          "label": "opponent_controls",
+          "polarity": "does_not_fire",
+          "delta": "Prodigal Sorcerer is on B's battlefield instead and A considers activating it.",
+          "expected": "A does not control Prodigal Sorcerer, so A cannot activate its ability (can_play false)."
+        }
+      ],
+      "cards": [
+        "Prodigal Sorcerer"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "701.2a-2",
+      "rules": [
+        "701.2a"
+      ],
+      "title": "A card with no controller can be activated by its owner",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Lonely Sandbar"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Island"
+          ],
+          "B": [
+            "Island"
+          ]
+        },
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A has priority in main phase 1 with an empty stack and considers activating the cycling ability ({U}, discard) of Lonely Sandbar, paying with Island."
+      ],
+      "variants": [
+        {
+          "label": "owner_hand",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Lonely Sandbar is in A's hand, so A, its owner, can activate its cycling: the activation is legal (can_play true)."
+        },
+        {
+          "label": "opponent_hand",
+          "polarity": "does_not_fire",
+          "delta": "Lonely Sandbar is in B's hand instead of A's.",
+          "expected": "A neither controls nor owns Lonely Sandbar, so A cannot activate its cycling (can_play false)."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Lonely Sandbar"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "701.2a-3",
+      "rules": [
+        "701.2a"
+      ],
+      "title": "An object can say that any player may activate its ability",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Flailing Soldier"
+          ],
+          "B": [
+            "Mountain"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "B has priority with an empty stack after A passes in main phase 1; Flailing Soldier is controlled by A."
+      },
+      "decisions": [
+        "A passes priority in main phase 1; B receives priority and considers activating Flailing Soldier's ability ({1}: +1/+1 until end of turn), paying with Mountain."
+      ],
+      "variants": [
+        {
+          "label": "any_player_may_activate",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Flailing Soldier says any player may activate its abilities, so B, who does not control it, can activate it: legal (can_play true)."
+        },
+        {
+          "label": "controller_only",
+          "polarity": "does_not_fire",
+          "delta": "A's creature is Prodigal Sorcerer instead (ready to tap), and B considers activating its ability.",
+          "expected": "Prodigal Sorcerer does not say another player may activate it, so B cannot activate it (can_play false)."
+        }
+      ],
+      "cards": [
+        "Flailing Soldier",
+        "Mountain",
+        "Prodigal Sorcerer"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

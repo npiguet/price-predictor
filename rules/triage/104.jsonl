@@ -1,0 +1,30 @@
+{"id": "104.1", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": "parent: ending conditions covered by children"}
+{"id": "104.2", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": "parent"}
+{"id": "104.2a", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "When the last opponent leaves the game, the remaining player wins immediately.", "note": ""}
+{"id": "104.2b", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "A resolving effect that states a player wins makes that player win and ends the game.", "note": ""}
+{"id": "104.2c", "category": "out_of_scope", "observability": "none", "record_kinds": [], "outcome": "", "note": "team multiplayer"}
+{"id": "104.2d", "category": "out_of_scope", "observability": "none", "record_kinds": [], "outcome": "", "note": "Emperor"}
+{"id": "104.3", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": "parent"}
+{"id": "104.3a", "category": "decision", "observability": "none", "record_kinds": [], "outcome": "", "note": "concession is a player action"}
+{"id": "104.3b", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "A player at 0 or less life loses the game at the next state-based check.", "note": ""}
+{"id": "104.3c", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "A player who drew from an empty library loses the game at the next state-based check.", "note": ""}
+{"id": "104.3d", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "A player with ten or more poison counters loses the game at the next state-based check.", "note": ""}
+{"id": "104.3e", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "A resolving effect that states a player loses makes that player lose the game.", "note": ""}
+{"id": "104.3f", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "A player who would both win and lose simultaneously loses the game.", "note": ""}
+{"id": "104.3g", "category": "out_of_scope", "observability": "none", "record_kinds": [], "outcome": "", "note": "team multiplayer"}
+{"id": "104.3h", "category": "out_of_scope", "observability": "none", "record_kinds": [], "outcome": "", "note": "limited range of influence multiplayer"}
+{"id": "104.3i", "category": "out_of_scope", "observability": "none", "record_kinds": [], "outcome": "", "note": "Emperor"}
+{"id": "104.3j", "category": "out_of_scope", "observability": "none", "record_kinds": [], "outcome": "", "note": "Commander variant"}
+{"id": "104.3k", "category": "out_of_scope", "observability": "none", "record_kinds": [], "outcome": "", "note": "tournament penalty"}
+{"id": "104.4", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": "parent"}
+{"id": "104.4a", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "If all remaining players lose simultaneously, the game is a draw.", "note": ""}
+{"id": "104.4b", "category": "mechanical", "observability": "needs_new_fields", "record_kinds": ["resolution"], "outcome": "A loop of mandatory actions with no way to stop makes the game a draw.", "note": "Forge detects some loops; rarely occurs"}
+{"id": "104.4c", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "A resolving effect that states the game is a draw ends the game as a draw.", "note": ""}
+{"id": "104.4d", "category": "out_of_scope", "observability": "none", "record_kinds": [], "outcome": "", "note": "team multiplayer"}
+{"id": "104.4e", "category": "out_of_scope", "observability": "none", "record_kinds": [], "outcome": "", "note": "limited range of influence multiplayer"}
+{"id": "104.4f", "category": "out_of_scope", "observability": "none", "record_kinds": [], "outcome": "", "note": "limited range of influence multiplayer"}
+{"id": "104.4g", "category": "out_of_scope", "observability": "none", "record_kinds": [], "outcome": "", "note": "team multiplayer"}
+{"id": "104.4h", "category": "out_of_scope", "observability": "none", "record_kinds": [], "outcome": "", "note": "Emperor"}
+{"id": "104.4i", "category": "out_of_scope", "observability": "none", "record_kinds": [], "outcome": "", "note": "tournament intentional draw"}
+{"id": "104.5", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "A player who loses or draws leaves the game, and in a two-player game the game ends.", "note": ""}
+{"id": "104.6", "category": "mechanical", "observability": "needs_new_fields", "record_kinds": ["resolution"], "outcome": "Karn Liberated's ability restarts the game: all players begin a new game.", "note": "Karn Liberated is in Forge with RestartGame"}

@@ -1,0 +1,215 @@
+{
+  "unit": "403",
+  "verified": true,
+  "review": [
+    "403: checked all scenarios and card scripts; no changes needed."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "403.2-1",
+      "rules": [
+        "403.2"
+      ],
+      "title": "A mass-destruction spell checks only the battlefield",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains"
+          ],
+          "B": [
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Wrath of God"
+          ]
+        },
+        "graveyard": {
+          "B": [
+            "Centaur Courser"
+          ]
+        },
+        "library": {},
+        "exile": {},
+        "notes": "Centaur Courser is a creature card in B's graveyard."
+      },
+      "decisions": [
+        "A casts Wrath of God, tapping four Plains.",
+        "Both players pass; Wrath of God resolves."
+      ],
+      "variants": [
+        {
+          "label": "on_battlefield",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears is destroyed and goes to B's graveyard on top of Centaur Courser. Centaur Courser is untouched in the graveyard."
+        },
+        {
+          "label": "in_hand",
+          "polarity": "does_not_fire",
+          "delta": "Grizzly Bears is a card in B's hand instead of on the battlefield.",
+          "expected": "Wrath of God destroys nothing; Grizzly Bears stays in B's hand and Centaur Courser stays in the graveyard."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Wrath of God",
+        "Grizzly Bears",
+        "Centaur Courser"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "403.2-2",
+      "rules": [
+        "403.2"
+      ],
+      "title": "A creature card outside the battlefield is not a legal target for a spell that targets creatures",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Forest"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Giant Growth"
+          ]
+        },
+        "graveyard": {
+          "A": [
+            "Grizzly Bears"
+          ]
+        },
+        "library": {},
+        "exile": {},
+        "notes": "No creature is on the battlefield."
+      },
+      "decisions": [
+        "A considers casting Giant Growth with Forest untapped."
+      ],
+      "variants": [
+        {
+          "label": "card_in_graveyard",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Giant Growth has no legal target, since Grizzly Bears in the graveyard is not on the battlefield, and A cannot cast it."
+        },
+        {
+          "label": "creature_on_battlefield",
+          "polarity": "does_not_fire",
+          "delta": "Grizzly Bears is on A's battlefield instead of in the graveyard.",
+          "expected": "Giant Growth has a legal target, Grizzly Bears, and A can cast it."
+        }
+      ],
+      "cards": [
+        "Forest",
+        "Giant Growth",
+        "Grizzly Bears"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "403.4-1",
+      "rules": [
+        "403.4"
+      ],
+      "title": "A permanent that re-enters the battlefield is a new object",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            {
+              "card": "Grizzly Bears",
+              "counters": {
+                "+1/+1": 1
+              },
+              "damage": 1,
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            "Island",
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Cloudshift"
+          ],
+          "B": [
+            "Counterspell"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Forest"
+          ]
+        },
+        "exile": {},
+        "notes": "Grizzly Bears is a 3/3 with one +1/+1 counter and 1 damage marked. B holds Counterspell with two untapped Islands and passes unless a variant says otherwise."
+      },
+      "decisions": [
+        "A casts Cloudshift targeting Grizzly Bears, tapping Plains.",
+        "B passes; both players pass; Cloudshift resolves."
+      ],
+      "variants": [
+        {
+          "label": "blink",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears is exiled and returns as a new 2/2 with no counters, no damage and summoning sickness."
+        },
+        {
+          "label": "countered",
+          "polarity": "does_not_fire",
+          "delta": "B responds with Counterspell, tapping both Islands, and it counters Cloudshift.",
+          "expected": "Cloudshift is countered; Grizzly Bears never leaves the battlefield and keeps its +1/+1 counter and 1 damage as a 3/3."
+        },
+        {
+          "label": "etb_creature",
+          "polarity": "other",
+          "delta": "The creature is Elvish Visionary (1/1) with a +1/+1 counter and 1 damage instead of Grizzly Bears.",
+          "expected": "Elvish Visionary returns as a new 1/1 with no counter or damage and its enters trigger fires, so A draws Forest."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Island",
+        "Grizzly Bears",
+        "Cloudshift",
+        "Counterspell",
+        "Elvish Visionary",
+        "Forest"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

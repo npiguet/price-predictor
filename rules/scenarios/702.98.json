@@ -1,0 +1,130 @@
+{
+  "unit": "702.98",
+  "verified": true,
+  "review": [],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.98a-1",
+      "rules": [
+        "702.98a"
+      ],
+      "title": "An unleashed creature enters with an additional +1/+1 counter",
+      "record_kind": "rewrite",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Rakdos Cackler"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Rakdos Cackler, tapping Mountain; it resolves.",
+        "As it enters, A chooses to have it enter with a +1/+1 counter."
+      ],
+      "variants": [
+        {
+          "label": "unleashed",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Rakdos Cackler enters with one +1/+1 counter and is 2/2."
+        },
+        {
+          "label": "not_unleashed",
+          "polarity": "does_not_fire",
+          "delta": "A chooses not to have Rakdos Cackler enter with a +1/+1 counter.",
+          "expected": "Rakdos Cackler enters with no counters and is 1/1."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Rakdos Cackler"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.98a-2",
+      "rules": [
+        "702.98a"
+      ],
+      "title": "A creature with unleash can't block while it has a +1/+1 counter",
+      "record_kind": "playability",
+      "setup": {
+        "active": "B",
+        "step": "declare_blockers",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Rakdos Cackler",
+              "summoning_sick": false,
+              "counters": {
+                "+1/+1": 1
+              }
+            }
+          ],
+          "B": [
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false,
+              "tapped": true
+            }
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Grizzly Bears is attacking player A. A is the defending player and is declaring blockers."
+      },
+      "decisions": [
+        "A tries to declare Rakdos Cackler as a blocker of Grizzly Bears."
+      ],
+      "variants": [
+        {
+          "label": "counter_on_cackler",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The block is illegal: Rakdos Cackler has a +1/+1 counter, so it can't block."
+        },
+        {
+          "label": "no_counter",
+          "polarity": "does_not_fire",
+          "delta": "Rakdos Cackler has no +1/+1 counter (it is 1/1).",
+          "expected": "The block is legal; Rakdos Cackler can block Grizzly Bears."
+        },
+        {
+          "label": "counter_on_other_creature",
+          "polarity": "other",
+          "delta": "A's creature is Runeclaw Bear with one +1/+1 counter instead of Rakdos Cackler.",
+          "expected": "The block is legal: Runeclaw Bear has no unleash, so its +1/+1 counter does not stop it blocking."
+        }
+      ],
+      "cards": [
+        "Rakdos Cackler",
+        "Grizzly Bears",
+        "Runeclaw Bear"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

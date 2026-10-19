@@ -1,0 +1,4 @@
+{"id": "702.61", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.61a", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "While a split second spell is on the stack, other spells cannot be cast and non-mana abilities cannot be activated.", "note": ""}
+{"id": "702.61b", "category": "legality", "observability": "direct", "record_kinds": ["playability", "trigger"], "outcome": "Mana abilities and special actions stay available and triggered abilities still trigger and go on the stack while a split second spell is on the stack.", "note": ""}
+{"id": "702.61c", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}

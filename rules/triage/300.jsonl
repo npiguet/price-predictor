@@ -1,0 +1,4 @@
+{"id": "300.1", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "300.2", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "An object with several card types is a legal target for, and is affected by, spells and abilities that affect any one of its card types.", "note": "Reclassified from definitional in review: the second sentence yields an observable targeting verdict."}
+{"id": "300.2a", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "A land that is also another card type can be played as a land and cannot be cast as a spell.", "note": ""}
+{"id": "300.2b", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}

@@ -1,0 +1,5 @@
+{"id": "701.17", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "701.17a", "category": "mechanical", "observability": "direct", "record_kinds": ["resolution"], "outcome": "The player moves that many cards from the top of their library to their graveyard.", "note": ""}
+{"id": "701.17b", "category": "mechanical", "observability": "direct", "record_kinds": ["resolution"], "outcome": "Milling more cards than the library holds mills the whole library; a cost to mill more than the library holds cannot be paid.", "note": "The cost-payment half is also a legality verdict."}
+{"id": "701.17c", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "A later part of the effect can find the milled card in the graveyard it moved to.", "note": ""}
+{"id": "701.17d", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution", "rewrite"], "outcome": "When replacement effects mill several cards, a single-card mill effect queries each milled card and sums or applies to all of them.", "note": ""}

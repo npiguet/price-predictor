@@ -1,0 +1,134 @@
+{
+  "unit": "701.69",
+  "verified": true,
+  "review": [],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "701.69a-1",
+      "rules": [
+        "701.69a"
+      ],
+      "title": "Damage dealt to Wolverine heals the damage already marked on it",
+      "record_kind": "rewrite",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain"
+          ],
+          "B": [
+            {
+              "card": "Wolverine, Fierce Fighter",
+              "summoning_sick": false,
+              "damage": 4
+            }
+          ]
+        },
+        "hand": {
+          "A": [
+            "Shock"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Shock targeting Wolverine, Fierce Fighter, tapping Mountain.",
+        "Both players pass; Shock resolves."
+      ],
+      "variants": [
+        {
+          "label": "wolverine",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The 2 damage is dealt and the 4 damage already marked on Wolverine is healed: Wolverine (3/5) has 2 damage marked and stays on the battlefield."
+        },
+        {
+          "label": "no_heal",
+          "polarity": "does_not_fire",
+          "delta": "B's creature is Great-Horn Krushok (3/5, no abilities) with 4 damage marked instead of Wolverine.",
+          "expected": "Great-Horn Krushok has 6 damage marked and moves to B's graveyard in the state-based check."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Shock",
+        "Wolverine, Fierce Fighter",
+        "Great-Horn Krushok"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "701.69a-2",
+      "rules": [
+        "701.69a"
+      ],
+      "title": "Pyramids removes all damage marked on a land instead of destroying it",
+      "record_kind": "rewrite",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Pyramids",
+            "Dryad Arbor",
+            "Forest",
+            "Forest"
+          ],
+          "B": [
+            "Mountain"
+          ]
+        },
+        "hand": {
+          "B": [
+            "Shock"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A activates Pyramids ({2}, tapping both Forests), choosing the mode 'the next time target land would be destroyed this turn, remove all damage marked on it instead' and targeting Dryad Arbor.",
+        "Both players pass; the ability resolves.",
+        "A passes priority; B casts Shock targeting Dryad Arbor, tapping Mountain.",
+        "Both players pass; Shock resolves."
+      ],
+      "variants": [
+        {
+          "label": "pyramids_active",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Dryad Arbor (1/1 land creature) is dealt 2 damage; instead of being destroyed, its marked damage is removed. Dryad Arbor stays on the battlefield with 0 damage marked."
+        },
+        {
+          "label": "no_pyramids",
+          "polarity": "does_not_fire",
+          "delta": "A does not activate Pyramids; the first two decisions are dropped.",
+          "expected": "Dryad Arbor is dealt 2 damage and moves to A's graveyard in the state-based check."
+        }
+      ],
+      "cards": [
+        "Pyramids",
+        "Dryad Arbor",
+        "Forest",
+        "Mountain",
+        "Shock"
+      ],
+      "forge_notes": "Pyramids is a one-shot replacement effect created by the activation; it lasts for the turn or until used."
+    }
+  ]
+}

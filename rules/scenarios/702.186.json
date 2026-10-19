@@ -1,0 +1,70 @@
+{
+  "unit": "702.186",
+  "verified": true,
+  "review": [
+    "702.186b triage: the infinity ability of The Soul Stone is a triggered ability, which 702.186b-1 observes as a trigger record; added trigger to the rule record_kinds."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.186b-1",
+      "rules": [
+        "702.186b"
+      ],
+      "title": "A harnessed permanent has the ability that follows the infinity symbol",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "upkeep",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "The Soul Stone"
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {
+          "A": [
+            "Grizzly Bears"
+          ]
+        },
+        "library": {
+          "A": [
+            "Forest",
+            "Forest"
+          ]
+        },
+        "exile": {},
+        "notes": "The Soul Stone is harnessed. Its infinity ability reads: at the beginning of your upkeep, return target creature card from your graveyard to the battlefield."
+      },
+      "decisions": [
+        "The upkeep of A begins; the infinity ability of The Soul Stone triggers and A targets Grizzly Bears in A's graveyard.",
+        "Both players pass; the trigger resolves."
+      ],
+      "variants": [
+        {
+          "label": "harnessed",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The triggered ability fires. Grizzly Bears moves from A's graveyard to the battlefield under A's control."
+        },
+        {
+          "label": "not_harnessed",
+          "polarity": "does_not_fire",
+          "delta": "The Soul Stone is not harnessed.",
+          "expected": "The triggered ability does not fire. Grizzly Bears stays in A's graveyard."
+        }
+      ],
+      "cards": [
+        "The Soul Stone",
+        "Grizzly Bears",
+        "Forest"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

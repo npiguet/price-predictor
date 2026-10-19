@@ -1,0 +1,3 @@
+{"id": "702.8", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.8a", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "A card with flash can be cast at instant timing, such as in an opponent's turn or with a spell on the stack.", "note": ""}
+{"id": "702.8b", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": "Redundancy of instances has no separate outcome."}

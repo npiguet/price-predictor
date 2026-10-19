@@ -1,0 +1,147 @@
+{
+  "unit": "702.100",
+  "verified": true,
+  "review": [],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.100a-1",
+      "rules": [
+        "702.100a"
+      ],
+      "title": "Evolve puts a +1/+1 counter when a creature with greater power or toughness enters",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Experiment One",
+              "summoning_sick": false
+            },
+            "Forest",
+            "Forest",
+            "Mountain"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Grizzly Bears",
+            "Wall of Wood",
+            "Mons's Goblin Raiders"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Grizzly Bears, tapping Forest and Forest; it resolves.",
+        "If evolve triggers, both players pass and it resolves."
+      ],
+      "variants": [
+        {
+          "label": "greater_power_and_toughness",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Evolve triggers: Grizzly Bears (2/2) is greater than Experiment One (1/1). Experiment One gets a +1/+1 counter and is 2/2."
+        },
+        {
+          "label": "equal_stats",
+          "polarity": "does_not_fire",
+          "delta": "A casts Mons's Goblin Raiders (1/1), tapping Mountain, instead of Grizzly Bears.",
+          "expected": "Mons's Goblin Raiders has neither greater power nor greater toughness than Experiment One, so evolve does not trigger. Experiment One stays 1/1."
+        },
+        {
+          "label": "greater_toughness_only",
+          "polarity": "fires",
+          "delta": "A casts Wall of Wood (0/3), tapping Forest, instead of Grizzly Bears.",
+          "expected": "Wall of Wood has greater toughness (3 > 1) but not greater power. Evolve triggers and Experiment One gets a +1/+1 counter, becoming 2/2."
+        }
+      ],
+      "cards": [
+        "Experiment One",
+        "Forest",
+        "Mountain",
+        "Grizzly Bears",
+        "Wall of Wood",
+        "Mons's Goblin Raiders"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.100d-1",
+      "rules": [
+        "702.100d"
+      ],
+      "title": "Each instance of evolve triggers separately",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Experiment One",
+              "summoning_sick": false
+            },
+            {
+              "card": "Tyranid Prime",
+              "summoning_sick": false
+            },
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Hill Giant"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Hill Giant, tapping four Mountains; it resolves.",
+        "Every evolve trigger goes on the stack; both players pass and each resolves in turn."
+      ],
+      "variants": [
+        {
+          "label": "two_instances",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Experiment One has two instances of evolve (its own and the one granted by Tyranid Prime), so two triggers resolve. After the first, Experiment One is 2/2 and Hill Giant (3/3) is still greater, so the second also gives a counter: Experiment One has two +1/+1 counters and is 3/3. Tyranid Prime's own evolve gives it one counter (1/5)."
+        },
+        {
+          "label": "one_instance",
+          "polarity": "does_not_fire",
+          "delta": "Tyranid Prime is not on the battlefield, so Experiment One has only its own evolve.",
+          "expected": "One evolve trigger resolves. Experiment One gets one +1/+1 counter and is 2/2."
+        }
+      ],
+      "cards": [
+        "Experiment One",
+        "Tyranid Prime",
+        "Mountain",
+        "Hill Giant"
+      ],
+      "forge_notes": "Check that Forge keeps Experiment One's printed Evolve and the granted Evolve as two separate triggers."
+    }
+  ]
+}

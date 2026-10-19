@@ -1,0 +1,779 @@
+{
+  "unit": "405",
+  "verified": true,
+  "review": [
+    "405.3-1: single_trigger expected omitted that B, at 1 life, drops to 0 and loses the game; added the life totals and the loss.",
+    "405.4-1: ability variant activates Prodigal Pyromancer with no note that it is free of summoning sickness; added the note.",
+    "405.5-1: b_responds expected stopped before the final outcome; added that Giant Growth resolves first and Grizzly Bears survives Shock.",
+    "405.6c-1: non_mana_ability variant activates Prodigal Pyromancer with no note that it is free of summoning sickness; added the note."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "405.1-1",
+      "rules": [
+        "405.1"
+      ],
+      "title": "A cast spell's card goes on the stack, an activated ability goes on the stack without a card",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Prodigal Pyromancer"
+          ],
+          "B": [
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Shock"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Prodigal Pyromancer has been under A's control since an earlier turn."
+      },
+      "decisions": [
+        "A casts Shock targeting Grizzly Bears, tapping Mountain.",
+        "A passes priority and holds the spell on the stack."
+      ],
+      "variants": [
+        {
+          "label": "cast_spell",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Shock moves from A's hand to the stack as a card; the stack holds that one spell and A's hand is empty."
+        },
+        {
+          "label": "activate_ability",
+          "polarity": "does_not_fire",
+          "delta": "A activates Prodigal Pyromancer targeting Grizzly Bears instead of casting Shock.",
+          "expected": "The stack holds an ability with no card; Prodigal Pyromancer stays on the battlefield tapped and Shock stays in A's hand."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Prodigal Pyromancer",
+        "Shock",
+        "Grizzly Bears"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "405.2-1",
+      "rules": [
+        "405.2"
+      ],
+      "title": "The last object put on the stack resolves first",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain"
+          ],
+          "B": [
+            "Forest",
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Shock"
+          ],
+          "B": [
+            "Giant Growth"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Shock targeting Grizzly Bears, tapping Mountain.",
+        "B responds by casting Giant Growth targeting Grizzly Bears, tapping Forest.",
+        "Both players pass; the stack resolves from the top."
+      ],
+      "variants": [
+        {
+          "label": "respond",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Giant Growth is put on top of Shock and resolves first: Grizzly Bears becomes 5/5. Shock then deals 2 damage and Grizzly Bears survives with 2 damage marked."
+        },
+        {
+          "label": "no_response",
+          "polarity": "does_not_fire",
+          "delta": "B does not cast Giant Growth while Shock is on the stack.",
+          "expected": "Shock resolves and Grizzly Bears dies in the state-based check before B receives priority, so Giant Growth has no target and cannot be cast."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Forest",
+        "Shock",
+        "Giant Growth",
+        "Grizzly Bears"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "405.3-1",
+      "rules": [
+        "405.3"
+      ],
+      "title": "Simultaneous triggers go on the stack in APNAP order, so the non-active player's resolves first",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 1,
+          "B": 1
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Blood Artist"
+          ],
+          "B": [
+            "Blood Artist",
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Shock"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Both players are at 1 life. Both Blood Artists trigger on the same death."
+      },
+      "decisions": [
+        "A casts Shock targeting Grizzly Bears, tapping Mountain.",
+        "Both players pass; Shock resolves and Grizzly Bears dies.",
+        "A targets B with A's Blood Artist trigger and B targets A with B's Blood Artist trigger; both go on the stack.",
+        "Both players pass; the stack resolves from the top."
+      ],
+      "variants": [
+        {
+          "label": "a_active",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "A's trigger goes on the stack first and B's on top of it. B's trigger resolves first: A loses 1 life and B gains 1 (B at 2). A is at 0 life and loses the game before A's trigger resolves."
+        },
+        {
+          "label": "b_active",
+          "polarity": "other",
+          "delta": "B is the active player instead of A.",
+          "expected": "B's trigger goes on the stack first and A's on top of it. A's trigger resolves first: B loses 1 life and A gains 1 (A at 2). B is at 0 life and loses the game before B's trigger resolves."
+        },
+        {
+          "label": "single_trigger",
+          "polarity": "does_not_fire",
+          "delta": "Blood Artist is absent from B's battlefield, so only A's trigger is put on the stack.",
+          "expected": "Only A's trigger is on the stack, targeting B; it resolves: B loses 1 life (0) and A gains 1 (2), and B loses the game in the next state-based check."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Blood Artist",
+        "Grizzly Bears",
+        "Shock"
+      ],
+      "forge_notes": "Two simultaneous triggers from one event, which Forge puts on the stack in APNAP order."
+    },
+    {
+      "id": "405.4-1",
+      "rules": [
+        "405.4"
+      ],
+      "title": "A spell on the stack has its card's characteristics, an ability has only its text",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Forest",
+            "Forest",
+            "Prodigal Pyromancer"
+          ],
+          "B": [
+            "Island",
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Grizzly Bears"
+          ],
+          "B": [
+            "Essence Scatter"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Prodigal Pyromancer has been under A's control since an earlier turn."
+      },
+      "decisions": [
+        "A casts Grizzly Bears, tapping both Forests.",
+        "B considers casting Essence Scatter."
+      ],
+      "variants": [
+        {
+          "label": "creature_spell",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The Grizzly Bears spell is a creature spell, so it is a legal target for Essence Scatter; B can cast it and it counters the spell."
+        },
+        {
+          "label": "ability",
+          "polarity": "does_not_fire",
+          "delta": "A activates Prodigal Pyromancer targeting B instead of casting Grizzly Bears.",
+          "expected": "The ability on the stack has no card characteristics and is not a creature spell, so Essence Scatter has no legal target and B cannot cast it."
+        }
+      ],
+      "cards": [
+        "Forest",
+        "Island",
+        "Prodigal Pyromancer",
+        "Grizzly Bears",
+        "Essence Scatter"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "405.4-2",
+      "rules": [
+        "405.4"
+      ],
+      "title": "A triggered ability is controlled by whoever controlled its source when it triggered",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain"
+          ],
+          "B": [
+            "Blood Artist",
+            {
+              "card": "Control Magic",
+              "attached_to": "Blood Artist"
+            }
+          ]
+        },
+        "hand": {
+          "A": [
+            "Shock"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "A owns Blood Artist, but B controls it through Control Magic (B's Aura)."
+      },
+      "decisions": [
+        "A casts Shock targeting Blood Artist, tapping Mountain.",
+        "Both players pass; Shock resolves and Blood Artist dies.",
+        "B, who controlled Blood Artist when it died, targets A with the trigger.",
+        "Both players pass; the trigger resolves."
+      ],
+      "variants": [
+        {
+          "label": "stolen",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The trigger is controlled by B: A loses 1 life (19) and B gains 1 (21). Blood Artist goes to A's graveyard and Control Magic to B's."
+        },
+        {
+          "label": "own",
+          "polarity": "does_not_fire",
+          "delta": "Control Magic is absent, so A controls Blood Artist, and A targets B with the trigger.",
+          "expected": "The trigger is controlled by A: B loses 1 life (19) and A gains 1 (21). Blood Artist goes to A's graveyard."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Blood Artist",
+        "Control Magic",
+        "Shock"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "405.5-1",
+      "rules": [
+        "405.5"
+      ],
+      "title": "When all players pass in succession the top object resolves; with an empty stack the step ends",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain"
+          ],
+          "B": [
+            "Forest",
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Shock"
+          ],
+          "B": [
+            "Giant Growth"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Shock targeting Grizzly Bears, tapping Mountain.",
+        "A passes priority.",
+        "B passes priority."
+      ],
+      "variants": [
+        {
+          "label": "both_pass",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Both players passed in succession with Shock on the stack, so Shock resolves and Grizzly Bears dies; the main phase does not end."
+        },
+        {
+          "label": "b_responds",
+          "polarity": "does_not_fire",
+          "delta": "B casts Giant Growth targeting Grizzly Bears instead of passing.",
+          "expected": "Not all players passed in succession, so Shock does not resolve yet; Giant Growth goes on top of the stack and resolves first after both players pass, then Shock resolves and Grizzly Bears survives as a 5/5 with 2 damage."
+        },
+        {
+          "label": "empty_stack",
+          "polarity": "other",
+          "delta": "A casts nothing, so the stack is empty when both players pass in succession.",
+          "expected": "The main phase ends and the beginning of combat step begins."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Forest",
+        "Shock",
+        "Giant Growth",
+        "Grizzly Bears"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "405.6a-1",
+      "rules": [
+        "405.6a"
+      ],
+      "title": "An effect does not use the stack but the delayed trigger it creates does",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Plains",
+            "Plains",
+            "Grizzly Bears"
+          ],
+          "B": [
+            "Island",
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Eerie Interlude"
+          ],
+          "B": [
+            "Counterspell"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Eerie Interlude targeting Grizzly Bears, tapping three Plains.",
+        "B passes; both players pass; Eerie Interlude resolves.",
+        "Both players pass with an empty stack until the end step begins.",
+        "The delayed trigger is put on the stack; both players pass and it resolves."
+      ],
+      "variants": [
+        {
+          "label": "resolves",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Eerie Interlude's exile happens as it resolves with nothing added to the stack. At the beginning of the end step the delayed trigger goes on the stack and returns Grizzly Bears to the battlefield."
+        },
+        {
+          "label": "countered",
+          "polarity": "does_not_fire",
+          "delta": "B responds with Counterspell, tapping both Islands, and it counters Eerie Interlude.",
+          "expected": "Eerie Interlude does not resolve, so no delayed trigger is created; Grizzly Bears stays on the battlefield and nothing is put on the stack at the end step."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Island",
+        "Grizzly Bears",
+        "Eerie Interlude",
+        "Counterspell"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "405.6b-1",
+      "rules": [
+        "405.6b"
+      ],
+      "title": "A static ability applies continuously without using the stack",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Plains",
+            "Plains",
+            "Grizzly Bears"
+          ],
+          "B": [
+            "Island",
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Glorious Anthem"
+          ],
+          "B": [
+            "Counterspell"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Glorious Anthem, tapping three Plains.",
+        "B passes; both players pass; Glorious Anthem resolves."
+      ],
+      "variants": [
+        {
+          "label": "anthem_resolves",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Glorious Anthem enters and Grizzly Bears is immediately 3/3; the static ability puts nothing on the stack."
+        },
+        {
+          "label": "anthem_countered",
+          "polarity": "does_not_fire",
+          "delta": "B responds with Counterspell, tapping both Islands, and it counters Glorious Anthem.",
+          "expected": "Glorious Anthem never enters the battlefield and Grizzly Bears stays 2/2."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Island",
+        "Grizzly Bears",
+        "Glorious Anthem",
+        "Counterspell"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "405.6c-1",
+      "rules": [
+        "405.6c"
+      ],
+      "title": "A mana ability resolves immediately and its other effect happens with it",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Adarkar Wastes",
+            "Prodigal Pyromancer"
+          ],
+          "B": [
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Prodigal Pyromancer has been under A's control since an earlier turn."
+      },
+      "decisions": [
+        "A activates the second ability of Adarkar Wastes, tapping it to add {W}.",
+        "A takes no other action."
+      ],
+      "variants": [
+        {
+          "label": "painful_mana",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "{W} is added and Adarkar Wastes deals 1 damage to A (19 life) immediately. Nothing is put on the stack and B receives no priority."
+        },
+        {
+          "label": "colorless_mana",
+          "polarity": "does_not_fire",
+          "delta": "A activates the first ability of Adarkar Wastes to add {C}.",
+          "expected": "{C} is added and A stays at 20 life; nothing is put on the stack."
+        },
+        {
+          "label": "non_mana_ability",
+          "polarity": "other",
+          "delta": "A activates Prodigal Pyromancer targeting Grizzly Bears instead of a land.",
+          "expected": "The ability goes on the stack and B may respond; no damage is dealt until it resolves."
+        }
+      ],
+      "cards": [
+        "Adarkar Wastes",
+        "Prodigal Pyromancer",
+        "Grizzly Bears"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "405.6d-1",
+      "rules": [
+        "405.6d"
+      ],
+      "title": "A special action happens immediately without using the stack",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            {
+              "card": "Exalted Angel",
+              "face_down": true
+            }
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Exalted Angel is a face-down 2/2 creature with morph {2}{W}{W}."
+      },
+      "decisions": [
+        "A turns Exalted Angel face up by paying its morph cost, tapping four Plains."
+      ],
+      "variants": [
+        {
+          "label": "pay_morph",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Exalted Angel is face up at once as a 4/5 flyer; nothing is put on the stack and B gets no chance to respond."
+        },
+        {
+          "label": "cannot_pay",
+          "polarity": "does_not_fire",
+          "delta": "One of the four Plains is already tapped.",
+          "expected": "A cannot pay {2}{W}{W} with three untapped Plains; turning Exalted Angel face up is not legal and it stays a face-down 2/2."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Exalted Angel"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "405.6e-1",
+      "rules": [
+        "405.6e"
+      ],
+      "title": "A turn-based action happens before priority without using the stack",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "upkeep",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Forest",
+            "Island"
+          ]
+        },
+        "exile": {},
+        "notes": "A's library is listed top first."
+      },
+      "decisions": [
+        "Both players pass in the upkeep with an empty stack.",
+        "The draw step begins."
+      ],
+      "variants": [
+        {
+          "label": "draw_step",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "A draws Forest as the step begins, before either player receives priority; nothing is put on the stack. A's hand holds Forest."
+        },
+        {
+          "label": "skipped_draw",
+          "polarity": "does_not_fire",
+          "delta": "A controls Necropotence, which skips A's draw step.",
+          "expected": "A draws nothing; Forest stays on top of A's library and the hand stays empty."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Forest",
+        "Island",
+        "Necropotence"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "405.6f-1",
+      "rules": [
+        "405.6f"
+      ],
+      "title": "State-based actions happen without the stack before a player would receive priority",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain"
+          ],
+          "B": [
+            "Forest",
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Shock"
+          ],
+          "B": [
+            "Giant Growth"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Shock targeting Grizzly Bears, tapping Mountain.",
+        "Both players pass; Shock resolves.",
+        "B passes whenever B receives priority."
+      ],
+      "variants": [
+        {
+          "label": "lethal_damage",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears has lethal damage and dies in the state-based check right after Shock resolves, before B receives priority; Giant Growth has no target afterwards."
+        },
+        {
+          "label": "survives",
+          "polarity": "does_not_fire",
+          "delta": "B's creature is Centaur Courser (3/3) instead of Grizzly Bears.",
+          "expected": "No state-based action applies; Centaur Courser stays on the battlefield with 2 damage."
+        },
+        {
+          "label": "respond_early",
+          "polarity": "other",
+          "delta": "B casts Giant Growth on Grizzly Bears while Shock is still on the stack.",
+          "expected": "Giant Growth resolves first and Grizzly Bears survives Shock as a 5/5 with 2 damage."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Forest",
+        "Shock",
+        "Giant Growth",
+        "Grizzly Bears",
+        "Centaur Courser"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

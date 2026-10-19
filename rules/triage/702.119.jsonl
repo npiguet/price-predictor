@@ -1,0 +1,4 @@
+{"id": "702.119", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.119a", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "A spell with emerge can be cast for its emerge cost with a creature sacrificed, and the total cost is reduced by generic mana equal to the sacrificed creature's mana value.", "note": ""}
+{"id": "702.119b", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "A spell with emerge from a quality can be cast by sacrificing a permanent of that quality, with the total cost reduced by its mana value.", "note": ""}
+{"id": "702.119c", "category": "decision", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}

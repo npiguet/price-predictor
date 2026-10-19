@@ -1,0 +1,2 @@
+{"id": "701.29", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "701.29a", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "Fateseal N moves the chosen cards among the top N of the opponent's library to its bottom and leaves the rest on top.", "note": ""}

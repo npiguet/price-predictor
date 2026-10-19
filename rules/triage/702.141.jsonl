@@ -1,0 +1,2 @@
+{"id": "702.141", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.141a", "category": "mechanical", "observability": "direct", "record_kinds": ["resolution", "trigger"], "outcome": "Resolving encore exiles the card as a cost and creates a hasty token copy per opponent that attacks that opponent if able and is sacrificed at the next end step; it is activatable only as a sorcery.", "note": ""}

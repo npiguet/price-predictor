@@ -1,0 +1,159 @@
+{
+  "unit": "702.46",
+  "verified": true,
+  "review": [
+    "702.46a-1: the no-target variants said the trigger is 'removed from the stack'; under 603.3d a trigger with no legal target is never put on the stack, so the expected text now says that.",
+    "702.46b-1 one_target: claimed the second trigger has no legal target, but both triggers can and must target Deathknell Kami (the only legal Spirit); rewrote it so the first returns the Kami and the second fizzles on resolution."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.46a-1",
+      "rules": [
+        "702.46a"
+      ],
+      "title": "Soulshift returns a Spirit card of mana value N or less from the graveyard when the permanent dies",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "B",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Elder Pine of Jukai"
+          ],
+          "B": [
+            "Mountain"
+          ]
+        },
+        "hand": {
+          "B": [
+            "Shock"
+          ]
+        },
+        "graveyard": {
+          "A": [
+            "Deathknell Kami"
+          ]
+        },
+        "library": {},
+        "exile": {},
+        "notes": "Elder Pine of Jukai is a 2/1 Spirit with soulshift 2. Deathknell Kami is a Spirit with mana value 2."
+      },
+      "decisions": [
+        "B casts Shock targeting Elder Pine of Jukai, tapping the Mountain.",
+        "Both players pass; Shock resolves and Elder Pine of Jukai dies in the state-based check.",
+        "A's soulshift trigger targets Deathknell Kami and A chooses to return it; both players pass and it resolves."
+      ],
+      "variants": [
+        {
+          "label": "spirit_in_range",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Elder Pine of Jukai moves to A's graveyard. The soulshift trigger fires and Deathknell Kami moves from A's graveyard to A's hand."
+        },
+        {
+          "label": "spirit_too_expensive",
+          "polarity": "does_not_fire",
+          "delta": "The Spirit card in A's graveyard is Thief of Hope (mana value 3) instead of Deathknell Kami.",
+          "expected": "Elder Pine of Jukai moves to A's graveyard. The soulshift trigger has no legal target, so it is not put on the stack; Thief of Hope stays in A's graveyard."
+        },
+        {
+          "label": "not_a_spirit",
+          "polarity": "does_not_fire",
+          "delta": "The card in A's graveyard is Grizzly Bears (mana value 2, not a Spirit) instead of Deathknell Kami.",
+          "expected": "Elder Pine of Jukai moves to A's graveyard. The soulshift trigger has no legal target, so it is not put on the stack; Grizzly Bears stays in A's graveyard."
+        }
+      ],
+      "cards": [
+        "Elder Pine of Jukai",
+        "Mountain",
+        "Shock",
+        "Deathknell Kami",
+        "Thief of Hope",
+        "Grizzly Bears"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.46b-1",
+      "rules": [
+        "702.46b"
+      ],
+      "title": "Each instance of soulshift triggers separately",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "B",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Forked-Branch Garami"
+          ],
+          "B": [
+            "Swamp",
+            "Swamp",
+            "Mountain"
+          ]
+        },
+        "hand": {
+          "B": [
+            "Doom Blade",
+            "Shock"
+          ]
+        },
+        "graveyard": {
+          "A": [
+            "Deathknell Kami",
+            "Elder Pine of Jukai"
+          ]
+        },
+        "library": {},
+        "exile": {},
+        "notes": "Forked-Branch Garami is a 4/4 green Spirit with two instances of soulshift 4. Deathknell Kami (mana value 2) and Elder Pine of Jukai (mana value 3) are Spirits."
+      },
+      "decisions": [
+        "B casts Doom Blade targeting Forked-Branch Garami, tapping both Swamps.",
+        "Both players pass; Doom Blade resolves and Forked-Branch Garami dies.",
+        "A puts both soulshift triggers on the stack; the first targets Deathknell Kami and the second targets Elder Pine of Jukai, and A chooses to return each. Both players pass and both resolve."
+      ],
+      "variants": [
+        {
+          "label": "two_targets",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Forked-Branch Garami moves to A's graveyard. Two soulshift triggers fire and both Deathknell Kami and Elder Pine of Jukai move from A's graveyard to A's hand."
+        },
+        {
+          "label": "one_target",
+          "polarity": "other",
+          "delta": "The card in A's graveyard in place of Elder Pine of Jukai is Harbinger of Spring (mana value 5).",
+          "expected": "Forked-Branch Garami moves to A's graveyard. Both soulshift triggers are put on the stack, each targeting Deathknell Kami, the only legal target. The first to resolve returns Deathknell Kami to A's hand; the second has no legal target left on resolution and does not resolve. Harbinger of Spring stays in A's graveyard."
+        },
+        {
+          "label": "survives",
+          "polarity": "does_not_fire",
+          "delta": "B casts Shock (tapping the Mountain) targeting Forked-Branch Garami instead of Doom Blade.",
+          "expected": "Forked-Branch Garami stays on the battlefield with 2 damage marked. No soulshift trigger fires and both Spirit cards stay in A's graveyard."
+        }
+      ],
+      "cards": [
+        "Forked-Branch Garami",
+        "Swamp",
+        "Mountain",
+        "Doom Blade",
+        "Shock",
+        "Deathknell Kami",
+        "Elder Pine of Jukai",
+        "Harbinger of Spring"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

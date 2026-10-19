@@ -1,0 +1,201 @@
+{
+  "unit": "701.42",
+  "verified": true,
+  "review": [
+    "701.42b-1: only the token branch of 701.42b was exercised; added clone_partner, a card copying Midnight Scavengers that is not a meld card."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "701.42a-1",
+      "rules": [
+        "701.42a"
+      ],
+      "title": "Melding puts the two cards onto the battlefield combined as one permanent",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Graf Rats",
+              "summoning_sick": false
+            },
+            {
+              "card": "Midnight Scavengers",
+              "summoning_sick": false
+            }
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A moves to the beginning of combat. Graf Rats' trigger fires; A has no other action and the trigger resolves."
+      ],
+      "variants": [
+        {
+          "label": "meld_pair",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Graf Rats and Midnight Scavengers are exiled and A's Chittering Host (5/6, haste, menace) enters the battlefield. It is one permanent represented by both cards; neither Graf Rats nor Midnight Scavengers is on the battlefield as a separate permanent."
+        },
+        {
+          "label": "wrong_partner",
+          "polarity": "does_not_fire",
+          "delta": "A controls Hill Giant instead of Midnight Scavengers.",
+          "expected": "Graf Rats' trigger does not fire. Graf Rats and Hill Giant stay on the battlefield and nothing is exiled."
+        }
+      ],
+      "cards": [
+        "Graf Rats",
+        "Midnight Scavengers",
+        "Hill Giant"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "701.42b-1",
+      "rules": [
+        "701.42b"
+      ],
+      "title": "A token cannot be melded",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Graf Rats",
+              "summoning_sick": false
+            },
+            {
+              "card": "Midnight Scavengers",
+              "token": true,
+              "summoning_sick": false
+            }
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "The token is a copy of Midnight Scavengers, so it has the card's name."
+      },
+      "decisions": [
+        "A moves to the beginning of combat. Graf Rats' trigger fires (a creature named Midnight Scavengers is present); A has no other action and the trigger resolves."
+      ],
+      "variants": [
+        {
+          "label": "token_partner",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Graf Rats and the Midnight Scavengers token are exiled. The token ceases to exist, Graf Rats stays in exile, and no Chittering Host enters the battlefield."
+        },
+        {
+          "label": "token_primary",
+          "polarity": "fires",
+          "delta": "Graf Rats is the token (a copy of Graf Rats) and Midnight Scavengers is the card.",
+          "expected": "Both are exiled. The Graf Rats token ceases to exist, Midnight Scavengers stays in exile, and no Chittering Host enters the battlefield."
+        },
+        {
+          "label": "clone_partner",
+          "polarity": "fires",
+          "delta": "The Midnight Scavengers is Clone, a card that entered as a copy of Midnight Scavengers, instead of a token.",
+          "expected": "Graf Rats and the Clone are exiled. The Clone is not a meld card, so nothing is melded: Graf Rats and Clone both stay in exile as cards, and no Chittering Host enters the battlefield."
+        },
+        {
+          "label": "two_cards",
+          "polarity": "does_not_fire",
+          "delta": "Both Graf Rats and Midnight Scavengers are cards, not tokens.",
+          "expected": "Both are exiled and melded: Chittering Host (5/6, haste, menace) enters the battlefield as one permanent."
+        }
+      ],
+      "cards": [
+        "Graf Rats",
+        "Midnight Scavengers",
+        "Clone"
+      ],
+      "forge_notes": "The token-primary variant needs a token copy of Graf Rats carrying the card's trigger. The clone_partner variant needs Clone on the battlefield already copying Midnight Scavengers."
+    },
+    {
+      "id": "701.42c-1",
+      "rules": [
+        "701.42c"
+      ],
+      "title": "Objects that cannot be melded stay in their current zone",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Hanweir Battlements",
+            {
+              "card": "Hanweir Garrison",
+              "token": true,
+              "summoning_sick": false
+            }
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "The token is a copy of Hanweir Garrison."
+      },
+      "decisions": [
+        "A activates Hanweir Battlements' meld ability, tapping all five Mountains for the mana and tapping Hanweir Battlements.",
+        "Both players pass; the ability resolves."
+      ],
+      "variants": [
+        {
+          "label": "token_garrison",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Hanweir Battlements and the token are exiled. The token ceases to exist, Hanweir Battlements stays in exile, and no Hanweir, the Writhing Township enters the battlefield."
+        },
+        {
+          "label": "real_garrison",
+          "polarity": "does_not_fire",
+          "delta": "Hanweir Garrison is a card, not a token.",
+          "expected": "Both are exiled and melded: Hanweir, the Writhing Township (7/4, trample, haste) enters the battlefield as one permanent."
+        },
+        {
+          "label": "garrison_absent",
+          "polarity": "other",
+          "delta": "Hanweir Garrison is a card in A's graveyard instead of on the battlefield.",
+          "expected": "The ability resolves but A controls no creature named Hanweir Garrison, so nothing is exiled. Hanweir Battlements stays on the battlefield, tapped."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Hanweir Battlements",
+        "Hanweir Garrison"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

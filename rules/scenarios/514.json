@@ -1,0 +1,295 @@
+{
+  "unit": "514",
+  "verified": true,
+  "review": [
+    "514.2-1: B's library was empty while the base variant continues into B's turn, so B would lose at its draw step before casting the second Shock; gave B a one-card library.",
+    "514.3a-1: the draw_in_response variant made A discard two cards in the second cleanup step without a fixed choice; added a decision that A always discards Mountains."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "514.1-1",
+      "rules": [
+        "514.1"
+      ],
+      "title": "The active player discards down to maximum hand size in the cleanup step",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "cleanup",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain"
+          ],
+          "B": [
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "A is the active player and has eight cards in hand. B has nine cards in hand but it is not B's turn. Neither player has a maximum-hand-size modifier unless a variant adds one."
+      },
+      "decisions": [
+        "The cleanup step begins; A discards one Mountain, which is A's choice, to reach seven cards (base variant)."
+      ],
+      "variants": [
+        {
+          "label": "eight_cards",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "A discards 1 card: one Mountain moves from A's hand to A's graveyard and A has 7 cards in hand. B, not the active player, discards nothing and keeps 9 cards."
+        },
+        {
+          "label": "seven_cards",
+          "polarity": "does_not_fire",
+          "delta": "A has seven Mountains in hand instead of eight.",
+          "expected": "A discards nothing: A has 7 cards in hand and an empty graveyard. B still keeps 9 cards."
+        },
+        {
+          "label": "no_maximum",
+          "polarity": "other",
+          "delta": "A controls Spellbook (no maximum hand size) on the battlefield, with eight cards in hand.",
+          "expected": "A discards nothing and keeps 8 cards in hand."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Spellbook"
+      ],
+      "forge_notes": "Spellbook is added to A's battlefield only in the no_maximum variant."
+    },
+    {
+      "id": "514.2-1",
+      "rules": [
+        "514.2"
+      ],
+      "title": "Damage marked on permanents is removed in the cleanup step",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main2",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Hill Giant"
+          ],
+          "B": [
+            "Mountain",
+            "Mountain"
+          ]
+        },
+        "hand": {
+          "B": [
+            "Shock",
+            "Shock"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "B": [
+            "Mountain"
+          ]
+        },
+        "exile": {},
+        "notes": "Hill Giant (3/3) has been under A's control since before this turn. B's library holds one card so that B's draw step does not lose B the game."
+      },
+      "decisions": [
+        "B casts Shock targeting Hill Giant, tapping a Mountain; it resolves.",
+        "Both players pass until the next turn: the turn ends, cleanup happens and B's turn begins (base variant).",
+        "In B's first main phase, B untaps and casts the second Shock targeting Hill Giant, tapping a Mountain; it resolves."
+      ],
+      "variants": [
+        {
+          "label": "next_turn",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The first Shock leaves Hill Giant with 2 damage marked. At cleanup the damage is removed, so after the second Shock Hill Giant has only 2 damage marked and stays on the battlefield."
+        },
+        {
+          "label": "same_turn",
+          "polarity": "does_not_fire",
+          "delta": "B casts the second Shock in the same main phase, right after the first resolves, tapping the other Mountain.",
+          "expected": "No cleanup has happened between the Shocks, so Hill Giant has 4 damage marked and moves to A's graveyard."
+        }
+      ],
+      "cards": [
+        "Hill Giant",
+        "Shock",
+        "Mountain"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "514.2-2",
+      "rules": [
+        "514.2"
+      ],
+      "title": "Damage removal and the end of 'until end of turn' effects happen simultaneously in the cleanup step",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "end",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Grizzly Bears",
+            "Forest"
+          ],
+          "B": [
+            "Mountain",
+            "Mountain"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Giant Growth"
+          ],
+          "B": [
+            "Shock",
+            "Shock"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Grizzly Bears has been under A's control since before this turn."
+      },
+      "decisions": [
+        "A casts Giant Growth targeting Grizzly Bears, tapping Forest; it resolves and Grizzly Bears is 5/5 until end of turn.",
+        "B casts Shock targeting Grizzly Bears and it resolves, then B casts the second Shock targeting Grizzly Bears and it resolves.",
+        "Both players pass priority in succession; the end step ends and cleanup happens."
+      ],
+      "variants": [
+        {
+          "label": "giant_growth",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "After the two Shocks Grizzly Bears (5/5) has 4 damage marked and survives. At cleanup the damage is removed and Giant Growth ends at the same time, so Grizzly Bears never has lethal damage: it stays on the battlefield as an undamaged 2/2."
+        },
+        {
+          "label": "counters",
+          "polarity": "does_not_fire",
+          "delta": "Grizzly Bears starts with three +1/+1 counters, and A does not cast Giant Growth.",
+          "expected": "Grizzly Bears (5/5) survives the two Shocks with 4 damage marked. At cleanup the damage is removed but the counters stay, so it is an undamaged 5/5."
+        }
+      ],
+      "cards": [
+        "Grizzly Bears",
+        "Giant Growth",
+        "Shock",
+        "Forest",
+        "Mountain"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "514.3a-1",
+      "rules": [
+        "514.3a"
+      ],
+      "title": "A trigger waiting in the cleanup step is put on the stack, players get priority and another cleanup step begins",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "cleanup",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island"
+          ],
+          "B": [
+            "Megrim"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Ancestral Recall"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Mountain"
+          ]
+        },
+        "exile": {},
+        "notes": "A is the active player and has eight cards in hand. Megrim: whenever an opponent discards a card, it deals 2 damage to that player."
+      },
+      "decisions": [
+        "Whenever A must discard in a cleanup step, A discards Mountains.",
+        "The cleanup step begins; A discards one Mountain to reach seven cards. Megrim triggers.",
+        "A receives priority with Megrim's trigger on the stack and passes; B passes; the trigger resolves (base variant).",
+        "With the stack empty and both players having passed in succession, another cleanup step begins."
+      ],
+      "variants": [
+        {
+          "label": "discard_triggers",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Megrim's trigger is put on the stack and A gets priority in the cleanup step. It resolves: A takes 2 damage (18). A has 7 cards, so the second cleanup step has no discard and the turn ends."
+        },
+        {
+          "label": "no_discard",
+          "polarity": "does_not_fire",
+          "delta": "A has seven cards in hand: six Mountains and Ancestral Recall.",
+          "expected": "Nothing is discarded, Megrim does not trigger, no player gets priority in the cleanup step and A stays at 20 life."
+        },
+        {
+          "label": "draw_in_response",
+          "polarity": "other",
+          "delta": "With Megrim's trigger on the stack, A casts Ancestral Recall on itself (tapping Island) and it resolves before the trigger.",
+          "expected": "A draws 3 cards (9 in hand). The trigger resolves (A at 18). The next cleanup step makes A discard 2 Mountains, which trigger Megrim twice: both triggers resolve (A at 14), and a final cleanup step finds 7 cards and ends the turn."
+        }
+      ],
+      "cards": [
+        "Megrim",
+        "Mountain",
+        "Ancestral Recall",
+        "Island"
+      ],
+      "forge_notes": "Cleanup priority is an exception in Forge; confirm the repeated cleanup step is reached."
+    }
+  ]
+}

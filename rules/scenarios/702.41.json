@@ -1,0 +1,127 @@
+{
+  "unit": "702.41",
+  "verified": true,
+  "review": [
+    "702.41b: the skip claimed no Forge spell can have two instances of affinity, but Mycosynth Golem grants affinity for artifacts to Frogmite, which already has it. Removed the skip and added scenario 702.41b-1."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.41a-1",
+      "rules": [
+        "702.41a"
+      ],
+      "title": "Affinity for artifacts reduces the cost by one per artifact you control",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Ornithopter",
+            "Ornithopter"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Frogmite"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A considers casting Frogmite (printed cost {4}) with the two Mountains."
+      ],
+      "variants": [
+        {
+          "label": "two_artifacts",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Frogmite costs {2} for A and can be cast (can_play true) with the two Mountains."
+        },
+        {
+          "label": "one_artifact",
+          "polarity": "does_not_fire",
+          "delta": "A controls one Ornithopter instead of two.",
+          "expected": "Frogmite costs {3}; A has only two untapped lands, so it cannot be cast."
+        },
+        {
+          "label": "opponent_artifacts",
+          "polarity": "does_not_fire",
+          "delta": "A controls no Ornithopters and B controls two.",
+          "expected": "Frogmite costs {4}, since only artifacts A controls count; it cannot be cast with two Mountains."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Ornithopter",
+        "Frogmite"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.41b-1",
+      "rules": [
+        "702.41b"
+      ],
+      "title": "Both instances of affinity reduce the cost of a spell",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mycosynth Golem",
+            "Ornithopter"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Frogmite"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "A controls no lands. Mycosynth Golem gives artifact creature spells A casts affinity for artifacts, so Frogmite has two instances."
+      },
+      "decisions": [
+        "A considers casting Frogmite (printed cost {4}) with no mana available."
+      ],
+      "variants": [
+        {
+          "label": "two_instances",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Frogmite costs {0} (two artifacts, counted once per instance of affinity) and can be cast (can_play true)."
+        },
+        {
+          "label": "one_instance",
+          "polarity": "does_not_fire",
+          "delta": "A controls a second Ornithopter instead of Mycosynth Golem.",
+          "expected": "Frogmite costs {2} (one instance, two artifacts); A has no mana, so it cannot be cast."
+        }
+      ],
+      "cards": [
+        "Mycosynth Golem",
+        "Ornithopter",
+        "Frogmite"
+      ],
+      "forge_notes": "Mycosynth Golem's grant applies to spells on the stack; the playability verdict depends on Forge applying it while computing the cost before the cast."
+    }
+  ]
+}

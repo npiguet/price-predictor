@@ -1,0 +1,1700 @@
+{
+  "unit": "107",
+  "verified": true,
+  "review": [
+    "107.3e-1: no_x_spell (Lightning Bolt) flipped Zaxara's trigger condition, not the X value 107.3e decides; replaced it with an x_zero variant (polarity other) and dropped Lightning Bolt.",
+    "107.3n-1: creature_next (Raging Goblin) flipped the delayed trigger's condition, not the X value 107.3n decides; replaced it with an x_zero variant (polarity other) and dropped Raging Goblin.",
+    "107.3h-1: no_green tested colored payment (107.4a), not the X = 0 treatment; dropped it and Island from cards.",
+    "107.3j-1: no_activation did not exercise the rule (no X is ever determined); dropped it.",
+    "107.3g-1: on_the_stack delta reworded to name the one fact it changes (the zone where the mana value is checked).",
+    "triage 107.3b: the forced X = 0 has an observable resolution outcome; reclassified decision -> mechanical and added 107.3b-1 (Omniscience, Blaze).",
+    "triage 107.4c, 107.4e, 107.4f: whether a {C}, hybrid or Phyrexian cost can be paid is a playability verdict no other unit covers; reclassified to legality and added 107.4c-1 (Matter Reshaper), 107.4e-1 (Dryad Militant), 107.4e-2 (Spectral Procession) and 107.4f-1 (Mutagenic Growth)."
+  ],
+  "skipped": [
+    {
+      "id": "107.2",
+      "reason": "cannot be illustrated: it needs an effect whose number depends on an object that is gone and has no last-known information, and Forge resolves every such reference (a remembered card that is absent, a missing imprint) through last-known information or an empty list that counts as 0, so no board distinguishes this branch from an ordinary count of 0"
+    },
+    {
+      "id": "107.17a",
+      "reason": "cannot be illustrated: Forge's cardsfolder has cards that give a player ticket counters (Blorbian Buddy, Ticket Turbotubes) but none with a ticket symbol in a cost, so no cost payment removes ticket counters"
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "107.1b-1",
+      "rules": [
+        "107.1b"
+      ],
+      "title": "A negative power used in an effect's calculation counts as zero while the creature's own power stays negative",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Chameleon Colossus",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Island"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Hydrosurge"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Hydrosurge targeting Chameleon Colossus, tapping Island; both players pass; Hydrosurge resolves and Chameleon Colossus (4/4) becomes -1/4.",
+        "A activates Chameleon Colossus's ability ({2}{G}{G}: it gets +X/+X until end of turn, where X is its power), tapping four Forests; both players pass; the ability resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "X is -1, the calculation of the bonus uses 0 instead, and Chameleon Colossus stays a -1/4 creature (not -2/3) until end of turn."
+        },
+        {
+          "label": "no_hydrosurge",
+          "polarity": "does_not_fire",
+          "delta": "A does not cast Hydrosurge, so Chameleon Colossus is a 4/4 when the ability is activated.",
+          "expected": "X is 4 and Chameleon Colossus becomes an 8/8 until end of turn."
+        }
+      ],
+      "cards": [
+        "Chameleon Colossus",
+        "Hydrosurge",
+        "Forest",
+        "Island"
+      ],
+      "forge_notes": "Whether Forge's Pump clamps a negative X to 0 or adds it (giving -2/3) is exactly what this scenario probes."
+    },
+    {
+      "id": "107.1b-2",
+      "rules": [
+        "107.1b"
+      ],
+      "title": "A creature with negative or zero power deals no combat damage and does not gain the opponent life",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Grizzly Bears",
+            "Island",
+            "Forest"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Hydrosurge",
+            "Giant Growth"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Grizzly Bears has been under A's control since the turn began."
+      },
+      "decisions": [
+        "A casts Hydrosurge targeting Grizzly Bears, tapping Island; both players pass; Hydrosurge resolves and Grizzly Bears (2/2) becomes -3/2.",
+        "A moves to combat and attacks B with Grizzly Bears; B declares no blockers.",
+        "Combat damage is dealt."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears has power -3 and toughness 2, assigns no combat damage, and B's life total stays 20 (it does not rise)."
+        },
+        {
+          "label": "growth_first",
+          "polarity": "fires",
+          "delta": "Before attacking, A also casts Giant Growth on Grizzly Bears, tapping Forest; it resolves.",
+          "expected": "Power is -3 + 3 = 0 and toughness 5, so Grizzly Bears is a 0/5, assigns no combat damage and B's life total stays 20 (not 17)."
+        },
+        {
+          "label": "no_hydrosurge",
+          "polarity": "does_not_fire",
+          "delta": "A does not cast Hydrosurge, so Grizzly Bears is a 2/2 when it attacks.",
+          "expected": "Grizzly Bears deals 2 combat damage to B and B's life total is 18."
+        }
+      ],
+      "cards": [
+        "Grizzly Bears",
+        "Hydrosurge",
+        "Giant Growth",
+        "Island",
+        "Forest"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "107.3c-1",
+      "rules": [
+        "107.3c"
+      ],
+      "title": "An X defined by the ability's text follows its current value while the ability is on the stack",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Chameleon Colossus",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Giant Growth"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A activates Chameleon Colossus's ability ({2}{G}{G}: it gets +X/+X until end of turn, where X is its power), tapping four Forests.",
+        "A holds priority and casts Giant Growth targeting Chameleon Colossus, tapping the fifth Forest.",
+        "Both players pass; Giant Growth resolves, then both players pass again and the pump ability resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Giant Growth makes Chameleon Colossus a 7/7 first; the ability then resolves with X = 7 and Chameleon Colossus is a 14/14 until end of turn."
+        },
+        {
+          "label": "no_response",
+          "polarity": "does_not_fire",
+          "delta": "A does not cast Giant Growth; the ability resolves with nothing in response.",
+          "expected": "The ability resolves with X = 4 and Chameleon Colossus is an 8/8 until end of turn; Giant Growth stays in A's hand."
+        }
+      ],
+      "cards": [
+        "Chameleon Colossus",
+        "Giant Growth",
+        "Forest"
+      ],
+      "forge_notes": "Relies on Forge evaluating Count$CardPower at resolution rather than at activation."
+    },
+    {
+      "id": "107.3e-1",
+      "rules": [
+        "107.3e"
+      ],
+      "title": "A trigger referring to the X of another object uses the X that object was cast with",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Zaxara, the Exemplary",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Blaze"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Zaxara has been under A's control since the turn began."
+      },
+      "decisions": [
+        "A casts Blaze with X = 2 targeting B, tapping three Mountains.",
+        "Zaxara's trigger goes on the stack above Blaze; both players pass and the trigger resolves, then both players pass and Blaze resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Zaxara's trigger fires and creates a green 0/0 Hydra token with 2 +1/+1 counters (a 2/2); Blaze then deals 2 damage and B's life total is 18."
+        },
+        {
+          "label": "x_three",
+          "polarity": "fires",
+          "delta": "A casts Blaze with X = 3, tapping all four Mountains.",
+          "expected": "Zaxara's trigger fires and the Hydra token has 3 +1/+1 counters (a 3/3); Blaze deals 3 damage and B's life total is 17."
+        },
+        {
+          "label": "x_zero",
+          "polarity": "other",
+          "delta": "A casts Blaze with X = 0, tapping one Mountain.",
+          "expected": "Zaxara's trigger fires and the Hydra token gets 0 +1/+1 counters, so the 0/0 token moves to the graveyard in the state-based check; Blaze deals 0 damage and B's life total stays 20."
+        }
+      ],
+      "cards": [
+        "Zaxara, the Exemplary",
+        "Blaze",
+        "Mountain"
+      ],
+      "forge_notes": "Zaxara's token count uses Count$xPaid inside a trigger; check that Forge reads the triggering spell's paid X. The rule has no does_not_fire branch: whenever the trigger refers to the cast spell's X, it uses it."
+    },
+    {
+      "id": "107.3g-1",
+      "rules": [
+        "107.3g"
+      ],
+      "title": "The {X} in the mana cost of a card outside the stack counts as 0",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Forest",
+            "Forest",
+            "Swamp"
+          ],
+          "B": [
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Reanimate",
+            "Jadelight Spelunker"
+          ],
+          "B": [
+            "Spell Snare"
+          ]
+        },
+        "graveyard": {
+          "A": [
+            "Jadelight Spelunker"
+          ]
+        },
+        "library": {},
+        "exile": {},
+        "notes": "Jadelight Spelunker has mana cost {X}{G}."
+      },
+      "decisions": [
+        "A casts Reanimate targeting the Jadelight Spelunker in A's graveyard, tapping Swamp; B passes; Reanimate resolves and A loses life equal to the creature's mana value."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "In the graveyard Jadelight Spelunker's {X}{G} has mana value 1, so A loses 1 life (life total 19) and Jadelight Spelunker enters the battlefield under A's control as a 1/1."
+        },
+        {
+          "label": "no_x_card",
+          "polarity": "other",
+          "delta": "The creature card in A's graveyard is Grizzly Bears instead of Jadelight Spelunker.",
+          "expected": "Grizzly Bears has mana value 2, so A loses 2 life (life total 18) and Grizzly Bears enters the battlefield."
+        },
+        {
+          "label": "on_the_stack",
+          "polarity": "does_not_fire",
+          "delta": "Jadelight Spelunker's mana value is checked while it is a spell on the stack instead of a card in the graveyard: A casts it from hand with X = 1 (tapping both Forests) instead of casting Reanimate, and B responds with Spell Snare, tapping Island.",
+          "expected": "As a spell on the stack Jadelight Spelunker has mana value 2 (X = 1 counts), so Spell Snare is legal and counters it; the countered Jadelight Spelunker moves to A's graveyard and A's life total stays 20."
+        }
+      ],
+      "cards": [
+        "Reanimate",
+        "Jadelight Spelunker",
+        "Spell Snare",
+        "Grizzly Bears",
+        "Forest",
+        "Swamp",
+        "Island"
+      ],
+      "forge_notes": "In the no_x_card variant A's graveyard holds Grizzly Bears in place of Jadelight Spelunker. Reanimate computes the life loss from the remembered last-known mana value."
+    },
+    {
+      "id": "107.3h-1",
+      "rules": [
+        "107.3h"
+      ],
+      "title": "Paying the mana cost of a card with {X} outside the stack treats X as 0",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Back from the Brink",
+            "Forest"
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {
+          "A": [
+            "Jadelight Spelunker"
+          ]
+        },
+        "library": {},
+        "exile": {},
+        "notes": "Back from the Brink: exile a creature card from your graveyard and pay its mana cost: create a token that's a copy of that card; activate only as a sorcery. Jadelight Spelunker has mana cost {X}{G}."
+      },
+      "decisions": [
+        "A tries to activate Back from the Brink, exiling Jadelight Spelunker from A's graveyard and paying its mana cost by tapping Forest."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Legal: X is 0, so the cost to pay is {G}. After the ability resolves A controls a token copy of Jadelight Spelunker (a 1/1) that explores 0 times."
+        },
+        {
+          "label": "no_x_card",
+          "polarity": "other",
+          "delta": "The creature card in A's graveyard is Grizzly Bears instead of Jadelight Spelunker.",
+          "expected": "Not legal: the cost is {1}{G} and A has only one untapped land."
+        }
+      ],
+      "cards": [
+        "Back from the Brink",
+        "Jadelight Spelunker",
+        "Grizzly Bears",
+        "Forest"
+      ],
+      "forge_notes": "Back from the Brink uses Mana<0\\Exiled>; check how Forge evaluates X in that cost. In the no_x_card variant the graveyard card is Grizzly Bears. The rule has no does_not_fire branch reachable with this card: X is treated as 0 whenever the paid object is not a spell on the stack."
+    },
+    {
+      "id": "107.3j-1",
+      "rules": [
+        "107.3j"
+      ],
+      "title": "An ability a copy gains takes the value of its own X, not that of the copied card",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island"
+          ],
+          "B": [
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Gigantoplasm"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Gigantoplasm, tapping four Islands; B passes; Gigantoplasm resolves and A chooses to have it enter as a copy of B's Grizzly Bears.",
+        "A activates the gained ability \"{X}: This creature has base power and toughness X/X\" with X = 3, tapping three Islands; B passes; the ability resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Gigantoplasm, a copy of Grizzly Bears, has base power and toughness 3/3 (X = 3 as announced for the gained ability)."
+        },
+        {
+          "label": "x_zero",
+          "polarity": "other",
+          "delta": "A activates the gained ability with X = 0.",
+          "expected": "Gigantoplasm's base power and toughness become 0/0 and it moves to A's graveyard in the state-based check."
+        }
+      ],
+      "cards": [
+        "Gigantoplasm",
+        "Grizzly Bears",
+        "Island"
+      ],
+      "forge_notes": "The gained ability is added with AddAbilities and AddSVars X; check the X it uses is the activation cost's. The rule has no does_not_fire branch here: not activating the ability never determines an X."
+    },
+    {
+      "id": "107.3k-1",
+      "rules": [
+        "107.3k"
+      ],
+      "title": "The X in an activation cost is chosen independently of the X the permanent was cast with",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Chamber Sentry",
+              "counters": {
+                "+1/+1": 3
+              },
+              "summoning_sick": false
+            },
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain"
+          ],
+          "B": [
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Chamber Sentry (mana cost {X}) was cast on an earlier turn with X = 3 paid with {R}{G}{U}, so it entered with three +1/+1 counters. It has been under A's control since the turn began and is untapped."
+      },
+      "decisions": [
+        "A activates Chamber Sentry ({X}, {T}, remove X +1/+1 counters: it deals X damage to any target), announcing X = 2, tapping two Mountains and removing two counters, targeting B's Grizzly Bears.",
+        "Both players pass; the ability resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The ability's X is 2 although the permanent was cast with X = 3: Grizzly Bears takes 2 damage and moves to B's graveyard, and Chamber Sentry keeps 1 counter (a 1/1, tapped)."
+        },
+        {
+          "label": "x_one",
+          "polarity": "fires",
+          "delta": "A announces X = 1 for the activation, tapping one Mountain and removing one counter.",
+          "expected": "The ability's X is 1: Grizzly Bears has 1 damage marked and stays on the battlefield, and Chamber Sentry keeps 2 counters (a 2/2, tapped)."
+        },
+        {
+          "label": "x_four",
+          "polarity": "does_not_fire",
+          "delta": "A tries to announce X = 4 for the activation.",
+          "expected": "Not legal: the cost requires removing four +1/+1 counters and Chamber Sentry has only three; the cast-time X of 3 does not supply the value."
+        }
+      ],
+      "cards": [
+        "Chamber Sentry",
+        "Grizzly Bears",
+        "Mountain"
+      ],
+      "forge_notes": "The counters are placed by setup, standing in for the earlier cast."
+    },
+    {
+      "id": "107.3m-1",
+      "rules": [
+        "107.3m"
+      ],
+      "title": "An enters-with-counters replacement effect uses the X of the spell that became the permanent",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Forest",
+            "Forest",
+            "Forest",
+            "Swamp"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Big Bertha",
+            "Reanimate"
+          ]
+        },
+        "graveyard": {
+          "A": [
+            "Big Bertha"
+          ]
+        },
+        "library": {},
+        "exile": {},
+        "notes": "Big Bertha has mana cost {X}{G} and enters with X +1/+1 counters on her."
+      },
+      "decisions": [
+        "A casts Big Bertha from hand with X = 2, tapping three Forests; B passes; Big Bertha resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Big Bertha enters with 2 +1/+1 counters and is a 3/3 with vigilance."
+        },
+        {
+          "label": "reanimated",
+          "polarity": "does_not_fire",
+          "delta": "A does not cast the Big Bertha in hand; A casts Reanimate (tapping Swamp) targeting the Big Bertha in A's graveyard instead.",
+          "expected": "The permanent was never a spell, so its X is 0: Big Bertha enters with no counters as a 1/1 with vigilance and A loses 1 life (life total 19)."
+        }
+      ],
+      "cards": [
+        "Big Bertha",
+        "Reanimate",
+        "Forest",
+        "Swamp"
+      ],
+      "forge_notes": "A's hand and graveyard each hold a Big Bertha; they never share the battlefield."
+    },
+    {
+      "id": "107.3m-2",
+      "rules": [
+        "107.3m"
+      ],
+      "title": "An enters-the-battlefield trigger referring to X uses the X of the spell that became the permanent",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Forest",
+            "Forest",
+            "Forest",
+            "Swamp"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Jadelight Spelunker",
+            "Reanimate"
+          ]
+        },
+        "graveyard": {
+          "A": [
+            "Jadelight Spelunker"
+          ]
+        },
+        "library": {
+          "A": [
+            "Grizzly Bears",
+            "Grizzly Bears",
+            "Forest"
+          ]
+        },
+        "exile": {},
+        "notes": "Jadelight Spelunker has mana cost {X}{G} and 'When it enters, it explores X times'. The top card of A's library is listed first."
+      },
+      "decisions": [
+        "A casts Jadelight Spelunker from hand with X = 2, tapping three Forests; B passes; it resolves and its enters trigger resolves.",
+        "Each time it explores, A reveals a Grizzly Bears (a nonland card), Jadelight Spelunker gets a +1/+1 counter, and A puts the revealed card into the graveyard."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The trigger fires and Jadelight Spelunker explores twice: it ends with 2 +1/+1 counters as a 3/3 and two Grizzly Bears are in A's graveyard."
+        },
+        {
+          "label": "reanimated",
+          "polarity": "does_not_fire",
+          "delta": "A does not cast the Jadelight Spelunker in hand; A casts Reanimate (tapping Swamp) targeting the one in A's graveyard instead.",
+          "expected": "The permanent was never a spell, so its X is 0: the enters trigger explores 0 times, no card is revealed, Jadelight Spelunker is a 1/1 and A loses 1 life (life total 19)."
+        }
+      ],
+      "cards": [
+        "Jadelight Spelunker",
+        "Reanimate",
+        "Grizzly Bears",
+        "Forest",
+        "Swamp"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "107.3n-1",
+      "rules": [
+        "107.3n"
+      ],
+      "title": "A delayed triggered ability referring to an undefined X uses the X of the spell that created it",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Storm King's Thunder",
+            "Shock"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Storm King's Thunder with X = 2, tapping five Mountains; B passes; it resolves and creates its delayed triggered ability.",
+        "A casts Shock targeting B, tapping the sixth Mountain. The delayed trigger fires on the cast and copies Shock X times, each copy targeting B. All players pass until everything resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The delayed trigger copies Shock 2 times; three Shocks deal 2 damage each and B's life total is 14."
+        },
+        {
+          "label": "x_one",
+          "polarity": "fires",
+          "delta": "A casts Storm King's Thunder with X = 1, tapping four Mountains.",
+          "expected": "The delayed trigger copies Shock once; two Shocks deal 4 damage and B's life total is 16."
+        },
+        {
+          "label": "x_zero",
+          "polarity": "other",
+          "delta": "A casts Storm King's Thunder with X = 0, tapping three Mountains.",
+          "expected": "The delayed trigger fires on Shock and copies it 0 times; one Shock deals 2 damage and B's life total is 18."
+        }
+      ],
+      "cards": [
+        "Storm King's Thunder",
+        "Shock",
+        "Mountain"
+      ],
+      "forge_notes": "Storm King's Thunder is implemented as a delayed trigger whose copy count is Count$xPaid. The rule has no does_not_fire branch: the delayed trigger always uses the creating spell's X."
+    },
+    {
+      "id": "107.4h-1",
+      "rules": [
+        "107.4h"
+      ],
+      "title": "A snow mana symbol in a cost can be paid only with mana from a snow source",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Icehide Troll",
+            "Snow-Covered Forest",
+            "Snow-Covered Forest"
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Icehide Troll: {S}{S}: it gets +2/+0 and gains indestructible until end of turn; tap it. It has been under A's control since the turn began."
+      },
+      "decisions": [
+        "A tries to activate Icehide Troll's ability, paying {S}{S} by tapping both lands."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Legal: both mana come from snow sources; the ability resolves and Icehide Troll is a 4/3 with indestructible until end of turn and is tapped."
+        },
+        {
+          "label": "nonsnow_lands",
+          "polarity": "does_not_fire",
+          "delta": "The two lands are plain Forests instead of Snow-Covered Forests.",
+          "expected": "Not legal: the mana comes from nonsnow sources and cannot pay {S}{S}."
+        },
+        {
+          "label": "one_snow",
+          "polarity": "does_not_fire",
+          "delta": "One land is a Snow-Covered Forest and the other a plain Forest.",
+          "expected": "Not legal: only one of the two {S} can be paid."
+        }
+      ],
+      "cards": [
+        "Icehide Troll",
+        "Snow-Covered Forest",
+        "Forest"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "107.5-1",
+      "rules": [
+        "107.5"
+      ],
+      "title": "A {T} ability cannot be activated when the permanent is tapped or the creature has not been controlled since the turn began",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Llanowar Elves",
+              "tapped": false,
+              "summoning_sick": false
+            }
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Llanowar Elves has been under A's control continuously since the turn began."
+      },
+      "decisions": [
+        "A tries to activate Llanowar Elves's mana ability ({T}: Add {G})."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Legal: the ability resolves as a mana ability and A's mana pool holds {G}; Llanowar Elves is tapped."
+        },
+        {
+          "label": "summoning_sick",
+          "polarity": "does_not_fire",
+          "delta": "Llanowar Elves came under A's control this turn (summoning_sick true).",
+          "expected": "Not legal: the creature has not been under A's control since the turn began, so {T} cannot be paid."
+        },
+        {
+          "label": "already_tapped",
+          "polarity": "does_not_fire",
+          "delta": "Llanowar Elves is tapped.",
+          "expected": "Not legal: a tapped permanent cannot be tapped again to pay the cost."
+        }
+      ],
+      "cards": [
+        "Llanowar Elves"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "107.5-2",
+      "rules": [
+        "107.5"
+      ],
+      "title": "The summoning-sickness restriction on {T} abilities applies to creatures only",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Mind Stone",
+              "tapped": false,
+              "summoning_sick": true
+            }
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Mind Stone came under A's control this turn."
+      },
+      "decisions": [
+        "A tries to activate Mind Stone's mana ability ({T}: Add {C})."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Legal: Mind Stone is not a creature, so having entered this turn does not stop {T}; A's mana pool holds {C} and Mind Stone is tapped."
+        },
+        {
+          "label": "creature",
+          "polarity": "does_not_fire",
+          "delta": "The permanent is Llanowar Elves (summoning_sick true) instead of Mind Stone, and A tries to activate its {T}: Add {G} ability.",
+          "expected": "Not legal: the creature has not been under A's control since the turn began."
+        }
+      ],
+      "cards": [
+        "Mind Stone",
+        "Llanowar Elves"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "107.6-1",
+      "rules": [
+        "107.6"
+      ],
+      "title": "A {Q} ability cannot be activated when the permanent is untapped or the creature has not been controlled since the turn began",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Farmstead Gleaner",
+              "tapped": true,
+              "summoning_sick": false
+            },
+            "Mountain",
+            "Mountain"
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Farmstead Gleaner (2/2, doesn't untap during its controller's untap step; {2}, {Q}: put a +1/+1 counter on it) has been under A's control since the turn began."
+      },
+      "decisions": [
+        "A tries to activate Farmstead Gleaner's ability, paying {2} by tapping both Mountains and {Q} by untapping it."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Legal: after the ability resolves Farmstead Gleaner has a +1/+1 counter (a 3/3) and is untapped."
+        },
+        {
+          "label": "untapped",
+          "polarity": "does_not_fire",
+          "delta": "Farmstead Gleaner is untapped.",
+          "expected": "Not legal: an untapped permanent cannot be untapped again to pay the cost."
+        },
+        {
+          "label": "summoning_sick",
+          "polarity": "does_not_fire",
+          "delta": "Farmstead Gleaner came under A's control this turn (summoning_sick true) and is tapped.",
+          "expected": "Not legal: the creature has not been under A's control since the turn began, so {Q} cannot be paid."
+        }
+      ],
+      "cards": [
+        "Farmstead Gleaner",
+        "Mountain"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "107.7-1",
+      "rules": [
+        "107.7"
+      ],
+      "title": "A loyalty cost adds or removes that many loyalty counters",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Jace Beleren",
+              "counters": {
+                "loyalty": 3
+              }
+            }
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Forest",
+            "Forest"
+          ],
+          "B": [
+            "Forest",
+            "Forest"
+          ]
+        },
+        "exile": {},
+        "notes": "Jace Beleren has not activated a loyalty ability this turn."
+      },
+      "decisions": [
+        "A activates Jace Beleren's [+2] ability (each player draws a card); both players pass and it resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Two loyalty counters are put on Jace Beleren as the cost (loyalty 5); each player draws a card."
+        },
+        {
+          "label": "minus_one",
+          "polarity": "fires",
+          "delta": "A activates the [-1] ability instead, targeting A.",
+          "expected": "One loyalty counter is removed as the cost (loyalty 2); A draws a card and B does not."
+        },
+        {
+          "label": "minus_ten",
+          "polarity": "does_not_fire",
+          "delta": "A tries to activate the [-10] ability instead, targeting B.",
+          "expected": "Not legal: ten loyalty counters cannot be removed from a planeswalker with 3 loyalty; loyalty stays 3 and nobody mills."
+        }
+      ],
+      "cards": [
+        "Jace Beleren",
+        "Forest"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "107.8a-1",
+      "rules": [
+        "107.8a"
+      ],
+      "title": "A leveler within a level symbol's range has that symbol's base power and toughness and abilities",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Student of Warfare",
+              "counters": {
+                "level": 2
+              }
+            }
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Student of Warfare is 1/1 with LEVEL 2-6: 3/3 first strike and LEVEL 7+: 4/4 double strike."
+      },
+      "decisions": [
+        "No action is taken; the stable board is read."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "With 2 level counters Student of Warfare is a 3/3 with first strike."
+        },
+        {
+          "label": "level_six",
+          "polarity": "fires",
+          "delta": "Student of Warfare has 6 level counters.",
+          "expected": "At the top of the range it is still a 3/3 with first strike and no double strike."
+        },
+        {
+          "label": "level_one",
+          "polarity": "does_not_fire",
+          "delta": "Student of Warfare has 1 level counter.",
+          "expected": "Below the range it is a 1/1 with no first strike."
+        },
+        {
+          "label": "level_seven",
+          "polarity": "other",
+          "delta": "Student of Warfare has 7 level counters.",
+          "expected": "Above the range it is a 4/4 with double strike and no longer takes the 3/3 first strike values."
+        }
+      ],
+      "cards": [
+        "Student of Warfare"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "107.8b-1",
+      "rules": [
+        "107.8b"
+      ],
+      "title": "A leveler with at least N3 level counters has the N3+ symbol's base power and toughness and abilities",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Student of Warfare",
+              "counters": {
+                "level": 7
+              }
+            }
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Student of Warfare is 1/1 with LEVEL 2-6: 3/3 first strike and LEVEL 7+: 4/4 double strike."
+      },
+      "decisions": [
+        "No action is taken; the stable board is read."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "With 7 level counters Student of Warfare is a 4/4 with double strike."
+        },
+        {
+          "label": "level_ten",
+          "polarity": "fires",
+          "delta": "Student of Warfare has 10 level counters.",
+          "expected": "Above N3 it is still a 4/4 with double strike."
+        },
+        {
+          "label": "level_six",
+          "polarity": "does_not_fire",
+          "delta": "Student of Warfare has 6 level counters.",
+          "expected": "One counter short it is a 3/3 with first strike and no double strike."
+        }
+      ],
+      "cards": [
+        "Student of Warfare"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "107.14-1",
+      "rules": [
+        "107.14"
+      ],
+      "title": "Paying {E} removes energy counters from the player",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Longtusk Cub",
+              "summoning_sick": false
+            }
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "A has 2 energy counters. Longtusk Cub: Pay {E}{E}: put a +1/+1 counter on it."
+      },
+      "decisions": [
+        "A activates Longtusk Cub's ability, paying {E}{E}; both players pass and it resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "A's energy counters go from 2 to 0 as the cost is paid, and Longtusk Cub gets a +1/+1 counter (a 3/3)."
+        },
+        {
+          "label": "four_energy",
+          "polarity": "fires",
+          "delta": "A has 4 energy counters.",
+          "expected": "Two energy counters are removed (A keeps 2) and Longtusk Cub gets a +1/+1 counter (a 3/3)."
+        },
+        {
+          "label": "one_energy",
+          "polarity": "does_not_fire",
+          "delta": "A has 1 energy counter.",
+          "expected": "Not legal: A cannot pay {E}{E}; A keeps 1 energy counter and Longtusk Cub stays a 2/2."
+        }
+      ],
+      "cards": [
+        "Longtusk Cub"
+      ],
+      "forge_notes": "Player energy counters are set through puzzle or setup notes; they are not a card state."
+    },
+    {
+      "id": "107.15a-1",
+      "rules": [
+        "107.15a"
+      ],
+      "title": "A chapter ability triggers when the lore counter count goes from below N to at least N",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "History of Benalia",
+              "counters": {
+                "lore": 1
+              }
+            },
+            {
+              "card": "Silver Knight",
+              "summoning_sick": false
+            }
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "History of Benalia: I, II create a 2/2 white Knight token with vigilance; III Knights you control get +2/+1 until end of turn. The setup is the moment just before A's precombat main phase adds a lore counter to it."
+      },
+      "decisions": [
+        "A's precombat main phase begins and its turn-based action adds a lore counter to History of Benalia.",
+        "Any chapter ability that triggers goes on the stack; both players pass and it resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The count goes from 1 to 2, chapter II triggers and A creates a 2/2 white Knight token with vigilance; chapter III does not trigger."
+        },
+        {
+          "label": "chapter_three",
+          "polarity": "does_not_fire",
+          "delta": "History of Benalia starts with 2 lore counters.",
+          "expected": "The count goes from 2 to 3: chapter III triggers (Silver Knight is a 4/3 until end of turn) but chapter II does not trigger again and no Knight token is created; History of Benalia is sacrificed after chapter III resolves."
+        }
+      ],
+      "cards": [
+        "History of Benalia",
+        "Silver Knight"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "107.16a-1",
+      "rules": [
+        "107.16a"
+      ],
+      "title": "A Class has a level's abilities when it is at that level or greater",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "declare_attackers",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Ranger Class",
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            }
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Ranger Class is level 2. Level 2: whenever you attack, put a +1/+1 counter on target attacking creature."
+      },
+      "decisions": [
+        "A attacks B with Grizzly Bears.",
+        "If Ranger Class's attack trigger fires it targets Grizzly Bears; both players pass and it resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The level 2 trigger fires and Grizzly Bears gets a +1/+1 counter (a 3/3)."
+        },
+        {
+          "label": "level_three",
+          "polarity": "fires",
+          "delta": "Ranger Class is level 3.",
+          "expected": "Level 3 still has the level 2 ability: the trigger fires and Grizzly Bears gets a +1/+1 counter (a 3/3)."
+        },
+        {
+          "label": "level_one",
+          "polarity": "does_not_fire",
+          "delta": "Ranger Class is level 1.",
+          "expected": "The trigger does not fire and Grizzly Bears stays a 2/2."
+        }
+      ],
+      "cards": [
+        "Ranger Class",
+        "Grizzly Bears"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "107.16a-2",
+      "rules": [
+        "107.16a"
+      ],
+      "title": "A class level bar can be activated only from the previous level and only as a sorcery",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Ranger Class",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest"
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Ranger Class is level 1. Its level bars are {1}{G}: Level 2 and {3}{G}: Level 3. The stack is empty."
+      },
+      "decisions": [
+        "A tries to activate the {1}{G}: Level 2 bar, tapping two Forests."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Legal: after it resolves Ranger Class is level 2."
+        },
+        {
+          "label": "combat",
+          "polarity": "does_not_fire",
+          "delta": "It is the beginning of combat step instead of the precombat main phase.",
+          "expected": "Not legal: a class level bar can be activated only as a sorcery; Ranger Class stays level 1."
+        },
+        {
+          "label": "skip_level",
+          "polarity": "does_not_fire",
+          "delta": "A tries to activate the {3}{G}: Level 3 bar instead, tapping all four Forests.",
+          "expected": "Not legal: it can be activated only if the Class is level 2; Ranger Class stays level 1."
+        }
+      ],
+      "cards": [
+        "Ranger Class",
+        "Forest"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "107.3b-1",
+      "rules": [
+        "107.3b"
+      ],
+      "title": "A spell with {X} cast without paying its mana cost has X = 0",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Omniscience",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Blaze"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Omniscience: you may cast spells from your hand without paying their mana costs."
+      },
+      "decisions": [
+        "A casts Blaze from hand targeting B without paying its mana cost, through Omniscience; X takes its only legal value.",
+        "B passes; Blaze resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "X is 0: Blaze resolves and deals 0 damage, B's life total stays 20 and A's four Mountains stay untapped."
+        },
+        {
+          "label": "paid",
+          "polarity": "does_not_fire",
+          "delta": "A casts Blaze paying its mana cost, announcing X = 3 and tapping all four Mountains.",
+          "expected": "X is 3: Blaze deals 3 damage and B's life total is 17."
+        }
+      ],
+      "cards": [
+        "Omniscience",
+        "Blaze",
+        "Mountain"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "107.4c-1",
+      "rules": [
+        "107.4c"
+      ],
+      "title": "A {C} cost can be paid only with colorless mana",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Wastes",
+            "Forest",
+            "Forest"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Matter Reshaper"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A tries to cast Matter Reshaper ({2}{C}), tapping all three lands."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Legal: Wastes pays {C} and the Forests pay {2}; Matter Reshaper resolves and enters the battlefield."
+        },
+        {
+          "label": "no_colorless_source",
+          "polarity": "does_not_fire",
+          "delta": "A's Wastes is a Forest instead.",
+          "expected": "Not legal: three green mana cannot pay {C}; Matter Reshaper stays in A's hand."
+        }
+      ],
+      "cards": [
+        "Matter Reshaper",
+        "Wastes",
+        "Forest"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "107.4e-1",
+      "rules": [
+        "107.4e"
+      ],
+      "title": "A two-color hybrid symbol can be paid with mana of either color",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Dryad Militant"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A tries to cast Dryad Militant ({G/W}), tapping its land."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Legal: white mana pays {G/W}; Dryad Militant enters the battlefield."
+        },
+        {
+          "label": "green",
+          "polarity": "fires",
+          "delta": "A's land is a Forest instead of a Plains.",
+          "expected": "Legal: green mana pays {G/W}; Dryad Militant enters the battlefield."
+        },
+        {
+          "label": "blue",
+          "polarity": "does_not_fire",
+          "delta": "A's land is an Island instead of a Plains.",
+          "expected": "Not legal: blue mana pays neither half of {G/W}; Dryad Militant stays in A's hand."
+        }
+      ],
+      "cards": [
+        "Dryad Militant",
+        "Plains",
+        "Forest",
+        "Island"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "107.4e-2",
+      "rules": [
+        "107.4e"
+      ],
+      "title": "A monocolored hybrid symbol can be paid with one mana of its color or two mana of any type",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Spectral Procession"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A tries to cast Spectral Procession ({2/W}{2/W}{2/W}), tapping six lands."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Legal: each {2/W} is paid with two blue mana; Spectral Procession resolves and A creates three 1/1 white Spirit tokens with flying."
+        },
+        {
+          "label": "five_islands",
+          "polarity": "does_not_fire",
+          "delta": "A controls five Islands instead of six.",
+          "expected": "Not legal: five blue mana cannot pay three {2/W} without white mana; Spectral Procession stays in A's hand."
+        },
+        {
+          "label": "one_plains",
+          "polarity": "fires",
+          "delta": "One of A's six Islands is a Plains instead, and A taps only the Plains and four Islands.",
+          "expected": "Legal: the Plains pays one {2/W} with {W} and four blue mana pay the other two; A creates three Spirit tokens and one Island stays untapped."
+        }
+      ],
+      "cards": [
+        "Spectral Procession",
+        "Island",
+        "Plains"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "107.4f-1",
+      "rules": [
+        "107.4f"
+      ],
+      "title": "A Phyrexian symbol can be paid with 2 life instead of mana",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            }
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Mutagenic Growth"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "A controls no lands."
+      },
+      "decisions": [
+        "A tries to cast Mutagenic Growth ({G/P}) targeting Grizzly Bears, paying 2 life for {G/P}.",
+        "B passes; Mutagenic Growth resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Legal with no land: A's life total becomes 18 and Grizzly Bears is a 4/4 until end of turn."
+        },
+        {
+          "label": "life_one",
+          "polarity": "does_not_fire",
+          "delta": "A's life total is 1.",
+          "expected": "Not legal: A cannot pay 2 life with a life total of 1 and has no green mana; Mutagenic Growth stays in A's hand and A's life total stays 1."
+        }
+      ],
+      "cards": [
+        "Mutagenic Growth",
+        "Grizzly Bears"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

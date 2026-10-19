@@ -1,0 +1,370 @@
+{
+  "unit": "701.28",
+  "verified": true,
+  "review": [
+    "skipped 701.28c: the reason claimed a convert of a non-double-faced permanent is unreachable, but a Clone copying Arcee, Sharpshooter carries the convert instruction while being a single-faced card; removed the skip and added scenario 701.28c-1"
+  ],
+  "skipped": [
+    {
+      "id": "701.28d",
+      "reason": "no Forge card has a convert instruction whose other face is an instant or sorcery; see the skip of 701.27d"
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "701.28a-1",
+      "rules": [
+        "701.28a"
+      ],
+      "title": "Converting turns a permanent to its other face under the transform rules",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            {
+              "card": "Arcee, Sharpshooter",
+              "counters": {
+                "+1/+1": 2
+              },
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            },
+            "Island"
+          ]
+        },
+        "hand": {
+          "B": [
+            "Unsummon"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Arcee, Sharpshooter is a 2/2 first-strike artifact creature; its ability reads 'Convert Arcee'. Converted it is Arcee, Acrobatic Coupe, a 2/2 Vehicle with living metal. B holds Unsummon and does not use it unless stated."
+      },
+      "decisions": [
+        "A activates Arcee's ability, paying {1} with Mountain and removing one +1/+1 counter (X=1), targeting Grizzly Bears.",
+        "Both players pass; the ability resolves."
+      ],
+      "variants": [
+        {
+          "label": "a_turn",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears has 1 damage marked. Arcee is Arcee, Acrobatic Coupe with one +1/+1 counter; it is a Vehicle that is also a creature during A's turn, so it is a 3/3 creature."
+        },
+        {
+          "label": "b_turn",
+          "polarity": "other",
+          "delta": "It is B's turn (B's main phase 1) and A activates the ability at instant speed after B passes priority.",
+          "expected": "Grizzly Bears has 1 damage marked. Arcee is Arcee, Acrobatic Coupe with one +1/+1 counter; it is a Vehicle and not a creature during B's turn."
+        },
+        {
+          "label": "target_gone",
+          "polarity": "does_not_fire",
+          "delta": "In response to the ability, B casts Unsummon (tapping Island) on Grizzly Bears, returning it to B's hand.",
+          "expected": "The ability's only target is gone, so it is removed from the stack without resolving: no damage is dealt and Arcee stays Arcee, Sharpshooter with one +1/+1 counter. Grizzly Bears is in B's hand."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Arcee, Sharpshooter",
+        "Grizzly Bears",
+        "Island",
+        "Unsummon"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "701.28c-1",
+      "rules": [
+        "701.28c"
+      ],
+      "title": "A convert instruction on a permanent that is not a double-faced card does nothing",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            {
+              "card": "Clone",
+              "counters": {
+                "+1/+1": 1
+              },
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            }
+          ]
+        },
+        "hand": {},
+        "graveyard": {
+          "A": [
+            "Arcee, Sharpshooter"
+          ]
+        },
+        "library": {},
+        "exile": {},
+        "notes": "Clone entered as a copy of Arcee, Sharpshooter, so it is a legendary 2/2 first-strike artifact creature named Arcee, Sharpshooter with its convert ability; the original Arcee then went to A's graveyard under the legend rule. Clone has one +1/+1 counter (a 3/3)."
+      },
+      "decisions": [
+        "A activates the copied ability of Clone, paying {1} with Mountain and removing its +1/+1 counter (X=1), targeting Grizzly Bears.",
+        "Both players pass; the ability resolves."
+      ],
+      "variants": [
+        {
+          "label": "single_faced_copy",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears has 1 damage marked. Clone does not convert: it is still a copy of Arcee, Sharpshooter, a 2/2 artifact creature with no counters."
+        },
+        {
+          "label": "double_faced_card",
+          "polarity": "does_not_fire",
+          "delta": "The permanent is the card Arcee, Sharpshooter itself (with one +1/+1 counter) instead of a Clone copying it, and A's graveyard is empty.",
+          "expected": "Grizzly Bears has 1 damage marked. Arcee converts and is Arcee, Acrobatic Coupe, a 2/2 Vehicle that is a creature during A's turn."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Clone",
+        "Arcee, Sharpshooter",
+        "Grizzly Bears"
+      ],
+      "forge_notes": "Card.canTransform requires the card itself to be transformable, so SetState skips a Clone whose copiable values come from a double-faced card."
+    },
+    {
+      "id": "701.28b-1",
+      "rules": [
+        "701.28b"
+      ],
+      "title": "Converting does not trigger 'turned face up' abilities",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Plains",
+            "Forest",
+            "Forest",
+            {
+              "card": "Arcee, Sharpshooter",
+              "counters": {
+                "+1/+1": 1
+              },
+              "summoning_sick": false
+            },
+            {
+              "card": "Aven Farseer",
+              "summoning_sick": false
+            },
+            {
+              "card": "Daru Lancer",
+              "face_down": true,
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            }
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Aven Farseer is a 1/1 flyer with no counters. Daru Lancer is a face-down 2/2 creature."
+      },
+      "decisions": [
+        "A activates Arcee's ability, paying {1} with a Forest and removing the +1/+1 counter (X=1), targeting Grizzly Bears.",
+        "Both players pass; the ability resolves and Arcee converts."
+      ],
+      "variants": [
+        {
+          "label": "convert",
+          "polarity": "does_not_fire",
+          "delta": "",
+          "expected": "Arcee is Arcee, Acrobatic Coupe. Aven Farseer's turned-face-up trigger does not fire; Aven Farseer is a 1/1 with no counters. Daru Lancer is still face down."
+        },
+        {
+          "label": "turn_face_up",
+          "polarity": "fires",
+          "delta": "Instead of activating Arcee, A turns Daru Lancer face up by paying {2}{W}{W} with all four lands.",
+          "expected": "Daru Lancer is face up. Aven Farseer's trigger fires: Aven Farseer has one +1/+1 counter and is 2/2. Arcee is still Arcee, Sharpshooter."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Forest",
+        "Arcee, Sharpshooter",
+        "Aven Farseer",
+        "Daru Lancer",
+        "Grizzly Bears"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "701.28e-1",
+      "rules": [
+        "701.28e"
+      ],
+      "title": "A convert instruction from an ability is ignored if the permanent converted since the ability went on the stack",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            {
+              "card": "Arcee, Sharpshooter",
+              "counters": {
+                "+1/+1": 2
+              },
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            {
+              "card": "Hill Giant",
+              "summoning_sick": false
+            }
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Arcee, Sharpshooter has two +1/+1 counters."
+      },
+      "decisions": [
+        "A activates Arcee's ability, paying {1} with a Mountain and removing one +1/+1 counter (X=1), targeting Hill Giant.",
+        "Holding priority, A activates the ability a second time, paying {1} with the other Mountain and removing the last +1/+1 counter (X=1), targeting Hill Giant.",
+        "Both players pass; the second ability resolves, then both pass again and the first ability resolves."
+      ],
+      "variants": [
+        {
+          "label": "two_activations",
+          "polarity": "does_not_fire",
+          "delta": "",
+          "expected": "Hill Giant has 2 damage marked. The second ability's resolution converts Arcee to Arcee, Acrobatic Coupe; the first ability's convert is ignored and Arcee stays Arcee, Acrobatic Coupe (a Vehicle with no counters)."
+        },
+        {
+          "label": "one_activation",
+          "polarity": "fires",
+          "delta": "A activates the ability once only (one counter removed); the second activation does not happen.",
+          "expected": "Hill Giant has 1 damage marked. Arcee converts once, to Arcee, Acrobatic Coupe, with one +1/+1 counter."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Arcee, Sharpshooter",
+        "Hill Giant"
+      ],
+      "forge_notes": "Forge stores the host's transform timestamp on the stack instance (StoredTransform) and compares it when SetState resolves."
+    },
+    {
+      "id": "701.28f-1",
+      "rules": [
+        "701.28f"
+      ],
+      "title": "A permanent that can't transform can't convert",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            {
+              "card": "Arcee, Sharpshooter",
+              "counters": {
+                "+1/+1": 1
+              },
+              "summoning_sick": false
+            },
+            {
+              "card": "Bound by Moonsilver",
+              "attached_to": "Arcee, Sharpshooter"
+            }
+          ],
+          "B": [
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            }
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Bound by Moonsilver: enchanted creature can't attack, block, or transform."
+      },
+      "decisions": [
+        "A activates Arcee's ability, paying {1} with Mountain and removing the +1/+1 counter (X=1), targeting Grizzly Bears.",
+        "Both players pass; the ability resolves."
+      ],
+      "variants": [
+        {
+          "label": "enchanted",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears has 1 damage marked. Arcee does not convert: it stays Arcee, Sharpshooter (a 2/2 creature with no counters), still enchanted by Bound by Moonsilver."
+        },
+        {
+          "label": "unenchanted",
+          "polarity": "does_not_fire",
+          "delta": "Bound by Moonsilver is not on the battlefield.",
+          "expected": "Grizzly Bears has 1 damage marked. Arcee converts to Arcee, Acrobatic Coupe."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Arcee, Sharpshooter",
+        "Bound by Moonsilver",
+        "Grizzly Bears"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

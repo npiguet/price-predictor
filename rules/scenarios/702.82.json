@@ -1,0 +1,139 @@
+{
+  "unit": "702.82",
+  "verified": true,
+  "review": [],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.82a-1",
+      "rules": [
+        "702.82a"
+      ],
+      "title": "A devour permanent enters with N +1/+1 counters per creature sacrificed",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Forest",
+            "Forest",
+            "Grizzly Bears",
+            "Grizzly Bears"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Gorger Wurm"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Gorger Wurm, tapping three Mountains and two Forests.",
+        "Both players pass; Gorger Wurm resolves.",
+        "As it enters, A sacrifices one Grizzly Bears to devour."
+      ],
+      "variants": [
+        {
+          "label": "devour_one",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Gorger Wurm (5/5, devour 1) enters with one +1/+1 counter, a 6/6. One Grizzly Bears is in A's graveyard; the other stays on the battlefield."
+        },
+        {
+          "label": "devour_two",
+          "polarity": "fires",
+          "delta": "A sacrifices both Grizzly Bears as Gorger Wurm enters.",
+          "expected": "Gorger Wurm enters with two +1/+1 counters, a 7/7. Both Grizzly Bears are in A's graveyard."
+        },
+        {
+          "label": "devour_none",
+          "polarity": "does_not_fire",
+          "delta": "A sacrifices no creatures as Gorger Wurm enters.",
+          "expected": "Gorger Wurm enters with no counters, a 5/5. Both Grizzly Bears stay on the battlefield."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Forest",
+        "Grizzly Bears",
+        "Gorger Wurm"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.82c-1",
+      "rules": [
+        "702.82c"
+      ],
+      "title": "Devour with a quality counts only sacrificed permanents of that quality",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Bonesplitter",
+            "Grizzly Bears"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Caprichrome"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Caprichrome, tapping four Plains.",
+        "Both players pass; Caprichrome resolves.",
+        "As it enters, A sacrifices every permanent it may sacrifice for devour artifact."
+      ],
+      "variants": [
+        {
+          "label": "artifact_available",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Caprichrome (2/2, devour artifact 1) sacrifices Bonesplitter and enters with one +1/+1 counter, a 3/3. Bonesplitter is in A's graveyard; Grizzly Bears stays on the battlefield."
+        },
+        {
+          "label": "no_artifact",
+          "polarity": "does_not_fire",
+          "delta": "Bonesplitter is not on A's battlefield.",
+          "expected": "Grizzly Bears is not an artifact and cannot be devoured. Caprichrome enters with no counters, a 2/2, and Grizzly Bears stays on the battlefield."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Caprichrome",
+        "Bonesplitter",
+        "Grizzly Bears"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

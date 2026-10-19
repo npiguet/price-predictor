@@ -1,0 +1,212 @@
+{
+  "unit": "702.34",
+  "verified": true,
+  "review": [],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.34a-1",
+      "rules": [
+        "702.34a"
+      ],
+      "title": "A resolved flashback spell is exiled instead of going to the graveyard",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain"
+          ],
+          "B": [
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {},
+        "graveyard": {
+          "A": [
+            "Firebolt"
+          ]
+        },
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Firebolt from the graveyard for its flashback cost {4}{R}, tapping all five Mountains, targeting Grizzly Bears.",
+        "Both players pass; the spell resolves."
+      ],
+      "variants": [
+        {
+          "label": "flashback",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Firebolt deals 2 damage to Grizzly Bears, which is destroyed and is in B's graveyard. Firebolt is exiled, not put into A's graveyard."
+        },
+        {
+          "label": "hard_cast",
+          "polarity": "does_not_fire",
+          "delta": "Firebolt is in A's hand instead of the graveyard and A casts it for its mana cost {R}.",
+          "expected": "Firebolt deals 2 damage to Grizzly Bears, which is destroyed. Firebolt is put into A's graveyard."
+        }
+      ],
+      "cards": [
+        "Firebolt",
+        "Mountain",
+        "Grizzly Bears"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.34a-2",
+      "rules": [
+        "702.34a"
+      ],
+      "title": "A countered flashback spell is exiled instead of going to the graveyard",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain"
+          ],
+          "B": [
+            "Island",
+            "Island",
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "B": [
+            "Counterspell"
+          ]
+        },
+        "graveyard": {
+          "A": [
+            "Firebolt"
+          ]
+        },
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Firebolt from the graveyard for its flashback cost {4}{R}, tapping all five Mountains, targeting Grizzly Bears.",
+        "B responds with Counterspell targeting Firebolt, tapping both Islands.",
+        "Both players pass; Counterspell resolves."
+      ],
+      "variants": [
+        {
+          "label": "flashback",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Firebolt is countered and is exiled instead of going to A's graveyard. Grizzly Bears is undamaged."
+        },
+        {
+          "label": "hard_cast",
+          "polarity": "does_not_fire",
+          "delta": "Firebolt is in A's hand instead of the graveyard and A casts it for its mana cost {R}.",
+          "expected": "Firebolt is countered and is put into A's graveyard. Grizzly Bears is undamaged."
+        }
+      ],
+      "cards": [
+        "Firebolt",
+        "Counterspell",
+        "Mountain",
+        "Island",
+        "Grizzly Bears"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.34a-3",
+      "rules": [
+        "702.34a"
+      ],
+      "title": "A flashback card can be cast from the graveyard only if the flashback cost can be paid",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain"
+          ],
+          "B": [
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {},
+        "graveyard": {
+          "A": [
+            "Firebolt"
+          ]
+        },
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A tries to cast the card from the graveyard targeting Grizzly Bears."
+      ],
+      "variants": [
+        {
+          "label": "flashback_payable",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Casting Firebolt from the graveyard for {4}{R} is legal (can_play true)."
+        },
+        {
+          "label": "flashback_unaffordable",
+          "polarity": "does_not_fire",
+          "delta": "A controls only four Mountains.",
+          "expected": "Casting Firebolt from the graveyard is illegal (can_play false): {4}{R} cannot be paid."
+        },
+        {
+          "label": "in_exile",
+          "polarity": "does_not_fire",
+          "delta": "Firebolt is in A's exile zone instead of the graveyard.",
+          "expected": "Casting Firebolt is illegal (can_play false): flashback functions only in the graveyard."
+        },
+        {
+          "label": "no_flashback_card",
+          "polarity": "does_not_fire",
+          "delta": "A's graveyard holds Shock instead of Firebolt.",
+          "expected": "Casting Shock from the graveyard is illegal (can_play false): it has no flashback."
+        }
+      ],
+      "cards": [
+        "Firebolt",
+        "Shock",
+        "Mountain",
+        "Grizzly Bears"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

@@ -1,0 +1,160 @@
+{
+  "unit": "701.56",
+  "verified": true,
+  "review": [],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "701.56a-1",
+      "rules": [
+        "701.56a"
+      ],
+      "title": "Time travel adds or removes a time counter on a chosen permanent that has one",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            {
+              "card": "Calciderm",
+              "counters": {
+                "time": 1
+              }
+            }
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "All of History, All at Once"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Calciderm (5/5 shroud, vanishing 4) is on the battlefield with one time counter."
+      },
+      "decisions": [
+        "A casts All of History, All at Once, tapping four Islands; Storm triggers but no spell was cast before it, so there are no copies.",
+        "Both players pass; the spell resolves and A time travels.",
+        "A chooses Calciderm and chooses to add a time counter."
+      ],
+      "variants": [
+        {
+          "label": "add",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Calciderm has 2 time counters and stays on the battlefield."
+        },
+        {
+          "label": "remove",
+          "polarity": "fires",
+          "delta": "A chooses to remove a time counter instead of adding one.",
+          "expected": "Calciderm has 0 time counters; vanishing's trigger sacrifices it, and Calciderm is in A's graveyard."
+        },
+        {
+          "label": "choose_nothing",
+          "polarity": "does_not_fire",
+          "delta": "A chooses no permanent to time travel.",
+          "expected": "Calciderm still has 1 time counter and stays on the battlefield."
+        },
+        {
+          "label": "opponents_permanent",
+          "polarity": "does_not_fire",
+          "delta": "Calciderm is on B's battlefield instead of A's, with the same one time counter; A has no permanent to choose.",
+          "expected": "Calciderm still has 1 time counter on B's battlefield; time travel affects only permanents the caster controls."
+        }
+      ],
+      "cards": [
+        "All of History, All at Once",
+        "Calciderm",
+        "Island"
+      ],
+      "forge_notes": "Forge's TimeTravelEffect offers the caster's exiled cards that have suspend and the caster's battlefield permanents with a time counter."
+    },
+    {
+      "id": "701.56a-2",
+      "rules": [
+        "701.56a"
+      ],
+      "title": "Time travel adds or removes a time counter on a suspended card, and removing the last one lets it be cast",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            "Island",
+            "Island"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "All of History, All at Once"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {
+          "A": [
+            {
+              "card": "Rift Bolt",
+              "counters": {
+                "time": 1
+              }
+            }
+          ]
+        },
+        "notes": "Rift Bolt is suspended in exile with one time counter."
+      },
+      "decisions": [
+        "A casts All of History, All at Once, tapping four Islands; Storm triggers but no spell was cast before it, so there are no copies.",
+        "Both players pass; the spell resolves and A time travels.",
+        "A chooses the suspended Rift Bolt and chooses to remove a time counter.",
+        "The suspend trigger resolves; A casts Rift Bolt without paying its mana cost, targeting player B; Rift Bolt resolves."
+      ],
+      "variants": [
+        {
+          "label": "remove",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The last time counter is removed from Rift Bolt, A casts it for free, and it deals 3 damage to B (B at 17). Rift Bolt is in A's graveyard."
+        },
+        {
+          "label": "add",
+          "polarity": "does_not_fire",
+          "delta": "A chooses to add a time counter instead of removing one (and casts nothing).",
+          "expected": "Rift Bolt has 2 time counters and stays in exile; B stays at 20."
+        },
+        {
+          "label": "choose_nothing",
+          "polarity": "does_not_fire",
+          "delta": "A chooses no card to time travel (and casts nothing).",
+          "expected": "Rift Bolt still has 1 time counter in exile; B stays at 20."
+        }
+      ],
+      "cards": [
+        "All of History, All at Once",
+        "Rift Bolt",
+        "Island"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

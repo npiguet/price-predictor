@@ -1,0 +1,5 @@
+{"id": "702.138", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.138a", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "A card with escape can be cast from the graveyard for its escape cost, which includes exiling other cards from the graveyard.", "note": ""}
+{"id": "702.138b", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.138c", "category": "mechanical", "observability": "direct", "record_kinds": ["rewrite", "trigger"], "outcome": "A permanent that escaped enters with the stated counters, and a linked \"enters this way\" trigger fires even when no counters were added.", "note": ""}
+{"id": "702.138d", "category": "mechanical", "observability": "direct", "record_kinds": ["continuous"], "outcome": "A permanent that escaped has the stated ability, and one that was not cast with escape does not.", "note": ""}

@@ -1,0 +1,18 @@
+{"id": "706.1", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "706.1a", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "706.1b", "category": "out_of_scope", "observability": "none", "record_kinds": [], "outcome": "", "note": "physical alternate randomization method"}
+{"id": "706.2", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "The final die result is the natural result plus or minus all applicable modifiers, and that final result decides the effect.", "note": ""}
+{"id": "706.2a", "category": "decision", "observability": "none", "record_kinds": [], "outcome": "", "note": "optional modifiers and mana activation are player choices"}
+{"id": "706.2b", "category": "decision", "observability": "none", "record_kinds": [], "outcome": "", "note": "the roller chooses the order of competing modifiers"}
+{"id": "706.3", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "706.3a", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "After a roll, the effect listed for the range containing the result happens, and no effect happens if no range contains it.", "note": ""}
+{"id": "706.3b", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "706.3c", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "A Roll again instruction rolls the same kind and number of dice with the same modifiers and the new result selects the effect.", "note": ""}
+{"id": "706.4", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "706.5", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "Celebr-8000's extra effect happens only when both dice show equal results.", "note": ""}
+{"id": "706.6", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution", "trigger"], "outcome": "An ignored roll counts as never having happened: no roll-triggered ability fires and no effect applies to it.", "note": ""}
+{"id": "706.7", "category": "out_of_scope", "observability": "none", "record_kinds": [], "outcome": "", "note": "Planechase planar die; Planechase is a casual variant not played in two-player collection"}
+{"id": "706.8", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "706.8a", "category": "mechanical", "observability": "needs_new_fields", "record_kinds": ["resolution"], "outcome": "Rolling dice with a storing ability records the die kind and value as stored results on the permanent.", "note": ""}
+{"id": "706.8b", "category": "mechanical", "observability": "needs_new_fields", "record_kinds": ["resolution"], "outcome": "Rerolling stored results rolls one die of each noted kind, removes the old stored results and stores the new ones.", "note": ""}
+{"id": "706.8c", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": "linking of abilities; covered by 706.8a and 706.8b"}

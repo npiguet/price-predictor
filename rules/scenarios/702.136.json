@@ -1,0 +1,196 @@
+{
+  "unit": "702.136",
+  "verified": true,
+  "review": [],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.136a-1",
+      "rules": [
+        "702.136a"
+      ],
+      "title": "Riot gives an additional +1/+1 counter when that choice is made",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Forest"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Zhur-Taa Goblin",
+            "Grizzly Bears"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Zhur-Taa Goblin, tapping the Mountain and the Forest.",
+        "Both players pass; Zhur-Taa Goblin resolves and A chooses the +1/+1 counter for riot."
+      ],
+      "variants": [
+        {
+          "label": "counter_choice",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Zhur-Taa Goblin enters with a +1/+1 counter on it: it is a 3/3 with one +1/+1 counter and does not have haste."
+        },
+        {
+          "label": "haste_choice",
+          "polarity": "does_not_fire",
+          "delta": "A chooses haste for riot instead of the counter.",
+          "expected": "Zhur-Taa Goblin enters with no counter: it is a 2/2 with haste."
+        },
+        {
+          "label": "no_riot",
+          "polarity": "other",
+          "delta": "A casts Grizzly Bears instead of Zhur-Taa Goblin.",
+          "expected": "Grizzly Bears has no riot: it enters as a 2/2 with no counter and no haste."
+        }
+      ],
+      "cards": [
+        "Zhur-Taa Goblin",
+        "Grizzly Bears",
+        "Mountain",
+        "Forest"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.136a-2",
+      "rules": [
+        "702.136a"
+      ],
+      "title": "Riot gives haste when the counter is not chosen",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Forest"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Zhur-Taa Goblin"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Zhur-Taa Goblin, tapping the Mountain and the Forest.",
+        "Both players pass; Zhur-Taa Goblin resolves and A chooses haste for riot.",
+        "A moves to the declare attackers step."
+      ],
+      "variants": [
+        {
+          "label": "haste_choice",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Zhur-Taa Goblin has haste and is a legal attacker this turn."
+        },
+        {
+          "label": "counter_choice",
+          "polarity": "does_not_fire",
+          "delta": "A chooses the +1/+1 counter for riot instead of haste.",
+          "expected": "Zhur-Taa Goblin has no haste and is summoning sick: it is not a legal attacker this turn."
+        }
+      ],
+      "cards": [
+        "Zhur-Taa Goblin",
+        "Mountain",
+        "Forest"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.136b-1",
+      "rules": [
+        "702.136b"
+      ],
+      "title": "Each instance of riot works separately",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Rhythm of the Wild",
+            "Mountain",
+            "Forest"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Zhur-Taa Goblin"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Zhur-Taa Goblin, tapping the Mountain and the Forest.",
+        "Both players pass; Zhur-Taa Goblin resolves. It has riot printed and riot from Rhythm of the Wild; A chooses the +1/+1 counter for both instances."
+      ],
+      "variants": [
+        {
+          "label": "two_counters",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Zhur-Taa Goblin enters with two +1/+1 counters: it is a 4/4 and does not have haste."
+        },
+        {
+          "label": "one_instance",
+          "polarity": "does_not_fire",
+          "delta": "Rhythm of the Wild is not on the battlefield.",
+          "expected": "Only the printed riot applies: Zhur-Taa Goblin enters with one +1/+1 counter as a 3/3, without haste."
+        },
+        {
+          "label": "counter_and_haste",
+          "polarity": "other",
+          "delta": "A chooses the counter for one instance and haste for the other.",
+          "expected": "Zhur-Taa Goblin enters with one +1/+1 counter and has haste: it is a 3/3 with haste."
+        },
+        {
+          "label": "two_haste",
+          "polarity": "other",
+          "delta": "A chooses haste for both instances.",
+          "expected": "Zhur-Taa Goblin enters with no counter and has haste: it is a 2/2 with haste."
+        }
+      ],
+      "cards": [
+        "Zhur-Taa Goblin",
+        "Rhythm of the Wild",
+        "Mountain",
+        "Forest"
+      ],
+      "forge_notes": "Forge asks for the riot choice once per instance; the two-instance case relies on Forge treating the granted and printed instances separately."
+    }
+  ]
+}

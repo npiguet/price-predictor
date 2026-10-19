@@ -1,0 +1,273 @@
+{
+  "unit": "701.49",
+  "verified": true,
+  "review": [
+    "701.49a-1: the dungeon_in_progress variant relied on a room choice the decisions did not fix; added it to decisions.",
+    "701.49b-1: the bottom_room delta changed two facts (marker position and the next-dungeon choice); moved the choice into decisions so the delta names only the marker position."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "701.49a-1",
+      "rules": [
+        "701.49a"
+      ],
+      "title": "Venturing with no dungeon in the command zone puts a dungeon there and enters its topmost room",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            "Island"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Eccentric Apprentice"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Forest"
+          ]
+        },
+        "exile": {},
+        "notes": "A owns Lost Mine of Phandelver outside the game and has no dungeon in the command zone. Eccentric Apprentice's second ability is inert here: A has completed no dungeon. Library lists are top first; cards below the listed ones are irrelevant Forests. Dungeon cards and venture markers are not zones the scenario format lists, so they are described here."
+      },
+      "decisions": [
+        "A casts Eccentric Apprentice, tapping three Islands.",
+        "Both players pass; Eccentric Apprentice resolves and its enters trigger goes on the stack.",
+        "Both players pass; the trigger resolves: A ventures into the dungeon.",
+        "A chooses Lost Mine of Phandelver. Its Cave Entrance room triggers: A scries 1 and keeps Forest on top.",
+        "In the dungeon_in_progress variant A instead follows the arrow from Cave Entrance to Goblin Lair."
+      ],
+      "variants": [
+        {
+          "label": "no_dungeon",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Lost Mine of Phandelver is in A's command zone with A's venture marker on Cave Entrance (its topmost room). Cave Entrance resolved: A scried 1 and kept Forest on top. A has completed no dungeon."
+        },
+        {
+          "label": "dungeon_in_progress",
+          "polarity": "does_not_fire",
+          "delta": "A already has Lost Mine of Phandelver in the command zone with the venture marker on Cave Entrance.",
+          "expected": "No new dungeon enters the command zone. The marker moves from Cave Entrance to the adjacent room Goblin Lair (A chose it over Mine Tunnels), whose ability creates a 1/1 red Goblin token under A's control. No scry happens."
+        }
+      ],
+      "cards": [
+        "Eccentric Apprentice",
+        "Island",
+        "Forest"
+      ],
+      "forge_notes": "Dungeon cards come from the venture effect (VentureEffect), not from a deck; the dungeon choice is a decision fixed in the scenario."
+    },
+    {
+      "id": "701.49b-1",
+      "rules": [
+        "701.49b"
+      ],
+      "title": "Venturing from a room that is not the bottommost moves the marker to an adjacent room",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            "Island"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Eccentric Apprentice"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Forest"
+          ]
+        },
+        "exile": {},
+        "notes": "A has Lost Mine of Phandelver in the command zone with the venture marker on Cave Entrance. Cave Entrance leads to Goblin Lair and Mine Tunnels. Dungeon cards and venture markers are not zones the scenario format lists, so they are described here."
+      },
+      "decisions": [
+        "A casts Eccentric Apprentice, tapping three Islands.",
+        "Both players pass; Eccentric Apprentice resolves and its enters trigger goes on the stack.",
+        "Both players pass; the trigger resolves: A ventures into the dungeon and chooses the arrow to Goblin Lair.",
+        "In the bottom_room variant A chooses Tomb of Annihilation as the next dungeon."
+      ],
+      "variants": [
+        {
+          "label": "goblin_lair",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The venture marker moves from Cave Entrance to Goblin Lair. Goblin Lair's room ability creates a 1/1 red Goblin creature token under A's control. A's dungeon is still in the command zone."
+        },
+        {
+          "label": "mine_tunnels",
+          "polarity": "other",
+          "delta": "A follows the other arrow out of Cave Entrance, to Mine Tunnels.",
+          "expected": "The venture marker moves from Cave Entrance to Mine Tunnels. Mine Tunnels' room ability creates a Treasure token under A's control. No Goblin token is created."
+        },
+        {
+          "label": "bottom_room",
+          "polarity": "does_not_fire",
+          "delta": "The venture marker is on Temple of Dumathoin, the bottommost room.",
+          "expected": "The marker does not move to an adjacent room (Temple of Dumathoin has no arrow out). Lost Mine of Phandelver is removed from the game and A has completed a dungeon. Tomb of Annihilation enters the command zone with the marker on Trapped Entry, which makes each player lose 1 life: A 19, B 19."
+        }
+      ],
+      "cards": [
+        "Eccentric Apprentice",
+        "Island",
+        "Forest"
+      ],
+      "forge_notes": "The bottom-room variant overlaps 701.49c; it is here as the case where 'adjacent room' does not apply. Forge allows re-choosing a completed dungeon; the scenario chooses a different one to stay within the rules."
+    },
+    {
+      "id": "701.49c-1",
+      "rules": [
+        "701.49c"
+      ],
+      "title": "Venturing from the bottommost room completes the dungeon and starts a new one",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            "Island"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Eccentric Apprentice"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Forest"
+          ]
+        },
+        "exile": {},
+        "notes": "A has Lost Mine of Phandelver in the command zone with the venture marker on Temple of Dumathoin, its bottommost room. A also owns Tomb of Annihilation outside the game. Dungeon cards and venture markers are not zones the scenario format lists, so they are described here."
+      },
+      "decisions": [
+        "A casts Eccentric Apprentice, tapping three Islands.",
+        "Both players pass; Eccentric Apprentice resolves and its enters trigger goes on the stack.",
+        "Both players pass; the trigger resolves: A ventures into the dungeon.",
+        "A chooses Tomb of Annihilation as the new dungeon."
+      ],
+      "variants": [
+        {
+          "label": "bottom_room",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Lost Mine of Phandelver is removed from the game and A has completed one dungeon. Tomb of Annihilation is in the command zone with the venture marker on Trapped Entry, whose ability makes each player lose 1 life: A 19, B 19."
+        },
+        {
+          "label": "one_room_above",
+          "polarity": "does_not_fire",
+          "delta": "The venture marker is on Dark Pool, the room above Temple of Dumathoin.",
+          "expected": "The marker moves to Temple of Dumathoin, whose ability makes A draw Forest. Lost Mine of Phandelver stays in the command zone, no dungeon is completed, and no life is lost: A 20, B 20."
+        }
+      ],
+      "cards": [
+        "Eccentric Apprentice",
+        "Island",
+        "Forest"
+      ],
+      "forge_notes": "Forge's VentureEffect completes the dungeon and then offers every enterable dungeon, including the one just completed; the scenario picks Tomb of Annihilation."
+    },
+    {
+      "id": "701.49d-1",
+      "rules": [
+        "701.49d"
+      ],
+      "title": "Venture into Undercity with no dungeon in the command zone enters Undercity, otherwise ventures normally",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            "Island",
+            "Island"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Aarakocra Sneak"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Forest",
+            "Mountain"
+          ]
+        },
+        "exile": {},
+        "notes": "A has no dungeon in the command zone and does not have the initiative. Taking the initiative makes A venture into Undercity. Library lists are top first; cards below the listed ones are irrelevant Forests. Dungeon cards and venture markers are not zones the scenario format lists, so they are described here."
+      },
+      "decisions": [
+        "A casts Aarakocra Sneak, tapping four Islands.",
+        "Both players pass; Aarakocra Sneak resolves and its enters trigger goes on the stack.",
+        "Both players pass; the trigger resolves: A takes the initiative and so ventures into Undercity.",
+        "Undercity's Secret Entrance room triggers: A searches for a basic land and chooses Forest."
+      ],
+      "variants": [
+        {
+          "label": "no_dungeon",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Undercity is in A's command zone with the venture marker on Secret Entrance. A puts Forest into the hand from the library and shuffles. A has the initiative."
+        },
+        {
+          "label": "dungeon_in_progress",
+          "polarity": "does_not_fire",
+          "delta": "A already has Lost Mine of Phandelver in the command zone with the venture marker on Cave Entrance.",
+          "expected": "Undercity does not enter. The marker in Lost Mine of Phandelver moves from Cave Entrance to Goblin Lair (A's choice), creating a 1/1 red Goblin token. No land is fetched. A has the initiative."
+        }
+      ],
+      "cards": [
+        "Aarakocra Sneak",
+        "Island",
+        "Forest",
+        "Mountain"
+      ],
+      "forge_notes": "Initiative is implemented in Player.java as emblem triggers that run Venture with Dungeon$ Undercity."
+    }
+  ]
+}

@@ -1,0 +1,4 @@
+{"id": "702.64", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.64a", "category": "mechanical", "observability": "direct", "record_kinds": ["rewrite"], "outcome": "Damage from a source to an absorb creature is reduced by N.", "note": ""}
+{"id": "702.64b", "category": "mechanical", "observability": "direct", "record_kinds": ["rewrite"], "outcome": "Each absorb ability prevents at most N damage per source per event, applying afresh to other sources or later damage.", "note": ""}
+{"id": "702.64c", "category": "mechanical", "observability": "direct", "record_kinds": ["rewrite"], "outcome": "Multiple absorb instances each prevent damage separately.", "note": ""}

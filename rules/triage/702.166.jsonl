@@ -1,0 +1,5 @@
+{"id": "702.166", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.166a", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "A spell with bargain can be cast with or without sacrificing an artifact, enchantment or token as an additional cost; the cost is payable only if such a permanent exists.", "note": ""}
+{"id": "702.166b", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "A spell cast with its bargain cost paid is bargained, and its bargain-conditional effect happens on resolution.", "note": ""}
+{"id": "702.166c", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.166d", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "A bargain-conditional part of a spell with targets only has those targets when bargained, so the spell resolves without them otherwise.", "note": ""}

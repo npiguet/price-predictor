@@ -1,0 +1,1878 @@
+{
+  "unit": "506",
+  "verified": true,
+  "review": [
+    "506.1-2: base variant carried a delta and the setup step (declare_blockers) came after the attack decision; base attacker fixed in decisions, step set to beginning_of_combat, variant delta names the swap.",
+    "506.3a-1: the does_not_fire variant changed three facts (no animation, different attacker, different target); both creatures now attack and the only delta is the trigger's target, with life totals recomputed (16 vs 15).",
+    "506.3d-1: no does_not_fire variant (the second variant only skipped ninjutsu), and A's draw from an empty library would lose the game; added Ainok Strike Leader whose Goblin token enters attacking in the declare attackers step, the delta is B blocking that token, A declines the draw and has a library.",
+    "506.3c: skip reason was false (ninjutsu enters attacking the returned creature's planeswalker, which can die in response); removed the skip and added scenario 506.3c-1 with Jace Beleren killed by Lightning Bolt in response to ninjutsu.",
+    "506.4-1: base variant carried a delta and the setup step came after the attack; attacker fixed in decisions, step set to beginning_of_combat, Shock timed in the declare blockers step.",
+    "506.4-2: base variant carried a delta ('A does not respond'); moved into the decisions, setup step set before the attack.",
+    "506.4-3: base variant carried a delta; the activation moved into the decisions, setup step set before the attack.",
+    "506.4-4: base variant carried a delta; target fixed in the decisions, setup step set before the attack.",
+    "506.4-5: base variant carried a delta; the Disenchant cast moved into the decisions, setup step set before the attack.",
+    "506.4a-1: base variant carried a delta; cast timing fixed in the decisions.",
+    "506.4a-2: base variant carried a delta; cast timing fixed in the decisions.",
+    "506.4b-1: base variant carried a delta; cast timing fixed in the decisions.",
+    "506.4b-2: base variant carried a delta; cast timing fixed in the decisions.",
+    "506.4c-1: base variant carried a delta and the Bolt's timing was unstated; Bolt fixed in the declare attackers step and no-block fixed in the decisions, so each variant changes one fact.",
+    "506.8a-1: base decisions left the attack to the variants; base attack and query step fixed so each variant changes one fact.",
+    "506.8b-2: the attack lived only in the notes; added it to the decisions.",
+    "506.8c-1: base variant (empty delta) was listed second and the polarities were inverted relative to the rule (legal in the later combat is the rule applying); reordered and swapped polarities.",
+    "506.8d-1: base variant carried a delta and the setup step was ambiguous between the two combats; notes now fix the second combat, base delta emptied.",
+    "506.8e-1: base variant carried a delta and the setup step contradicted it; setup step set to end_of_combat, base delta emptied.",
+    "506.8f-1: variant delta reworded to name the single fact changed (A attacks) and its consequence."
+  ],
+  "skipped": [
+    {
+      "id": "506.3b",
+      "reason": "cannot occur in a two-player Forge game: the attacking player is always the active player, and no card Forge implements puts a creature onto the battlefield attacking under another player's control (every put-attacking effect, such as Zara, Chorale of the Void or Noctis, puts it under the attacker's or its owner's control on the owner's own attack)"
+    },
+    {
+      "id": "506.3e",
+      "reason": "cannot occur in a two-player Forge game: the effects that put a creature onto the battlefield blocking (Flash Foliage, Mirror Match, Brimaz) are controlled by the defending player and name attackers that attack that player or their planeswalker, so the exception for an attacker not attacking the entering creature's controller never arises"
+    },
+    {
+      "id": "506.3f",
+      "reason": "cannot be illustrated: it needs a battle that is also a creature put onto the battlefield attacking or blocking, and no card Forge implements both gives a battle the creature type and puts permanents onto the battlefield attacking or blocking"
+    },
+    {
+      "id": "506.3g",
+      "reason": "cannot be illustrated: it needs a resolving spell or ability that makes a battle an attacking or blocking creature, and no card Forge implements does that"
+    },
+    {
+      "id": "506.4d",
+      "reason": "cannot be illustrated: it needs a permanent that is both a creature and a planeswalker blocking an attacker on the opponent's turn, and every planeswalker animation Forge implements (Gideon Jura, Gideon Blackblade and similar) lasts only on its controller's own turn"
+    },
+    {
+      "id": "506.4e",
+      "reason": "cannot be illustrated: it needs an attacked permanent that is both a planeswalker and a battle, and no card Forge implements makes a permanent both"
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "506.1-1",
+      "rules": [
+        "506.1"
+      ],
+      "title": "Declare blockers and combat damage steps are skipped when no creature is declared as an attacker",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            "Forest",
+            "Forest"
+          ]
+        },
+        "hand": {
+          "B": [
+            "Fog Patch"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Fog Patch can be cast only during the declare blockers step, so a legal cast shows that the step exists. B has no creatures."
+      },
+      "decisions": [
+        "Both players pass priority in the beginning of combat step.",
+        "A declares no attackers.",
+        "B holds priority windows only in the steps the combat phase actually has; B casts nothing."
+      ],
+      "variants": [
+        {
+          "label": "no_attackers",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "No declare blockers step and no combat damage step take place. At no priority B receives in this combat is casting Fog Patch legal (can_play false at declare attackers and at end of combat). B's life stays 20."
+        },
+        {
+          "label": "one_attacker",
+          "polarity": "does_not_fire",
+          "delta": "A declares Grizzly Bears as an attacker against B.",
+          "expected": "The declare blockers step takes place and B receives priority in it: casting Fog Patch (tapping both Forests) is legal there. B casts nothing, declares no blockers, and takes 2 combat damage in the combat damage step: B's life is 18."
+        }
+      ],
+      "cards": [
+        "Grizzly Bears",
+        "Forest",
+        "Fog Patch"
+      ],
+      "forge_notes": "If Forge does not stop at the declare attackers step at all when nobody attacks, the playability verdict at that step is simply absent rather than false."
+    },
+    {
+      "id": "506.1-2",
+      "rules": [
+        "506.1"
+      ],
+      "title": "A first strike attacker causes a second combat damage step",
+      "record_kind": "combat",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Youthful Knight",
+              "summoning_sick": false
+            },
+            {
+              "card": "Elite Vanguard",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Youthful Knight is 2/1 with first strike; Elite Vanguard is a vanilla 2/1."
+      },
+      "decisions": [
+        "A attacks B with Youthful Knight.",
+        "B blocks Youthful Knight with Grizzly Bears.",
+        "No spells or abilities are used; combat damage is dealt."
+      ],
+      "variants": [
+        {
+          "label": "first_strike_attacker",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Two combat damage steps take place. In the first-strike step Youthful Knight deals 2 damage to Grizzly Bears, which is destroyed and goes to B's graveyard. In the regular step Grizzly Bears is gone and deals no damage: Youthful Knight has no damage marked and stays on the battlefield."
+        },
+        {
+          "label": "plain_attacker",
+          "polarity": "does_not_fire",
+          "delta": "A attacks with Elite Vanguard (no first strike) instead of Youthful Knight, and B blocks it with Grizzly Bears.",
+          "expected": "Only one combat damage step takes place. Elite Vanguard and Grizzly Bears deal 2 damage to each other at the same time; both are destroyed and go to their owners' graveyards."
+        }
+      ],
+      "cards": [
+        "Youthful Knight",
+        "Elite Vanguard",
+        "Grizzly Bears"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "506.3-1",
+      "rules": [
+        "506.3"
+      ],
+      "title": "A noncreature permanent is not offered as an attacker until it becomes a creature",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            },
+            {
+              "card": "Treetop Village",
+              "summoning_sick": false
+            },
+            "Forest",
+            "Forest"
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Treetop Village has been under A's control since before the turn began."
+      },
+      "decisions": [
+        "A moves to combat; at the declare attackers step A's legal attackers are queried."
+      ],
+      "variants": [
+        {
+          "label": "land_not_animated",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Legal attackers for A: Grizzly Bears only. Treetop Village is a land and not a creature, so declaring it as an attacker is illegal."
+        },
+        {
+          "label": "land_animated",
+          "polarity": "does_not_fire",
+          "delta": "In main1 A activates Treetop Village ({1}{G}, tapping both Forests); the ability resolves and Treetop Village is a 3/3 green Ape creature with trample until end of turn.",
+          "expected": "Legal attackers for A: Grizzly Bears and Treetop Village."
+        }
+      ],
+      "cards": [
+        "Grizzly Bears",
+        "Treetop Village",
+        "Forest"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "506.3-2",
+      "rules": [
+        "506.3"
+      ],
+      "title": "A noncreature permanent is not offered as a blocker until it becomes a creature",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "declare_attackers",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Hill Giant",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            },
+            {
+              "card": "Treetop Village",
+              "summoning_sick": false
+            },
+            "Forest",
+            "Forest",
+            "Mountain"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A attacks B with Hill Giant.",
+        "B's legal blockers are queried."
+      ],
+      "variants": [
+        {
+          "label": "land_not_animated",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Legal blockers for B: Grizzly Bears only. Treetop Village and Mountain are lands and not creatures, so they cannot be declared as blockers."
+        },
+        {
+          "label": "land_animated",
+          "polarity": "does_not_fire",
+          "delta": "In the declare attackers step B activates Treetop Village ({1}{G}, tapping both Forests); it resolves and Treetop Village is a 3/3 creature until end of turn.",
+          "expected": "Legal blockers for B: Grizzly Bears and Treetop Village. Mountain is still not offered."
+        }
+      ],
+      "cards": [
+        "Hill Giant",
+        "Grizzly Bears",
+        "Treetop Village",
+        "Forest",
+        "Mountain"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "506.3-3",
+      "rules": [
+        "506.3"
+      ],
+      "title": "Only players, planeswalkers and battles can be attacked; a creature cannot",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Hill Giant",
+              "summoning_sick": false
+            },
+            "Mountain"
+          ],
+          "B": [
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            },
+            {
+              "card": "Jace Beleren",
+              "counters": {
+                "loyalty": 3
+              }
+            }
+          ]
+        },
+        "hand": {
+          "A": [
+            "Lightning Bolt"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A moves to combat; at the declare attackers step the legal attack targets for Hill Giant are queried."
+      ],
+      "variants": [
+        {
+          "label": "jace_present",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Attacking Grizzly Bears is illegal: a creature is not an attack target. The legal attack targets for Hill Giant are player B and Jace Beleren."
+        },
+        {
+          "label": "jace_candidate",
+          "polarity": "does_not_fire",
+          "delta": "The attack target queried is Jace Beleren instead of Grizzly Bears.",
+          "expected": "Attacking Jace Beleren is legal: a planeswalker can be attacked."
+        },
+        {
+          "label": "jace_killed",
+          "polarity": "other",
+          "delta": "In main1 A casts Lightning Bolt targeting Jace Beleren, tapping Mountain; it resolves and Jace Beleren (loyalty 3) goes to B's graveyard.",
+          "expected": "Legal attack targets for Hill Giant: player B only. Grizzly Bears is still not an attack target."
+        }
+      ],
+      "cards": [
+        "Hill Giant",
+        "Mountain",
+        "Grizzly Bears",
+        "Jace Beleren",
+        "Lightning Bolt"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "506.3a-1",
+      "rules": [
+        "506.3a"
+      ],
+      "title": "A noncreature permanent put onto the battlefield attacking enters but is not an attacker",
+      "record_kind": "combat",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Echoing Assault",
+            {
+              "card": "Mutavault",
+              "summoning_sick": false
+            },
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            },
+            "Mountain"
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Echoing Assault: whenever A attacks a player, create a 1/1 token copy of a target nontoken creature attacking that player, tapped and attacking, sacrificed at the next end step."
+      },
+      "decisions": [
+        "A taps Mountain to pay {1} and activates Mutavault; it resolves and Mutavault is a 2/2 creature land until end of turn.",
+        "A attacks B with Mutavault and Grizzly Bears.",
+        "Echoing Assault triggers and A targets Mutavault; B has no responses.",
+        "The trigger resolves. B declares no blockers (B has no creatures); combat damage is dealt."
+      ],
+      "variants": [
+        {
+          "label": "copies_animated_land",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The token copy of Mutavault is a land and not a creature (the animation is not copied): it enters the battlefield tapped but is not an attacking permanent and deals no combat damage. Mutavault and Grizzly Bears each deal 2 combat damage: B's life is 16. The token is sacrificed at the next end step."
+        },
+        {
+          "label": "copies_creature",
+          "polarity": "does_not_fire",
+          "delta": "Echoing Assault's trigger targets Grizzly Bears instead of Mutavault.",
+          "expected": "The token copy of Grizzly Bears is a 1/1 creature that enters tapped and attacking B. Mutavault deals 2, Grizzly Bears 2 and the token 1: B's life is 15. The token is sacrificed at the next end step."
+        }
+      ],
+      "cards": [
+        "Echoing Assault",
+        "Mutavault",
+        "Grizzly Bears",
+        "Mountain"
+      ],
+      "forge_notes": "Echoing Assault copies via CopyPermanent with TokenAttacking$ TriggeredAttackedTarget; whether Forge leaves a non-creature token in the attackers list is the thing to check."
+    },
+    {
+      "id": "506.3c-1",
+      "rules": [
+        "506.3c"
+      ],
+      "title": "A creature put onto the battlefield attacking a planeswalker that has left the battlefield enters but is not attacking",
+      "record_kind": "combat",
+      "setup": {
+        "active": "A",
+        "step": "declare_attackers",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            },
+            "Island",
+            "Island"
+          ],
+          "B": [
+            {
+              "card": "Jace Beleren",
+              "counters": {
+                "loyalty": 3
+              }
+            },
+            "Mountain"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Ninja of the Deep Hours"
+          ],
+          "B": [
+            "Lightning Bolt"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Island",
+            "Island",
+            "Island"
+          ]
+        },
+        "exile": {},
+        "notes": "B has no creatures. Ninjutsu puts the Ninja onto the battlefield attacking the same player or planeswalker the returned creature was attacking (702.49c)."
+      },
+      "decisions": [
+        "A attacks Jace Beleren with Grizzly Bears.",
+        "B declares no blockers.",
+        "In the declare blockers step A activates ninjutsu of Ninja of the Deep Hours ({1}{U}, tapping both Islands), returning the unblocked Grizzly Bears to hand.",
+        "In response B casts Lightning Bolt targeting Jace Beleren, tapping Mountain; it resolves and Jace Beleren (loyalty 3) goes to B's graveyard.",
+        "The ninjutsu ability resolves; combat damage is dealt."
+      ],
+      "variants": [
+        {
+          "label": "planeswalker_gone",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Ninja of the Deep Hours enters the battlefield tapped but is not an attacking creature: it deals no combat damage. B's life is 20. Jace Beleren is in B's graveyard and Grizzly Bears is in A's hand."
+        },
+        {
+          "label": "planeswalker_stays",
+          "polarity": "does_not_fire",
+          "delta": "B does not cast Lightning Bolt.",
+          "expected": "Ninja of the Deep Hours enters tapped and attacking Jace Beleren, unblocked, and deals 2 combat damage to it: Jace Beleren's loyalty is 1. Its draw trigger does not fire (no damage to a player). B's life is 20."
+        }
+      ],
+      "cards": [
+        "Grizzly Bears",
+        "Island",
+        "Jace Beleren",
+        "Mountain",
+        "Ninja of the Deep Hours",
+        "Lightning Bolt"
+      ],
+      "forge_notes": "Whether Forge's ninjutsu resolution checks the stored defender and leaves the Ninja out of combat when that planeswalker is gone is the thing to check."
+    },
+    {
+      "id": "506.3d-1",
+      "rules": [
+        "506.3d"
+      ],
+      "title": "A creature put onto the battlefield attacking during the declare blockers step enters unblocked; one put attacking during the declare attackers step can be blocked",
+      "record_kind": "combat",
+      "setup": {
+        "active": "A",
+        "step": "declare_attackers",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Ainok Strike Leader",
+              "summoning_sick": false
+            },
+            "Island",
+            "Island"
+          ],
+          "B": [
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            }
+          ]
+        },
+        "hand": {
+          "A": [
+            "Ninja of the Deep Hours"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Island",
+            "Island",
+            "Island"
+          ]
+        },
+        "exile": {},
+        "notes": "Ainok Strike Leader (2/2): when A attacks with it, A creates a 1/1 red Goblin creature token tapped and attacking B. Ninja of the Deep Hours: 2/2, ninjutsu {1}{U}."
+      },
+      "decisions": [
+        "A attacks B with Ainok Strike Leader. Its trigger resolves in the declare attackers step: a 1/1 Goblin token enters tapped and attacking B.",
+        "B declares no blockers.",
+        "In the declare blockers step A activates ninjutsu of Ninja of the Deep Hours ({1}{U}, tapping both Islands), returning the unblocked Ainok Strike Leader to hand; the ability resolves.",
+        "Combat damage is dealt; A declines the optional draw from Ninja of the Deep Hours' trigger."
+      ],
+      "variants": [
+        {
+          "label": "no_blocks",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Ninja of the Deep Hours enters tapped and attacking B as an unblocked creature; no blocker was or can be declared for it. The Goblin token is unblocked. Ninja deals 2 and the token 1 combat damage to B: B's life is 17. Ainok Strike Leader is in A's hand."
+        },
+        {
+          "label": "token_blocked",
+          "polarity": "does_not_fire",
+          "delta": "B declares Grizzly Bears as a blocker of the Goblin token.",
+          "expected": "The block is legal: the Goblin token entered attacking during the declare attackers step, before blockers were declared, so it is blocked. Grizzly Bears deals 2 damage to the token, which is destroyed; the token deals 1 damage to Grizzly Bears. Ninja of the Deep Hours still enters unblocked and deals 2 combat damage to B: B's life is 18."
+        }
+      ],
+      "cards": [
+        "Ainok Strike Leader",
+        "Grizzly Bears",
+        "Island",
+        "Ninja of the Deep Hours"
+      ],
+      "forge_notes": "No Forge card puts a creature onto the battlefield attacking at a step of the controller's choosing, so the contrast uses two effects of the same combat: a token put attacking in the declare attackers step (blockable) next to a ninjutsu creature put attacking in the declare blockers step (unblocked)."
+    },
+    {
+      "id": "506.4-1",
+      "rules": [
+        "506.4"
+      ],
+      "title": "A creature that leaves the battlefield is removed from combat",
+      "record_kind": "combat",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            },
+            {
+              "card": "Earth Elemental",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            },
+            "Mountain"
+          ]
+        },
+        "hand": {
+          "B": [
+            "Shock"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Earth Elemental is a vanilla 4/5."
+      },
+      "decisions": [
+        "A attacks B with Grizzly Bears.",
+        "B blocks it with B's Grizzly Bears.",
+        "In the declare blockers step B casts Shock targeting the attacker, tapping Mountain; A does not respond; Shock resolves.",
+        "Combat damage is dealt."
+      ],
+      "variants": [
+        {
+          "label": "attacker_dies",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "A's Grizzly Bears takes 2 damage, is destroyed and leaves the battlefield, so it is removed from combat. B's Grizzly Bears is no longer blocking anything, deals and takes no combat damage and has no damage marked."
+        },
+        {
+          "label": "attacker_survives",
+          "polarity": "does_not_fire",
+          "delta": "A attacks with Earth Elemental instead of Grizzly Bears (B blocks it and Shocks it the same way).",
+          "expected": "Earth Elemental takes 2 damage from Shock and stays on the battlefield and in combat. It deals 4 combat damage to B's Grizzly Bears, which is destroyed, and takes 2 combat damage from it: Earth Elemental has 4 damage marked and survives."
+        }
+      ],
+      "cards": [
+        "Grizzly Bears",
+        "Earth Elemental",
+        "Mountain",
+        "Shock"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "506.4-2",
+      "rules": [
+        "506.4"
+      ],
+      "title": "A creature whose controller changes is removed from combat",
+      "record_kind": "combat",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Hill Giant",
+              "summoning_sick": false
+            },
+            "Plains"
+          ],
+          "B": [
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            },
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Gods Willing"
+          ],
+          "B": [
+            "Act of Aggression"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A attacks B with Hill Giant.",
+        "B blocks with Grizzly Bears.",
+        "In the declare blockers step B casts Act of Aggression targeting Hill Giant, tapping five Mountains.",
+        "A does not respond; Act of Aggression resolves.",
+        "Combat damage is dealt."
+      ],
+      "variants": [
+        {
+          "label": "control_changes",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "B gains control of Hill Giant, which untaps and gains haste until end of turn, and it is removed from combat: it deals no combat damage and B's Grizzly Bears takes no damage. Both players are at 20. Hill Giant returns to A's control at end of turn."
+        },
+        {
+          "label": "target_illegal",
+          "polarity": "does_not_fire",
+          "delta": "In response to Act of Aggression A casts Gods Willing targeting Hill Giant, tapping Plains, choosing protection from red and scrying 1 with an empty library; it resolves first.",
+          "expected": "Act of Aggression's only target is illegal when it tries to resolve, so it fizzles and A keeps control. Hill Giant stays in combat, blocked: it deals 3 damage to Grizzly Bears, which is destroyed, and takes 2 damage. Both players are at 20."
+        }
+      ],
+      "cards": [
+        "Hill Giant",
+        "Plains",
+        "Grizzly Bears",
+        "Mountain",
+        "Gods Willing",
+        "Act of Aggression"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "506.4-3",
+      "rules": [
+        "506.4"
+      ],
+      "title": "An attacking or blocking creature that regenerates is removed from combat",
+      "record_kind": "combat",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Battle Hurda",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            {
+              "card": "Gorilla Chieftain",
+              "summoning_sick": false
+            },
+            "Forest",
+            "Forest"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Battle Hurda is a 3/3 with first strike. Gorilla Chieftain is a 3/3 with {1}{G}: Regenerate."
+      },
+      "decisions": [
+        "A attacks B with Battle Hurda.",
+        "B blocks with Gorilla Chieftain.",
+        "In the declare blockers step B activates Gorilla Chieftain's regeneration ability ({1}{G}, tapping both Forests); it resolves, creating a regeneration shield.",
+        "Combat damage is dealt (first-strike step, then regular step)."
+      ],
+      "variants": [
+        {
+          "label": "regenerates",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "In the first-strike step Battle Hurda deals 3 damage to Gorilla Chieftain; it is destroyed, so the shield is used instead: it is tapped, its damage is removed, and it is removed from combat. In the regular step it deals no damage: Battle Hurda has no damage marked. Gorilla Chieftain stays on the battlefield, tapped."
+        },
+        {
+          "label": "no_shield",
+          "polarity": "does_not_fire",
+          "delta": "B does not activate the regeneration ability.",
+          "expected": "In the first-strike step Battle Hurda deals 3 damage to Gorilla Chieftain, which is destroyed and goes to B's graveyard before it deals any damage. Battle Hurda has no damage marked."
+        }
+      ],
+      "cards": [
+        "Battle Hurda",
+        "Gorilla Chieftain",
+        "Forest"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "506.4-4",
+      "rules": [
+        "506.4"
+      ],
+      "title": "A creature that phases out is removed from combat",
+      "record_kind": "combat",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Hill Giant",
+              "summoning_sick": false
+            },
+            {
+              "card": "Elite Vanguard",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            },
+            "Plains"
+          ]
+        },
+        "hand": {
+          "B": [
+            "Galadriel's Dismissal"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A attacks B with Hill Giant only; Elite Vanguard stays home.",
+        "B blocks with Grizzly Bears.",
+        "In the declare blockers step B casts Galadriel's Dismissal unkicked ({W}, tapping Plains) targeting Hill Giant; A does not respond; it resolves.",
+        "Combat damage is dealt."
+      ],
+      "variants": [
+        {
+          "label": "attacker_phases_out",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Hill Giant phases out and is removed from combat. B's Grizzly Bears takes no damage and Hill Giant deals none; both players are at 20. Hill Giant phases back in during A's next untap step."
+        },
+        {
+          "label": "bystander_phases_out",
+          "polarity": "does_not_fire",
+          "delta": "Galadriel's Dismissal targets Elite Vanguard, which is not in combat, instead of Hill Giant.",
+          "expected": "Elite Vanguard phases out. Hill Giant stays in combat, blocked: it deals 3 damage to Grizzly Bears, which is destroyed, and takes 2 damage. Both players are at 20."
+        }
+      ],
+      "cards": [
+        "Hill Giant",
+        "Elite Vanguard",
+        "Grizzly Bears",
+        "Plains",
+        "Galadriel's Dismissal"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "506.4-5",
+      "rules": [
+        "506.4"
+      ],
+      "title": "An attacking creature that stops being a creature is removed from combat",
+      "record_kind": "combat",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Opalescence",
+            {
+              "card": "Sylvan Library",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            },
+            "Plains",
+            "Plains"
+          ]
+        },
+        "hand": {
+          "B": [
+            "Disenchant"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Opalescence makes each other non-Aura enchantment a creature with power and toughness equal to its mana value, so Sylvan Library (mana value 2) is a 2/2 enchantment creature."
+      },
+      "decisions": [
+        "A attacks B with Sylvan Library.",
+        "B blocks with Grizzly Bears.",
+        "In the declare blockers step B casts Disenchant ({1}{W}, tapping both Plains) targeting Opalescence; A does not respond; it resolves.",
+        "Combat damage is dealt."
+      ],
+      "variants": [
+        {
+          "label": "creature_status_lost",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Opalescence is destroyed, Sylvan Library is no longer a creature and is removed from combat. It deals no combat damage and stays on the battlefield; B's Grizzly Bears takes no damage and stays."
+        },
+        {
+          "label": "still_creature",
+          "polarity": "does_not_fire",
+          "delta": "B does not cast Disenchant.",
+          "expected": "Sylvan Library (2/2) and Grizzly Bears (2/2) deal 2 damage to each other; both are destroyed and go to their owners' graveyards."
+        }
+      ],
+      "cards": [
+        "Opalescence",
+        "Sylvan Library",
+        "Grizzly Bears",
+        "Plains",
+        "Disenchant"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "506.4a-1",
+      "rules": [
+        "506.4a"
+      ],
+      "title": "An effect that would have kept a creature from attacking does not remove it once it is declared as an attacker",
+      "record_kind": "combat",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Hill Giant",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            "Plains"
+          ]
+        },
+        "hand": {
+          "B": [
+            "Off Balance"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A attacks B with Hill Giant.",
+        "In the declare attackers step, after Hill Giant is declared as an attacker, B casts Off Balance targeting Hill Giant, tapping Plains; it resolves.",
+        "B declares no blockers (B has no creatures); combat damage is dealt."
+      ],
+      "variants": [
+        {
+          "label": "cast_after_declaration",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Hill Giant stays an attacking creature although it now can't attack, and deals 3 combat damage to B: B's life is 17."
+        },
+        {
+          "label": "cast_before_declaration",
+          "polarity": "does_not_fire",
+          "delta": "B casts Off Balance in the beginning of combat step, before attackers are declared, so A cannot declare Hill Giant as an attacker.",
+          "expected": "Hill Giant can't attack this turn and is not declared as an attacker. No combat damage is dealt: B's life is 20."
+        }
+      ],
+      "cards": [
+        "Hill Giant",
+        "Plains",
+        "Off Balance"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "506.4a-2",
+      "rules": [
+        "506.4a"
+      ],
+      "title": "An effect that would have kept a creature from blocking does not remove it once it is declared as a blocker",
+      "record_kind": "combat",
+      "setup": {
+        "active": "A",
+        "step": "declare_attackers",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Hill Giant",
+              "summoning_sick": false
+            },
+            "Plains"
+          ],
+          "B": [
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            }
+          ]
+        },
+        "hand": {
+          "A": [
+            "Off Balance"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A attacks B with Hill Giant.",
+        "B blocks Hill Giant with Grizzly Bears.",
+        "In the declare blockers step A casts Off Balance targeting Grizzly Bears, tapping Plains; it resolves.",
+        "Combat damage is dealt."
+      ],
+      "variants": [
+        {
+          "label": "cast_after_block",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears stays a blocking creature although it now can't block. Hill Giant deals 3 damage to it and it is destroyed; it deals 2 damage to Hill Giant. B's life is 20."
+        },
+        {
+          "label": "cast_before_block",
+          "polarity": "does_not_fire",
+          "delta": "A casts Off Balance in the declare attackers step, before blockers are declared, so B cannot declare Grizzly Bears as a blocker.",
+          "expected": "Grizzly Bears can't block this turn, so B declares no blockers. Hill Giant is unblocked and deals 3 combat damage to B: B's life is 17."
+        }
+      ],
+      "cards": [
+        "Hill Giant",
+        "Plains",
+        "Grizzly Bears",
+        "Off Balance"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "506.4b-1",
+      "rules": [
+        "506.4b"
+      ],
+      "title": "Tapping a declared blocker does not remove it from combat or stop its combat damage",
+      "record_kind": "combat",
+      "setup": {
+        "active": "A",
+        "step": "declare_attackers",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Hill Giant",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            },
+            "Island",
+            "Island"
+          ]
+        },
+        "hand": {
+          "B": [
+            "Icy Blast"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A attacks B with Hill Giant.",
+        "B blocks Hill Giant with Grizzly Bears.",
+        "In the declare blockers step B casts Icy Blast with X=1 ({1}{U}, tapping both Islands) targeting Grizzly Bears; it resolves (no ferocious: B controls no creature with power 4 or greater).",
+        "Combat damage is dealt."
+      ],
+      "variants": [
+        {
+          "label": "tapped_after_block",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears becomes tapped but remains a blocking creature. Combat damage is still dealt: it deals 2 damage to Hill Giant and takes 3, so it is destroyed. B's life is 20."
+        },
+        {
+          "label": "tapped_before_block",
+          "polarity": "does_not_fire",
+          "delta": "B casts Icy Blast in the declare attackers step, before blockers are declared, so tapped Grizzly Bears cannot be declared as a blocker.",
+          "expected": "Grizzly Bears is tapped and can't be declared as a blocker. Hill Giant is unblocked and deals 3 combat damage to B: B's life is 17."
+        }
+      ],
+      "cards": [
+        "Hill Giant",
+        "Grizzly Bears",
+        "Island",
+        "Icy Blast"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "506.4b-2",
+      "rules": [
+        "506.4b"
+      ],
+      "title": "Tapping a declared attacker that did not tap to attack does not remove it from combat or stop its combat damage",
+      "record_kind": "combat",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Serra Angel",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            "Island",
+            "Island"
+          ]
+        },
+        "hand": {
+          "B": [
+            "Icy Blast"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Serra Angel is a 4/4 with flying and vigilance, so it stays untapped when it attacks."
+      },
+      "decisions": [
+        "A attacks B with Serra Angel; it does not tap (vigilance).",
+        "In the declare attackers step, after Serra Angel is declared, B casts Icy Blast with X=1 ({1}{U}, tapping both Islands) targeting Serra Angel; it resolves.",
+        "B has no blockers; combat damage is dealt."
+      ],
+      "variants": [
+        {
+          "label": "tapped_after_declaration",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Serra Angel becomes tapped but remains an attacking creature and deals 4 combat damage to B: B's life is 16."
+        },
+        {
+          "label": "tapped_before_declaration",
+          "polarity": "does_not_fire",
+          "delta": "B casts Icy Blast in the beginning of combat step, before attackers are declared, so tapped Serra Angel cannot be declared as an attacker.",
+          "expected": "Serra Angel is tapped and can't be declared as an attacker. No combat damage is dealt: B's life is 20."
+        }
+      ],
+      "cards": [
+        "Serra Angel",
+        "Island",
+        "Icy Blast"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "506.4c-1",
+      "rules": [
+        "506.4c"
+      ],
+      "title": "An attacker whose planeswalker target left combat keeps attacking, may be blocked, and deals no damage if unblocked",
+      "record_kind": "combat",
+      "setup": {
+        "active": "A",
+        "step": "declare_attackers",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Hill Giant",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            },
+            {
+              "card": "Jace Beleren",
+              "counters": {
+                "loyalty": 3
+              }
+            },
+            "Mountain"
+          ]
+        },
+        "hand": {
+          "B": [
+            "Lightning Bolt"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A attacks Jace Beleren with Hill Giant.",
+        "In the declare attackers step B casts Lightning Bolt targeting Jace Beleren, tapping Mountain; it resolves and Jace Beleren goes to B's graveyard.",
+        "B declares no blockers; combat damage is dealt."
+      ],
+      "variants": [
+        {
+          "label": "unblocked",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Jace Beleren (loyalty 3) is destroyed by 3 damage and leaves combat. Hill Giant remains an attacking creature but attacks nothing; unblocked, it deals no combat damage. B's life is 20 and Grizzly Bears is undamaged."
+        },
+        {
+          "label": "planeswalker_stays",
+          "polarity": "does_not_fire",
+          "delta": "B does not cast Lightning Bolt.",
+          "expected": "Hill Giant is unblocked and deals 3 combat damage to Jace Beleren: loyalty 0, so it goes to B's graveyard. B's life is 20."
+        },
+        {
+          "label": "blocked",
+          "polarity": "fires",
+          "delta": "B blocks Hill Giant with Grizzly Bears.",
+          "expected": "Jace Beleren is destroyed. Hill Giant remains an attacking creature and is blocked: it deals 3 damage to Grizzly Bears, which is destroyed, and takes 2 damage. B's life is 20."
+        }
+      ],
+      "cards": [
+        "Hill Giant",
+        "Grizzly Bears",
+        "Jace Beleren",
+        "Mountain",
+        "Lightning Bolt"
+      ],
+      "forge_notes": "Forge may drop the attacker from the attackers list when its defender leaves; the rule says it stays an attacking creature."
+    },
+    {
+      "id": "506.8a-1",
+      "rules": [
+        "506.8a"
+      ],
+      "title": "A spell castable only before attackers are declared cannot be cast once the declare attackers step has begun",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "declare_attackers",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            },
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Master Warcraft"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Master Warcraft ({2}{R/W}{R/W}) can be cast only before attackers are declared."
+      },
+      "decisions": [
+        "A attacks B with Grizzly Bears.",
+        "In the declare attackers step, A's casting Master Warcraft with the four Mountains is queried."
+      ],
+      "variants": [
+        {
+          "label": "after_declaration",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Casting Master Warcraft is illegal (can_play false): the declare attackers step has begun."
+        },
+        {
+          "label": "before_declaration",
+          "polarity": "does_not_fire",
+          "delta": "The query is made in the beginning of combat step, before the declare attackers step begins.",
+          "expected": "Casting Master Warcraft is legal (can_play true)."
+        },
+        {
+          "label": "no_attackers_declared",
+          "polarity": "fires",
+          "delta": "A declares no attackers (the query is still made in the declare attackers step).",
+          "expected": "Casting Master Warcraft is illegal (can_play false) even though no attacker was declared: the declare attackers step has begun."
+        }
+      ],
+      "cards": [
+        "Grizzly Bears",
+        "Mountain",
+        "Master Warcraft"
+      ],
+      "forge_notes": "In the no_attackers_declared variant Forge may skip the declare attackers step's priority entirely, leaving no verdict to record."
+    },
+    {
+      "id": "506.8b-1",
+      "rules": [
+        "506.8b"
+      ],
+      "title": "A spell castable only before blockers are declared cannot be cast once the declare blockers step has begun, whether or not any blocker was declared",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "declare_blockers",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            },
+            "Mountain",
+            "Mountain"
+          ],
+          "B": [
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            }
+          ]
+        },
+        "hand": {
+          "A": [
+            "Gorilla War Cry"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Gorilla War Cry can be cast only during combat before blockers are declared. A attacked B with Grizzly Bears; B declared no blockers."
+      },
+      "decisions": [
+        "A's casting Gorilla War Cry ({1}{R}, tapping both Mountains) is queried."
+      ],
+      "variants": [
+        {
+          "label": "blockers_step_begun",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Casting Gorilla War Cry is illegal (can_play false): the declare blockers step has begun, although B declared no blockers."
+        },
+        {
+          "label": "before_blockers_step",
+          "polarity": "does_not_fire",
+          "delta": "The query is made in the declare attackers step, after Grizzly Bears is declared as an attacker.",
+          "expected": "Casting Gorilla War Cry is legal (can_play true)."
+        }
+      ],
+      "cards": [
+        "Grizzly Bears",
+        "Mountain",
+        "Gorilla War Cry"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "506.8b-2",
+      "rules": [
+        "506.8b"
+      ],
+      "title": "A spell castable only after blockers are declared can be cast in the declare blockers step even if no blocker was declared",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "declare_attackers",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            },
+            "Mountain",
+            "Mountain"
+          ],
+          "B": [
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            }
+          ]
+        },
+        "hand": {
+          "A": [
+            "Chaotic Strike"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Chaotic Strike can be cast only during combat after blockers are declared. A attacks B with Grizzly Bears; B will declare no blockers."
+      },
+      "decisions": [
+        "A attacks B with Grizzly Bears.",
+        "In the declare attackers step, A's casting Chaotic Strike ({1}{R}, tapping both Mountains) targeting A's Grizzly Bears is queried."
+      ],
+      "variants": [
+        {
+          "label": "before_blockers",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Casting Chaotic Strike is illegal (can_play false): the declare blockers step has not begun."
+        },
+        {
+          "label": "after_blockers_none_declared",
+          "polarity": "does_not_fire",
+          "delta": "B declares no blockers and the query is made in the declare blockers step.",
+          "expected": "Casting Chaotic Strike is legal (can_play true), although no blocker was declared."
+        }
+      ],
+      "cards": [
+        "Grizzly Bears",
+        "Mountain",
+        "Chaotic Strike"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "506.8c-1",
+      "rules": [
+        "506.8c"
+      ],
+      "title": "A spell castable only during combat can be cast in any combat phase of a turn with several",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            },
+            "Plains",
+            "Plains",
+            {
+              "card": "Mountain",
+              "tapped": true
+            },
+            {
+              "card": "Mountain",
+              "tapped": true
+            },
+            {
+              "card": "Mountain",
+              "tapped": true
+            },
+            {
+              "card": "Mountain",
+              "tapped": true
+            }
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Mandate of Peace"
+          ]
+        },
+        "graveyard": {
+          "A": [
+            "Relentless Assault"
+          ]
+        },
+        "library": {},
+        "exile": {},
+        "notes": "A cast Relentless Assault in main1 this turn, so the turn has an additional combat phase and an additional main phase after main1, followed by the regular combat phase. The step given is the beginning of combat of the regular, second combat phase."
+      },
+      "decisions": [
+        "A's casting Mandate of Peace ({1}{W}, tapping both Plains) is queried."
+      ],
+      "variants": [
+        {
+          "label": "second_combat_phase",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Casting Mandate of Peace is legal (can_play true): it is combat, and the spell can be cast in any combat phase of the turn."
+        },
+        {
+          "label": "additional_main_phase",
+          "polarity": "does_not_fire",
+          "delta": "The query is made in the additional main phase between the two combat phases instead of the second combat phase's beginning of combat step.",
+          "expected": "Casting Mandate of Peace is illegal (can_play false): it is not combat."
+        }
+      ],
+      "cards": [
+        "Grizzly Bears",
+        "Plains",
+        "Mountain",
+        "Mandate of Peace",
+        "Relentless Assault"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "506.8d-1",
+      "rules": [
+        "506.8d"
+      ],
+      "title": "A spell castable only before attackers are declared can be cast only before the first combat phase of the turn",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            },
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            {
+              "card": "Mountain",
+              "tapped": true
+            },
+            {
+              "card": "Mountain",
+              "tapped": true
+            },
+            {
+              "card": "Mountain",
+              "tapped": true
+            },
+            {
+              "card": "Mountain",
+              "tapped": true
+            }
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Master Warcraft"
+          ]
+        },
+        "graveyard": {
+          "A": [
+            "Relentless Assault"
+          ]
+        },
+        "library": {},
+        "exile": {},
+        "notes": "A cast Relentless Assault in main1 this turn (paying with the four tapped Mountains), so the turn has an additional combat phase right after main1, an additional main phase, and then the regular combat phase. The step given is the beginning of combat of the regular, second combat phase. Master Warcraft has no 'during combat' wording."
+      },
+      "decisions": [
+        "A's casting Master Warcraft with four untapped Mountains is queried."
+      ],
+      "variants": [
+        {
+          "label": "second_combat_phase",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Casting Master Warcraft is illegal (can_play false): the first combat phase of the turn has already passed its declare attackers step."
+        },
+        {
+          "label": "first_combat_phase",
+          "polarity": "does_not_fire",
+          "delta": "The query is made in the beginning of combat step of the additional, first combat phase.",
+          "expected": "Casting Master Warcraft is legal (can_play true)."
+        }
+      ],
+      "cards": [
+        "Grizzly Bears",
+        "Mountain",
+        "Master Warcraft",
+        "Relentless Assault"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "506.8e-1",
+      "rules": [
+        "506.8e"
+      ],
+      "title": "When no attacker is declared, a spell castable only before blockers are declared can be cast only until the declare attackers step ends",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "end_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            },
+            "Mountain",
+            "Mountain"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Gorilla War Cry"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "A declared no attackers this combat, so the declare blockers and combat damage steps were skipped."
+      },
+      "decisions": [
+        "A declares no attackers.",
+        "In the end of combat step, A's casting Gorilla War Cry ({1}{R}, tapping both Mountains) is queried."
+      ],
+      "variants": [
+        {
+          "label": "end_of_combat",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Casting Gorilla War Cry is illegal (can_play false): the declare attackers step has ended and no declare blockers step exists to cast it before."
+        },
+        {
+          "label": "declare_attackers_step",
+          "polarity": "does_not_fire",
+          "delta": "The query is made in the declare attackers step, after A declared no attackers, instead of the end of combat step.",
+          "expected": "Casting Gorilla War Cry is legal (can_play true)."
+        }
+      ],
+      "cards": [
+        "Grizzly Bears",
+        "Mountain",
+        "Gorilla War Cry"
+      ],
+      "forge_notes": "Only the first sentence of 506.8e is illustrated. The second sentence (a skipped combat phase leaves casting possible only before the precombat main phase ends) gives the same verdicts as the ordinary 'before attackers are declared' case in every position, so no separate variant tells it apart. If Forge skips the declare attackers step's priority when nobody attacks, the declare_attackers_step verdict is absent."
+    },
+    {
+      "id": "506.8f-1",
+      "rules": [
+        "506.8f"
+      ],
+      "title": "A spell castable only during combat after blockers are declared cannot be cast when the declare blockers step is skipped",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "end_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            },
+            "Mountain",
+            "Mountain"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Chaotic Strike"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "A declared no attackers this combat, so the declare blockers and combat damage steps were skipped."
+      },
+      "decisions": [
+        "A's casting Chaotic Strike ({1}{R}, tapping both Mountains) targeting Grizzly Bears is queried."
+      ],
+      "variants": [
+        {
+          "label": "blockers_step_skipped",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Casting Chaotic Strike is illegal (can_play false) during this combat phase."
+        },
+        {
+          "label": "blockers_step_happens",
+          "polarity": "does_not_fire",
+          "delta": "A attacks B with Grizzly Bears instead of declaring no attackers, so the declare blockers step happens (B declares no blockers); the query is made in that step.",
+          "expected": "Casting Chaotic Strike is legal (can_play true)."
+        }
+      ],
+      "cards": [
+        "Grizzly Bears",
+        "Mountain",
+        "Chaotic Strike"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "506.8g-1",
+      "rules": [
+        "506.8g"
+      ],
+      "title": "A 'before attackers are declared' timing restriction applies to an activated ability",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "declare_attackers",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Apprentice Sorcerer",
+              "summoning_sick": false
+            },
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            }
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Apprentice Sorcerer: {T}: deals 1 damage to any target. Activate only during your turn, before attackers are declared. A attacked B with Grizzly Bears."
+      },
+      "decisions": [
+        "A's activating Apprentice Sorcerer targeting B is queried."
+      ],
+      "variants": [
+        {
+          "label": "after_attackers",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Activating Apprentice Sorcerer is illegal (can_play false): the declare attackers step has begun."
+        },
+        {
+          "label": "before_combat",
+          "polarity": "does_not_fire",
+          "delta": "The query is made in main1, before combat.",
+          "expected": "Activating Apprentice Sorcerer is legal (can_play true)."
+        }
+      ],
+      "cards": [
+        "Apprentice Sorcerer",
+        "Grizzly Bears"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "506.8g-2",
+      "rules": [
+        "506.8g"
+      ],
+      "title": "A 'during combat' timing restriction applies to an activated ability",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Jade Statue",
+            "Mountain",
+            "Mountain"
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Jade Statue: {2}: becomes a 3/6 Golem artifact creature until end of combat. Activate only during combat."
+      },
+      "decisions": [
+        "A's activating Jade Statue ({2}, tapping both Mountains) is queried."
+      ],
+      "variants": [
+        {
+          "label": "main_phase",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Activating Jade Statue is illegal (can_play false): it is not combat."
+        },
+        {
+          "label": "beginning_of_combat",
+          "polarity": "does_not_fire",
+          "delta": "The query is made in the beginning of combat step.",
+          "expected": "Activating Jade Statue is legal (can_play true)."
+        }
+      ],
+      "cards": [
+        "Jade Statue",
+        "Mountain"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

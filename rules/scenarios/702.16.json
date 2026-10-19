@@ -1,0 +1,910 @@
+{
+  "unit": "702.16",
+  "verified": true,
+  "review": [
+    "702.16n-1: the variant cast Gods Willing (white) on Grizzly Bears, which already had protection from white from Pledge of Loyalty, so the cast was illegal; the second protection now comes from equipping the colorless Sword of Light and Shadow, with a fourth Plains for the equip cost.",
+    "702.16k-1: noted that True-Name Nemesis now chooses any player (Forge ChoosePlayer with Choices$ Player), which makes the protection-from-B variants of 702.16k-1/2/3 reachable; no outcome change."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.16b-1",
+      "rules": [
+        "702.16b"
+      ],
+      "title": "A creature with protection cannot be the target of spells with the stated quality",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Mountain"
+          ],
+          "B": [
+            "Black Knight"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Swords to Plowshares",
+            "Lightning Bolt"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A attempts to cast Swords to Plowshares targeting Black Knight, tapping Plains."
+      ],
+      "variants": [
+        {
+          "label": "white_spell",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Black Knight (protection from white) is not a legal target for Swords to Plowshares (white); the cast is illegal."
+        },
+        {
+          "label": "red_spell",
+          "polarity": "does_not_fire",
+          "delta": "A attempts to cast Lightning Bolt targeting Black Knight, tapping Mountain, instead.",
+          "expected": "Black Knight is a legal target for Lightning Bolt (red); the cast is legal."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Mountain",
+        "Black Knight",
+        "Swords to Plowshares",
+        "Lightning Bolt"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.16b-2",
+      "rules": [
+        "702.16b"
+      ],
+      "title": "A creature with protection cannot be the target of abilities from sources with the stated quality",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Master Decoy",
+              "summoning_sick": false
+            },
+            {
+              "card": "Prodigal Sorcerer",
+              "summoning_sick": false
+            },
+            "Plains"
+          ],
+          "B": [
+            "Black Knight"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A attempts to activate Master Decoy's tap ability targeting Black Knight, paying W with Plains."
+      ],
+      "variants": [
+        {
+          "label": "white_source",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Black Knight (protection from white) is not a legal target for Master Decoy's ability (white source); the activation is illegal."
+        },
+        {
+          "label": "blue_source",
+          "polarity": "does_not_fire",
+          "delta": "A attempts to activate Prodigal Sorcerer's ability targeting Black Knight instead.",
+          "expected": "Black Knight is a legal target for Prodigal Sorcerer's ability (blue source); the activation is legal."
+        }
+      ],
+      "cards": [
+        "Master Decoy",
+        "Prodigal Sorcerer",
+        "Plains",
+        "Black Knight"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.16c-1",
+      "rules": [
+        "702.16c"
+      ],
+      "title": "An Aura of the stated quality is put into the graveyard when its enchanted permanent gains protection",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "B",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Pacifism",
+              "attached_to": "Grizzly Bears"
+            }
+          ],
+          "B": [
+            "Grizzly Bears",
+            "Plains"
+          ]
+        },
+        "hand": {
+          "B": [
+            "Gods Willing"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "B": [
+            "Forest"
+          ]
+        },
+        "exile": {},
+        "notes": "Pacifism is controlled by A and is attached to B's Grizzly Bears."
+      },
+      "decisions": [
+        "B casts Gods Willing targeting Grizzly Bears, tapping Plains, and chooses white.",
+        "Both players pass; Gods Willing resolves, then B scries 1 and keeps Forest on top."
+      ],
+      "variants": [
+        {
+          "label": "choose_white",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears gains protection from white until end of turn. Pacifism (white) is put into A's graveyard in the state-based check."
+        },
+        {
+          "label": "choose_red",
+          "polarity": "does_not_fire",
+          "delta": "B chooses red instead of white.",
+          "expected": "Grizzly Bears gains protection from red until end of turn. Pacifism stays attached to Grizzly Bears."
+        }
+      ],
+      "cards": [
+        "Pacifism",
+        "Grizzly Bears",
+        "Plains",
+        "Gods Willing",
+        "Forest"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.16d-1",
+      "rules": [
+        "702.16d"
+      ],
+      "title": "Equipment of the stated quality becomes unattached from a protected creature but stays on the battlefield",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Grizzly Bears",
+            {
+              "card": "Bonesplitter",
+              "attached_to": "Grizzly Bears"
+            },
+            "Plains",
+            "Plains"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Apostle's Blessing"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Apostle's Blessing targeting Grizzly Bears, paying {1}{W/P} by tapping both Plains, and chooses artifacts.",
+        "Both players pass; Apostle's Blessing resolves."
+      ],
+      "variants": [
+        {
+          "label": "protection_from_artifacts",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Bonesplitter (an artifact) becomes unattached from Grizzly Bears and stays on the battlefield. Grizzly Bears is 2/2."
+        },
+        {
+          "label": "protection_from_green",
+          "polarity": "does_not_fire",
+          "delta": "A chooses green instead of artifacts.",
+          "expected": "Bonesplitter stays attached to Grizzly Bears. Grizzly Bears is 4/2."
+        }
+      ],
+      "cards": [
+        "Grizzly Bears",
+        "Bonesplitter",
+        "Plains",
+        "Apostle's Blessing"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.16e-1",
+      "rules": [
+        "702.16e"
+      ],
+      "title": "Damage from a source with the stated quality is prevented for a protected creature",
+      "record_kind": "rewrite",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain"
+          ],
+          "B": [
+            "Burrenton Forge-Tender"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Pyroclasm"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Pyroclasm, tapping both Mountains.",
+        "Both players pass; Pyroclasm resolves. B does not sacrifice Burrenton Forge-Tender."
+      ],
+      "variants": [
+        {
+          "label": "protected_creature",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The 2 damage Pyroclasm (red) would deal to Burrenton Forge-Tender (protection from red) is prevented. It has no damage marked and stays on the battlefield."
+        },
+        {
+          "label": "unprotected_creature",
+          "polarity": "does_not_fire",
+          "delta": "B's creature is Savannah Lions (white 2/1) instead of Burrenton Forge-Tender.",
+          "expected": "Savannah Lions is dealt 2 damage and is destroyed."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Burrenton Forge-Tender",
+        "Pyroclasm",
+        "Savannah Lions"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.16e-2",
+      "rules": [
+        "702.16e"
+      ],
+      "title": "Combat damage from a source with the stated quality to a protected blocker is prevented",
+      "record_kind": "combat",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Hill Giant",
+              "summoning_sick": false
+            },
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            "Burrenton Forge-Tender"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A attacks player B with Hill Giant.",
+        "B blocks Hill Giant with Burrenton Forge-Tender, without sacrificing it.",
+        "Combat damage is dealt."
+      ],
+      "variants": [
+        {
+          "label": "red_attacker",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Hill Giant's 3 damage to Burrenton Forge-Tender (protection from red) is prevented; it has no damage and survives. Burrenton Forge-Tender deals 1 damage to Hill Giant, which survives."
+        },
+        {
+          "label": "green_attacker",
+          "polarity": "does_not_fire",
+          "delta": "A attacks with Grizzly Bears instead of Hill Giant.",
+          "expected": "Grizzly Bears deals 2 damage to Burrenton Forge-Tender, which is destroyed. Burrenton Forge-Tender deals 1 damage to Grizzly Bears, which survives."
+        }
+      ],
+      "cards": [
+        "Hill Giant",
+        "Grizzly Bears",
+        "Burrenton Forge-Tender"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.16f-1",
+      "rules": [
+        "702.16f"
+      ],
+      "title": "An attacking creature with protection cannot be blocked by creatures with the stated quality",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Black Knight",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            "Savannah Lions",
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A attacks player B with Black Knight.",
+        "B declares Savannah Lions as a blocker of Black Knight."
+      ],
+      "variants": [
+        {
+          "label": "white_blocker",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Declaring Savannah Lions (white) as a blocker of Black Knight (protection from white) is illegal."
+        },
+        {
+          "label": "green_blocker",
+          "polarity": "does_not_fire",
+          "delta": "B declares Grizzly Bears (green) as the blocker instead of Savannah Lions.",
+          "expected": "Declaring Grizzly Bears as a blocker of Black Knight is legal."
+        }
+      ],
+      "cards": [
+        "Black Knight",
+        "Savannah Lions",
+        "Grizzly Bears"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.16j-1",
+      "rules": [
+        "702.16j"
+      ],
+      "title": "A permanent with protection from everything cannot be targeted",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain"
+          ],
+          "B": [
+            "Progenitus",
+            "Hill Giant"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Lightning Bolt"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A attempts to cast Lightning Bolt targeting Progenitus, tapping Mountain."
+      ],
+      "variants": [
+        {
+          "label": "target_progenitus",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Progenitus (protection from everything) is not a legal target for Lightning Bolt; the cast is illegal."
+        },
+        {
+          "label": "target_hill_giant",
+          "polarity": "does_not_fire",
+          "delta": "A attempts to target Hill Giant instead of Progenitus.",
+          "expected": "Hill Giant is a legal target for Lightning Bolt; the cast is legal."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Progenitus",
+        "Hill Giant",
+        "Lightning Bolt"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.16j-2",
+      "rules": [
+        "702.16j"
+      ],
+      "title": "A creature with protection from everything cannot be blocked",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Progenitus",
+              "summoning_sick": false
+            },
+            {
+              "card": "Hill Giant",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A attacks player B with Progenitus and Hill Giant.",
+        "B declares Grizzly Bears as a blocker of Progenitus."
+      ],
+      "variants": [
+        {
+          "label": "block_progenitus",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Declaring Grizzly Bears as a blocker of Progenitus is illegal."
+        },
+        {
+          "label": "block_hill_giant",
+          "polarity": "does_not_fire",
+          "delta": "B declares Grizzly Bears as a blocker of Hill Giant instead of Progenitus.",
+          "expected": "Declaring Grizzly Bears as a blocker of Hill Giant is legal."
+        }
+      ],
+      "cards": [
+        "Progenitus",
+        "Hill Giant",
+        "Grizzly Bears"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.16j-3",
+      "rules": [
+        "702.16j"
+      ],
+      "title": "All damage dealt to a creature with protection from everything is prevented",
+      "record_kind": "rewrite",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain"
+          ],
+          "B": [
+            "Progenitus"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Pyroclasm"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Pyroclasm, tapping both Mountains.",
+        "Both players pass; Pyroclasm resolves."
+      ],
+      "variants": [
+        {
+          "label": "progenitus",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The 2 damage to Progenitus is prevented; it has no damage marked."
+        },
+        {
+          "label": "hill_giant",
+          "polarity": "does_not_fire",
+          "delta": "B's creature is Hill Giant instead of Progenitus.",
+          "expected": "Hill Giant is dealt 2 damage and has 2 damage marked; it stays on the battlefield."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Progenitus",
+        "Pyroclasm",
+        "Hill Giant"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.16k-1",
+      "rules": [
+        "702.16k"
+      ],
+      "title": "A creature with protection from a player cannot be targeted by that player's spells",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain"
+          ],
+          "B": [
+            "True-Name Nemesis"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Lightning Bolt"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "B chose player A as True-Name Nemesis entered the battlefield."
+      },
+      "decisions": [
+        "A attempts to cast Lightning Bolt targeting True-Name Nemesis, tapping Mountain."
+      ],
+      "variants": [
+        {
+          "label": "protected_from_A",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "True-Name Nemesis (protection from player A) is not a legal target for A's Lightning Bolt; the cast is illegal."
+        },
+        {
+          "label": "protected_from_B",
+          "polarity": "does_not_fire",
+          "delta": "True-Name Nemesis has protection from player B instead.",
+          "expected": "True-Name Nemesis is a legal target for A's Lightning Bolt; the cast is legal."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "True-Name Nemesis",
+        "Lightning Bolt"
+      ],
+      "forge_notes": "The chosen player is a setup fact; B chose A in the base. Current Oracle and Forge let True-Name Nemesis's controller choose any player, so the protected_from_B variant is reachable."
+    },
+    {
+      "id": "702.16k-2",
+      "rules": [
+        "702.16k"
+      ],
+      "title": "A creature with protection from a player cannot be blocked by that player's creatures",
+      "record_kind": "playability",
+      "setup": {
+        "active": "B",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Grizzly Bears"
+          ],
+          "B": [
+            {
+              "card": "True-Name Nemesis",
+              "summoning_sick": false
+            }
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "B chose player A as True-Name Nemesis entered the battlefield."
+      },
+      "decisions": [
+        "B attacks player A with True-Name Nemesis.",
+        "A declares Grizzly Bears as a blocker of True-Name Nemesis."
+      ],
+      "variants": [
+        {
+          "label": "protected_from_A",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Declaring A's Grizzly Bears as a blocker of True-Name Nemesis (protection from player A) is illegal."
+        },
+        {
+          "label": "protected_from_B",
+          "polarity": "does_not_fire",
+          "delta": "True-Name Nemesis has protection from player B instead.",
+          "expected": "Declaring A's Grizzly Bears as a blocker of True-Name Nemesis is legal."
+        }
+      ],
+      "cards": [
+        "Grizzly Bears",
+        "True-Name Nemesis"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.16k-3",
+      "rules": [
+        "702.16k"
+      ],
+      "title": "Damage from a player's sources to a creature with protection from that player is prevented",
+      "record_kind": "rewrite",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain"
+          ],
+          "B": [
+            "True-Name Nemesis"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Pyroclasm"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "B chose player A as True-Name Nemesis entered the battlefield."
+      },
+      "decisions": [
+        "A casts Pyroclasm, tapping both Mountains.",
+        "Both players pass; Pyroclasm resolves."
+      ],
+      "variants": [
+        {
+          "label": "protected_from_A",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The 2 damage from A's Pyroclasm to True-Name Nemesis (3/1) is prevented; it has no damage marked and stays on the battlefield."
+        },
+        {
+          "label": "protected_from_B",
+          "polarity": "does_not_fire",
+          "delta": "True-Name Nemesis has protection from player B instead.",
+          "expected": "True-Name Nemesis is dealt 2 damage and is destroyed."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "True-Name Nemesis",
+        "Pyroclasm"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.16n-1",
+      "rules": [
+        "702.16n"
+      ],
+      "title": "An Aura that grants protection and says it does not remove itself stays attached, but another instance of the same protection removes it",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Grizzly Bears",
+            "Sword of Light and Shadow",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Pledge of Loyalty"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Sword of Light and Shadow is on the battlefield unattached."
+      },
+      "decisions": [
+        "A casts Pledge of Loyalty targeting Grizzly Bears, tapping two Plains. Both players pass; Pledge of Loyalty resolves and attaches."
+      ],
+      "variants": [
+        {
+          "label": "pledge_only",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears has protection from white and from green through Pledge of Loyalty. Pledge of Loyalty (white) stays attached."
+        },
+        {
+          "label": "second_protection",
+          "polarity": "does_not_fire",
+          "delta": "After Pledge of Loyalty resolves, A activates Sword of Light and Shadow's equip ability targeting Grizzly Bears, tapping the other two Plains; it resolves.",
+          "expected": "Sword of Light and Shadow becomes attached to Grizzly Bears (4/4, protection from white and from black). Pledge of Loyalty is put into A's graveyard in the state-based check."
+        }
+      ],
+      "cards": [
+        "Grizzly Bears",
+        "Sword of Light and Shadow",
+        "Plains",
+        "Pledge of Loyalty"
+      ],
+      "forge_notes": "Pledge of Loyalty gives protection from the colors of permanents its controller controls; with Pledge (white), Grizzly Bears (green) and the colorless Sword and Plains that is white and green."
+    },
+    {
+      "id": "702.16p-1",
+      "rules": [
+        "702.16p"
+      ],
+      "title": "Benevolent Blessing's protection does not remove Auras its controller already attached",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Grizzly Bears",
+            {
+              "card": "Holy Strength",
+              "attached_to": "Grizzly Bears"
+            },
+            "Plains",
+            "Plains"
+          ],
+          "B": [
+            {
+              "card": "Pacifism",
+              "attached_to": "Grizzly Bears"
+            }
+          ]
+        },
+        "hand": {
+          "A": [
+            "Benevolent Blessing"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Pacifism is controlled by B and attached to A's Grizzly Bears."
+      },
+      "decisions": [
+        "A casts Benevolent Blessing targeting Grizzly Bears, tapping both Plains, and chooses white as it enters.",
+        "Both players pass; Benevolent Blessing resolves."
+      ],
+      "variants": [
+        {
+          "label": "choose_white",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Holy Strength (A's white Aura) and Benevolent Blessing stay attached to Grizzly Bears (3/4). Pacifism (B's white Aura) is put into B's graveyard."
+        },
+        {
+          "label": "choose_green",
+          "polarity": "does_not_fire",
+          "delta": "A chooses green instead of white.",
+          "expected": "Holy Strength, Benevolent Blessing and Pacifism all stay attached to Grizzly Bears."
+        }
+      ],
+      "cards": [
+        "Grizzly Bears",
+        "Holy Strength",
+        "Plains",
+        "Pacifism",
+        "Benevolent Blessing"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

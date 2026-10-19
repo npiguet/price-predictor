@@ -1,0 +1,352 @@
+{
+  "unit": "208",
+  "verified": true,
+  "review": [
+    "208.2a-1: variant opponent_swamp changed two facts (added B's Swamp, restated A's) and left the outcome identical to the base; replaced by swamp_controlled_by_b, which moves one Swamp to B and makes Nightmare 1/1.",
+    "208.2b-1: countered variant changed two facts (Counterspell and A not casting Shock) and did not show the rule's off-battlefield clause; delta is now Counterspell alone and expected records the 0/0 in the graveyard.",
+    "208.4b-1: copy variant's delta also restated that Giant Growth is not cast (already true of the base) and left the copy unreachable; delta now names only the earlier copy activation, and the exiled Juggernaut is placed in A's exile."
+  ],
+  "skipped": [
+    {
+      "id": "208.5",
+      "reason": "cannot be illustrated: every Forge effect that makes a permanent a creature also sets its power and toughness (animation effects, Opalescence-style effects, crew and manifest all supply values), so a creature with no value for power or toughness cannot be reached in a two-player Forge game"
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "208.2a-1",
+      "rules": [
+        "208.2a"
+      ],
+      "title": "A characteristic-defining ability sets power and toughness from the board",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Swamp",
+            "Swamp",
+            "Mountain",
+            "Nightmare"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Shock"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Nightmare's power and toughness are each equal to the number of Swamps its controller controls."
+      },
+      "decisions": [
+        "A casts Shock targeting Nightmare, tapping Mountain.",
+        "Both players pass; Shock resolves."
+      ],
+      "variants": [
+        {
+          "label": "two_swamps",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Nightmare is a 2/2 (two Swamps). Shock deals 2 damage and Nightmare moves to A's graveyard in the state-based check."
+        },
+        {
+          "label": "three_swamps",
+          "polarity": "does_not_fire",
+          "delta": "A controls a third Swamp.",
+          "expected": "Nightmare is a 3/3. Shock deals 2 damage and Nightmare stays on the battlefield with 2 damage marked."
+        },
+        {
+          "label": "swamp_controlled_by_b",
+          "polarity": "other",
+          "delta": "B controls one of the two Swamps instead of A.",
+          "expected": "Nightmare is a 1/1 (one Swamp under A's control). Shock deals 2 damage and Nightmare moves to A's graveyard in the state-based check."
+        }
+      ],
+      "cards": [
+        "Swamp",
+        "Mountain",
+        "Nightmare",
+        "Shock"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "208.2b-1",
+      "rules": [
+        "208.2b"
+      ],
+      "title": "A creature that enters as one of several P/T values has the chosen values",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Mountain"
+          ],
+          "B": [
+            "Island",
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Aquamorph Entity",
+            "Shock"
+          ],
+          "B": [
+            "Counterspell"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Aquamorph Entity, tapping four Islands.",
+        "B passes priority; Aquamorph Entity resolves.",
+        "As it enters, A chooses to make it 5/1.",
+        "A casts Shock targeting Aquamorph Entity, tapping Mountain.",
+        "B passes; Shock resolves."
+      ],
+      "variants": [
+        {
+          "label": "chosen_5_1",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Aquamorph Entity enters as a 5/1. Shock deals 2 damage and it moves to A's graveyard in the state-based check."
+        },
+        {
+          "label": "chosen_1_5",
+          "polarity": "other",
+          "delta": "A chooses 1/5 as it enters.",
+          "expected": "Aquamorph Entity enters as a 1/5. Shock deals 2 damage and it stays on the battlefield with 2 damage marked."
+        },
+        {
+          "label": "countered",
+          "polarity": "does_not_fire",
+          "delta": "B responds to Aquamorph Entity with Counterspell, tapping two Islands.",
+          "expected": "Aquamorph Entity is countered and moves to A's graveyard without entering, so no P/T choice is made; in the graveyard its power and toughness are each 0. Shock is not cast at it, since it is no longer on the battlefield."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Mountain",
+        "Aquamorph Entity",
+        "Shock",
+        "Counterspell"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "208.3-1",
+      "rules": [
+        "208.3"
+      ],
+      "title": "An uncrewed Vehicle has no power or toughness on the battlefield",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Smuggler's Copter",
+            "Grizzly Bears"
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Smuggler's Copter has 3/3 printed on it."
+      },
+      "decisions": [
+        "No actions are taken; the continuous state is read with the Copter uncrewed."
+      ],
+      "variants": [
+        {
+          "label": "uncrewed",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Smuggler's Copter is an artifact, not a creature, and has no power or toughness."
+        },
+        {
+          "label": "crewed",
+          "polarity": "does_not_fire",
+          "delta": "A has crewed the Copter with Grizzly Bears and the crew ability has resolved.",
+          "expected": "Smuggler's Copter is an artifact creature with power 3 and toughness 3 until end of turn."
+        },
+        {
+          "label": "in_graveyard",
+          "polarity": "other",
+          "delta": "Smuggler's Copter is in A's graveyard instead of on the battlefield.",
+          "expected": "Smuggler's Copter in the graveyard has its printed power 3 and toughness 3."
+        }
+      ],
+      "cards": [
+        "Smuggler's Copter",
+        "Grizzly Bears"
+      ],
+      "forge_notes": "The graveyard variant moves the Copter, and Grizzly Bears stays on the battlefield; the crewed variant adds the crew activation to the decisions."
+    },
+    {
+      "id": "208.3a-1",
+      "rules": [
+        "208.3a"
+      ],
+      "title": "A pump aimed at a Vehicle before it is a creature applies once it becomes one",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Smuggler's Copter",
+            "Veteran Motorist",
+            "Grizzly Bears"
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Veteran Motorist: whenever it crews a Vehicle, that Vehicle gets +1/+1 until end of turn."
+      },
+      "decisions": [
+        "A activates Smuggler's Copter's crew ability, tapping Veteran Motorist.",
+        "Veteran Motorist's crew trigger goes on the stack above the crew ability.",
+        "Both players pass; the trigger resolves while the Copter is not yet a creature.",
+        "Both players pass; the crew ability resolves."
+      ],
+      "variants": [
+        {
+          "label": "motorist_crews",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Smuggler's Copter becomes an artifact creature and is a 4/4 until end of turn (printed 3/3 plus the +1/+1 created while it was not a creature)."
+        },
+        {
+          "label": "bears_crew",
+          "polarity": "does_not_fire",
+          "delta": "A taps Grizzly Bears to crew instead of Veteran Motorist.",
+          "expected": "No crew trigger occurs. Smuggler's Copter becomes an artifact creature and is a 3/3 until end of turn."
+        }
+      ],
+      "cards": [
+        "Smuggler's Copter",
+        "Veteran Motorist",
+        "Grizzly Bears"
+      ],
+      "forge_notes": "Forge's Pump on a noncreature Vehicle is expected to persist until it becomes a creature; verify the Copter shows 4/4."
+    },
+    {
+      "id": "208.4b-1",
+      "rules": [
+        "208.4b"
+      ],
+      "title": "A base-power check ignores pumps and counts the copied base value",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "declare_attackers",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Curie, Emergent Intelligence",
+              "summoning_sick": false
+            },
+            "Forest"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Giant Growth"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island"
+          ]
+        },
+        "exile": {
+          "A": [
+            "Juggernaut"
+          ]
+        },
+        "notes": "Curie: whenever it deals combat damage to a player, draw cards equal to its base power. Curie is a 1/3."
+      },
+      "decisions": [
+        "A declares Curie, Emergent Intelligence as an attacker against B.",
+        "B declares no blockers.",
+        "Combat damage is dealt.",
+        "Curie's trigger resolves."
+      ],
+      "variants": [
+        {
+          "label": "unmodified",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Curie deals 1 damage; B is at 19. A draws 1 card, Curie's base power."
+        },
+        {
+          "label": "pumped",
+          "polarity": "does_not_fire",
+          "delta": "After blockers, A casts Giant Growth targeting Curie, tapping Forest.",
+          "expected": "Curie is 4/6 and deals 4 damage; B is at 16. A still draws only 1 card, because the +3/+3 does not change base power."
+        },
+        {
+          "label": "copy_of_juggernaut",
+          "polarity": "other",
+          "delta": "Earlier this turn A activated Curie's copy ability, exiling a Juggernaut A controlled, so Curie is a copy of Juggernaut with Curie's draw trigger.",
+          "expected": "Curie, a 5/3 Juggernaut, deals 5 damage; B is at 15. A draws 5 cards, the copied base power."
+        }
+      ],
+      "cards": [
+        "Curie, Emergent Intelligence",
+        "Forest",
+        "Giant Growth",
+        "Island",
+        "Juggernaut"
+      ],
+      "forge_notes": "The copy variant starts from Curie already a copy of Juggernaut (Forge's Clone with AddTriggers keeps the draw trigger, and Count$CardBasePower reads the copied base power); the base setup's exile holds the Juggernaut that activation exiled."
+    }
+  ]
+}

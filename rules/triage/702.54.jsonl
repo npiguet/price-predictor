@@ -1,0 +1,4 @@
+{"id": "702.54", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.54a", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "A permanent with bloodthirst N enters with N +1/+1 counters if an opponent was dealt damage this turn.", "note": ""}
+{"id": "702.54b", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "A permanent with bloodthirst X enters with counters equal to the total damage dealt to opponents this turn.", "note": ""}
+{"id": "702.54c", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "Each instance of bloodthirst applies separately.", "note": ""}

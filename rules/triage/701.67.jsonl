@@ -1,0 +1,4 @@
+{"id": "701.67", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "701.67a", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "Each generic mana of a waterbend cost can be paid by tapping an untapped artifact or creature the player controls.", "note": ""}
+{"id": "701.67b", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "Tapping artifacts and creatures pays only the waterbend cost's generic mana, not other generic mana in the total cost.", "note": ""}
+{"id": "701.67c", "category": "mechanical", "observability": "direct", "record_kinds": ["trigger"], "outcome": "A whenever-you-waterbend trigger fires whenever the player pays a waterbend cost, however it was paid.", "note": ""}

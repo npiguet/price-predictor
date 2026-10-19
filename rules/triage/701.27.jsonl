@@ -1,0 +1,8 @@
+{"id": "701.27", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "701.27a", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution", "continuous"], "outcome": "A double-faced permanent transforms to its other face; a permanent that is not double-faced does not.", "note": ""}
+{"id": "701.27b", "category": "mechanical", "observability": "indirect", "record_kinds": ["trigger"], "outcome": "Transforming does not fire triggers for turning a permanent face up or face down.", "note": ""}
+{"id": "701.27c", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "Transforming a permanent that is not double-faced does nothing.", "note": ""}
+{"id": "701.27d", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "Transforming a permanent whose other face is an instant or sorcery does nothing.", "note": ""}
+{"id": "701.27e", "category": "mechanical", "observability": "indirect", "record_kinds": ["trigger"], "outcome": "A 'transforms into' trigger fires on a transform or convert when the new face has the stated characteristic.", "note": ""}
+{"id": "701.27f", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "A transform instruction from an ability is ignored if the permanent transformed or converted since the ability was put on the stack or created.", "note": ""}
+{"id": "701.27g", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}

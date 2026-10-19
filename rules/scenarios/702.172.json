@@ -1,0 +1,139 @@
+{
+  "unit": "702.172",
+  "verified": true,
+  "review": [],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.172a-1",
+      "rules": [
+        "702.172a"
+      ],
+      "title": "Each chosen spree mode happens and the unchosen mode does not",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            {
+              "card": "Assassin Initiate",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Caught in the Crossfire"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Caught in the Crossfire choosing only the first mode (2 damage to each outlaw creature), paying {R}{R} plus that mode's {1} by tapping three Mountains.",
+        "Both players pass; Caught in the Crossfire resolves."
+      ],
+      "variants": [
+        {
+          "label": "outlaw_only",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Assassin Initiate (a Human Assassin, so an outlaw) is dealt 2 damage and moves to A's graveyard in the state-based check. Grizzly Bears is not an outlaw, is not dealt damage and stays on the battlefield. Three Mountains are tapped."
+        },
+        {
+          "label": "non_outlaw_only",
+          "polarity": "does_not_fire",
+          "delta": "A chooses only the second mode (2 damage to each non-outlaw creature) instead of the first.",
+          "expected": "Grizzly Bears is dealt 2 damage and moves to B's graveyard. Assassin Initiate is not dealt damage and stays on the battlefield. Three Mountains are tapped."
+        },
+        {
+          "label": "both_modes",
+          "polarity": "fires",
+          "delta": "A chooses both modes and pays {R}{R} plus {1} plus {1} by tapping four Mountains.",
+          "expected": "Assassin Initiate and Grizzly Bears are each dealt 2 damage and move to their owners' graveyards. All four Mountains are tapped."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Caught in the Crossfire",
+        "Assassin Initiate",
+        "Grizzly Bears"
+      ],
+      "forge_notes": "Assassin Initiate's activated ability is never used. Outlaw is implemented as a creature-type group in Forge (Creature.Outlaw)."
+    },
+    {
+      "id": "702.172a-2",
+      "rules": [
+        "702.172a"
+      ],
+      "title": "The costs of the chosen spree modes are added to the spell's cost",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Mountain"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Caught in the Crossfire"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A, holding priority in the main phase with three untapped Mountains, considers casting Caught in the Crossfire with one mode chosen."
+      ],
+      "variants": [
+        {
+          "label": "one_mode",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Casting Caught in the Crossfire with one mode is legal: the total cost is {R}{R}{1}, which three Mountains pay."
+        },
+        {
+          "label": "two_modes",
+          "polarity": "does_not_fire",
+          "delta": "A considers choosing both modes instead of one.",
+          "expected": "Casting Caught in the Crossfire with both modes is not legal: the total cost is {R}{R}{1}{1}, which three Mountains cannot pay."
+        },
+        {
+          "label": "no_mode",
+          "polarity": "other",
+          "delta": "A considers choosing no mode instead of one.",
+          "expected": "Casting Caught in the Crossfire with no mode chosen is not legal: a spree spell requires at least one mode."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Caught in the Crossfire"
+      ],
+      "forge_notes": "Forge builds the spree choice as a Charm with MinCharmNum$ 1 and per-mode ModeCost$ values that are added to the spell's cost."
+    }
+  ]
+}

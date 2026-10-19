@@ -1,0 +1,5 @@
+{"id": "701.43", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "701.43a", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "An exerted permanent does not untap during its controller's next untap step.", "note": "Names the choice together with its consequence."}
+{"id": "701.43b", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "Exerting an untapped or already exerted permanent works, and multiple exert effects all expire at the same untap step.", "note": ""}
+{"id": "701.43c", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "An object not on the battlefield cannot be exerted.", "note": ""}
+{"id": "701.43d", "category": "mechanical", "observability": "indirect", "record_kinds": ["trigger"], "outcome": "Exerting as the creature attacks is an optional attack cost, and its linked when-you-do trigger fires only if the creature was exerted.", "note": ""}

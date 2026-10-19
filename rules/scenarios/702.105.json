@@ -1,0 +1,125 @@
+{
+  "unit": "702.105",
+  "verified": true,
+  "review": [],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.105a-1",
+      "rules": [
+        "702.105a"
+      ],
+      "title": "Dethrone triggers when the creature attacks the player with the most life",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "declare_attackers",
+        "life": {
+          "A": 15,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Enraged Revolutionary",
+              "summoning_sick": false
+            }
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Enraged Revolutionary is a 2/1 with dethrone."
+      },
+      "decisions": [
+        "A declares Enraged Revolutionary as an attacker against B.",
+        "Both players pass; the dethrone trigger, if it fired, resolves.",
+        "B declares no blockers; combat damage is dealt."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "B (20 life) has more life than A (15), so dethrone fires: Enraged Revolutionary gets a +1/+1 counter, deals 3 damage and B is at 17."
+        },
+        {
+          "label": "tied",
+          "polarity": "fires",
+          "delta": "B's life total is 15, tied with A's.",
+          "expected": "B is tied for the most life, so dethrone fires: a +1/+1 counter, 3 damage, B is at 12."
+        },
+        {
+          "label": "less-life",
+          "polarity": "does_not_fire",
+          "delta": "B's life total is 14, less than A's 15.",
+          "expected": "Dethrone does not fire. Enraged Revolutionary stays 2/1 with no counter, deals 2 damage and B is at 12."
+        }
+      ],
+      "cards": [
+        "Enraged Revolutionary"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.105b-1",
+      "rules": [
+        "702.105b"
+      ],
+      "title": "Each instance of dethrone triggers separately",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "declare_attackers",
+        "life": {
+          "A": 15,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Enraged Revolutionary",
+              "summoning_sick": false
+            },
+            {
+              "card": "Marchesa, the Black Rose",
+              "summoning_sick": false
+            }
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Enraged Revolutionary (2/1) has dethrone itself; Marchesa, the Black Rose (3/3) gives other creatures A controls dethrone, so Enraged Revolutionary has two instances. Marchesa does not attack."
+      },
+      "decisions": [
+        "A declares only Enraged Revolutionary as an attacker against B.",
+        "Both players pass; the dethrone triggers resolve.",
+        "B declares no blockers; combat damage is dealt."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Two dethrone triggers fire and resolve: Enraged Revolutionary gets two +1/+1 counters (4/3), deals 4 damage and B is at 16."
+        },
+        {
+          "label": "single-instance",
+          "polarity": "does_not_fire",
+          "delta": "Marchesa, the Black Rose is not on the battlefield.",
+          "expected": "One dethrone trigger fires: one +1/+1 counter (3/2), 3 damage and B is at 17."
+        }
+      ],
+      "cards": [
+        "Enraged Revolutionary",
+        "Marchesa, the Black Rose"
+      ],
+      "forge_notes": "Forge may collapse a granted keyword that duplicates the card's own into one instance."
+    }
+  ]
+}

@@ -1,0 +1,990 @@
+{
+  "unit": "303",
+  "verified": true,
+  "review": [
+    "303.4d: skip reason was wrong (Mycosynth Lattice plus March of the Machines turns an Aura into a creature); added scenario 303.4d-1 and removed the skip.",
+    "303.4h: skip reason rewritten to name the CopyPermanent attach effects (Arna Kennerud, Stangg), which copy only permanents already attached.",
+    "303.4i-1 (Retether): Retether chooses the object on resolution under an extra restriction, which is 303.4g (no legal object under the enchant ability and other applicable effects), not 303.4i; renamed 303.4g-2 and moved the attach choice from the variant delta into the decisions.",
+    "303.4i-1: replaced with Academy Researchers, whose effect names the object the Aura enters attached to; Wild Growth versus Holy Strength.",
+    "303.4j-1: Aura Graft says 'another permanent it can enchant', so choosing Black Knight was never a legal choice and the base did not reach 303.4j; switched to Enchantment Alteration (attach to another creature, no can-enchant restriction) and made the minimal pair the identity of the only other creature."
+  ],
+  "skipped": [
+    {
+      "id": "303.4h",
+      "reason": "cannot be illustrated in Forge: every script that puts a card onto the battlefield attached to something (AttachedTo$ on ChangeZone, Token or CopyPermanent) selects Aura, Equipment or Role cards, or copies a permanent that is already attached (Arna Kennerud, Stangg), which can only be an Aura, Equipment or Fortification"
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "303.1-1",
+      "rules": [
+        "303.1"
+      ],
+      "title": "An enchantment can be cast only in a main phase of its controller's turn with an empty stack",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Plains",
+            "Plains",
+            "Mountain"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Glorious Anthem",
+            "Shock"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Both players have 20 life, nobody has cast anything this turn, and A has priority."
+      },
+      "decisions": [
+        "The candidate action is A casting Glorious Anthem from hand, paying {1}{W}{W} with the three Plains.",
+        "Only the legality verdict of the cast is recorded; whether it is legal decides whether A makes it."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Casting Glorious Anthem is legal: can_play is true, because it is A's main phase, A has priority and the stack is empty."
+        },
+        {
+          "label": "combat-step",
+          "polarity": "does_not_fire",
+          "delta": "The step is beginning_of_combat instead of main1.",
+          "expected": "Casting Glorious Anthem is not legal: can_play is false and the card stays in A's hand."
+        },
+        {
+          "label": "opponent-turn",
+          "polarity": "does_not_fire",
+          "delta": "B is the active player in main1 instead of A, and A holds priority after B passes.",
+          "expected": "Casting Glorious Anthem is not legal: can_play is false, because it is not A's turn."
+        },
+        {
+          "label": "stack-not-empty",
+          "polarity": "does_not_fire",
+          "delta": "A first casts Shock targeting B with the Mountain, and A holds priority with Shock still on the stack.",
+          "expected": "Casting Glorious Anthem is not legal: can_play is false while Shock is on the stack, and no mana from the Plains is spent."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Mountain",
+        "Glorious Anthem",
+        "Shock"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "303.2-1",
+      "rules": [
+        "303.2"
+      ],
+      "title": "A resolving enchantment spell enters the battlefield under its controller's control",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Plains",
+            "Plains",
+            "Grizzly Bears"
+          ],
+          "B": [
+            "Island",
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Glorious Anthem"
+          ],
+          "B": [
+            "Counterspell"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Grizzly Bears has been under A's control since before the turn."
+      },
+      "decisions": [
+        "A casts Glorious Anthem, tapping the three Plains.",
+        "A passes priority; B passes priority; Glorious Anthem resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Glorious Anthem moves from the stack to the battlefield under A's control, and Grizzly Bears is a 3/3."
+        },
+        {
+          "label": "countered",
+          "polarity": "does_not_fire",
+          "delta": "After A passes priority B casts Counterspell targeting Glorious Anthem, tapping both Islands, then both players pass.",
+          "expected": "Glorious Anthem is countered and goes from the stack to A's graveyard without entering the battlefield; Counterspell goes to B's graveyard; Grizzly Bears stays a 2/2."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Island",
+        "Grizzly Bears",
+        "Glorious Anthem",
+        "Counterspell"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "303.4-1",
+      "rules": [
+        "303.4"
+      ],
+      "title": "A resolving Aura spell enters the battlefield attached to the object it targeted",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Plains",
+            "Mountain"
+          ],
+          "B": [
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Pacifism",
+            "Shock"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Pacifism targeting Grizzly Bears, tapping the two Plains.",
+        "A passes priority; B passes priority; Pacifism resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Pacifism enters the battlefield under A's control attached to B's Grizzly Bears, which stays on the battlefield."
+        },
+        {
+          "label": "target-gone",
+          "polarity": "does_not_fire",
+          "delta": "Holding priority after casting Pacifism, A casts Shock targeting Grizzly Bears, tapping the Mountain, then both players pass until both spells have resolved.",
+          "expected": "Shock resolves first and Grizzly Bears moves to B's graveyard; Pacifism has no legal target, does not enter the battlefield and goes from the stack to A's graveyard."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Mountain",
+        "Grizzly Bears",
+        "Pacifism",
+        "Shock"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "303.4a-1",
+      "rules": [
+        "303.4a"
+      ],
+      "title": "An Aura spell can be cast only if its enchant ability has a legal target",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Plains"
+          ],
+          "B": [
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Pacifism"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "The candidate action is A casting Pacifism, paying {1}{W} with the two Plains."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Casting Pacifism is legal: can_play is true, has_legal_target is true and the legal targets are Grizzly Bears."
+        },
+        {
+          "label": "no-creature",
+          "polarity": "does_not_fire",
+          "delta": "B controls no creature, so Grizzly Bears is absent from the battlefield.",
+          "expected": "Casting Pacifism is not legal: has_legal_target is false, there are no legal targets and can_play is false."
+        },
+        {
+          "label": "protection",
+          "polarity": "does_not_fire",
+          "delta": "B's only creature is Black Knight (protection from white) instead of Grizzly Bears.",
+          "expected": "Casting Pacifism is not legal: Black Knight is not a legal target of the white Aura, has_legal_target is false and can_play is false."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Grizzly Bears",
+        "Black Knight",
+        "Pacifism"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "303.4c-1",
+      "rules": [
+        "303.4c"
+      ],
+      "title": "An Aura whose enchanted object has left the battlefield is put into its owner's graveyard",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Pacifism",
+              "attached_to": "Grizzly Bears"
+            },
+            "Mountain"
+          ],
+          "B": [
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Shock"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Pacifism has been attached to B's Grizzly Bears since an earlier turn; A controls it."
+      },
+      "decisions": [
+        "A casts Shock targeting Grizzly Bears, tapping the Mountain.",
+        "A passes priority; B passes priority; Shock resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears is dealt 2 damage and moves to B's graveyard in the state-based check; Pacifism, no longer attached to anything, moves from the battlefield to A's graveyard in the same check."
+        },
+        {
+          "label": "tougher",
+          "polarity": "does_not_fire",
+          "delta": "B's creature is Centaur Courser (3/3), the Aura's enchanted object, instead of Grizzly Bears.",
+          "expected": "Centaur Courser stays on the battlefield with 2 damage marked and Pacifism stays attached to it."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Pacifism",
+        "Grizzly Bears",
+        "Centaur Courser",
+        "Shock"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "303.4c-2",
+      "rules": [
+        "303.4c"
+      ],
+      "title": "An Aura enchanting an object it can no longer legally enchant is put into its owner's graveyard",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "B",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Pacifism",
+              "attached_to": "Grizzly Bears"
+            }
+          ],
+          "B": [
+            "Grizzly Bears",
+            "Plains"
+          ]
+        },
+        "hand": {
+          "B": [
+            "Gods Willing"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "B": [
+            "Plains"
+          ]
+        },
+        "exile": {},
+        "notes": "Pacifism is white and controlled by A; it has been attached to B's Grizzly Bears since an earlier turn."
+      },
+      "decisions": [
+        "B casts Gods Willing targeting Grizzly Bears, tapping the Plains, and chooses the color white.",
+        "B passes priority; A passes priority; Gods Willing resolves (B scries 1 and leaves the card on top)."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears gains protection from white until end of turn and Pacifism, which it can no longer legally enchant, moves from the battlefield to A's graveyard in the state-based check."
+        },
+        {
+          "label": "other-color",
+          "polarity": "does_not_fire",
+          "delta": "B chooses the color red instead of white.",
+          "expected": "Grizzly Bears gains protection from red until end of turn and Pacifism stays on the battlefield attached to it."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Grizzly Bears",
+        "Pacifism",
+        "Gods Willing"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "303.4d-1",
+      "rules": [
+        "303.4d"
+      ],
+      "title": "An Aura that becomes a creature becomes unattached and is put into its owner's graveyard",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Mycosynth Lattice",
+            {
+              "card": "Pacifism",
+              "attached_to": "Grizzly Bears"
+            }
+          ],
+          "B": [
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "A": [
+            "March of the Machines"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Mycosynth Lattice has been on the battlefield since an earlier turn, so every permanent is already an artifact. A cast Pacifism on B's Grizzly Bears on an earlier turn."
+      },
+      "decisions": [
+        "A casts March of the Machines, tapping the four Islands.",
+        "A passes priority; B passes priority; March of the Machines resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Pacifism, a noncreature artifact through Mycosynth Lattice, becomes a 2/2 artifact creature Aura; in the state-based check it becomes unattached and moves to A's graveyard. The four Islands become 0/0 artifact creatures and move to A's graveyard in the same check. Mycosynth Lattice is a 6/6 and March of the Machines a 4/4; Grizzly Bears stays a 2/2."
+        },
+        {
+          "label": "no-lattice",
+          "polarity": "does_not_fire",
+          "delta": "Mycosynth Lattice is absent from A's battlefield.",
+          "expected": "Pacifism is not an artifact, does not become a creature and stays attached to Grizzly Bears; the Islands stay on the battlefield."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Mycosynth Lattice",
+        "Pacifism",
+        "Grizzly Bears",
+        "March of the Machines"
+      ],
+      "forge_notes": "Forge's stateBasedAction704_attach unattaches an attached permanent that is a creature; the unattached Aura then goes to the graveyard. The self-enchanting half of 303.4d stays unreachable: no Forge effect attaches an Aura to itself."
+    },
+    {
+      "id": "303.4e-1",
+      "rules": [
+        "303.4e"
+      ],
+      "title": "Only the Aura's controller can activate the Aura's own abilities, though it enchants another player's creature",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            {
+              "card": "Crown of Flames",
+              "attached_to": "Grizzly Bears"
+            }
+          ],
+          "B": [
+            "Grizzly Bears",
+            "Mountain"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "A cast Crown of Flames on B's Grizzly Bears on an earlier turn: A controls the Aura and B controls the creature. A has priority with an empty stack, and B has priority too after A passes."
+      },
+      "decisions": [
+        "The candidate action is A activating Crown of Flames' ability '{R}: Enchanted creature gets +1/+0 until end of turn', paying {R} with an untapped Mountain."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The activation is legal: can_play is true for A, whose Mountain pays {R}, and the enchanted Grizzly Bears would get +1/+0."
+        },
+        {
+          "label": "creature-controller",
+          "polarity": "does_not_fire",
+          "delta": "The candidate is B, the controller of the enchanted creature, activating the same ability and paying {R} with B's Mountain.",
+          "expected": "The activation is not legal: can_play is false for B, because B does not control Crown of Flames."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Crown of Flames",
+        "Grizzly Bears"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "303.4e-2",
+      "rules": [
+        "303.4e"
+      ],
+      "title": "An ability an Aura grants can be activated only by the enchanted creature's controller",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "declare_attackers",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Archery Training",
+              "attached_to": "Grizzly Bears",
+              "counters": {
+                "ARROW": 1
+              }
+            },
+            {
+              "card": "Centaur Courser",
+              "tapped": true,
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            }
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "A cast Archery Training on B's Grizzly Bears on an earlier turn and it has one arrow counter. A's Centaur Courser has been declared as an attacker and is tapped and attacking. The declare-attackers step is over and priority is with the player named in the candidate."
+      },
+      "decisions": [
+        "The candidate action is B activating the ability Archery Training grants to Grizzly Bears, '{T}: This creature deals X damage to target attacking or blocking creature', targeting Centaur Courser, where X is the number of arrow counters on Archery Training."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The activation is legal: can_play is true for B, with Centaur Courser as a legal target."
+        },
+        {
+          "label": "aura-controller",
+          "polarity": "does_not_fire",
+          "delta": "The candidate is A, who controls Archery Training but not Grizzly Bears, attempting the same activation.",
+          "expected": "The activation is not legal: can_play is false for A, because the granted ability belongs to Grizzly Bears and A does not control it."
+        }
+      ],
+      "cards": [
+        "Archery Training",
+        "Grizzly Bears",
+        "Centaur Courser"
+      ],
+      "forge_notes": "Centaur Courser must be set up as a declared attacker, which a tapped flag alone does not express."
+    },
+    {
+      "id": "303.4e-3",
+      "rules": [
+        "303.4e"
+      ],
+      "title": "Changing control of the enchanted creature does not change control of the Aura",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain"
+          ],
+          "B": [
+            "Mountain",
+            {
+              "card": "Crown of Flames",
+              "attached_to": "Grizzly Bears"
+            },
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Act of Treason"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "B cast Crown of Flames on B's own Grizzly Bears on an earlier turn. Once Act of Treason has resolved A has priority with an empty stack in main1; A has one untapped Mountain and B has one untapped Mountain."
+      },
+      "decisions": [
+        "A casts Act of Treason targeting Grizzly Bears, tapping three Mountains.",
+        "A passes priority; B passes priority; Act of Treason resolves and A controls Grizzly Bears until end of turn.",
+        "The candidate action is B activating Crown of Flames' ability '{R}: Enchanted creature gets +1/+0 until end of turn', paying {R} with B's untapped Mountain."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Crown of Flames is still controlled by B and the activation is legal: can_play is true for B, even though A now controls the enchanted Grizzly Bears."
+        },
+        {
+          "label": "creature-controller",
+          "polarity": "does_not_fire",
+          "delta": "The candidate is A, the new controller of the enchanted creature, activating the same ability and paying {R} with A's fourth Mountain.",
+          "expected": "The activation is not legal: can_play is false for A, because control of Crown of Flames did not change."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Crown of Flames",
+        "Grizzly Bears",
+        "Act of Treason"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "303.4g-1",
+      "rules": [
+        "303.4g"
+      ],
+      "title": "An Aura entering the battlefield with nothing legal to enchant stays in its zone",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Replenish"
+          ]
+        },
+        "graveyard": {
+          "A": [
+            "Pacifism"
+          ]
+        },
+        "library": {},
+        "exile": {},
+        "notes": "No creature is on the battlefield in the base."
+      },
+      "decisions": [
+        "A casts Replenish, tapping the four Plains.",
+        "A passes priority; B passes priority; Replenish resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Pacifism has no legal creature to enchant, stays in A's graveyard and does not enter the battlefield; Replenish goes to A's graveyard."
+        },
+        {
+          "label": "creature-present",
+          "polarity": "does_not_fire",
+          "delta": "B controls a Grizzly Bears, and A chooses it as the object Pacifism enters attached to.",
+          "expected": "Pacifism moves from A's graveyard to the battlefield attached to Grizzly Bears; Replenish goes to A's graveyard."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Replenish",
+        "Pacifism",
+        "Grizzly Bears"
+      ],
+      "forge_notes": "Whether Forge leaves an Aura with nothing to enchant in the graveyard when Replenish resolves is the behaviour under test; the base has no creature on either side."
+    },
+    {
+      "id": "303.4g-2",
+      "rules": [
+        "303.4g"
+      ],
+      "title": "An Aura that an effect restricts to creatures, but that cannot enchant a creature, stays in its zone",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Forest"
+          ],
+          "B": [
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Retether"
+          ]
+        },
+        "graveyard": {
+          "A": [
+            "Wild Growth"
+          ]
+        },
+        "library": {},
+        "exile": {},
+        "notes": "Retether returns each Aura card from A's graveyard and allows only creatures to be enchanted this way; lands, which Wild Growth could otherwise enchant, are on the battlefield."
+      },
+      "decisions": [
+        "A casts Retether, tapping four Plains.",
+        "A passes priority; B passes priority; Retether resolves.",
+        "If an Aura can enter, A attaches it to Grizzly Bears, the only creature."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Wild Growth (enchant land) cannot enchant a creature, stays in A's graveyard and does not enter the battlefield; Retether goes to A's graveyard."
+        },
+        {
+          "label": "creature-aura",
+          "polarity": "does_not_fire",
+          "delta": "The Aura card in A's graveyard is Pacifism instead of Wild Growth.",
+          "expected": "Pacifism moves from A's graveyard to the battlefield attached to Grizzly Bears; Retether goes to A's graveyard."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Forest",
+        "Retether",
+        "Wild Growth",
+        "Pacifism",
+        "Grizzly Bears"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "303.4i-1",
+      "rules": [
+        "303.4i"
+      ],
+      "title": "An Aura put onto the battlefield attached to an object it cannot legally enchant stays in its zone",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            "Island"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Academy Researchers",
+            "Wild Growth"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "A has priority with an empty stack."
+      },
+      "decisions": [
+        "A casts Academy Researchers, tapping the three Islands; both players pass and it resolves.",
+        "Its enters trigger goes on the stack; both players pass and it resolves.",
+        "A chooses to put the Aura card in hand onto the battlefield attached to Academy Researchers."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Wild Growth (enchant land) cannot enchant Academy Researchers and stays in A's hand; Academy Researchers is a 2/2 with nothing attached."
+        },
+        {
+          "label": "creature-aura",
+          "polarity": "does_not_fire",
+          "delta": "The Aura card in A's hand is Holy Strength instead of Wild Growth.",
+          "expected": "Holy Strength moves from A's hand to the battlefield attached to Academy Researchers, which is a 3/4."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Academy Researchers",
+        "Wild Growth",
+        "Holy Strength"
+      ],
+      "forge_notes": "Forge offers only Auras that can enchant Academy Researchers (ChangeType$ Aura.CanEnchantSource), so in the base no card is offered and Wild Growth stays in hand."
+    },
+    {
+      "id": "303.4j-1",
+      "rules": [
+        "303.4j"
+      ],
+      "title": "An effect attaching an Aura to an object it cannot legally enchant leaves the Aura where it is",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Grizzly Bears"
+          ],
+          "B": [
+            {
+              "card": "Pacifism",
+              "attached_to": "Grizzly Bears"
+            },
+            "Black Knight"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Enchantment Alteration"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "B cast Pacifism on A's Grizzly Bears on an earlier turn. Black Knight (protection from white) is the only other creature on the battlefield."
+      },
+      "decisions": [
+        "A casts Enchantment Alteration targeting Pacifism, tapping the Island.",
+        "A passes priority; B passes priority; Enchantment Alteration resolves and A chooses B's other creature as the permanent to attach Pacifism to."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Pacifism cannot legally enchant Black Knight and does not move: it stays attached to Grizzly Bears under B's control; Enchantment Alteration goes to A's graveyard."
+        },
+        {
+          "label": "legal-creature",
+          "polarity": "does_not_fire",
+          "delta": "B's other creature is Centaur Courser instead of Black Knight.",
+          "expected": "Pacifism moves from Grizzly Bears to Centaur Courser; Enchantment Alteration goes to A's graveyard."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Enchantment Alteration",
+        "Pacifism",
+        "Grizzly Bears",
+        "Centaur Courser",
+        "Black Knight"
+      ],
+      "forge_notes": "Forge may offer only permanents Pacifism can enchant; with Black Knight as the only other creature it then offers none, and Pacifism still does not move."
+    },
+    {
+      "id": "303.7a-1",
+      "rules": [
+        "303.7a"
+      ],
+      "title": "A permanent with two Roles controlled by the same player keeps only the newest one",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Grizzly Bears"
+          ],
+          "B": [
+            "Mountain"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Monstrous Rage",
+            "Monstrous Rage"
+          ],
+          "B": [
+            "Monstrous Rage"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Grizzly Bears has been under A's control since before the turn."
+      },
+      "decisions": [
+        "A casts Monstrous Rage targeting Grizzly Bears, tapping a Mountain; both players pass; it resolves and A's Monster Role token enters attached to Grizzly Bears.",
+        "A casts the second Monstrous Rage targeting Grizzly Bears, tapping the second Mountain; both players pass; it resolves and A's second Monster Role token enters attached to Grizzly Bears."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "A controls two Roles on Grizzly Bears; the first Monster Role token is put into A's graveyard in the state-based check and ceases to exist, the second stays; Grizzly Bears is a 7/3 with trample until end of turn."
+        },
+        {
+          "label": "other-controller",
+          "polarity": "does_not_fire",
+          "delta": "B casts B's own Monstrous Rage targeting Grizzly Bears, tapping B's Mountain, instead of A casting the second one; the second Role token is B's.",
+          "expected": "Each Role is controlled by a different player, so both Monster Role tokens stay attached to Grizzly Bears, which is an 8/4 with trample until end of turn."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Grizzly Bears",
+        "Monstrous Rage"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

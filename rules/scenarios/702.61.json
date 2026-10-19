@@ -1,0 +1,223 @@
+{
+  "unit": "702.61",
+  "verified": true,
+  "review": [],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.61a-1",
+      "rules": [
+        "702.61a"
+      ],
+      "title": "Split second stops other spells and non-mana abilities",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain"
+          ],
+          "B": [
+            "Mountain",
+            "Grizzly Bears",
+            {
+              "summoning_sick": false,
+              "card": "Prodigal Sorcerer"
+            }
+          ]
+        },
+        "hand": {
+          "A": [
+            "Sudden Shock",
+            "Shock"
+          ],
+          "B": [
+            "Shock"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Sudden Shock targeting B's Grizzly Bears, tapping Mountain and Mountain.",
+        "A passes priority. B receives priority with Sudden Shock on the stack and tries to cast Shock targeting player A, tapping Mountain."
+      ],
+      "variants": [
+        {
+          "label": "cast_spell",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "B's Shock cannot be cast: can_play is false."
+        },
+        {
+          "label": "without_split_second",
+          "polarity": "does_not_fire",
+          "delta": "A casts Shock (no split second) targeting B's Grizzly Bears, tapping one Mountain, instead of Sudden Shock.",
+          "expected": "B's Shock can be cast in response: can_play is true."
+        },
+        {
+          "label": "activate_ability",
+          "polarity": "fires",
+          "delta": "B tries to activate Prodigal Sorcerer ({T}: 1 damage to any target) instead of casting Shock.",
+          "expected": "The activation is not allowed: can_play is false."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Grizzly Bears",
+        "Prodigal Sorcerer",
+        "Sudden Shock",
+        "Shock"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.61b-1",
+      "rules": [
+        "702.61b"
+      ],
+      "title": "Mana abilities and special actions stay available under split second",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain"
+          ],
+          "B": [
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            {
+              "face_down": true,
+              "summoning_sick": false,
+              "card": "Battering Craghorn"
+            },
+            {
+              "summoning_sick": false,
+              "card": "Prodigal Sorcerer"
+            }
+          ]
+        },
+        "hand": {
+          "A": [
+            "Sudden Shock"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Sudden Shock targeting player B, tapping Mountain and Mountain.",
+        "A passes priority. B receives priority with Sudden Shock on the stack and tries to activate the mana ability of a Mountain."
+      ],
+      "variants": [
+        {
+          "label": "mana_ability",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Tapping the Mountain for {R} is allowed: can_play is true."
+        },
+        {
+          "label": "turn_face_up",
+          "polarity": "fires",
+          "delta": "B instead turns the face-down creature face up (a special action), paying its morph cost {1}{R}{R} with the three Mountains.",
+          "expected": "Turning Battering Craghorn face up is allowed and it becomes a 3/1 first striker."
+        },
+        {
+          "label": "activate_ability",
+          "polarity": "does_not_fire",
+          "delta": "B instead tries to activate Prodigal Sorcerer ({T}: 1 damage to any target).",
+          "expected": "The activation is not allowed: can_play is false."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Battering Craghorn",
+        "Prodigal Sorcerer",
+        "Sudden Shock"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.61b-2",
+      "rules": [
+        "702.61b"
+      ],
+      "title": "Triggered abilities still trigger and go on the stack under split second",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Forest",
+            {
+              "summoning_sick": false,
+              "card": "Young Pyromancer"
+            }
+          ]
+        },
+        "hand": {
+          "A": [
+            "Sudden Shock",
+            "Grizzly Bears"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Sudden Shock targeting player B, tapping Mountain and Mountain.",
+        "Young Pyromancer's trigger goes on the stack above Sudden Shock; both players pass and it resolves.",
+        "Both players pass again; Sudden Shock resolves."
+      ],
+      "variants": [
+        {
+          "label": "instant_cast",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Young Pyromancer's trigger fires while Sudden Shock is on the stack and A gets a 1/1 red Elemental token. Sudden Shock then resolves and B's life is 18."
+        },
+        {
+          "label": "creature_cast",
+          "polarity": "does_not_fire",
+          "delta": "A casts Grizzly Bears, tapping Forest and Mountain, instead of Sudden Shock.",
+          "expected": "Young Pyromancer's trigger does not fire and no token is created."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Forest",
+        "Young Pyromancer",
+        "Sudden Shock",
+        "Grizzly Bears"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

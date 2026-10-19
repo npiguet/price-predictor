@@ -1,0 +1,179 @@
+{
+  "unit": "702.114",
+  "verified": true,
+  "review": [],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.114a-1",
+      "rules": [
+        "702.114a"
+      ],
+      "title": "A permanent with devoid is colorless although its mana cost has a color",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [],
+          "B": [
+            "Culling Drone"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Culling Drone costs {1}{B}, is a 2/2 with devoid and ingest. The board is stable and observed with no further actions."
+      },
+      "decisions": [
+        "No action is taken; the colors of B's creature on the battlefield are read."
+      ],
+      "variants": [
+        {
+          "label": "devoid",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Culling Drone is colorless: it has no color although its mana cost contains black."
+        },
+        {
+          "label": "no_devoid",
+          "polarity": "does_not_fire",
+          "delta": "B's creature is Walking Corpse (a 2/2 with the same mana cost {1}{B} and no devoid) instead of Culling Drone.",
+          "expected": "Walking Corpse is black."
+        }
+      ],
+      "cards": [
+        "Culling Drone",
+        "Walking Corpse"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.114a-2",
+      "rules": [
+        "702.114a"
+      ],
+      "title": "A colorless devoid creature is a legal target for a nonblack-creature spell",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Swamp",
+            "Swamp"
+          ],
+          "B": [
+            "Culling Drone"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Doom Blade"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Doom Blade ({1}{B} instant) destroys target nonblack creature. Culling Drone has a black mana cost and devoid."
+      },
+      "decisions": [
+        "A considers casting Doom Blade targeting B's creature, tapping both Swamps; the engine's verdict on that target is read."
+      ],
+      "variants": [
+        {
+          "label": "devoid",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Culling Drone is a legal target for Doom Blade (it is colorless, so nonblack), and can_play is true."
+        },
+        {
+          "label": "black_without_devoid",
+          "polarity": "does_not_fire",
+          "delta": "B's creature is Walking Corpse (black, no devoid) instead of Culling Drone.",
+          "expected": "Walking Corpse is not a legal target for Doom Blade: it is black, so Doom Blade has no legal target and cannot be cast."
+        }
+      ],
+      "cards": [
+        "Culling Drone",
+        "Walking Corpse",
+        "Doom Blade",
+        "Swamp"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.114a-3",
+      "rules": [
+        "702.114a"
+      ],
+      "title": "A devoid spell on the stack is colorless",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "B",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain"
+          ],
+          "B": [
+            "Island",
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Pyroblast"
+          ],
+          "B": [
+            "Mist Intruder"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Mist Intruder ({1}{U}, 1/2, devoid, flying, ingest) has a blue mana cost. Pyroblast ({R} instant) is a choice of countering target spell if it is blue, or destroying target permanent if it is blue."
+      },
+      "decisions": [
+        "B casts Mist Intruder, tapping both Islands.",
+        "A responds with Pyroblast, tapping Mountain, choosing the counter mode and targeting Mist Intruder.",
+        "Both players pass; Pyroblast resolves, then Mist Intruder resolves if it is still on the stack."
+      ],
+      "variants": [
+        {
+          "label": "devoid_spell",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Pyroblast resolves but does not counter Mist Intruder, because it is colorless on the stack. Mist Intruder then resolves and enters the battlefield under B's control."
+        },
+        {
+          "label": "blue_spell",
+          "polarity": "does_not_fire",
+          "delta": "B casts Coral Merfolk (a blue 2/1 with the same cost {1}{U} and no devoid) instead of Mist Intruder.",
+          "expected": "Pyroblast counters Coral Merfolk because it is blue; Coral Merfolk goes to B's graveyard."
+        }
+      ],
+      "cards": [
+        "Mist Intruder",
+        "Coral Merfolk",
+        "Pyroblast",
+        "Island",
+        "Mountain"
+      ],
+      "forge_notes": "Pyroblast's counter mode can target any spell and checks the color on resolution (ConditionPresent$ Spell.Blue)."
+    }
+  ]
+}

@@ -1,0 +1,824 @@
+{
+  "unit": "615",
+  "verified": true,
+  "review": [
+    "615.3-1: decisions had A cast Fog in the declare blockers step before blockers were declared; Fog is now cast in the declare attackers step.",
+    "615.8-1: variants 'big-single-hit' and 'other-source' each changed two facts (attackers and chosen source); both creatures now attack in every variant and each variant changes only the chosen source or whether the Circle is activated; dropped the unused Mountain.",
+    "615.11-1: 'black-shield' still creates a shield (for Walking Corpse), so its polarity is other, not does_not_fire.",
+    "triage/615.jsonl was missing; wrote one line per rule (615.1a and 615.2 definitional, 615.12a observability none)."
+  ],
+  "skipped": [
+    {
+      "id": "615.2",
+      "reason": "points to rule 609.7 and adds no outcome of its own; damage prevented from a chosen source is illustrated by 615.8-1 and 615.9-1"
+    },
+    {
+      "id": "615.12a",
+      "reason": "the once-only application is observable only as the absence of an endless loop; the visible outcome of unpreventable damage meeting a prevention effect is illustrated by 615.12-1 and no board difference separates two variants"
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "615.1-1",
+      "rules": [
+        "615.1",
+        "615.1a"
+      ],
+      "title": "A prevention effect stops the damage events it matches and no others",
+      "record_kind": "rewrite",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Forest",
+            "Mountain",
+            "Grizzly Bears"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Fog",
+            "Shock"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "No creature is summoning sick. Both libraries are non-empty."
+      },
+      "decisions": [
+        "A casts Fog, tapping Forest.",
+        "Both players pass; Fog resolves.",
+        "A moves to combat and declares Grizzly Bears as an attacker, attacking B.",
+        "B declares no blockers.",
+        "Both players pass through the combat damage step."
+      ],
+      "variants": [
+        {
+          "label": "combat-damage",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Fog resolved. Grizzly Bears's 2 combat damage to B is prevented; B stays at 20 life."
+        },
+        {
+          "label": "noncombat-damage",
+          "polarity": "does_not_fire",
+          "delta": "Instead of attacking, A casts Shock targeting B, tapping Mountain, after Fog resolves.",
+          "expected": "Fog resolved. Shock's 2 damage to B is not combat damage and is not prevented; B is at 18 life."
+        }
+      ],
+      "cards": [
+        "Forest",
+        "Mountain",
+        "Grizzly Bears",
+        "Fog",
+        "Shock"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "615.3-1",
+      "rules": [
+        "615.3"
+      ],
+      "title": "A prevention effect lasts until its duration ends and does not carry into the next turn",
+      "record_kind": "rewrite",
+      "setup": {
+        "active": "A",
+        "step": "end",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Forest"
+          ],
+          "B": [
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Fog"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "No creature is summoning sick. Both libraries are non-empty. Grizzly Bears has been under B's control since before this turn."
+      },
+      "decisions": [
+        "A passes priority in its own end step without casting anything.",
+        "The turn passes to B. B untaps and draws.",
+        "B moves to combat and declares Grizzly Bears as an attacker, attacking A.",
+        "In the declare attackers step A casts Fog, tapping Forest; both players pass and Fog resolves.",
+        "A declares no blockers (A has no creatures). Both players pass through the combat damage step."
+      ],
+      "variants": [
+        {
+          "label": "same-turn",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Fog resolves during B's turn. Grizzly Bears's 2 combat damage to A is prevented; A stays at 20 life."
+        },
+        {
+          "label": "earlier-turn",
+          "polarity": "does_not_fire",
+          "delta": "A casts Fog in its own end step (it resolves there) instead of during B's combat.",
+          "expected": "Fog resolves in A's end step and its 'this turn' duration ends with that turn. On B's turn Grizzly Bears deals 2 combat damage to A; A is at 18 life."
+        }
+      ],
+      "cards": [
+        "Forest",
+        "Grizzly Bears",
+        "Fog"
+      ],
+      "forge_notes": "The scenario spans two turns; the step name only gives the starting point."
+    },
+    {
+      "id": "615.4-1",
+      "rules": [
+        "615.4"
+      ],
+      "title": "A prevention effect must exist before the damage event it would modify",
+      "record_kind": "rewrite",
+      "setup": {
+        "active": "B",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains"
+          ],
+          "B": [
+            "Mountain"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Mending Hands"
+          ],
+          "B": [
+            "Shock"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Libraries are non-empty."
+      },
+      "decisions": [
+        "B casts Shock targeting A, tapping Mountain.",
+        "B passes priority; A casts Mending Hands targeting A, tapping Plains.",
+        "Both players pass; Mending Hands resolves.",
+        "Both players pass; Shock resolves."
+      ],
+      "variants": [
+        {
+          "label": "in-response",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Mending Hands resolves first and creates a shield of 4 on A. Shock's 2 damage is prevented; A stays at 20 life."
+        },
+        {
+          "label": "too-late",
+          "polarity": "does_not_fire",
+          "delta": "A does not respond. Shock resolves, and only afterwards A casts Mending Hands targeting A.",
+          "expected": "Shock deals 2 damage to A before the shield exists; A is at 18 life. Mending Hands then resolves and the damage already dealt is not undone; A stays at 18."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Mountain",
+        "Mending Hands",
+        "Shock"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "615.5-1",
+      "rules": [
+        "615.5"
+      ],
+      "title": "The additional effect of a prevention effect uses the amount prevented and happens right after the prevention",
+      "record_kind": "rewrite",
+      "setup": {
+        "active": "B",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Vigor",
+            "Grizzly Bears"
+          ],
+          "B": [
+            "Mountain"
+          ]
+        },
+        "hand": {
+          "B": [
+            "Shock"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Libraries are non-empty."
+      },
+      "decisions": [
+        "B casts Shock targeting Grizzly Bears, tapping Mountain.",
+        "Both players pass; Shock resolves."
+      ],
+      "variants": [
+        {
+          "label": "another-creature",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Vigor prevents the 2 damage to Grizzly Bears, then Grizzly Bears gets 2 +1/+1 counters (4/4). No damage is marked on it."
+        },
+        {
+          "label": "vigor-itself",
+          "polarity": "does_not_fire",
+          "delta": "Shock targets Vigor instead of Grizzly Bears.",
+          "expected": "Vigor only applies to another creature, so Vigor has 2 damage marked, no counters, and stays on the battlefield (6/6). Grizzly Bears is unchanged."
+        }
+      ],
+      "cards": [
+        "Vigor",
+        "Grizzly Bears",
+        "Mountain",
+        "Shock"
+      ],
+      "forge_notes": "Vigor's script is a DamageDone replacement with PreventionEffect and ExecuteMode$ PerTarget that puts counters equal to the damage."
+    },
+    {
+      "id": "615.6-1",
+      "rules": [
+        "615.6"
+      ],
+      "title": "Prevented damage never happens, so effects that need the damage to be dealt do not happen either",
+      "record_kind": "rewrite",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Typhoid Rats",
+            "Mountain"
+          ],
+          "B": [
+            "Grizzly Bears",
+            "Plains"
+          ]
+        },
+        "hand": {
+          "B": [
+            "Mending Hands"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "No creature is summoning sick. Both libraries are non-empty."
+      },
+      "decisions": [
+        "A moves to combat and declares Typhoid Rats as an attacker, attacking B.",
+        "B declares Grizzly Bears as a blocker of Typhoid Rats.",
+        "B casts Mending Hands targeting Grizzly Bears, tapping Plains; both players pass and Mending Hands resolves.",
+        "Both players pass through the combat damage step."
+      ],
+      "variants": [
+        {
+          "label": "shield-on-victim",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Typhoid Rats's 1 damage to Grizzly Bears is prevented, so deathtouch has no damage to act on and Grizzly Bears survives with no damage. Grizzly Bears deals 2 damage to Typhoid Rats, which dies."
+        },
+        {
+          "label": "shield-on-rats",
+          "polarity": "fires",
+          "delta": "Mending Hands targets Typhoid Rats instead of Grizzly Bears.",
+          "expected": "Grizzly Bears's 2 damage to Typhoid Rats is prevented and Typhoid Rats survives. Typhoid Rats deals 1 deathtouch damage to Grizzly Bears, which dies."
+        },
+        {
+          "label": "no-shield",
+          "polarity": "does_not_fire",
+          "delta": "B does not cast Mending Hands.",
+          "expected": "Typhoid Rats deals 1 deathtouch damage to Grizzly Bears and Grizzly Bears deals 2 damage to Typhoid Rats; both die."
+        }
+      ],
+      "cards": [
+        "Typhoid Rats",
+        "Mountain",
+        "Grizzly Bears",
+        "Plains",
+        "Mending Hands"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "615.7-1",
+      "rules": [
+        "615.7"
+      ],
+      "title": "A damage-amount shield prevents damage one point at a time and is used up at zero",
+      "record_kind": "rewrite",
+      "setup": {
+        "active": "B",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains"
+          ],
+          "B": [
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Mending Hands"
+          ],
+          "B": [
+            "Lightning Bolt",
+            "Lava Axe",
+            "Shock",
+            "Shock"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Libraries are non-empty."
+      },
+      "decisions": [
+        "B casts Lightning Bolt targeting A, tapping one Mountain.",
+        "B passes priority; A casts Mending Hands targeting A, tapping Plains.",
+        "Both players pass; Mending Hands resolves.",
+        "Both players pass; Lightning Bolt resolves."
+      ],
+      "variants": [
+        {
+          "label": "bolt-within-shield",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Mending Hands creates a shield of 4 on A. Lightning Bolt's 3 damage is entirely prevented; A stays at 20 life with 1 point of shield left."
+        },
+        {
+          "label": "axe-exceeds-shield",
+          "polarity": "does_not_fire",
+          "delta": "B casts Lava Axe (tapping all five Mountains) targeting A instead of Lightning Bolt; A responds with Mending Hands as before.",
+          "expected": "Mending Hands prevents 4 of Lava Axe's 5 damage; the shield is then at 0 and the remaining 1 damage is dealt. A is at 19 life."
+        },
+        {
+          "label": "two-events",
+          "polarity": "other",
+          "delta": "B casts Shock targeting A instead of Lightning Bolt, and after it resolves casts a second Shock targeting A (tapping a second Mountain).",
+          "expected": "The shield prevents the first Shock's 2 damage (2 left) and the second Shock's 2 damage (0 left); the number of events does not matter. A stays at 20 life."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Mountain",
+        "Mending Hands",
+        "Lightning Bolt",
+        "Lava Axe",
+        "Shock"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "615.8-1",
+      "rules": [
+        "615.8"
+      ],
+      "title": "A next-time prevention effect prevents one whole instance of damage from the chosen source",
+      "record_kind": "rewrite",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Raging Redcap",
+            "Hill Giant"
+          ],
+          "B": [
+            "Circle of Protection: Red",
+            "Plains",
+            "Plains"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "No creature is summoning sick. Both libraries are non-empty."
+      },
+      "decisions": [
+        "A moves to combat and declares Raging Redcap and Hill Giant as attackers, attacking B.",
+        "B activates Circle of Protection: Red, paying {1} with a Plains, and chooses Raging Redcap as the source; both players pass and the ability resolves.",
+        "B declares no blockers.",
+        "Both players pass through the first-strike damage step and then the regular combat damage step."
+      ],
+      "variants": [
+        {
+          "label": "second-instance",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Raging Redcap's 1 first-strike damage to B is prevented. Its 1 regular combat damage and Hill Giant's 3 combat damage are dealt. B is at 16 life."
+        },
+        {
+          "label": "big-single-hit",
+          "polarity": "fires",
+          "delta": "B chooses Hill Giant as the source instead of Raging Redcap.",
+          "expected": "Hill Giant's 3 combat damage to B is prevented. Raging Redcap's 1 first-strike and 1 regular combat damage are dealt. B is at 18 life."
+        },
+        {
+          "label": "no-shield",
+          "polarity": "does_not_fire",
+          "delta": "B does not activate Circle of Protection: Red.",
+          "expected": "Raging Redcap deals 1 first-strike and 1 regular combat damage and Hill Giant deals 3 combat damage to B. B is at 15 life."
+        }
+      ],
+      "cards": [
+        "Raging Redcap",
+        "Hill Giant",
+        "Circle of Protection: Red",
+        "Plains"
+      ],
+      "forge_notes": "Circle of Protection: Red is implemented as an Effect with a replacement that exiles itself after one use."
+    },
+    {
+      "id": "615.9-1",
+      "rules": [
+        "615.9"
+      ],
+      "title": "A shield for a source with certain properties rechecks the source when it would deal damage",
+      "record_kind": "rewrite",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Wild Mongrel",
+            "Mountain"
+          ],
+          "B": [
+            "Circle of Protection: Green",
+            "Plains",
+            "Plains"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Mountain"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "No creature is summoning sick. Both libraries are non-empty."
+      },
+      "decisions": [
+        "A moves to combat and declares Wild Mongrel as an attacker, attacking B.",
+        "B activates Circle of Protection: Green, paying {1} with a Plains, and chooses Wild Mongrel as the source; both players pass and the ability resolves.",
+        "B declares no blockers.",
+        "Both players pass through the combat damage step."
+      ],
+      "variants": [
+        {
+          "label": "still-green",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Wild Mongrel is still a green source when it deals its 2 combat damage; the damage is prevented and B stays at 20 life."
+        },
+        {
+          "label": "recolored",
+          "polarity": "does_not_fire",
+          "delta": "After the ability resolves, A activates Wild Mongrel discarding the Mountain from hand, choosing red; the ability resolves.",
+          "expected": "Wild Mongrel is a 3/3 red creature when damage is dealt, no longer matching the shield. Its 3 damage is dealt to B (17 life) and the shield is not used up."
+        }
+      ],
+      "cards": [
+        "Wild Mongrel",
+        "Mountain",
+        "Circle of Protection: Green",
+        "Plains"
+      ],
+      "forge_notes": "The ChooseSource choice is made on resolution, so the recoloring response must come after the ability resolves. Forge rechecks the colour through ValidSource Card.ChosenCardStrict+GreenSource."
+    },
+    {
+      "id": "615.10-1",
+      "rules": [
+        "615.10"
+      ],
+      "title": "A static prevention effect of a fixed amount applies separately to each damage event",
+      "record_kind": "rewrite",
+      "setup": {
+        "active": "B",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Daunting Defender",
+            "Grizzly Bears"
+          ],
+          "B": [
+            "Mountain",
+            "Mountain"
+          ]
+        },
+        "hand": {
+          "B": [
+            "Shock",
+            "Shock"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Libraries are non-empty."
+      },
+      "decisions": [
+        "B casts Shock targeting Daunting Defender, tapping a Mountain.",
+        "Both players pass; Shock resolves."
+      ],
+      "variants": [
+        {
+          "label": "cleric",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Daunting Defender (a 3/3 Cleric) takes 2 damage minus 1 prevented: 1 damage is marked. It stays on the battlefield."
+        },
+        {
+          "label": "non-cleric",
+          "polarity": "does_not_fire",
+          "delta": "Shock targets Grizzly Bears instead of Daunting Defender.",
+          "expected": "Grizzly Bears is not a Cleric, so nothing is prevented; it takes 2 damage and dies."
+        },
+        {
+          "label": "second-event",
+          "polarity": "fires",
+          "delta": "B casts a second Shock targeting Daunting Defender, tapping the other Mountain, after the first resolves.",
+          "expected": "Each Shock has 1 of its 2 damage prevented separately. Daunting Defender has 2 damage marked in total (3/3) and survives."
+        }
+      ],
+      "cards": [
+        "Daunting Defender",
+        "Grizzly Bears",
+        "Mountain",
+        "Shock"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "615.11-1",
+      "rules": [
+        "615.11"
+      ],
+      "title": "A radiance prevention effect creates a shield for each applicable creature when it resolves",
+      "record_kind": "rewrite",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Wojek Apothecary",
+              "summoning_sick": false
+            },
+            "Grizzly Bears",
+            "Runeclaw Bear",
+            "Walking Corpse",
+            "Mountain",
+            "Mountain",
+            "Forest",
+            "Forest"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Pyroclasm",
+            "Runeclaw Bear"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Libraries are non-empty."
+      },
+      "decisions": [
+        "A activates Wojek Apothecary (tapping it) targeting Grizzly Bears; both players pass and the ability resolves.",
+        "A casts Pyroclasm, tapping both Mountains; both players pass and Pyroclasm resolves."
+      ],
+      "variants": [
+        {
+          "label": "green-shield",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears and the other green creature Runeclaw Bear each get a shield of 1, so each takes 1 of Pyroclasm's 2 damage and survives. Walking Corpse (black) and Wojek Apothecary (white) have no shield and die."
+        },
+        {
+          "label": "black-shield",
+          "polarity": "other",
+          "delta": "The Apothecary's ability targets Walking Corpse instead of Grizzly Bears.",
+          "expected": "Only Walking Corpse gets a shield: it takes 1 damage and survives. Grizzly Bears and Runeclaw Bear die, and so does Wojek Apothecary."
+        },
+        {
+          "label": "enters-later",
+          "polarity": "does_not_fire",
+          "delta": "After the ability resolves and before Pyroclasm, A casts the Runeclaw Bear from hand, tapping both Forests.",
+          "expected": "The Runeclaw Bear that entered later has no shield and dies to Pyroclasm. Grizzly Bears and the Runeclaw Bear already on the battlefield survive with 1 damage; Walking Corpse and Wojek Apothecary die."
+        }
+      ],
+      "cards": [
+        "Wojek Apothecary",
+        "Grizzly Bears",
+        "Runeclaw Bear",
+        "Walking Corpse",
+        "Mountain",
+        "Forest",
+        "Pyroclasm"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "615.12-1",
+      "rules": [
+        "615.12"
+      ],
+      "title": "Damage that can't be prevented ignores a shield and does not reduce it",
+      "record_kind": "rewrite",
+      "setup": {
+        "active": "B",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains"
+          ],
+          "B": [
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Mending Hands"
+          ],
+          "B": [
+            "Flames of the Blood Hand",
+            "Lightning Bolt",
+            "Lightning Bolt"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Libraries are non-empty."
+      },
+      "decisions": [
+        "B casts Flames of the Blood Hand targeting A, tapping three Mountains.",
+        "B passes priority; A casts Mending Hands targeting A, tapping Plains.",
+        "Both players pass; Mending Hands resolves.",
+        "Both players pass; Flames of the Blood Hand resolves.",
+        "B casts Lightning Bolt targeting A, tapping the fourth Mountain; both players pass and it resolves."
+      ],
+      "variants": [
+        {
+          "label": "unpreventable-first",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Flames of the Blood Hand's 4 damage is dealt in full (A at 16) and the shield of 4 is not reduced. The Lightning Bolt's 3 damage is then entirely prevented by the intact shield; A stays at 16 life."
+        },
+        {
+          "label": "preventable-first",
+          "polarity": "does_not_fire",
+          "delta": "B casts Lightning Bolt first (tapping one Mountain) instead of Flames of the Blood Hand, and then the second Lightning Bolt (tapping another Mountain).",
+          "expected": "The first Lightning Bolt's 3 damage is prevented and reduces the shield to 1. The second Lightning Bolt has 1 damage prevented and 2 dealt; A is at 18 life."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Mountain",
+        "Mending Hands",
+        "Flames of the Blood Hand",
+        "Lightning Bolt"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "615.13-1",
+      "rules": [
+        "615.13"
+      ],
+      "title": "A trigger on damage being prevented fires when a prevention effect prevents damage",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "B",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Grizzly Bears"
+          ],
+          "B": [
+            "Mountain"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Selfless Squire"
+          ],
+          "B": [
+            "Lightning Bolt"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Libraries are non-empty."
+      },
+      "decisions": [
+        "B casts Lightning Bolt targeting A, tapping Mountain.",
+        "B passes priority; A casts Selfless Squire (flash), tapping four Plains; both players pass and Selfless Squire resolves.",
+        "Selfless Squire's enters trigger goes on the stack; both players pass and it resolves, preventing all damage to A this turn.",
+        "Both players pass; Lightning Bolt resolves."
+      ],
+      "variants": [
+        {
+          "label": "damage-to-player",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Lightning Bolt's 3 damage to A is prevented; A stays at 20 life. Selfless Squire's prevented-damage trigger fires and Selfless Squire gets 3 +1/+1 counters (4/4)."
+        },
+        {
+          "label": "damage-to-creature",
+          "polarity": "does_not_fire",
+          "delta": "Lightning Bolt targets Grizzly Bears instead of A.",
+          "expected": "The prevention covers only damage to A, so Grizzly Bears takes 3 damage and dies. No damage is prevented, the trigger does not fire, and Selfless Squire stays 1/1."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Grizzly Bears",
+        "Selfless Squire",
+        "Mountain",
+        "Lightning Bolt"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

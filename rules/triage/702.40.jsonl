@@ -1,0 +1,3 @@
+{"id": "702.40", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.40a", "category": "mechanical", "observability": "direct", "record_kinds": ["trigger", "resolution"], "outcome": "When a storm spell is cast, it is copied once for each other spell cast earlier this turn.", "note": ""}
+{"id": "702.40b", "category": "mechanical", "observability": "direct", "record_kinds": ["trigger"], "outcome": "Each instance of storm triggers separately.", "note": ""}

@@ -1,0 +1,549 @@
+{
+  "unit": "702.11",
+  "verified": true,
+  "review": [
+    "skipped: removed 702.11a, 702.11h, which the triage classifies definitional (static-ability marker and redundancy), so they need neither a scenario nor a skip.",
+    "702.11b-2: wrong rule outcome. The scenario claimed Doom Blade still resolves after its target gains hexproof; under 608.2b the target is rechecked on resolution and hexproof makes it illegal for A's spell, so Doom Blade fizzles. Rewrote the base to fizzle, made no_response the does_not_fire variant, dropped the Gods Willing variant (protection, 702.16) with its Plains.",
+    "702.11d-1: the base carried a non-empty delta; fixed Doom Blade as the spell checked in the decisions and made Shock the one-fact swap.",
+    "702.11f-1: Raddic, Tal Zealot is white and black, so Doom Blade (nonblack creature only) could never target it whatever its hexproof; replaced Doom Blade with Last Gasp (black, any creature) and fixed the base's non-empty delta.",
+    "702.11g-1: the base carried a non-empty delta; fixed Shock as the source checked in the decisions and made Aether Spellbomb's ability the one-fact swap.",
+    "triage/702.11.jsonl: was missing; wrote it (702.11b to 702.11g legality, 702.11b also resolution; 702.11, 702.11a and 702.11h definitional)."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.11b-1",
+      "rules": [
+        "702.11b"
+      ],
+      "title": "A hexproof permanent cannot be targeted by spells or abilities its controller's opponents control",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            {
+              "card": "Prodigal Sorcerer",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            "Gladecover Scout",
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Shock"
+          ],
+          "B": []
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A checks whether Shock (paid with Mountain) can target Gladecover Scout."
+      ],
+      "variants": [
+        {
+          "label": "spell_targets_opponents_hexproof",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Gladecover Scout is not a legal target for Shock."
+        },
+        {
+          "label": "ability_targets_opponents_hexproof",
+          "polarity": "fires",
+          "delta": "A checks whether Prodigal Sorcerer's {T} ability can target Gladecover Scout instead of casting Shock.",
+          "expected": "Gladecover Scout is not a legal target for the ability either."
+        },
+        {
+          "label": "no_hexproof",
+          "polarity": "does_not_fire",
+          "delta": "The target checked is Grizzly Bears, which has no hexproof.",
+          "expected": "Grizzly Bears is a legal target for Shock."
+        },
+        {
+          "label": "own_hexproof",
+          "polarity": "does_not_fire",
+          "delta": "Gladecover Scout is controlled by A instead of B, and A targets it with Shock.",
+          "expected": "Gladecover Scout is a legal target for Shock, because hexproof protects it only from its controller's opponents."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Prodigal Sorcerer",
+        "Gladecover Scout",
+        "Grizzly Bears",
+        "Shock"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.11b-2",
+      "rules": [
+        "702.11b"
+      ],
+      "title": "A creature that gains hexproof in response is an illegal target on resolution, so the opposing spell fizzles",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Swamp",
+            "Swamp"
+          ],
+          "B": [
+            "Grizzly Bears",
+            "Forest"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Doom Blade"
+          ],
+          "B": [
+            "Snakeskin Veil"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Doom Blade targeting Grizzly Bears, tapping both Swamps.",
+        "A passes priority. B casts Snakeskin Veil targeting Grizzly Bears, tapping Forest.",
+        "Both players pass priority; Snakeskin Veil resolves.",
+        "Both players pass priority; Doom Blade tries to resolve."
+      ],
+      "variants": [
+        {
+          "label": "hexproof_in_response",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Doom Blade's only target is illegal on resolution and it fizzles. Grizzly Bears stays on the battlefield as a 3/3 with a +1/+1 counter."
+        },
+        {
+          "label": "no_response",
+          "polarity": "does_not_fire",
+          "delta": "B passes without casting Snakeskin Veil.",
+          "expected": "Doom Blade resolves, and Grizzly Bears is destroyed and moves to B's graveyard."
+        }
+      ],
+      "cards": [
+        "Swamp",
+        "Forest",
+        "Grizzly Bears",
+        "Doom Blade",
+        "Snakeskin Veil"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.11c-1",
+      "rules": [
+        "702.11c"
+      ],
+      "title": "A player with hexproof cannot be targeted by their opponents' spells or abilities",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain"
+          ],
+          "B": [
+            "Witchbane Orb",
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Shock"
+          ],
+          "B": []
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A checks whether Shock (paid with Mountain) can target player B."
+      ],
+      "variants": [
+        {
+          "label": "player_hexproof",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Player B is not a legal target for Shock, because B has hexproof from Witchbane Orb."
+        },
+        {
+          "label": "no_orb",
+          "polarity": "does_not_fire",
+          "delta": "Witchbane Orb is not on the battlefield.",
+          "expected": "Player B is a legal target for Shock."
+        },
+        {
+          "label": "creature_target",
+          "polarity": "other",
+          "delta": "Shock is checked against Grizzly Bears instead of player B.",
+          "expected": "Grizzly Bears is a legal target for Shock; the player's hexproof does not protect B's permanents."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Witchbane Orb",
+        "Grizzly Bears",
+        "Shock"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.11d-1",
+      "rules": [
+        "702.11d"
+      ],
+      "title": "Hexproof from a quality stops only opposing spells and abilities with that quality",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Swamp",
+            "Mountain"
+          ],
+          "B": [
+            "Garruk's Harbinger"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Doom Blade",
+            "Shock"
+          ],
+          "B": []
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A checks whether Doom Blade, paid with Swamp and Mountain, can target Garruk's Harbinger (hexproof from black)."
+      ],
+      "variants": [
+        {
+          "label": "black_spell",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Garruk's Harbinger is not a legal target for Doom Blade."
+        },
+        {
+          "label": "red_spell",
+          "polarity": "does_not_fire",
+          "delta": "A checks Shock (red), paid with Mountain, instead of Doom Blade.",
+          "expected": "Garruk's Harbinger is a legal target for Shock."
+        },
+        {
+          "label": "own_harbinger",
+          "polarity": "does_not_fire",
+          "delta": "Garruk's Harbinger is controlled by A instead of B, and A checks Doom Blade.",
+          "expected": "Garruk's Harbinger is a legal target for Doom Blade, because the ability protects it only from its controller's opponents."
+        }
+      ],
+      "cards": [
+        "Swamp",
+        "Mountain",
+        "Garruk's Harbinger",
+        "Doom Blade",
+        "Shock"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.11e-1",
+      "rules": [
+        "702.11e"
+      ],
+      "title": "An effect that makes a permanent lose hexproof removes hexproof from [quality] as well",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Shadowspear",
+            "Swamp",
+            "Swamp",
+            "Swamp"
+          ],
+          "B": [
+            "Garruk's Harbinger"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Doom Blade"
+          ],
+          "B": []
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A activates Shadowspear's {1} ability, tapping a Swamp; both players pass and it resolves.",
+        "A checks whether Doom Blade (paid with the other two Swamps) can target Garruk's Harbinger."
+      ],
+      "variants": [
+        {
+          "label": "hexproof_removed",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Garruk's Harbinger has lost its hexproof from black until end of turn and is a legal target for Doom Blade."
+        },
+        {
+          "label": "ability_not_activated",
+          "polarity": "does_not_fire",
+          "delta": "A does not activate Shadowspear's ability.",
+          "expected": "Garruk's Harbinger is not a legal target for Doom Blade."
+        }
+      ],
+      "cards": [
+        "Shadowspear",
+        "Swamp",
+        "Garruk's Harbinger",
+        "Doom Blade"
+      ],
+      "forge_notes": "Forge's AnimateAll RemoveKeywords$ Hexproof may remove only the plain Hexproof keyword and leave Hexproof:Black."
+    },
+    {
+      "id": "702.11e-2",
+      "rules": [
+        "702.11e"
+      ],
+      "title": "An effect that lets a player target creatures as though they lacked hexproof also covers hexproof from [quality]",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Glaring Spotlight",
+            "Swamp",
+            "Swamp"
+          ],
+          "B": [
+            "Garruk's Harbinger"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Doom Blade"
+          ],
+          "B": []
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A checks whether Doom Blade (paid with both Swamps) can target Garruk's Harbinger."
+      ],
+      "variants": [
+        {
+          "label": "spotlight_controlled",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Garruk's Harbinger is a legal target for Doom Blade, because Glaring Spotlight lets A target it as though it lacked hexproof."
+        },
+        {
+          "label": "no_spotlight",
+          "polarity": "does_not_fire",
+          "delta": "Glaring Spotlight is not on the battlefield.",
+          "expected": "Garruk's Harbinger is not a legal target for Doom Blade."
+        },
+        {
+          "label": "opponent_spotlight",
+          "polarity": "does_not_fire",
+          "delta": "Glaring Spotlight is controlled by B instead of A.",
+          "expected": "Garruk's Harbinger is not a legal target for Doom Blade, because the permission applies only to the spotlight controller's spells and abilities."
+        }
+      ],
+      "cards": [
+        "Glaring Spotlight",
+        "Swamp",
+        "Garruk's Harbinger",
+        "Doom Blade"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.11f-1",
+      "rules": [
+        "702.11f"
+      ],
+      "title": "Hexproof from two qualities behaves as two separate hexproof abilities",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Swamp",
+            "Plains",
+            "Mountain"
+          ],
+          "B": [
+            "Raddic, Tal Zealot"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Last Gasp",
+            "Pacifism",
+            "Shock"
+          ],
+          "B": []
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A checks whether Last Gasp, paid with Swamp and Plains, can target Raddic, Tal Zealot (hexproof from white, hexproof from black)."
+      ],
+      "variants": [
+        {
+          "label": "black_spell",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Raddic, Tal Zealot is not a legal target for Last Gasp."
+        },
+        {
+          "label": "white_spell",
+          "polarity": "fires",
+          "delta": "A checks Pacifism (white Aura spell), paid with Plains and Mountain, instead of Last Gasp.",
+          "expected": "Raddic, Tal Zealot is not a legal target for Pacifism."
+        },
+        {
+          "label": "red_spell",
+          "polarity": "does_not_fire",
+          "delta": "A checks Shock (red), paid with Mountain, instead of Last Gasp.",
+          "expected": "Raddic, Tal Zealot is a legal target for Shock."
+        }
+      ],
+      "cards": [
+        "Swamp",
+        "Plains",
+        "Mountain",
+        "Raddic, Tal Zealot",
+        "Last Gasp",
+        "Pacifism",
+        "Shock"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.11g-1",
+      "rules": [
+        "702.11g"
+      ],
+      "title": "Hexproof from each color stops every colored source and lets colorless sources through",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Mountain",
+            "Aether Spellbomb"
+          ],
+          "B": [
+            "Breaker of Creation"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Shock"
+          ],
+          "B": []
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A checks whether Shock, paid with Mountain, can target Breaker of Creation (hexproof from each color)."
+      ],
+      "variants": [
+        {
+          "label": "red_spell",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Breaker of Creation is not a legal target for Shock."
+        },
+        {
+          "label": "colorless_ability",
+          "polarity": "does_not_fire",
+          "delta": "A checks Aether Spellbomb's return-to-hand ability (a colorless source), paid with Island and sacrificing the Spellbomb, instead of Shock.",
+          "expected": "Breaker of Creation is a legal target for the ability of the colorless Aether Spellbomb."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Mountain",
+        "Aether Spellbomb",
+        "Breaker of Creation",
+        "Shock"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

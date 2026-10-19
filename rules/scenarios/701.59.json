@@ -1,0 +1,68 @@
+{
+  "unit": "701.59",
+  "verified": true,
+  "review": [
+    "701.59a-1: Cryptex's ability is a mana ability, which does not use the stack, yet the decisions had both players pass for it to resolve; rewrote that decision so it resolves at once and fixed the mana color.",
+    "triage: rules/triage/701.59.jsonl was missing, so validate never checked this file; wrote it."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "701.59a-1",
+      "rules": ["701.59a", "701.59b"],
+      "title": "Collect evidence needs graveyard cards of total mana value N or greater",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {"A": 20, "B": 20},
+        "battlefield": {"A": ["Cryptex"], "B": []},
+        "hand": {},
+        "graveyard": {"A": ["Grizzly Bears", "Shock"]},
+        "library": {},
+        "exile": {},
+        "notes": "Cryptex is untapped. Grizzly Bears has mana value 2 and Shock has mana value 1, so the graveyard totals 3."
+      },
+      "decisions": [
+        "A activates Cryptex ({T}, collect evidence 3), exiling every card from A's graveyard as the evidence.",
+        "The ability is a mana ability and resolves at once without using the stack: A chooses green for the mana and an unlock counter is put on Cryptex."
+      ],
+      "variants": [
+        {"label": "base", "polarity": "fires", "delta": "", "expected": "The activation is legal: exiling Grizzly Bears and Shock (total mana value 3) pays the collect evidence 3 cost. Both cards move from A's graveyard to exile, Cryptex taps, A adds one mana of any color and Cryptex gets one unlock counter."},
+        {"label": "total_too_low", "polarity": "does_not_fire", "delta": "A's graveyard holds Grizzly Bears and Mountain instead of Grizzly Bears and Shock (total mana value 2).", "expected": "The activation is not legal: the cards in A's graveyard have total mana value 2, below 3, so A cannot choose to collect evidence. Cryptex stays untapped with no counter and the graveyard is unchanged."},
+        {"label": "total_exceeds", "polarity": "fires", "delta": "A's graveyard holds Grizzly Bears and Hill Giant (total mana value 6) instead of Grizzly Bears and Shock.", "expected": "The activation is legal: the exiled cards have total mana value 6, which is 3 or greater, so exceeding N is allowed. Grizzly Bears and Hill Giant move to exile, Cryptex taps and gets one unlock counter."}
+      ],
+      "cards": ["Cryptex", "Grizzly Bears", "Shock", "Mountain", "Hill Giant"],
+      "forge_notes": "Cryptex's cost is the CollectEvidence<3> cost part. Hill Giant appears only in the total_exceeds variant's graveyard."
+    },
+    {
+      "id": "701.59c-1",
+      "rules": ["701.59c", "701.59a", "701.59b"],
+      "title": "A spell's linked ability checks whether evidence was collected",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {"A": 20, "B": 20},
+        "battlefield": {"A": ["Forest"], "B": []},
+        "hand": {"A": ["Analyze the Pollen"]},
+        "graveyard": {"A": ["Serra Angel", "Hill Giant"]},
+        "library": {"A": ["Grizzly Bears", "Forest"]},
+        "exile": {},
+        "notes": "Library lists are top first. Serra Angel has mana value 5 and Hill Giant has mana value 4, so the graveyard totals 9."
+      },
+      "decisions": [
+        "A casts Analyze the Pollen, tapping Forest, and chooses to collect evidence 8 as the optional additional cost, exiling Serra Angel and Hill Giant from the graveyard.",
+        "Both players pass; Analyze the Pollen resolves.",
+        "A searches the library for a creature or land card and takes Grizzly Bears."
+      ],
+      "variants": [
+        {"label": "base", "polarity": "fires", "delta": "", "expected": "Evidence was collected, so the creature-or-land search applies. Grizzly Bears moves from A's library to A's hand, Serra Angel and Hill Giant are in exile, Analyze the Pollen goes to the graveyard and the library is shuffled."},
+        {"label": "declined", "polarity": "does_not_fire", "delta": "A does not collect evidence when casting Analyze the Pollen.", "expected": "Evidence was not collected, so only a basic land card can be found. Grizzly Bears is not an eligible choice; A takes Forest into hand. Grizzly Bears stays in the library and Serra Angel and Hill Giant stay in the graveyard."},
+        {"label": "cannot_collect", "polarity": "other", "delta": "A's graveyard holds Serra Angel and Savannah Lions (total mana value 6) instead of Serra Angel and Hill Giant.", "expected": "Collecting evidence 8 is not possible, so A casts the spell without evidence. Only a basic land card can be found: Forest moves to A's hand, Grizzly Bears stays in the library, and no card leaves the graveyard."}
+      ],
+      "cards": ["Forest", "Analyze the Pollen", "Serra Angel", "Hill Giant", "Grizzly Bears", "Savannah Lions"],
+      "forge_notes": "The optional cost is an OptionalCost static ability with CollectEvidence<8>. Savannah Lions appears only in the cannot_collect variant's graveyard."
+    }
+  ]
+}

@@ -1,0 +1,69 @@
+{
+  "unit": "702.141",
+  "verified": true,
+  "review": [
+    "702.141a-1: the decisions declared the token as an attacker unconditionally, contradicting the Propaganda variant; reworded so the token attacks as its requirement demands when able.",
+    "702.141a-2: the opponent-turn variant changed two facts (whose turn and a non-empty stack); split it into opponent-turn (empty stack) and stack-not-empty (A's turn, B's Shock on the stack), added Shock to cards and cleared the stale forge_notes.",
+    "702.141a-2: added an in-hand variant so the graveyard-only zone of encore is contrasted."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.141a-1",
+      "rules": ["702.141a"],
+      "title": "Encore exiles the card as a cost and makes a hasty token copy that attacks and is sacrificed at the next end step",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {"A": 20, "B": 20},
+        "battlefield": {"A": ["Mountain", "Mountain", "Mountain", "Mountain", "Mountain", "Mountain"], "B": []},
+        "hand": {},
+        "graveyard": {"A": ["Fathom Fleet Swordjack"]},
+        "library": {}, "exile": {},
+        "notes": "Fathom Fleet Swordjack is a 4/3 with Encore {5}{R}; its attack trigger deals damage equal to the number of artifacts A controls, which is 0 here. A has exactly six lands."
+      },
+      "decisions": [
+        "A activates encore of Fathom Fleet Swordjack, tapping 6 Mountains and exiling the card from the graveyard as a cost.",
+        "Both players pass; the encore ability resolves.",
+        "A moves to combat; in the declare attackers step the token attacks B, as its encore requirement demands when able, and the attack trigger resolves for 0 damage.",
+        "B declares no blockers; combat damage is dealt.",
+        "Both players pass through to the end step; the delayed trigger resolves."
+      ],
+      "variants": [
+        {"label": "base", "polarity": "fires", "delta": "", "expected": "Fathom Fleet Swordjack is in exile (not the graveyard) as soon as encore is activated. A gets one 4/3 token copy with haste that attacks B: B goes to 16 life. At the beginning of the end step the token is sacrificed and A controls no creature."},
+        {"label": "blocked", "polarity": "other", "delta": "B controls Grizzly Bears and blocks the token with it.", "expected": "The token is created with haste and attacks even though a blocker exists; Grizzly Bears takes 4 damage and dies, the token takes 2 damage and survives, B stays at 20 life, and the token is sacrificed at the beginning of the end step."},
+        {"label": "cannot-pay-attack-tax", "polarity": "does_not_fire", "delta": "B controls Propaganda, and A has no untapped mana left to pay its cost.", "expected": "The token is created with haste, but it does not attack because A cannot pay Propaganda's {2}: B stays at 20 life. The token is still sacrificed at the beginning of the end step."}
+      ],
+      "cards": ["Mountain", "Fathom Fleet Swordjack", "Grizzly Bears", "Propaganda"],
+      "forge_notes": "Token copy attack requirement with a tax (Propaganda): confirm the AI/engine does not force payment."
+    },
+    {
+      "id": "702.141a-2",
+      "rules": ["702.141a"],
+      "title": "Encore can be activated only from the graveyard, for its cost, and only at sorcery timing",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {"A": 20, "B": 20},
+        "battlefield": {"A": ["Mountain", "Mountain", "Mountain", "Mountain", "Mountain", "Mountain"], "B": []},
+        "hand": {},
+        "graveyard": {"A": ["Fathom Fleet Swordjack"]},
+        "library": {}, "exile": {},
+        "notes": "A has priority with an empty stack. Encore {5}{R} needs six mana."
+      },
+      "decisions": ["A considers activating encore of Fathom Fleet Swordjack from the graveyard."],
+      "variants": [
+        {"label": "base", "polarity": "fires", "delta": "", "expected": "Encore can be activated: it is A's main phase, the stack is empty and A can pay {5}{R}."},
+        {"label": "combat-step", "polarity": "does_not_fire", "delta": "The step is beginning_of_combat instead of main1.", "expected": "Encore cannot be activated: it is not a main phase."},
+        {"label": "opponent-turn", "polarity": "does_not_fire", "delta": "B is the active player in main1; A receives priority with an empty stack after B passes.", "expected": "Encore cannot be activated: it is not A's turn."},
+        {"label": "stack-not-empty", "polarity": "does_not_fire", "delta": "A receives priority with B's Shock targeting A on the stack (B cast it with a Mountain B controls after A passed in main1).", "expected": "Encore cannot be activated: the stack is not empty."},
+        {"label": "in-hand", "polarity": "does_not_fire", "delta": "Fathom Fleet Swordjack is in A's hand instead of A's graveyard.", "expected": "Encore cannot be activated: it functions only while the card is in a graveyard (casting the card for {3}{R} remains possible)."},
+        {"label": "short-on-mana", "polarity": "does_not_fire", "delta": "A controls five Mountains instead of six.", "expected": "Encore cannot be activated: the cost {5}{R} cannot be paid."}
+      ],
+      "cards": ["Mountain", "Fathom Fleet Swordjack", "Shock"],
+      "forge_notes": ""
+    }
+  ]
+}

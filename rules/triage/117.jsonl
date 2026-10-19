@@ -1,0 +1,20 @@
+{"id": "117.1", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "117.1a", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "A noninstant spell is castable only in the owner's main phase with an empty stack; an instant is castable whenever the player has priority.", "note": ""}
+{"id": "117.1b", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "An activated ability is activatable whenever its controller has priority.", "note": ""}
+{"id": "117.1c", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "A special action is takeable whenever its taker has priority, or only in their main phase with an empty stack, as rule 116 specifies for each action.", "note": "Restates the timing of the rule 116 special actions; covered by unit 116's scenarios."}
+{"id": "117.1d", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "A mana ability can be activated whenever the player has priority or a mana payment is being made.", "note": ""}
+{"id": "117.2", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "117.2a", "category": "mechanical", "observability": "indirect", "record_kinds": ["trigger"], "outcome": "A triggered ability that triggered during casting or resolution is put on the stack only when a player would next receive priority.", "note": ""}
+{"id": "117.2b", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "117.2c", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "117.2d", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "117.2e", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "117.3", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "117.3a", "category": "mechanical", "observability": "needs_new_fields", "record_kinds": ["trigger"], "outcome": "The active player receives priority at the start of a step after turn-based actions and beginning-of-step triggers are put on the stack, except in the untap step.", "note": ""}
+{"id": "117.3b", "category": "mechanical", "observability": "needs_new_fields", "record_kinds": ["resolution"], "outcome": "After a spell or ability resolves, the active player receives priority first.", "note": ""}
+{"id": "117.3c", "category": "mechanical", "observability": "needs_new_fields", "record_kinds": ["resolution"], "outcome": "A player who casts a spell or activates an ability with priority receives priority again before any opponent can respond.", "note": "Same observability as 117.3b: who holds priority is not a record field, but it decides the stack order."}
+{"id": "117.3d", "category": "decision", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "117.4", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "When all players pass in succession, the top stack object resolves, or the step ends if the stack is empty.", "note": ""}
+{"id": "117.5", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution", "trigger"], "outcome": "State-based actions are performed repeatedly, then pending triggers are put on the stack, before a player receives priority.", "note": ""}
+{"id": "117.6", "category": "out_of_scope", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "117.7", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "A spell cast in response to another stack object resolves before it.", "note": ""}

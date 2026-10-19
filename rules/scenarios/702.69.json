@@ -1,0 +1,79 @@
+{
+  "unit": "702.69",
+  "verified": true,
+  "review": [],
+  "skipped": [
+    {
+      "id": "702.69b",
+      "reason": "no card or effect gives one spell two instances of gravestorm, and a copy of a spell is not cast so it does not trigger; the single trigger is illustrated by 702.69a-1"
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "702.69a-1",
+      "rules": [
+        "702.69a"
+      ],
+      "title": "Gravestorm copies the spell once per permanent put into a graveyard from the battlefield this turn",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Island",
+            "Island",
+            "Island"
+          ],
+          "B": [
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Lightning Bolt",
+            "Follow the Bodies"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Lightning Bolt targeting Grizzly Bears, tapping Mountain.",
+        "Both players pass; Lightning Bolt resolves and Grizzly Bears dies.",
+        "A casts Follow the Bodies, tapping three Islands. The gravestorm trigger goes on the stack.",
+        "Both players pass; the gravestorm trigger resolves and copies the spell.",
+        "Both players pass; the copy and then the original Follow the Bodies resolve."
+      ],
+      "variants": [
+        {
+          "label": "one_permanent_died",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears is in B's graveyard before Follow the Bodies is cast. Gravestorm copies the spell once. A controls two Clue tokens."
+        },
+        {
+          "label": "no_permanent_died",
+          "polarity": "does_not_fire",
+          "delta": "A's Lightning Bolt targets player B instead of Grizzly Bears.",
+          "expected": "B's life is 17 and Grizzly Bears stays on the battlefield. No permanent has gone to a graveyard this turn, so gravestorm makes no copies. A controls one Clue token."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Island",
+        "Lightning Bolt",
+        "Follow the Bodies",
+        "Grizzly Bears"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

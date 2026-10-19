@@ -1,0 +1,336 @@
+{
+  "unit": "725",
+  "verified": true,
+  "review": [
+    "725.5-1: Dawnglade Regent's 'as long as you're the monarch' is an ordinary condition that is simply false with no monarch, so it did not exercise 725.5 (an effect whose result depends on who the monarch is); replaced with Fealty to the Realm ('the monarch controls enchanted creature'), read while its become-the-monarch trigger is on the stack, record kind continuous."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "725.2-1",
+      "rules": [
+        "725.2"
+      ],
+      "title": "At the beginning of the monarch's end step, the monarch draws a card",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main2",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Forest",
+            "Grizzly Bears"
+          ],
+          "B": [
+            "Forest"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest"
+          ],
+          "B": [
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest"
+          ]
+        },
+        "exile": {},
+        "notes": "A has no cards in hand. A is the monarch. Both players pass priority through the second main phase into the end step."
+      },
+      "decisions": [
+        "Both players pass priority in the second main phase; the end step begins and the monarch's inherent trigger is put on the stack.",
+        "Both players pass priority; the trigger resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The monarch trigger fires at the beginning of A's end step and A draws a card: A's hand has one card and A's library nine."
+        },
+        {
+          "label": "b_is_monarch",
+          "polarity": "does_not_fire",
+          "delta": "B is the monarch instead of A.",
+          "expected": "It is not the beginning of B's end step, so the monarch trigger does not fire: A draws nothing and B draws nothing."
+        },
+        {
+          "label": "no_monarch",
+          "polarity": "other",
+          "delta": "No player is the monarch.",
+          "expected": "There is no monarch trigger and no player draws."
+        }
+      ],
+      "cards": [
+        "Forest",
+        "Grizzly Bears"
+      ],
+      "forge_notes": "The monarch designation is not a zone card field; notes state it."
+    },
+    {
+      "id": "725.2-2",
+      "rules": [
+        "725.2"
+      ],
+      "title": "When a creature deals combat damage to the monarch, its controller becomes the monarch",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "B",
+        "step": "declare_blockers",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Hill Giant"
+          ],
+          "B": [
+            {
+              "card": "Grizzly Bears",
+              "tapped": true
+            }
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest"
+          ],
+          "B": [
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest"
+          ]
+        },
+        "exile": {},
+        "notes": "A is the monarch. Grizzly Bears (2/2, B's) is attacking A. Hill Giant (3/3, A's) is untapped. Combat damage is dealt next. The turn then continues to B's end step."
+      },
+      "decisions": [
+        "A declares no blockers.",
+        "Both players pass priority; combat damage is dealt: Grizzly Bears deals 2 damage to A.",
+        "The monarch trigger goes on the stack and resolves; both players pass priority through the rest of the turn into B's end step."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "A is dealt 2 combat damage (18). The monarch trigger fires and resolves: B becomes the monarch and A stops being the monarch. At the beginning of B's end step B draws a card; A draws nothing."
+        },
+        {
+          "label": "blocked",
+          "polarity": "does_not_fire",
+          "delta": "A declares Hill Giant as a blocker for Grizzly Bears.",
+          "expected": "Combat damage is dealt to Grizzly Bears, which moves to B's graveyard, and not to A (20). A remains the monarch. At B's end step nobody draws."
+        }
+      ],
+      "cards": [
+        "Grizzly Bears",
+        "Hill Giant",
+        "Forest"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "725.3-1",
+      "rules": [
+        "725.3"
+      ],
+      "title": "Only one player is the monarch: a player becoming the monarch ends the designation of the previous monarch",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Swamp",
+            "Swamp",
+            "Swamp",
+            "Swamp"
+          ],
+          "B": [
+            "Island",
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Thorn of the Black Rose"
+          ],
+          "B": [
+            "Counterspell"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Swamp",
+            "Swamp",
+            "Swamp",
+            "Swamp",
+            "Swamp",
+            "Swamp",
+            "Swamp",
+            "Swamp",
+            "Swamp",
+            "Swamp"
+          ],
+          "B": [
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island"
+          ]
+        },
+        "exile": {},
+        "notes": "B is the monarch. After Thorn of the Black Rose resolves, both players pass priority through the rest of the turn into A's end step."
+      },
+      "decisions": [
+        "A casts Thorn of the Black Rose (3B), tapping the four Swamps.",
+        "B passes priority; Thorn resolves and its enters-the-battlefield trigger goes on the stack.",
+        "B passes priority; the trigger resolves: A becomes the monarch.",
+        "Both players pass priority through the rest of the turn into A's end step."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "A becomes the monarch and B stops being the monarch: there is exactly one monarch, A. At the beginning of A's end step A draws a card; B draws nothing."
+        },
+        {
+          "label": "countered",
+          "polarity": "does_not_fire",
+          "delta": "B responds to Thorn of the Black Rose with Counterspell, tapping both Islands.",
+          "expected": "Thorn of the Black Rose is countered and moves to A's graveyard. No enters trigger exists, so B remains the monarch and A does not. At A's end step nobody draws."
+        },
+        {
+          "label": "no_previous_monarch",
+          "polarity": "other",
+          "delta": "No player is the monarch before Thorn of the Black Rose enters.",
+          "expected": "A becomes the monarch; nobody loses the designation. At the beginning of A's end step A draws a card."
+        }
+      ],
+      "cards": [
+        "Swamp",
+        "Island",
+        "Thorn of the Black Rose",
+        "Counterspell"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "725.5-1",
+      "rules": [
+        "725.5"
+      ],
+      "title": "An effect that gives control to the monarch does nothing while there is no monarch",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island"
+          ],
+          "B": [
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Fealty to the Realm"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "No player is the monarch. Fealty to the Realm (4U Aura): when it enters, its controller becomes the monarch; the monarch controls enchanted creature. A has priority in the first main phase with an empty stack."
+      },
+      "decisions": [
+        "A casts Fealty to the Realm (4U) targeting Grizzly Bears, tapping the five Islands.",
+        "B passes priority; Fealty to the Realm resolves and enters attached to Grizzly Bears, and its enters trigger goes on the stack.",
+        "Control of Grizzly Bears is read while the trigger waits on the stack; then both players pass and the trigger resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "While the trigger is on the stack there is no monarch and the control effect does nothing: B controls Grizzly Bears. When the trigger resolves A becomes the monarch and A controls Grizzly Bears."
+        },
+        {
+          "label": "a_already_monarch",
+          "polarity": "does_not_fire",
+          "delta": "A is the monarch before casting Fealty to the Realm.",
+          "expected": "As soon as Fealty to the Realm is attached, A controls Grizzly Bears, while the trigger is still on the stack. After the trigger resolves A is still the monarch and still controls Grizzly Bears."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Grizzly Bears",
+        "Fealty to the Realm"
+      ],
+      "forge_notes": "Forge's GainControl$ Player.isMonarch finds no player while there is no monarch; check that control stays with the owner. The monarch designation is stated in notes because the zone model has no field for it."
+    }
+  ]
+}

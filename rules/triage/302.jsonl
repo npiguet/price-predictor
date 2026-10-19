@@ -1,0 +1,10 @@
+{"id": "302.1", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "A creature card can be cast from hand only in a main phase of its controller's turn with an empty stack.", "note": ""}
+{"id": "302.2", "category": "mechanical", "observability": "direct", "record_kinds": ["resolution"], "outcome": "A resolving creature spell moves to the battlefield under its controller's control.", "note": ""}
+{"id": "302.3", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "302.4", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "302.4a", "category": "mechanical", "observability": "direct", "record_kinds": ["combat"], "outcome": "A creature deals combat damage equal to its power.", "note": ""}
+{"id": "302.4b", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution", "combat"], "outcome": "A creature with damage marked at least equal to its toughness is destroyed.", "note": ""}
+{"id": "302.4c", "category": "mechanical", "observability": "direct", "record_kinds": ["continuous"], "outcome": "A creature's power and toughness are its printed values modified by applicable continuous effects.", "note": ""}
+{"id": "302.5", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "Creatures are legal attackers and blockers when no other restriction applies.", "note": ""}
+{"id": "302.6", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "A creature not controlled continuously since its controller's turn began cannot attack or activate tap-symbol or untap-symbol abilities.", "note": ""}
+{"id": "302.7", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution", "combat"], "outcome": "Damage from a source without wither or infect is marked, lethal damage destroys the creature, and marked damage is removed on regeneration and in cleanup.", "note": ""}

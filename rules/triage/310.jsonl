@@ -1,0 +1,24 @@
+{"id": "310.1", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "A battle card can be cast only from hand in a main phase of its owner's turn with an empty stack.", "note": ""}
+{"id": "310.2", "category": "mechanical", "observability": "direct", "record_kinds": ["resolution"], "outcome": "A resolving battle spell enters the battlefield under its controller's control.", "note": ""}
+{"id": "310.3", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "310.4", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "310.4a", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "310.4b", "category": "mechanical", "observability": "direct", "record_kinds": ["rewrite"], "outcome": "A battle enters with defense counters equal to its printed defense.", "note": ""}
+{"id": "310.4c", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "310.5", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "Battles are legal attack targets.", "note": ""}
+{"id": "310.6", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution", "combat"], "outcome": "Damage dealt to a battle removes that many defense counters from it.", "note": ""}
+{"id": "310.7", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "A Siege with 0 defense that is not the source of a pending triggered ability goes to its owner's graveyard in the state-based check.", "note": ""}
+{"id": "310.8", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "A non-Siege battle with 0 defense goes to its owner's graveyard in the state-based check.", "note": ""}
+{"id": "310.9", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "310.9a", "category": "decision", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "310.9b", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "A battle's protector cannot attack it, while any attacking player whose opponent is the protector can; a Siege's controller can attack it.", "note": ""}
+{"id": "310.9c", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "Only the protector may block creatures attacking the battle.", "note": ""}
+{"id": "310.9d", "category": "mechanical", "observability": "needs_new_fields", "record_kinds": [], "outcome": "Rules referring to the defending player for an attacked battle refer to its protector.", "note": "Protector is not recorded."}
+{"id": "310.9e", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "310.9f", "category": "mechanical", "observability": "needs_new_fields", "record_kinds": [], "outcome": "A battle has one protector, replaced when another player becomes protector.", "note": "Protector is not recorded."}
+{"id": "310.9g", "category": "mechanical", "observability": "needs_new_fields", "record_kinds": [], "outcome": "A battle keeps its protector when it stops being a battle or copies another battle.", "note": "Protector is not recorded."}
+{"id": "310.10", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "A battle attached to a permanent becomes unattached in the state-based check.", "note": ""}
+{"id": "310.11", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "A non-attacked battle without a valid protector gets a newly chosen one, or goes to the graveyard if none can be chosen.", "note": ""}
+{"id": "310.12", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "310.12a", "category": "decision", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "310.12b", "category": "mechanical", "observability": "direct", "record_kinds": ["trigger"], "outcome": "When the last defense counter leaves a Siege, it triggers, exiling the Siege and allowing it to be cast transformed for free.", "note": ""}

@@ -1,0 +1,20 @@
+{"id": "703.1", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "703.1a", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "703.2", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "703.3", "category": "mechanical", "observability": "indirect", "record_kinds": ["trigger"], "outcome": "Turn-based actions happen before state-based actions are checked and before triggered abilities go on the stack.", "note": ""}
+{"id": "703.4", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "703.4a", "category": "mechanical", "observability": "indirect", "record_kinds": ["continuous"], "outcome": "After the untap step begins, the active player's phased-in phasing permanents phase out and their phased-out permanents phase in simultaneously.", "note": ""}
+{"id": "703.4b", "category": "mechanical", "observability": "needs_new_fields", "record_kinds": ["trigger"], "outcome": "After phasing in the untap step, an existing day or night designation changes according to the previous turn's spells cast.", "note": ""}
+{"id": "703.4c", "category": "mechanical", "observability": "indirect", "record_kinds": ["continuous"], "outcome": "The active player untaps all permanents that untap, simultaneously.", "note": ""}
+{"id": "703.4d", "category": "mechanical", "observability": "indirect", "record_kinds": ["trigger"], "outcome": "After the draw step begins, the active player draws a card.", "note": ""}
+{"id": "703.4e", "category": "out_of_scope", "observability": "none", "record_kinds": [], "outcome": "", "note": "Archenemy schemes are not played in a two-player game."}
+{"id": "703.4f", "category": "mechanical", "observability": "indirect", "record_kinds": ["trigger"], "outcome": "After the precombat main phase begins, the active player puts a lore counter on each of their Sagas with chapter abilities.", "note": ""}
+{"id": "703.4g", "category": "mechanical", "observability": "indirect", "record_kinds": ["trigger"], "outcome": "After lore counters are placed, the active player controlling Attractions rolls to visit them.", "note": ""}
+{"id": "703.4h", "category": "out_of_scope", "observability": "none", "record_kinds": [], "outcome": "", "note": "Only applies when opponents do not all automatically become defending players, which cannot occur in two-player games."}
+{"id": "703.4i", "category": "decision", "observability": "none", "record_kinds": [], "outcome": "", "note": "Declaring attackers is a player decision; its legality is covered by 508."}
+{"id": "703.4j", "category": "decision", "observability": "none", "record_kinds": [], "outcome": "", "note": "Declaring blockers is a player decision; its legality is covered by 509."}
+{"id": "703.4k", "category": "decision", "observability": "none", "record_kinds": [], "outcome": "", "note": "Announcing combat damage assignment is a player decision; the damage itself is 703.4m."}
+{"id": "703.4m", "category": "mechanical", "observability": "direct", "record_kinds": ["combat"], "outcome": "All combat damage is dealt simultaneously.", "note": ""}
+{"id": "703.4n", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "At cleanup the active player discards down to maximum hand size.", "note": ""}
+{"id": "703.4p", "category": "mechanical", "observability": "indirect", "record_kinds": ["continuous"], "outcome": "At cleanup all damage is removed from permanents and until-end-of-turn effects end simultaneously.", "note": ""}
+{"id": "703.4q", "category": "mechanical", "observability": "needs_new_fields", "record_kinds": ["resolution"], "outcome": "Unspent mana empties from mana pools as each step or phase ends.", "note": ""}

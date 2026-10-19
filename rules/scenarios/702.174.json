@@ -1,0 +1,786 @@
+{
+  "unit": "702.174",
+  "verified": true,
+  "review": [
+    "702.174e-1: expected outcomes said only Grizzly Bears gains hexproof and indestructible, but Dawn's Truce affects every permanent A controls; rewrote both expected outcomes to include the Plains.",
+    "702.174g-1: both libraries were empty while play continued through B's turns, so B would lose drawing from an empty library (704.5b) before the extra turn could be observed; gave A two Plains and B three Islands in library and added Island to cards."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.174a-1",
+      "rules": [
+        "702.174a",
+        "702.174b",
+        "702.174d",
+        "702.174k"
+      ],
+      "title": "Promising a gift is a no-mana additional cost, and a promised Food gift is created before the spell's other effects",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            }
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Crumb and Get It"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Crumb and Get It targeting Grizzly Bears, choosing B as the opponent to promise the gift to, and pays {W} by tapping Plains.",
+        "Both players pass; Crumb and Get It resolves."
+      ],
+      "variants": [
+        {
+          "label": "promised",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The gift was promised. B creates a Food token first. Grizzly Bears gets +2/+2 (4/4) and indestructible until end of turn. Crumb and Get It moves to A's graveyard."
+        },
+        {
+          "label": "not_promised",
+          "polarity": "does_not_fire",
+          "delta": "A does not choose an opponent, so the gift is not promised.",
+          "expected": "B creates no Food token. Grizzly Bears gets +2/+2 (4/4) until end of turn and does not gain indestructible. Crumb and Get It moves to A's graveyard."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Grizzly Bears",
+        "Crumb and Get It"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.174b-1",
+      "rules": [
+        "702.174b"
+      ],
+      "title": "A gift permanent's enters trigger and gift effect happen only if the gift was promised",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Forest",
+            "Forest",
+            "Forest"
+          ],
+          "B": [
+            "Island",
+            "Island",
+            "Sol Ring"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Scrapshooter"
+          ],
+          "B": [
+            "Counterspell"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "B": [
+            "Mountain",
+            "Mountain"
+          ]
+        },
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Scrapshooter, choosing B as the opponent to promise the gift to, and pays {1}{G}{G} by tapping three Forests.",
+        "B passes with Counterspell unused; Scrapshooter resolves and enters the battlefield.",
+        "Scrapshooter's enters trigger targets Sol Ring and the gift trigger is put on the stack; A orders the destroy trigger first. Both resolve."
+      ],
+      "variants": [
+        {
+          "label": "promised",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Scrapshooter's enters trigger fires and destroys Sol Ring (moves to B's graveyard). B draws a card from the gift (hand: Counterspell and Mountain)."
+        },
+        {
+          "label": "not_promised",
+          "polarity": "does_not_fire",
+          "delta": "A does not choose an opponent, so the gift is not promised.",
+          "expected": "Neither trigger fires. Sol Ring stays on B's battlefield and B's hand stays Counterspell only."
+        },
+        {
+          "label": "countered",
+          "polarity": "does_not_fire",
+          "delta": "A promises the gift, but B casts Counterspell on Scrapshooter, tapping both Islands.",
+          "expected": "Scrapshooter is countered and moves to A's graveyard. It never enters, so neither trigger fires, B draws no card and Sol Ring stays on the battlefield. B's hand is empty because Counterspell was cast."
+        }
+      ],
+      "cards": [
+        "Forest",
+        "Island",
+        "Sol Ring",
+        "Scrapshooter",
+        "Counterspell",
+        "Mountain"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.174c-1",
+      "rules": [
+        "702.174c"
+      ],
+      "title": "A give-a-gift trigger fires when a gifted spell resolves",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Plains",
+            {
+              "card": "Jolly Gerbils",
+              "summoning_sick": false
+            },
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            "Island",
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Crumb and Get It"
+          ],
+          "B": [
+            "Counterspell"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Forest",
+            "Forest"
+          ],
+          "B": [
+            "Mountain"
+          ]
+        },
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Crumb and Get It targeting Grizzly Bears, choosing B as the opponent to promise the gift to, and pays {W} by tapping a Plains.",
+        "B passes with Counterspell unused; Crumb and Get It resolves and Jolly Gerbils' trigger, if it fired, resolves."
+      ],
+      "variants": [
+        {
+          "label": "promised",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Crumb and Get It resolves with its gift: B creates a Food token. Jolly Gerbils' trigger fires and A draws a card (hand: Forest)."
+        },
+        {
+          "label": "not_promised",
+          "polarity": "does_not_fire",
+          "delta": "A does not choose an opponent, so the gift is not promised.",
+          "expected": "Crumb and Get It resolves without a gift. Jolly Gerbils' trigger does not fire and A draws no card."
+        },
+        {
+          "label": "countered",
+          "polarity": "does_not_fire",
+          "delta": "A promises the gift, but B casts Counterspell on Crumb and Get It, tapping both Islands.",
+          "expected": "Crumb and Get It is countered, so no gift is given: B creates no Food token, Jolly Gerbils' trigger does not fire and A draws no card."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Island",
+        "Jolly Gerbils",
+        "Grizzly Bears",
+        "Crumb and Get It",
+        "Counterspell",
+        "Forest",
+        "Mountain"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.174c-2",
+      "rules": [
+        "702.174c"
+      ],
+      "title": "A give-a-gift trigger also fires when a gift triggered ability resolves",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Forest",
+            "Forest",
+            "Forest",
+            {
+              "card": "Jolly Gerbils",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            "Sol Ring"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Scrapshooter"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Plains",
+            "Plains"
+          ],
+          "B": [
+            "Mountain"
+          ]
+        },
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Scrapshooter, choosing B as the opponent to promise the gift to, and pays {1}{G}{G} by tapping three Forests.",
+        "Both players pass; Scrapshooter resolves and enters. Its enters triggers (destroy Sol Ring; gift draw) and Jolly Gerbils' trigger, if it fires, are put on the stack and resolve."
+      ],
+      "variants": [
+        {
+          "label": "promised",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The gift triggered ability resolves: B draws a card. Jolly Gerbils' trigger fires and A draws a card (hand: Plains). Sol Ring is destroyed."
+        },
+        {
+          "label": "not_promised",
+          "polarity": "does_not_fire",
+          "delta": "A does not choose an opponent, so the gift is not promised.",
+          "expected": "No gift triggered ability resolves. Jolly Gerbils' trigger does not fire and A draws no card. Sol Ring stays on the battlefield."
+        }
+      ],
+      "cards": [
+        "Forest",
+        "Jolly Gerbils",
+        "Sol Ring",
+        "Scrapshooter",
+        "Plains",
+        "Mountain"
+      ],
+      "forge_notes": "Forge implements the permanent's gift as a GiftAbility SVar that may not raise the GiveGift trigger; this scenario tests whether it does."
+    },
+    {
+      "id": "702.174e-1",
+      "rules": [
+        "702.174e",
+        "702.174b"
+      ],
+      "title": "Gift a card makes the chosen opponent draw a card",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Plains",
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            }
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Dawn's Truce"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "B": [
+            "Mountain",
+            "Mountain"
+          ]
+        },
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Dawn's Truce, choosing B as the opponent to promise the gift to, and pays {1}{W} by tapping both Plains.",
+        "Both players pass; Dawn's Truce resolves."
+      ],
+      "variants": [
+        {
+          "label": "promised",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "B draws the top card of their library (hand: Mountain), before the other effects. A and each permanent A controls (both Plains and Grizzly Bears) gain hexproof, and each permanent A controls also gains indestructible until end of turn."
+        },
+        {
+          "label": "not_promised",
+          "polarity": "does_not_fire",
+          "delta": "A does not choose an opponent, so the gift is not promised.",
+          "expected": "B draws no card (hand empty). A and each permanent A controls (both Plains and Grizzly Bears) gain hexproof until end of turn; no permanent gains indestructible."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Grizzly Bears",
+        "Dawn's Truce",
+        "Mountain"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.174f-1",
+      "rules": [
+        "702.174f",
+        "702.174b"
+      ],
+      "title": "Gift a tapped Fish makes the chosen opponent create a tapped 1/1 blue Fish",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Plains"
+          ],
+          "B": [
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            }
+          ]
+        },
+        "hand": {
+          "A": [
+            "Parting Gust"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Parting Gust targeting Grizzly Bears, choosing B as the opponent to promise the gift to, and pays {W}{W} by tapping both Plains.",
+        "Both players pass; Parting Gust resolves. The turn then advances to its end step."
+      ],
+      "variants": [
+        {
+          "label": "promised",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "B creates a tapped 1/1 blue Fish creature token. Grizzly Bears is exiled and stays exiled; it does not return at the end step."
+        },
+        {
+          "label": "not_promised",
+          "polarity": "does_not_fire",
+          "delta": "A does not choose an opponent, so the gift is not promised.",
+          "expected": "B creates no Fish. Grizzly Bears is exiled, then returns to the battlefield under B's control at the beginning of the next end step with a +1/+1 counter (3/3)."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Grizzly Bears",
+        "Parting Gust"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.174g-1",
+      "rules": [
+        "702.174g"
+      ],
+      "title": "Gift an extra turn gives the chosen opponent an extra turn after this one",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Perch Protection"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Plains",
+            "Plains"
+          ],
+          "B": [
+            "Island",
+            "Island",
+            "Island"
+          ]
+        },
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Perch Protection, choosing B as the opponent to promise the gift to, and pays {4}{W}{W} by tapping six Plains.",
+        "Both players pass; Perch Protection resolves. Play continues through the end of A's turn and the following turns with no further actions."
+      ],
+      "variants": [
+        {
+          "label": "promised",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "B is given an extra turn. After A's turn ends, B takes a turn and then a second, consecutive turn, and A's next turn is the third turn after this one. A created four 2/2 blue Bird tokens with flying, which (with A's other permanents) phased out, and Perch Protection is exiled."
+        },
+        {
+          "label": "not_promised",
+          "polarity": "does_not_fire",
+          "delta": "A does not choose an opponent, so the gift is not promised.",
+          "expected": "B receives no extra turn. After A's turn ends, B takes one turn and then A takes the next. A created four 2/2 blue Bird tokens with flying, which stay on the battlefield phased in, and Perch Protection is exiled."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Island",
+        "Perch Protection"
+      ],
+      "forge_notes": "Both variants also exile Perch Protection and create the four Birds. The promised-gift phasing and protection effects are not what this scenario checks."
+    },
+    {
+      "id": "702.174h-1",
+      "rules": [
+        "702.174h",
+        "702.174b"
+      ],
+      "title": "Gift a Treasure makes the chosen opponent create a Treasure token",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain"
+          ],
+          "B": [
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            }
+          ]
+        },
+        "hand": {
+          "A": [
+            "Blooming Blast"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Blooming Blast targeting Grizzly Bears, choosing B as the opponent to promise the gift to, and pays {1}{R} by tapping both Mountains.",
+        "Both players pass; Blooming Blast resolves."
+      ],
+      "variants": [
+        {
+          "label": "promised",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "B creates a Treasure token first. Blooming Blast deals 2 damage to Grizzly Bears, which moves to B's graveyard, and 3 damage to B (life 17)."
+        },
+        {
+          "label": "not_promised",
+          "polarity": "does_not_fire",
+          "delta": "A does not choose an opponent, so the gift is not promised.",
+          "expected": "B creates no Treasure. Grizzly Bears takes 2 damage and moves to B's graveyard. B's life stays 20."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Grizzly Bears",
+        "Blooming Blast"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.174i-1",
+      "rules": [
+        "702.174i",
+        "702.174b"
+      ],
+      "title": "Gift an Octopus makes the chosen opponent create an 8/8 blue Octopus when the gift permanent enters",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Forest",
+            "Forest",
+            "Forest",
+            "Island",
+            "Island"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Octomancer"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Octomancer, choosing B as the opponent to promise the gift to, and pays {3}{G}{U} by tapping all five lands.",
+        "Both players pass; Octomancer resolves and enters, and its gift trigger resolves."
+      ],
+      "variants": [
+        {
+          "label": "promised",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Octomancer's gift trigger fires on entering and B creates an 8/8 blue Octopus creature token. Octomancer (3/3) is on A's battlefield."
+        },
+        {
+          "label": "not_promised",
+          "polarity": "does_not_fire",
+          "delta": "A does not choose an opponent, so the gift is not promised.",
+          "expected": "No gift trigger fires and B has no Octopus. Octomancer (3/3) is on A's battlefield."
+        }
+      ],
+      "cards": [
+        "Forest",
+        "Island",
+        "Octomancer"
+      ],
+      "forge_notes": "Observe immediately after the gift trigger resolves: at the beginning of the end step Octomancer's own trigger copies an Octopus token that entered this turn."
+    },
+    {
+      "id": "702.174j-1",
+      "rules": [
+        "702.174j"
+      ],
+      "title": "A gifted spell that is countered or fizzles gives no gift",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Plains",
+            "Mountain"
+          ],
+          "B": [
+            "Island",
+            "Island",
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            }
+          ]
+        },
+        "hand": {
+          "A": [
+            "Parting Gust",
+            "Shock"
+          ],
+          "B": [
+            "Counterspell"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Parting Gust targeting Grizzly Bears, choosing B as the opponent to promise the gift to, and pays {W}{W} by tapping both Plains.",
+        "B and A pass without responding; Parting Gust resolves."
+      ],
+      "variants": [
+        {
+          "label": "resolves",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "B creates a tapped 1/1 blue Fish creature token and Grizzly Bears is exiled."
+        },
+        {
+          "label": "countered",
+          "polarity": "does_not_fire",
+          "delta": "B casts Counterspell on Parting Gust, tapping both Islands, before it resolves.",
+          "expected": "Parting Gust is countered and moves to A's graveyard. B creates no Fish and Grizzly Bears stays on the battlefield."
+        },
+        {
+          "label": "fizzles",
+          "polarity": "does_not_fire",
+          "delta": "A responds by casting Shock on Grizzly Bears, tapping the Mountain, before Parting Gust resolves.",
+          "expected": "Shock resolves first and Grizzly Bears moves to B's graveyard. Parting Gust fizzles with no legal target and moves to A's graveyard. B creates no Fish."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Mountain",
+        "Island",
+        "Grizzly Bears",
+        "Parting Gust",
+        "Shock",
+        "Counterspell"
+      ],
+      "forge_notes": "A fizzled spell never resolves, so Forge must skip the GiftAbility sub-effect; verify."
+    },
+    {
+      "id": "702.174m-1",
+      "rules": [
+        "702.174m",
+        "702.174b"
+      ],
+      "title": "A gift-conditional target is chosen only if the gift was promised",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island"
+          ],
+          "B": [
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            }
+          ]
+        },
+        "hand": {
+          "A": [
+            "Mind Spiral"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Plains",
+            "Plains",
+            "Plains"
+          ]
+        },
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Mind Spiral targeting A, choosing B as the opponent to promise the gift to and targeting Grizzly Bears with the gift-conditional tap, and pays {4}{U} by tapping all five Islands.",
+        "Both players pass; Mind Spiral resolves."
+      ],
+      "variants": [
+        {
+          "label": "promised",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "B creates a tapped 1/1 blue Fish first. A draws three cards (hand: three Plains). Grizzly Bears is tapped and gets a stun counter."
+        },
+        {
+          "label": "not_promised",
+          "polarity": "does_not_fire",
+          "delta": "A does not choose an opponent, so the gift is not promised and no second target is chosen.",
+          "expected": "B creates no Fish. A draws three cards. Grizzly Bears stays untapped with no counters; Mind Spiral had only one target."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Grizzly Bears",
+        "Mind Spiral",
+        "Plains"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

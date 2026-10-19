@@ -1,0 +1,5 @@
+{"id": "701.30", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "701.30a", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "Clashing reveals the top card of the library, which then either stays on top or moves to the bottom.", "note": ""}
+{"id": "701.30b", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "Clashing with an opponent makes both the player and that opponent reveal their top card and choose top or bottom.", "note": "In a two-player game choosing the opponent is trivial; the observable part is that the opponent clashes too."}
+{"id": "701.30c", "category": "decision", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "701.30d", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "The player who revealed the strictly highest mana value wins the clash; ties and lower values do not win.", "note": ""}

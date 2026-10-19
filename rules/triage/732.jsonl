@@ -1,0 +1,12 @@
+{"id":"732.1","category":"definitional","observability":"none","record_kinds":[],"outcome":"","note":""}
+{"id":"732.1a","category":"out_of_scope","observability":"none","record_kinds":[],"outcome":"","note":"Informal player conduct."}
+{"id":"732.1b","category":"definitional","observability":"none","record_kinds":[],"outcome":"","note":""}
+{"id":"732.1c","category":"out_of_scope","observability":"none","record_kinds":[],"outcome":"","note":"Tournament rules."}
+{"id":"732.2","category":"decision","observability":"none","record_kinds":[],"outcome":"","note":""}
+{"id":"732.2a","category":"decision","observability":"none","record_kinds":[],"outcome":"","note":""}
+{"id":"732.2b","category":"decision","observability":"none","record_kinds":[],"outcome":"","note":""}
+{"id":"732.2c","category":"decision","observability":"none","record_kinds":[],"outcome":"","note":""}
+{"id":"732.3","category":"decision","observability":"none","record_kinds":[],"outcome":"","note":""}
+{"id":"732.4","category":"out_of_scope","observability":"none","record_kinds":[],"outcome":"","note":"Forge has no loop detection that draws the game, and self-play collection cannot produce a mandatory infinite loop."}
+{"id":"732.5","category":"decision","observability":"none","record_kinds":[],"outcome":"","note":""}
+{"id":"732.6","category":"decision","observability":"none","record_kinds":[],"outcome":"","note":""}

@@ -1,0 +1,342 @@
+{
+  "unit": "616",
+  "verified": true,
+  "review": [
+    "616.1-1: with Rest in Peace absent there is no choice among effects, so 'single-effect' is the does_not_fire variant; the scenario had none.",
+    "616.1a-1: decisions offered an order choice that 616.1a forbids; the self-replacement is now stated as applied first without a choice.",
+    "616.1c-1: decisions offered an order choice that 616.1c forbids; the copy effect is now stated as applied first without a choice.",
+    "616.1g-1: decisions presented the forced order as A's choice; reworded as the order 616.1g imposes.",
+    "triage/616.jsonl was missing; wrote one line per rule, all mechanical; 616.1b and 616.1d stay skipped."
+  ],
+  "skipped": [
+    {
+      "id": "616.1b",
+      "reason": "cannot be illustrated with a simple Forge state: it needs two replacement effects that both change who controls an entering object, and no pair of simple cards does that in a two-player game"
+    },
+    {
+      "id": "616.1d",
+      "reason": "cannot be illustrated with a simple Forge state: it needs a replacement that makes a card enter with its back face up competing with another replacement effect, and no such pair of simple cards exists"
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "616.1-1",
+      "rules": [
+        "616.1",
+        "616.1e",
+        "616.1f"
+      ],
+      "title": "The affected object's controller chooses among applicable replacement effects, and the rest are rechecked",
+      "record_kind": "rewrite",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Rest in Peace",
+            "Swamp",
+            "Swamp"
+          ],
+          "B": [
+            "Darksteel Colossus"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Diabolic Edict"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Libraries are non-empty."
+      },
+      "decisions": [
+        "A casts Diabolic Edict targeting B, tapping both Swamps; both players pass and Diabolic Edict resolves.",
+        "B sacrifices Darksteel Colossus, its only creature.",
+        "B, as the controller of the affected object, chooses Rest in Peace's replacement effect to apply first."
+      ],
+      "variants": [
+        {
+          "label": "rest-in-peace-first",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Darksteel Colossus is exiled instead of going to the graveyard. Its own shuffle-into-library effect no longer applies and does nothing. Diabolic Edict is also exiled by Rest in Peace."
+        },
+        {
+          "label": "colossus-first",
+          "polarity": "other",
+          "delta": "B chooses Darksteel Colossus's own replacement effect to apply first.",
+          "expected": "Darksteel Colossus is shuffled into B's library instead of going to the graveyard; Rest in Peace no longer applies to it and does nothing. Diabolic Edict is still exiled."
+        },
+        {
+          "label": "single-effect",
+          "polarity": "does_not_fire",
+          "delta": "Rest in Peace is not on the battlefield.",
+          "expected": "Only Darksteel Colossus's replacement effect applies, with no choice to make; it is shuffled into B's library. Diabolic Edict goes to A's graveyard."
+        }
+      ],
+      "cards": [
+        "Rest in Peace",
+        "Swamp",
+        "Darksteel Colossus",
+        "Diabolic Edict"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "616.1a-1",
+      "rules": [
+        "616.1a"
+      ],
+      "title": "A self-replacement effect is applied before other replacement effects",
+      "record_kind": "rewrite",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Furnace of Rath",
+            "Mountain",
+            "Mountain"
+          ],
+          "B": [
+            "Centaur Courser"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Searing Blaze",
+            "Mountain"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Libraries are non-empty."
+      },
+      "decisions": [
+        "A plays Mountain from hand as the land drop.",
+        "A casts Searing Blaze targeting B and Centaur Courser, tapping two Mountains; both players pass and Searing Blaze resolves.",
+        "No order is chosen: Searing Blaze's own landfall replacement is applied before Furnace of Rath's doubling."
+      ],
+      "variants": [
+        {
+          "label": "landfall",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The landfall replacement makes the damage 3 to each, and Furnace of Rath doubles it: B takes 6 damage (14 life) and Centaur Courser takes 6 and dies."
+        },
+        {
+          "label": "no-landfall",
+          "polarity": "does_not_fire",
+          "delta": "A does not play the Mountain, so no land entered under A's control this turn.",
+          "expected": "Searing Blaze deals 1 damage to each, doubled to 2: B is at 18 life and Centaur Courser (3/3) survives with 2 damage marked."
+        }
+      ],
+      "cards": [
+        "Furnace of Rath",
+        "Mountain",
+        "Centaur Courser",
+        "Searing Blaze"
+      ],
+      "forge_notes": "In Forge the landfall condition is part of Searing Blaze's own damage amount (Count$Landfall), so the doubling applies to the final amount."
+    },
+    {
+      "id": "616.1c-1",
+      "rules": [
+        "616.1c"
+      ],
+      "title": "A copy effect applying as an object enters the battlefield is applied before other replacement effects",
+      "record_kind": "rewrite",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Essence of the Wild",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Rusted Sentinel"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Libraries are non-empty."
+      },
+      "decisions": [
+        "A casts Rusted Sentinel, tapping four Forests; both players pass and it resolves.",
+        "No order is chosen: Essence of the Wild's copy effect is applied before Rusted Sentinel's enters-tapped effect."
+      ],
+      "variants": [
+        {
+          "label": "essence-present",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Rusted Sentinel enters as a copy of Essence of the Wild (a 6/6 Avatar). Because the copy effect applied first, it has no 'enters tapped' ability and is untapped."
+        },
+        {
+          "label": "essence-absent",
+          "polarity": "does_not_fire",
+          "delta": "Essence of the Wild is not on the battlefield.",
+          "expected": "Rusted Sentinel enters as itself (a 3/4 Golem) and its own effect makes it enter tapped."
+        }
+      ],
+      "cards": [
+        "Essence of the Wild",
+        "Forest",
+        "Rusted Sentinel"
+      ],
+      "forge_notes": "Forge may apply Rusted Sentinel's enters-tapped replacement independently of the clone; the rules outcome is an untapped copy."
+    },
+    {
+      "id": "616.1g-1",
+      "rules": [
+        "616.1g"
+      ],
+      "title": "An effect on an event contained in another event is applied after the containing event's effect",
+      "record_kind": "rewrite",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Doubling Season",
+            "Essence of the Wild",
+            "Plains",
+            "Plains"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Raise the Alarm"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Libraries are non-empty."
+      },
+      "decisions": [
+        "A casts Raise the Alarm, tapping both Plains; both players pass and it resolves.",
+        "Doubling Season's effect is applied to the token creation first; Essence of the Wild's copy effect is then applied to each token as it enters."
+      ],
+      "variants": [
+        {
+          "label": "both-effects",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Doubling Season changes two tokens into four; each of the four tokens then enters as a copy of Essence of the Wild. A controls four 6/6 Essence of the Wild tokens (plus the original Essence of the Wild)."
+        },
+        {
+          "label": "no-essence",
+          "polarity": "does_not_fire",
+          "delta": "Essence of the Wild is not on the battlefield.",
+          "expected": "Doubling Season alone makes four tokens; they enter as four 1/1 white Soldier tokens."
+        },
+        {
+          "label": "no-doubling",
+          "polarity": "other",
+          "delta": "Doubling Season is not on the battlefield.",
+          "expected": "Raise the Alarm creates two tokens, and each enters as a copy of Essence of the Wild: two 6/6 Essence of the Wild tokens."
+        }
+      ],
+      "cards": [
+        "Doubling Season",
+        "Essence of the Wild",
+        "Plains",
+        "Raise the Alarm"
+      ],
+      "forge_notes": "The final board is the same whichever order Forge applies the two effects in; the scenario checks both effects take part."
+    },
+    {
+      "id": "616.2-1",
+      "rules": [
+        "616.2"
+      ],
+      "title": "A replacement or prevention effect can become applicable because of a previous one",
+      "record_kind": "rewrite",
+      "setup": {
+        "active": "B",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Daunting Defender",
+            "Grizzly Bears",
+            {
+              "card": "Pariah",
+              "attached_to": "Daunting Defender"
+            }
+          ],
+          "B": [
+            "Mountain"
+          ]
+        },
+        "hand": {
+          "B": [
+            "Lightning Bolt"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Libraries are non-empty."
+      },
+      "decisions": [
+        "B casts Lightning Bolt targeting A, tapping Mountain.",
+        "Both players pass; Lightning Bolt resolves."
+      ],
+      "variants": [
+        {
+          "label": "cleric-enchanted",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Pariah makes the 3 damage to A be dealt to Daunting Defender instead. That now triggers Daunting Defender's prevention, so 1 is prevented: Daunting Defender has 2 damage marked and survives; A stays at 20 life."
+        },
+        {
+          "label": "bears-enchanted",
+          "polarity": "does_not_fire",
+          "delta": "Pariah is attached to Grizzly Bears instead of Daunting Defender.",
+          "expected": "Pariah redirects the 3 damage to Grizzly Bears, which is not a Cleric, so nothing is prevented; Grizzly Bears dies. A stays at 20 life."
+        }
+      ],
+      "cards": [
+        "Daunting Defender",
+        "Grizzly Bears",
+        "Pariah",
+        "Mountain",
+        "Lightning Bolt"
+      ],
+      "forge_notes": "Forge must re-run the replacement check on the redirected damage target for the second effect to apply."
+    }
+  ]
+}

@@ -1,0 +1,5 @@
+{"id": "701.44", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "701.44a", "category": "mechanical", "observability": "direct", "record_kinds": ["resolution"], "outcome": "Explore reveals the top card: a land goes to hand, otherwise the permanent gets a +1/+1 counter and the card may go to the graveyard.", "note": ""}
+{"id": "701.44b", "category": "mechanical", "observability": "indirect", "record_kinds": ["trigger"], "outcome": "A permanent explores, firing explore triggers, even if some of the actions were impossible.", "note": ""}
+{"id": "701.44c", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "A permanent that left the battlefield still explores, using last known information for the object and its controller.", "note": ""}
+{"id": "701.44d", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "Simultaneous explores happen one at a time, in APNAP order of the permanents' controllers.", "note": ""}

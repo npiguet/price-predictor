@@ -1,0 +1,592 @@
+{
+  "unit": "612",
+  "verified": true,
+  "review": [
+    "612.2a-1: expected named the tokens 'Goblin', but under 111.4 an unnamed token is named after its subtypes plus 'Token'; changed to 'Goblin Token' (and 'Soldier Token' in the absent_type variant).",
+    "612.4-1: expected did not state the token's name; added that token 1 keeps the name Soldier Token, since under 111.4 a change to an existing token's subtype does not change its name.",
+    "612.7-1: the Equipment attachment lived only in notes; recorded it as attached_to in the setup.",
+    "612.8-1: target_renamed omitted that Honest Work, left unattached when Bears 1 returns to hand, goes to A's graveyard under 704.5m; added it."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "612.2-1",
+      "rules": [
+        "612.2"
+      ],
+      "title": "A text-changing effect changes a color word used as a color word but not the same word inside a card name",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            {
+              "card": "White Knight"
+            }
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Sleight of Mind"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "White Knight has the name word 'White' and the rules-text color word 'black' (protection from black)."
+      },
+      "decisions": [
+        "A casts Sleight of Mind targeting White Knight, tapping Island, and chooses to replace the color word black with red.",
+        "Both players pass; Sleight of Mind resolves.",
+        "The board is read in main1 after resolution."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "White Knight is named White Knight and has first strike and protection from red; it no longer has protection from black."
+        },
+        {
+          "label": "name_word",
+          "polarity": "does_not_fire",
+          "delta": "The chosen color word to replace is white instead of black, replaced with red.",
+          "expected": "White Knight is still named White Knight, with first strike and protection from black; nothing about it changed."
+        }
+      ],
+      "cards": [
+        "Island",
+        "White Knight",
+        "Sleight of Mind"
+      ],
+      "forge_notes": "Sleight of Mind has Duration$ Permanent. Its color choice goes through the activating player's chooseColor, so the scenario fixes both colors."
+    },
+    {
+      "id": "612.2a-1",
+      "rules": [
+        "612.2a"
+      ],
+      "title": "A text-changing effect on a token-creating spell changes the created token's creature type and name",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Plains"
+          ],
+          "B": [
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Raise the Alarm"
+          ],
+          "B": [
+            "Artificial Evolution"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Raise the Alarm's text is 'Create two 1/1 white Soldier creature tokens.'"
+      },
+      "decisions": [
+        "A casts Raise the Alarm, tapping both Plains.",
+        "B responds by casting Artificial Evolution targeting Raise the Alarm on the stack, tapping Island, and chooses to replace the creature type Soldier with Goblin.",
+        "Both players pass; Artificial Evolution resolves, then both pass again and Raise the Alarm resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Raise the Alarm resolves and creates two 1/1 white Goblin creature tokens named Goblin Token under A's control; there are no Soldier tokens."
+        },
+        {
+          "label": "absent_type",
+          "polarity": "does_not_fire",
+          "delta": "B chooses to replace the creature type Elf with Goblin instead of Soldier with Goblin.",
+          "expected": "Raise the Alarm resolves and creates two 1/1 white Soldier creature tokens named Soldier Token under A's control; there are no Goblin tokens."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Island",
+        "Raise the Alarm",
+        "Artificial Evolution"
+      ],
+      "forge_notes": "Forge applies the text change to the token prototype in TokenInfo.protoTypeApplyTextChange; confirm the token's name follows its subtype."
+    },
+    {
+      "id": "612.3-1",
+      "rules": [
+        "612.3"
+      ],
+      "title": "A text-changing effect does not alter an ability granted by another effect",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island"
+          ],
+          "B": [
+            "Lord of Atlantis",
+            "Merfolk of the Pearl Trident",
+            "Bull Hippo"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Mind Bend"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Merfolk of the Pearl Trident has islandwalk only because Lord of Atlantis grants it; Bull Hippo has islandwalk printed on it."
+      },
+      "decisions": [
+        "A casts Mind Bend targeting Merfolk of the Pearl Trident, tapping Island, choosing to change a basic land type, replacing Island with Swamp.",
+        "Both players pass; Mind Bend resolves.",
+        "The board is read in main1 after resolution."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Merfolk of the Pearl Trident is 2/2 and still has islandwalk (granted by Lord of Atlantis); it does not have swampwalk."
+        },
+        {
+          "label": "printed",
+          "polarity": "does_not_fire",
+          "delta": "Mind Bend targets Bull Hippo instead of Merfolk of the Pearl Trident.",
+          "expected": "Bull Hippo is 3/3 and has swampwalk; it no longer has islandwalk."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Lord of Atlantis",
+        "Merfolk of the Pearl Trident",
+        "Bull Hippo",
+        "Mind Bend"
+      ],
+      "forge_notes": "Mind Bend is a GenericChoice with a ChangeText sub-ability, so the scenario fixes the branch (land type) and both land types. Check that Forge leaves the AddKeyword$ Landwalk:Island granted by the static ability untouched."
+    },
+    {
+      "id": "612.4-1",
+      "rules": [
+        "612.4"
+      ],
+      "title": "A text-changing effect on a token changes the token's subtypes",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Plains"
+          ],
+          "B": [
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Raise the Alarm"
+          ],
+          "B": [
+            "Artificial Evolution"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "The two Soldier tokens are created during the decisions; they are called token 1 and token 2."
+      },
+      "decisions": [
+        "A casts Raise the Alarm, tapping both Plains.",
+        "Both players pass; Raise the Alarm resolves and creates two 1/1 white Soldier creature tokens, token 1 and token 2.",
+        "A passes priority; B casts Artificial Evolution targeting token 1, tapping Island, and chooses to replace the creature type Soldier with Goblin.",
+        "Both players pass; Artificial Evolution resolves.",
+        "The board is read in main1 after resolution."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Token 1 is a 1/1 white Goblin creature named Soldier Token (its subtype is Goblin, not Soldier); token 2 is still a 1/1 white Soldier creature named Soldier Token."
+        },
+        {
+          "label": "absent_type",
+          "polarity": "does_not_fire",
+          "delta": "B chooses to replace the creature type Elf with Goblin instead of Soldier with Goblin.",
+          "expected": "Token 1 and token 2 are both still 1/1 white Soldier creatures named Soldier Token; neither is a Goblin."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Island",
+        "Raise the Alarm",
+        "Artificial Evolution"
+      ],
+      "forge_notes": "B acts on A's turn with priority after Raise the Alarm resolves."
+    },
+    {
+      "id": "612.5-1",
+      "rules": [
+        "612.5"
+      ],
+      "title": "Exchanging text boxes swaps the rules text of two creatures for as long as the enchantment remains",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            "Island",
+            "Serra Angel"
+          ],
+          "B": [
+            "Plains",
+            "Plains",
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Exchange of Words"
+          ],
+          "B": [
+            "Disenchant"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Serra Angel has flying and vigilance in its text box; Grizzly Bears has an empty text box."
+      },
+      "decisions": [
+        "A casts Exchange of Words, tapping three Islands.",
+        "Both players pass; Exchange of Words resolves and enters the battlefield.",
+        "Its enters trigger goes on the stack targeting Serra Angel and Grizzly Bears; both players pass and it resolves.",
+        "The board is read in main1 after resolution."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears is a 2/2 with flying and vigilance; Serra Angel is a 4/4 with no abilities. Power and toughness are unchanged on both. Exchange of Words is on the battlefield."
+        },
+        {
+          "label": "enchantment_removed",
+          "polarity": "does_not_fire",
+          "delta": "After the trigger resolves, B casts Disenchant targeting Exchange of Words, tapping both Plains, and it resolves.",
+          "expected": "Exchange of Words is in A's graveyard; Serra Angel is a 4/4 with flying and vigilance again and Grizzly Bears is a 2/2 with no abilities."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Plains",
+        "Serra Angel",
+        "Grizzly Bears",
+        "Exchange of Words",
+        "Disenchant"
+      ],
+      "forge_notes": "Implemented by ExchangeTextBox (TextBoxExchangeEffect) with Duration$ AsLongAsInPlay."
+    },
+    {
+      "id": "612.6-1",
+      "rules": [
+        "612.6"
+      ],
+      "title": "An object with the full text of another object takes its name, mana cost, colors, types, abilities and power/toughness",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Volrath's Shapeshifter"
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {
+          "A": [
+            "Shock",
+            "Serra Angel"
+          ]
+        },
+        "library": {},
+        "exile": {},
+        "notes": "Graveyard lists are bottom first, so the last entry is the top card. Base: Serra Angel is on top of A's graveyard."
+      },
+      "decisions": [
+        "No spell is cast and no ability is activated.",
+        "The board is read in main1."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Volrath's Shapeshifter is named Serra Angel with mana cost {3}{W}{W}, is a white 4/4 Angel creature with flying, vigilance and '{2}: Discard a card.'"
+        },
+        {
+          "label": "noncreature_on_top",
+          "polarity": "does_not_fire",
+          "delta": "The graveyard order is reversed, so Shock is the top card and Serra Angel is under it.",
+          "expected": "Volrath's Shapeshifter keeps its own characteristics: named Volrath's Shapeshifter, mana cost {1}{U}{U}, a blue 0/1 Phyrexian Shapeshifter creature with only '{2}: Discard a card.'"
+        }
+      ],
+      "cards": [
+        "Volrath's Shapeshifter",
+        "Shock",
+        "Serra Angel"
+      ],
+      "forge_notes": "Implemented as GainTextOf$ TopOfGraveyard.Creature in a static ability."
+    },
+    {
+      "id": "612.7-1",
+      "rules": [
+        "612.7"
+      ],
+      "title": "An object with all names of nonlegendary creature cards has each of those names in addition to its own",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            {
+              "card": "Hill Giant"
+            },
+            {
+              "card": "Spy Kit",
+              "attached_to": "Hill Giant"
+            }
+          ],
+          "B": [
+            "Grizzly Bears",
+            "Hill Giant"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Echoing Truth"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Spy Kit is attached to A's Hill Giant (not B's). Echoing Truth returns the target and every other permanent with the same name as the target."
+      },
+      "decisions": [
+        "A casts Echoing Truth targeting B's Grizzly Bears, tapping both Islands.",
+        "Both players pass; Echoing Truth resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "B's Grizzly Bears returns to B's hand and A's equipped Hill Giant returns to A's hand; Spy Kit stays on the battlefield unattached; B's Hill Giant stays on the battlefield."
+        },
+        {
+          "label": "unattached",
+          "polarity": "does_not_fire",
+          "delta": "Spy Kit is on A's battlefield but not attached to any creature.",
+          "expected": "Only B's Grizzly Bears returns to B's hand; A's Hill Giant and B's Hill Giant stay on the battlefield."
+        },
+        {
+          "label": "own_name",
+          "polarity": "other",
+          "delta": "Echoing Truth targets B's Hill Giant instead of B's Grizzly Bears.",
+          "expected": "B's Hill Giant returns to B's hand and A's equipped Hill Giant returns to A's hand, since it keeps its own name; B's Grizzly Bears stays on the battlefield."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Hill Giant",
+        "Spy Kit",
+        "Grizzly Bears",
+        "Echoing Truth"
+      ],
+      "forge_notes": "Check that sharesNameWith in Echoing Truth's ChangeZoneAll honors names added by AddNames$ AllNonLegendaryCreatureNames."
+    },
+    {
+      "id": "612.8-1",
+      "rules": [
+        "612.8"
+      ],
+      "title": "An effect that sets an object's name replaces its previous names",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            "Island"
+          ],
+          "B": [
+            "Grizzly Bears",
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Honest Work",
+            "Echoing Truth"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "B's two Grizzly Bears are called Bears 1 and Bears 2."
+      },
+      "decisions": [
+        "A casts Honest Work targeting Bears 1, tapping one Island.",
+        "Both players pass; Honest Work resolves, its enters trigger taps Bears 1, and the trigger resolves. Bears 1 is now a 1/1 Citizen named Humble Merchant.",
+        "A casts Echoing Truth targeting Bears 2, tapping two Islands.",
+        "Both players pass; Echoing Truth resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Bears 2 returns to B's hand; Bears 1, named Humble Merchant, stays on the battlefield enchanted by Honest Work."
+        },
+        {
+          "label": "no_aura",
+          "polarity": "does_not_fire",
+          "delta": "A does not cast Honest Work; Bears 1 keeps the name Grizzly Bears.",
+          "expected": "Both Bears 1 and Bears 2 return to B's hand."
+        },
+        {
+          "label": "target_renamed",
+          "polarity": "fires",
+          "delta": "Echoing Truth targets Bears 1 (named Humble Merchant) instead of Bears 2.",
+          "expected": "Only Bears 1 returns to B's hand; Honest Work goes to A's graveyard as a state-based action; Bears 2 stays on the battlefield."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Grizzly Bears",
+        "Honest Work",
+        "Echoing Truth"
+      ],
+      "forge_notes": "Honest Work uses SetName$ Humble Merchant in its static ability."
+    },
+    {
+      "id": "612.10-1",
+      "rules": [
+        "612.10"
+      ],
+      "title": "A spliced card's rules text is added to the spell and its effects also happen",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Desperate Ritual",
+            "Glacial Ray"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Both cards are Arcane instants with splice onto Arcane {1}{R}."
+      },
+      "decisions": [
+        "A casts Desperate Ritual, revealing Glacial Ray from hand and paying its splice cost, choosing B as the target of Glacial Ray's 2 damage, and taps all four Mountains for {1}{R} plus {1}{R}.",
+        "Both players pass; Desperate Ritual resolves.",
+        "The state is read in main1 right after resolution."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "B is at 18 life; A has {R}{R}{R} in mana pool; Desperate Ritual is in A's graveyard and Glacial Ray is still in A's hand."
+        },
+        {
+          "label": "no_splice",
+          "polarity": "does_not_fire",
+          "delta": "A does not splice Glacial Ray and pays only {1}{R} (two Mountains).",
+          "expected": "B is at 20 life; A has {R}{R}{R} in mana pool; Desperate Ritual is in A's graveyard and Glacial Ray is still in A's hand."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Desperate Ritual",
+        "Glacial Ray"
+      ],
+      "forge_notes": "Mana in the pool empties at the end of the step, so it is read in main1 straight after resolution."
+    }
+  ]
+}

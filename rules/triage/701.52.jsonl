@@ -1,0 +1,2 @@
+{"id": "701.52", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "701.52a", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution", "trigger"], "outcome": "Rolling a d6 triggers the visit ability of each controlled Attraction whose lit-up number equals the result.", "note": ""}

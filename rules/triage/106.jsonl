@@ -1,0 +1,20 @@
+{"id": "106.1", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": "mana as a resource"}
+{"id": "106.1a", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": "five colors of mana"}
+{"id": "106.1b", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": "six types of mana"}
+{"id": "106.2", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": "mana symbols"}
+{"id": "106.3", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "A mana ability or spell effect adds mana to the controller's pool, with the ability's source as the mana's source.", "note": ""}
+{"id": "106.4", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "Added mana sits in the pool, can pay costs, and is lost when the pool empties at the end of each step and phase.", "note": ""}
+{"id": "106.4a", "category": "decision", "observability": "none", "record_kinds": [], "outcome": "", "note": "announcement of remaining mana"}
+{"id": "106.4b", "category": "decision", "observability": "none", "record_kinds": [], "outcome": "", "note": "announcement when passing priority"}
+{"id": "106.5", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "An ability that would produce mana of an undefined type produces no mana.", "note": ""}
+{"id": "106.6", "category": "mechanical", "observability": "needs_new_fields", "record_kinds": ["resolution"], "outcome": "Restricted mana can be spent only as its restriction allows, and its riders or delayed triggers apply when spent, without changing its type.", "note": ""}
+{"id": "106.6a", "category": "mechanical", "observability": "needs_new_fields", "record_kinds": ["rewrite", "resolution"], "outcome": "A replacement effect that increases mana produced applies the source's restrictions and additional effects to every mana, with one delayed trigger per mana.", "note": ""}
+{"id": "106.7", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "An ability based on mana a permanent could produce yields the types its abilities would produce at that time, or no mana if none.", "note": ""}
+{"id": "106.8", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "Hybrid mana added to a pool becomes one mana of the chosen half's color or the chosen generic amount of colorless mana.", "note": "choice then consequence"}
+{"id": "106.9", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "Phyrexian mana added to a pool is one mana of the symbol's color.", "note": ""}
+{"id": "106.10", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "Generic mana symbols add that much colorless mana.", "note": ""}
+{"id": "106.11", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "Snow mana symbols add that much colorless mana.", "note": ""}
+{"id": "106.12", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": "defines tapping for mana"}
+{"id": "106.12a", "category": "mechanical", "observability": "direct", "record_kinds": ["trigger"], "outcome": "A 'tapped for mana' trigger fires when the mana ability resolves and produces mana of the specified type.", "note": ""}
+{"id": "106.12b", "category": "mechanical", "observability": "direct", "record_kinds": ["rewrite"], "outcome": "A 'tapped for mana' replacement effect modifies the mana production event while the ability resolves.", "note": ""}
+{"id": "106.13", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "Drain Power empties one player's pool and adds the same mana, with restrictions intact, to the other player's pool.", "note": "Drain Power is in Forge"}

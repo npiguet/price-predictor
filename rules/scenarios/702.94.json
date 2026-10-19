@@ -1,0 +1,78 @@
+{
+  "unit": "702.94",
+  "verified": true,
+  "review": [],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.94a-1",
+      "rules": [
+        "702.94a"
+      ],
+      "title": "Miracle lets a card be cast for its miracle cost only if it is the first card drawn this turn",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "B",
+        "step": "upkeep",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Mountain"
+          ],
+          "B": [
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Inspiration"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Thunderous Wrath",
+            "Island",
+            "Island"
+          ]
+        },
+        "exile": {},
+        "notes": "Library lists the top card first. It is B's turn, so A has not drawn any card this turn yet."
+      },
+      "decisions": [
+        "A casts Inspiration targeting A, tapping the four Islands; B passes and it resolves, so A draws two cards from the top of the library.",
+        "If the first drawn card is Thunderous Wrath, A reveals it for miracle; the miracle trigger resolves and A casts it for {R} targeting B's Grizzly Bears, tapping Mountain.",
+        "Both players pass; Thunderous Wrath resolves."
+      ],
+      "variants": [
+        {
+          "label": "wrath_drawn_first",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "A draws Thunderous Wrath first, reveals it, and the miracle trigger fires. Thunderous Wrath is cast for {R}, deals 5 damage to Grizzly Bears, which dies, and Thunderous Wrath is put into A's graveyard. A's hand holds one Island."
+        },
+        {
+          "label": "wrath_drawn_second",
+          "polarity": "does_not_fire",
+          "delta": "A's library order is Island, Thunderous Wrath, Island (top first), so Thunderous Wrath is the second card drawn.",
+          "expected": "Thunderous Wrath is not the first card drawn this turn, so no miracle trigger fires. It stays in A's hand along with an Island. Mountain stays untapped, but {4}{R}{R} cannot be paid, so it cannot be cast. Grizzly Bears is unharmed."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Mountain",
+        "Grizzly Bears",
+        "Inspiration",
+        "Thunderous Wrath"
+      ],
+      "forge_notes": "Check that Forge offers miracle for a draw made on the opponent's turn and counts draws per player."
+    }
+  ]
+}

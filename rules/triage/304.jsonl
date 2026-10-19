@@ -1,0 +1,5 @@
+{"id": "304.1", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "An instant card can be cast from hand whenever its controller has priority.", "note": ""}
+{"id": "304.2", "category": "mechanical", "observability": "direct", "record_kinds": ["resolution"], "outcome": "A resolving instant spell follows its text and then moves to its owner's graveyard.", "note": ""}
+{"id": "304.3", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "304.4", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "An instant that would enter the battlefield stays in its previous zone.", "note": ""}
+{"id": "304.5", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "An 'any time you could cast an instant' action needs only priority, not an instant card or ability to cast one.", "note": ""}

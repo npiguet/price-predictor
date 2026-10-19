@@ -1,0 +1,200 @@
+{
+  "unit": "702.185",
+  "verified": true,
+  "review": [],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.185a-1",
+      "rules": [
+        "702.185a"
+      ],
+      "title": "A permanent spell cast for its warp cost is exiled at the beginning of the next end step",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Memorial Team Leader"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Memorial Team Leader for its warp cost {1}{R}, tapping two Mountains.",
+        "Both players pass; Memorial Team Leader resolves.",
+        "Both players pass through combat and the second main phase to the beginning of the end step; the delayed trigger goes on the stack and both players pass."
+      ],
+      "variants": [
+        {
+          "label": "warp_cast",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Memorial Team Leader (4/3) is on the battlefield until the end step. At the beginning of the end step it is exiled (not put into the graveyard) and stays in exile."
+        },
+        {
+          "label": "cast_for_mana_cost",
+          "polarity": "does_not_fire",
+          "delta": "A casts Memorial Team Leader for its mana cost {3}{R}, tapping four Mountains, instead of for its warp cost.",
+          "expected": "Memorial Team Leader (4/3) stays on the battlefield through the end step. No delayed trigger exiles it."
+        }
+      ],
+      "cards": [
+        "Memorial Team Leader",
+        "Mountain"
+      ],
+      "forge_notes": "Warp is implemented by registering a delayed trigger when the spell's permanent enters."
+    },
+    {
+      "id": "702.185a-2",
+      "rules": [
+        "702.185a"
+      ],
+      "title": "A warped card in exile can be cast on a later turn, but not for its warp cost",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain"
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {
+          "A": [
+            "Memorial Team Leader"
+          ]
+        },
+        "notes": "It is a later turn of A than the one in which A cast Memorial Team Leader for its warp cost. The delayed trigger from that cast exiled Memorial Team Leader at the beginning of that turn's end step."
+      },
+      "decisions": [
+        "A checks whether Memorial Team Leader can be cast from exile for its mana cost {3}{R}, with four Mountains."
+      ],
+      "variants": [
+        {
+          "label": "warped_card_in_exile",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Casting Memorial Team Leader from exile is legal for {3}{R}, payable with the four Mountains."
+        },
+        {
+          "label": "exiled_by_other_effect",
+          "polarity": "does_not_fire",
+          "delta": "Memorial Team Leader is in exile because another effect exiled it, not because its warp delayed trigger did.",
+          "expected": "Casting Memorial Team Leader from exile is not legal."
+        },
+        {
+          "label": "two_mountains",
+          "polarity": "does_not_fire",
+          "delta": "A controls only two Mountains.",
+          "expected": "Casting Memorial Team Leader from exile is not legal: the warp cost {1}{R} can be used only when casting from hand, so only the mana cost {3}{R} applies from exile."
+        }
+      ],
+      "cards": [
+        "Memorial Team Leader",
+        "Mountain"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.185c-1",
+      "rules": [
+        "702.185c"
+      ],
+      "title": "A condition asking whether a spell was warped this turn is true after a spell was cast for its warp cost",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Swamp",
+            "Swamp",
+            "Swamp"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Memorial Team Leader",
+            "Decode Transmissions"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Forest",
+            "Forest",
+            "Forest"
+          ]
+        },
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Memorial Team Leader for its warp cost {1}{R}, tapping two Mountains.",
+        "Both players pass; Memorial Team Leader resolves.",
+        "A casts Decode Transmissions, tapping three Swamps.",
+        "Both players pass; Decode Transmissions resolves."
+      ],
+      "variants": [
+        {
+          "label": "spell_was_warped",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Decode Transmissions resolves with its void condition true: A draws two cards (hand 2, library 1) and B loses 2 life (18). A's life stays 20. Memorial Team Leader is still on the battlefield."
+        },
+        {
+          "label": "spell_not_warped",
+          "polarity": "does_not_fire",
+          "delta": "A casts Memorial Team Leader for its mana cost {3}{R}, tapping four Mountains, instead of for its warp cost.",
+          "expected": "Decode Transmissions resolves with its void condition false (no spell was warped and no nonland permanent left the battlefield): A draws two cards and A loses 2 life (18). B's life stays 20."
+        }
+      ],
+      "cards": [
+        "Memorial Team Leader",
+        "Decode Transmissions",
+        "Mountain",
+        "Swamp",
+        "Forest"
+      ],
+      "forge_notes": "Both spells are cast in the first main phase, so Memorial Team Leader has not yet been exiled; this keeps 'a nonland permanent left the battlefield this turn' false and isolates 'a spell was warped this turn'."
+    }
+  ]
+}

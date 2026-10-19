@@ -1,0 +1,305 @@
+{
+  "unit": "701.44",
+  "verified": true,
+  "review": [
+    "701.44b-1: opponents_walker flipped Wildgrowth Walker's 'you control' condition, not whether the creature explored; replaced it with explore_countered (Stifle), adding B's Island and Stifle to the base setup."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "701.44a-1",
+      "rules": [
+        "701.44a"
+      ],
+      "title": "Explore sends a revealed land to hand and otherwise adds a +1/+1 counter",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Forest",
+            "Forest"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Merfolk Branchwalker"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Grizzly Bears",
+            "Forest"
+          ]
+        },
+        "exile": {},
+        "notes": "Library lists are ordered top card first."
+      },
+      "decisions": [
+        "A casts Merfolk Branchwalker, tapping both Forests; it resolves and enters the battlefield.",
+        "Its explore trigger resolves: A reveals the top card of A's library. If the revealed card is not a land, A puts it into the graveyard."
+      ],
+      "variants": [
+        {
+          "label": "nonland_revealed",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears is revealed, is not a land, and goes to A's graveyard. Merfolk Branchwalker gets a +1/+1 counter (3/2). A's hand is empty and A's library holds only Forest."
+        },
+        {
+          "label": "land_revealed",
+          "polarity": "does_not_fire",
+          "delta": "The library order is Forest, then Grizzly Bears.",
+          "expected": "Forest is revealed and goes to A's hand. Merfolk Branchwalker gets no counter and stays 2/1. A's library holds only Grizzly Bears."
+        },
+        {
+          "label": "nonland_kept_on_top",
+          "polarity": "other",
+          "delta": "A leaves the revealed Grizzly Bears on top of the library instead of putting it into the graveyard.",
+          "expected": "Merfolk Branchwalker gets a +1/+1 counter (3/2). Grizzly Bears stays on top of A's library and A's graveyard is empty."
+        }
+      ],
+      "cards": [
+        "Forest",
+        "Merfolk Branchwalker",
+        "Grizzly Bears"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "701.44b-1",
+      "rules": [
+        "701.44b"
+      ],
+      "title": "A permanent explores even when the reveal is impossible",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Forest",
+            "Forest",
+            "Wildgrowth Walker"
+          ],
+          "B": [
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Merfolk Branchwalker"
+          ],
+          "B": [
+            "Stifle"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": []
+        },
+        "exile": {},
+        "notes": "A's library is empty."
+      },
+      "decisions": [
+        "A casts Merfolk Branchwalker, tapping both Forests; it resolves and enters the battlefield; its explore trigger goes on the stack.",
+        "B passes; the explore trigger resolves. Wildgrowth Walker's trigger, if it fires, resolves afterwards."
+      ],
+      "variants": [
+        {
+          "label": "empty_library",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Nothing can be revealed, but Merfolk Branchwalker still explores: it gets a +1/+1 counter (3/2). Wildgrowth Walker's trigger fires, giving Walker a +1/+1 counter (2/4) and A 3 life (23)."
+        },
+        {
+          "label": "land_on_top",
+          "polarity": "fires",
+          "delta": "A's library holds one card, Forest.",
+          "expected": "Forest is revealed and goes to A's hand; Merfolk Branchwalker gets no counter (2/1). Wildgrowth Walker's trigger still fires: Walker is 2/4 and A is at 23."
+        },
+        {
+          "label": "explore_countered",
+          "polarity": "does_not_fire",
+          "delta": "B casts Stifle targeting the explore trigger, tapping Island, instead of passing.",
+          "expected": "The explore trigger is countered and Merfolk Branchwalker does not explore: it stays 2/1 with no counter. Wildgrowth Walker's trigger does not fire: Walker stays 1/3 and A's life stays 20."
+        }
+      ],
+      "cards": [
+        "Forest",
+        "Island",
+        "Merfolk Branchwalker",
+        "Wildgrowth Walker",
+        "Stifle"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "701.44c-1",
+      "rules": [
+        "701.44c"
+      ],
+      "title": "A permanent that left the battlefield still explores using last known information",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Forest",
+            "Forest",
+            "Wildgrowth Walker"
+          ],
+          "B": [
+            "Mountain",
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Merfolk Branchwalker"
+          ],
+          "B": [
+            "Shock",
+            "Stifle"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Grizzly Bears",
+            "Forest"
+          ]
+        },
+        "exile": {},
+        "notes": "Library lists are ordered top card first."
+      },
+      "decisions": [
+        "A casts Merfolk Branchwalker, tapping both Forests; it resolves and enters the battlefield; its explore trigger goes on the stack.",
+        "In response B casts Shock targeting Merfolk Branchwalker, tapping Mountain; Shock resolves.",
+        "The explore trigger resolves: A reveals the top card of A's library and, if it is not a land, puts it into the graveyard."
+      ],
+      "variants": [
+        {
+          "label": "killed_in_response",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Merfolk Branchwalker dies to Shock and is in A's graveyard before the trigger resolves. The trigger still explores: Grizzly Bears is revealed and goes to A's graveyard; no counter can be put on Branchwalker. Wildgrowth Walker's trigger fires using A as the controller: Walker is 2/4 and A is at 23."
+        },
+        {
+          "label": "no_response",
+          "polarity": "other",
+          "delta": "B does not cast Shock.",
+          "expected": "Merfolk Branchwalker explores and gets a +1/+1 counter (3/2); Grizzly Bears goes to A's graveyard. Wildgrowth Walker's trigger fires: Walker is 2/4 and A is at 23."
+        },
+        {
+          "label": "land_on_top_killed",
+          "polarity": "fires",
+          "delta": "The library order is Forest, then Grizzly Bears (Branchwalker still killed in response).",
+          "expected": "Merfolk Branchwalker is in A's graveyard. The trigger still explores: Forest is revealed and goes to A's hand. Wildgrowth Walker's trigger fires: Walker is 2/4 and A is at 23."
+        },
+        {
+          "label": "trigger_countered",
+          "polarity": "does_not_fire",
+          "delta": "B casts Stifle targeting the explore trigger with Island instead of casting Shock.",
+          "expected": "The explore trigger is countered. Nothing is revealed, Merfolk Branchwalker stays 2/1 with no counter, Wildgrowth Walker's trigger does not fire (1/3, A at 20), and A's library is unchanged."
+        }
+      ],
+      "cards": [
+        "Forest",
+        "Mountain",
+        "Island",
+        "Wildgrowth Walker",
+        "Merfolk Branchwalker",
+        "Shock",
+        "Stifle",
+        "Grizzly Bears"
+      ],
+      "forge_notes": "Forge's ExploreEffect reads the card from the game state before adding the counter; the Explores trigger needs the last-known controller of the dead creature."
+    },
+    {
+      "id": "701.44d-1",
+      "rules": [
+        "701.44d"
+      ],
+      "title": "Several permanents instructed to explore at once explore one at a time",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Hakbal of the Surging Soul",
+              "summoning_sick": false
+            },
+            {
+              "card": "Merfolk Branchwalker",
+              "summoning_sick": false
+            }
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Forest",
+            "Shock"
+          ]
+        },
+        "exile": {},
+        "notes": "Library lists are ordered top card first. Both of A's Merfolk are on the battlefield before combat."
+      },
+      "decisions": [
+        "A moves to the beginning of combat. Hakbal's trigger (each Merfolk creature A controls explores) resolves.",
+        "A chooses Hakbal of the Surging Soul to explore first and Merfolk Branchwalker second. After each reveal, if the revealed card is not a land, A puts it into the graveyard."
+      ],
+      "variants": [
+        {
+          "label": "hakbal_first",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Hakbal explores first: Forest is revealed and goes to A's hand, so Hakbal gets no counter (3/3). Branchwalker explores second: Shock is revealed and goes to A's graveyard, and Branchwalker gets a +1/+1 counter (3/2)."
+        },
+        {
+          "label": "branchwalker_first",
+          "polarity": "other",
+          "delta": "A chooses Merfolk Branchwalker to explore first and Hakbal second.",
+          "expected": "Branchwalker explores first: Forest goes to A's hand and Branchwalker gets no counter (2/1). Hakbal explores second: Shock goes to A's graveyard and Hakbal gets a +1/+1 counter (4/4)."
+        },
+        {
+          "label": "only_one_merfolk",
+          "polarity": "does_not_fire",
+          "delta": "The second permanent is Grizzly Bears, which is not a Merfolk.",
+          "expected": "Only Hakbal explores: Forest goes to A's hand and Hakbal gets no counter (3/3). Grizzly Bears does not explore and Shock stays on top of A's library."
+        }
+      ],
+      "cards": [
+        "Hakbal of the Surging Soul",
+        "Merfolk Branchwalker",
+        "Forest",
+        "Shock",
+        "Grizzly Bears"
+      ],
+      "forge_notes": "Forge sorts the exploring permanents by owner and lets the controller order them; both permanents share one controller here, so the order is A's choice."
+    }
+  ]
+}

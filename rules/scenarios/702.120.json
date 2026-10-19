@@ -1,0 +1,77 @@
+{
+  "unit": "702.120",
+  "verified": true,
+  "review": [],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.120a-1",
+      "rules": [
+        "702.120a"
+      ],
+      "title": "Each mode chosen beyond the first adds the escalate cost",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            }
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Borrowed Hostility"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Borrowed Hostility choosing both modes: mode 1 targets Grizzly Bears (+3/+0) and mode 2 targets Grizzly Bears (first strike).",
+        "A pays {R} plus the escalate cost {3} for the second mode by tapping all four Mountains.",
+        "Both players pass; Borrowed Hostility resolves."
+      ],
+      "variants": [
+        {
+          "label": "two_modes",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The total cost is {3}{R}, four mana, all four Mountains are tapped. Borrowed Hostility resolves; Grizzly Bears is 5/2 with first strike until end of turn. Borrowed Hostility moves to A's graveyard."
+        },
+        {
+          "label": "one_mode",
+          "polarity": "does_not_fire",
+          "delta": "A chooses only the +3/+0 mode.",
+          "expected": "No escalate cost is added: the total cost is {R}, one Mountain is tapped and three stay untapped. Grizzly Bears is 5/2 without first strike until end of turn."
+        },
+        {
+          "label": "two_modes_three_lands",
+          "polarity": "fires",
+          "delta": "A controls three Mountains instead of four, and chooses both modes.",
+          "expected": "The total cost is {3}{R}, four mana, and A has only three lands. Casting Borrowed Hostility with both modes is not legal; the spell stays in A's hand."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Grizzly Bears",
+        "Borrowed Hostility"
+      ],
+      "forge_notes": "Variant two_modes_three_lands changes the number of Mountains in the base setup from four to three."
+    }
+  ]
+}

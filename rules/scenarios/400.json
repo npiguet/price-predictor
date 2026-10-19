@@ -1,0 +1,1173 @@
+{
+  "unit": "400",
+  "verified": true,
+  "review": [
+    "400.4a-1: Tezzeret, Cruel Machinist's -7 puts instant and sorcery cards onto the battlefield face down (a face-down card has no card type, so 400.4a does not stop it), so the base and sorcery expectations were wrong; rewrote the scenario as Cloudshift flickering a face-down (manifested) Lightning Bolt / Divination / Grizzly Bears, where the face-up instant or sorcery stays in exile.",
+    "400.6-1: the only contrast was the Unsummon bounce, in which the replacement still exiles Unsummon, so nothing showed the zone change without a replacement; added a no_replacement variant (no Rest in Peace) as does_not_fire and relabelled the bounce variant other.",
+    "400.7e-1: the only contrast (Rest in Peace) stops the trigger firing at all, so it never tested whether the trigger finds the new object; added Tormod's Crypt to A's board and a left_graveyard variant where the trigger fires but Rancor has left the graveyard before it resolves.",
+    "400.7f-1: setup note called the enchanted Bears white-looking; Angelic Destiny does not change color (Terror needs it nonblack, which it is), so corrected the note.",
+    "400.12-1: expected outcomes omitted that Tormod's Crypt goes to A's graveyard when sacrificed as a cost; added it to both variants.",
+    "400.7h: the skip claimed no Forge card has a later effect part acting on the cast spell, but Torrential Gearhulk ('If that spell would be put into your graveyard this turn, exile it instead', ReplaceGraveyard$ Exile) does; removed the skip and added scenario 400.7h-1."
+  ],
+  "skipped": [
+    {
+      "id": "400.4b",
+      "reason": "A conspiracy, phenomenon, plane, scheme or vanguard card lives in the command zone of a casual variant (Conspiracy draft, Planechase, Archenemy, Vanguard). The sealed and draft games this corpus collects are two-player constructed-style games with none of these cards, and the scenario schema has no way to set up a plane or scheme deck, so the situation is not reachable."
+    },
+    {
+      "id": "400.7i",
+      "reason": "No Forge card script follows a land play with a later effect part that acts on the land that entered (Forge's Play effect with a land is not followed by such sub-abilities in any script), so the rule produces no observable outcome that differs from ordinary land play and cannot be contrasted in a variant."
+    },
+    {
+      "id": "400.7m",
+      "reason": "Stickers belong to the Unfinity set; Forge scripts one sticker card and the sticker mechanic is not part of any pool or draft format the corpus collects, so a sticker cannot be on a permanent in a collected game."
+    },
+    {
+      "id": "400.8",
+      "reason": "No Forge script moves an object from exile to exile, so the 'new object that has just been exiled' case has no card that exercises it; the nearest observable behaviour, a re-exile trigger firing again, cannot be reached in a two-player Forge game."
+    },
+    {
+      "id": "400.9",
+      "reason": "Turning a face-up object in the command zone face down requires a command-zone object such as a commander or emblem being manifested or cloaked; the collected games use no command zone, and Forge has no effect that does this to an emblem or commander in a way the engine models."
+    },
+    {
+      "id": "400.10",
+      "reason": "Putting a command-zone object into the command zone again (for example a commander re-entering through a Command Beacon style effect) needs the Commander format, which is not part of the collected two-player games."
+    },
+    {
+      "id": "400.11b",
+      "reason": "Bringing a card into the game from outside it (Wish cards, Learn) requires a sideboard. The collected games supply only the 40-card deck, and the scenario schema has no sideboard zone, so the situation is not reachable in the corpus."
+    },
+    {
+      "id": "400.11c",
+      "reason": "Cards outside the game cannot be affected by spells or abilities. The collected games have no sideboard or other outside-the-game cards, so no spell can even try to affect one and the rule never shows a difference."
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "400.3-1",
+      "rules": [
+        "400.3"
+      ],
+      "title": "A card owned by another player goes to its owner's graveyard or hand, not its controller's",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Island",
+            "Grizzly Bears",
+            {
+              "card": "Control Magic",
+              "attached_to": "Grizzly Bears"
+            }
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Shock",
+            "Unsummon"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "The Grizzly Bears on A's battlefield is owned by B and controlled by A through Control Magic (owned by A)."
+      },
+      "decisions": [
+        "A casts Shock targeting Grizzly Bears, tapping Mountain.",
+        "Both players pass; Shock resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears has 2 damage marked and dies in the state-based check. It moves to B's graveyard (its owner), not A's graveyard. Control Magic goes to A's graveyard and Shock goes to A's graveyard."
+        },
+        {
+          "label": "bounce",
+          "polarity": "fires",
+          "delta": "A casts Unsummon targeting Grizzly Bears, tapping Island, instead of Shock.",
+          "expected": "Grizzly Bears returns to B's hand (its owner), not A's hand. Control Magic goes to A's graveyard."
+        },
+        {
+          "label": "own_creature",
+          "polarity": "does_not_fire",
+          "delta": "The Grizzly Bears is owned by A, and A cast Control Magic on it anyway.",
+          "expected": "Grizzly Bears dies and goes to A's graveyard, which is both its owner's and its controller's graveyard, so no redirection takes place."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Island",
+        "Grizzly Bears",
+        "Control Magic",
+        "Shock",
+        "Unsummon"
+      ],
+      "forge_notes": "Forge needs a puzzle setup where the Bears is owned by B yet enters play under A's control (for example by actually casting Control Magic first)."
+    },
+    {
+      "id": "400.4a-1",
+      "rules": [
+        "400.4a"
+      ],
+      "title": "An instant or sorcery card that would return to the battlefield stays in exile",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            {
+              "card": "Lightning Bolt",
+              "face_down": true,
+              "summoning_sick": false
+            }
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Cloudshift"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "The face-down Lightning Bolt was put onto the battlefield face down by a manifest effect, so it is a 2/2 face-down creature with no name or types."
+      },
+      "decisions": [
+        "A casts Cloudshift targeting the face-down creature, tapping Plains.",
+        "Both players pass; Cloudshift resolves: the face-down card is exiled (turned face up in exile) and Cloudshift tries to return it to the battlefield."
+      ],
+      "variants": [
+        {
+          "label": "base_instant",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Lightning Bolt is exiled face up and does not return to the battlefield; it stays in exile. Cloudshift is in A's graveyard."
+        },
+        {
+          "label": "sorcery",
+          "polarity": "fires",
+          "delta": "The face-down card is Divination instead of Lightning Bolt.",
+          "expected": "Divination is exiled face up and does not return to the battlefield; it stays in exile."
+        },
+        {
+          "label": "creature",
+          "polarity": "does_not_fire",
+          "delta": "The face-down card is Grizzly Bears instead of Lightning Bolt.",
+          "expected": "Grizzly Bears is exiled and returns to the battlefield face up under A's control as a 2/2 Grizzly Bears."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Cloudshift",
+        "Lightning Bolt",
+        "Divination",
+        "Grizzly Bears"
+      ],
+      "forge_notes": "GameAction.changeZone implements the rule (rules 304.4 and 307.4 comment). The face-down instant needs a puzzle setup or a prior manifest effect."
+    },
+    {
+      "id": "400.6-1",
+      "rules": [
+        "400.6"
+      ],
+      "title": "A replacement effect applies to the zone change before the object moves",
+      "record_kind": "rewrite",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Island",
+            "Rest in Peace"
+          ],
+          "B": [
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Shock",
+            "Unsummon"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Shock targeting Grizzly Bears, tapping Mountain.",
+        "Both players pass; Shock resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears has 2 damage marked and would die. Rest in Peace replaces the move to the graveyard, so Grizzly Bears moves to exile instead and never enters the graveyard. Shock is also exiled instead of going to A's graveyard."
+        },
+        {
+          "label": "no_replacement",
+          "polarity": "does_not_fire",
+          "delta": "A does not control Rest in Peace.",
+          "expected": "Grizzly Bears has 2 damage marked, dies and moves to B's graveyard. Shock goes to A's graveyard."
+        },
+        {
+          "label": "bounce",
+          "polarity": "other",
+          "delta": "A casts Unsummon targeting Grizzly Bears, tapping Island, instead of Shock.",
+          "expected": "Grizzly Bears returns to B's hand; no replacement applies to it because it does not go to a graveyard. Unsummon itself is exiled by the replacement effect."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Island",
+        "Rest in Peace",
+        "Grizzly Bears",
+        "Shock",
+        "Unsummon"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "400.7-1",
+      "rules": [
+        "400.7"
+      ],
+      "title": "An object that changes zones becomes a new object with no memory of its previous existence",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            {
+              "card": "Grizzly Bears",
+              "counters": {
+                "+1/+1": 1
+              }
+            }
+          ],
+          "B": [
+            "Island",
+            "Island",
+            {
+              "card": "Pacifism",
+              "attached_to": "Grizzly Bears"
+            }
+          ]
+        },
+        "hand": {
+          "A": [
+            "Cloudshift"
+          ],
+          "B": [
+            "Counterspell"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "A's Grizzly Bears is a 3/3 with one +1/+1 counter, enchanted by B's Pacifism."
+      },
+      "decisions": [
+        "A casts Cloudshift targeting Grizzly Bears, tapping Plains.",
+        "B passes without responding.",
+        "Cloudshift resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears is exiled and returns to the battlefield as a new object: a 2/2 with no +1/+1 counter, summoning sick. Pacifism is no longer attached to anything and goes to B's graveyard."
+        },
+        {
+          "label": "countered",
+          "polarity": "does_not_fire",
+          "delta": "B casts Counterspell on Cloudshift, tapping both Islands.",
+          "expected": "Cloudshift is countered. Grizzly Bears never changes zones: it stays a 3/3 with its +1/+1 counter and Pacifism stays attached to it."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Island",
+        "Grizzly Bears",
+        "Pacifism",
+        "Cloudshift",
+        "Counterspell"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "400.7a-1",
+      "rules": [
+        "400.7a"
+      ],
+      "title": "A controller change applied to a permanent spell continues to apply to the permanent it becomes",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "B",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island"
+          ],
+          "B": [
+            "Forest",
+            "Forest",
+            "Island",
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Aethersnatch"
+          ],
+          "B": [
+            "Grizzly Bears",
+            "Counterspell"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "B casts Grizzly Bears, tapping both Forests.",
+        "A responds by casting Aethersnatch targeting the Grizzly Bears spell, tapping all six Islands.",
+        "B passes without responding; Aethersnatch resolves and A gains control of the Grizzly Bears spell (no new targets, since it has none).",
+        "Both players pass; the Grizzly Bears spell resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Aethersnatch resolves. Grizzly Bears enters the battlefield under A's control, not B's. Aethersnatch is in A's graveyard."
+        },
+        {
+          "label": "countered",
+          "polarity": "does_not_fire",
+          "delta": "B responds to Aethersnatch by casting Counterspell on it, tapping both of B's Islands.",
+          "expected": "Aethersnatch is countered and goes to A's graveyard. B keeps control of the Grizzly Bears spell and it enters the battlefield under B's control."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Forest",
+        "Aethersnatch",
+        "Grizzly Bears",
+        "Counterspell"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "400.7b-1",
+      "rules": [
+        "400.7b"
+      ],
+      "title": "A static ability that grants a battlefield ability to a spell keeps applying to the permanent it becomes",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Henzie \"Toolbox\" Torre",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Fire Elemental",
+            "Goblin Piker"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Mountain"
+          ]
+        },
+        "exile": {},
+        "notes": "Henzie gives each creature spell A casts with mana value 4 or greater blitz. Henzie is not summoning sick."
+      },
+      "decisions": [
+        "A casts Fire Elemental for its blitz cost (equal to its mana cost), tapping all five Mountains.",
+        "Both players pass; Fire Elemental resolves.",
+        "A moves to combat and attacks B with Fire Elemental; B has no creatures, so there are no blocks.",
+        "At the beginning of the end step, the blitz sacrifice trigger resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Fire Elemental has haste and attacks the turn it entered; it deals 5 damage and B is at 15. At the beginning of the end step Fire Elemental is sacrificed, and because it died A draws a card (A's hand gains the Mountain)."
+        },
+        {
+          "label": "low_mana_value",
+          "polarity": "does_not_fire",
+          "delta": "A casts Goblin Piker (mana value 2) instead of Fire Elemental, paying its normal cost with two Mountains.",
+          "expected": "Goblin Piker is not given blitz and cannot be cast for a blitz cost. It enters without haste, cannot attack this turn, is not sacrificed at the end step, and A draws no card."
+        }
+      ],
+      "cards": [
+        "Henzie \"Toolbox\" Torre",
+        "Mountain",
+        "Fire Elemental",
+        "Goblin Piker"
+      ],
+      "forge_notes": "Blitz is granted by a static ability with AffectedZone$ Stack; check that the keyword stays on the permanent after it resolves."
+    },
+    {
+      "id": "400.7c-1",
+      "rules": [
+        "400.7c"
+      ],
+      "title": "A prevention effect for damage from a spell continues to apply to damage from the permanent the spell becomes",
+      "record_kind": "rewrite",
+      "setup": {
+        "active": "B",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Plains",
+            "Circle of Protection: Red"
+          ],
+          "B": [
+            "Mountain",
+            {
+              "card": "Goblin Piker",
+              "summoning_sick": false
+            }
+          ]
+        },
+        "hand": {
+          "B": [
+            "Raging Goblin"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "B casts Raging Goblin, tapping Mountain.",
+        "A responds by activating Circle of Protection: Red for {1}, tapping Plains, and chooses the Raging Goblin spell on the stack as the source.",
+        "Both players pass; the activation resolves, then Raging Goblin resolves.",
+        "B attacks A with Raging Goblin (haste) and Goblin Piker; A does not block.",
+        "Combat damage is dealt."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The damage Raging Goblin deals to A is prevented; Goblin Piker deals 2. A ends at 18 life."
+        },
+        {
+          "label": "other_source",
+          "polarity": "does_not_fire",
+          "delta": "A chooses Goblin Piker, not the Raging Goblin spell, as the source of Circle of Protection: Red.",
+          "expected": "The damage from Goblin Piker is prevented; Raging Goblin deals 1. A ends at 19 life."
+        },
+        {
+          "label": "no_activation",
+          "polarity": "other",
+          "delta": "A does not activate Circle of Protection: Red.",
+          "expected": "Both creatures deal damage: A ends at 17 life."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Mountain",
+        "Circle of Protection: Red",
+        "Goblin Piker",
+        "Raging Goblin"
+      ],
+      "forge_notes": "Forge's ChooseSource may not offer a spell on the stack as a choice, and the replacement matches the chosen card strictly, so it may not follow the spell to the battlefield. This is the scenario where Forge is most likely to deviate from the rule."
+    },
+    {
+      "id": "400.7d-1",
+      "rules": [
+        "400.7d"
+      ],
+      "title": "An ability of a permanent can use information about the spell it was, such as the costs paid",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Swamp",
+            "Swamp",
+            "Swamp"
+          ],
+          "B": [
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Gatekeeper of Malakir"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Gatekeeper of Malakir, paying the kicker {B}, tapping all three Swamps.",
+        "Both players pass; Gatekeeper of Malakir resolves.",
+        "Its enters trigger targets B; both players pass and the trigger resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Gatekeeper of Malakir enters the battlefield and its trigger fires because it was kicked. B sacrifices Grizzly Bears, which goes to B's graveyard."
+        },
+        {
+          "label": "not_kicked",
+          "polarity": "does_not_fire",
+          "delta": "A casts Gatekeeper of Malakir without paying the kicker, tapping two Swamps.",
+          "expected": "Gatekeeper of Malakir enters the battlefield and its trigger does not fire. Grizzly Bears stays on the battlefield."
+        }
+      ],
+      "cards": [
+        "Swamp",
+        "Gatekeeper of Malakir",
+        "Grizzly Bears"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "400.7e-1",
+      "rules": [
+        "400.7e"
+      ],
+      "title": "A leaves-the-battlefield trigger finds the new object in the public zone the card moved to",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Plains",
+            "Tormod's Crypt"
+          ],
+          "B": [
+            "Grizzly Bears",
+            {
+              "card": "Rancor",
+              "attached_to": "Grizzly Bears"
+            }
+          ]
+        },
+        "hand": {
+          "A": [
+            "Disenchant"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Rancor is owned by B."
+      },
+      "decisions": [
+        "A casts Disenchant targeting Rancor, tapping both Plains.",
+        "Both players pass; Disenchant resolves.",
+        "Rancor's trigger goes on the stack; both players pass and it resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Rancor is destroyed and goes to B's graveyard, its trigger fires, and the trigger finds Rancor in the graveyard and returns it to B's hand. Disenchant goes to A's graveyard."
+        },
+        {
+          "label": "exiled_instead",
+          "polarity": "does_not_fire",
+          "delta": "A also controls Rest in Peace on the battlefield.",
+          "expected": "Rancor is exiled instead of going to the graveyard, so its put-into-graveyard trigger does not fire and Rancor stays in exile. Disenchant is exiled too."
+        },
+        {
+          "label": "left_graveyard",
+          "polarity": "does_not_fire",
+          "delta": "In response to Rancor's trigger, A activates Tormod's Crypt (tap, sacrifice) targeting B.",
+          "expected": "Rancor's trigger fires, but Rancor is exiled from B's graveyard before it resolves; the trigger cannot find the new object in exile, so Rancor stays in exile and B's hand does not gain it."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Grizzly Bears",
+        "Rancor",
+        "Disenchant",
+        "Rest in Peace",
+        "Tormod's Crypt"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "400.7f-1",
+      "rules": [
+        "400.7f"
+      ],
+      "title": "A trigger on an enchanted creature leaving finds the Aura that went to the graveyard with it",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Swamp",
+            "Swamp",
+            "Plains"
+          ],
+          "B": [
+            "Grizzly Bears",
+            {
+              "card": "Angelic Destiny",
+              "attached_to": "Grizzly Bears"
+            }
+          ]
+        },
+        "hand": {
+          "A": [
+            "Terror",
+            "Path to Exile"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Angelic Destiny is owned by B; the enchanted Grizzly Bears is a green 6/6 Bear Angel with flying and first strike, so Terror can target it."
+      },
+      "decisions": [
+        "A casts Terror targeting Grizzly Bears, tapping both Swamps.",
+        "Both players pass; Terror resolves.",
+        "Angelic Destiny's trigger goes on the stack; both players pass and it resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears is destroyed and goes to B's graveyard. Angelic Destiny goes to B's graveyard in the same state-based check; its trigger fires and finds it there, returning it to B's hand."
+        },
+        {
+          "label": "exiled",
+          "polarity": "does_not_fire",
+          "delta": "A casts Path to Exile (tapping Plains) on Grizzly Bears instead of Terror.",
+          "expected": "Grizzly Bears is exiled, not destroyed, so the dies trigger does not fire. Angelic Destiny goes to B's graveyard as a state-based action and stays there."
+        }
+      ],
+      "cards": [
+        "Swamp",
+        "Plains",
+        "Grizzly Bears",
+        "Angelic Destiny",
+        "Terror",
+        "Path to Exile"
+      ],
+      "forge_notes": "Path to Exile also lets B search for a basic land; B's library is empty, so nothing is found."
+    },
+    {
+      "id": "400.7g-1",
+      "rules": [
+        "400.7g"
+      ],
+      "title": "A cast permission granted to a card persists on the spell it becomes",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            "Mountain"
+          ],
+          "B": [
+            "Island",
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Snapcaster Mage"
+          ],
+          "B": [
+            "Counterspell"
+          ]
+        },
+        "graveyard": {
+          "A": [
+            "Lightning Bolt"
+          ]
+        },
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Snapcaster Mage, tapping both Islands.",
+        "B passes; Snapcaster Mage resolves.",
+        "Its enters trigger targets Lightning Bolt in A's graveyard; it resolves and Bolt gains flashback until end of turn.",
+        "A casts Lightning Bolt from the graveyard with flashback, paying {R} with Mountain, targeting B.",
+        "B passes; Lightning Bolt resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Lightning Bolt deals 3 damage to B (B at 17) and, because the flashback permission carried over to the spell, is exiled instead of going to the graveyard."
+        },
+        {
+          "label": "countered",
+          "polarity": "fires",
+          "delta": "B casts Counterspell on the flashback Lightning Bolt, tapping both Islands.",
+          "expected": "Lightning Bolt is countered and exiled (not in A's graveyard); B stays at 20."
+        },
+        {
+          "label": "not_cast",
+          "polarity": "does_not_fire",
+          "delta": "A does not cast Lightning Bolt.",
+          "expected": "Lightning Bolt stays in A's graveyard. When the turn ends the flashback permission ends and Lightning Bolt can no longer be cast from the graveyard."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Mountain",
+        "Snapcaster Mage",
+        "Lightning Bolt",
+        "Counterspell"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "400.7h-1",
+      "rules": [
+        "400.7h"
+      ],
+      "title": "A later part of a cast-permission effect finds the spell the card became",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island"
+          ],
+          "B": [
+            "Island",
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Torrential Gearhulk"
+          ],
+          "B": [
+            "Counterspell"
+          ]
+        },
+        "graveyard": {
+          "A": [
+            "Lightning Bolt"
+          ]
+        },
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Torrential Gearhulk, tapping all six of A's Islands.",
+        "B passes; Torrential Gearhulk resolves.",
+        "Its enters trigger targets Lightning Bolt in A's graveyard; both players pass and the trigger resolves.",
+        "A casts Lightning Bolt from the graveyard without paying its mana cost, targeting B.",
+        "B passes; Lightning Bolt resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Lightning Bolt deals 3 damage to B (B at 17) and is exiled instead of being put into A's graveyard."
+        },
+        {
+          "label": "countered",
+          "polarity": "fires",
+          "delta": "B casts Counterspell on the Lightning Bolt spell, tapping both of B's Islands.",
+          "expected": "Lightning Bolt is countered and exiled instead of being put into A's graveyard; B stays at 20. Counterspell is in B's graveyard."
+        },
+        {
+          "label": "not_cast",
+          "polarity": "does_not_fire",
+          "delta": "A declines to cast Lightning Bolt when the trigger resolves.",
+          "expected": "Lightning Bolt stays in A's graveyard; B stays at 20."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Torrential Gearhulk",
+        "Lightning Bolt",
+        "Counterspell"
+      ],
+      "forge_notes": "Forge scripts the exile clause as ReplaceGraveyard$ Exile on the Play effect."
+    },
+    {
+      "id": "400.7j-1",
+      "rules": [
+        "400.7j"
+      ],
+      "title": "The effect of a spell finds the object moved by its cost",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Grizzly Bears",
+            "Centaur Courser"
+          ],
+          "B": [
+            "Island",
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Fling"
+          ],
+          "B": [
+            "Counterspell"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Fling targeting B, paying {1}{R} with both Mountains and sacrificing Grizzly Bears as an additional cost.",
+        "B passes; Fling resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Fling's effect finds the sacrificed Grizzly Bears and deals 2 damage to B (B at 18). Grizzly Bears is in A's graveyard."
+        },
+        {
+          "label": "bigger_creature",
+          "polarity": "other",
+          "delta": "A sacrifices Centaur Courser instead of Grizzly Bears.",
+          "expected": "Fling deals 3 damage to B (B at 17). Centaur Courser is in A's graveyard."
+        },
+        {
+          "label": "countered",
+          "polarity": "does_not_fire",
+          "delta": "B casts Counterspell on Fling, tapping both Islands.",
+          "expected": "Fling is countered and deals no damage (B at 20). Grizzly Bears was already sacrificed as a cost and is in A's graveyard."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Island",
+        "Grizzly Bears",
+        "Centaur Courser",
+        "Fling",
+        "Counterspell"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "400.7j-2",
+      "rules": [
+        "400.7j"
+      ],
+      "title": "Later parts of an effect find the object the effect moved",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Swamp"
+          ],
+          "B": [
+            "Tormod's Crypt"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Reanimate"
+          ]
+        },
+        "graveyard": {
+          "B": [
+            "Centaur Courser",
+            "Grizzly Bears"
+          ]
+        },
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Reanimate targeting Centaur Courser in B's graveyard, tapping Swamp.",
+        "B passes; Reanimate resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Centaur Courser moves from B's graveyard to the battlefield under A's control, and the second part of Reanimate finds it: A loses 3 life (A at 17)."
+        },
+        {
+          "label": "cheaper_creature",
+          "polarity": "other",
+          "delta": "A targets Grizzly Bears instead of Centaur Courser.",
+          "expected": "Grizzly Bears enters the battlefield under A's control and A loses 2 life (A at 18)."
+        },
+        {
+          "label": "exiled_in_response",
+          "polarity": "does_not_fire",
+          "delta": "In response, B activates Tormod's Crypt targeting B, sacrificing it to exile every card in B's graveyard.",
+          "expected": "Reanimate's target is gone from the graveyard, so Reanimate fizzles: nothing enters the battlefield and A stays at 20 life. Centaur Courser and Grizzly Bears are in exile."
+        }
+      ],
+      "cards": [
+        "Swamp",
+        "Tormod's Crypt",
+        "Reanimate",
+        "Centaur Courser",
+        "Grizzly Bears"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "400.7k-1",
+      "rules": [
+        "400.7k"
+      ],
+      "title": "After a madness trigger, effects find the discarded card if it was not cast and went to a public zone",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Swamp",
+            "Mountain",
+            "Containment Construct"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Raven's Crime",
+            "Fiery Temper"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Raven's Crime targeting A, tapping Swamp.",
+        "Raven's Crime resolves; A discards Fiery Temper, which is exiled by madness.",
+        "A puts Containment Construct's discard trigger on the stack first and the madness trigger on top of it.",
+        "The madness trigger resolves: A declines to cast Fiery Temper, so it moves to A's graveyard.",
+        "Containment Construct's trigger resolves: A chooses to exile the discarded card from the graveyard."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Containment Construct's trigger finds Fiery Temper in the graveyard: it moves to exile, and A may play it from exile this turn."
+        },
+        {
+          "label": "madness_cast",
+          "polarity": "does_not_fire",
+          "delta": "A casts Fiery Temper for its madness cost {R}, tapping Mountain, targeting B, instead of declining.",
+          "expected": "Fiery Temper is cast, so it is not found by the later effect: it deals 3 damage to B (B at 17), goes to A's graveyard after resolving, and Containment Construct's trigger does not exile it."
+        }
+      ],
+      "cards": [
+        "Swamp",
+        "Mountain",
+        "Containment Construct",
+        "Raven's Crime",
+        "Fiery Temper"
+      ],
+      "forge_notes": "Whether Forge's Discarded trigger and madness ordering put Containment Construct's trigger below the madness trigger in this way is untested."
+    },
+    {
+      "id": "400.12-1",
+      "rules": [
+        "400.12"
+      ],
+      "title": "An effect that acts on a zone acts on every card in it, not on the zone itself",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Tormod's Crypt"
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {
+          "A": [
+            "Shock"
+          ],
+          "B": [
+            "Lightning Bolt",
+            "Grizzly Bears",
+            "Mountain"
+          ]
+        },
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A activates Tormod's Crypt (tap, sacrifice) targeting B.",
+        "Both players pass; the ability resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "All three cards in B's graveyard (Lightning Bolt, Grizzly Bears, Mountain) move to exile. A's graveyard holds Shock and the sacrificed Tormod's Crypt."
+        },
+        {
+          "label": "empty_graveyard",
+          "polarity": "does_not_fire",
+          "delta": "B's graveyard is empty.",
+          "expected": "The ability resolves and nothing moves. A's graveyard holds Shock and the sacrificed Tormod's Crypt."
+        }
+      ],
+      "cards": [
+        "Tormod's Crypt",
+        "Shock",
+        "Lightning Bolt",
+        "Grizzly Bears",
+        "Mountain"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

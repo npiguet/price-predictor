@@ -1,0 +1,39 @@
+{"id": "118.1", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "118.2", "category": "decision", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "118.3", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "A cost cannot be paid without the full resources for it, such as a tapped permanent that cannot be tapped again or life below the cost.", "note": ""}
+{"id": "118.3a", "category": "mechanical", "observability": "needs_new_fields", "record_kinds": ["resolution"], "outcome": "Paying mana removes it from the mana pool.", "note": ""}
+{"id": "118.3b", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "Paying life subtracts that amount from the life total.", "note": ""}
+{"id": "118.3c", "category": "decision", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "118.4", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "118.5", "category": "decision", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "118.5a", "category": "decision", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "118.6", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "A spell or ability with an unpayable cost can be attempted, but its cost cannot be paid, so it is not castable or activatable.", "note": ""}
+{"id": "118.6a", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "An unpayable cost stays unpayable when increased, but an alternative cost such as casting without paying its mana cost makes it payable.", "note": ""}
+{"id": "118.7", "category": "mechanical", "observability": "direct", "record_kinds": ["playability"], "outcome": "A reduced cost is paid at its reduced amount and counts as paying the original cost.", "note": ""}
+{"id": "118.7a", "category": "mechanical", "observability": "direct", "record_kinds": ["playability"], "outcome": "A generic reduction lowers only the generic component of the cost.", "note": ""}
+{"id": "118.7b", "category": "mechanical", "observability": "direct", "record_kinds": ["playability"], "outcome": "A colored or colorless reduction the cost does not require reduces generic mana instead.", "note": ""}
+{"id": "118.7c", "category": "mechanical", "observability": "direct", "record_kinds": ["playability"], "outcome": "A colored reduction exceeding that color's component removes it and reduces generic mana by the excess.", "note": ""}
+{"id": "118.7d", "category": "mechanical", "observability": "direct", "record_kinds": ["playability"], "outcome": "A colorless reduction exceeding the colorless component removes it and reduces generic mana by the excess.", "note": ""}
+{"id": "118.7e", "category": "mechanical", "observability": "direct", "record_kinds": ["playability"], "outcome": "A reduction by a hybrid symbol reduces the cost by the half the payer chose.", "note": ""}
+{"id": "118.7f", "category": "mechanical", "observability": "direct", "record_kinds": ["playability"], "outcome": "A reduction by a Phyrexian symbol reduces the cost by one mana of its color.", "note": ""}
+{"id": "118.7g", "category": "mechanical", "observability": "direct", "record_kinds": ["playability"], "outcome": "A reduction by snow mana symbols reduces generic mana by that amount.", "note": ""}
+{"id": "118.8", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "118.8a", "category": "decision", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "118.8b", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "118.8c", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "A spell with a mandatory additional cost involving hidden-zone cards need not be cast by an if-able instruction.", "note": ""}
+{"id": "118.8d", "category": "mechanical", "observability": "needs_new_fields", "record_kinds": ["continuous"], "outcome": "An additional cost leaves the spell's mana cost and mana value unchanged for effects that read it.", "note": ""}
+{"id": "118.9", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "118.9a", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "Only one alternative cost can apply to a spell as it is cast.", "note": ""}
+{"id": "118.9b", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "118.9c", "category": "mechanical", "observability": "needs_new_fields", "record_kinds": ["continuous"], "outcome": "An alternative cost leaves the spell's mana cost and mana value unchanged for effects that read it.", "note": ""}
+{"id": "118.9d", "category": "mechanical", "observability": "direct", "record_kinds": ["playability"], "outcome": "Additional costs, increases and reductions apply on top of the alternative cost being paid.", "note": ""}
+{"id": "118.10", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "A single payment, such as a sacrifice, cannot pay costs of two abilities, so the second cannot be paid.", "note": ""}
+{"id": "118.11", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution", "rewrite"], "outcome": "A cost whose paid action was modified by a replacement effect still counts as paid.", "note": ""}
+{"id": "118.12", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "An if-you-do clause after a resolution-time cost applies whenever the player chose to pay, even if the action was replaced or could not fully happen.", "note": ""}
+{"id": "118.12a", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "An unless clause applies its effect only when the player does not pay the unless cost.", "note": ""}
+{"id": "118.12b", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "An if-you-do clause after an optional search applies whenever the player chose to search, whatever happened afterwards.", "note": ""}
+{"id": "118.13", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "118.13a", "category": "decision", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "118.13b", "category": "decision", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "118.13c", "category": "decision", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "118.14", "category": "mechanical", "observability": "direct", "record_kinds": ["playability"], "outcome": "Mana may be spent as though it were mana of any type on a cost with that permission.", "note": ""}

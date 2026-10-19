@@ -1,0 +1,4 @@
+{"id": "701.42", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "701.42a", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution", "continuous"], "outcome": "Melding puts the two cards onto the battlefield combined as one permanent represented by two cards.", "note": ""}
+{"id": "701.42b", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "Tokens and cards not forming a meld pair cannot be melded.", "note": ""}
+{"id": "701.42c", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "Objects that cannot be melded stay in their current zone.", "note": ""}

@@ -1,0 +1,226 @@
+{
+  "unit": "701.11",
+  "verified": true,
+  "review": [],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "701.11a-1",
+      "rules": [
+        "701.11a"
+      ],
+      "title": "Tripling modifies power and toughness instead of setting them, so a later base-value effect still shows the bonus",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            },
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Plains",
+            "Plains"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Tifa's Limit Break",
+            "Humble"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Tifa's Limit Break is a tiered spell: its total cost is {G} plus the chosen tier's cost."
+      },
+      "decisions": [
+        "A casts Tifa's Limit Break choosing the Final Heaven tier ({6}{G}), targeting Grizzly Bears, tapping eight Forests.",
+        "Both players pass; Tifa's Limit Break resolves.",
+        "A casts Humble targeting Grizzly Bears, tapping both Plains.",
+        "Both players pass; Humble resolves."
+      ],
+      "variants": [
+        {
+          "label": "triple_then_humble",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "After Final Heaven, Grizzly Bears is 6/6 (+4/+4). After Humble sets its base power and toughness to 0/1, Grizzly Bears is 4/5: the +4/+4 from the tripling is still applied on top of the new base."
+        },
+        {
+          "label": "humble_then_triple",
+          "polarity": "does_not_fire",
+          "delta": "A casts and resolves Humble first, then Tifa's Limit Break with the Final Heaven tier.",
+          "expected": "After Humble, Grizzly Bears is 0/1. Final Heaven gives +0 power and +2 toughness (twice 0 and twice 1). Grizzly Bears is 0/3."
+        }
+      ],
+      "cards": [
+        "Forest",
+        "Grizzly Bears",
+        "Humble",
+        "Plains",
+        "Tifa's Limit Break"
+      ],
+      "forge_notes": "Forge implements the tiers as a Charm with ModeCost."
+    },
+    {
+      "id": "701.11b-1",
+      "rules": [
+        "701.11b"
+      ],
+      "title": "Tripling a creature's power and toughness adds twice each value as the spell resolves",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Hill Giant",
+              "summoning_sick": false
+            },
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Tifa's Limit Break",
+            "Giant Growth"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Tifa's Limit Break is a tiered spell: its total cost is {G} plus the chosen tier's cost."
+      },
+      "decisions": [
+        "A casts Tifa's Limit Break choosing the Final Heaven tier ({6}{G}), targeting Hill Giant, tapping eight Forests.",
+        "Both players pass; Tifa's Limit Break resolves."
+      ],
+      "variants": [
+        {
+          "label": "plain",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Hill Giant (3/3) gets +6/+6 and is 9/9 until end of turn."
+        },
+        {
+          "label": "pump_in_response",
+          "polarity": "fires",
+          "delta": "With Tifa's Limit Break on the stack, A casts Giant Growth targeting Hill Giant, tapping the ninth Forest. Giant Growth resolves first.",
+          "expected": "Hill Giant is 6/6 when Tifa's Limit Break resolves, so it gets +12/+12. Hill Giant is 18/18 until end of turn."
+        },
+        {
+          "label": "double_tier",
+          "polarity": "does_not_fire",
+          "delta": "A chooses the Meteor Strikes tier ({2}) instead of Final Heaven, tapping Forests for {G}{2}.",
+          "expected": "Hill Giant gets +3/+3 and is 6/6 until end of turn: doubled, not tripled."
+        }
+      ],
+      "cards": [
+        "Forest",
+        "Giant Growth",
+        "Hill Giant",
+        "Tifa's Limit Break"
+      ],
+      "forge_notes": "Forge implements the tiers as a Charm with ModeCost."
+    },
+    {
+      "id": "701.11c-1",
+      "rules": [
+        "701.11c"
+      ],
+      "title": "Tripling a negative power gives a further negative modifier of twice its size",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Wall of Wood"
+            },
+            {
+              "card": "Dead Weight",
+              "attached_to": "Wall of Wood"
+            },
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Tifa's Limit Break"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Wall of Wood with Dead Weight is -2/1."
+      },
+      "decisions": [
+        "A casts Tifa's Limit Break choosing the Final Heaven tier ({6}{G}), targeting Wall of Wood, tapping eight Forests.",
+        "Both players pass; Tifa's Limit Break resolves."
+      ],
+      "variants": [
+        {
+          "label": "negative_power",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Power -2 triples to -4/-0 (twice the difference from 0) and toughness 1 triples to +0/+2. Wall of Wood (-2/1) is -6/3 until end of turn."
+        },
+        {
+          "label": "zero_power",
+          "polarity": "does_not_fire",
+          "delta": "Dead Weight is not on the battlefield, so Wall of Wood is 0/3.",
+          "expected": "Wall of Wood gets +0/+6 and is 0/9 until end of turn: a power of 0 is not negative and triples to +0."
+        }
+      ],
+      "cards": [
+        "Dead Weight",
+        "Forest",
+        "Tifa's Limit Break",
+        "Wall of Wood"
+      ],
+      "forge_notes": "Forge's Triple may compute the modifier as twice the value without special handling of negatives; the expected values follow the rule text."
+    }
+  ]
+}

@@ -1,0 +1,237 @@
+{
+  "unit": "702.7",
+  "verified": true,
+  "review": [
+    "skipped: removed 702.7a, which the triage classifies definitional (static-ability description), so they need neither a scenario nor a skip.",
+    "702.7b-1: the contrast without first strike (Elite Vanguard attacking) was labelled other while the tougher-blocker variant, in which first strike still applies, was labelled does_not_fire; swapped the two polarities and moved the no-first-strike variant next to the base.",
+    "702.7c-2: the double-strike variant is the case where 702.7c's 'unless the creature has double strike' lets the creature deal damage again, so it is the scenario's does_not_fire variant; relabelled it from other.",
+    "702.7d-1: dropped. 702.7d is redundancy, triaged definitional like 702.2f, and the scenario's own no_extra_instance variant produced the base outcome unchanged, so no variant flipped anything; the double-strike contrast belongs to 702.4.",
+    "triage/702.7.jsonl: was missing; wrote it (702.7b and 702.7c mechanical/combat, the rest definitional)."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.7b-1",
+      "rules": [
+        "702.7b"
+      ],
+      "title": "Creatures with first strike deal combat damage in an earlier step than creatures without it",
+      "record_kind": "combat",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Youthful Knight",
+              "summoning_sick": false
+            },
+            {
+              "card": "Elite Vanguard",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            "Grizzly Bears",
+            "Hill Giant",
+            "Benalish Knight"
+          ]
+        },
+        "hand": {
+          "A": [],
+          "B": []
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Combat damage steps are recorded separately: the first-strike combat damage step and the regular combat damage step."
+      },
+      "decisions": [
+        "A attacks player B with Youthful Knight (Elite Vanguard stays home unless a variant says otherwise).",
+        "B declares Grizzly Bears as the only blocker of Youthful Knight.",
+        "Both players pass priority with an empty stack in every step; no spells or abilities are used.",
+        "Combat damage is dealt: the first-strike combat damage step, then the regular combat damage step."
+      ],
+      "variants": [
+        {
+          "label": "bears_blocks",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "In the first-strike combat damage step Youthful Knight (2/1) deals 2 damage to Grizzly Bears (2/2), which dies in the state-based check before the regular step. Grizzly Bears deals no damage, and Youthful Knight survives undamaged. No damage is dealt to B."
+        },
+        {
+          "label": "no_first_strike",
+          "polarity": "does_not_fire",
+          "delta": "A attacks with Elite Vanguard (2/1, no first strike) instead of Youthful Knight, and B still blocks with Grizzly Bears.",
+          "expected": "No creature has first strike, so all combat damage is dealt simultaneously in the single regular step: Elite Vanguard and Grizzly Bears each deal 2 damage and both die."
+        },
+        {
+          "label": "giant_blocks",
+          "polarity": "other",
+          "delta": "B declares Hill Giant (3/3) as the blocker instead of Grizzly Bears.",
+          "expected": "In the first-strike step Youthful Knight deals 2 damage to Hill Giant, which survives with 2 damage marked. In the regular step Hill Giant deals 3 damage to Youthful Knight, which dies. Hill Giant stays on the battlefield with 2 damage."
+        },
+        {
+          "label": "both_first_strike",
+          "polarity": "other",
+          "delta": "B declares Benalish Knight (2/2, first strike) as the blocker instead of Grizzly Bears.",
+          "expected": "Both creatures deal damage simultaneously in the first-strike step: Benalish Knight takes 2 and Youthful Knight takes 2, and both die. No creature deals damage in the regular step."
+        }
+      ],
+      "cards": [
+        "Youthful Knight",
+        "Grizzly Bears",
+        "Hill Giant",
+        "Benalish Knight",
+        "Elite Vanguard"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.7c-1",
+      "rules": [
+        "702.7c"
+      ],
+      "title": "A creature that gains first strike after the first-strike damage step still deals damage in the second step",
+      "record_kind": "combat",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Youthful Knight",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            "Hill Giant",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain"
+          ]
+        },
+        "hand": {
+          "A": [],
+          "B": [
+            "Ambush"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Combat damage steps are recorded separately: the first-strike combat damage step and the regular combat damage step."
+      },
+      "decisions": [
+        "A attacks player B with Youthful Knight.",
+        "B declares Hill Giant as the blocker of Youthful Knight.",
+        "Both players pass priority through the declare blockers step; the first-strike combat damage step begins and Youthful Knight deals 2 damage to Hill Giant.",
+        "After that damage B casts Ambush, tapping four Mountains; both players pass and Ambush resolves, so blocking creatures gain first strike.",
+        "Both players pass priority; the second combat damage step begins."
+      ],
+      "variants": [
+        {
+          "label": "gained_after_first_step",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Youthful Knight deals 2 damage to Hill Giant in the first-strike step. Hill Giant gains first strike afterwards and still deals its 3 combat damage in the second step, so Youthful Knight dies. Hill Giant survives with 2 damage marked."
+        },
+        {
+          "label": "gained_before_first_step",
+          "polarity": "does_not_fire",
+          "delta": "B casts Ambush in the declare blockers step, before any combat damage is dealt, instead of after the first-strike damage.",
+          "expected": "Hill Giant has first strike when the first-strike step begins, so Hill Giant and Youthful Knight deal damage simultaneously in that step. Youthful Knight dies and Hill Giant has 2 damage marked. No creature deals damage in the second step."
+        }
+      ],
+      "cards": [
+        "Youthful Knight",
+        "Hill Giant",
+        "Ambush",
+        "Mountain"
+      ],
+      "forge_notes": "Ambush's PumpAll affects creatures that are blocking at resolution, so Hill Giant must still be a blocker when it resolves."
+    },
+    {
+      "id": "702.7c-2",
+      "rules": [
+        "702.7c"
+      ],
+      "title": "A creature that loses first strike after dealing first-strike damage does not deal damage again in the second step",
+      "record_kind": "combat",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Youthful Knight",
+              "summoning_sick": false
+            },
+            "Mountain",
+            "Plains"
+          ],
+          "B": [
+            "Hill Giant",
+            {
+              "card": "Walking Sponge",
+              "summoning_sick": false
+            }
+          ]
+        },
+        "hand": {
+          "A": [
+            "Boros Charm"
+          ],
+          "B": []
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Combat damage steps are recorded separately: the first-strike combat damage step and the regular combat damage step."
+      },
+      "decisions": [
+        "A attacks player B with Youthful Knight.",
+        "B declares Hill Giant as the blocker of Youthful Knight.",
+        "Both players pass priority through the declare blockers step; the first-strike combat damage step begins and Youthful Knight deals 2 damage to Hill Giant.",
+        "After that damage B activates Walking Sponge, tapping it, targeting Youthful Knight and choosing that it loses first strike; both players pass and the ability resolves.",
+        "Both players pass priority; the second combat damage step begins."
+      ],
+      "variants": [
+        {
+          "label": "first_strike_removed",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Youthful Knight loses first strike after already dealing damage and deals no damage in the second step. Hill Giant has 2 damage marked and survives. Hill Giant deals 3 damage to Youthful Knight in the second step and Youthful Knight dies."
+        },
+        {
+          "label": "double_strike_in_response",
+          "polarity": "does_not_fire",
+          "delta": "In response to Walking Sponge's ability A casts Boros Charm (tapping Mountain and Plains) choosing the mode that gives Youthful Knight double strike, then the ability resolves too.",
+          "expected": "Boros Charm resolves first, then Walking Sponge removes first strike only; Youthful Knight keeps double strike and deals 2 more damage in the second step. Hill Giant (3/3) has taken 4 damage in total and dies, while its own 3 damage kills Youthful Knight."
+        }
+      ],
+      "cards": [
+        "Youthful Knight",
+        "Hill Giant",
+        "Walking Sponge",
+        "Boros Charm",
+        "Mountain",
+        "Plains"
+      ],
+      "forge_notes": "Forge may re-select the second-step damage dealers from the creatures that currently lack first strike, which would let Youthful Knight strike twice in the first_strike_removed variant."
+    }
+  ]
+}

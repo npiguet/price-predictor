@@ -1,0 +1,3 @@
+{"id": "702.69", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.69a", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution", "trigger"], "outcome": "Casting a gravestorm spell copies it once per permanent put into a graveyard from the battlefield this turn.", "note": ""}
+{"id": "702.69b", "category": "mechanical", "observability": "indirect", "record_kinds": ["trigger"], "outcome": "Each gravestorm instance triggers separately.", "note": ""}

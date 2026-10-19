@@ -1,0 +1,141 @@
+{
+  "unit": "702.86",
+  "verified": true,
+  "review": [],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.86a-1",
+      "rules": [
+        "702.86a"
+      ],
+      "title": "Annihilator N makes the defending player sacrifice N permanents when the creature attacks",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Ulamog's Crusher",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            "Forest",
+            "Mountain",
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A attacks player B with Ulamog's Crusher (it attacks each combat if able).",
+        "The annihilator trigger resolves; B sacrifices Forest and Mountain (or Grizzly Bears if that is all B has).",
+        "B declares no blockers; combat damage is dealt."
+      ],
+      "variants": [
+        {
+          "label": "attacks",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "B sacrifices two permanents: Forest and Mountain go to B's graveyard and Grizzly Bears stays. Ulamog's Crusher deals 8 damage, so B's life becomes 12."
+        },
+        {
+          "label": "summoning_sick",
+          "polarity": "does_not_fire",
+          "delta": "Ulamog's Crusher came under A's control this turn (summoning sick) and cannot attack.",
+          "expected": "Ulamog's Crusher does not attack, so annihilator does not trigger. B keeps Forest, Mountain and Grizzly Bears, and B's life stays 20."
+        },
+        {
+          "label": "fewer_permanents",
+          "polarity": "other",
+          "delta": "B controls only Grizzly Bears (no Forest or Mountain).",
+          "expected": "B sacrifices its only permanent, Grizzly Bears, and has no permanents left. Ulamog's Crusher deals 8 damage, so B's life becomes 12."
+        }
+      ],
+      "cards": [
+        "Ulamog's Crusher",
+        "Forest",
+        "Mountain",
+        "Grizzly Bears"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.86b-1",
+      "rules": [
+        "702.86b"
+      ],
+      "title": "Each instance of annihilator triggers separately",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Ulamog's Crusher",
+              "summoning_sick": false
+            },
+            {
+              "card": "Eldrazi Conscription",
+              "attached_to": "Ulamog's Crusher"
+            }
+          ],
+          "B": [
+            "Forest",
+            "Forest",
+            "Mountain",
+            "Mountain",
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A attacks player B with Ulamog's Crusher (enchanted by Eldrazi Conscription: 18/18 with trample and annihilator 2, so two instances of annihilator 2).",
+        "The annihilator triggers resolve in turn. For the first B sacrifices both Forests, for the second both Mountains.",
+        "B declares no blockers; combat damage is dealt."
+      ],
+      "variants": [
+        {
+          "label": "two_instances",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Two annihilator 2 triggers: B sacrifices four permanents (both Forests and both Mountains) and keeps Grizzly Bears. Ulamog's Crusher deals 18 damage, so B's life becomes 2."
+        },
+        {
+          "label": "one_instance",
+          "polarity": "does_not_fire",
+          "delta": "Eldrazi Conscription is not on the battlefield.",
+          "expected": "One annihilator 2 trigger: B sacrifices both Forests and keeps both Mountains and Grizzly Bears. Ulamog's Crusher (8/8) deals 8 damage, so B's life becomes 12."
+        }
+      ],
+      "cards": [
+        "Ulamog's Crusher",
+        "Eldrazi Conscription",
+        "Forest",
+        "Mountain",
+        "Grizzly Bears"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

@@ -1,0 +1,136 @@
+{
+  "unit": "702.93",
+  "verified": true,
+  "review": [],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.93a-1",
+      "rules": [
+        "702.93a"
+      ],
+      "title": "Undying returns a creature with no +1/+1 counter",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "B",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Young Wolf",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            "Mountain"
+          ]
+        },
+        "hand": {
+          "B": [
+            "Shock"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "B casts Shock targeting Young Wolf, tapping Mountain.",
+        "Both players pass; Shock resolves and Young Wolf is dealt 2 damage.",
+        "If undying triggers, both players pass and it resolves."
+      ],
+      "variants": [
+        {
+          "label": "no_counter",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Young Wolf (1/1) is destroyed by the state-based check and goes to A's graveyard. Its undying trigger fires and resolves: Young Wolf returns to the battlefield under A's control with a +1/+1 counter and is 2/2."
+        },
+        {
+          "label": "has_counter",
+          "polarity": "does_not_fire",
+          "delta": "Young Wolf already has one +1/+1 counter (it is 2/2).",
+          "expected": "Young Wolf is dealt 2 damage and is destroyed. It had a +1/+1 counter, so undying does not trigger. Young Wolf stays in A's graveyard."
+        }
+      ],
+      "cards": [
+        "Young Wolf",
+        "Mountain",
+        "Shock"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.93a-2",
+      "rules": [
+        "702.93a"
+      ],
+      "title": "Undying returns the creature under its owner's control",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain"
+          ],
+          "B": [
+            {
+              "card": "Young Wolf",
+              "summoning_sick": false
+            }
+          ]
+        },
+        "hand": {
+          "A": [
+            "Shock"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Young Wolf is owned by A but controlled by B, who gained control of it on an earlier turn with a control-changing effect that lasts indefinitely."
+      },
+      "decisions": [
+        "A casts Shock targeting Young Wolf, tapping Mountain.",
+        "Both players pass; Shock resolves and Young Wolf is dealt 2 damage.",
+        "If undying triggers, both players pass and it resolves."
+      ],
+      "variants": [
+        {
+          "label": "owned_by_A",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Young Wolf is destroyed and goes to A's graveyard, its owner's. The undying trigger resolves and Young Wolf returns to the battlefield under A's control with a +1/+1 counter (2/2). B no longer controls it."
+        },
+        {
+          "label": "owned_by_B",
+          "polarity": "other",
+          "delta": "Young Wolf is owned and controlled by B.",
+          "expected": "Young Wolf is destroyed and goes to B's graveyard. The undying trigger resolves and Young Wolf returns to the battlefield under B's control with a +1/+1 counter (2/2)."
+        },
+        {
+          "label": "has_counter",
+          "polarity": "does_not_fire",
+          "delta": "Young Wolf already has one +1/+1 counter (it is 2/2).",
+          "expected": "Young Wolf is destroyed and goes to A's graveyard, its owner's. It had a +1/+1 counter, so undying does not trigger and it stays there."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Young Wolf",
+        "Shock"
+      ],
+      "forge_notes": "Control of a card owned by the other player is hard to reach in a puzzle setup; it may need an Aura or control-changing effect played first."
+    }
+  ]
+}

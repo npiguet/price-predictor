@@ -1,0 +1,1758 @@
+{
+  "unit": "712",
+  "verified": true,
+  "review": [
+    "712.8c-1: the countered Generous Soul's destination was missing, though its own replacement exiles it; the base expected now says it is exiled, and the comber variant names the Aura's attachment and token.",
+    "712.11d-1: the five-lands variant flipped only affordability, not whether a front-face cast-transformed ability is considered; replaced it with a double-faced card lacking such an ability.",
+    "712.14-1: the Grizzly Bears variant changed nothing the rule decides; rebuilt it on one Biolume Egg returned either by Zombify (front face up) or by its own delayed trigger (transformed), and folded 712.14a in.",
+    "712.14a-1: dropped; its Terror variant only stopped the sacrifice trigger, so it was no minimal pair for entering transformed. 712.14a is now covered by 712.14-1.",
+    "712.15a-1: both variants ended with Delver front face up, so nothing flipped; the pair is now Moonmist before versus after turning the manifest face up, which flips Delver versus Insectile Aberration.",
+    "712.18-1: the base variant carried a non-empty delta, against the schema; Moonmist moved into decisions and the Cloudshift variant names its change against it.",
+    "712.21-1: Blood Artist's target and the may-choices were not fixed in decisions; fixed. Dropped 712.21e from its rules, since triggers are 712.21's own example and no effect here counts objects or cards; 712.21e has its own scenario now.",
+    "712.21d-2: the base variant had a non-empty delta, and the Wheel-on-B variant gave the same outcome as the base, so nothing flipped; rebuilt with Damnation on B's turn so the contrast is melded (one choice moves both cards) against two separate creatures (one card exiled, the other to the library).",
+    "712.21e-1: added; 712.21e was listed on 712.21-1, where nothing counts objects or cards that moved. Fumigate's life gain counts the melded permanent as one creature against two when unmelded.",
+    "712.10: the skip reason was false (The Golden-Gear Colossus transforms any double-faced artifact you control, and Mycosynth Lattice makes a Siege with a sorcery back face one); added 712.10-1 and removed the skip.",
+    "712.14b: the skip reason was false (a flicker effect such as Ghostly Flicker returns the card that left without selecting by type); added 712.14b-1 and removed the skip.",
+    "712.13a: the skip reason claimed daybound was the only route and missed the rule's own Mystic Reflection construction; reworded to name that construction and why it is not built."
+  ],
+  "skipped": [
+    {
+      "id": "712.13a",
+      "reason": "the only construction is the rule's own example: Mycosynth Lattice plus March of the Machines to make a Siege spell a creature as it enters, Mystic Reflection copying a non-double-faced copy of a daybound creature at night, and a Siege with a sorcery back face. Lattice plus March also turns every land into a 0/0 creature that dies, and the outcome hinges on Forge applying daybound's enters-transformed rule to a battle entering as a copy, which is unverified; no daybound double-faced card has an instant or sorcery back face"
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "712.4a-1",
+      "rules": [
+        "712.4a",
+        "712.14c"
+      ],
+      "title": "Melding exiles both cards and puts them onto the battlefield as one permanent with the back faces up",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Graf Rats",
+              "summoning_sick": false
+            },
+            {
+              "card": "Midnight Scavengers",
+              "summoning_sick": false
+            }
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A moves to the beginning of combat. Graf Rats' trigger fires; A has no other action and passes priority, B passes, and the trigger resolves."
+      ],
+      "variants": [
+        {
+          "label": "meld_pair",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Graf Rats and Midnight Scavengers are exiled and return as a single permanent, Chittering Host (colorless 5/6 Eldrazi Horror with haste and menace), represented by both cards with their back faces up. Neither Graf Rats nor Midnight Scavengers is on the battlefield as a separate permanent. Chittering Host's enters trigger resolves with no other creature to affect."
+        },
+        {
+          "label": "wrong_partner",
+          "polarity": "does_not_fire",
+          "delta": "A controls Hill Giant instead of Midnight Scavengers.",
+          "expected": "Graf Rats' trigger does not fire. Graf Rats (2/1) and Hill Giant stay on the battlefield as separate permanents and nothing is exiled."
+        }
+      ],
+      "cards": [
+        "Graf Rats",
+        "Midnight Scavengers",
+        "Chittering Host",
+        "Hill Giant"
+      ],
+      "forge_notes": "Forge implements the meld through the Meld ability on Graf Rats, whose intervening-if checks for a creature named Midnight Scavengers."
+    },
+    {
+      "id": "712.4b-1",
+      "rules": [
+        "712.4b"
+      ],
+      "title": "The back face of a meld card determines no characteristics while the card is not part of a melded permanent",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Swamp",
+            "Swamp"
+          ],
+          "B": [
+            "Meddling Mage"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Graf Rats"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Meddling Mage entered earlier with the chosen name Chittering Host. Naming the combined back face of a meld pair is allowed."
+      },
+      "decisions": [
+        "A tries to cast Graf Rats from hand, tapping both Swamps."
+      ],
+      "variants": [
+        {
+          "label": "back_face_name_named",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Casting Graf Rats is legal (can_play true): Graf Rats is not named Chittering Host, because its back face determines no characteristics outside a melded permanent. Graf Rats goes on the stack and resolves."
+        },
+        {
+          "label": "front_face_name_named",
+          "polarity": "does_not_fire",
+          "delta": "Meddling Mage's chosen name is Graf Rats instead of Chittering Host.",
+          "expected": "Casting Graf Rats is not legal (can_play false); Graf Rats stays in A's hand."
+        }
+      ],
+      "cards": [
+        "Swamp",
+        "Meddling Mage",
+        "Graf Rats",
+        "Chittering Host"
+      ],
+      "forge_notes": "Forge's name chooser may not offer the back-face name of a meld card; if it does not, play the scenario with the chosen name set directly in the state."
+    },
+    {
+      "id": "712.4c-1",
+      "rules": [
+        "712.4c"
+      ],
+      "title": "An instruction to transform a meld card is ignored",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Forest",
+            "Forest",
+            {
+              "card": "Midnight Scavengers",
+              "summoning_sick": false
+            }
+          ]
+        },
+        "hand": {
+          "A": [
+            "Moonmist"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Midnight Scavengers is a Human Rogue, so Moonmist's transform instruction selects it."
+      },
+      "decisions": [
+        "A casts Moonmist, tapping both Forests.",
+        "Both players pass; Moonmist resolves, instructing all Humans to transform."
+      ],
+      "variants": [
+        {
+          "label": "meld_card",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Midnight Scavengers does not transform: it stays a black 3/3 Human Rogue with its front face up. Moonmist is in A's graveyard."
+        },
+        {
+          "label": "double_faced_card",
+          "polarity": "does_not_fire",
+          "delta": "A controls Delver of Secrets instead of Midnight Scavengers.",
+          "expected": "Delver of Secrets transforms and is Insectile Aberration, a blue 3/2 Human Insect with flying. Moonmist is in A's graveyard."
+        }
+      ],
+      "cards": [
+        "Forest",
+        "Midnight Scavengers",
+        "Moonmist",
+        "Delver of Secrets"
+      ],
+      "forge_notes": "Forge's SetState transform path goes through Card.canTransform, which should refuse a meld card; confirm that Midnight Scavengers is left untouched."
+    },
+    {
+      "id": "712.8a-1",
+      "rules": [
+        "712.8a"
+      ],
+      "title": "A double-faced card in the graveyard has only its front face's characteristics",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Splendid Reclamation"
+          ]
+        },
+        "graveyard": {
+          "A": [
+            "Legion's Landing",
+            "Forest"
+          ]
+        },
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Splendid Reclamation, tapping all four Forests.",
+        "Both players pass; Splendid Reclamation resolves, returning all land cards from A's graveyard to the battlefield tapped."
+      ],
+      "variants": [
+        {
+          "label": "enchantment_front_land_back",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The Forest returns to the battlefield tapped. Legion's Landing stays in A's graveyard: only its front face counts there (a legendary enchantment), so it is not a land card even though its back face, Adanto, the First Fort, is a land."
+        },
+        {
+          "label": "land_front",
+          "polarity": "does_not_fire",
+          "delta": "A's graveyard holds Brightclimb Pathway instead of Legion's Landing.",
+          "expected": "Both the Forest and Brightclimb Pathway return to the battlefield tapped: the front face of Brightclimb Pathway is a land card."
+        }
+      ],
+      "cards": [
+        "Forest",
+        "Splendid Reclamation",
+        "Legion's Landing",
+        "Adanto, the First Fort",
+        "Brightclimb Pathway",
+        "Grimclimb Pathway"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "712.8b-1",
+      "rules": [
+        "712.8b"
+      ],
+      "title": "A meld card on the stack has only its front face's characteristics, including its mana value",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Swamp",
+            "Swamp",
+            "Swamp",
+            "Swamp",
+            "Swamp"
+          ],
+          "B": [
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Graf Rats",
+            "Midnight Scavengers"
+          ],
+          "B": [
+            "Spell Snare"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Graf Rats, tapping two Swamps.",
+        "A passes priority and B receives priority with Graf Rats on the stack.",
+        "B casts Spell Snare targeting Graf Rats, tapping the Island, if it is a legal target.",
+        "Both players pass."
+      ],
+      "variants": [
+        {
+          "label": "graf_rats",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Graf Rats on the stack has mana value 2 (its front face's {1}{B}); Spell Snare has a legal target and is cast. Graf Rats is countered and goes to A's graveyard."
+        },
+        {
+          "label": "midnight_scavengers",
+          "polarity": "does_not_fire",
+          "delta": "A casts Midnight Scavengers (mana value 5) instead, tapping all five Swamps.",
+          "expected": "Midnight Scavengers on the stack has mana value 5; Spell Snare has no legal target and cannot be cast. Midnight Scavengers resolves and enters the battlefield."
+        }
+      ],
+      "cards": [
+        "Swamp",
+        "Island",
+        "Graf Rats",
+        "Midnight Scavengers",
+        "Spell Snare",
+        "Chittering Host"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "712.8c-1",
+      "rules": [
+        "712.8c"
+      ],
+      "title": "A double-faced spell cast transformed takes its mana value from the front face's mana cost",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Island",
+            "Grizzly Bears"
+          ],
+          "B": [
+            "Island"
+          ]
+        },
+        "hand": {
+          "B": [
+            "Spell Snare"
+          ]
+        },
+        "graveyard": {
+          "A": [
+            "Beloved Beggar",
+            "Brine Comber"
+          ]
+        },
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Beloved Beggar from the graveyard transformed for its disturb cost {4}{W}{W}, tapping all six Plains.",
+        "A passes priority and B receives priority with the spell on the stack.",
+        "B casts Spell Snare targeting it, tapping the Island, if it is a legal target.",
+        "Both players pass."
+      ],
+      "variants": [
+        {
+          "label": "beggar",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The spell on the stack is Generous Soul, a white 4/4 creature spell with flying and vigilance, and its mana value is 2 (Beloved Beggar's {1}{W}), not the disturb cost 6 and not 0. Spell Snare has a legal target and counters it; Beloved Beggar is exiled instead of going to A's graveyard."
+        },
+        {
+          "label": "comber",
+          "polarity": "does_not_fire",
+          "delta": "A casts Brine Comber from the graveyard transformed for its disturb cost {W}{U} instead, tapping a Plains and the Island and targeting Grizzly Bears.",
+          "expected": "The spell on the stack is Brinebound Gift with mana value 3 (Brine Comber's {1}{W}{U}), not the paid cost 2. Spell Snare has no legal target and cannot be cast. Brinebound Gift resolves and enters attached to Grizzly Bears, and its enters trigger creates a 1/1 white Spirit token with flying."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Island",
+        "Grizzly Bears",
+        "Beloved Beggar",
+        "Generous Soul",
+        "Brine Comber",
+        "Brinebound Gift",
+        "Spell Snare"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "712.11a-1",
+      "rules": [
+        "712.11a"
+      ],
+      "title": "A card cast transformed is put on the stack with its back face up",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Plains",
+            "Island",
+            "Grizzly Bears"
+          ],
+          "B": [
+            "Island",
+            "Island",
+            "Island"
+          ]
+        },
+        "hand": {
+          "B": [
+            "Spell Pierce",
+            "Essence Scatter"
+          ]
+        },
+        "graveyard": {
+          "A": [
+            "Brine Comber"
+          ]
+        },
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Brine Comber from the graveyard transformed for its disturb cost {W}{U}, tapping a Plains and the Island and targeting Grizzly Bears with the resulting Aura spell.",
+        "A passes priority and B receives priority with the spell on the stack.",
+        "B checks which of Spell Pierce and Essence Scatter have a legal target on it."
+      ],
+      "variants": [
+        {
+          "label": "transformed",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The spell on the stack is Brinebound Gift, a white and blue Enchantment Aura spell, not a creature spell. Spell Pierce has a legal target (a noncreature spell); Essence Scatter has none."
+        },
+        {
+          "label": "front_from_hand",
+          "polarity": "does_not_fire",
+          "delta": "Brine Comber is in A's hand instead of the graveyard, and A casts it normally for {1}{W}{U}, tapping both Plains and the Island.",
+          "expected": "The spell on the stack is Brine Comber, a white and blue Spirit creature spell. Essence Scatter has a legal target; Spell Pierce has none."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Island",
+        "Grizzly Bears",
+        "Brine Comber",
+        "Brinebound Gift",
+        "Spell Pierce",
+        "Essence Scatter"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "712.8d-1",
+      "rules": [
+        "712.8d",
+        "712.8e"
+      ],
+      "title": "A permanent shows only the face that is up, and a transformed one keeps the front face's mana value",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Forest",
+            "Forest",
+            {
+              "card": "Hanweir Watchkeep",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            "Swamp"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Moonmist"
+          ],
+          "B": [
+            "Fatal Push"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Moonmist, tapping both Forests.",
+        "Both players pass; Moonmist resolves, transforming all Humans.",
+        "B casts Fatal Push targeting Hanweir Watchkeep, tapping the Swamp.",
+        "Both players pass; Fatal Push resolves."
+      ],
+      "variants": [
+        {
+          "label": "back_face_up",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Hanweir Watchkeep transformed into Bane of Hanweir: a red 5/5 Werewolf (no longer a Human Warrior, no defender) that attacks each combat if able. Its mana value is 3, from the front face's {2}{R}, not 0, so Fatal Push does not destroy it and Bane of Hanweir stays on the battlefield."
+        },
+        {
+          "label": "front_face_up",
+          "polarity": "does_not_fire",
+          "delta": "A does not cast Moonmist; Hanweir Watchkeep stays front face up and B casts Fatal Push at it.",
+          "expected": "Hanweir Watchkeep is a red 1/5 Human Warrior Werewolf with defender and has only its front face's characteristics. Its mana value is 3, so Fatal Push does not destroy it and it stays on the battlefield."
+        }
+      ],
+      "cards": [
+        "Forest",
+        "Swamp",
+        "Hanweir Watchkeep",
+        "Bane of Hanweir",
+        "Moonmist",
+        "Fatal Push"
+      ],
+      "forge_notes": "Fatal Push targets any creature and checks mana value on resolution, so it resolves and does nothing to a creature with mana value above 2."
+    },
+    {
+      "id": "712.8e-2",
+      "rules": [
+        "712.8e"
+      ],
+      "title": "A permanent copying the back face of a nonmodal double-faced permanent has mana value 0",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            {
+              "card": "Hanweir Watchkeep",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            "Swamp"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Clone"
+          ],
+          "B": [
+            "Fatal Push"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Hanweir Watchkeep is on the battlefield with its back face up, as Bane of Hanweir."
+      },
+      "decisions": [
+        "A casts Clone, tapping the four Islands.",
+        "Both players pass; Clone resolves and A has it enter as a copy of Bane of Hanweir.",
+        "B casts Fatal Push targeting the Clone, tapping the Swamp.",
+        "Both players pass; Fatal Push resolves."
+      ],
+      "variants": [
+        {
+          "label": "target_the_copy",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The Clone is a copy of Bane of Hanweir (red 5/5 Werewolf) and, being a copy of a back face, has mana value 0. Fatal Push destroys it and it moves to A's graveyard. The original Bane of Hanweir is untouched."
+        },
+        {
+          "label": "target_the_original",
+          "polarity": "does_not_fire",
+          "delta": "B targets the original Bane of Hanweir instead of the Clone.",
+          "expected": "The original has mana value 3 from its front face's {2}{R}. Fatal Push resolves and does not destroy it; both it and the Clone stay on the battlefield."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Swamp",
+        "Hanweir Watchkeep",
+        "Bane of Hanweir",
+        "Clone",
+        "Fatal Push"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "712.8f-1",
+      "rules": [
+        "712.8f"
+      ],
+      "title": "A modal double-faced permanent has only the characteristics of the face that is up",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Swamp",
+            "Swamp",
+            "Swamp",
+            "Swamp",
+            "Swamp",
+            "Mountain",
+            "Mountain"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Valki, God of Lies"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Valki, God of Lies as its back face, Tibalt, Cosmic Impostor, tapping all seven lands.",
+        "Both players pass; the spell resolves and Tibalt enters the battlefield."
+      ],
+      "variants": [
+        {
+          "label": "back_face",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Tibalt, Cosmic Impostor is a legendary planeswalker with five loyalty counters and mana value 7. It is not a creature and has none of Valki's characteristics or name."
+        },
+        {
+          "label": "front_face",
+          "polarity": "does_not_fire",
+          "delta": "A casts Valki as its front face for {1}{B}, tapping two Swamps.",
+          "expected": "Valki, God of Lies is a legendary 2/1 black God creature with mana value 2. It is not a planeswalker and has no loyalty counters. Its enters trigger resolves with B's hand empty, exiling nothing."
+        }
+      ],
+      "cards": [
+        "Swamp",
+        "Mountain",
+        "Valki, God of Lies",
+        "Tibalt, Cosmic Impostor"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "712.8g-1",
+      "rules": [
+        "712.8g"
+      ],
+      "title": "A melded permanent has the combined back face's characteristics and the sum of the front faces' mana values; a copy has mana value 0",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Chittering Host"
+          ],
+          "B": [
+            "Swamp"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Clone"
+          ],
+          "B": [
+            "Fatal Push"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Chittering Host is a melded permanent represented by Graf Rats and Midnight Scavengers."
+      },
+      "decisions": [
+        "B casts Fatal Push targeting Chittering Host, tapping the Swamp.",
+        "Both players pass; Fatal Push resolves."
+      ],
+      "variants": [
+        {
+          "label": "target_the_melded_permanent",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Chittering Host is a colorless 5/6 Eldrazi Horror with haste and menace, and its mana value is 7 (2 for Graf Rats plus 5 for Midnight Scavengers). Fatal Push resolves and does not destroy it."
+        },
+        {
+          "label": "target_a_copy",
+          "polarity": "does_not_fire",
+          "delta": "Before B acts, A casts Clone, tapping the four Islands, and has it enter as a copy of Chittering Host; B then targets the Clone with Fatal Push.",
+          "expected": "The Clone is a copy of the melded permanent and has mana value 0. Fatal Push destroys it and it moves to A's graveyard; the original Chittering Host stays on the battlefield."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Swamp",
+        "Chittering Host",
+        "Graf Rats",
+        "Midnight Scavengers",
+        "Clone",
+        "Fatal Push"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "712.9-1",
+      "rules": [
+        "712.9"
+      ],
+      "title": "Only a double-faced card or token can transform; a copy of one cannot",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Forest",
+            "Forest",
+            {
+              "card": "Hanweir Watchkeep",
+              "summoning_sick": false
+            }
+          ]
+        },
+        "hand": {
+          "A": [
+            "Moonmist"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Moonmist, tapping both Forests.",
+        "Both players pass; Moonmist resolves, instructing all Humans to transform."
+      ],
+      "variants": [
+        {
+          "label": "double_faced_card",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Hanweir Watchkeep transforms and is Bane of Hanweir, a red 5/5 Werewolf."
+        },
+        {
+          "label": "copy_of_front_face",
+          "polarity": "does_not_fire",
+          "delta": "A controls a Clone that entered as a copy of Hanweir Watchkeep instead of the Watchkeep itself.",
+          "expected": "The Clone is a red 1/5 Human Warrior Werewolf with defender, but it is not a double-faced card, so the transform instruction does nothing and it stays a copy of Hanweir Watchkeep."
+        }
+      ],
+      "cards": [
+        "Forest",
+        "Hanweir Watchkeep",
+        "Bane of Hanweir",
+        "Clone",
+        "Moonmist"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "712.11-1",
+      "rules": [
+        "712.11",
+        "712.11c"
+      ],
+      "title": "A modal double-faced card is cast with its front face by default, and only the face to be cast is evaluated",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Swamp",
+            "Swamp"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Valki, God of Lies"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A considers casting Valki, God of Lies from hand as its front face, then as its back face, Tibalt, Cosmic Impostor."
+      ],
+      "variants": [
+        {
+          "label": "two_lands",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Casting the front face is legal: Valki goes on the stack front face up as a creature spell with mana value 2. Casting the back face is not legal, because Tibalt's cost {5}{B}{R} cannot be paid with two Swamps."
+        },
+        {
+          "label": "seven_lands",
+          "polarity": "does_not_fire",
+          "delta": "A controls five Swamps and two Mountains instead of two Swamps.",
+          "expected": "Casting either face is legal. Cast as the front face, Valki goes on the stack as a creature spell with mana value 2; cast as the back face, Tibalt goes on the stack as a planeswalker spell with mana value 7."
+        }
+      ],
+      "cards": [
+        "Swamp",
+        "Mountain",
+        "Valki, God of Lies",
+        "Tibalt, Cosmic Impostor"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "712.11d-1",
+      "rules": [
+        "712.11d"
+      ],
+      "title": "An ability of the front face that allows casting the card transformed is considered when deciding whether it can be cast",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains"
+          ]
+        },
+        "hand": {},
+        "graveyard": {
+          "A": [
+            "Beloved Beggar"
+          ]
+        },
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A considers casting Beloved Beggar from the graveyard using its disturb ability ({4}{W}{W}, cast transformed)."
+      ],
+      "variants": [
+        {
+          "label": "six_lands",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Casting is legal (can_play true): Beloved Beggar's disturb ability allows it to be cast from the graveyard transformed, and the cost {4}{W}{W} can be paid with six Plains."
+        },
+        {
+          "label": "no_disturb",
+          "polarity": "does_not_fire",
+          "delta": "A's graveyard holds Hanweir Watchkeep, a double-faced card whose front face has no ability allowing it to be cast transformed, instead of Beloved Beggar.",
+          "expected": "Casting Hanweir Watchkeep from the graveyard is not legal (can_play false); it stays in A's graveyard."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Beloved Beggar",
+        "Generous Soul",
+        "Hanweir Watchkeep"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "712.13-1",
+      "rules": [
+        "712.13"
+      ],
+      "title": "A resolving double-faced spell enters the battlefield with the face that was up on the stack",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains"
+          ]
+        },
+        "hand": {},
+        "graveyard": {
+          "A": [
+            "Beloved Beggar"
+          ]
+        },
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Beloved Beggar from the graveyard transformed for its disturb cost {4}{W}{W}, tapping all six Plains.",
+        "Both players pass; the spell resolves."
+      ],
+      "variants": [
+        {
+          "label": "cast_transformed",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Generous Soul, a white 4/4 Spirit with flying and vigilance, is on the battlefield with its back face up. Beloved Beggar's front face is not shown."
+        },
+        {
+          "label": "cast_front_from_hand",
+          "polarity": "does_not_fire",
+          "delta": "Beloved Beggar is in A's hand instead of the graveyard, and A casts it normally for {1}{W}, tapping two Plains.",
+          "expected": "Beloved Beggar, a white 0/4 Human Peasant, is on the battlefield with its front face up."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Beloved Beggar",
+        "Generous Soul"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "712.14-1",
+      "rules": [
+        "712.14",
+        "712.14a"
+      ],
+      "title": "A double-faced card put onto the battlefield enters front face up unless the effect says transformed",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Swamp",
+            "Swamp",
+            "Swamp",
+            "Swamp"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Zombify"
+          ]
+        },
+        "graveyard": {
+          "A": [
+            "Biolume Egg"
+          ]
+        },
+        "library": {},
+        "exile": {},
+        "notes": "During A's upkeep this turn B cast Diabolic Edict targeting A and A sacrificed Biolume Egg, A's only creature. Biolume Egg's sacrifice trigger resolved, so a delayed trigger will return that card from A's graveyard to the battlefield transformed at the beginning of the next end step."
+      },
+      "decisions": [
+        "A casts Zombify targeting Biolume Egg in A's graveyard, tapping all four Swamps.",
+        "Both players pass; Zombify resolves.",
+        "If Biolume Egg's enters trigger fires, A scries 2 and keeps both cards on top.",
+        "The turn moves to the end step; the delayed trigger resolves."
+      ],
+      "variants": [
+        {
+          "label": "zombify",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Biolume Egg enters the battlefield front face up as a blue 0/4 Serpent Egg with defender, and its enters trigger fires (A scries 2). At the end step the delayed trigger does nothing, because the card it refers to left the graveyard; Biolume Egg stays front face up."
+        },
+        {
+          "label": "delayed_trigger_returns_it",
+          "polarity": "does_not_fire",
+          "delta": "A does not cast Zombify.",
+          "expected": "At the beginning of the end step Biolume Egg returns to the battlefield transformed, back face up as Biolume Serpent, a blue 4/4 Serpent. No enters trigger fires and A does not scry."
+        }
+      ],
+      "cards": [
+        "Swamp",
+        "Zombify",
+        "Biolume Egg",
+        "Biolume Serpent",
+        "Diabolic Edict"
+      ],
+      "forge_notes": "No Forge effect puts a card that is not double-faced onto the battlefield transformed (every such effect uses the card itself), so the second sentence of 712.14a cannot be shown."
+    },
+    {
+      "id": "712.15a-1",
+      "rules": [
+        "712.15a"
+      ],
+      "title": "A face-down double-faced permanent does not transform, and turned face up it has its front face up",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Plains",
+            "Forest",
+            "Forest",
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Soul Summons",
+            "Moonmist"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Delver of Secrets"
+          ]
+        },
+        "exile": {},
+        "notes": "Delver of Secrets is the top card of A's library."
+      },
+      "decisions": [
+        "A casts Soul Summons, tapping both Plains; it resolves and manifests the top card, Delver of Secrets, as a face-down 2/2 creature.",
+        "A casts Moonmist, tapping both Forests, and both players pass; Moonmist resolves.",
+        "A turns the manifested card face up by paying its mana cost {U}, tapping the Island."
+      ],
+      "variants": [
+        {
+          "label": "moonmist_while_face_down",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "While Moonmist resolves the face-down 2/2 does not transform. When turned face up it is Delver of Secrets with its front face up, a blue 1/1 Human Wizard, not Insectile Aberration."
+        },
+        {
+          "label": "face_up_first",
+          "polarity": "does_not_fire",
+          "delta": "A turns the manifested card face up before casting Moonmist instead of after it.",
+          "expected": "Delver of Secrets is face up as a Human when Moonmist resolves, so it transforms and is Insectile Aberration, a blue 3/2 Human Insect with flying."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Forest",
+        "Island",
+        "Soul Summons",
+        "Moonmist",
+        "Delver of Secrets",
+        "Insectile Aberration"
+      ],
+      "forge_notes": "No Forge transform effect selects a creature regardless of creature type: Moonmist selects Humans, and a face-down 2/2 has no creature types, so it is also not selected. The scenario shows the outcome, not which of the two reasons Forge applies."
+    },
+    {
+      "id": "712.16-1",
+      "rules": [
+        "712.16"
+      ],
+      "title": "An effect that turns a double-faced permanent face down does nothing",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island"
+          ],
+          "B": [
+            "Delver of Secrets",
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Ixidron"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Ixidron, tapping all five Islands.",
+        "Both players pass; Ixidron resolves and, as it enters, turns all other nontoken creatures face down."
+      ],
+      "variants": [
+        {
+          "label": "double_faced_creature",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears is turned face down and is a colorless 2/2. Delver of Secrets stays face up as a blue 1/1 Human Wizard. Ixidron is 1/1, because one creature is face down."
+        },
+        {
+          "label": "ordinary_creature",
+          "polarity": "does_not_fire",
+          "delta": "B controls Hill Giant instead of Delver of Secrets.",
+          "expected": "Both Hill Giant and Grizzly Bears are turned face down and are colorless 2/2 creatures. Ixidron is 2/2."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Delver of Secrets",
+        "Grizzly Bears",
+        "Hill Giant",
+        "Ixidron"
+      ],
+      "forge_notes": "Forge's SetState TurnFaceDown may or may not refuse a double-faced permanent; check Delver of Secrets stays face up."
+    },
+    {
+      "id": "712.18-1",
+      "rules": [
+        "712.18"
+      ],
+      "title": "A permanent that transforms stays the same object and keeps effects that applied to it",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Forest",
+            "Forest",
+            "Forest",
+            "Plains",
+            {
+              "card": "Hanweir Watchkeep",
+              "summoning_sick": false
+            }
+          ]
+        },
+        "hand": {
+          "A": [
+            "Giant Growth",
+            "Moonmist",
+            "Cloudshift"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Giant Growth targeting Hanweir Watchkeep, tapping a Forest.",
+        "Both players pass; Giant Growth resolves, giving Hanweir Watchkeep +3/+3 until end of turn.",
+        "A casts Moonmist, tapping two Forests, and both players pass; Moonmist resolves."
+      ],
+      "variants": [
+        {
+          "label": "transform",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Hanweir Watchkeep transforms into Bane of Hanweir and is the same object, so it keeps +3/+3 from Giant Growth: Bane of Hanweir is an 8/8 until end of turn."
+        },
+        {
+          "label": "leave_and_return",
+          "polarity": "does_not_fire",
+          "delta": "A casts Cloudshift targeting Hanweir Watchkeep, tapping the Plains, instead of Moonmist.",
+          "expected": "Hanweir Watchkeep is exiled and returns as a new object, front face up, without the +3/+3: it is a 1/5 with defender."
+        }
+      ],
+      "cards": [
+        "Forest",
+        "Plains",
+        "Hanweir Watchkeep",
+        "Bane of Hanweir",
+        "Giant Growth",
+        "Moonmist",
+        "Cloudshift"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "712.20-1",
+      "rules": [
+        "712.20"
+      ],
+      "title": "An 'as this permanent transforms' ability applies while the permanent transforms",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "upkeep",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Leeching Lurker",
+              "summoning_sick": false
+            }
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "It is night. Leeching Lurker is on the battlefield with its back face up; its front face is Curse of Leeches. B cast two spells during B's previous turn, and the day/night check happens as A's turn begins."
+      },
+      "decisions": [
+        "A's turn begins. Because B cast two spells in the previous turn, it becomes day and Leeching Lurker transforms into Curse of Leeches.",
+        "As it transforms, A chooses B as the player to attach the Curse to."
+      ],
+      "variants": [
+        {
+          "label": "two_spells",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "It is day. Curse of Leeches is on the battlefield attached to B, and stays there; it is not put into the graveyard for being an unattached Aura. It will drain B at B's next upkeep."
+        },
+        {
+          "label": "one_spell",
+          "polarity": "does_not_fire",
+          "delta": "B cast only one spell during B's previous turn.",
+          "expected": "It stays night. Leeching Lurker stays on the battlefield as a black 4/4 Leech Horror with lifelink; nothing is attached to B."
+        }
+      ],
+      "cards": [
+        "Leeching Lurker",
+        "Curse of Leeches"
+      ],
+      "forge_notes": "Forge implements the attachment as a Transform replacement effect (Event$ Transform) on the Curse of Leeches face."
+    },
+    {
+      "id": "712.21-1",
+      "rules": [
+        "712.21"
+      ],
+      "title": "A melded permanent leaving the battlefield is one permanent leaving and two cards moving",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Chittering Host",
+            "Hill Giant",
+            "Blood Artist",
+            "Quest for Ancient Secrets"
+          ],
+          "B": [
+            "Swamp",
+            "Swamp"
+          ]
+        },
+        "hand": {
+          "B": [
+            "Terror"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Chittering Host is a melded permanent represented by Graf Rats and Midnight Scavengers. Quest for Ancient Secrets has no counters. A takes every may-ability."
+      },
+      "decisions": [
+        "B casts Terror targeting Chittering Host, tapping both Swamps.",
+        "Both players pass; Terror resolves and Chittering Host is destroyed.",
+        "A's triggered abilities resolve; Blood Artist's targets B, and A puts a quest counter on Quest for Ancient Secrets for each of its triggers."
+      ],
+      "variants": [
+        {
+          "label": "melded_permanent",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Graf Rats and Midnight Scavengers are both in A's graveyard. Blood Artist triggers once, as one creature died: B loses 1 life and A gains 1. Quest for Ancient Secrets triggers twice, as two cards were put into the graveyard, and gets 2 quest counters."
+        },
+        {
+          "label": "ordinary_creature",
+          "polarity": "does_not_fire",
+          "delta": "B targets Hill Giant instead of Chittering Host.",
+          "expected": "Hill Giant is in A's graveyard. Blood Artist triggers once and Quest for Ancient Secrets triggers once, getting 1 quest counter; Chittering Host stays on the battlefield."
+        }
+      ],
+      "cards": [
+        "Chittering Host",
+        "Graf Rats",
+        "Midnight Scavengers",
+        "Hill Giant",
+        "Blood Artist",
+        "Quest for Ancient Secrets",
+        "Swamp",
+        "Terror"
+      ],
+      "forge_notes": "Terror cannot target Blood Artist (black), which is why it is a safe bystander. Whether Forge fires the card-moved trigger once per card for a melded permanent needs checking."
+    },
+    {
+      "id": "712.21c-1",
+      "rules": [
+        "712.21c"
+      ],
+      "title": "An effect that finds the object a melded permanent became finds both cards and acts on each",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Plains",
+            "Chittering Host",
+            "Hill Giant"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Otherworldly Journey"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Chittering Host is a melded permanent represented by Graf Rats and Midnight Scavengers."
+      },
+      "decisions": [
+        "A casts Otherworldly Journey targeting Chittering Host, tapping both Plains.",
+        "Both players pass; Otherworldly Journey resolves and exiles the target.",
+        "The turn moves to the end step; the delayed trigger resolves, returning the exiled card."
+      ],
+      "variants": [
+        {
+          "label": "melded_permanent",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "At the beginning of the next end step both Graf Rats and Midnight Scavengers return to the battlefield as separate permanents, each with a +1/+1 counter: Graf Rats is a 3/2 and Midnight Scavengers a 4/4. Chittering Host is not on the battlefield."
+        },
+        {
+          "label": "ordinary_creature",
+          "polarity": "does_not_fire",
+          "delta": "A targets Hill Giant instead of Chittering Host.",
+          "expected": "At the beginning of the next end step Hill Giant returns to the battlefield with one +1/+1 counter, a 4/4; Chittering Host stays on the battlefield."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Chittering Host",
+        "Graf Rats",
+        "Midnight Scavengers",
+        "Hill Giant",
+        "Otherworldly Journey"
+      ],
+      "forge_notes": "Forge's delayed trigger remembers the exiled object by last-known information; check that it returns both halves of a melded permanent."
+    },
+    {
+      "id": "712.21d-1",
+      "rules": [
+        "712.21d"
+      ],
+      "title": "A replacement effect applied to a melded permanent leaving the battlefield affects both cards",
+      "record_kind": "rewrite",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Chittering Host"
+          ],
+          "B": [
+            "Leyline of the Void",
+            "Swamp",
+            "Swamp"
+          ]
+        },
+        "hand": {
+          "B": [
+            "Terror"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Chittering Host is a melded permanent represented by Graf Rats and Midnight Scavengers."
+      },
+      "decisions": [
+        "B casts Terror targeting Chittering Host, tapping both Swamps.",
+        "Both players pass; Terror resolves and Chittering Host is destroyed."
+      ],
+      "variants": [
+        {
+          "label": "leyline",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Leyline of the Void's replacement effect applies once to the event and moves both cards: Graf Rats and Midnight Scavengers are both exiled instead of going to A's graveyard."
+        },
+        {
+          "label": "no_leyline",
+          "polarity": "does_not_fire",
+          "delta": "B controls no Leyline of the Void.",
+          "expected": "Graf Rats and Midnight Scavengers are both put into A's graveyard."
+        }
+      ],
+      "cards": [
+        "Chittering Host",
+        "Graf Rats",
+        "Midnight Scavengers",
+        "Leyline of the Void",
+        "Swamp",
+        "Terror"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "712.21d-2",
+      "rules": [
+        "712.21d"
+      ],
+      "title": "When two replacement effects could apply to a melded permanent leaving, the one chosen applies to both cards",
+      "record_kind": "rewrite",
+      "setup": {
+        "active": "B",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Chittering Host"
+          ],
+          "B": [
+            "Leyline of the Void",
+            "Wheel of Sun and Moon",
+            "Swamp",
+            "Swamp",
+            "Swamp",
+            "Swamp"
+          ]
+        },
+        "hand": {
+          "B": [
+            "Damnation"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Chittering Host is a melded permanent represented by Graf Rats and Midnight Scavengers, both owned by A. Wheel of Sun and Moon is controlled by B and enchants A."
+      },
+      "decisions": [
+        "B casts Damnation, tapping all four Swamps.",
+        "Both players pass; Damnation resolves and destroys every creature.",
+        "A, the affected player, chooses Leyline of the Void's replacement effect for Graf Rats and, wherever a separate choice for Midnight Scavengers is possible, Wheel of Sun and Moon's for Midnight Scavengers."
+      ],
+      "variants": [
+        {
+          "label": "melded",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The one choice applies to both cards: Graf Rats and Midnight Scavengers are both exiled; neither is in A's library or graveyard."
+        },
+        {
+          "label": "choose_wheel",
+          "polarity": "other",
+          "delta": "A chooses Wheel of Sun and Moon's replacement effect for Graf Rats instead.",
+          "expected": "Both Graf Rats and Midnight Scavengers are revealed and put on the bottom of A's library; neither is exiled or in the graveyard."
+        },
+        {
+          "label": "not_melded",
+          "polarity": "does_not_fire",
+          "delta": "A controls Graf Rats and Midnight Scavengers as two separate permanents instead of the melded Chittering Host.",
+          "expected": "Each card gets its own choice: Graf Rats is exiled and Midnight Scavengers is revealed and put on the bottom of A's library."
+        }
+      ],
+      "cards": [
+        "Chittering Host",
+        "Graf Rats",
+        "Midnight Scavengers",
+        "Leyline of the Void",
+        "Wheel of Sun and Moon",
+        "Swamp",
+        "Damnation"
+      ],
+      "forge_notes": "Whether Forge lets the owner order the two replacement effects for a melded permanent is untested."
+    },
+    {
+      "id": "712.21e-1",
+      "rules": [
+        "712.21e"
+      ],
+      "title": "An effect counting objects that changed zones counts a melded permanent once",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains"
+          ],
+          "B": [
+            "Chittering Host"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Fumigate"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Chittering Host is a melded permanent represented by Graf Rats and Midnight Scavengers, both owned and controlled by B."
+      },
+      "decisions": [
+        "A casts Fumigate, tapping all five Plains.",
+        "Both players pass; Fumigate resolves."
+      ],
+      "variants": [
+        {
+          "label": "melded",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Chittering Host is destroyed and Graf Rats and Midnight Scavengers are both put into B's graveyard. One creature was destroyed, so A gains 1 life and is at 21."
+        },
+        {
+          "label": "not_melded",
+          "polarity": "does_not_fire",
+          "delta": "B controls Graf Rats and Midnight Scavengers as two separate permanents instead of the melded Chittering Host.",
+          "expected": "Both creatures are destroyed and put into B's graveyard. Two creatures were destroyed, so A gains 2 life and is at 22."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Fumigate",
+        "Chittering Host",
+        "Graf Rats",
+        "Midnight Scavengers"
+      ],
+      "forge_notes": "Fumigate counts the remembered destroyed objects; whether Forge remembers a melded permanent as one object or as its two cards needs checking. The card-count half of 712.21e is shown by Quest for Ancient Secrets in 712.21-1."
+    },
+    {
+      "id": "712.10-1",
+      "rules": [
+        "712.10"
+      ],
+      "title": "An instruction to transform a permanent whose other face is a sorcery does nothing",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "declare_attackers",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mycosynth Lattice",
+            {
+              "card": "Tetzin, Gnome Champion",
+              "summoning_sick": false
+            },
+            "Invasion of Alara",
+            "Hanweir Watchkeep"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Tetzin, Gnome Champion is on the battlefield with its back face up, as The Golden-Gear Colossus (it was crafted earlier). A cast Invasion of Alara earlier and controls it; B is its protector and it has 7 defense counters. Mycosynth Lattice makes every permanent an artifact, so Invasion of Alara and Hanweir Watchkeep are double-faced artifacts A controls."
+      },
+      "decisions": [
+        "A declares The Golden-Gear Colossus as an attacker against B.",
+        "Its attack trigger targets Invasion of Alara; both players pass and the trigger resolves."
+      ],
+      "variants": [
+        {
+          "label": "sorcery_back_face",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Invasion of Alara does not transform: it stays on the battlefield front face up as a battle with 7 defense counters. A creates two 1/1 colorless Gnome artifact creature tokens."
+        },
+        {
+          "label": "permanent_back_face",
+          "polarity": "does_not_fire",
+          "delta": "The trigger targets Hanweir Watchkeep instead of Invasion of Alara.",
+          "expected": "Hanweir Watchkeep transforms into Bane of Hanweir, a colorless 5/5 Werewolf artifact creature. A creates two 1/1 colorless Gnome artifact creature tokens. Invasion of Alara is unchanged."
+        }
+      ],
+      "cards": [
+        "Mycosynth Lattice",
+        "Tetzin, Gnome Champion",
+        "The Golden-Gear Colossus",
+        "Invasion of Alara",
+        "Awaken the Maelstrom",
+        "Hanweir Watchkeep",
+        "Bane of Hanweir"
+      ],
+      "forge_notes": "Forge's SetState transform may not check for an instant or sorcery destination face; confirm Invasion of Alara keeps its front face."
+    },
+    {
+      "id": "712.14b-1",
+      "rules": [
+        "712.14b"
+      ],
+      "title": "A modal double-faced card whose front face is not a permanent card stays in its zone when put onto the battlefield",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            "Island",
+            "Agadeem's Awakening",
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Ghostly Flicker"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Agadeem's Awakening was played as a land earlier, so it is on the battlefield untapped with its back face up, as Agadeem, the Undercrypt."
+      },
+      "decisions": [
+        "A casts Ghostly Flicker targeting Agadeem, the Undercrypt and Grizzly Bears, tapping the three Islands.",
+        "Both players pass; Ghostly Flicker resolves, exiling both and returning those cards to the battlefield."
+      ],
+      "variants": [
+        {
+          "label": "sorcery_front",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears returns to the battlefield. Agadeem's Awakening stays in exile: in exile it is a sorcery card (its front face), so it cannot be put onto the battlefield."
+        },
+        {
+          "label": "land_front",
+          "polarity": "does_not_fire",
+          "delta": "A's land is Brightclimb Pathway played as its back face, Grimclimb Pathway, instead of Agadeem's Awakening.",
+          "expected": "Grizzly Bears and the Pathway both return to the battlefield; the Pathway returns front face up as Brightclimb Pathway."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Agadeem's Awakening",
+        "Agadeem, the Undercrypt",
+        "Grizzly Bears",
+        "Ghostly Flicker",
+        "Brightclimb Pathway",
+        "Grimclimb Pathway"
+      ],
+      "forge_notes": "Forge's ChangeZone from exile to the battlefield may not refuse a non-permanent front face; confirm Agadeem's Awakening stays in exile."
+    }
+  ]
+}

@@ -1,0 +1,3 @@
+{"id": "701.66", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "701.66a", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution", "continuous", "trigger"], "outcome": "The target land becomes a 0/0 hasty land creature with N +1/+1 counters, and returns to the battlefield tapped when it dies or is exiled.", "note": ""}
+{"id": "701.66b", "category": "mechanical", "observability": "direct", "record_kinds": ["trigger"], "outcome": "A whenever-you-earthbend trigger fires when the earthbend's delayed trigger is created.", "note": ""}

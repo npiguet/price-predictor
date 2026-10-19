@@ -1,0 +1,6 @@
+{"id": "702.14", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.14a", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.14b", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.14c", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "A creature with landwalk has no legal blockers while the defending player controls a land matching the specified land type or supertype qualifier.", "note": ""}
+{"id": "702.14d", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "A defender controlling a creature with the same landwalk still cannot block an attacker with that landwalk.", "note": ""}
+{"id": "702.14e", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": "Redundancy has no separate outcome."}

@@ -1,0 +1,2 @@
+{"id": "701.2", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "701.2a", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "A player with priority can activate an activated ability only of an object they control (or own, if uncontrolled), unless the object says otherwise.", "note": ""}

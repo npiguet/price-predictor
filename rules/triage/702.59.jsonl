@@ -1,0 +1,2 @@
+{"id": "702.59", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.59a", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution", "trigger"], "outcome": "When a creature goes from the battlefield to its controller's graveyard, a recover card in the graveyard returns to hand if the cost is paid, otherwise it is exiled.", "note": ""}

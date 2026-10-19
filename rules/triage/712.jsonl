@@ -1,0 +1,58 @@
+{"id": "712.1", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "712.2", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "712.2a", "category": "out_of_scope", "observability": "none", "record_kinds": [], "outcome": "", "note": "card-face symbols are physical"}
+{"id": "712.2b", "category": "out_of_scope", "observability": "none", "record_kinds": [], "outcome": "", "note": "card-face symbols are physical"}
+{"id": "712.2c", "category": "out_of_scope", "observability": "none", "record_kinds": [], "outcome": "", "note": "reminder text with no effect"}
+{"id": "712.3", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "712.3a", "category": "out_of_scope", "observability": "none", "record_kinds": [], "outcome": "", "note": "card-face symbols are physical"}
+{"id": "712.3b", "category": "out_of_scope", "observability": "none", "record_kinds": [], "outcome": "", "note": "card-face symbols are physical"}
+{"id": "712.3c", "category": "out_of_scope", "observability": "none", "record_kinds": [], "outcome": "", "note": "reminder text with no effect"}
+{"id": "712.4", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "712.4a", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "Melding exiles both cards and returns them to the battlefield as one permanent with the combined back face up.", "note": ""}
+{"id": "712.4b", "category": "mechanical", "observability": "needs_new_fields", "record_kinds": ["continuous"], "outcome": "A meld card's back face outside a melded permanent determines no characteristics.", "note": ""}
+{"id": "712.4c", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "An instruction to transform or convert a meld card is ignored and the card keeps its face.", "note": ""}
+{"id": "712.5", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "712.5a", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "712.5b", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "712.5c", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "712.5d", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "712.5e", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "712.5f", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "712.5g", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "712.6", "category": "out_of_scope", "observability": "none", "record_kinds": [], "outcome": "", "note": "players looking at cards is a physical-game matter"}
+{"id": "712.7", "category": "out_of_scope", "observability": "none", "record_kinds": [], "outcome": "", "note": "hidden-zone card handling and sleeves are physical"}
+{"id": "712.8", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "712.8a", "category": "mechanical", "observability": "direct", "record_kinds": ["continuous"], "outcome": "A double-faced card in a zone other than the battlefield or stack shows only its front face's characteristics.", "note": ""}
+{"id": "712.8b", "category": "mechanical", "observability": "direct", "record_kinds": ["continuous"], "outcome": "A meld card on the stack has only its front face's characteristics.", "note": ""}
+{"id": "712.8c", "category": "mechanical", "observability": "direct", "record_kinds": ["continuous"], "outcome": "A double-faced spell cast transformed has its back face's characteristics but a mana value from the front face's mana cost.", "note": ""}
+{"id": "712.8d", "category": "mechanical", "observability": "direct", "record_kinds": ["continuous"], "outcome": "A double-faced permanent with its front face up has only its front face's characteristics.", "note": ""}
+{"id": "712.8e", "category": "mechanical", "observability": "direct", "record_kinds": ["continuous"], "outcome": "A nonmodal permanent with its back face up has back-face characteristics but the front face's mana value, or 0 if it is a copy of the back face.", "note": ""}
+{"id": "712.8f", "category": "mechanical", "observability": "direct", "record_kinds": ["continuous"], "outcome": "A modal double-faced spell or permanent has only the characteristics of the face that is up.", "note": ""}
+{"id": "712.8g", "category": "mechanical", "observability": "direct", "record_kinds": ["continuous"], "outcome": "A melded permanent has the combined back face's characteristics and the sum of the front faces' mana values, or 0 as a copy.", "note": ""}
+{"id": "712.9", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "Transform or convert instructions change only permanents that are double-faced cards or tokens; any other permanent is unchanged.", "note": ""}
+{"id": "712.10", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "A transform or convert instruction does nothing when the destination face is an instant or sorcery face.", "note": ""}
+{"id": "712.11", "category": "mechanical", "observability": "direct", "record_kinds": ["playability"], "outcome": "A double-faced spell is put on the stack front face up by default.", "note": ""}
+{"id": "712.11a", "category": "mechanical", "observability": "direct", "record_kinds": ["playability"], "outcome": "A double-faced card cast transformed or converted is put on the stack with its back face up.", "note": ""}
+{"id": "712.11b", "category": "decision", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "712.11c", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "Only the face that would be up on the stack is evaluated to decide whether the card can be cast.", "note": ""}
+{"id": "712.11d", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "A front-face ability allowing the card to be cast transformed is also considered when deciding whether it can be cast.", "note": ""}
+{"id": "712.12", "category": "decision", "observability": "none", "record_kinds": [], "outcome": "", "note": "the face choice has no separate outcome; the face entering is covered by 712.8f"}
+{"id": "712.13", "category": "mechanical", "observability": "direct", "record_kinds": ["resolution"], "outcome": "A resolving double-faced spell enters the battlefield with the face that was up on the stack.", "note": ""}
+{"id": "712.13a", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "A spell told to enter transformed whose back face is an instant or sorcery goes to its owner's graveyard instead of entering.", "note": ""}
+{"id": "712.14", "category": "mechanical", "observability": "direct", "record_kinds": ["resolution"], "outcome": "A double-faced card put onto the battlefield from a zone other than the stack enters front face up by default.", "note": ""}
+{"id": "712.14a", "category": "mechanical", "observability": "direct", "record_kinds": ["resolution"], "outcome": "A double-faced card put onto the battlefield transformed enters back face up; a non-double-faced card stays in its zone.", "note": ""}
+{"id": "712.14b", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "A modal double-faced card whose front face is not a permanent card stays in its zone when put onto the battlefield.", "note": ""}
+{"id": "712.14c", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "Two melding cards enter the battlefield as a single permanent with their back faces up.", "note": ""}
+{"id": "712.15", "category": "out_of_scope", "observability": "none", "record_kinds": [], "outcome": "", "note": "face-down double-faced cards are physical handling; the face-down characteristics are covered in 708"}
+{"id": "712.15a", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "A face-down double-faced permanent does not transform; turned face up it has its front face up.", "note": ""}
+{"id": "712.16", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "An effect turning a melded or double-faced permanent face down does nothing and changes no characteristics.", "note": ""}
+{"id": "712.17", "category": "out_of_scope", "observability": "none", "record_kinds": [], "outcome": "", "note": "hidden card handling is physical"}
+{"id": "712.18", "category": "mechanical", "observability": "indirect", "record_kinds": ["continuous"], "outcome": "A permanent that transforms stays the same object and keeps effects that applied to it.", "note": ""}
+{"id": "712.19", "category": "decision", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "712.20", "category": "mechanical", "observability": "needs_new_fields", "record_kinds": ["resolution"], "outcome": "An 'as this transforms' ability is applied during the transformation, not after it.", "note": ""}
+{"id": "712.21", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "A melded permanent leaving the battlefield is one permanent leaving and two cards entering the new zone.", "note": ""}
+{"id": "712.21a", "category": "decision", "observability": "none", "record_kinds": [], "outcome": "", "note": "the owner arranges the two cards"}
+{"id": "712.21b", "category": "decision", "observability": "none", "record_kinds": [], "outcome": "", "note": "the exiling player determines the relative timestamp order"}
+{"id": "712.21c", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "An effect that finds the object a melded permanent became finds both cards and acts upon each.", "note": ""}
+{"id": "712.21d", "category": "mechanical", "observability": "indirect", "record_kinds": ["rewrite"], "outcome": "A replacement effect applied to a melded permanent leaving the battlefield affects both cards.", "note": ""}
+{"id": "712.21e", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "A melded permanent counts as one object moved and two cards moved.", "note": ""}

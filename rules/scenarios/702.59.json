@@ -1,0 +1,82 @@
+{
+  "unit": "702.59",
+  "verified": true,
+  "review": [],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.59a-1",
+      "rules": [
+        "702.59a"
+      ],
+      "title": "Recover returns the card to hand if the cost is paid, otherwise exiles it",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Swamp",
+            "Swamp",
+            "Swamp",
+            "Grizzly Bears"
+          ],
+          "B": [
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Shock"
+          ]
+        },
+        "graveyard": {
+          "A": [
+            "Grim Harvest"
+          ]
+        },
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Shock targeting A's Grizzly Bears, tapping Mountain.",
+        "Both players pass; Shock resolves and A's Grizzly Bears dies.",
+        "Grim Harvest's recover trigger goes on the stack; A pays {2}{B} with Swamp, Swamp, Swamp when it resolves."
+      ],
+      "variants": [
+        {
+          "label": "pay_recover",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "A's Grizzly Bears is put into A's graveyard. The recover trigger fires, A pays {2}{B}, and Grim Harvest moves from A's graveyard to A's hand."
+        },
+        {
+          "label": "decline_payment",
+          "polarity": "other",
+          "delta": "A does not pay {2}{B} when the recover trigger resolves.",
+          "expected": "The recover trigger fires, no cost is paid, and Grim Harvest moves from A's graveyard to exile."
+        },
+        {
+          "label": "opponents_creature",
+          "polarity": "does_not_fire",
+          "delta": "Shock targets B's Grizzly Bears instead of A's.",
+          "expected": "B's Grizzly Bears is put into B's graveyard. The recover trigger does not fire and Grim Harvest stays in A's graveyard."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Swamp",
+        "Grizzly Bears",
+        "Shock",
+        "Grim Harvest"
+      ],
+      "forge_notes": "Recover is a triggered ability that works from the graveyard; the pay-or-exile choice is fixed in the decisions."
+    }
+  ]
+}

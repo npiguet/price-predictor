@@ -1,0 +1,3 @@
+{"id": "702.45", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.45a", "category": "mechanical", "observability": "direct", "record_kinds": ["trigger", "combat"], "outcome": "A creature with bushido N gets +N/+N until end of turn when it blocks or becomes blocked.", "note": ""}
+{"id": "702.45b", "category": "mechanical", "observability": "direct", "record_kinds": ["trigger"], "outcome": "Each instance of bushido triggers separately.", "note": ""}

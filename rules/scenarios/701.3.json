@@ -1,0 +1,266 @@
+{
+  "unit": "701.3",
+  "verified": true,
+  "review": [
+    "701.3a-1: resolution decision named a choice that does not exist in the protected_host variant; reworded to choose Hill Giant only when it is a legal host.",
+    "701.3b-1: other_host expects Grafted Wargear's trigger to resolve but no decision passed priority for it; added the pass to the decisions."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "701.3a-1",
+      "rules": [
+        "701.3a",
+        "701.3b"
+      ],
+      "title": "An Aura moved by an effect attaches only to a permanent it could enchant",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            "Hill Giant"
+          ],
+          "B": [
+            "Grizzly Bears",
+            {
+              "card": "Pacifism",
+              "attached_to": "Grizzly Bears"
+            }
+          ]
+        },
+        "hand": {
+          "A": [
+            "Aura Graft"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Pacifism is attached to Grizzly Bears and controlled by B. Both libraries are non-empty and irrelevant."
+      },
+      "decisions": [
+        "A casts Aura Graft targeting Pacifism, tapping both Islands.",
+        "Both players pass; Aura Graft resolves: A gains control of Pacifism, then A attaches it to Hill Giant, the only other permanent Pacifism can enchant (in a variant with no such permanent, no choice is made)."
+      ],
+      "variants": [
+        {
+          "label": "legal_host",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "A gains control of Pacifism. Pacifism moves from Grizzly Bears to Hill Giant: Hill Giant can't attack or block, Grizzly Bears can. Aura Graft resolved and is in A's graveyard."
+        },
+        {
+          "label": "protected_host",
+          "polarity": "does_not_fire",
+          "delta": "A's other creature is Black Knight (protection from white) instead of Hill Giant.",
+          "expected": "A gains control of Pacifism, but a white Aura can't be attached to Black Knight, so Pacifism does not move: it stays attached to Grizzly Bears, which still can't attack or block. Black Knight is unaffected. Aura Graft resolved and is in A's graveyard."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Hill Giant",
+        "Black Knight",
+        "Grizzly Bears",
+        "Pacifism",
+        "Aura Graft"
+      ],
+      "forge_notes": "Aura Graft's Attach sub-ability uses Choices$ Permanent; confirm Forge filters the choice by what the Aura can enchant (including protection) so no illegal host is offered."
+    },
+    {
+      "id": "701.3b-1",
+      "rules": [
+        "701.3b"
+      ],
+      "title": "An attach effect aimed at the permanent the Equipment is already attached to does nothing",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Grizzly Bears",
+            "Hill Giant",
+            {
+              "card": "Grafted Wargear",
+              "attached_to": "Grizzly Bears"
+            }
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Equip costs {0}, so no mana is needed. Both libraries are non-empty and irrelevant."
+      },
+      "decisions": [
+        "A activates Grafted Wargear's equip ability targeting Grizzly Bears (the creature it is already attached to).",
+        "Both players pass; the equip ability resolves. If a becomes-unattached trigger goes on the stack, both players pass and it resolves."
+      ],
+      "variants": [
+        {
+          "label": "same_host",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The equip effect does nothing: Grafted Wargear stays attached to Grizzly Bears (5/4), no becomes-unattached trigger fires, and Grizzly Bears is not sacrificed."
+        },
+        {
+          "label": "other_host",
+          "polarity": "does_not_fire",
+          "delta": "The equip ability targets Hill Giant instead of Grizzly Bears.",
+          "expected": "Grafted Wargear moves to Hill Giant (6/5). Its becomes-unattached trigger fires and Grizzly Bears is sacrificed, moving to A's graveyard."
+        }
+      ],
+      "cards": [
+        "Grizzly Bears",
+        "Hill Giant",
+        "Grafted Wargear"
+      ],
+      "forge_notes": "The rule's other branch, an object that is not an Aura, Equipment or Fortification being attached, needs a second effect that changes the object's types in response and has no simple card in Forge."
+    },
+    {
+      "id": "701.3c-1",
+      "rules": [
+        "701.3c"
+      ],
+      "title": "Re-attaching an Equipment gives it a new timestamp",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Plains",
+            "Plains",
+            "Grizzly Bears",
+            "Hill Giant",
+            {
+              "card": "Swiftfoot Boots",
+              "attached_to": "Grizzly Bears"
+            }
+          ]
+        },
+        "hand": {
+          "A": [
+            "Darksteel Mutation"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Swiftfoot Boots (equip {1}) is already attached to Grizzly Bears. Darksteel Mutation removes all abilities of its host and then gives it indestructible; Swiftfoot Boots gives its host haste and hexproof. Both effects act in the ability layer and are ordered by timestamp."
+      },
+      "decisions": [
+        "A casts Darksteel Mutation targeting Hill Giant, tapping two Plains; both players pass; it resolves and attaches to Hill Giant.",
+        "A activates equip on Swiftfoot Boots targeting Hill Giant, tapping the third Plains; both players pass; the equip ability resolves and Swiftfoot Boots moves from Grizzly Bears to Hill Giant."
+      ],
+      "variants": [
+        {
+          "label": "equip_after_aura",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Swiftfoot Boots' new timestamp is later than Darksteel Mutation's, so Hill Giant is a 0/1 indestructible Insect artifact creature that has haste and hexproof. Grizzly Bears is an unequipped 2/2."
+        },
+        {
+          "label": "equip_before_aura",
+          "polarity": "does_not_fire",
+          "delta": "The two actions swap order: A first activates equip (Swiftfoot Boots moves to Hill Giant), then casts Darksteel Mutation targeting Hill Giant.",
+          "expected": "Darksteel Mutation's timestamp is later than Swiftfoot Boots', so it removes the granted keywords: Hill Giant is a 0/1 indestructible Insect artifact creature with no haste and no hexproof."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Grizzly Bears",
+        "Hill Giant",
+        "Swiftfoot Boots",
+        "Darksteel Mutation"
+      ],
+      "forge_notes": "The layer-6 result in the continuous record is the only observable of the timestamp."
+    },
+    {
+      "id": "701.3d-1",
+      "rules": [
+        "701.3d"
+      ],
+      "title": "An Equipment that stops being attached triggers its becomes-unattached ability",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Swamp",
+            "Swamp",
+            "Grizzly Bears",
+            "Hill Giant",
+            {
+              "card": "Grafted Wargear",
+              "attached_to": "Grizzly Bears"
+            }
+          ]
+        },
+        "hand": {
+          "A": [
+            "Doom Blade"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Grafted Wargear: whenever it becomes unattached from a permanent, sacrifice that permanent. Equip costs {0}."
+      },
+      "decisions": [
+        "A activates Grafted Wargear's equip ability targeting Hill Giant.",
+        "Both players pass; the equip ability resolves. The becomes-unattached trigger goes on the stack, both players pass, and it resolves."
+      ],
+      "variants": [
+        {
+          "label": "moved_away",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grafted Wargear moves from Grizzly Bears to Hill Giant (6/5). The becomes-unattached trigger fires for Grizzly Bears and Grizzly Bears is sacrificed, moving to A's graveyard."
+        },
+        {
+          "label": "host_destroyed",
+          "polarity": "fires",
+          "delta": "Instead of equipping, A casts Doom Blade targeting Grizzly Bears, tapping both Swamps.",
+          "expected": "Grizzly Bears is destroyed and moves to A's graveyard. Grafted Wargear stays on the battlefield, unattached, and its becomes-unattached trigger fires; there is nothing left to sacrifice. Hill Giant stays 3/3."
+        },
+        {
+          "label": "never_attached",
+          "polarity": "does_not_fire",
+          "delta": "Grafted Wargear starts unattached, and A equips it to Hill Giant.",
+          "expected": "Grafted Wargear attaches to Hill Giant (6/5). No becomes-unattached trigger fires and Grizzly Bears stays on the battlefield."
+        }
+      ],
+      "cards": [
+        "Swamp",
+        "Grizzly Bears",
+        "Hill Giant",
+        "Grafted Wargear",
+        "Doom Blade"
+      ],
+      "forge_notes": "Confirm Forge fires the Unattached trigger when the host leaves the battlefield (state-based unattach), not only when an equip ability moves the Equipment."
+    }
+  ]
+}

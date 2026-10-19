@@ -1,0 +1,4 @@
+{"id": "702.20", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.20a", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.20b", "category": "mechanical", "observability": "indirect", "record_kinds": ["combat", "continuous"], "outcome": "A creature with vigilance that attacks stays untapped, while a creature without it becomes tapped.", "note": ""}
+{"id": "702.20c", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": "Redundancy has no separate outcome."}

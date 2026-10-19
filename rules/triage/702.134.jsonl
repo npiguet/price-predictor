@@ -1,0 +1,4 @@
+{"id": "702.134", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.134a", "category": "mechanical", "observability": "direct", "record_kinds": ["trigger", "resolution"], "outcome": "When a creature with mentor attacks, it puts a +1/+1 counter on target attacking creature with lesser power, and the trigger has no legal target if none exists.", "note": ""}
+{"id": "702.134b", "category": "mechanical", "observability": "indirect", "record_kinds": ["trigger"], "outcome": "Each instance of mentor triggers separately.", "note": ""}
+{"id": "702.134c", "category": "mechanical", "observability": "direct", "record_kinds": ["trigger"], "outcome": "A \"whenever a creature mentors\" ability triggers when a mentor ability with that source and target resolves.", "note": ""}

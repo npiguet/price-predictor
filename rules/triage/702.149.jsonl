@@ -1,0 +1,4 @@
+{"id": "702.149", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.149a", "category": "mechanical", "observability": "direct", "record_kinds": ["trigger", "resolution"], "outcome": "When this creature and another creature with greater power attack, the training trigger fires and a +1/+1 counter is put on it.", "note": ""}
+{"id": "702.149b", "category": "mechanical", "observability": "direct", "record_kinds": ["trigger"], "outcome": "Each instance of training triggers separately, putting one counter per instance.", "note": ""}
+{"id": "702.149c", "category": "mechanical", "observability": "indirect", "record_kinds": ["trigger"], "outcome": "A \"when this creature trains\" ability triggers when a resolving training ability puts counters on the creature.", "note": ""}

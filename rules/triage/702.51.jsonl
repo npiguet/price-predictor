@@ -1,0 +1,5 @@
+{"id": "702.51", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.51a", "category": "mechanical", "observability": "direct", "record_kinds": ["playability"], "outcome": "Tapping untapped creatures pays for matching colored or generic mana of a convoke spell's cost.", "note": ""}
+{"id": "702.51b", "category": "mechanical", "observability": "direct", "record_kinds": ["playability"], "outcome": "Convoke applies after the total cost, including reductions, is determined.", "note": ""}
+{"id": "702.51c", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.51d", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": "redundancy; no distinct outcome beyond 702.51a"}

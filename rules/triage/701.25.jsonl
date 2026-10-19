@@ -1,0 +1,5 @@
+{"id": "701.25", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "701.25a", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "Surveil N moves the chosen cards among the top N from library to graveyard and leaves the rest on top.", "note": "The choice of which cards is taken; the zone moves are the outcome."}
+{"id": "701.25b", "category": "decision", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "701.25c", "category": "mechanical", "observability": "indirect", "record_kinds": ["trigger"], "outcome": "Surveil 0 is no event, so surveil triggers do not fire.", "note": ""}
+{"id": "701.25d", "category": "mechanical", "observability": "indirect", "record_kinds": ["trigger"], "outcome": "A surveil trigger fires after surveil completes, even if no card could be moved.", "note": ""}

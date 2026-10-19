@@ -1,0 +1,7 @@
+{"id": "701.28", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "701.28a", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution", "continuous"], "outcome": "Converting a permanent turns it to its other face under the same rules as transforming.", "note": ""}
+{"id": "701.28b", "category": "mechanical", "observability": "indirect", "record_kinds": ["trigger"], "outcome": "Converting does not fire triggers for turning a permanent face up or face down.", "note": ""}
+{"id": "701.28c", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "Converting a permanent that is not double-faced does nothing.", "note": ""}
+{"id": "701.28d", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "Converting a permanent whose other face is an instant or sorcery does nothing.", "note": ""}
+{"id": "701.28e", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "A convert instruction from an ability is ignored if the permanent converted or transformed since the ability was put on the stack or created.", "note": ""}
+{"id": "701.28f", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution", "rewrite"], "outcome": "A permanent that can't transform also can't convert.", "note": ""}

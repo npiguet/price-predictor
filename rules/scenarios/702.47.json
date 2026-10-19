@@ -1,0 +1,444 @@
+{
+  "unit": "702.47",
+  "verified": true,
+  "review": [
+    "702.47d-1: B's response was written into the base expected text and the decisions left B's choice open; moved the Unsummon cast into the decisions and the variant delta.",
+    "702.47e-1: polarities were inverted (the plain recast is the rule's effect, losing the spliced text); set recast_plain to fires and recast_spliced_again to other, and noted that 702.47e has no does_not_fire case."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.47a-1",
+      "rules": [
+        "702.47a"
+      ],
+      "title": "A spliced spell gains the card's text, the splice cost is paid and the card stays in hand",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Mountain",
+            "Mountain"
+          ],
+          "B": [
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Reach Through Mists",
+            "Glacial Ray"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Forest"
+          ]
+        },
+        "exile": {},
+        "notes": "Reach Through Mists is a blue Arcane instant that draws a card. Glacial Ray has splice onto Arcane {1}{R} and deals 2 damage to any target."
+      },
+      "decisions": [
+        "A casts Reach Through Mists, revealing Glacial Ray to splice it onto the spell, and chooses Grizzly Bears as the target of the spliced text.",
+        "A pays {U} with the Island and the splice cost {1}{R} with both Mountains.",
+        "Both players pass; the spell resolves."
+      ],
+      "variants": [
+        {
+          "label": "spliced",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "All three lands are tapped. Reach Through Mists resolves: A draws Forest and Grizzly Bears is dealt 2 damage and moves to B's graveyard. Glacial Ray is still in A's hand. Reach Through Mists moves to A's graveyard."
+        },
+        {
+          "label": "not_spliced",
+          "polarity": "does_not_fire",
+          "delta": "A does not reveal Glacial Ray and pays only {U} with the Island.",
+          "expected": "Only the Island is tapped. Reach Through Mists resolves: A draws Forest. Grizzly Bears is undamaged on the battlefield and Glacial Ray is in A's hand."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Mountain",
+        "Grizzly Bears",
+        "Reach Through Mists",
+        "Glacial Ray",
+        "Forest"
+      ],
+      "forge_notes": "Forge represents a spliced spell by adding the spliced abilities to the spell on the stack."
+    },
+    {
+      "id": "702.47b-1",
+      "rules": [
+        "702.47b"
+      ],
+      "title": "A card cannot be spliced onto a spell when its targets cannot be chosen",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Swamp",
+            "Swamp",
+            "Swamp"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Reach Through Mists",
+            "Goryo's Vengeance"
+          ]
+        },
+        "graveyard": {
+          "A": [
+            "Isao, Enlightened Bushi"
+          ]
+        },
+        "library": {
+          "A": [
+            "Forest"
+          ]
+        },
+        "exile": {},
+        "notes": "Goryo's Vengeance has splice onto Arcane {2}{B} and targets a legendary creature card in the caster's graveyard. Isao, Enlightened Bushi is legendary."
+      },
+      "decisions": [
+        "A casts Reach Through Mists and offers to splice Goryo's Vengeance onto it, targeting the legendary creature card in A's graveyard.",
+        "A pays {U} with the Island and the splice cost {2}{B} with the three Swamps.",
+        "Both players pass; the spell resolves."
+      ],
+      "variants": [
+        {
+          "label": "legal_target",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Splicing Goryo's Vengeance is legal. Reach Through Mists resolves: A draws Forest and Isao, Enlightened Bushi moves from A's graveyard to the battlefield under A's control with haste. Goryo's Vengeance is still in A's hand."
+        },
+        {
+          "label": "no_legal_target",
+          "polarity": "does_not_fire",
+          "delta": "The creature card in A's graveyard is Grizzly Bears (not legendary) instead of Isao, Enlightened Bushi.",
+          "expected": "Splicing Goryo's Vengeance is not legal because it has no legal target. Only Reach Through Mists can be cast, for {U}; A draws Forest and Grizzly Bears stays in the graveyard."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Swamp",
+        "Reach Through Mists",
+        "Goryo's Vengeance",
+        "Isao, Enlightened Bushi",
+        "Grizzly Bears",
+        "Forest"
+      ],
+      "forge_notes": "Goryo's Vengeance exiles the returned creature at the beginning of the next end step."
+    },
+    {
+      "id": "702.47b-2",
+      "rules": [
+        "702.47b"
+      ],
+      "title": "Several cards can be spliced onto one spell and each adds its own effect",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain"
+          ],
+          "B": [
+            "Craw Wurm"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Reach Through Mists",
+            "Glacial Ray",
+            "Glacial Ray"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Forest"
+          ]
+        },
+        "exile": {},
+        "notes": "Craw Wurm is a 6/4. Each Glacial Ray deals 2 damage to any target."
+      },
+      "decisions": [
+        "A casts Reach Through Mists, revealing both Glacial Rays at once to splice them onto the spell, and orders the effects with Reach Through Mists first, then the Rays.",
+        "Both spliced texts target Craw Wurm.",
+        "A pays {U} with the Island and each splice cost {1}{R} with two Mountains.",
+        "Both players pass; the spell resolves."
+      ],
+      "variants": [
+        {
+          "label": "two_rays",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Reach Through Mists resolves: A draws Forest first, then Craw Wurm is dealt 2 damage twice and moves to B's graveyard. Both Glacial Rays are still in A's hand."
+        },
+        {
+          "label": "one_ray",
+          "polarity": "does_not_fire",
+          "delta": "A splices only one Glacial Ray and pays {U}{1}{R}, leaving two Mountains untapped.",
+          "expected": "Reach Through Mists resolves: A draws Forest and Craw Wurm is dealt 2 damage once and stays on the battlefield with 2 damage marked. Both Glacial Rays are still in A's hand."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Mountain",
+        "Craw Wurm",
+        "Reach Through Mists",
+        "Glacial Ray",
+        "Forest"
+      ],
+      "forge_notes": "The same Glacial Ray card cannot be spliced twice onto one spell; only the two distinct copies are used here."
+    },
+    {
+      "id": "702.47c-1",
+      "rules": [
+        "702.47c"
+      ],
+      "title": "A spliced spell keeps the main spell's color, so protection is checked against the main spell",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Mountain",
+            "Mountain"
+          ],
+          "B": [
+            "Knights of Thorn"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Reach Through Mists",
+            "Lava Spike",
+            "Glacial Ray"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Forest"
+          ]
+        },
+        "exile": {},
+        "notes": "Knights of Thorn is a 2/2 with protection from red (and banding, which is inert here). Reach Through Mists is blue and Lava Spike is red."
+      },
+      "decisions": [
+        "A casts Reach Through Mists, splicing Glacial Ray onto it and choosing Knights of Thorn as the target of the spliced text.",
+        "A pays {U} with the Island and the splice cost {1}{R} with both Mountains.",
+        "Both players pass; the spell resolves."
+      ],
+      "variants": [
+        {
+          "label": "blue_main_spell",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Knights of Thorn is a legal target for the spliced text because the spell is blue. Reach Through Mists resolves: A draws Forest and Knights of Thorn is dealt 2 damage and moves to B's graveyard."
+        },
+        {
+          "label": "red_main_spell",
+          "polarity": "does_not_fire",
+          "delta": "A casts Lava Spike (red) as the main spell, targeting B, and splices Glacial Ray onto it instead of Reach Through Mists.",
+          "expected": "Knights of Thorn is not a legal target for the spliced text because the spell is red. Knights of Thorn stays on the battlefield undamaged; the spliced text can target only B or other permanents."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Mountain",
+        "Knights of Thorn",
+        "Reach Through Mists",
+        "Lava Spike",
+        "Glacial Ray",
+        "Forest"
+      ],
+      "forge_notes": "In the red_main_spell variant A pays {R} for Lava Spike with one Mountain and the splice cost {1}{R} with the other Mountain and the Island."
+    },
+    {
+      "id": "702.47d-1",
+      "rules": [
+        "702.47d"
+      ],
+      "title": "A spell whose only targets come from spliced text does not resolve when they become illegal",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Mountain",
+            "Mountain"
+          ],
+          "B": [
+            "Grizzly Bears",
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Reach Through Mists",
+            "Glacial Ray"
+          ],
+          "B": [
+            "Unsummon"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Forest"
+          ]
+        },
+        "exile": {},
+        "notes": "Reach Through Mists has no target of its own."
+      },
+      "decisions": [
+        "A casts Reach Through Mists, splicing Glacial Ray onto it with Grizzly Bears as the target of the spliced text, paying {U} with the Island and {1}{R} with both Mountains.",
+        "B casts Unsummon targeting Grizzly Bears, paying {U} with B's Island. Both players pass; Unsummon resolves.",
+        "Both players pass; Reach Through Mists resolves or is removed from the stack."
+      ],
+      "variants": [
+        {
+          "label": "target_removed",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears moves to B's hand. Reach Through Mists does not resolve because its only target is illegal: it fizzles, A does not draw and Reach Through Mists moves to A's graveyard. Glacial Ray stays in A's hand."
+        },
+        {
+          "label": "target_stays",
+          "polarity": "does_not_fire",
+          "delta": "B passes priority instead of casting Unsummon.",
+          "expected": "Reach Through Mists resolves: A draws Forest and Grizzly Bears is dealt 2 damage and moves to B's graveyard. Unsummon stays in B's hand."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Mountain",
+        "Grizzly Bears",
+        "Reach Through Mists",
+        "Glacial Ray",
+        "Unsummon",
+        "Forest"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.47e-1",
+      "rules": [
+        "702.47e"
+      ],
+      "title": "A spell loses its spliced text once it leaves the stack",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Forest",
+            "Forest"
+          ],
+          "B": [
+            "Grizzly Bears",
+            "Savannah Lions"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Reach Through Mists",
+            "Glacial Ray",
+            "Regrowth"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Forest",
+            "Forest"
+          ]
+        },
+        "exile": {},
+        "notes": "Savannah Lions is a 2/1."
+      },
+      "decisions": [
+        "A casts Reach Through Mists splicing Glacial Ray onto it with Grizzly Bears as the target of the spliced text, paying {U} with an Island and {1}{R} with two Mountains. Both players pass; it resolves.",
+        "A casts Regrowth targeting Reach Through Mists in A's graveyard, paying {1}{G} with both Forests. Both players pass; it resolves and Reach Through Mists returns to A's hand.",
+        "A casts Reach Through Mists again, paying {U} with the second Island."
+      ],
+      "variants": [
+        {
+          "label": "recast_plain",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The first cast resolves: A draws a Forest and Grizzly Bears moves to B's graveyard. The second cast resolves: A draws another Forest and nothing is dealt damage; Savannah Lions is undamaged on the battlefield. Glacial Ray is still in A's hand."
+        },
+        {
+          "label": "recast_spliced_again",
+          "polarity": "other",
+          "delta": "On the second cast A also splices Glacial Ray again, targeting Savannah Lions, and pays {1}{R} with the two remaining Mountains.",
+          "expected": "The second cast resolves: A draws a Forest and Savannah Lions is dealt 2 damage and moves to B's graveyard. Glacial Ray is still in A's hand."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Mountain",
+        "Forest",
+        "Grizzly Bears",
+        "Savannah Lions",
+        "Reach Through Mists",
+        "Glacial Ray",
+        "Regrowth"
+      ],
+      "forge_notes": "Reach Through Mists must be a fresh object after Regrowth returns it; the second library draw requires at least two cards in A's library. 702.47e always applies once the spell leaves the stack, so the scenario has no does_not_fire variant."
+    }
+  ]
+}

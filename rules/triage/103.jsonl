@@ -1,0 +1,32 @@
+{"id": "103.1", "category": "out_of_scope", "observability": "none", "record_kinds": [], "outcome": "", "note": "starting the game, outside collected play"}
+{"id": "103.1a", "category": "out_of_scope", "observability": "none", "record_kinds": [], "outcome": "", "note": "starting the game, outside collected play"}
+{"id": "103.1b", "category": "out_of_scope", "observability": "none", "record_kinds": [], "outcome": "", "note": "starting the game, outside collected play"}
+{"id": "103.1c", "category": "out_of_scope", "observability": "none", "record_kinds": [], "outcome": "", "note": "Power Play is a conspiracy, usable only in Conspiracy Draft (rule 905, chapter 9 casual variant); starting the game, outside collected play"}
+{"id": "103.2", "category": "out_of_scope", "observability": "none", "record_kinds": [], "outcome": "", "note": "starting the game, outside collected play"}
+{"id": "103.2a", "category": "out_of_scope", "observability": "none", "record_kinds": [], "outcome": "", "note": "starting the game, outside collected play"}
+{"id": "103.2b", "category": "out_of_scope", "observability": "none", "record_kinds": [], "outcome": "", "note": "starting the game, outside collected play"}
+{"id": "103.2c", "category": "out_of_scope", "observability": "none", "record_kinds": [], "outcome": "", "note": "starting the game, outside collected play"}
+{"id": "103.2d", "category": "out_of_scope", "observability": "none", "record_kinds": [], "outcome": "", "note": "starting the game, outside collected play"}
+{"id": "103.2e", "category": "out_of_scope", "observability": "none", "record_kinds": [], "outcome": "", "note": "starting the game, outside collected play"}
+{"id": "103.3", "category": "out_of_scope", "observability": "none", "record_kinds": [], "outcome": "", "note": "starting the game, outside collected play"}
+{"id": "103.3a", "category": "out_of_scope", "observability": "none", "record_kinds": [], "outcome": "", "note": "starting the game, outside collected play"}
+{"id": "103.4", "category": "out_of_scope", "observability": "none", "record_kinds": [], "outcome": "", "note": "starting the game, outside collected play"}
+{"id": "103.4a", "category": "out_of_scope", "observability": "none", "record_kinds": [], "outcome": "", "note": "starting the game, outside collected play"}
+{"id": "103.4b", "category": "out_of_scope", "observability": "none", "record_kinds": [], "outcome": "", "note": "starting the game, outside collected play"}
+{"id": "103.4c", "category": "out_of_scope", "observability": "none", "record_kinds": [], "outcome": "", "note": "starting the game, outside collected play"}
+{"id": "103.4d", "category": "out_of_scope", "observability": "none", "record_kinds": [], "outcome": "", "note": "starting the game, outside collected play"}
+{"id": "103.4e", "category": "out_of_scope", "observability": "none", "record_kinds": [], "outcome": "", "note": "starting the game, outside collected play"}
+{"id": "103.5", "category": "out_of_scope", "observability": "none", "record_kinds": [], "outcome": "", "note": "starting the game, outside collected play"}
+{"id": "103.5a", "category": "out_of_scope", "observability": "none", "record_kinds": [], "outcome": "", "note": "starting the game, outside collected play"}
+{"id": "103.5b", "category": "out_of_scope", "observability": "none", "record_kinds": [], "outcome": "", "note": "starting the game, outside collected play"}
+{"id": "103.5c", "category": "out_of_scope", "observability": "none", "record_kinds": [], "outcome": "", "note": "starting the game, outside collected play"}
+{"id": "103.5d", "category": "out_of_scope", "observability": "none", "record_kinds": [], "outcome": "", "note": "starting the game, outside collected play"}
+{"id": "103.6", "category": "decision", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "103.6a", "category": "mechanical", "observability": "needs_new_fields", "record_kinds": ["resolution"], "outcome": "A card allowing it begins the game on the battlefield instead of in the hand.", "note": ""}
+{"id": "103.6b", "category": "decision", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "103.6c", "category": "out_of_scope", "observability": "none", "record_kinds": [], "outcome": "", "note": "starting the game, outside collected play"}
+{"id": "103.7", "category": "out_of_scope", "observability": "none", "record_kinds": [], "outcome": "", "note": "starting the game, outside collected play"}
+{"id": "103.8", "category": "out_of_scope", "observability": "none", "record_kinds": [], "outcome": "", "note": "starting the game, outside collected play"}
+{"id": "103.8a", "category": "mechanical", "observability": "needs_new_fields", "record_kinds": ["resolution"], "outcome": "The starting player draws no card in the draw step of their first turn in a two-player game.", "note": ""}
+{"id": "103.8b", "category": "out_of_scope", "observability": "none", "record_kinds": [], "outcome": "", "note": "starting the game, outside collected play"}
+{"id": "103.8c", "category": "out_of_scope", "observability": "none", "record_kinds": [], "outcome": "", "note": "starting the game, outside collected play"}

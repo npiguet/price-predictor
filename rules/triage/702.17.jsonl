@@ -1,0 +1,4 @@
+{"id": "702.17", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.17a", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.17b", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "A creature with flying can be blocked only by creatures with flying or reach.", "note": ""}
+{"id": "702.17c", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": "Redundancy has no separate outcome."}

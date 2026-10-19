@@ -1,0 +1,139 @@
+{
+  "unit": "702.40",
+  "verified": true,
+  "review": [
+    "702.40b: the skip claimed no Forge spell can have two instances of storm, but Prismari, the Inspiration grants storm to Grapeshot, which already has it. Removed the skip and added scenario 702.40b-1."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.40a-1",
+      "rules": [
+        "702.40a"
+      ],
+      "title": "A storm spell is copied once for each spell cast before it this turn",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Plains",
+            "Mountain",
+            "Mountain"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Savannah Lions",
+            "Grapeshot"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Savannah Lions, tapping one Plains; it resolves.",
+        "A casts Grapeshot targeting player B, tapping both Mountains; the storm trigger goes on the stack above it.",
+        "Both players pass; the storm trigger resolves and creates the copies, each targeting player B.",
+        "All players pass; each copy and then the original Grapeshot resolve."
+      ],
+      "variants": [
+        {
+          "label": "one_prior_spell",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "One copy of Grapeshot is created. B takes 1 damage from the copy and 1 from the original, life 18. Savannah Lions is on the battlefield."
+        },
+        {
+          "label": "no_prior_spell",
+          "polarity": "does_not_fire",
+          "delta": "A does not cast Savannah Lions; Grapeshot is the first spell cast this turn.",
+          "expected": "The storm trigger creates no copy. Only the original Grapeshot resolves, B's life is 19."
+        },
+        {
+          "label": "two_prior_spells",
+          "polarity": "fires",
+          "delta": "A's hand holds a second Savannah Lions, cast with the second Plains before Grapeshot.",
+          "expected": "Two copies are created. B takes 3 damage in total, life 17."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Mountain",
+        "Savannah Lions",
+        "Grapeshot"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.40b-1",
+      "rules": [
+        "702.40b"
+      ],
+      "title": "A spell with two instances of storm triggers twice",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Mountain",
+            "Mountain",
+            "Prismari, the Inspiration"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Savannah Lions",
+            "Grapeshot"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Prismari gives instant and sorcery spells A casts storm, so Grapeshot has its own storm and a granted one."
+      },
+      "decisions": [
+        "A casts Savannah Lions, tapping Plains; it resolves.",
+        "A casts Grapeshot targeting player B, tapping both Mountains; every storm trigger goes on the stack above it.",
+        "Both players pass after each object; each storm trigger resolves and creates its copies, each targeting player B; the copies and then the original resolve."
+      ],
+      "variants": [
+        {
+          "label": "two_instances",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Two storm triggers fire, each creating one copy of Grapeshot. B takes 1 damage from each copy and 1 from the original, life 17."
+        },
+        {
+          "label": "one_instance",
+          "polarity": "does_not_fire",
+          "delta": "A does not control Prismari, the Inspiration.",
+          "expected": "One storm trigger fires and creates one copy. B's life is 18."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Mountain",
+        "Savannah Lions",
+        "Grapeshot",
+        "Prismari, the Inspiration"
+      ],
+      "forge_notes": "Prismari grants storm to the spell on the stack; Forge must apply the grant before the cast trigger is collected."
+    }
+  ]
+}

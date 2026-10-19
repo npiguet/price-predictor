@@ -1,0 +1,201 @@
+{
+  "unit": "702.80",
+  "verified": true,
+  "review": [],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.80a-1",
+      "rules": [
+        "702.80a"
+      ],
+      "title": "Combat damage from a wither creature to a creature is dealt as -1/-1 counters",
+      "record_kind": "combat",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Cinderbones",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A attacks player B with Cinderbones.",
+        "B blocks Cinderbones with Grizzly Bears.",
+        "No spells or abilities are used; combat damage is dealt."
+      ],
+      "variants": [
+        {
+          "label": "wither_attacker",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Cinderbones deals 1 damage to Grizzly Bears as one -1/-1 counter: Grizzly Bears is a 1/1 with 0 damage marked and stays on the battlefield. Grizzly Bears deals 2 damage to Cinderbones, which is destroyed and moves to A's graveyard. B's life stays 20."
+        },
+        {
+          "label": "plain_attacker",
+          "polarity": "does_not_fire",
+          "delta": "A's attacker is Fugitive Wizard (1/1, no abilities) instead of Cinderbones.",
+          "expected": "Fugitive Wizard deals 1 damage to Grizzly Bears, which has 1 damage marked, no counters, and stays a 2/2. Grizzly Bears deals 2 damage to Fugitive Wizard, which is destroyed. B's life stays 20."
+        },
+        {
+          "label": "unblocked",
+          "polarity": "other",
+          "delta": "B declares no blockers.",
+          "expected": "Cinderbones deals 1 damage to player B, whose life becomes 19. No -1/-1 counters are placed anywhere; Grizzly Bears is unchanged."
+        }
+      ],
+      "cards": [
+        "Cinderbones",
+        "Grizzly Bears",
+        "Fugitive Wizard"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.80b-1",
+      "rules": [
+        "702.80b"
+      ],
+      "title": "A wither source that has left the battlefield still deals its damage as -1/-1 counters",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "B",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Corrosive Mentor",
+            "Footlight Fiend"
+          ],
+          "B": [
+            "Mountain",
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "B": [
+            "Shock"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "B casts Shock targeting Footlight Fiend, tapping Mountain.",
+        "A does not respond; Shock resolves and Footlight Fiend (a 1/1 with wither from Corrosive Mentor) dies.",
+        "Footlight Fiend's dies trigger goes on the stack with A choosing Grizzly Bears as its target.",
+        "Both players pass; the trigger resolves."
+      ],
+      "variants": [
+        {
+          "label": "mentor_present",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Footlight Fiend is in A's graveyard when its trigger resolves, but it had wither as it left the battlefield. Its 1 damage is dealt as one -1/-1 counter: Grizzly Bears is a 1/1 with 0 damage marked."
+        },
+        {
+          "label": "mentor_absent",
+          "polarity": "does_not_fire",
+          "delta": "Corrosive Mentor is not on A's battlefield.",
+          "expected": "Footlight Fiend had no wither as it left the battlefield. Its 1 damage is marked on Grizzly Bears: a 2/2 with 1 damage marked and no counters."
+        }
+      ],
+      "cards": [
+        "Corrosive Mentor",
+        "Footlight Fiend",
+        "Mountain",
+        "Grizzly Bears",
+        "Shock"
+      ],
+      "forge_notes": "Relies on Forge using the dead source's last known information for its keywords: Corrosive Mentor still affects black creatures on the battlefield but no longer the card in the graveyard."
+    },
+    {
+      "id": "702.80c-1",
+      "rules": [
+        "702.80c"
+      ],
+      "title": "A wither spell on the stack deals its damage as -1/-1 counters",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Mountain"
+          ],
+          "B": [
+            "Craw Wurm"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Puncture Blast",
+            "Lightning Bolt"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Puncture Blast targeting Craw Wurm, tapping all three Mountains.",
+        "Both players pass; Puncture Blast resolves."
+      ],
+      "variants": [
+        {
+          "label": "wither_spell",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Puncture Blast deals 3 damage to Craw Wurm as three -1/-1 counters: Craw Wurm is a 3/1 with 0 damage marked and stays on the battlefield."
+        },
+        {
+          "label": "plain_spell",
+          "polarity": "does_not_fire",
+          "delta": "A casts Lightning Bolt (tapping one Mountain) targeting Craw Wurm instead of Puncture Blast.",
+          "expected": "Lightning Bolt deals 3 damage to Craw Wurm, which has 3 damage marked, no counters, and stays a 6/4."
+        },
+        {
+          "label": "player_target",
+          "polarity": "other",
+          "delta": "Puncture Blast targets player B instead of Craw Wurm.",
+          "expected": "B loses 3 life and has 17 life. B has no poison counters. Craw Wurm is unchanged."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Puncture Blast",
+        "Lightning Bolt",
+        "Craw Wurm"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

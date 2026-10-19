@@ -1,0 +1,4 @@
+{"id": "407.1", "category": "out_of_scope", "observability": "none", "record_kinds": [], "outcome": "", "note": "Ante is an optional variation; Forge has ante cards but collection decks do not play for ante."}
+{"id": "407.2", "category": "out_of_scope", "observability": "none", "record_kinds": [], "outcome": "", "note": "Game-start procedure for ante play."}
+{"id": "407.3", "category": "out_of_scope", "observability": "none", "record_kinds": [], "outcome": "", "note": "Deck construction."}
+{"id": "407.4", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "An object anted by its owner moves from its current zone to the ante zone.", "note": "Forge implements ante, for example Contract from Below."}

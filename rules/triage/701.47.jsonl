@@ -1,0 +1,5 @@
+{"id": "701.47", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "701.47a", "category": "mechanical", "observability": "direct", "record_kinds": ["resolution"], "outcome": "Amass creates a 0/0 Army token if the player controls no Army, then puts N +1/+1 counters on an Army creature and adds the subtype.", "note": ""}
+{"id": "701.47b", "category": "mechanical", "observability": "indirect", "record_kinds": ["trigger"], "outcome": "A player amasses, firing amass triggers, even if some of the actions were impossible.", "note": ""}
+{"id": "701.47c", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "The amassed Army refers to the chosen creature whether or not it received counters.", "note": ""}
+{"id": "701.47d", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}

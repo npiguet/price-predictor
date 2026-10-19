@@ -1,0 +1,16 @@
+{"id": "309.1", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "309.2", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "A dungeon card enters the game only through a venture into the dungeon and is never part of the deck.", "note": ""}
+{"id": "309.2a", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "Venturing without a dungeon in the command zone puts a chosen owned dungeon into the command zone.", "note": ""}
+{"id": "309.2b", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "A dungeon brought into the game is put into the command zone.", "note": ""}
+{"id": "309.2c", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "A dungeon card cannot be cast and does not leave the command zone except by leaving the game.", "note": ""}
+{"id": "309.2d", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "An effect other than venturing that would bring a dungeon into the game does nothing and the dungeon stays outside the game.", "note": ""}
+{"id": "309.3", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "A player cannot bring a second dungeon into the game while owning one in the command zone.", "note": ""}
+{"id": "309.4", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "309.4a", "category": "mechanical", "observability": "needs_new_fields", "record_kinds": [], "outcome": "A dungeon entering the command zone gets its owner's venture marker on the topmost room.", "note": "Venture marker position is not in any record."}
+{"id": "309.4b", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "309.4c", "category": "mechanical", "observability": "direct", "record_kinds": ["trigger"], "outcome": "Moving the venture marker into a room triggers that room's ability, controlled by the dungeon's owner.", "note": ""}
+{"id": "309.5", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "309.5a", "category": "mechanical", "observability": "needs_new_fields", "record_kinds": [], "outcome": "Venturing moves the marker to the next room along an arrow when it is not on the bottommost room.", "note": "Venture marker position is not in any record."}
+{"id": "309.5b", "category": "mechanical", "observability": "needs_new_fields", "record_kinds": [], "outcome": "Venturing from the bottommost room removes that dungeon from the game, then puts a new chosen dungeon into the command zone with the marker on its topmost room.", "note": "Venture marker position is not in any record."}
+{"id": "309.6", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "A dungeon whose marker is on its bottommost room and that is not the source of a pending room ability is removed from the game in the state-based check.", "note": ""}
+{"id": "309.7", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "A dungeon removed from the game counts as completed.", "note": ""}

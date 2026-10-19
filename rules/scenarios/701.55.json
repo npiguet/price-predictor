@@ -1,0 +1,260 @@
+{
+  "unit": "701.55",
+  "verified": true,
+  "review": [
+    "701.55a-1: the attack declaration was left open while Davros (3/4 menace) could attack and change B's life; added 'A declares no attackers' to the decisions.",
+    "701.55b-1: the attack declaration was left open while Davros (3/4 menace) could attack and change B's life; added 'A declares no attackers' to the decisions."
+  ],
+  "skipped": [
+    {
+      "id": "701.55d",
+      "reason": "cannot occur in a two-player Forge game: every card that makes a player face a villainous choice instructs one player (each opponent, the defending player, the targeted or owning player), so two players never face the choice at once and there is no APNAP order to illustrate; the one-at-a-time repetition of a single player's choices is covered by 701.55c-1"
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "701.55a-1",
+      "rules": [
+        "701.55a"
+      ],
+      "title": "A player facing a villainous choice chooses one option and only that option is performed",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Davros, Dalek Creator",
+            "Mountain"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Lightning Bolt"
+          ],
+          "B": [
+            "Grizzly Bears"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Plains",
+            "Island"
+          ],
+          "B": [
+            "Forest"
+          ]
+        },
+        "exile": {},
+        "notes": "Library lists are ordered top first. "
+      },
+      "decisions": [
+        "A casts Lightning Bolt targeting player B, tapping Mountain.",
+        "Both players pass; Lightning Bolt resolves.",
+        "A declares no attackers; both players pass priority through combat and the second main phase to A's end step; no other spell or ability is used.",
+        "At A's end step Davros's trigger resolves; if B lost 3 or more life this turn, A creates the Dalek token and B faces the villainous choice.",
+        "B chooses the option 'You draw a card'."
+      ],
+      "variants": [
+        {
+          "label": "choose_draw",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "B lost 3 life from Lightning Bolt (B at 17). Davros's trigger creates a 3/3 black Dalek artifact creature token with menace under A's control. B chooses 'You draw a card': A draws Plains (A's hand: Plains). B does not discard; B's hand is still Grizzly Bears."
+        },
+        {
+          "label": "choose_discard",
+          "polarity": "fires",
+          "delta": "B chooses the option 'that player discards a card' instead of 'You draw a card'.",
+          "expected": "The Dalek token is created. B discards Grizzly Bears (B's graveyard: Grizzly Bears, B's hand empty). A does not draw; A's hand is empty and A's library is unchanged."
+        },
+        {
+          "label": "lost_only_2",
+          "polarity": "does_not_fire",
+          "delta": "A casts Shock instead of Lightning Bolt (Shock replaces Lightning Bolt in A's hand).",
+          "expected": "B lost only 2 life (B at 18), so no Dalek token is created and B does not face a villainous choice: A does not draw and B keeps Grizzly Bears."
+        }
+      ],
+      "cards": [
+        "Davros, Dalek Creator",
+        "Mountain",
+        "Lightning Bolt",
+        "Shock",
+        "Grizzly Bears",
+        "Plains",
+        "Island",
+        "Forest"
+      ],
+      "forge_notes": "Davros's choice is a DB$ VillainousChoice gated by Defined$ Opponent.LostLifeThisTurn GE3; check that the trigger reads the life B lost earlier in the same turn."
+    },
+    {
+      "id": "701.55b-1",
+      "rules": [
+        "701.55b"
+      ],
+      "title": "A player may choose a villainous-choice option that is impossible and performs as much of it as possible",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Davros, Dalek Creator",
+            "Mountain"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Lightning Bolt"
+          ],
+          "B": [
+            "Grizzly Bears"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Plains",
+            "Island"
+          ],
+          "B": [
+            "Forest"
+          ]
+        },
+        "exile": {},
+        "notes": "Library lists are ordered top first. "
+      },
+      "decisions": [
+        "A casts Lightning Bolt targeting player B, tapping Mountain.",
+        "Both players pass; Lightning Bolt resolves.",
+        "A declares no attackers; both players pass priority through combat and the second main phase to A's end step; no other spell or ability is used.",
+        "At A's end step Davros's trigger resolves; if B lost 3 or more life this turn, A creates the Dalek token and B faces the villainous choice.",
+        "B chooses the option 'that player discards a card'."
+      ],
+      "variants": [
+        {
+          "label": "can_discard",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "B lost 3 life (B at 17). The Dalek token is created. B discards Grizzly Bears (B's graveyard: Grizzly Bears). A does not draw."
+        },
+        {
+          "label": "empty_hand",
+          "polarity": "does_not_fire",
+          "delta": "B's hand is empty (Grizzly Bears is not in B's hand).",
+          "expected": "B lost 3 life (B at 17). The Dalek token is created. B chose an impossible option and discards nothing; the choice is still faced and performed as far as possible, so B's hand and graveyard stay empty. A does not draw (the draw option was not chosen)."
+        }
+      ],
+      "cards": [
+        "Davros, Dalek Creator",
+        "Mountain",
+        "Lightning Bolt",
+        "Grizzly Bears",
+        "Plains",
+        "Island",
+        "Forest"
+      ],
+      "forge_notes": "Forge may refuse to offer an option that cannot be performed; the scenario needs the discard option to be selectable when B's hand is empty."
+    },
+    {
+      "id": "701.55c-1",
+      "rules": [
+        "701.55c"
+      ],
+      "title": "A replacement effect makes a player face the same villainous choice an additional time, one at a time",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Swamp",
+            "Swamp",
+            "Mountain",
+            "Mountain",
+            "The Valeyard"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Sycorax Commander"
+          ],
+          "B": [
+            "Grizzly Bears",
+            "Shock",
+            "Lightning Bolt"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Plains"
+          ],
+          "B": [
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island"
+          ]
+        },
+        "exile": {},
+        "notes": "Library lists are ordered top first. "
+      },
+      "decisions": [
+        "A casts Sycorax Commander, tapping both Swamps and both Mountains.",
+        "Both players pass; Sycorax Commander resolves and enters the battlefield.",
+        "Sycorax Commander's enters trigger goes on the stack; both players pass and it resolves. B faces the villainous choice: discard their hand then draw that many cards minus one, or Sycorax Commander deals damage to B equal to the number of cards in B's hand.",
+        "B chooses 'Sycorax Commander deals damage to you equal to the number of cards in your hand' each time B faces the choice."
+      ],
+      "variants": [
+        {
+          "label": "valeyard_extra_choice",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The Valeyard makes B face the choice twice. B takes 3 damage the first time and 3 damage the second time (B's hand stays at 3 cards both times): B ends at 14 life with Grizzly Bears, Shock and Lightning Bolt still in hand."
+        },
+        {
+          "label": "valeyard_controlled_by_B",
+          "polarity": "does_not_fire",
+          "delta": "The Valeyard is on B's battlefield instead of A's.",
+          "expected": "The Valeyard only affects the opponents of its controller, which is A, so B faces the choice once and takes 3 damage: B ends at 17 life with three cards in hand."
+        },
+        {
+          "label": "different_choices",
+          "polarity": "other",
+          "delta": "B chooses 'discard your hand, then draw that many cards minus one' the first time and the damage option the second time.",
+          "expected": "First choice: B discards Grizzly Bears, Shock and Lightning Bolt and draws 2 Islands. Second choice: Sycorax Commander deals damage equal to the 2 cards in B's hand, so B ends at 18 life with two Islands in hand and the three discarded cards in the graveyard."
+        }
+      ],
+      "cards": [
+        "Sycorax Commander",
+        "The Valeyard",
+        "Swamp",
+        "Mountain",
+        "Grizzly Bears",
+        "Shock",
+        "Lightning Bolt",
+        "Island",
+        "Plains"
+      ],
+      "forge_notes": "Forge's VillainousChoiceEffect collects all of a player's choices before resolving any of them, so the second choice is made before the first resolves; the expected outcomes assume B's choices are fixed in advance as listed."
+    }
+  ]
+}

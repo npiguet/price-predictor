@@ -1,0 +1,1665 @@
+{
+  "unit": "120",
+  "verified": true,
+  "review": [
+    "120.4a-2: forge_notes claimed the deathtouch clause of 120.4a could not be illustrated; added 120.4a-3 (Ram Through from Argothian Swine equipped with Gorgon's Head into Hill Giant, with an unattached-equipment variant) and updated the note."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "120.1a-1",
+      "rules": [
+        "120.1a"
+      ],
+      "title": "Damage dealt to a noncreature permanent has no result",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain"
+          ],
+          "B": [
+            "Mutavault",
+            "Forest",
+            "Hill Giant"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Pyroclasm"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Pyroclasm, tapping both Mountains.",
+        "B passes priority; Pyroclasm resolves."
+      ],
+      "variants": [
+        {
+          "label": "not_animated",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Pyroclasm deals 2 damage to each creature. Hill Giant has 2 damage marked and stays on the battlefield. Mutavault is a land and not a creature, so it is dealt no damage: it has no damage marked and stays on the battlefield."
+        },
+        {
+          "label": "animated",
+          "polarity": "does_not_fire",
+          "delta": "In response to Pyroclasm, B activates Mutavault's {1} ability, tapping Forest, and Mutavault becomes a 2/2 creature until end of turn.",
+          "expected": "Mutavault is a creature when Pyroclasm resolves and is dealt 2 damage, which is lethal. Mutavault moves to B's graveyard in the state-based check. Hill Giant has 2 damage marked and stays."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Pyroclasm",
+        "Mutavault",
+        "Forest",
+        "Hill Giant"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "120.2a-1",
+      "rules": [
+        "120.2a"
+      ],
+      "title": "Each attacking and blocking creature deals combat damage equal to its power",
+      "record_kind": "combat",
+      "setup": {
+        "active": "A",
+        "step": "declare_attackers",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Forest",
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            {
+              "card": "Hill Giant",
+              "summoning_sick": false
+            }
+          ]
+        },
+        "hand": {
+          "A": [
+            "Giant Growth"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "All creatures have been under their controllers' control since the start of the turn."
+      },
+      "decisions": [
+        "A declares Grizzly Bears as an attacker, attacking B.",
+        "B declares Hill Giant as a blocker of Grizzly Bears.",
+        "Both players pass priority through the declare blockers step into the combat damage step."
+      ],
+      "variants": [
+        {
+          "label": "both_deal",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears deals 2 combat damage to Hill Giant and Hill Giant deals 3 combat damage to Grizzly Bears, simultaneously. Hill Giant has 2 damage marked and survives. Grizzly Bears has 3 damage marked and moves to A's graveyard. B's life stays 20."
+        },
+        {
+          "label": "pumped",
+          "polarity": "fires",
+          "delta": "After blockers are declared, A casts Giant Growth on Grizzly Bears, tapping Forest, and it resolves.",
+          "expected": "Grizzly Bears is 5/5 and deals 5 combat damage to Hill Giant; Hill Giant deals 3 to Grizzly Bears. Hill Giant moves to B's graveyard. Grizzly Bears has 3 damage marked and survives."
+        },
+        {
+          "label": "unblocked",
+          "polarity": "does_not_fire",
+          "delta": "B declares no blockers.",
+          "expected": "Hill Giant is not blocking and deals no combat damage. Grizzly Bears deals 2 combat damage to B, whose life is 18. No creature has damage marked."
+        }
+      ],
+      "cards": [
+        "Forest",
+        "Grizzly Bears",
+        "Hill Giant",
+        "Giant Growth"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "120.2b-1",
+      "rules": [
+        "120.2b"
+      ],
+      "title": "A spell that names a creature as the source makes that creature the damage source",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Forest",
+            "Forest",
+            "Grizzly Bears",
+            "Savannah Lions"
+          ],
+          "B": [
+            "Black Knight"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Rabid Bite"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "All creatures have been under their controllers' control since the start of the turn."
+      },
+      "decisions": [
+        "A casts Rabid Bite, tapping both Forests, with Grizzly Bears as the creature that deals damage and Black Knight as the target creature B controls.",
+        "B passes priority; Rabid Bite resolves."
+      ],
+      "variants": [
+        {
+          "label": "green_source",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears (green) is the source and deals 2 damage to Black Knight. Black Knight has 2 damage marked and moves to B's graveyard in the state-based check."
+        },
+        {
+          "label": "white_source",
+          "polarity": "does_not_fire",
+          "delta": "The creature A chooses to deal the damage is Savannah Lions (white, 2 power) instead of Grizzly Bears.",
+          "expected": "Savannah Lions is the source of the 2 damage. Black Knight has protection from white, so the damage is prevented. Black Knight has no damage marked and stays on the battlefield. Rabid Bite is green and could target it."
+        }
+      ],
+      "cards": [
+        "Forest",
+        "Grizzly Bears",
+        "Savannah Lions",
+        "Black Knight",
+        "Rabid Bite"
+      ],
+      "forge_notes": "Rabid Bite is implemented with DamageSource$ ParentTarget, so the creature is the damage source."
+    },
+    {
+      "id": "120.3a-1",
+      "rules": [
+        "120.3a"
+      ],
+      "title": "Damage from a source without infect makes a player lose life",
+      "record_kind": "combat",
+      "setup": {
+        "active": "A",
+        "step": "declare_attackers",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            },
+            {
+              "card": "Glistener Elf",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            {
+              "card": "Hill Giant",
+              "summoning_sick": false
+            }
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "All creatures have been under their controllers' control since the start of the turn."
+      },
+      "decisions": [
+        "A declares Grizzly Bears as an attacker, attacking B.",
+        "B declares no blockers.",
+        "Both players pass priority into the combat damage step."
+      ],
+      "variants": [
+        {
+          "label": "no_infect",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears deals 2 combat damage to B. B loses 2 life and is at 18. B has no poison counters."
+        },
+        {
+          "label": "infect",
+          "polarity": "does_not_fire",
+          "delta": "A attacks with Glistener Elf (1/1 infect) instead of Grizzly Bears.",
+          "expected": "Glistener Elf deals 1 damage to B in the form of a poison counter. B's life stays 20 and B has 1 poison counter."
+        },
+        {
+          "label": "blocked",
+          "polarity": "does_not_fire",
+          "delta": "B declares Hill Giant as a blocker of Grizzly Bears.",
+          "expected": "No combat damage is dealt to B. B's life stays 20. Hill Giant has 2 damage marked and Grizzly Bears moves to A's graveyard."
+        }
+      ],
+      "cards": [
+        "Grizzly Bears",
+        "Glistener Elf",
+        "Hill Giant"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "120.3b-1",
+      "rules": [
+        "120.3b"
+      ],
+      "title": "Damage from an infect source gives a player poison counters",
+      "record_kind": "combat",
+      "setup": {
+        "active": "A",
+        "step": "declare_attackers",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Glistener Elf",
+              "summoning_sick": false
+            },
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            {
+              "card": "Hill Giant",
+              "summoning_sick": false
+            }
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "All creatures have been under their controllers' control since the start of the turn."
+      },
+      "decisions": [
+        "A declares Glistener Elf as an attacker, attacking B.",
+        "B declares no blockers.",
+        "Both players pass priority into the combat damage step."
+      ],
+      "variants": [
+        {
+          "label": "infect",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Glistener Elf deals 1 damage to B in the form of 1 poison counter. B's life stays 20."
+        },
+        {
+          "label": "no_infect",
+          "polarity": "does_not_fire",
+          "delta": "A attacks with Grizzly Bears (no infect) instead of Glistener Elf.",
+          "expected": "Grizzly Bears deals 2 damage to B, who loses 2 life and is at 18. B has no poison counters."
+        },
+        {
+          "label": "blocked",
+          "polarity": "other",
+          "delta": "B declares Hill Giant as a blocker of Glistener Elf.",
+          "expected": "B receives no poison counters and keeps 20 life. Glistener Elf deals its damage to Hill Giant as one -1/-1 counter, and Glistener Elf is dealt 3 damage and dies."
+        }
+      ],
+      "cards": [
+        "Glistener Elf",
+        "Grizzly Bears",
+        "Hill Giant"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "120.3c-1",
+      "rules": [
+        "120.3c"
+      ],
+      "title": "Damage dealt to a planeswalker removes loyalty counters",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain"
+          ],
+          "B": [
+            {
+              "card": "Jace Beleren",
+              "counters": {
+                "loyalty": 3
+              }
+            },
+            "Plains"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Shock"
+          ],
+          "B": [
+            "Mending Hands"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Shock targeting Jace Beleren, tapping Mountain.",
+        "B passes priority; Shock resolves."
+      ],
+      "variants": [
+        {
+          "label": "shock",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Shock deals 2 damage to Jace Beleren. Two loyalty counters are removed and Jace Beleren has 1 loyalty. It stays on the battlefield."
+        },
+        {
+          "label": "prevented",
+          "polarity": "does_not_fire",
+          "delta": "In response, B casts Mending Hands targeting Jace Beleren, tapping Plains.",
+          "expected": "Mending Hands prevents the next 4 damage to Jace Beleren, so Shock's 2 damage is prevented. No loyalty counters are removed and Jace Beleren has 3 loyalty."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Shock",
+        "Jace Beleren",
+        "Plains",
+        "Mending Hands"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "120.3d-1",
+      "rules": [
+        "120.3d"
+      ],
+      "title": "Damage from a wither or infect source to a creature puts -1/-1 counters on it",
+      "record_kind": "combat",
+      "setup": {
+        "active": "A",
+        "step": "declare_attackers",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Sickle Ripper",
+              "summoning_sick": false
+            },
+            {
+              "card": "Savannah Lions",
+              "summoning_sick": false
+            },
+            {
+              "card": "Glistener Elf",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            {
+              "card": "Hill Giant",
+              "summoning_sick": false
+            }
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "All creatures have been under their controllers' control since the start of the turn."
+      },
+      "decisions": [
+        "A declares Sickle Ripper as an attacker, attacking B.",
+        "B declares Hill Giant as a blocker of Sickle Ripper.",
+        "Both players pass priority into the combat damage step."
+      ],
+      "variants": [
+        {
+          "label": "wither",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Sickle Ripper (2/1 wither) deals 2 damage to Hill Giant as two -1/-1 counters. Hill Giant is a 1/1 with two -1/-1 counters and no damage marked. Hill Giant deals 3 damage to Sickle Ripper, which dies."
+        },
+        {
+          "label": "no_wither",
+          "polarity": "does_not_fire",
+          "delta": "A attacks with Savannah Lions (2/1, no wither) instead of Sickle Ripper.",
+          "expected": "Savannah Lions deals 2 damage to Hill Giant, marked as damage. Hill Giant is still a 3/3 with no counters and 2 damage marked. Savannah Lions dies."
+        },
+        {
+          "label": "infect",
+          "polarity": "fires",
+          "delta": "A attacks with Glistener Elf (1/1 infect) instead of Sickle Ripper.",
+          "expected": "Glistener Elf deals 1 damage to Hill Giant as one -1/-1 counter. Hill Giant is a 2/2 with no damage marked. Glistener Elf dies."
+        }
+      ],
+      "cards": [
+        "Sickle Ripper",
+        "Savannah Lions",
+        "Glistener Elf",
+        "Hill Giant"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "120.3e-1",
+      "rules": [
+        "120.3e"
+      ],
+      "title": "Damage from a source with neither wither nor infect is marked on a creature",
+      "record_kind": "combat",
+      "setup": {
+        "active": "A",
+        "step": "declare_attackers",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Savannah Lions",
+              "summoning_sick": false
+            },
+            {
+              "card": "Sickle Ripper",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            {
+              "card": "Hill Giant",
+              "summoning_sick": false
+            }
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "All creatures have been under their controllers' control since the start of the turn."
+      },
+      "decisions": [
+        "A declares Savannah Lions as an attacker, attacking B.",
+        "B declares Hill Giant as a blocker of Savannah Lions.",
+        "Both players pass priority into the combat damage step."
+      ],
+      "variants": [
+        {
+          "label": "plain",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Savannah Lions deals 2 damage to Hill Giant. Hill Giant has 2 damage marked and no counters, and stays a 3/3 on the battlefield. Savannah Lions dies."
+        },
+        {
+          "label": "wither",
+          "polarity": "does_not_fire",
+          "delta": "A attacks with Sickle Ripper (2/1 wither) instead of Savannah Lions.",
+          "expected": "Sickle Ripper deals its damage as two -1/-1 counters. Hill Giant has no damage marked and is a 1/1. Sickle Ripper dies."
+        }
+      ],
+      "cards": [
+        "Savannah Lions",
+        "Sickle Ripper",
+        "Hill Giant"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "120.3f-1",
+      "rules": [
+        "120.3f"
+      ],
+      "title": "Damage dealt by a lifelink source makes its controller gain that much life",
+      "record_kind": "combat",
+      "setup": {
+        "active": "A",
+        "step": "declare_attackers",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Child of Night",
+              "summoning_sick": false
+            },
+            {
+              "card": "Savannah Lions",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            {
+              "card": "Hill Giant",
+              "summoning_sick": false
+            }
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "All creatures have been under their controllers' control since the start of the turn."
+      },
+      "decisions": [
+        "A declares Child of Night as an attacker, attacking B.",
+        "B declares no blockers.",
+        "Both players pass priority into the combat damage step."
+      ],
+      "variants": [
+        {
+          "label": "unblocked_lifelink",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Child of Night deals 2 damage to B. B loses 2 life (18) and A gains 2 life (22)."
+        },
+        {
+          "label": "blocked_lifelink",
+          "polarity": "fires",
+          "delta": "B declares Hill Giant as a blocker of Child of Night.",
+          "expected": "Child of Night deals 2 damage to Hill Giant and A gains 2 life (22). B's life stays 20. Child of Night dies."
+        },
+        {
+          "label": "no_lifelink",
+          "polarity": "does_not_fire",
+          "delta": "A attacks with Savannah Lions (no lifelink) instead of Child of Night.",
+          "expected": "Savannah Lions deals 2 damage to B (18). A's life stays 20."
+        }
+      ],
+      "cards": [
+        "Child of Night",
+        "Savannah Lions",
+        "Hill Giant"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "120.3g-1",
+      "rules": [
+        "120.3g"
+      ],
+      "title": "Combat damage to a player from a toxic creature also gives poison counters",
+      "record_kind": "combat",
+      "setup": {
+        "active": "A",
+        "step": "declare_attackers",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Branchblight Stalker",
+              "summoning_sick": false
+            },
+            {
+              "card": "Savannah Lions",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            }
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "All creatures have been under their controllers' control since the start of the turn."
+      },
+      "decisions": [
+        "A declares Branchblight Stalker (3/1, toxic 2) as an attacker, attacking B.",
+        "B declares no blockers.",
+        "Both players pass priority into the combat damage step."
+      ],
+      "variants": [
+        {
+          "label": "toxic_unblocked",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Branchblight Stalker deals 3 combat damage to B. B loses 3 life (17) and gets 2 poison counters."
+        },
+        {
+          "label": "toxic_blocked",
+          "polarity": "does_not_fire",
+          "delta": "B declares Grizzly Bears as a blocker of Branchblight Stalker.",
+          "expected": "The damage goes to Grizzly Bears, not to a player. B's life stays 20 and B gets no poison counters. Both creatures die."
+        },
+        {
+          "label": "not_toxic",
+          "polarity": "does_not_fire",
+          "delta": "A attacks with Savannah Lions (no toxic) instead of Branchblight Stalker.",
+          "expected": "Savannah Lions deals 2 damage to B (18). B gets no poison counters."
+        }
+      ],
+      "cards": [
+        "Branchblight Stalker",
+        "Savannah Lions",
+        "Grizzly Bears"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "120.3h-1",
+      "rules": [
+        "120.3h"
+      ],
+      "title": "Damage dealt to a battle removes defense counters",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            {
+              "card": "Invasion of Dominaria",
+              "counters": {
+                "defense": 5
+              }
+            }
+          ],
+          "B": [
+            "Plains"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Shock"
+          ],
+          "B": [
+            "Mending Hands"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "A controls the Siege and B is the opponent chosen to protect it."
+      },
+      "decisions": [
+        "A casts Shock targeting Invasion of Dominaria, tapping Mountain.",
+        "B passes priority; Shock resolves."
+      ],
+      "variants": [
+        {
+          "label": "shock",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Shock deals 2 damage to Invasion of Dominaria. Two defense counters are removed and it has 3 defense counters. It stays on the battlefield."
+        },
+        {
+          "label": "prevented",
+          "polarity": "does_not_fire",
+          "delta": "In response, B casts Mending Hands targeting Invasion of Dominaria, tapping Plains.",
+          "expected": "Shock's 2 damage is prevented by Mending Hands. No defense counters are removed and Invasion of Dominaria has 5 defense counters."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Shock",
+        "Invasion of Dominaria",
+        "Plains",
+        "Mending Hands"
+      ],
+      "forge_notes": "Requires Forge's Any target filter to include battles and the battle to be placed with B as protector."
+    },
+    {
+      "id": "120.4-1",
+      "rules": [
+        "120.4",
+        "120.4d"
+      ],
+      "title": "Damage is modified by prevention, processed into results, modified again, and then occurs",
+      "record_kind": "combat",
+      "setup": {
+        "active": "A",
+        "step": "declare_attackers",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Boon Reflection",
+            {
+              "card": "Child of Night",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            {
+              "card": "Samite Healer",
+              "summoning_sick": false
+            }
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "All creatures have been under their controllers' control since the start of the turn."
+      },
+      "decisions": [
+        "A declares Child of Night (2/1 lifelink) as an attacker, attacking B.",
+        "B declares no blockers.",
+        "In the declare blockers step, B activates Samite Healer, tapping it, targeting B (prevent the next 1 damage to B this turn); it resolves.",
+        "Both players pass priority into the combat damage step."
+      ],
+      "variants": [
+        {
+          "label": "prevent_and_double",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The damage event starts as 2 damage to B. Samite Healer's prevention makes it 1 damage. It is processed into B losing 1 life and A gaining 1 life; Boon Reflection doubles the gain to 2. B is at 19 and A is at 22."
+        },
+        {
+          "label": "no_prevention",
+          "polarity": "does_not_fire",
+          "delta": "B does not activate Samite Healer.",
+          "expected": "The 2 damage is dealt. B loses 2 life (18). A gains 2 life from lifelink, doubled by Boon Reflection to 4 (24)."
+        },
+        {
+          "label": "no_boon",
+          "polarity": "does_not_fire",
+          "delta": "A does not control Boon Reflection (the card is not on the battlefield).",
+          "expected": "The prevention makes the damage 1. B loses 1 life (19) and A gains 1 life (21), with no doubling."
+        }
+      ],
+      "cards": [
+        "Boon Reflection",
+        "Child of Night",
+        "Samite Healer"
+      ],
+      "forge_notes": "Samite Healer's prevention shield on a player must apply to combat damage before lifelink computes the life gain."
+    },
+    {
+      "id": "120.4a-1",
+      "rules": [
+        "120.4a"
+      ],
+      "title": "Excess damage is redirected to the creature's controller",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Mountain"
+          ],
+          "B": [
+            "Grizzly Bears",
+            "Craw Wurm"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Flame Spill"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Flame Spill targeting Grizzly Bears, tapping the three Mountains.",
+        "B passes priority; Flame Spill resolves."
+      ],
+      "variants": [
+        {
+          "label": "excess_2",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Lethal damage for Grizzly Bears is 2 of the 4. Grizzly Bears is dealt 2 damage and B is dealt the 2 excess damage (18). Grizzly Bears dies in the state-based check."
+        },
+        {
+          "label": "exactly_lethal",
+          "polarity": "does_not_fire",
+          "delta": "Flame Spill targets Craw Wurm (6/4) instead of Grizzly Bears.",
+          "expected": "All 4 damage is lethal damage, so there is no excess. B stays at 20 and Craw Wurm dies."
+        },
+        {
+          "label": "already_damaged",
+          "polarity": "fires",
+          "delta": "Grizzly Bears has 1 damage marked before Flame Spill resolves.",
+          "expected": "Lethal damage is only 1 more. Grizzly Bears is dealt 1 damage and B is dealt 3 excess damage (17)."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Flame Spill",
+        "Grizzly Bears",
+        "Craw Wurm"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "120.4a-2",
+      "rules": [
+        "120.4a"
+      ],
+      "title": "Excess damage from a trampling source is redirected only when the effect says so",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Forest",
+            "Forest",
+            "Argothian Swine",
+            "Hill Giant"
+          ],
+          "B": [
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Ram Through"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "All creatures have been under their controllers' control since the start of the turn."
+      },
+      "decisions": [
+        "A casts Ram Through, tapping both Forests, with Argothian Swine as the creature that deals damage and Grizzly Bears as the target.",
+        "B passes priority; Ram Through resolves."
+      ],
+      "variants": [
+        {
+          "label": "trample",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Argothian Swine (3/3 trample) deals 3 damage: 2 to Grizzly Bears, which dies, and the 1 excess damage to B (19)."
+        },
+        {
+          "label": "no_trample",
+          "polarity": "does_not_fire",
+          "delta": "The creature that deals damage is Hill Giant (3/3, no trample) instead of Argothian Swine.",
+          "expected": "Hill Giant deals all 3 damage to Grizzly Bears, which dies. There is no redirection and B stays at 20."
+        }
+      ],
+      "cards": [
+        "Forest",
+        "Argothian Swine",
+        "Hill Giant",
+        "Grizzly Bears",
+        "Ram Through"
+      ],
+      "forge_notes": "The deathtouch clause of 120.4a is illustrated separately by 120.4a-3."
+    },
+    {
+      "id": "120.4a-3",
+      "rules": [
+        "120.4a"
+      ],
+      "title": "Any damage beyond 1 from a deathtouch source is excess damage",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Forest",
+            "Forest",
+            {
+              "card": "Argothian Swine",
+              "summoning_sick": false
+            },
+            {
+              "card": "Gorgon's Head",
+              "attached_to": "Argothian Swine"
+            }
+          ],
+          "B": [
+            "Hill Giant"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Ram Through"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Gorgon's Head is attached to Argothian Swine, which therefore has deathtouch and trample."
+      },
+      "decisions": [
+        "A casts Ram Through, tapping both Forests, with Argothian Swine as the creature that deals damage and Hill Giant as the target.",
+        "B passes priority; Ram Through resolves."
+      ],
+      "variants": [
+        {
+          "label": "deathtouch",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Argothian Swine deals 1 damage to Hill Giant and the 2 excess damage to B (18). Hill Giant moves to B's graveyard in the state-based check."
+        },
+        {
+          "label": "no_deathtouch",
+          "polarity": "does_not_fire",
+          "delta": "Gorgon's Head is on A's battlefield unattached, so Argothian Swine does not have deathtouch.",
+          "expected": "Argothian Swine deals all 3 damage to Hill Giant, which is exactly lethal, so there is no excess. B stays at 20 and Hill Giant moves to B's graveyard."
+        }
+      ],
+      "cards": [
+        "Forest",
+        "Argothian Swine",
+        "Gorgon's Head",
+        "Hill Giant",
+        "Ram Through"
+      ],
+      "forge_notes": "Requires Forge's ExcessDamage computation to treat 1 damage as lethal from a deathtouch source."
+    },
+    {
+      "id": "120.4b-1",
+      "rules": [
+        "120.4b"
+      ],
+      "title": "Prevention changes the damage amount and damage-dealt triggers fire only on damage that is dealt",
+      "record_kind": "rewrite",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain"
+          ],
+          "B": [
+            "Jackal Pup",
+            {
+              "card": "Samite Healer",
+              "summoning_sick": false
+            },
+            "Plains"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Lightning Bolt"
+          ],
+          "B": [
+            "Mending Hands"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Samite Healer has been under B's control since the start of the turn."
+      },
+      "decisions": [
+        "A casts Lightning Bolt targeting Jackal Pup, tapping Mountain.",
+        "B passes priority; Lightning Bolt resolves."
+      ],
+      "variants": [
+        {
+          "label": "no_prevention",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Jackal Pup is dealt 3 damage, its trigger fires and deals 3 damage to B (17). Jackal Pup dies."
+        },
+        {
+          "label": "prevent_1",
+          "polarity": "fires",
+          "delta": "In response, B activates Samite Healer, tapping it, targeting Jackal Pup (prevent the next 1 damage).",
+          "expected": "The damage is reduced from 3 to 2. Jackal Pup is dealt 2 damage, its trigger fires and deals 2 damage to B (18). Jackal Pup dies."
+        },
+        {
+          "label": "prevent_all",
+          "polarity": "does_not_fire",
+          "delta": "In response, B casts Mending Hands targeting Jackal Pup, tapping Plains.",
+          "expected": "All 3 damage is prevented. No damage is dealt, Jackal Pup's trigger does not fire, B stays at 20 and Jackal Pup stays on the battlefield."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Lightning Bolt",
+        "Jackal Pup",
+        "Samite Healer",
+        "Plains",
+        "Mending Hands"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "120.4c-1",
+      "rules": [
+        "120.4c"
+      ],
+      "title": "A replacement effect on a damage result applies to the processed result",
+      "record_kind": "combat",
+      "setup": {
+        "active": "A",
+        "step": "declare_attackers",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Boon Reflection",
+            {
+              "card": "Child of Night",
+              "summoning_sick": false
+            },
+            {
+              "card": "Savannah Lions",
+              "summoning_sick": false
+            }
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "All creatures have been under their controllers' control since the start of the turn."
+      },
+      "decisions": [
+        "A declares Child of Night (2/1 lifelink) as an attacker, attacking B.",
+        "B declares no blockers.",
+        "Both players pass priority into the combat damage step."
+      ],
+      "variants": [
+        {
+          "label": "boon_mine",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "B loses 2 life (18). The lifelink gain of 2 is doubled by Boon Reflection and A gains 4 life (24)."
+        },
+        {
+          "label": "boon_theirs",
+          "polarity": "does_not_fire",
+          "delta": "B controls Boon Reflection instead of A.",
+          "expected": "Boon Reflection only affects its controller's life gain. B loses 2 life (18) and A gains 2 life (22)."
+        },
+        {
+          "label": "no_lifelink",
+          "polarity": "does_not_fire",
+          "delta": "A attacks with Savannah Lions (no lifelink) instead of Child of Night.",
+          "expected": "There is no life gain to replace. B loses 2 life (18) and A stays at 20."
+        }
+      ],
+      "cards": [
+        "Boon Reflection",
+        "Child of Night",
+        "Savannah Lions"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "120.5-1",
+      "rules": [
+        "120.5"
+      ],
+      "title": "Damage does not destroy a creature, state-based actions do",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain"
+          ],
+          "B": [
+            "Grizzly Bears",
+            "Darksteel Myr"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Lightning Bolt"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Lightning Bolt targeting Grizzly Bears, tapping Mountain.",
+        "B passes priority; Lightning Bolt resolves."
+      ],
+      "variants": [
+        {
+          "label": "not_indestructible",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Lightning Bolt deals 3 damage, which is marked on Grizzly Bears. Grizzly Bears moves to B's graveyard only in the state-based check after Lightning Bolt has finished resolving."
+        },
+        {
+          "label": "indestructible",
+          "polarity": "does_not_fire",
+          "delta": "Lightning Bolt targets Darksteel Myr (0/1 indestructible) instead of Grizzly Bears.",
+          "expected": "Darksteel Myr is dealt 3 damage and has 3 damage marked. The state-based check does not destroy it, so it stays on the battlefield."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Lightning Bolt",
+        "Grizzly Bears",
+        "Darksteel Myr"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "120.6-1",
+      "rules": [
+        "120.6"
+      ],
+      "title": "Damage marked on a creature accumulates through the turn and is lethal at toughness",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain"
+          ],
+          "B": [
+            "Hill Giant"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Shock",
+            "Shock"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Shock targeting Hill Giant, tapping a Mountain; it resolves.",
+        "A casts a second Shock targeting Hill Giant, tapping the other Mountain; it resolves."
+      ],
+      "variants": [
+        {
+          "label": "two_shocks",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "After the first Shock Hill Giant has 2 damage marked and stays on the battlefield. After the second the total marked damage is 4, at least its toughness of 3, and Hill Giant moves to B's graveyard."
+        },
+        {
+          "label": "one_shock",
+          "polarity": "does_not_fire",
+          "delta": "A casts only the first Shock.",
+          "expected": "Hill Giant has 2 damage marked, less than its toughness of 3, and stays on the battlefield."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Shock",
+        "Hill Giant"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "120.6-2",
+      "rules": [
+        "120.6"
+      ],
+      "title": "Marked damage is removed in the cleanup step",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "end",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain"
+          ],
+          "B": [
+            {
+              "card": "Hill Giant",
+              "damage": 2
+            }
+          ]
+        },
+        "hand": {
+          "A": [
+            "Shock"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Shock targeting Hill Giant during the end step, tapping Mountain; it resolves."
+      ],
+      "variants": [
+        {
+          "label": "same_turn",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Hill Giant still has its 2 damage marked, so Shock brings the total to 4, at least its toughness of 3, and Hill Giant moves to B's graveyard."
+        },
+        {
+          "label": "next_turn",
+          "polarity": "does_not_fire",
+          "delta": "A passes priority in the end step and casts Shock during B's following upkeep instead, after the cleanup step.",
+          "expected": "The 2 damage was removed in the cleanup step. Shock deals 2 damage to a Hill Giant with no damage marked. It has 2 damage marked, less than its toughness of 3, and stays on the battlefield."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Shock",
+        "Hill Giant"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "120.6-3",
+      "rules": [
+        "120.6"
+      ],
+      "title": "Regenerating removes all damage marked on a permanent",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain"
+          ],
+          "B": [
+            "Drudge Skeletons",
+            "Swamp"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Lightning Bolt"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Lightning Bolt targeting Drudge Skeletons, tapping Mountain.",
+        "B passes priority; Lightning Bolt resolves."
+      ],
+      "variants": [
+        {
+          "label": "no_shield",
+          "polarity": "does_not_fire",
+          "delta": "",
+          "expected": "Drudge Skeletons has 3 damage marked, at least its toughness of 1, and moves to B's graveyard."
+        },
+        {
+          "label": "regenerated",
+          "polarity": "fires",
+          "delta": "In response, B activates Drudge Skeletons' regeneration ability, tapping Swamp.",
+          "expected": "Lightning Bolt deals 3 damage. The state-based destruction is replaced by the regeneration shield: Drudge Skeletons becomes tapped, all damage is removed (0 marked), and it stays on the battlefield."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Lightning Bolt",
+        "Drudge Skeletons",
+        "Swamp"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "120.8-1",
+      "rules": [
+        "120.8"
+      ],
+      "title": "A source that would deal 0 damage deals no damage, so damage triggers do not fire",
+      "record_kind": "combat",
+      "setup": {
+        "active": "A",
+        "step": "declare_attackers",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Darksteel Myr",
+              "summoning_sick": false
+            },
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            {
+              "card": "Jackal Pup",
+              "summoning_sick": false
+            }
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "All creatures have been under their controllers' control since the start of the turn."
+      },
+      "decisions": [
+        "A declares Darksteel Myr (0/1) as an attacker, attacking B.",
+        "B declares Jackal Pup as a blocker of Darksteel Myr.",
+        "Both players pass priority into the combat damage step."
+      ],
+      "variants": [
+        {
+          "label": "zero_power",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Darksteel Myr deals no damage. Jackal Pup is not dealt damage, so its trigger does not fire and B stays at 20. Jackal Pup deals 2 damage to Darksteel Myr, which is indestructible and stays."
+        },
+        {
+          "label": "two_power",
+          "polarity": "does_not_fire",
+          "delta": "A attacks with Grizzly Bears (2/2) instead of Darksteel Myr.",
+          "expected": "Grizzly Bears deals 2 damage to Jackal Pup and its trigger fires, dealing 2 damage to B (18). Jackal Pup and Grizzly Bears both die."
+        }
+      ],
+      "cards": [
+        "Darksteel Myr",
+        "Grizzly Bears",
+        "Jackal Pup"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "120.9-1",
+      "rules": [
+        "120.9"
+      ],
+      "title": "A trigger on damage by a specific source refers only to that source's damage",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "declare_attackers",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            },
+            {
+              "card": "Savannah Lions",
+              "summoning_sick": false
+            },
+            {
+              "card": "Spirit Link",
+              "attached_to": "Grizzly Bears"
+            }
+          ],
+          "B": [
+            {
+              "card": "Hill Giant",
+              "summoning_sick": false
+            }
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "All creatures have been under their controllers' control since the start of the turn."
+      },
+      "decisions": [
+        "A declares Grizzly Bears as an attacker, attacking B.",
+        "B declares Hill Giant as a blocker of Grizzly Bears.",
+        "Both players pass priority into the combat damage step."
+      ],
+      "variants": [
+        {
+          "label": "linked_attacker",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears deals 2 damage and Hill Giant deals 3 damage at the same time. Spirit Link triggers on Grizzly Bears' damage only: A gains 2 life (22), not 5."
+        },
+        {
+          "label": "linked_bystander",
+          "polarity": "does_not_fire",
+          "delta": "Spirit Link is attached to Savannah Lions, which is not in combat, instead of Grizzly Bears.",
+          "expected": "The same combat damage is dealt, but the enchanted creature deals no damage. Spirit Link does not trigger and A stays at 20."
+        },
+        {
+          "label": "linked_blocker",
+          "polarity": "fires",
+          "delta": "Spirit Link is attached to Hill Giant instead of Grizzly Bears.",
+          "expected": "Spirit Link triggers on Hill Giant's 3 damage only. A, who controls Spirit Link, gains 3 life (23)."
+        }
+      ],
+      "cards": [
+        "Grizzly Bears",
+        "Savannah Lions",
+        "Spirit Link",
+        "Hill Giant"
+      ],
+      "forge_notes": "Spirit Link attached to an opponent's creature is only reached by setting up the state directly."
+    },
+    {
+      "id": "120.10-1",
+      "rules": [
+        "120.10"
+      ],
+      "title": "An excess-damage trigger fires when the damage exceeds lethal damage",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Magmatic Galleon"
+          ],
+          "B": [
+            "Grizzly Bears",
+            "Hill Giant"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Lightning Bolt"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Lightning Bolt targeting Grizzly Bears, tapping Mountain.",
+        "B passes priority; Lightning Bolt resolves."
+      ],
+      "variants": [
+        {
+          "label": "excess",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears is dealt 3 damage, 1 more than lethal. Magmatic Galleon's trigger fires and A creates a Treasure token. Grizzly Bears dies."
+        },
+        {
+          "label": "exactly_lethal",
+          "polarity": "does_not_fire",
+          "delta": "Lightning Bolt targets Hill Giant (3/3) instead of Grizzly Bears.",
+          "expected": "Hill Giant is dealt exactly lethal damage, so there is no excess. Magmatic Galleon does not trigger and A creates no Treasure. Hill Giant dies."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Magmatic Galleon",
+        "Lightning Bolt",
+        "Grizzly Bears",
+        "Hill Giant"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "120.10-2",
+      "rules": [
+        "120.10"
+      ],
+      "title": "Excess damage counts damage already marked on the creature",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Magmatic Galleon"
+          ],
+          "B": [
+            {
+              "card": "Hill Giant",
+              "damage": 1
+            }
+          ]
+        },
+        "hand": {
+          "A": [
+            "Lightning Bolt"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Lightning Bolt targeting Hill Giant, tapping Mountain.",
+        "B passes priority; Lightning Bolt resolves."
+      ],
+      "variants": [
+        {
+          "label": "pre_damaged",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Hill Giant needs only 2 more damage to be lethal and is dealt 3, so 1 damage is excess. Magmatic Galleon's trigger fires and A creates a Treasure token."
+        },
+        {
+          "label": "undamaged",
+          "polarity": "does_not_fire",
+          "delta": "Hill Giant has no damage marked.",
+          "expected": "Hill Giant is dealt exactly lethal damage with no excess. Magmatic Galleon does not trigger and A creates no Treasure."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Magmatic Galleon",
+        "Lightning Bolt",
+        "Hill Giant"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

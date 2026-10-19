@@ -1,0 +1,322 @@
+{
+  "unit": "702.33",
+  "verified": true,
+  "review": [],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.33a-1",
+      "rules": [
+        "702.33a"
+      ],
+      "title": "A kicked spell applies its kicker-linked effect, an unkicked one does not",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain"
+          ],
+          "B": [
+            "Centaur Courser"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Burst Lightning"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Burst Lightning paying its kicker {4} (total {4}{R}, tapping all five Mountains), targeting Centaur Courser.",
+        "Both players pass; the spell resolves."
+      ],
+      "variants": [
+        {
+          "label": "kicked",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Burst Lightning was kicked and deals 4 damage to Centaur Courser (3/3), which is destroyed and is in B's graveyard."
+        },
+        {
+          "label": "unkicked",
+          "polarity": "does_not_fire",
+          "delta": "A does not pay the kicker; A casts Burst Lightning for {R} only.",
+          "expected": "Burst Lightning deals 2 damage to Centaur Courser, which stays on the battlefield with 2 damage marked."
+        }
+      ],
+      "cards": [
+        "Burst Lightning",
+        "Mountain",
+        "Centaur Courser"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.33c-1",
+      "rules": [
+        "702.33c"
+      ],
+      "title": "Multikicker counts how many times the cost was paid",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Everflowing Chalice"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Everflowing Chalice paying its multikicker {2} twice (tapping all four Mountains).",
+        "Both players pass; the spell resolves."
+      ],
+      "variants": [
+        {
+          "label": "kicked_twice",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Everflowing Chalice enters the battlefield with 2 charge counters."
+        },
+        {
+          "label": "kicked_once",
+          "polarity": "other",
+          "delta": "A pays the multikicker only once (two Mountains tapped).",
+          "expected": "Everflowing Chalice enters with 1 charge counter."
+        },
+        {
+          "label": "unkicked",
+          "polarity": "does_not_fire",
+          "delta": "A pays no multikicker.",
+          "expected": "Everflowing Chalice enters with no charge counters."
+        }
+      ],
+      "cards": [
+        "Everflowing Chalice",
+        "Mountain"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.33e-1",
+      "rules": [
+        "702.33e"
+      ],
+      "title": "A kicker-linked triggered ability fires only if its object was kicked",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Swamp",
+            "Swamp",
+            "Swamp"
+          ],
+          "B": [
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Gatekeeper of Malakir"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Gatekeeper of Malakir paying its kicker {B} (total {B}{B}{B}, tapping three Swamps).",
+        "Both players pass; the spell resolves and the enters trigger goes on the stack targeting player B.",
+        "Both players pass; the trigger resolves."
+      ],
+      "variants": [
+        {
+          "label": "kicked",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The 'if it was kicked' trigger fires: B sacrifices Grizzly Bears (B's only creature), which is in B's graveyard. Gatekeeper of Malakir is on the battlefield."
+        },
+        {
+          "label": "unkicked",
+          "polarity": "does_not_fire",
+          "delta": "A casts Gatekeeper of Malakir for {B}{B} only, without the kicker.",
+          "expected": "No trigger fires. Grizzly Bears stays on B's battlefield and Gatekeeper of Malakir is on the battlefield."
+        }
+      ],
+      "cards": [
+        "Gatekeeper of Malakir",
+        "Swamp",
+        "Grizzly Bears"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.33f-1",
+      "rules": [
+        "702.33f"
+      ],
+      "title": "Each 'kicked with its' ability applies only if the matching kicker cost was paid",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Forest",
+            "Forest",
+            "Forest",
+            "Mountain",
+            "Plains"
+          ],
+          "B": [
+            "Phyrexian Walker"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Thornscape Battlemage"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Thornscape Battlemage paying its {R} kicker (total {2}{G}{R}, tapping Forest, Forest, Forest and Mountain).",
+        "Both players pass; the spell resolves and the enters trigger goes on the stack targeting player B.",
+        "Both players pass; the trigger resolves."
+      ],
+      "variants": [
+        {
+          "label": "kicked_red",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The 'kicked with its {R} kicker' trigger fires: it deals 2 damage to B (life 20 to 18). Phyrexian Walker is not affected."
+        },
+        {
+          "label": "kicked_white",
+          "polarity": "other",
+          "delta": "A pays the {W} kicker instead of the {R} kicker (tapping Plains instead of Mountain), and the trigger targets Phyrexian Walker.",
+          "expected": "The 'kicked with its {W} kicker' trigger fires: Phyrexian Walker (an artifact creature) is destroyed and is in B's graveyard. B's life stays 20."
+        },
+        {
+          "label": "unkicked",
+          "polarity": "does_not_fire",
+          "delta": "A pays no kicker.",
+          "expected": "Neither trigger fires: B's life stays 20 and Phyrexian Walker stays on the battlefield."
+        }
+      ],
+      "cards": [
+        "Thornscape Battlemage",
+        "Phyrexian Walker",
+        "Forest",
+        "Mountain",
+        "Plains"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.33g-1",
+      "rules": [
+        "702.33g"
+      ],
+      "title": "A kicker-conditional target is chosen only if the spell is kicked",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            "Mountain",
+            "Mountain"
+          ],
+          "B": [
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Jilt"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Grizzly Bears is the only creature on the battlefield."
+      },
+      "decisions": [
+        "A tries to cast Jilt targeting Grizzly Bears, paying {1}{U} (and the kicker {1}{R} when kicked)."
+      ],
+      "variants": [
+        {
+          "label": "unkicked",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The cast is legal (can_play true) with a single target: the damage part of Jilt is not part of the spell when it is unkicked, so no second target is needed."
+        },
+        {
+          "label": "kicked",
+          "polarity": "does_not_fire",
+          "delta": "A also pays the kicker {1}{R}, tapping all four lands.",
+          "expected": "The cast is illegal (can_play false): a kicked Jilt needs another target creature to deal 2 damage to, and Grizzly Bears is the only creature."
+        }
+      ],
+      "cards": [
+        "Jilt",
+        "Island",
+        "Mountain",
+        "Grizzly Bears"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

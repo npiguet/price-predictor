@@ -1,0 +1,4 @@
+{"id": "701.59", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "701.59a", "category": "mechanical", "observability": "direct", "record_kinds": ["playability", "resolution"], "outcome": "Collecting evidence N exiles cards from the player's graveyard whose total mana value is N or greater.", "note": ""}
+{"id": "701.59b", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "A player whose graveyard holds less than N total mana value cannot choose to collect evidence N, so a cost requiring it cannot be paid.", "note": ""}
+{"id": "701.59c", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "A spell's linked ability applies its evidence-collected branch only if evidence was collected as it was cast.", "note": ""}

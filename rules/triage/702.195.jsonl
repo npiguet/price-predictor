@@ -1,0 +1,4 @@
+{"id": "702.195", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.195a", "category": "mechanical", "observability": "needs_new_fields", "record_kinds": ["continuous", "resolution"], "outcome": "A player controlling three or more artifact, Saga or legendary permanents gets an enduring story for the rest of the game.", "note": ""}
+{"id": "702.195b", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.195c", "category": "mechanical", "observability": "needs_new_fields", "record_kinds": ["trigger"], "outcome": "After a player gets an enduring story, continuous effects are reapplied before trigger conditions are checked.", "note": ""}

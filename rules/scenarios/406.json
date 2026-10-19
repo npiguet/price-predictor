@@ -1,0 +1,369 @@
+{
+  "unit": "406",
+  "verified": true,
+  "review": [
+    "406.3a-1: the combat-timing and land-chosen variants flipped on casting timing and on Gonti's cast-only permission, not on 406.3a; replaced Grizzly Bears with the morph card Fathom Seer and made the contrast a face-up cast against a face-down morph cast (406.3a's exception), adding a seventh Swamp for the {3} cost.",
+    "406.3b-1: Colfenor's Plans names no spell quality, and its second-spell variant flipped on the Plans' own one-spell limit; rebuilt the scenario on Vivien, Champion of the Wilds (-2, cast only if it's a creature spell), contrasting an exiled Grizzly Bears with an exiled Shock; dropped Llanowar Elves and Colfenor's Plans."
+  ],
+  "skipped": [
+    {
+      "id": "406.7",
+      "reason": "cannot be illustrated: no Forge card script moves a card from the exile zone to the exile zone (a search of cardsfolder for an exile effect whose origin includes exile finds none), so an already-exiled card is never exiled again in a Forge game"
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "406.2-1",
+      "rules": [
+        "406.2"
+      ],
+      "title": "An exile effect moves a permanent from the battlefield to the exile zone",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains"
+          ],
+          "B": [
+            "Grizzly Bears",
+            "Island",
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Swords to Plowshares"
+          ],
+          "B": [
+            "Counterspell"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Swords to Plowshares targeting Grizzly Bears, tapping Plains.",
+        "B passes priority with Counterspell unused.",
+        "Both players pass; Swords to Plowshares resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears moves from the battlefield to the exile zone and is an exiled card, not in B's graveyard; B gains 2 life (22). Swords to Plowshares resolved and is in A's graveyard."
+        },
+        {
+          "label": "countered",
+          "polarity": "does_not_fire",
+          "delta": "In response, B casts Counterspell tapping both Islands, and it resolves first.",
+          "expected": "Swords to Plowshares is countered and goes to A's graveyard; Grizzly Bears stays on the battlefield, the exile zone is empty and B's life stays 20."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Island",
+        "Swords to Plowshares",
+        "Counterspell",
+        "Grizzly Bears"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "406.2-2",
+      "rules": [
+        "406.2"
+      ],
+      "title": "An exile effect moves cards from the graveyard to the exile zone",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Bojuka Bog"
+          ]
+        },
+        "graveyard": {
+          "B": [
+            "Grizzly Bears",
+            "Shock"
+          ]
+        },
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A plays Bojuka Bog as a land; it enters tapped.",
+        "Bojuka Bog's enters trigger targets player B.",
+        "Both players pass; the trigger resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears and Shock move from B's graveyard to the exile zone; B's graveyard is empty."
+        },
+        {
+          "label": "cards-in-hand",
+          "polarity": "does_not_fire",
+          "delta": "Grizzly Bears and Shock are in B's hand instead of B's graveyard.",
+          "expected": "The trigger resolves and exiles nothing; Grizzly Bears and Shock stay in B's hand and the exile zone is empty."
+        }
+      ],
+      "cards": [
+        "Bojuka Bog",
+        "Grizzly Bears",
+        "Shock"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "406.3a-1",
+      "rules": [
+        "406.3a"
+      ],
+      "title": "A card exiled face down is turned face up when it is cast from exile",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Swamp",
+            "Swamp",
+            "Swamp",
+            "Swamp",
+            "Swamp",
+            "Swamp",
+            "Swamp"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Gonti, Lord of Luxury"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "B": [
+            "Fathom Seer",
+            "Forest",
+            "Mountain",
+            "Island",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains"
+          ]
+        },
+        "exile": {},
+        "notes": "Library lists are ordered top first."
+      },
+      "decisions": [
+        "A casts Gonti, Lord of Luxury tapping four Swamps.",
+        "Both players pass; Gonti resolves and enters.",
+        "Gonti's enters trigger targets player B; both players pass and it resolves.",
+        "A looks at the top four cards of B's library (Fathom Seer, Forest, Mountain, Island), exiles Fathom Seer face down, and the other three go to the bottom of B's library in random order.",
+        "In the same main phase A casts the exiled card face up for its mana cost {1}{U}, tapping two Swamps (mana of any type may be spent).",
+        "Both players pass; the spell resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "While exiled the card is face down with no characteristics. Just before it is cast it turns face up: the spell on the stack is Fathom Seer (blue Illusion, 1/3, mana value 2), and it resolves onto the battlefield face up under A's control."
+        },
+        {
+          "label": "cast-face-down",
+          "polarity": "does_not_fire",
+          "delta": "A casts the exiled card face down using morph for {3}, tapping three Swamps, instead of face up for {1}{U}.",
+          "expected": "The card is not turned face up: the spell on the stack is a face-down 2/2 colorless creature spell with no name and mana value 0, and it resolves as a face-down 2/2 creature under A's control. Fathom Seer's turned-face-up trigger does not fire."
+        }
+      ],
+      "cards": [
+        "Swamp",
+        "Gonti, Lord of Luxury",
+        "Fathom Seer",
+        "Forest",
+        "Mountain",
+        "Island",
+        "Plains"
+      ],
+      "forge_notes": "Gonti's permission covers every spell of the exiled card, including its face-down morph cast; Forge models morph as an extra spell ability on the card, which the MayPlay static should offer from exile."
+    },
+    {
+      "id": "406.3b-1",
+      "rules": [
+        "406.3b"
+      ],
+      "title": "A face-down exiled card may be cast only if the resulting spell has the quality the permission names",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Vivien, Champion of the Wilds",
+              "counters": {
+                "loyalty": 4
+              }
+            },
+            "Forest",
+            "Forest",
+            "Mountain"
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Grizzly Bears",
+            "Shock",
+            "Forest",
+            "Plains",
+            "Plains"
+          ]
+        },
+        "exile": {},
+        "notes": "Library lists are ordered top first. Vivien has been under A's control since before this turn and has not activated a loyalty ability this turn."
+      },
+      "decisions": [
+        "A activates Vivien's -2 ability; both players pass and it resolves.",
+        "A looks at the top three cards of A's library (Grizzly Bears, Shock, Forest), exiles Grizzly Bears face down, and puts Shock and Forest on the bottom of A's library.",
+        "A casts the exiled Grizzly Bears, tapping two Forests.",
+        "Both players pass; the spell resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Casting the face-down card is legal (can_play true): A may look at it and the resulting spell is a creature spell. Grizzly Bears resolves onto the battlefield under A's control; Vivien has 2 loyalty."
+        },
+        {
+          "label": "noncreature-exiled",
+          "polarity": "does_not_fire",
+          "delta": "A exiles Shock face down instead of Grizzly Bears, and tries to cast it targeting B with the Mountain.",
+          "expected": "Casting the face-down Shock is not legal (can_play false): the resulting spell is not a creature spell. Shock stays face down in exile and B's life stays 20."
+        }
+      ],
+      "cards": [
+        "Vivien, Champion of the Wilds",
+        "Forest",
+        "Mountain",
+        "Plains",
+        "Grizzly Bears",
+        "Shock"
+      ],
+      "forge_notes": "Vivien's play permission is a MayPlay static affecting Creature.IsRemembered in exile; the creature check is made against the card's face-up characteristics."
+    },
+    {
+      "id": "406.6-1",
+      "rules": [
+        "406.6"
+      ],
+      "title": "A linked leaves-the-battlefield ability returns only the card its own enters ability exiled",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains"
+          ],
+          "B": [
+            "Grizzly Bears",
+            "Centaur Courser",
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Journey to Nowhere",
+            "Journey to Nowhere",
+            "Disenchant"
+          ],
+          "B": [
+            "Unsummon"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Journey to Nowhere (call it J1), tapping two Plains; it resolves and its enters trigger targets Grizzly Bears.",
+        "B passes; the trigger resolves.",
+        "A casts a second Journey to Nowhere (J2), tapping two Plains; it resolves and its enters trigger targets Centaur Courser.",
+        "B passes; the trigger resolves.",
+        "A casts Disenchant targeting J1, tapping two Plains.",
+        "B passes; Disenchant resolves, J1 is destroyed and its leaves-the-battlefield trigger resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "J1 goes to A's graveyard. Grizzly Bears returns from exile to the battlefield under B's control. Centaur Courser stays in exile, because J2's linked ability, not J1's, refers to it; J2 stays on the battlefield."
+        },
+        {
+          "label": "nothing-exiled",
+          "polarity": "does_not_fire",
+          "delta": "When J1's enters trigger is on the stack targeting Grizzly Bears, B casts Unsummon on Grizzly Bears, tapping the Island; Unsummon resolves first.",
+          "expected": "Grizzly Bears is in B's hand and J1's trigger fizzles, exiling nothing. After Disenchant destroys J1 its leaves trigger returns nothing: Centaur Courser stays in exile, Grizzly Bears stays in B's hand, and the battlefield gains no card."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Island",
+        "Grizzly Bears",
+        "Centaur Courser",
+        "Journey to Nowhere",
+        "Disenchant",
+        "Unsummon"
+      ],
+      "forge_notes": "Forge links the two Journey abilities by the remembered cards of each Journey object."
+    }
+  ]
+}

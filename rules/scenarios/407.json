@@ -1,0 +1,157 @@
+{
+  "unit": "407",
+  "verified": true,
+  "review": [
+    "407.4-1 only contrasts anting with a countered spell and never exercises 407.4's owner-only clause; added 407.4-2 (Jeweled Bird owned versus stolen with Steal Artifact) for it."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "407.4-1",
+      "rules": [
+        "407.4"
+      ],
+      "title": "Anting an object moves it from its zone to the ante zone",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Swamp"
+          ],
+          "B": [
+            "Island",
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Contract from Below",
+            "Shock"
+          ],
+          "B": [
+            "Counterspell"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Mountain",
+            "Island",
+            "Plains",
+            "Forest",
+            "Swamp",
+            "Grizzly Bears",
+            "Centaur Courser",
+            "Mountain",
+            "Island",
+            "Plains"
+          ]
+        },
+        "exile": {},
+        "notes": "The game is played for ante. Library lists are ordered top first."
+      },
+      "decisions": [
+        "A casts Contract from Below, tapping Swamp.",
+        "B passes priority with Counterspell unused.",
+        "Both players pass; Contract from Below resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "A discards Shock to the graveyard, the top card of A's library (Mountain) moves to the ante zone, and A draws seven cards (Island, Plains, Forest, Swamp, Grizzly Bears, Centaur Courser, Mountain); two cards remain in A's library. Contract from Below goes to A's graveyard."
+        },
+        {
+          "label": "countered",
+          "polarity": "does_not_fire",
+          "delta": "In response, B casts Counterspell tapping both Islands, and it resolves first.",
+          "expected": "Contract from Below is countered and goes to A's graveyard; Shock stays in A's hand, the ante zone is empty and A's library still has ten cards."
+        }
+      ],
+      "cards": [
+        "Swamp",
+        "Island",
+        "Contract from Below",
+        "Shock",
+        "Counterspell",
+        "Mountain",
+        "Plains",
+        "Forest",
+        "Grizzly Bears",
+        "Centaur Courser"
+      ],
+      "forge_notes": "Contract from Below requires a game played for ante; Forge has an ante zone but collection decks do not use it, so this needs a hand-built game state."
+    },
+    {
+      "id": "407.4-2",
+      "rules": [
+        "407.4"
+      ],
+      "title": "Only the owner of an object can ante it",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Jeweled Bird"
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Plains",
+            "Island"
+          ],
+          "B": [
+            "Forest",
+            "Forest"
+          ]
+        },
+        "exile": {},
+        "notes": "The game is played for ante. The ante zone holds Mountain (owned by A) and Swamp (owned by B), anted at the start of the game. Library lists are ordered top first."
+      },
+      "decisions": [
+        "A activates Jeweled Bird's ability, tapping it.",
+        "Both players pass; the ability resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Jeweled Bird moves from the battlefield to the ante zone. Mountain moves from the ante zone to A's graveyard, Swamp stays in the ante zone, and A draws Plains."
+        },
+        {
+          "label": "stolen-bird",
+          "polarity": "does_not_fire",
+          "delta": "Jeweled Bird is owned by B; A controls it through Steal Artifact, which A controls and which is attached to it.",
+          "expected": "Jeweled Bird is not anted and stays on the battlefield tapped under A's control. Mountain and Swamp stay in the ante zone and A draws no card."
+        }
+      ],
+      "cards": [
+        "Jeweled Bird",
+        "Steal Artifact",
+        "Plains",
+        "Island",
+        "Forest",
+        "Mountain",
+        "Swamp"
+      ],
+      "forge_notes": "Forge's ChangeZone to Ante has no owner check, so the stolen-bird variant likely diverges in Forge (the Bird would be anted into B's ante zone). Setting up the ante zone needs a hand-built game state."
+    }
+  ]
+}

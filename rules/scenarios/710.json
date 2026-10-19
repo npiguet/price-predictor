@@ -1,0 +1,433 @@
+{
+  "unit": "710",
+  "verified": true,
+  "review": [
+    "710.1c-1: the red-card swap was labelled does_not_fire, but it does not make 710.1c fail (a flip never changes color; the rule has no does_not_fire branch); relabelled it other as a control and trimmed its expected to the legality verdict.",
+    "710.1c-2: the Bushi Tenderfoot swap was labelled does_not_fire though 710.1c (mana cost unchanged by flipping) cannot fail; relabelled it other as a control.",
+    "710.1c-3: Glorious Anthem on A's vs B's side only tested 'creatures you control', and a static anthem applies regardless of any flip; rebuilt it so Giant Growth pumps the unflipped Nezumi Graverobber, which then flips through its own ability and is 7/5 as Nighteyes the Desecrator, with a no-pump control (polarity other, since 710.1c has no failing branch).",
+    "triage 710.1b/710.1c/710.2/710.5: a continuous or playability record shows name, types, P/T, color and the activation verdict as fields, so observability is direct rather than indirect/needs_new_fields; 710.5's record kind is playability (what its scenario observes) and 710.1c gains playability."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "710.1b-1",
+      "rules": [
+        "710.1b"
+      ],
+      "title": "A flipped permanent has the alternative name, type line, power, toughness and abilities",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "declare_attackers",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Akki Lavarunner",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            "Wall of Wood"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Akki Lavarunner starts unflipped. Wall of Wood is on B's battlefield in the base setup so that the variant only changes the block declaration."
+      },
+      "decisions": [
+        "A declares Akki Lavarunner (1/1 haste) as an attacker against B.",
+        "B declares no blockers.",
+        "Combat damage is dealt; Akki Lavarunner's trigger (whenever it deals damage to an opponent, flip it) goes on the stack and both players pass; it resolves."
+      ],
+      "variants": [
+        {
+          "label": "unblocked",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Akki Lavarunner deals 1 damage to B (B at 19) and its trigger flips it. The permanent is now named Tok-Tok, Volcano Born, is a legendary Goblin Shaman creature that is 2/2 with protection from red, and no longer has haste."
+        },
+        {
+          "label": "blocked",
+          "polarity": "does_not_fire",
+          "delta": "B declares Wall of Wood (0/3) as a blocker of Akki Lavarunner.",
+          "expected": "Akki Lavarunner deals 1 damage to Wall of Wood (1 damage marked) and none to B (B at 20); the flip trigger does not fire. The permanent is still Akki Lavarunner, a nonlegendary 1/1 Goblin Warrior with haste."
+        }
+      ],
+      "cards": [
+        "Akki Lavarunner",
+        "Wall of Wood"
+      ],
+      "forge_notes": "Flip cards are the two-faced Forge scripts with AlternateMode:Flip; the alternate face is Tok-Tok, Volcano Born."
+    },
+    {
+      "id": "710.1c-1",
+      "rules": [
+        "710.1c"
+      ],
+      "title": "A flipped permanent keeps its color",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Swamp",
+            "Swamp"
+          ],
+          "B": [
+            {
+              "card": "Nezumi Graverobber",
+              "summoning_sick": false
+            }
+          ]
+        },
+        "hand": {
+          "A": [
+            "Doom Blade"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "B's Nezumi Graverobber is flipped (Nighteyes the Desecrator, a black creature)."
+      },
+      "decisions": [
+        "A considers casting Doom Blade (destroy target nonblack creature), paying with both Swamps, targeting B's flipped permanent."
+      ],
+      "variants": [
+        {
+          "label": "flipped_black",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Doom Blade has no legal target: the flipped permanent Nighteyes the Desecrator is still black, so it is not a legal target."
+        },
+        {
+          "label": "flipped_red",
+          "polarity": "other",
+          "delta": "B's flipped permanent is Akki Lavarunner (flipped, Tok-Tok, Volcano Born, a red creature) instead of Nezumi Graverobber.",
+          "expected": "Doom Blade has a legal target: the flipped permanent Tok-Tok, Volcano Born is red, so casting Doom Blade targeting it is legal."
+        }
+      ],
+      "cards": [
+        "Swamp",
+        "Doom Blade",
+        "Nezumi Graverobber",
+        "Akki Lavarunner"
+      ],
+      "forge_notes": "In the second variant Tok-Tok's protection from red does not stop Doom Blade, which is black."
+    },
+    {
+      "id": "710.1c-2",
+      "rules": [
+        "710.1c"
+      ],
+      "title": "A flipped permanent keeps its mana cost and mana value",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Swamp",
+            "Swamp"
+          ],
+          "B": [
+            {
+              "card": "Akki Lavarunner",
+              "summoning_sick": false
+            }
+          ]
+        },
+        "hand": {
+          "A": [
+            "Smother"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "B's Akki Lavarunner (mana cost {3}{R}, mana value 4) is flipped (Tok-Tok, Volcano Born)."
+      },
+      "decisions": [
+        "A considers casting Smother (destroy target creature with mana value 3 or less), paying with both Swamps, targeting B's flipped permanent."
+      ],
+      "variants": [
+        {
+          "label": "flipped_mv4",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Smother has no legal target: the flipped permanent still has the mana cost {3}{R}, mana value 4."
+        },
+        {
+          "label": "flipped_mv1",
+          "polarity": "other",
+          "delta": "B's flipped permanent is Bushi Tenderfoot (flipped, Kenzo the Hardhearted, mana cost {W}) instead of Akki Lavarunner.",
+          "expected": "Smother has a legal target: the flipped permanent has mana value 1, so casting it is legal."
+        }
+      ],
+      "cards": [
+        "Swamp",
+        "Smother",
+        "Akki Lavarunner",
+        "Bushi Tenderfoot"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "710.1c-3",
+      "rules": [
+        "710.1c"
+      ],
+      "title": "An external effect applied before the flip still applies after it",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Forest",
+            "Swamp",
+            "Swamp",
+            {
+              "card": "Nezumi Graverobber",
+              "summoning_sick": false
+            }
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Giant Growth"
+          ]
+        },
+        "graveyard": {
+          "B": [
+            "Grizzly Bears"
+          ]
+        },
+        "library": {},
+        "exile": {},
+        "notes": "A's Nezumi Graverobber starts unflipped (2/1). Grizzly Bears is the only card in B's graveyard."
+      },
+      "decisions": [
+        "A casts Giant Growth targeting Nezumi Graverobber, tapping Forest. Both players pass; it resolves.",
+        "A activates Nezumi Graverobber's ability ({1}{B}: exile target card from an opponent's graveyard; if no cards are in that graveyard, flip it), tapping both Swamps, targeting Grizzly Bears in B's graveyard. Both players pass; it resolves."
+      ],
+      "variants": [
+        {
+          "label": "pumped_then_flipped",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears is exiled and Nezumi Graverobber flips into Nighteyes the Desecrator, which is 7/5: its 4/2 plus Giant Growth's +3/+3."
+        },
+        {
+          "label": "not_pumped",
+          "polarity": "other",
+          "delta": "A does not cast Giant Growth.",
+          "expected": "Grizzly Bears is exiled and Nezumi Graverobber flips into Nighteyes the Desecrator, which is 4/2."
+        }
+      ],
+      "cards": [
+        "Forest",
+        "Swamp",
+        "Giant Growth",
+        "Nezumi Graverobber",
+        "Grizzly Bears"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "710.2-1",
+      "rules": [
+        "710.2"
+      ],
+      "title": "Only the alternative characteristics apply once flipped, only the normal ones before",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Day of Destiny",
+            "Akki Lavarunner"
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "A's Akki Lavarunner is flipped (Tok-Tok, Volcano Born, a legendary creature)."
+      },
+      "decisions": [
+        "No actions are taken; the board is observed in A's first main phase."
+      ],
+      "variants": [
+        {
+          "label": "flipped",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The flipped permanent is legendary Tok-Tok, Volcano Born, so Day of Destiny (legendary creatures you control get +2/+2) applies: it is 4/4 with protection from red."
+        },
+        {
+          "label": "unflipped",
+          "polarity": "does_not_fire",
+          "delta": "Akki Lavarunner is not flipped.",
+          "expected": "The permanent is the nonlegendary Akki Lavarunner, so Day of Destiny does not apply: it is 1/1 with haste."
+        }
+      ],
+      "cards": [
+        "Day of Destiny",
+        "Akki Lavarunner"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "710.4-1",
+      "rules": [
+        "710.4"
+      ],
+      "title": "A flipped permanent that leaves the battlefield returns unflipped",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Swamp",
+            "Swamp",
+            {
+              "card": "Nezumi Graverobber",
+              "summoning_sick": false
+            }
+          ]
+        },
+        "hand": {
+          "A": [
+            "Unsummon"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "A's Nezumi Graverobber on the battlefield is flipped (Nighteyes the Desecrator, 4/2)."
+      },
+      "decisions": [
+        "A casts Unsummon targeting their own flipped permanent, tapping Island.",
+        "Both players pass; Unsummon resolves and the card returns to A's hand.",
+        "A casts Nezumi Graverobber from hand, tapping both Swamps. Both players pass; it resolves."
+      ],
+      "variants": [
+        {
+          "label": "bounced_and_recast",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The recast permanent is unflipped: Nezumi Graverobber, a nonlegendary 2/1 Rat Rogue with its exile ability. It kept no memory of being flipped."
+        },
+        {
+          "label": "not_bounced",
+          "polarity": "does_not_fire",
+          "delta": "A casts neither Unsummon nor Nezumi Graverobber; no actions are taken.",
+          "expected": "The permanent stays on the battlefield and stays flipped: Nighteyes the Desecrator, a legendary 4/2."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Swamp",
+        "Nezumi Graverobber",
+        "Unsummon"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "710.5-1",
+      "rules": [
+        "710.5"
+      ],
+      "title": "A flip card's alternative name can be chosen as a card name and matches the flipped permanent",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Swamp",
+            "Swamp",
+            "Swamp",
+            "Swamp",
+            "Swamp",
+            "Pithing Needle",
+            {
+              "card": "Nezumi Graverobber",
+              "summoning_sick": false
+            }
+          ]
+        },
+        "hand": {},
+        "graveyard": {
+          "A": [
+            "Grizzly Bears"
+          ]
+        },
+        "library": {},
+        "exile": {},
+        "notes": "A's Nezumi Graverobber is flipped (Nighteyes the Desecrator). Pithing Needle entered with the chosen card name Nighteyes the Desecrator."
+      },
+      "decisions": [
+        "A considers activating the flipped permanent's ability ({4}{B}: put target creature card from a graveyard onto the battlefield under your control), paying with the five Swamps and targeting Grizzly Bears in A's graveyard."
+      ],
+      "variants": [
+        {
+          "label": "alt_name_chosen",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The activation is not legal: Pithing Needle's chosen name matches the flipped permanent's alternative name, so its activated ability can't be activated."
+        },
+        {
+          "label": "other_name_chosen",
+          "polarity": "does_not_fire",
+          "delta": "Pithing Needle's chosen card name is Nezumi Graverobber instead.",
+          "expected": "The activation is legal: the flipped permanent is named Nighteyes the Desecrator, which doesn't match the chosen name, so it can be activated targeting Grizzly Bears."
+        }
+      ],
+      "cards": [
+        "Swamp",
+        "Pithing Needle",
+        "Nezumi Graverobber",
+        "Grizzly Bears"
+      ],
+      "forge_notes": "Forge's NameCard choice may only offer the front-face name of a flip card; if the alternative name cannot be chosen in the game, this scenario cannot be played directly."
+    }
+  ]
+}

@@ -1,0 +1,310 @@
+{
+  "unit": "106",
+  "verified": true,
+  "review": [
+    "106.6-1: the creature_spell variant changed two facts (color chosen and spell cast); replaced Elite Vanguard with Raging Goblin ({R} creature) so the variant changes only the spell, with red chosen in both.",
+    "106.6a-1: Healing Salve's mode was not fixed; added the gain-life mode to the decisions.",
+    "106.6a-1: the second_creature variant still applies the restriction (only the spell differs), so its polarity changed from does_not_fire to other; unrestricted_source stays the does_not_fire variant."
+  ],
+  "skipped": [
+    {
+      "id": "106.8",
+      "reason": "cannot be illustrated: no card in Forge's cardsfolder adds mana represented by a hybrid mana symbol (hybrid symbols appear only in costs and in color-indicator text of lands such as Fetid Heath)"
+    },
+    {
+      "id": "106.9",
+      "reason": "cannot be illustrated: no card in Forge's cardsfolder adds mana represented by a Phyrexian mana symbol"
+    },
+    {
+      "id": "106.10",
+      "reason": "cannot be illustrated: no card in Forge's cardsfolder adds mana represented by a generic mana symbol such as {1}; Sol Ring and Ashnod's Altar add {C}, which is colorless mana and not a generic symbol"
+    },
+    {
+      "id": "106.11",
+      "reason": "cannot be illustrated: no card in Forge's cardsfolder adds mana represented by a snow mana symbol {S}"
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "106.3-1",
+      "rules": ["106.3"],
+      "title": "A spell that produces mana adds it to the caster's pool when it resolves",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {"A": 20, "B": 20},
+        "battlefield": {"A": ["Swamp"], "B": ["Island", "Island"]},
+        "hand": {"A": ["Dark Ritual", "Black Knight"], "B": ["Counterspell"]},
+        "graveyard": {}, "library": {}, "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Dark Ritual, tapping Swamp for {B}.",
+        "B passes priority; Dark Ritual resolves (unless a variant says otherwise).",
+        "A casts Black Knight, paying {B}{B} from the mana pool if the pool holds mana.",
+        "B passes priority; the cast Black Knight resolves."
+      ],
+      "variants": [
+        {"label": "base", "polarity": "fires", "delta": "", "expected": "Dark Ritual resolves and A's mana pool holds {B}{B}{B}. A pays {B}{B} for Black Knight from the pool, one {B} stays in the pool, and Black Knight resolves onto A's battlefield."},
+        {"label": "ritual_countered", "polarity": "does_not_fire", "delta": "B responds to Dark Ritual by casting Counterspell (tapping both Islands) targeting it.", "expected": "Dark Ritual is countered and moves to A's graveyard without resolving. A's mana pool stays empty, Black Knight cannot be cast and stays in A's hand."}
+      ],
+      "cards": ["Swamp", "Island", "Dark Ritual", "Black Knight", "Counterspell"],
+      "forge_notes": ""
+    },
+    {
+      "id": "106.3-2",
+      "rules": ["106.3"],
+      "title": "A land's mana ability adds mana to its controller's pool",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {"A": 20, "B": 20},
+        "battlefield": {"A": ["Forest"], "B": []},
+        "hand": {"A": ["Llanowar Elves"]},
+        "graveyard": {}, "library": {}, "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A activates the mana ability of Forest (tapping it for {G}) to pay for Llanowar Elves and attempts to cast Llanowar Elves."
+      ],
+      "variants": [
+        {"label": "base", "polarity": "fires", "delta": "", "expected": "Legal: the mana ability adds {G} to A's pool, A casts Llanowar Elves, and it resolves onto A's battlefield."},
+        {"label": "forest_tapped", "polarity": "does_not_fire", "delta": "Forest starts the turn tapped.", "expected": "Not legal: the mana ability cannot be activated, no mana is added to A's pool, and Llanowar Elves cannot be cast."}
+      ],
+      "cards": ["Forest", "Llanowar Elves"],
+      "forge_notes": ""
+    },
+    {
+      "id": "106.4-1",
+      "rules": ["106.4"],
+      "title": "Unspent mana is lost when the step ends",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {"A": 20, "B": 20},
+        "battlefield": {"A": ["Mountain"], "B": []},
+        "hand": {"A": ["Shock"]},
+        "graveyard": {}, "library": {}, "exile": {},
+        "notes": "A has no source of mana besides Mountain."
+      },
+      "decisions": [
+        "A taps Mountain for {R}, which stays in A's mana pool, without casting anything.",
+        "A and B pass priority with an empty stack; the game moves to the beginning of combat step.",
+        "In the beginning of combat step A receives priority and attempts to cast Shock targeting B."
+      ],
+      "variants": [
+        {"label": "base", "polarity": "fires", "delta": "", "expected": "Not legal: the {R} was lost when main phase 1 ended, A's mana pool is empty and Mountain is tapped, so Shock cannot be cast. B stays at 20 life."},
+        {"label": "cast_in_same_step", "polarity": "does_not_fire", "delta": "A casts Shock targeting B in main phase 1, right after tapping Mountain, paying with the {R} still in the pool.", "expected": "Legal: the {R} is still in the pool, Shock is cast and resolves, and B goes to 18 life."}
+      ],
+      "cards": ["Mountain", "Shock"],
+      "forge_notes": ""
+    },
+    {
+      "id": "106.5-1",
+      "rules": ["106.5"],
+      "title": "A mana ability that would produce mana of an undefined color produces no mana",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {"A": 20, "B": 20},
+        "battlefield": {"A": ["Meteor Crater"], "B": []},
+        "hand": {"A": ["Llanowar Elves"]},
+        "graveyard": {}, "library": {}, "exile": {},
+        "notes": "Meteor Crater is a colorless land, so A controls no colored permanent."
+      },
+      "decisions": [
+        "A activates Meteor Crater's mana ability, choosing green if a color is available, and attempts to cast Llanowar Elves with the mana."
+      ],
+      "variants": [
+        {"label": "base", "polarity": "fires", "delta": "", "expected": "Not legal: A controls no colored permanent, so the ability produces no mana, A's pool stays empty and Llanowar Elves cannot be cast. Meteor Crater is tapped."},
+        {"label": "colorless_artifact", "polarity": "fires", "delta": "A also controls Sol Ring, a colorless artifact.", "expected": "Not legal: Sol Ring is colorless too, so the ability still produces no mana and Llanowar Elves cannot be cast."},
+        {"label": "green_permanent", "polarity": "does_not_fire", "delta": "A also controls Grizzly Bears, a green creature.", "expected": "Legal: Meteor Crater adds {G} (the color of Grizzly Bears), A casts Llanowar Elves, and it resolves onto A's battlefield."}
+      ],
+      "cards": ["Meteor Crater", "Llanowar Elves", "Sol Ring", "Grizzly Bears"],
+      "forge_notes": "Grizzly Bears and Sol Ring are on the battlefield only in the variant that names them."
+    },
+    {
+      "id": "106.6-1",
+      "rules": ["106.6"],
+      "title": "Restricted mana can be spent only on what its restriction allows",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {"A": 20, "B": 20},
+        "battlefield": {"A": ["Ancient Ziggurat"], "B": []},
+        "hand": {"A": ["Shock", "Raging Goblin"]},
+        "graveyard": {}, "library": {}, "exile": {},
+        "notes": "Ancient Ziggurat is A's only mana source. Its mana can be spent only to cast creature spells."
+      },
+      "decisions": [
+        "A activates Ancient Ziggurat's mana ability, choosing red, and attempts to cast Shock targeting B with that mana."
+      ],
+      "variants": [
+        {"label": "base", "polarity": "fires", "delta": "", "expected": "Not legal: the {R} can be spent only on a creature spell, so Shock cannot be cast with it. B stays at 20 life."},
+        {"label": "creature_spell", "polarity": "does_not_fire", "delta": "A attempts to cast Raging Goblin (a red creature spell) instead of Shock.", "expected": "Legal: the {R} may be spent on a creature spell, Raging Goblin is cast and resolves onto A's battlefield. B stays at 20 life."}
+      ],
+      "cards": ["Ancient Ziggurat", "Shock", "Raging Goblin"],
+      "forge_notes": ""
+    },
+    {
+      "id": "106.6-2",
+      "rules": ["106.6"],
+      "title": "Spending restricted mana can give the spell an additional effect",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {"A": 20, "B": 20},
+        "battlefield": {"A": ["Cavern of Souls", "Plains"], "B": ["Island", "Island"]},
+        "hand": {"A": ["Elite Vanguard"], "B": ["Counterspell"]},
+        "graveyard": {}, "library": {}, "exile": {},
+        "notes": "Cavern of Souls entered with the creature type Human chosen. Elite Vanguard is a Human Soldier."
+      },
+      "decisions": [
+        "A casts Elite Vanguard, paying {W} with Cavern of Souls (its colored-mana ability, choosing white).",
+        "B responds by casting Counterspell targeting Elite Vanguard, tapping both Islands.",
+        "Both players pass; Counterspell resolves, then the creature spell, if still on the stack, resolves."
+      ],
+      "variants": [
+        {"label": "base", "polarity": "fires", "delta": "", "expected": "Elite Vanguard can't be countered because mana from Cavern of Souls was spent on it: Counterspell resolves without countering it, Counterspell goes to B's graveyard, and Elite Vanguard (2/1) enters A's battlefield."},
+        {"label": "paid_with_plains", "polarity": "does_not_fire", "delta": "A pays {W} with Plains instead of Cavern of Souls.", "expected": "No restricted mana was spent, so Counterspell counters Elite Vanguard: both Elite Vanguard and Counterspell move to their owners' graveyards."}
+      ],
+      "cards": ["Cavern of Souls", "Plains", "Island", "Elite Vanguard", "Counterspell"],
+      "forge_notes": "The creature type chosen as Cavern of Souls enters must be set to Human in the setup."
+    },
+    {
+      "id": "106.6a-1",
+      "rules": ["106.6a"],
+      "title": "A mana-doubling replacement effect gives every added mana the source's restriction",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {"A": 20, "B": 20},
+        "battlefield": {"A": ["Ancient Ziggurat", "Mana Reflection"], "B": []},
+        "hand": {"A": ["Elite Vanguard", "Elite Vanguard", "Healing Salve"]},
+        "graveyard": {}, "library": {}, "exile": {},
+        "notes": "Ancient Ziggurat is A's only mana source. Mana Reflection doubles the mana produced when A taps a permanent for mana."
+      },
+      "decisions": [
+        "A activates Ancient Ziggurat's mana ability, choosing white; with Mana Reflection it adds {W}{W}.",
+        "A casts the first Elite Vanguard, paying with one {W}; it resolves.",
+        "A then attempts to cast Healing Salve with the remaining {W}, choosing the mode 'target player gains 3 life' and targeting A."
+      ],
+      "variants": [
+        {"label": "base", "polarity": "fires", "delta": "", "expected": "The first Elite Vanguard is legal and resolves. Healing Salve is not legal: the second {W} also can be spent only on a creature spell, so it cannot pay for Healing Salve. A stays at 20 life."},
+        {"label": "second_creature", "polarity": "other", "delta": "A attempts to cast the second Elite Vanguard instead of Healing Salve.", "expected": "Legal: the second {W} is restricted to creature spells and Elite Vanguard is a creature spell, so both Elite Vanguards resolve onto A's battlefield."},
+        {"label": "unrestricted_source", "polarity": "does_not_fire", "delta": "A's land is Plains instead of Ancient Ziggurat.", "expected": "Legal: Mana Reflection makes Plains add {W}{W} with no restriction, both Elite Vanguard and Healing Salve are cast and resolve, and A goes to 23 life."}
+      ],
+      "cards": ["Ancient Ziggurat", "Mana Reflection", "Plains", "Elite Vanguard", "Healing Salve"],
+      "forge_notes": "Plains is on the battlefield only in the variant that names it."
+    },
+    {
+      "id": "106.7-1",
+      "rules": ["106.7"],
+      "title": "A land that copies what an opponent's lands could produce yields only those types",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {"A": 20, "B": 20},
+        "battlefield": {"A": ["Exotic Orchard"], "B": ["Forest"]},
+        "hand": {"A": ["Llanowar Elves"]},
+        "graveyard": {}, "library": {}, "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A activates Exotic Orchard's mana ability, choosing green if a color is available, and attempts to cast Llanowar Elves with the mana."
+      ],
+      "variants": [
+        {"label": "base", "polarity": "fires", "delta": "", "expected": "Legal: B's Forest could produce {G}, so Exotic Orchard adds {G}, A casts Llanowar Elves, and it resolves onto A's battlefield."},
+        {"label": "opponent_mountain", "polarity": "does_not_fire", "delta": "B's land is Mountain instead of Forest.", "expected": "Not legal: Exotic Orchard can add only {R}, so {G} is not available and Llanowar Elves cannot be cast."},
+        {"label": "opponent_no_lands", "polarity": "does_not_fire", "delta": "B controls no lands.", "expected": "Not legal: no type of mana is defined, Exotic Orchard produces no mana, and Llanowar Elves cannot be cast."}
+      ],
+      "cards": ["Exotic Orchard", "Forest", "Mountain", "Llanowar Elves"],
+      "forge_notes": "Forest and Mountain are on B's battlefield only in the variants that name them."
+    },
+    {
+      "id": "106.12a-1",
+      "rules": ["106.12", "106.12a"],
+      "title": "A trigger for permanents tapped for a type of mana fires only when that mana is produced by tapping",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {"A": 20, "B": 20},
+        "battlefield": {"A": ["Forsaken Monument", "Sol Ring", "Llanowar Elves", "Ashnod's Altar"], "B": []},
+        "hand": {}, "graveyard": {}, "library": {}, "exile": {},
+        "notes": "Llanowar Elves has been under A's control since before the turn began. Forsaken Monument reads: whenever you tap a permanent for {C}, add an additional {C}."
+      },
+      "decisions": [
+        "A activates Sol Ring's mana ability, tapping it for {C}{C}.",
+        "No other action is taken; A's mana pool is read after the mana ability has resolved."
+      ],
+      "variants": [
+        {"label": "base", "polarity": "fires", "delta": "", "expected": "Forsaken Monument's trigger fires because Sol Ring was tapped for {C}; A's pool holds {C}{C}{C}."},
+        {"label": "tapped_for_green", "polarity": "does_not_fire", "delta": "A taps Llanowar Elves for {G} instead of Sol Ring.", "expected": "The trigger does not fire because the permanent was tapped for {G}, not {C}; A's pool holds only {G}."},
+        {"label": "no_tap_cost", "polarity": "does_not_fire", "delta": "A sacrifices Llanowar Elves to Ashnod's Altar for {C}{C} instead of tapping Sol Ring.", "expected": "The trigger does not fire because Ashnod's Altar's ability has no {T} in its cost, so no permanent was tapped for mana; A's pool holds only {C}{C}."}
+      ],
+      "cards": ["Forsaken Monument", "Sol Ring", "Llanowar Elves", "Ashnod's Altar"],
+      "forge_notes": "Forsaken Monument also pumps colorless creatures and gains life on colorless spells; nothing in the scenario is colorless creature or cast."
+    },
+    {
+      "id": "106.12b-1",
+      "rules": ["106.12b"],
+      "title": "A replacement effect for permanents tapped for mana changes the mana produced",
+      "record_kind": "rewrite",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {"A": 20, "B": 20},
+        "battlefield": {"A": ["Forest", "Mana Reflection", "Llanowar Elves", "Ashnod's Altar"], "B": []},
+        "hand": {"A": ["Grizzly Bears"]},
+        "graveyard": {}, "library": {}, "exile": {},
+        "notes": "Llanowar Elves has been under A's control since before the turn began."
+      },
+      "decisions": [
+        "A activates Forest's mana ability, tapping it for {G}.",
+        "A casts Grizzly Bears, paying {1}{G} from the mana pool if the pool holds that much; Grizzly Bears resolves."
+      ],
+      "variants": [
+        {"label": "base", "polarity": "fires", "delta": "", "expected": "Mana Reflection replaces the production: Forest adds {G}{G} instead of {G}. A pays {1}{G} for Grizzly Bears and it resolves onto A's battlefield."},
+        {"label": "no_tap_cost", "polarity": "does_not_fire", "delta": "A sacrifices Llanowar Elves to Ashnod's Altar for {C}{C} instead of tapping Forest.", "expected": "Mana Reflection does not apply because nothing was tapped for mana: A's pool holds exactly {C}{C} (not four), and Grizzly Bears cannot be cast because no {G} is available."}
+      ],
+      "cards": ["Forest", "Mana Reflection", "Llanowar Elves", "Ashnod's Altar", "Grizzly Bears"],
+      "forge_notes": "Forge's Mana Reflection script (Event$ ProduceMana, ValidCard$ Permanent) does not check for a tap cost, so Forge may double Ashnod's Altar's mana; the expected outcome follows the rule text."
+    },
+    {
+      "id": "106.13-1",
+      "rules": ["106.13"],
+      "title": "Drain Power moves the other player's unspent mana to its caster, restrictions intact",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {"A": 20, "B": 20},
+        "battlefield": {"A": ["Island", "Island"], "B": ["Mountain"]},
+        "hand": {"A": ["Drain Power", "Shock"]},
+        "graveyard": {}, "library": {}, "exile": {},
+        "notes": "A's lands are only the two Islands; A has no way to produce {R} itself."
+      },
+      "decisions": [
+        "A casts Drain Power targeting B, tapping both Islands.",
+        "B passes priority; Drain Power resolves: B activates the mana ability of each land B controls, choosing red where there is a choice, then B loses all unspent mana and A adds the mana lost this way.",
+        "A attempts to cast Shock targeting B with the mana in A's pool."
+      ],
+      "variants": [
+        {"label": "base", "polarity": "fires", "delta": "", "expected": "B's Mountain is tapped for {R}, B's pool is emptied and A's pool gets {R}. Shock is cast with it and resolves: B goes to 18 life."},
+        {"label": "no_mana", "polarity": "does_not_fire", "delta": "B's Mountain starts tapped.", "expected": "B has no unspent mana to lose, so A adds nothing. Shock cannot be cast, and B stays at 20 life."},
+        {"label": "restricted_mana", "polarity": "other", "delta": "B's land is Ancient Ziggurat instead of Mountain, tapped for {R}.", "expected": "A's pool gets {R} that can be spent only on a creature spell, so Shock cannot be cast with it. B stays at 20 life."}
+      ],
+      "cards": ["Island", "Mountain", "Ancient Ziggurat", "Drain Power", "Shock"],
+      "forge_notes": "Forge's Drain Power script first makes the target player activate a mana ability of each land they control, matching the current Oracle text, so B's untapped land always produces mana; the no_mana variant relies on B's land being tapped."
+    }
+  ]
+}

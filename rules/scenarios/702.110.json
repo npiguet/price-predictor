@@ -1,0 +1,149 @@
+{
+  "unit": "702.110",
+  "verified": true,
+  "review": [
+    "702.110b: triaged definitional, but it decides whether a 'when this exploits a creature' trigger fires; reclassified mechanical/direct/trigger and added scenario 702.110b-1 contrasting a sacrifice to the exploit trigger with a sacrifice to Bloodthrone Vampire."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.110a-1",
+      "rules": [
+        "702.110a"
+      ],
+      "title": "Exploit lets the controller sacrifice a creature as the enters trigger resolves",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Swamp",
+            "Swamp",
+            "Swamp",
+            "Swamp",
+            "Grizzly Bears"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Vulturous Aven"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Swamp",
+            "Swamp",
+            "Swamp"
+          ]
+        },
+        "exile": {},
+        "notes": "Vulturous Aven is a 2/3 flier with exploit: when it exploits a creature, A draws two cards and loses 2 life."
+      },
+      "decisions": [
+        "A casts Vulturous Aven, tapping all four Swamps; the creature spell resolves.",
+        "The exploit trigger goes on the stack; both players pass.",
+        "As the trigger resolves, A sacrifices Grizzly Bears."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears is sacrificed and goes to A's graveyard. The Aven exploits a creature: A draws two cards and loses 2 life, so A is at 18 and the Aven stays on the battlefield."
+        },
+        {
+          "label": "decline",
+          "polarity": "does_not_fire",
+          "delta": "A declines to sacrifice a creature as the trigger resolves.",
+          "expected": "Grizzly Bears stays on the battlefield and Vulturous Aven stays too. A draws no cards and loses no life, and stays at 20."
+        },
+        {
+          "label": "sacrifice-itself",
+          "polarity": "fires",
+          "delta": "A sacrifices Vulturous Aven itself instead of Grizzly Bears.",
+          "expected": "Vulturous Aven goes to A's graveyard, Grizzly Bears stays on the battlefield, and the Aven's trigger still counts as exploiting a creature: A draws two cards and is at 18."
+        }
+      ],
+      "cards": [
+        "Swamp",
+        "Vulturous Aven",
+        "Grizzly Bears"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.110b-1",
+      "rules": [
+        "702.110b"
+      ],
+      "title": "A creature exploits only a creature sacrificed as its exploit ability resolves",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Swamp",
+            "Swamp",
+            "Swamp",
+            "Swamp",
+            "Grizzly Bears",
+            "Bloodthrone Vampire"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Vulturous Aven"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Swamp",
+            "Swamp",
+            "Swamp"
+          ]
+        },
+        "exile": {},
+        "notes": "Vulturous Aven: when it exploits a creature, A draws two cards and loses 2 life. Bloodthrone Vampire: sacrifice a creature: it gets +2/+2 until end of turn."
+      },
+      "decisions": [
+        "A casts Vulturous Aven, tapping all four Swamps; the creature spell resolves and its exploit trigger goes on the stack.",
+        "Both players pass; as the exploit trigger resolves, A sacrifices Grizzly Bears if Grizzly Bears is still on the battlefield, and otherwise sacrifices nothing."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears goes to A's graveyard. Vulturous Aven's exploits-a-creature trigger fires: A draws two cards and is at 18."
+        },
+        {
+          "label": "sacrificed-elsewhere",
+          "polarity": "does_not_fire",
+          "delta": "With the exploit trigger on the stack, A sacrifices Grizzly Bears to Bloodthrone Vampire's ability instead.",
+          "expected": "Grizzly Bears goes to A's graveyard and Bloodthrone Vampire is 3/3 until end of turn. The exploit trigger resolves with no sacrifice and the exploits-a-creature trigger does not fire: A draws no cards and stays at 20."
+        }
+      ],
+      "cards": [
+        "Swamp",
+        "Vulturous Aven",
+        "Grizzly Bears",
+        "Bloodthrone Vampire"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

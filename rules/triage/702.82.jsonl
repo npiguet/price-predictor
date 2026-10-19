@@ -1,0 +1,4 @@
+{"id": "702.82", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.82a", "category": "mechanical", "observability": "direct", "record_kinds": ["resolution", "continuous"], "outcome": "A devour permanent enters with N +1/+1 counters per creature sacrificed as it enters.", "note": ""}
+{"id": "702.82b", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.82c", "category": "mechanical", "observability": "direct", "record_kinds": ["resolution", "continuous"], "outcome": "Devour with a quality enters with N +1/+1 counters per sacrificed permanent of that quality.", "note": ""}

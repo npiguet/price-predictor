@@ -1,0 +1,2 @@
+{"id": "702.147", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.147a", "category": "mechanical", "observability": "direct", "record_kinds": ["playability", "trigger"], "outcome": "A creature with decayed cannot be declared as a blocker, and when it attacks it is sacrificed at end of combat.", "note": ""}

@@ -1,0 +1,81 @@
+{
+  "unit": "702.125",
+  "verified": true,
+  "review": [
+    "702.125a-1: the only does_not_fire variant (five lands) still had undaunted applying, so nothing in it switched the rule off; added no_undaunted, a same-cost {6}{W} sorcery without undaunted that six lands cannot cast, and relabelled five_lands as other (it shows the reduction is exactly {1})."
+  ],
+  "skipped": [
+    {
+      "id": "702.125c",
+      "reason": "cannot be illustrated: no Forge card has two instances of undaunted on one spell (Durnan of the Yawning Portal grants undaunted only to creature cards cast from exile, and no creature card has printed undaunted); the single-instance reduction is covered by 702.125a-1"
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "702.125a-1",
+      "rules": [
+        "702.125a"
+      ],
+      "title": "Undaunted makes a spell cost {1} less for each opponent",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Sublime Exhalation"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Sublime Exhalation, paying its cost by tapping all six Plains.",
+        "Both players pass; Sublime Exhalation resolves."
+      ],
+      "variants": [
+        {
+          "label": "six_lands",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The total cost is {6}{W} reduced by {1} (one opponent) to {5}{W}, six mana. Casting is legal and Sublime Exhalation resolves. Sublime Exhalation moves to A's graveyard."
+        },
+        {
+          "label": "no_undaunted",
+          "polarity": "does_not_fire",
+          "delta": "A's hand holds Devout Invocation (a {6}{W} sorcery without undaunted) instead of Sublime Exhalation.",
+          "expected": "Devout Invocation's cost is not reduced: it costs {6}{W}, seven mana, and A has only six lands. Casting it is not legal and it stays in A's hand."
+        },
+        {
+          "label": "five_lands",
+          "polarity": "other",
+          "delta": "A controls five Plains instead of six.",
+          "expected": "The reduced cost {5}{W} is six mana and A has only five lands. Casting Sublime Exhalation is not legal and it stays in A's hand."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Sublime Exhalation",
+        "Devout Invocation"
+      ],
+      "forge_notes": "Variant five_lands changes the number of Plains in the base setup from six to five."
+    }
+  ]
+}

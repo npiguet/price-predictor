@@ -1,0 +1,3 @@
+{"id": "702.105", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.105a", "category": "mechanical", "observability": "direct", "record_kinds": ["trigger", "resolution"], "outcome": "When a creature with dethrone attacks the player with the most life or tied for most, it gets a +1/+1 counter; attacking a player with less life does not fire it.", "note": ""}
+{"id": "702.105b", "category": "mechanical", "observability": "direct", "record_kinds": ["trigger"], "outcome": "Each instance of dethrone triggers separately.", "note": ""}

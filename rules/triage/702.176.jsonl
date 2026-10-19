@@ -1,0 +1,2 @@
+{"id": "702.176", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.176a", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution", "continuous", "trigger"], "outcome": "A spell cast for its impending cost enters with N time counters, is not a creature while it has one, and loses one at each of its controller's end steps.", "note": ""}

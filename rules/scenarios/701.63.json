@@ -1,0 +1,62 @@
+{
+  "unit": "701.63",
+  "verified": true,
+  "review": [
+    "triage: rules/triage/701.63.jsonl was missing, so validate never checked this file; wrote it."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "701.63a-1",
+      "rules": ["701.63a"],
+      "title": "Endure N puts N +1/+1 counters on the permanent or creates an N/N Spirit",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {"A": 20, "B": 20},
+        "battlefield": {"A": [{"card": "Krumar Initiate", "summoning_sick": false}, "Swamp", "Swamp", "Swamp"], "B": ["Mountain"]},
+        "hand": {"B": ["Shock"]},
+        "graveyard": {}, "library": {}, "exile": {},
+        "notes": "Krumar Initiate is a 2/2 and is untapped."
+      },
+      "decisions": [
+        "A activates Krumar Initiate with X=2 ({2}{B}, {T}, pay 2 life), tapping the three Swamps. A's life is 18.",
+        "B passes priority; the ability resolves and Krumar Initiate endures 2.",
+        "A chooses to put two +1/+1 counters on Krumar Initiate."
+      ],
+      "variants": [
+        {"label": "base", "polarity": "fires", "delta": "", "expected": "Krumar Initiate has two +1/+1 counters and is a 4/4. No token is created. A's life is 18."},
+        {"label": "token", "polarity": "other", "delta": "A chooses not to put counters on Krumar Initiate.", "expected": "A creates a 2/2 white Spirit creature token. Krumar Initiate has no counters and is a 2/2. A's life is 18."},
+        {"label": "left_battlefield", "polarity": "does_not_fire", "delta": "In response to the ability, B casts Shock targeting Krumar Initiate, tapping Mountain, and Shock resolves first.", "expected": "Krumar Initiate dies from 2 damage and moves to A's graveyard. When the ability resolves, counters cannot be put on it, so A creates a 2/2 white Spirit creature token. A's life is 18."}
+      ],
+      "cards": ["Krumar Initiate", "Swamp", "Mountain", "Shock"],
+      "forge_notes": "Krumar Initiate's ability is sorcery speed and has Cost$ X B T PayLife<X>. In the left_battlefield variant Forge's EndureEffect creates the token when the card is no longer on the battlefield."
+    },
+    {
+      "id": "701.63b-1",
+      "rules": ["701.63b"],
+      "title": "Endure 0 does nothing",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {"A": 20, "B": 20},
+        "battlefield": {"A": [{"card": "Krumar Initiate", "summoning_sick": false}, "Swamp", "Swamp"], "B": []},
+        "hand": {}, "graveyard": {}, "library": {}, "exile": {},
+        "notes": "Krumar Initiate is a 2/2 and is untapped."
+      },
+      "decisions": [
+        "A activates Krumar Initiate with X=1 ({1}{B}, {T}, pay 1 life), tapping both Swamps. A's life is 19.",
+        "Both players pass; the ability resolves and Krumar Initiate endures 1.",
+        "A chooses to put one +1/+1 counter on Krumar Initiate."
+      ],
+      "variants": [
+        {"label": "base", "polarity": "fires", "delta": "", "expected": "Krumar Initiate has one +1/+1 counter and is a 3/3. No token is created. A's life is 19."},
+        {"label": "endure_zero", "polarity": "does_not_fire", "delta": "A activates Krumar Initiate with X=0 ({B}, {T}, pay 0 life) instead of X=1, tapping one Swamp.", "expected": "Nothing happens when the ability resolves: Krumar Initiate has no counters and is a 2/2, no token is created, and A's life is 20."}
+      ],
+      "cards": ["Krumar Initiate", "Swamp"],
+      "forge_notes": "In the endure_zero variant the activation has no counter or token choice to make."
+    }
+  ]
+}

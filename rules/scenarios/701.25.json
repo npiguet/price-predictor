@@ -1,0 +1,243 @@
+{
+  "unit": "701.25",
+  "verified": true,
+  "review": [
+    "701.25a-1: the decisions had A surveil before the trigger resolved; reordered so the surveil happens on resolution.",
+    "701.25c-1: the one-artifact expectation had the Snitch trigger resolve before Cerebral Download's draw; the draw happens during resolution and the trigger resolves afterwards. Added the decision that resolves the trigger."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "701.25a-1",
+      "rules": [
+        "701.25a"
+      ],
+      "title": "Surveil 2 puts chosen cards into the graveyard and leaves the rest on top",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Citywatch Sphinx",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            "Swamp",
+            "Swamp"
+          ]
+        },
+        "hand": {
+          "B": [
+            "Terror"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Forest",
+            "Mountain",
+            "Island"
+          ]
+        },
+        "exile": {},
+        "notes": "Library lists are top first."
+      },
+      "decisions": [
+        "A passes priority with an empty stack.",
+        "B casts Terror targeting Citywatch Sphinx, tapping Swamp and Swamp.",
+        "Both players pass; Terror resolves and Citywatch Sphinx dies.",
+        "Citywatch Sphinx's trigger goes on the stack; both players pass.",
+        "The trigger resolves: A surveils 2, looks at Forest and Mountain, puts Forest into the graveyard and Mountain on top."
+      ],
+      "variants": [
+        {
+          "label": "one-to-graveyard",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "A's graveyard holds Citywatch Sphinx and Forest. A's library is Mountain, Island from the top."
+        },
+        {
+          "label": "keep-both",
+          "polarity": "does_not_fire",
+          "delta": "A keeps both cards on top, in their current order.",
+          "expected": "A's graveyard holds only Citywatch Sphinx. A's library is Forest, Mountain, Island from the top."
+        },
+        {
+          "label": "both-to-graveyard",
+          "polarity": "fires",
+          "delta": "A puts both Forest and Mountain into the graveyard.",
+          "expected": "A's graveyard holds Citywatch Sphinx, Forest and Mountain. A's library is Island."
+        }
+      ],
+      "cards": [
+        "Citywatch Sphinx",
+        "Swamp",
+        "Terror",
+        "Forest",
+        "Mountain",
+        "Island"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "701.25c-1",
+      "rules": [
+        "701.25c"
+      ],
+      "title": "Surveil 0 is not a surveil event",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Whispering Snitch",
+              "summoning_sick": false
+            },
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Cerebral Download"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest"
+          ]
+        },
+        "exile": {},
+        "notes": "Library lists are top first. A controls no artifact."
+      },
+      "decisions": [
+        "A casts Cerebral Download, tapping five Islands.",
+        "Both players pass; Cerebral Download resolves.",
+        "A surveils X, X being the number of artifacts A controls, keeping any looked-at card on top.",
+        "A draws three cards.",
+        "If Whispering Snitch triggers, both players pass and the trigger resolves."
+      ],
+      "variants": [
+        {
+          "label": "zero-artifacts",
+          "polarity": "does_not_fire",
+          "delta": "",
+          "expected": "A surveils 0: no surveil event occurs and Whispering Snitch does not trigger. A draws three Forests; life totals stay 20 and 20."
+        },
+        {
+          "label": "one-artifact",
+          "polarity": "fires",
+          "delta": "A also controls Ornithopter.",
+          "expected": "A surveils 1, keeping the Forest on top, and draws three Forests. Whispering Snitch triggers and its trigger resolves after Cerebral Download: B takes 1 damage (19) and A gains 1 life (21)."
+        }
+      ],
+      "cards": [
+        "Whispering Snitch",
+        "Island",
+        "Cerebral Download",
+        "Forest",
+        "Ornithopter"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "701.25d-1",
+      "rules": [
+        "701.25d"
+      ],
+      "title": "A surveil trigger fires even if no card could be moved",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Citywatch Sphinx",
+              "summoning_sick": false
+            },
+            {
+              "card": "Whispering Snitch",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            "Swamp",
+            "Swamp",
+            "Plains"
+          ]
+        },
+        "hand": {
+          "B": [
+            "Terror"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "A's library is empty. B's Plains is used only in the last variant."
+      },
+      "decisions": [
+        "A passes priority with an empty stack.",
+        "B casts Terror targeting Citywatch Sphinx, tapping Swamp and Swamp.",
+        "Both players pass; Terror resolves and Citywatch Sphinx dies.",
+        "Its trigger surveils 2 on A's empty library.",
+        "Whispering Snitch's trigger goes on the stack and resolves."
+      ],
+      "variants": [
+        {
+          "label": "empty-library",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The surveil looks at no card and moves nothing, and Whispering Snitch triggers: B takes 1 damage (19) and A gains 1 life (21)."
+        },
+        {
+          "label": "two-cards",
+          "polarity": "fires",
+          "delta": "A's library holds Forest and Forest, and A puts both into the graveyard.",
+          "expected": "Both Forests move to A's graveyard after Citywatch Sphinx, then Whispering Snitch triggers: B 19, A 21."
+        },
+        {
+          "label": "no-death",
+          "polarity": "does_not_fire",
+          "delta": "B's hand holds Swords to Plowshares instead of Terror, and B casts it targeting Citywatch Sphinx, tapping Plains.",
+          "expected": "Citywatch Sphinx is exiled and does not die, so no surveil occurs and Whispering Snitch does not trigger. A gains 5 life (25) from Swords to Plowshares and B stays at 20."
+        }
+      ],
+      "cards": [
+        "Citywatch Sphinx",
+        "Whispering Snitch",
+        "Swamp",
+        "Plains",
+        "Terror",
+        "Swords to Plowshares"
+      ],
+      "forge_notes": "A's library is empty throughout; A must not draw during the scenario."
+    }
+  ]
+}

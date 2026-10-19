@@ -1,0 +1,124 @@
+{
+  "unit": "702.71",
+  "verified": true,
+  "review": [],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.71a-1",
+      "rules": [
+        "702.71a"
+      ],
+      "title": "Transfigure sacrifices the permanent and fetches a creature of the same mana value",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Fleshwrither",
+            "Swamp",
+            "Swamp",
+            "Swamp"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Hill Giant",
+            "Grizzly Bears"
+          ]
+        },
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A activates transfigure of Fleshwrither, tapping three Swamps for {1}{B}{B} and sacrificing Fleshwrither as part of the cost.",
+        "Both players pass; the ability resolves. A searches the library for a creature card with mana value 4 and puts it onto the battlefield, then shuffles."
+      ],
+      "variants": [
+        {
+          "label": "matching_value",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Fleshwrither is in A's graveyard. Hill Giant (mana value 4) enters the battlefield under A's control. A's library is shuffled and holds only Grizzly Bears."
+        },
+        {
+          "label": "no_matching_value",
+          "polarity": "does_not_fire",
+          "delta": "The library holds Craw Wurm (mana value 6) instead of Hill Giant.",
+          "expected": "Fleshwrither is in A's graveyard but no creature card has mana value 4, so nothing enters the battlefield. A's library is shuffled and still holds Craw Wurm and Grizzly Bears."
+        }
+      ],
+      "cards": [
+        "Fleshwrither",
+        "Swamp",
+        "Hill Giant",
+        "Grizzly Bears",
+        "Craw Wurm"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.71a-2",
+      "rules": [
+        "702.71a"
+      ],
+      "title": "Transfigure may be activated only as a sorcery",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Fleshwrither",
+            "Swamp",
+            "Swamp",
+            "Swamp"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Hill Giant"
+          ]
+        },
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "Evaluate whether A may activate transfigure of Fleshwrither with the stack empty and three untapped Swamps."
+      ],
+      "variants": [
+        {
+          "label": "main_phase",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The activation is legal (can_play true)."
+        },
+        {
+          "label": "during_combat",
+          "polarity": "does_not_fire",
+          "delta": "The step is declare_attackers instead of main1.",
+          "expected": "The activation is not legal (can_play false), because transfigure may be activated only as a sorcery."
+        }
+      ],
+      "cards": [
+        "Fleshwrither",
+        "Swamp",
+        "Hill Giant"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

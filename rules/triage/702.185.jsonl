@@ -1,0 +1,4 @@
+{"id": "702.185", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.185a", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution", "trigger"], "outcome": "A permanent spell cast for its warp cost is exiled at the beginning of the next end step and can be cast from exile on later turns.", "note": ""}
+{"id": "702.185b", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.185c", "category": "mechanical", "observability": "needs_new_fields", "record_kinds": ["resolution"], "outcome": "A condition asking whether a spell was warped this turn is true after a spell was cast for its warp cost.", "note": ""}

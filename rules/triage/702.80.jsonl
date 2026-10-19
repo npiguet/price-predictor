@@ -1,0 +1,5 @@
+{"id": "702.80", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.80a", "category": "mechanical", "observability": "direct", "record_kinds": ["resolution", "rewrite"], "outcome": "Damage from a wither source to a creature is not marked and instead puts that many -1/-1 counters on it.", "note": ""}
+{"id": "702.80b", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution", "rewrite"], "outcome": "Last known information decides whether a source that left its zone had wither.", "note": ""}
+{"id": "702.80c", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution", "rewrite"], "outcome": "Wither applies from whatever zone the source deals damage.", "note": ""}
+{"id": "702.80d", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}

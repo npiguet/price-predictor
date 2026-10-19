@@ -1,0 +1,259 @@
+{
+  "unit": "702.165",
+  "verified": true,
+  "review": [
+    "702.165c-1: the Brute Strength variant gave Assailant trample after the backup trigger was already on the stack, so 702.165d alone excluded it and 702.165c was never what flipped the outcome; rebuilt with Herald of Dromoka granting vigilance before the trigger goes on the stack, contrasted with Sigiled Sentinel printing vigilance below backup.",
+    "702.165d-1: target_removed (Shock kills the target, trigger fizzles) illustrated 608.2b, not 702.165d; variant dropped with Shock and B's Mountain, and the missing does_not_fire branch explained in forge_notes."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.165a-1",
+      "rules": [
+        "702.165a"
+      ],
+      "title": "Backup puts counters on the target and grants it the abilities printed below backup",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Forest",
+            "Forest",
+            "Forest",
+            "Grizzly Bears"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Serpent-Blade Assailant"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Serpent-Blade Assailant is {2}{G} 2/1 with backup 1 and deathtouch printed below it. Grizzly Bears (2/2) has been under A's control since earlier turns."
+      },
+      "decisions": [
+        "A casts Serpent-Blade Assailant, tapping three Forests. It resolves and enters.",
+        "The backup trigger targets Grizzly Bears. Both players pass; it resolves.",
+        "The turn proceeds to the cleanup step."
+      ],
+      "variants": [
+        {
+          "label": "another_creature",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears gets a +1/+1 counter (3/3) and gains deathtouch until end of turn; Serpent-Blade Assailant stays a 2/1 with deathtouch. At the cleanup step Grizzly Bears loses deathtouch and keeps its counter."
+        },
+        {
+          "label": "itself",
+          "polarity": "does_not_fire",
+          "delta": "The backup trigger targets Serpent-Blade Assailant itself.",
+          "expected": "Serpent-Blade Assailant gets a +1/+1 counter (3/2). Nothing is granted since the target is not another creature; it keeps its own deathtouch. Grizzly Bears stays a 2/2 with no deathtouch."
+        }
+      ],
+      "cards": [
+        "Forest",
+        "Grizzly Bears",
+        "Serpent-Blade Assailant"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.165b-1",
+      "rules": [
+        "702.165b"
+      ],
+      "title": "A copy of a backup creature keeps the printed ability order and its backup grants the abilities below it",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Serpent-Blade Assailant",
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Clone"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Serpent-Blade Assailant and Grizzly Bears have been under A's control since earlier turns."
+      },
+      "decisions": [
+        "A casts Clone, tapping four Islands. It resolves and A chooses to have it enter as a copy of Serpent-Blade Assailant.",
+        "The backup trigger of the copy targets Grizzly Bears. Both players pass; it resolves."
+      ],
+      "variants": [
+        {
+          "label": "copy_of_backup",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Clone enters as a Serpent-Blade Assailant copy (2/1) and its backup trigger fires. Grizzly Bears gets a +1/+1 counter (3/3) and gains deathtouch until end of turn."
+        },
+        {
+          "label": "copy_of_bears",
+          "polarity": "does_not_fire",
+          "delta": "A has Clone enter as a copy of Grizzly Bears.",
+          "expected": "Clone enters as a 2/2 Grizzly Bears copy with no backup. No trigger fires and the original Grizzly Bears is a 2/2 with no counter and no deathtouch."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Serpent-Blade Assailant",
+        "Grizzly Bears",
+        "Clone"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.165c-1",
+      "rules": [
+        "702.165c"
+      ],
+      "title": "Backup grants only abilities printed on the creature, not abilities it has gained",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Forest",
+            "Forest",
+            "Plains",
+            "Herald of Dromoka",
+            "Grizzly Bears"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Serpent-Blade Assailant"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Serpent-Blade Assailant is a {2}{G} 2/1 Elf Warrior with backup 1 and deathtouch printed below it. Herald of Dromoka (2/2 Human Warrior, vigilance) gives other Warrior creatures A controls vigilance, so Assailant has vigilance it did not print from the moment it enters. Grizzly Bears (2/2 Bear, not a Warrior) and Herald have been under A's control since earlier turns."
+      },
+      "decisions": [
+        "A casts Serpent-Blade Assailant, tapping Forest, Forest and Plains. It resolves and enters.",
+        "The backup trigger targets Grizzly Bears and goes on the stack. Both players pass; it resolves."
+      ],
+      "variants": [
+        {
+          "label": "gained_vigilance",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears gets a +1/+1 counter (3/3) and gains deathtouch until end of turn. It does not gain vigilance, which Assailant has only from Herald of Dromoka. Serpent-Blade Assailant is a 2/1 with deathtouch and vigilance."
+        },
+        {
+          "label": "printed_vigilance",
+          "polarity": "does_not_fire",
+          "delta": "A's hand holds Sigiled Sentinel ({2}{W} 2/2 Human Knight with backup 1 and vigilance printed below it) instead of Serpent-Blade Assailant, cast by tapping Forest, Forest and Plains.",
+          "expected": "Grizzly Bears gets a +1/+1 counter (3/3) and gains vigilance until end of turn, since vigilance is printed below backup on Sigiled Sentinel."
+        }
+      ],
+      "cards": [
+        "Forest",
+        "Plains",
+        "Herald of Dromoka",
+        "Grizzly Bears",
+        "Serpent-Blade Assailant",
+        "Sigiled Sentinel"
+      ],
+      "forge_notes": "Forge grants a backup creature's printed abilities from the BackupAbility SVar, so a keyword from a static effect such as Herald of Dromoka's is not part of the grant."
+    },
+    {
+      "id": "702.165d-1",
+      "rules": [
+        "702.165d"
+      ],
+      "title": "The granted abilities are fixed when the backup ability goes on the stack",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Forest",
+            "Forest",
+            "Forest",
+            "Grizzly Bears"
+          ],
+          "B": [
+            "Island",
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Serpent-Blade Assailant"
+          ],
+          "B": [
+            "Turn to Frog"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Serpent-Blade Assailant is {2}{G} 2/1 with backup 1 and deathtouch printed below it. Grizzly Bears (2/2) has been under A's control since earlier turns. B holds Turn to Frog {1}{U} and has two Islands; B passes in the base case."
+      },
+      "decisions": [
+        "A casts Serpent-Blade Assailant, tapping three Forests. It resolves and enters.",
+        "The backup trigger targets Grizzly Bears and goes on the stack.",
+        "Both players pass until the stack is empty, unless the variant has B respond."
+      ],
+      "variants": [
+        {
+          "label": "no_response",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears gets a +1/+1 counter (3/3) and gains deathtouch until end of turn."
+        },
+        {
+          "label": "source_loses_abilities",
+          "polarity": "fires",
+          "delta": "In response to the backup trigger B casts Turn to Frog on Serpent-Blade Assailant, tapping two Islands.",
+          "expected": "Serpent-Blade Assailant becomes a 1/1 blue Frog with no abilities until end of turn. The backup trigger still resolves: Grizzly Bears gets a +1/+1 counter (3/3) and gains deathtouch until end of turn, as the abilities were determined when the trigger went on the stack."
+        }
+      ],
+      "cards": [
+        "Forest",
+        "Island",
+        "Grizzly Bears",
+        "Serpent-Blade Assailant",
+        "Turn to Frog"
+      ],
+      "forge_notes": "702.165d has no does_not_fire branch: it only says the granted set does not change, and an ability the source gains after the trigger is on the stack is unprinted, so 702.165c already excludes it."
+    }
+  ]
+}

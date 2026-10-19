@@ -1,0 +1,196 @@
+{
+  "unit": "721",
+  "verified": true,
+  "review": [
+    "721.2a-1: base expected called the noncreature Frigate '3/5 printed'; a noncreature permanent has no power or toughness, reworded.",
+    "721.4-1: does_not_fire variant bears_tapped flipped cost payability (no untapped creature to tap), not 721.4; dropped it and noted that the unconditional rule has no does_not_fire branch."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "721.2a-1",
+      "rules": [
+        "721.2a"
+      ],
+      "title": "A station symbol grants its abilities only while the permanent has enough charge counters",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Lumen-Class Frigate",
+              "counters": {
+                "charge": 2
+              }
+            },
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            "Hill Giant"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Lumen-Class Frigate has STATION 2+ (other creatures you control get +1/+1) and STATION 12+ (flying, lifelink, creature). The counters are charge counters."
+      },
+      "decisions": [
+        "No spell or ability is used; both players pass priority with the stack empty and the board is observed after the state-based check."
+      ],
+      "variants": [
+        {
+          "label": "two_counters",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Lumen-Class Frigate has 2 charge counters, meets STATION 2+ and gives its anthem: Grizzly Bears is 3/3. Lumen-Class Frigate is a noncreature artifact with no power or toughness and no flying or lifelink. B's Hill Giant stays 3/3."
+        },
+        {
+          "label": "one_counter",
+          "polarity": "does_not_fire",
+          "delta": "Lumen-Class Frigate has 1 charge counter instead of 2.",
+          "expected": "Lumen-Class Frigate has 1 charge counter, below STATION 2+, and gives no anthem: Grizzly Bears is 2/2. Lumen-Class Frigate is not a creature."
+        }
+      ],
+      "cards": [
+        "Lumen-Class Frigate",
+        "Grizzly Bears",
+        "Hill Giant"
+      ],
+      "forge_notes": "Forge implements the station symbol as a static ability with Affected$ Card.Self+counters_GE2_CHARGE."
+    },
+    {
+      "id": "721.2b-1",
+      "rules": [
+        "721.2b"
+      ],
+      "title": "A station symbol with a power/toughness box makes the permanent a creature with that base power and toughness",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Rescue Skiff",
+              "counters": {
+                "charge": 10
+              },
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            "Hill Giant"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Rescue Skiff is a noncreature artifact Spacecraft with STATION 10+ (flying, 5/6 creature). It is already on the battlefield, so its enters trigger does not happen."
+      },
+      "decisions": [
+        "No spell or ability is used; both players pass priority with the stack empty and the board is observed after the state-based check."
+      ],
+      "variants": [
+        {
+          "label": "ten_counters",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Rescue Skiff has 10 charge counters and is an artifact creature with base power and toughness 5/6 and flying. It stays on the battlefield."
+        },
+        {
+          "label": "nine_counters",
+          "polarity": "does_not_fire",
+          "delta": "Rescue Skiff has 9 charge counters instead of 10.",
+          "expected": "Rescue Skiff has 9 charge counters, below STATION 10+: it is a noncreature artifact Spacecraft with no power or toughness in play and no flying. It stays on the battlefield."
+        }
+      ],
+      "cards": [
+        "Rescue Skiff",
+        "Hill Giant"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "721.4-1",
+      "rules": [
+        "721.4"
+      ],
+      "title": "The station ability is activatable at any counter count; abilities behind a station symbol need the counters",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Debris Field Crusher",
+              "counters": {
+                "charge": 7
+              }
+            },
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            },
+            "Mountain",
+            "Mountain"
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Debris Field Crusher has the station ability (tap another untapped creature you control: put charge counters equal to its power on it; sorcery speed) and STATION 8+ (creature, flying, {1}{R}: +2/+0 until end of turn). The stack is empty. The candidates are the station ability and the {1}{R} pump ability."
+      },
+      "decisions": [
+        "Both candidates are evaluated by the engine for A; nothing is activated."
+      ],
+      "variants": [
+        {
+          "label": "seven_counters",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The station ability is legal to activate (can_play true, its cost taps Grizzly Bears). The {1}{R} pump ability is not available (can_play false) because Debris Field Crusher has 7 charge counters, below STATION 8+."
+        },
+        {
+          "label": "zero_counters",
+          "polarity": "fires",
+          "delta": "Debris Field Crusher has 0 charge counters instead of 7.",
+          "expected": "The station ability is legal to activate (can_play true). The {1}{R} pump ability is not available (can_play false)."
+        },
+        {
+          "label": "eight_counters",
+          "polarity": "other",
+          "delta": "Debris Field Crusher has 8 charge counters instead of 7.",
+          "expected": "The station ability is legal to activate (can_play true) and the {1}{R} pump ability is also available (can_play true, payable with the two Mountains), because STATION 8+ is met."
+        }
+      ],
+      "cards": [
+        "Debris Field Crusher",
+        "Grizzly Bears",
+        "Mountain"
+      ],
+      "forge_notes": "The station keyword is K:Station:8 in Forge; the striated abilities are added by a static ability conditioned on counters_GE8_CHARGE. 721.4 is unconditional, so it has no does_not_fire branch of its own; the contrast is the striated pump ability, gated in seven_counters and zero_counters and available in eight_counters."
+    }
+  ]
+}

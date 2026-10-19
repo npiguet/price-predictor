@@ -1,0 +1,2 @@
+{"id": "701.46", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "701.46a", "category": "mechanical", "observability": "direct", "record_kinds": ["resolution"], "outcome": "Adapt N puts N +1/+1 counters on the permanent only if it has no +1/+1 counters.", "note": ""}

@@ -1,0 +1,337 @@
+{
+  "unit": "606",
+  "verified": true,
+  "review": [
+    "606.5-1: variant no_carth changed two facts (Carth absent and the -1 activated instead of the +1); it now removes only Carth, so A still activates the +1 and Garruk ends at 4.",
+    "606.6-1: base expected left Gideon Jura on the battlefield at 0 loyalty; added that it goes to the graveyard under 704.5i before the ability resolves, which still destroys the Bears.",
+    "606.6-2: base expected stopped at Garruk reaching 0 loyalty; added its state-based move to the graveyard, Carth's 'planeswalker you control dies' trigger (library stated empty) and the -4's resolved +3/+3 and trample."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "606.3-1",
+      "rules": [
+        "606.3"
+      ],
+      "title": "A loyalty ability is legal only at sorcery timing, on its controller's turn, once per permanent per turn",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Jace Beleren"
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Forest",
+            "Forest",
+            "Forest"
+          ],
+          "B": [
+            "Island",
+            "Island",
+            "Island"
+          ]
+        },
+        "exile": {},
+        "notes": "Jace Beleren has 3 loyalty counters and has not activated a loyalty ability this turn. In the stack_not_empty variant the stack holds {'card': 'Runeclaw Bear', 'controller': 'A'}."
+      },
+      "decisions": [
+        "A, with priority, activates Jace Beleren's +2 (each player draws a card).",
+        "Both players pass; the ability resolves."
+      ],
+      "variants": [
+        {
+          "label": "sorcery_timing",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Activating +2 is legal (can_play true); Jace has 5 loyalty counters and each player draws a card."
+        },
+        {
+          "label": "second_activation",
+          "polarity": "does_not_fire",
+          "delta": "A already activated Jace Beleren's -1 earlier this turn (it resolved).",
+          "expected": "Activating +2 is illegal (can_play false): Jace already activated a loyalty ability this turn."
+        },
+        {
+          "label": "opponents_turn",
+          "polarity": "does_not_fire",
+          "delta": "B is the active player in main1; A holds priority.",
+          "expected": "Activating +2 is illegal (can_play false): it is not A's turn."
+        },
+        {
+          "label": "stack_not_empty",
+          "polarity": "does_not_fire",
+          "delta": "A Runeclaw Bear spell controlled by A is on the stack.",
+          "expected": "Activating +2 is illegal (can_play false): the stack is not empty."
+        },
+        {
+          "label": "combat_phase",
+          "polarity": "does_not_fire",
+          "delta": "The step is beginning_of_combat instead of main1.",
+          "expected": "Activating +2 is illegal (can_play false): it is not a main phase."
+        }
+      ],
+      "cards": [
+        "Jace Beleren",
+        "Forest",
+        "Island",
+        "Runeclaw Bear"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "606.4-1",
+      "rules": [
+        "606.4"
+      ],
+      "title": "A loyalty ability's cost adds or removes loyalty counters",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Gideon Jura"
+          ],
+          "B": [
+            {
+              "card": "Grizzly Bears",
+              "tapped": true
+            }
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Gideon Jura has 6 loyalty counters."
+      },
+      "decisions": [
+        "A activates Gideon Jura's +2 targeting B, adding two loyalty counters as the cost.",
+        "Both players pass; the ability resolves."
+      ],
+      "variants": [
+        {
+          "label": "plus_two",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Gideon Jura has 8 loyalty counters (the counters are added on activation) and creatures B controls must attack Gideon during B's next turn."
+        },
+        {
+          "label": "minus_two",
+          "polarity": "fires",
+          "delta": "A activates the -2 targeting B's tapped Grizzly Bears instead.",
+          "expected": "Gideon Jura has 4 loyalty counters and the tapped Grizzly Bears moves to B's graveyard."
+        },
+        {
+          "label": "zero",
+          "polarity": "does_not_fire",
+          "delta": "A activates the 0 ability instead.",
+          "expected": "Gideon Jura still has 6 loyalty counters (the cost adds none) and becomes a 6/6 creature until end of turn."
+        }
+      ],
+      "cards": [
+        "Gideon Jura",
+        "Grizzly Bears"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "606.5-1",
+      "rules": [
+        "606.5"
+      ],
+      "title": "Several loyalty-counter costs combine into one net addition or removal",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Carth the Lion",
+              "summoning_sick": false
+            },
+            "Garruk Wildspeaker",
+            {
+              "card": "Forest",
+              "tapped": true
+            },
+            {
+              "card": "Forest",
+              "tapped": true
+            }
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Garruk Wildspeaker has 3 loyalty counters. Carth the Lion: planeswalkers' loyalty abilities you activate cost an additional [+1]."
+      },
+      "decisions": [
+        "A activates Garruk Wildspeaker's +1 targeting both tapped Forests; the cost is the +1 plus Carth's additional +1, two counters.",
+        "Both players pass; the ability resolves."
+      ],
+      "variants": [
+        {
+          "label": "plus_one",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Garruk has 5 loyalty counters and both Forests untap."
+        },
+        {
+          "label": "minus_one",
+          "polarity": "fires",
+          "delta": "A activates the -1 (create a Beast) instead, its cost combined with Carth's +1.",
+          "expected": "Garruk has 3 loyalty counters (the combined cost is a net change of zero) and a 3/3 Beast token is created."
+        },
+        {
+          "label": "no_carth",
+          "polarity": "does_not_fire",
+          "delta": "Carth the Lion is not on the battlefield.",
+          "expected": "Garruk has 4 loyalty counters and both Forests untap."
+        }
+      ],
+      "cards": [
+        "Carth the Lion",
+        "Garruk Wildspeaker",
+        "Forest"
+      ],
+      "forge_notes": "Forge applies Carth's RaiseCost as an extra AddCounter cost part; confirm it nets against the SubCounter part."
+    },
+    {
+      "id": "606.6-1",
+      "rules": [
+        "606.6"
+      ],
+      "title": "A negative loyalty cost can't be paid without enough loyalty counters",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Gideon Jura",
+              "counters": {
+                "loyalty": 2
+              }
+            }
+          ],
+          "B": [
+            {
+              "card": "Grizzly Bears",
+              "tapped": true
+            }
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A activates Gideon Jura's -2 targeting B's tapped Grizzly Bears."
+      ],
+      "variants": [
+        {
+          "label": "two_counters",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Activating -2 is legal (can_play true); Gideon Jura has 0 loyalty counters and moves to A's graveyard in the state-based check before the ability resolves; the ability still resolves and the tapped Grizzly Bears moves to B's graveyard."
+        },
+        {
+          "label": "one_counter",
+          "polarity": "does_not_fire",
+          "delta": "Gideon Jura has 1 loyalty counter instead of 2.",
+          "expected": "Activating -2 is illegal (can_play false): there are not enough counters to remove."
+        }
+      ],
+      "cards": [
+        "Gideon Jura",
+        "Grizzly Bears"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "606.6-2",
+      "rules": [
+        "606.6"
+      ],
+      "title": "An additional loyalty cost is counted when checking whether a negative cost can be paid",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Carth the Lion",
+              "summoning_sick": false
+            },
+            "Garruk Wildspeaker",
+            "Runeclaw Bear"
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Garruk Wildspeaker has 3 loyalty counters. Carth the Lion adds [+1] to each loyalty cost. A's library is empty."
+      },
+      "decisions": [
+        "A activates Garruk Wildspeaker's -4 (creatures A controls get +3/+3 and trample)."
+      ],
+      "variants": [
+        {
+          "label": "with_carth",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Activating -4 is legal (can_play true): the total cost removes 3 counters (-4 plus Carth's +1). Garruk has 0 loyalty counters and moves to A's graveyard in the state-based check; Carth's dies trigger fires and finds nothing in the empty library; the -4 then resolves and Carth the Lion is 6/8 and Runeclaw Bear 5/5, both with trample, until end of turn."
+        },
+        {
+          "label": "without_carth",
+          "polarity": "does_not_fire",
+          "delta": "Carth the Lion is not on the battlefield.",
+          "expected": "Activating -4 is illegal (can_play false): the cost removes 4 counters and Garruk has only 3."
+        }
+      ],
+      "cards": [
+        "Carth the Lion",
+        "Garruk Wildspeaker",
+        "Runeclaw Bear"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

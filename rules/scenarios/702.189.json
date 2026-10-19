@@ -1,0 +1,143 @@
+{
+  "unit": "702.189",
+  "verified": true,
+  "review": [],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.189a-1",
+      "rules": [
+        "702.189a"
+      ],
+      "title": "Firebending adds red mana when the creature attacks and the mana lasts until end of combat",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Fire Sages",
+              "summoning_sick": false
+            },
+            "Mountain",
+            "Mountain"
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Fire Sages is a 2/2 with firebending 1 and the ability '{1}{R}{R}: put a +1/+1 counter on this creature'. B controls no creatures."
+      },
+      "decisions": [
+        "A attacks player B with Fire Sages; the firebending trigger goes on the stack.",
+        "Both players pass; the firebending trigger resolves, adding {R}.",
+        "B declares no blockers. In the declare blockers step A activates Fire Sages' {1}{R}{R} ability, paying with the {R} from firebending and two Mountains.",
+        "Both players pass; the ability resolves and combat damage is dealt."
+      ],
+      "variants": [
+        {
+          "label": "attacks",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The firebending trigger fires and A adds {R}, which is still in A's mana pool in the declare blockers step. Fire Sages gets a +1/+1 counter and deals 3 combat damage to B (17)."
+        },
+        {
+          "label": "does_not_attack",
+          "polarity": "does_not_fire",
+          "delta": "A does not attack with Fire Sages.",
+          "expected": "No firebending trigger fires and no mana is added. A cannot pay {1}{R}{R} with two Mountains, so Fire Sages gets no counter and B's life stays 20."
+        },
+        {
+          "label": "mana_not_used_in_combat",
+          "polarity": "does_not_fire",
+          "delta": "A does not spend the firebending mana during combat and tries the activation in the second main phase.",
+          "expected": "The firebending trigger fires and A adds {R}, but the mana empties at the end of combat. In the second main phase A cannot pay {1}{R}{R} with two Mountains, so Fire Sages gets no counter. Fire Sages deals 2 combat damage to B (18)."
+        }
+      ],
+      "cards": [
+        "Fire Sages",
+        "Mountain"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.189b-1",
+      "rules": [
+        "702.189b"
+      ],
+      "title": "An ability that triggers when a player firebends fires when a firebending ability that player controls resolves",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Fire Sages",
+              "summoning_sick": false
+            },
+            {
+              "card": "Avatar Aang",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            "Island"
+          ]
+        },
+        "hand": {
+          "B": [
+            "Stifle"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Forest",
+            "Forest"
+          ]
+        },
+        "exile": {},
+        "notes": "Avatar Aang reads 'Whenever you waterbend, earthbend, firebend, or airbend, draw a card' (and transforms if you have done all four this turn). Avatar Aang does not attack."
+      },
+      "decisions": [
+        "A attacks player B with Fire Sages only; the firebending trigger goes on the stack.",
+        "B passes without responding. Both players pass; the firebending trigger resolves and Avatar Aang's trigger goes on the stack.",
+        "Both players pass; Avatar Aang's trigger resolves."
+      ],
+      "variants": [
+        {
+          "label": "firebending_resolves",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The firebending ability resolves, A adds {R}, and Avatar Aang's trigger fires. A draws a card (hand 1, library 1)."
+        },
+        {
+          "label": "firebending_countered",
+          "polarity": "does_not_fire",
+          "delta": "In response to the firebending trigger, B casts Stifle, tapping Island, targeting the firebending trigger.",
+          "expected": "Stifle counters the firebending trigger, so A adds no {R}, and Avatar Aang's trigger does not fire. A draws no card (hand 0, library 2)."
+        }
+      ],
+      "cards": [
+        "Fire Sages",
+        "Avatar Aang",
+        "Island",
+        "Stifle",
+        "Forest"
+      ],
+      "forge_notes": "Forge fires the Firebend trigger from the mana effect of the firebending ability (ManaEffect.java)."
+    }
+  ]
+}

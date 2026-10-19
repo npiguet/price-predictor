@@ -1,0 +1,210 @@
+{
+  "unit": "401",
+  "verified": true,
+  "review": [
+    "401.5-2: base expected said Centaur Courser was castable after the cast, but both Forests are tapped; reworded to say the cast-from-top permission applies to it."
+  ],
+  "skipped": [
+    {
+      "id": "401.6",
+      "reason": "no Forge card keeps an effect, target or counter on a library card that depends on the card's object identity across a gap in its reveal, so no board outcome differs between the old and the new object; 401.5-1 and 401.5-2 cover the reveal timing"
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "401.5-1",
+      "rules": [
+        "401.5"
+      ],
+      "title": "A new top card is not revealed until the special action of playing the old one finishes",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Forest",
+            "Forest",
+            "Oracle of Mul Daya"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Mountain"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Forest",
+            "Shock",
+            "Island"
+          ]
+        },
+        "exile": {},
+        "notes": "A's library is listed top first. Oracle of Mul Daya reveals A's top card, lets A play lands from the top of the library and gives an additional land drop. A has played no land this turn."
+      },
+      "decisions": [
+        "A plays the Forest on top of their library as a land drop (a special action).",
+        "A takes no other action."
+      ],
+      "variants": [
+        {
+          "label": "from_library",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "While A is playing Forest from the top of the library, the new top card Shock is not revealed and cannot be looked at. Once the special action has finished, Shock is revealed as the new top card, and it is not playable from the library because it is not a land."
+        },
+        {
+          "label": "from_hand",
+          "polarity": "does_not_fire",
+          "delta": "A plays Mountain from hand as the land drop instead of Forest from the library.",
+          "expected": "The top card of the library does not change, so Forest stays revealed throughout; no card is withheld from reveal."
+        }
+      ],
+      "cards": [
+        "Forest",
+        "Mountain",
+        "Island",
+        "Shock",
+        "Oracle of Mul Daya"
+      ],
+      "forge_notes": "Forge may reveal the new top card at once; the revealed-state timing is not part of the existing playability fields."
+    },
+    {
+      "id": "401.5-2",
+      "rules": [
+        "401.5"
+      ],
+      "title": "A new top card is not revealed while the spell cast from the top of the library is being cast",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Forest",
+            "Forest",
+            "Vizier of the Menagerie"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Grizzly Bears"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Grizzly Bears",
+            "Centaur Courser",
+            "Island"
+          ]
+        },
+        "exile": {},
+        "notes": "A's library is listed top first. Vizier of the Menagerie lets A look at the top card of the library any time and cast creature spells from it. A holds a second Grizzly Bears in hand. Vizier of the Menagerie has been under A's control since an earlier turn."
+      },
+      "decisions": [
+        "A casts the Grizzly Bears on top of the library, tapping both Forests for {1}{G}.",
+        "Both players pass; the spell resolves."
+      ],
+      "variants": [
+        {
+          "label": "from_library",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Casting Grizzly Bears moves it from the top of the library to the stack, so Centaur Courser becomes the top card. A cannot look at Centaur Courser until Grizzly Bears has become cast. After that A may look at it, and Vizier of the Menagerie's permission to cast creature spells from the top applies to it."
+        },
+        {
+          "label": "from_hand",
+          "polarity": "does_not_fire",
+          "delta": "A casts the Grizzly Bears in hand instead of the one on top of the library.",
+          "expected": "The top card of the library is still Grizzly Bears and A may look at it throughout the casting; no new top card appears."
+        }
+      ],
+      "cards": [
+        "Forest",
+        "Grizzly Bears",
+        "Centaur Courser",
+        "Island",
+        "Vizier of the Menagerie"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "401.7-1",
+      "rules": [
+        "401.7"
+      ],
+      "title": "A card put Nth from the top of a library with fewer than N cards goes to the bottom",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Plains"
+          ],
+          "B": [
+            "Sol Ring"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Lost to Legend"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "B": [
+            "Forest",
+            "Island"
+          ]
+        },
+        "exile": {},
+        "notes": "B's library is listed top first and holds two cards. Sol Ring is a historic permanent."
+      },
+      "decisions": [
+        "A casts Lost to Legend targeting Sol Ring, tapping both Plains.",
+        "Both players pass; Lost to Legend resolves."
+      ],
+      "variants": [
+        {
+          "label": "short_library",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Sol Ring leaves the battlefield and goes to the bottom of B's library, which is now, top to bottom, Forest, Island, Sol Ring."
+        },
+        {
+          "label": "long_library",
+          "polarity": "does_not_fire",
+          "delta": "B's library holds five cards: Forest, Island, Swamp, Mountain, Plains from the top.",
+          "expected": "Sol Ring goes fourth from the top: Forest, Island, Swamp, Sol Ring, Mountain, Plains."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Lost to Legend",
+        "Sol Ring",
+        "Forest",
+        "Island",
+        "Swamp",
+        "Mountain"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

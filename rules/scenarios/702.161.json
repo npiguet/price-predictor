@@ -1,0 +1,59 @@
+{
+  "unit": "702.161",
+  "verified": true,
+  "review": [],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.161a-1",
+      "rules": [
+        "702.161a"
+      ],
+      "title": "A permanent with living metal is a creature only during its controller's turn",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Goldbug, Humanity's Ally"
+          ],
+          "B": [
+            "Mountain"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Goldbug is on the battlefield converted (its back face Goldbug, Scrappy Scout, a 1/3 Vehicle with living metal, face up). It has been under A's control since earlier turns and is untapped. No crew is paid."
+      },
+      "decisions": [
+        "No spells or abilities are used. The permanent's types are read in the first main phase."
+      ],
+      "variants": [
+        {
+          "label": "own_turn",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "During A's turn Goldbug, Scrappy Scout is a legendary artifact creature Vehicle with power and toughness 1/3. It is a legal attacker."
+        },
+        {
+          "label": "opponent_turn",
+          "polarity": "does_not_fire",
+          "delta": "It is B's turn (B is the active player) instead of A's.",
+          "expected": "During B's turn Goldbug, Scrappy Scout is only a legendary artifact Vehicle, not a creature, since it is not crewed. It is not a creature and cannot block."
+        }
+      ],
+      "cards": [
+        "Goldbug, Humanity's Ally",
+        "Mountain"
+      ],
+      "forge_notes": "Forge stores the Vehicle face as the alternate state of the card named Goldbug, Humanity's Ally."
+    }
+  ]
+}

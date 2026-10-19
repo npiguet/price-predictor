@@ -1,0 +1,588 @@
+{
+  "unit": "306",
+  "verified": true,
+  "review": [
+    "306.5d-1: second_activation said Ajani had activated -1 earlier, inconsistent with the 4 loyalty counters in the setup; delta now states an earlier activation already reflected in the shown counters.",
+    "306.2-1: base decision was ambiguous about B's response; base now has B pass, and the countered delta states B casts Counterspell instead."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "306.1-1",
+      "rules": [
+        "306.1"
+      ],
+      "title": "A planeswalker can be cast only in a main phase of its owner's turn with an empty stack",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            "Island"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Jace Beleren"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "A has priority. In the stack_not_empty variant the stack holds {'card': 'Shock', 'controller': 'B', 'targets': ['A']}; Shock is not in any other zone."
+      },
+      "decisions": [
+        "A attempts to cast Jace Beleren, tapping three Islands."
+      ],
+      "variants": [
+        {
+          "label": "main_empty_stack",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Casting Jace Beleren is legal (can_play true); it goes on the stack as a spell."
+        },
+        {
+          "label": "combat_phase",
+          "polarity": "does_not_fire",
+          "delta": "The step is beginning_of_combat instead of main1.",
+          "expected": "Casting Jace Beleren is illegal (can_play false): it is not a main phase and Jace has no flash. Jace stays in A's hand."
+        },
+        {
+          "label": "stack_not_empty",
+          "polarity": "does_not_fire",
+          "delta": "A Shock spell controlled by B targeting A is on the stack.",
+          "expected": "Casting Jace Beleren is illegal (can_play false): the stack is not empty. Jace stays in A's hand."
+        },
+        {
+          "label": "opponents_turn",
+          "polarity": "does_not_fire",
+          "delta": "B is the active player in main1 with an empty stack.",
+          "expected": "Casting Jace Beleren is illegal (can_play false): it is not A's turn. Jace stays in A's hand."
+        }
+      ],
+      "cards": [
+        "Jace Beleren",
+        "Island",
+        "Shock"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "306.2-1",
+      "rules": [
+        "306.2"
+      ],
+      "title": "A resolving planeswalker spell enters the battlefield under its controller's control",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            "Island"
+          ],
+          "B": [
+            "Island",
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Jace Beleren"
+          ],
+          "B": [
+            "Counterspell"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Jace Beleren, tapping three Islands.",
+        "B passes priority and A passes; Jace Beleren resolves."
+      ],
+      "variants": [
+        {
+          "label": "resolves",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Jace Beleren resolves and enters the battlefield under A's control."
+        },
+        {
+          "label": "countered",
+          "polarity": "does_not_fire",
+          "delta": "B, with priority after A casts Jace Beleren, casts Counterspell targeting it, tapping both Islands; both players pass.",
+          "expected": "Counterspell resolves; Jace Beleren is countered and moves to A's graveyard without entering the battlefield; Counterspell moves to B's graveyard."
+        }
+      ],
+      "cards": [
+        "Jace Beleren",
+        "Counterspell",
+        "Island"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "306.4-1",
+      "rules": [
+        "306.4"
+      ],
+      "title": "Two planeswalkers with the same name are subject to the legend rule",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Jace Beleren",
+              "counters": {
+                "loyalty": 3
+              }
+            },
+            "Island",
+            "Island",
+            "Island",
+            "Island"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Jace Beleren"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts the second Jace Beleren from hand, tapping three Islands.",
+        "Both players pass; Jace Beleren resolves and enters with 3 loyalty counters.",
+        "A, as the legend rule requires, chooses to keep the new Jace Beleren."
+      ],
+      "variants": [
+        {
+          "label": "same_name",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The older Jace Beleren moves to A's graveyard in the state-based check; the new Jace Beleren stays with 3 loyalty counters."
+        },
+        {
+          "label": "different_name",
+          "polarity": "does_not_fire",
+          "delta": "The card in A's hand is Jace, the Mind Sculptor (2UU, loyalty 3) instead, cast tapping all four Islands.",
+          "expected": "Both planeswalkers stay on the battlefield, each with 3 loyalty counters; nothing goes to the graveyard."
+        }
+      ],
+      "cards": [
+        "Jace Beleren",
+        "Jace, the Mind Sculptor",
+        "Island"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "306.5b-1",
+      "rules": [
+        "306.5b"
+      ],
+      "title": "A planeswalker enters with loyalty counters equal to its printed loyalty",
+      "record_kind": "rewrite",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            "Island"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Jace Beleren"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Jace Beleren, tapping three Islands.",
+        "Both players pass; Jace Beleren resolves."
+      ],
+      "variants": [
+        {
+          "label": "printed_loyalty",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Jace Beleren enters with 3 loyalty counters (its printed loyalty)."
+        },
+        {
+          "label": "doubling_season",
+          "polarity": "other",
+          "delta": "A also controls Doubling Season on the battlefield (its mana is not needed).",
+          "expected": "Jace Beleren enters with 6 loyalty counters: the entering replacement puts 3 counters and Doubling Season doubles that."
+        }
+      ],
+      "cards": [
+        "Jace Beleren",
+        "Doubling Season",
+        "Island"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "306.5c-1",
+      "rules": [
+        "306.5c"
+      ],
+      "title": "The loyalty of a planeswalker on the battlefield equals its loyalty counters",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Ajani Goldmane",
+              "counters": {
+                "loyalty": 4
+              }
+            }
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Ajani Goldmane (printed loyalty 4) has not activated a loyalty ability this turn. Loyalty is counted in loyalty counters."
+      },
+      "decisions": [
+        "A activates Ajani Goldmane's +1 (you gain 2 life), adding a loyalty counter as the cost.",
+        "Both players pass; the ability resolves."
+      ],
+      "variants": [
+        {
+          "label": "plus_one",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Ajani has 5 loyalty counters, so its loyalty is 5; A gains 2 life (22)."
+        },
+        {
+          "label": "minus_one",
+          "polarity": "other",
+          "delta": "A activates the -1 ability instead (put a +1/+1 counter on each creature you control; A controls none).",
+          "expected": "Ajani has 3 loyalty counters, so its loyalty is 3; nothing else changes."
+        },
+        {
+          "label": "ultimate",
+          "polarity": "does_not_fire",
+          "delta": "A attempts to activate the -6 ability instead.",
+          "expected": "Activation is illegal (can_play false): Ajani has only 4 loyalty, fewer than 6 counters to remove; its loyalty stays 4."
+        }
+      ],
+      "cards": [
+        "Ajani Goldmane"
+      ],
+      "forge_notes": "The ultimate variant is a playability verdict whose input is the loyalty value."
+    },
+    {
+      "id": "306.5d-1",
+      "rules": [
+        "306.5d"
+      ],
+      "title": "A loyalty ability can be activated only at sorcery timing, once per permanent per turn",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Ajani Goldmane",
+              "counters": {
+                "loyalty": 4
+              }
+            }
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Ajani Goldmane has not activated a loyalty ability this turn. In the stack_not_empty variant the stack holds {'card': 'Shock', 'controller': 'B', 'targets': ['A']}."
+      },
+      "decisions": [
+        "A, with priority, activates Ajani Goldmane's +1 (you gain 2 life).",
+        "Both players pass; the ability resolves."
+      ],
+      "variants": [
+        {
+          "label": "sorcery_timing",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Activation is legal (can_play true); Ajani has 5 loyalty counters and A gains 2 life."
+        },
+        {
+          "label": "second_activation",
+          "polarity": "does_not_fire",
+          "delta": "Ajani Goldmane already activated a loyalty ability earlier this turn (its +1, which resolved; the 4 loyalty counters shown already reflect it).",
+          "expected": "Activating +1 is illegal (can_play false): Ajani already activated a loyalty ability this turn."
+        },
+        {
+          "label": "combat_phase",
+          "polarity": "does_not_fire",
+          "delta": "The step is beginning_of_combat instead of main1.",
+          "expected": "Activation is illegal (can_play false): it is not a main phase."
+        },
+        {
+          "label": "stack_not_empty",
+          "polarity": "does_not_fire",
+          "delta": "A Shock spell controlled by B targeting A is on the stack.",
+          "expected": "Activation is illegal (can_play false): the stack is not empty."
+        }
+      ],
+      "cards": [
+        "Ajani Goldmane",
+        "Shock"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "306.6-1",
+      "rules": [
+        "306.6"
+      ],
+      "title": "Planeswalkers can be attacked",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "declare_attackers",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            },
+            {
+              "card": "Ajani Goldmane",
+              "counters": {
+                "loyalty": 4
+              }
+            }
+          ],
+          "B": [
+            {
+              "card": "Jace Beleren",
+              "counters": {
+                "loyalty": 3
+              }
+            }
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A declares Grizzly Bears as an attacker against Jace Beleren."
+      ],
+      "variants": [
+        {
+          "label": "opposing_planeswalker",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The attack is legal: Jace Beleren (B's planeswalker) is a legal attack target for Grizzly Bears."
+        },
+        {
+          "label": "own_planeswalker",
+          "polarity": "does_not_fire",
+          "delta": "A declares Grizzly Bears as an attacker against Ajani Goldmane, A's own planeswalker.",
+          "expected": "The attack is illegal: a player cannot attack a planeswalker they control."
+        }
+      ],
+      "cards": [
+        "Grizzly Bears",
+        "Ajani Goldmane",
+        "Jace Beleren"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "306.8-1",
+      "rules": [
+        "306.8"
+      ],
+      "title": "Damage dealt to a planeswalker removes that many loyalty counters",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain"
+          ],
+          "B": [
+            {
+              "card": "Jace Beleren",
+              "counters": {
+                "loyalty": 3
+              }
+            },
+            "Plains"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Shock"
+          ],
+          "B": [
+            "Healing Salve"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Shock targeting Jace Beleren, tapping Mountain.",
+        "B passes; both players pass and Shock resolves."
+      ],
+      "variants": [
+        {
+          "label": "damage_dealt",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Shock deals 2 damage to Jace Beleren; 2 loyalty counters are removed and it has 1 loyalty counter. Shock moves to A's graveyard."
+        },
+        {
+          "label": "damage_prevented",
+          "polarity": "does_not_fire",
+          "delta": "In response, B casts Healing Salve choosing the prevention mode targeting Jace Beleren, tapping Plains.",
+          "expected": "Healing Salve resolves first and Shock's 2 damage is prevented: no loyalty counters are removed and Jace Beleren keeps 3 loyalty counters."
+        }
+      ],
+      "cards": [
+        "Shock",
+        "Healing Salve",
+        "Jace Beleren",
+        "Mountain",
+        "Plains"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "306.9-1",
+      "rules": [
+        "306.9"
+      ],
+      "title": "A planeswalker with 0 loyalty is put into its owner's graveyard",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain"
+          ],
+          "B": [
+            {
+              "card": "Jace Beleren",
+              "counters": {
+                "loyalty": 3
+              }
+            }
+          ]
+        },
+        "hand": {
+          "A": [
+            "Lightning Bolt"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Lightning Bolt targeting Jace Beleren, tapping Mountain.",
+        "Both players pass; Lightning Bolt resolves."
+      ],
+      "variants": [
+        {
+          "label": "zero_loyalty",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Lightning Bolt deals 3 damage, removing all 3 loyalty counters; Jace Beleren has 0 loyalty and moves to B's graveyard in the next state-based check."
+        },
+        {
+          "label": "one_loyalty_left",
+          "polarity": "does_not_fire",
+          "delta": "A casts Shock (2 damage) instead of Lightning Bolt.",
+          "expected": "Shock removes 2 loyalty counters; Jace Beleren has 1 loyalty and stays on the battlefield."
+        }
+      ],
+      "cards": [
+        "Lightning Bolt",
+        "Shock",
+        "Jace Beleren",
+        "Mountain"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

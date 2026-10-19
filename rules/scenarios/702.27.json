@@ -1,0 +1,91 @@
+{
+  "unit": "702.27",
+  "verified": true,
+  "review": [],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.27a-1",
+      "rules": [
+        "702.27a"
+      ],
+      "title": "A spell with its buyback cost paid returns to hand as it resolves",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain"
+          ],
+          "B": [
+            "Fugitive Wizard",
+            "Island",
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Searing Touch"
+          ],
+          "B": [
+            "Counterspell",
+            "Unsummon"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Searing Touch targeting Fugitive Wizard, paying the buyback cost {4}, tapping all five Mountains.",
+        "B passes.",
+        "Searing Touch resolves."
+      ],
+      "variants": [
+        {
+          "label": "buyback_paid",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Fugitive Wizard (1/1) takes 1 damage and moves to B's graveyard. Searing Touch returns to A's hand."
+        },
+        {
+          "label": "buyback_not_paid",
+          "polarity": "does_not_fire",
+          "delta": "A does not pay the buyback cost and taps one Mountain only.",
+          "expected": "Fugitive Wizard dies. Searing Touch moves to A's graveyard."
+        },
+        {
+          "label": "countered",
+          "polarity": "other",
+          "delta": "B responds with Counterspell, tapping both Islands.",
+          "expected": "Searing Touch is countered and moves to A's graveyard, not to A's hand. Fugitive Wizard survives undamaged."
+        },
+        {
+          "label": "fizzled",
+          "polarity": "other",
+          "delta": "B responds with Unsummon on Fugitive Wizard, tapping one Island.",
+          "expected": "Fugitive Wizard returns to B's hand. Searing Touch has no legal target, fizzles and moves to A's graveyard, not to A's hand."
+        }
+      ],
+      "cards": [
+        "Searing Touch",
+        "Mountain",
+        "Fugitive Wizard",
+        "Island",
+        "Counterspell",
+        "Unsummon"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

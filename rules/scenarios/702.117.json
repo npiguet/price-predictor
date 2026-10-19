@@ -1,0 +1,79 @@
+{
+  "unit": "702.117",
+  "verified": true,
+  "review": [
+    "702.117a-1: opponent_spell_cast had B cast Shock in A's upkeep although the setup starts in main1; moved B's Shock into A's main1 (B casts after A passes with an empty stack). Base decisions now include the pass that lets Goblin Freerunner resolve, which its expected reports."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.117a-1",
+      "rules": [
+        "702.117a"
+      ],
+      "title": "A surge spell can be cast for its surge cost only after the caster has cast another spell this turn",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Mountain"
+          ],
+          "B": [
+            "Mountain"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Shock",
+            "Goblin Freerunner"
+          ],
+          "B": [
+            "Shock"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Goblin Freerunner costs {3}{R} and has surge {1}{R}. A has three Mountains, so the full cost {3}{R} is out of reach and only the surge cost {1}{R} is affordable (after paying {R} for Shock). Nothing has been cast this turn."
+      },
+      "decisions": [
+        "A casts Shock targeting B, tapping one Mountain; both players pass and Shock resolves.",
+        "A then casts Goblin Freerunner for its surge cost {1}{R}, tapping the other two Mountains; the engine's verdict on that cast is read, then both players pass and it resolves if it was cast."
+      ],
+      "variants": [
+        {
+          "label": "own_spell_cast",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Casting Goblin Freerunner for its surge cost is legal; the cost after adjustment is {1}{R}. Shock deals 2 damage to B (life 18) and Goblin Freerunner resolves onto the battlefield."
+        },
+        {
+          "label": "no_spell_cast",
+          "polarity": "does_not_fire",
+          "delta": "A casts no spell before Goblin Freerunner; Shock stays in A's hand.",
+          "expected": "Casting Goblin Freerunner is illegal: the surge cost is not available, the cost stays {3}{R} and A has only three Mountains."
+        },
+        {
+          "label": "opponent_spell_cast",
+          "polarity": "does_not_fire",
+          "delta": "A casts no spell before Goblin Freerunner; instead, after A passes priority in main1 with an empty stack, B casts Shock targeting A, it resolves and A receives priority again in main1.",
+          "expected": "Casting Goblin Freerunner is illegal: a spell cast by an opponent does not enable surge, the cost stays {3}{R} and A has only three Mountains. A's life is 18."
+        }
+      ],
+      "cards": [
+        "Goblin Freerunner",
+        "Shock",
+        "Mountain"
+      ],
+      "forge_notes": "Forge checks surge through a count of spells cast this turn by the player (and teammates); an opponent's spell must not count."
+    }
+  ]
+}

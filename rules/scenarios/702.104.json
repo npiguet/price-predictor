@@ -1,0 +1,127 @@
+{
+  "unit": "702.104",
+  "verified": true,
+  "review": [],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.104a-1",
+      "rules": [
+        "702.104a"
+      ],
+      "title": "The chosen opponent may have a tribute creature enter with extra counters",
+      "record_kind": "rewrite",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Forest",
+            "Mountain"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Fanatic of Xenagos"
+          ],
+          "B": []
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Fanatic of Xenagos is a 3/3 trampler with tribute 1. B is the only opponent, so B is the chosen opponent."
+      },
+      "decisions": [
+        "A casts Fanatic of Xenagos, tapping all three lands.",
+        "Both players pass; the creature spell resolves.",
+        "As Fanatic of Xenagos enters, B pays tribute: it enters with one additional +1/+1 counter."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Fanatic of Xenagos enters the battlefield with one +1/+1 counter and is 4/4."
+        },
+        {
+          "label": "declined",
+          "polarity": "does_not_fire",
+          "delta": "B declines to pay tribute.",
+          "expected": "Fanatic of Xenagos enters the battlefield with no counters (3/3 before its own trigger resolves)."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Forest",
+        "Fanatic of Xenagos"
+      ],
+      "forge_notes": "B's tribute choice is an AI decision in Forge and has to be forced."
+    },
+    {
+      "id": "702.104b-1",
+      "rules": [
+        "702.104b"
+      ],
+      "title": "The if-tribute-wasn't-paid trigger fires only when the opponent declined",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Forest",
+            "Mountain"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Fanatic of Xenagos"
+          ],
+          "B": []
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Fanatic of Xenagos: when it enters, if tribute wasn't paid, it gets +1/+1 and haste until end of turn."
+      },
+      "decisions": [
+        "A casts Fanatic of Xenagos, tapping all three lands.",
+        "Both players pass; the creature spell resolves.",
+        "As Fanatic of Xenagos enters, B declines to pay tribute.",
+        "Both players pass; the enters trigger, if it fired, resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The trigger fires and resolves: Fanatic of Xenagos has no counters, is 4/4 until end of turn and has haste."
+        },
+        {
+          "label": "paid",
+          "polarity": "does_not_fire",
+          "delta": "B pays tribute, so Fanatic of Xenagos enters with a +1/+1 counter.",
+          "expected": "The trigger does not fire. Fanatic of Xenagos is 4/4 from the counter and has no haste."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Forest",
+        "Fanatic of Xenagos"
+      ],
+      "forge_notes": "B's tribute choice is an AI decision in Forge and has to be forced."
+    }
+  ]
+}

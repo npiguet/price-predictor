@@ -1,0 +1,3 @@
+{"id": "701.26", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "701.26a", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution", "trigger"], "outcome": "Tapping an untapped permanent taps it and fires tap triggers; tapping an already tapped permanent does nothing.", "note": ""}
+{"id": "701.26b", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution", "trigger"], "outcome": "Untapping a tapped permanent untaps it and fires untap triggers; untapping an untapped permanent does nothing.", "note": ""}

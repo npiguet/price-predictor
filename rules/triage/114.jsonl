@@ -1,0 +1,5 @@
+{"id": "114.1", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "114.2", "category": "mechanical", "observability": "needs_new_fields", "record_kinds": ["resolution"], "outcome": "A player gets an emblem in the command zone, owned and controlled by that player.", "note": ""}
+{"id": "114.3", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "114.4", "category": "mechanical", "observability": "indirect", "record_kinds": ["trigger", "continuous"], "outcome": "An emblem's abilities function from the command zone.", "note": ""}
+{"id": "114.5", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}

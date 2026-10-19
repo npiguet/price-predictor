@@ -1,0 +1,8 @@
+{"id": "701.24", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "701.24a", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "701.24b", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution", "trigger"], "outcome": "Cards found by a search are left out of the following shuffle, and shuffle triggers still fire.", "note": ""}
+{"id": "701.24c", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution", "trigger"], "outcome": "Shuffling specific objects into a library shuffles it even if the objects have already left the expected zone.", "note": ""}
+{"id": "701.24d", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution", "trigger"], "outcome": "Shuffling a set of objects into a library shuffles it even when the set is empty.", "note": ""}
+{"id": "701.24e", "category": "mechanical", "observability": "indirect", "record_kinds": ["trigger"], "outcome": "Shuffle triggers fire when a library of zero or one cards is shuffled.", "note": ""}
+{"id": "701.24f", "category": "mechanical", "observability": "indirect", "record_kinds": ["trigger"], "outcome": "Simultaneous shuffles of one library fire shuffle triggers once per shuffle.", "note": ""}
+{"id": "701.24g", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "A simultaneous shuffle and put-into-position leaves the library shuffled except the placed object, which sits in its specified position.", "note": ""}

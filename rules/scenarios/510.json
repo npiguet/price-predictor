@@ -1,0 +1,511 @@
+{
+  "unit": "510",
+  "verified": true,
+  "review": [],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "510.1a-1",
+      "rules": [
+        "510.1a"
+      ],
+      "title": "A creature assigns combat damage equal to its power, and none when its power is 0",
+      "record_kind": "combat",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Grizzly Bears",
+            "Forest"
+          ],
+          "B": [
+            "Hill Giant",
+            "Wall of Wood"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Giant Growth"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "All creatures have been under their controllers' control since before this turn. Giant Growth is used only in the pumped_power variant."
+      },
+      "decisions": [
+        "A attacks B with Grizzly Bears.",
+        "B blocks Grizzly Bears with Hill Giant.",
+        "No spells or abilities are used; both players pass through the declare blockers step and combat damage is assigned and dealt."
+      ],
+      "variants": [
+        {
+          "label": "equal_to_power",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears assigns 2 damage to Hill Giant and Hill Giant assigns 3 damage to Grizzly Bears. Grizzly Bears (2/2) moves to A's graveyard; Hill Giant (3/3) stays on the battlefield with 2 damage marked."
+        },
+        {
+          "label": "zero_power_blocker",
+          "polarity": "does_not_fire",
+          "delta": "B blocks Grizzly Bears with Wall of Wood (0/3) instead of Hill Giant.",
+          "expected": "Grizzly Bears assigns 2 damage to Wall of Wood; Wall of Wood has power 0 and assigns no combat damage at all. Grizzly Bears has no damage marked and stays on the battlefield, and Wall of Wood survives with 2 damage marked."
+        },
+        {
+          "label": "pumped_power",
+          "polarity": "fires",
+          "delta": "In the declare blockers step, after the block, A casts Giant Growth (tapping Forest) targeting Grizzly Bears and it resolves.",
+          "expected": "Grizzly Bears has power 5 and assigns 5 damage to Hill Giant, which moves to B's graveyard; Hill Giant assigns 3 damage to Grizzly Bears (5/5 until end of turn), which survives with 3 damage marked."
+        }
+      ],
+      "cards": [
+        "Grizzly Bears",
+        "Hill Giant",
+        "Wall of Wood",
+        "Giant Growth",
+        "Forest"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "510.1b-1",
+      "rules": [
+        "510.1b"
+      ],
+      "title": "An unblocked attacker assigns its damage to what it attacks, and none if it attacks nothing",
+      "record_kind": "combat",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Grizzly Bears",
+            "Mountain"
+          ],
+          "B": [
+            "Jace Beleren"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Lightning Bolt"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Jace Beleren has 3 loyalty counters. Grizzly Bears has been under A's control since before this turn. B controls no creatures. Lightning Bolt is used only in the walker_removed variant."
+      },
+      "decisions": [
+        "A attacks Jace Beleren with Grizzly Bears.",
+        "B declares no blockers.",
+        "No spells or abilities are used; both players pass and combat damage is assigned and dealt."
+      ],
+      "variants": [
+        {
+          "label": "attack_planeswalker",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears is unblocked and assigns its 2 damage to Jace Beleren, which loses 2 loyalty counters and stays on the battlefield with 1. B's life stays 20."
+        },
+        {
+          "label": "attack_player",
+          "polarity": "other",
+          "delta": "A attacks B (the player) with Grizzly Bears instead of Jace Beleren.",
+          "expected": "Grizzly Bears is unblocked and assigns its 2 damage to B, whose life becomes 18. Jace Beleren keeps 3 loyalty counters."
+        },
+        {
+          "label": "walker_removed",
+          "polarity": "does_not_fire",
+          "delta": "After no blockers are declared, A casts Lightning Bolt (tapping Mountain) targeting Jace Beleren and it resolves before combat damage.",
+          "expected": "Jace Beleren takes 3 damage, loses all its loyalty and moves to B's graveyard. Grizzly Bears remains in combat attacking nothing and assigns no combat damage: B's life stays 20."
+        }
+      ],
+      "cards": [
+        "Grizzly Bears",
+        "Jace Beleren",
+        "Lightning Bolt",
+        "Mountain"
+      ],
+      "forge_notes": "Check that Forge leaves the attacker in combat with no defender when the attacked planeswalker leaves the battlefield, and does not redirect its damage to the player."
+    },
+    {
+      "id": "510.1c-1",
+      "rules": [
+        "510.1c"
+      ],
+      "title": "A blocked attacker assigns damage to its blockers, and none if no blockers remain",
+      "record_kind": "combat",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Grizzly Bears",
+            "Mountain"
+          ],
+          "B": [
+            "Hill Giant",
+            "Wall of Wood"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Lightning Bolt"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "All creatures have been under their controllers' control since before this turn. Lightning Bolt is used only in the blocker_removed variant."
+      },
+      "decisions": [
+        "A attacks B with Grizzly Bears.",
+        "B blocks Grizzly Bears with Hill Giant only.",
+        "No spells or abilities are used; both players pass and combat damage is assigned and dealt."
+      ],
+      "variants": [
+        {
+          "label": "single_blocker",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears assigns all 2 of its damage to Hill Giant, which stays on the battlefield with 2 damage marked; Hill Giant assigns 3 damage to Grizzly Bears, which moves to A's graveyard. B's life stays 20."
+        },
+        {
+          "label": "blocker_removed",
+          "polarity": "does_not_fire",
+          "delta": "After the block, A casts Lightning Bolt (tapping Mountain) targeting Hill Giant and it resolves.",
+          "expected": "Hill Giant moves to B's graveyard before damage. Grizzly Bears stays blocked but no creature is blocking it, so it assigns no combat damage; B's life stays 20, Wall of Wood has no damage and Grizzly Bears survives undamaged."
+        },
+        {
+          "label": "two_blockers",
+          "polarity": "other",
+          "delta": "B blocks Grizzly Bears with both Hill Giant and Wall of Wood, and A divides its damage 1 to Hill Giant and 1 to Wall of Wood.",
+          "expected": "Grizzly Bears assigns 1 damage to Hill Giant and 1 to Wall of Wood, which both survive with 1 damage marked. Hill Giant assigns 3 damage to Grizzly Bears, which moves to A's graveyard; Wall of Wood assigns none."
+        }
+      ],
+      "cards": [
+        "Grizzly Bears",
+        "Hill Giant",
+        "Wall of Wood",
+        "Lightning Bolt",
+        "Mountain"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "510.1d-1",
+      "rules": [
+        "510.1d"
+      ],
+      "title": "A blocking creature assigns damage to what it blocks, and none if it blocks nothing",
+      "record_kind": "combat",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Grizzly Bears",
+            "Grizzly Bears"
+          ],
+          "B": [
+            "Noble Ox",
+            "Mountain"
+          ]
+        },
+        "hand": {
+          "B": [
+            "Shock"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Call A's creatures Bears 1 and Bears 2. All creatures have been under their controllers' control since before this turn. Noble Ox (2/4) can block any number of creatures. Shock is used only in the attacker_removed variant."
+      },
+      "decisions": [
+        "A attacks B with Bears 1 only.",
+        "B blocks Bears 1 with Noble Ox.",
+        "No spells or abilities are used; both players pass and combat damage is assigned and dealt."
+      ],
+      "variants": [
+        {
+          "label": "single_blocked",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Noble Ox assigns all 2 of its damage to Bears 1, which moves to A's graveyard; Bears 1 assigns 2 damage to Noble Ox, which stays on the battlefield (2/4) with 2 damage marked."
+        },
+        {
+          "label": "attacker_removed",
+          "polarity": "does_not_fire",
+          "delta": "After the block, B casts Shock (tapping Mountain) targeting Bears 1 and it resolves.",
+          "expected": "Bears 1 moves to A's graveyard before damage. Noble Ox is blocking nothing, so it assigns no combat damage; it has no damage marked and A's Bears 2 is untouched."
+        },
+        {
+          "label": "two_blocked",
+          "polarity": "other",
+          "delta": "A attacks with both Bears 1 and Bears 2, Noble Ox blocks both, and B divides its damage 1 to each.",
+          "expected": "Noble Ox assigns 1 damage to each Bears, which both survive with 1 damage marked; Bears 1 and Bears 2 together assign 4 damage to Noble Ox, which moves to B's graveyard."
+        }
+      ],
+      "cards": [
+        "Grizzly Bears",
+        "Noble Ox",
+        "Shock",
+        "Mountain"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "510.2-1",
+      "rules": [
+        "510.2"
+      ],
+      "title": "Combat damage is dealt simultaneously, so a creature that dies still deals its damage",
+      "record_kind": "combat",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Grizzly Bears"
+          ],
+          "B": [
+            "Grizzly Bears",
+            "Youthful Knight"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "All creatures have been under their controllers' control since before this turn. Youthful Knight (2/1) has first strike."
+      },
+      "decisions": [
+        "A attacks B with its Grizzly Bears.",
+        "B blocks with its Grizzly Bears (base variant).",
+        "No spells or abilities are used; both players pass and combat damage is assigned and dealt."
+      ],
+      "variants": [
+        {
+          "label": "simultaneous",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Both Grizzly Bears assign 2 damage in the same combat damage step, and both are dealt at once: both creatures have lethal damage and move to their owners' graveyards."
+        },
+        {
+          "label": "first_strike_blocker",
+          "polarity": "does_not_fire",
+          "delta": "B blocks with Youthful Knight (first strike) instead of its Grizzly Bears.",
+          "expected": "The damage is not simultaneous: in the first combat damage step Youthful Knight deals 2 damage and A's Grizzly Bears moves to A's graveyard before it can deal damage. Youthful Knight has no damage marked and stays on the battlefield."
+        }
+      ],
+      "cards": [
+        "Grizzly Bears",
+        "Youthful Knight"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "510.3a-1",
+      "rules": [
+        "510.3a"
+      ],
+      "title": "A trigger on combat damage is put on the stack before the active player gets priority",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Slith Firewalker"
+          ],
+          "B": [
+            "Wall of Wood"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Slith Firewalker (1/1 haste): whenever it deals combat damage to a player, put a +1/+1 counter on it. All creatures have been under their controllers' control since before this turn."
+      },
+      "decisions": [
+        "A attacks B with Slith Firewalker.",
+        "B declares no blockers (base variant).",
+        "No spells or abilities are used until the combat damage step; when A first receives priority there, A passes and then B passes."
+      ],
+      "variants": [
+        {
+          "label": "unblocked",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Slith Firewalker deals 1 combat damage to B (life 19). Its trigger fires and is already on the stack when A first gets priority in the combat damage step; when it resolves Slith Firewalker has a +1/+1 counter and is 2/2."
+        },
+        {
+          "label": "blocked",
+          "polarity": "does_not_fire",
+          "delta": "B blocks Slith Firewalker with Wall of Wood.",
+          "expected": "Slith Firewalker deals its 1 damage to Wall of Wood, not to a player: the trigger does not fire, nothing is on the stack when A gets priority, B stays at 20 life and Slith Firewalker stays 1/1."
+        }
+      ],
+      "cards": [
+        "Slith Firewalker",
+        "Wall of Wood"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "510.3a-2",
+      "rules": [
+        "510.3a"
+      ],
+      "title": "A trigger on a state-based death after combat damage is put on the stack before the active player gets priority",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Zulaport Cutthroat",
+            "Grizzly Bears"
+          ],
+          "B": [
+            "Hill Giant",
+            "Wall of Wood"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Zulaport Cutthroat (1/1) stays home: whenever it or another creature A controls dies, each opponent loses 1 life and A gains 1 life. All creatures have been under their controllers' control since before this turn."
+      },
+      "decisions": [
+        "A attacks B with Grizzly Bears only.",
+        "B blocks Grizzly Bears with Hill Giant (base variant).",
+        "No spells or abilities are used until the combat damage step; when A first receives priority there, A passes and then B passes."
+      ],
+      "variants": [
+        {
+          "label": "attacker_dies",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Hill Giant deals 3 to Grizzly Bears, which dies in the state-based check right after damage. Zulaport Cutthroat's trigger is already on the stack when A first gets priority in the combat damage step; when it resolves B is at 19 and A at 21."
+        },
+        {
+          "label": "attacker_survives",
+          "polarity": "does_not_fire",
+          "delta": "B blocks Grizzly Bears with Wall of Wood instead of Hill Giant.",
+          "expected": "Wall of Wood deals no damage, Grizzly Bears survives, Zulaport Cutthroat does not trigger and the stack is empty when A gets priority; both players stay at 20 life."
+        }
+      ],
+      "cards": [
+        "Zulaport Cutthroat",
+        "Grizzly Bears",
+        "Hill Giant",
+        "Wall of Wood"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "510.4-1",
+      "rules": [
+        "510.4"
+      ],
+      "title": "A first strike or double strike creature in combat splits combat damage into two steps",
+      "record_kind": "combat",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Grizzly Bears",
+            "Hill Giant"
+          ],
+          "B": [
+            "Youthful Knight",
+            "Grizzly Bears",
+            "Fencing Ace"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "All creatures have been under their controllers' control since before this turn. Youthful Knight (2/1) has first strike; Fencing Ace (1/1) has double strike."
+      },
+      "decisions": [
+        "A attacks B with A's Grizzly Bears only.",
+        "B blocks with Youthful Knight (base variant).",
+        "No spells or abilities are used; both players pass through every combat damage step."
+      ],
+      "variants": [
+        {
+          "label": "first_strike_blocker",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "In the first combat damage step only Youthful Knight deals damage: 2 to Grizzly Bears, which moves to A's graveyard. In the second combat damage step Grizzly Bears is gone and deals no damage; Youthful Knight has no damage marked and survives."
+        },
+        {
+          "label": "no_first_strike",
+          "polarity": "does_not_fire",
+          "delta": "B blocks with its Grizzly Bears instead of Youthful Knight.",
+          "expected": "There is no first strike or double strike creature in combat, so there is a single combat damage step in which both Grizzly Bears deal 2 damage at once and both move to their owners' graveyards."
+        },
+        {
+          "label": "survives_first_strike",
+          "polarity": "other",
+          "delta": "A attacks with Hill Giant instead of Grizzly Bears, and Youthful Knight blocks it.",
+          "expected": "In the first step Youthful Knight deals 2 damage to Hill Giant (3/3), which survives. In the second step Hill Giant deals 3 damage to Youthful Knight, which moves to B's graveyard; Youthful Knight, with first strike only, deals no damage in the second step. Hill Giant stays with 2 damage marked."
+        },
+        {
+          "label": "double_strike_blocker",
+          "polarity": "other",
+          "delta": "B blocks Grizzly Bears with Fencing Ace instead of Youthful Knight.",
+          "expected": "In the first step Fencing Ace deals 1 damage to Grizzly Bears, which survives with 1 damage. In the second step Fencing Ace deals 1 more and Grizzly Bears deals 2 damage to it: Grizzly Bears (2 damage in total) and Fencing Ace both move to their owners' graveyards."
+        }
+      ],
+      "cards": [
+        "Grizzly Bears",
+        "Hill Giant",
+        "Youthful Knight",
+        "Fencing Ace"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

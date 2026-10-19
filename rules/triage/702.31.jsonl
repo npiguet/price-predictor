@@ -1,0 +1,4 @@
+{"id": "702.31", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.31a", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.31b", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "A creature with horsemanship can be blocked only by creatures with horsemanship, but can block creatures with or without it.", "note": ""}
+{"id": "702.31c", "category": "legality", "observability": "indirect", "record_kinds": ["playability"], "outcome": "Multiple instances of horsemanship give the same blocking restriction as one.", "note": ""}

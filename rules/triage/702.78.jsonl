@@ -1,0 +1,3 @@
+{"id": "702.78", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.78a", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution", "trigger"], "outcome": "Casting a spell with its conspire cost paid triggers a copy of that spell.", "note": ""}
+{"id": "702.78b", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution", "trigger"], "outcome": "Each conspire instance is paid and triggers independently.", "note": ""}

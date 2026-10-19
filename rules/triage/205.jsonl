@@ -1,0 +1,33 @@
+{"id": "205.1", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "205.1a", "category": "mechanical", "observability": "direct", "record_kinds": ["continuous"], "outcome": "An effect that sets a card type replaces the existing types except instant or sorcery, which is retained, and subtypes of a removed type disappear.", "note": ""}
+{"id": "205.1b", "category": "mechanical", "observability": "direct", "record_kinds": ["continuous"], "outcome": "An effect that adds a type or says the object is still a type keeps all prior types, supertypes and subtypes, so a permanent becomes an artifact land creature instead of replacing its types.", "note": ""}
+{"id": "205.2", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "205.2a", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "205.2b", "category": "mechanical", "observability": "indirect", "record_kinds": ["continuous", "resolution"], "outcome": "An artifact creature is matched by effects that apply to artifacts and by effects that apply to creatures.", "note": ""}
+{"id": "205.2c", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "205.3", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "205.3a", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "205.3b", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "205.3c", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "205.3d", "category": "mechanical", "observability": "direct", "record_kinds": ["continuous"], "outcome": "An effect that grants a subtype not corresponding to one of the object's types does not give it that subtype.", "note": ""}
+{"id": "205.3e", "category": "decision", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "205.3f", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "205.3g", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "205.3h", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "205.3i", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "205.3j", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "205.3k", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "205.3m", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "205.3n", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "205.3p", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "205.3q", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "205.3r", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "205.4", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "205.4a", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "205.4b", "category": "mechanical", "observability": "direct", "record_kinds": ["continuous"], "outcome": "Changing an object's card types or subtypes leaves its supertypes unchanged, and changing supertypes leaves types and subtypes unchanged, so a legendary land turned into a creature stays legendary.", "note": ""}
+{"id": "205.4c", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "205.4d", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "When a player controls two legendary permanents with the same name, that player chooses one and the others go to the graveyard in the state-based check.", "note": ""}
+{"id": "205.4e", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "A legendary instant or sorcery is not castable unless its caster controls a legendary creature or planeswalker.", "note": ""}
+{"id": "205.4f", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "When two world permanents are on the battlefield, all but the newest go to their owners' graveyards in the state-based check.", "note": ""}
+{"id": "205.4g", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "205.4h", "category": "out_of_scope", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}

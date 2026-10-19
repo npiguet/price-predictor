@@ -1,0 +1,3 @@
+{"id": "702.65", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.65a", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "Paying the aura swap cost exchanges the Aura on the battlefield with an Aura card in hand.", "note": ""}
+{"id": "702.65b", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "If either half of the aura swap exchange cannot be completed, the ability has no effect.", "note": ""}

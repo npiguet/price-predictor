@@ -1,0 +1,4 @@
+{"id": "701.11", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "701.11a", "category": "mechanical", "observability": "direct", "record_kinds": ["continuous"], "outcome": "A tripled creature's power and/or toughness is modified by a continuous effect rather than set to a value.", "note": ""}
+{"id": "701.11b", "category": "mechanical", "observability": "direct", "record_kinds": ["continuous"], "outcome": "Tripling power gives +X/+0 with X twice the power at resolution, tripling toughness gives +0/+X, tripling both gives +X/+Y.", "note": ""}
+{"id": "701.11c", "category": "mechanical", "observability": "direct", "record_kinds": ["continuous"], "outcome": "A negative power or toughness triples to a further negative modifier of twice the difference from 0.", "note": ""}

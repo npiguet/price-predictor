@@ -1,0 +1,337 @@
+{
+  "unit": "404",
+  "verified": true,
+  "review": [
+    "404.1-2: flashback expected omitted the sacrificed Mountain going to A's graveyard; added it.",
+    "404.1-5: token variant was labelled does_not_fire, but a sacrificed token does go to the graveyard before ceasing to exist (704.5d); made it other with that outcome and added a Leyline of the Void does_not_fire variant."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "404.1-1",
+      "rules": [
+        "404.1"
+      ],
+      "title": "An instant that finished resolving is put on top of its owner's graveyard",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Lava Dart"
+          ]
+        },
+        "graveyard": {
+          "A": [
+            "Grizzly Bears"
+          ]
+        },
+        "library": {},
+        "exile": {},
+        "notes": "A's graveyard is listed bottom first."
+      },
+      "decisions": [
+        "A casts Lava Dart targeting B, tapping Mountain.",
+        "Both players pass; Lava Dart resolves."
+      ],
+      "variants": [
+        {
+          "label": "from_hand",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "B takes 1 damage (19 life). Lava Dart goes on top of A's graveyard, above Grizzly Bears."
+        },
+        {
+          "label": "flashback",
+          "polarity": "does_not_fire",
+          "delta": "Lava Dart is in A's graveyard on top of Grizzly Bears and A casts it with flashback, sacrificing Mountain.",
+          "expected": "B takes 1 damage. Lava Dart is exiled and A's graveyard holds Mountain on top of Grizzly Bears."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Lava Dart",
+        "Grizzly Bears"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "404.1-2",
+      "rules": [
+        "404.1"
+      ],
+      "title": "A countered spell is put on top of its owner's graveyard",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain"
+          ],
+          "B": [
+            "Island",
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Lava Dart"
+          ],
+          "B": [
+            "Counterspell"
+          ]
+        },
+        "graveyard": {
+          "A": [
+            "Grizzly Bears"
+          ]
+        },
+        "library": {},
+        "exile": {},
+        "notes": "A's graveyard is listed bottom first."
+      },
+      "decisions": [
+        "A casts Lava Dart targeting B, tapping Mountain.",
+        "B casts Counterspell targeting Lava Dart, tapping both Islands.",
+        "Both players pass; Counterspell resolves."
+      ],
+      "variants": [
+        {
+          "label": "from_hand",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Lava Dart is countered and goes on top of A's graveyard, above Grizzly Bears; Counterspell goes to B's graveyard. B takes no damage."
+        },
+        {
+          "label": "flashback",
+          "polarity": "does_not_fire",
+          "delta": "Lava Dart is in A's graveyard on top of Grizzly Bears and A casts it with flashback, sacrificing Mountain.",
+          "expected": "Lava Dart is countered and exiled instead of going to the graveyard; Mountain goes on top of A's graveyard, above Grizzly Bears; Counterspell goes to B's graveyard; B takes no damage."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Island",
+        "Lava Dart",
+        "Counterspell",
+        "Grizzly Bears"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "404.1-3",
+      "rules": [
+        "404.1"
+      ],
+      "title": "A destroyed creature is put on top of its owner's graveyard",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain"
+          ],
+          "B": [
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Shock"
+          ]
+        },
+        "graveyard": {
+          "B": [
+            "Giant Growth"
+          ]
+        },
+        "library": {},
+        "exile": {},
+        "notes": "B's graveyard is listed bottom first."
+      },
+      "decisions": [
+        "A casts Shock targeting Grizzly Bears, tapping Mountain.",
+        "Both players pass; Shock resolves."
+      ],
+      "variants": [
+        {
+          "label": "toughness_2",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears takes 2 damage and dies; it goes on top of B's graveyard, above Giant Growth. Shock goes to A's graveyard."
+        },
+        {
+          "label": "toughness_3",
+          "polarity": "does_not_fire",
+          "delta": "B's creature is Centaur Courser (3/3) instead of Grizzly Bears.",
+          "expected": "Centaur Courser stays on the battlefield with 2 damage marked; B's graveyard holds only Giant Growth."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Shock",
+        "Grizzly Bears",
+        "Centaur Courser",
+        "Giant Growth"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "404.1-4",
+      "rules": [
+        "404.1"
+      ],
+      "title": "A discarded card is put on top of its owner's graveyard",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Swamp"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Raven's Crime"
+          ],
+          "B": [
+            "Forest",
+            "Giant Growth"
+          ]
+        },
+        "graveyard": {
+          "B": [
+            "Grizzly Bears"
+          ]
+        },
+        "library": {},
+        "exile": {},
+        "notes": "B's graveyard is listed bottom first."
+      },
+      "decisions": [
+        "A casts Raven's Crime targeting B, tapping Swamp.",
+        "Both players pass; Raven's Crime resolves.",
+        "B chooses to discard Forest."
+      ],
+      "variants": [
+        {
+          "label": "plain",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Forest goes on top of B's graveyard, above Grizzly Bears; B keeps Giant Growth. Raven's Crime goes to A's graveyard."
+        },
+        {
+          "label": "library_of_leng",
+          "polarity": "does_not_fire",
+          "delta": "B controls Library of Leng and chooses to put the discarded Forest on top of their library.",
+          "expected": "Forest goes on top of B's library; B's graveyard holds only Grizzly Bears."
+        }
+      ],
+      "cards": [
+        "Swamp",
+        "Raven's Crime",
+        "Forest",
+        "Giant Growth",
+        "Grizzly Bears",
+        "Library of Leng"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "404.1-5",
+      "rules": [
+        "404.1"
+      ],
+      "title": "A sacrificed permanent is put on top of its owner's graveyard",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Swamp",
+            "Swamp"
+          ],
+          "B": [
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Diabolic Edict"
+          ]
+        },
+        "graveyard": {
+          "B": [
+            "Giant Growth"
+          ]
+        },
+        "library": {},
+        "exile": {},
+        "notes": "B's graveyard is listed bottom first. In the leyline_of_the_void variant, A cast Leyline of the Void after Giant Growth reached B's graveyard."
+      },
+      "decisions": [
+        "A casts Diabolic Edict targeting B, tapping both Swamps.",
+        "Both players pass; Diabolic Edict resolves.",
+        "B sacrifices Grizzly Bears, B's only creature."
+      ],
+      "variants": [
+        {
+          "label": "card",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears goes on top of B's graveyard, above Giant Growth."
+        },
+        {
+          "label": "token",
+          "polarity": "other",
+          "delta": "B's only creature is a 2/2 Bear creature token instead of the Grizzly Bears card.",
+          "expected": "The token is put into B's graveyard as it is sacrificed and ceases to exist in the next state-based check; B's graveyard then holds only Giant Growth."
+        },
+        {
+          "label": "leyline_of_the_void",
+          "polarity": "does_not_fire",
+          "delta": "A controls Leyline of the Void.",
+          "expected": "Grizzly Bears is sacrificed and exiled instead of going to B's graveyard; B's graveyard holds only Giant Growth."
+        }
+      ],
+      "cards": [
+        "Swamp",
+        "Diabolic Edict",
+        "Grizzly Bears",
+        "Giant Growth",
+        "Leyline of the Void"
+      ],
+      "forge_notes": "A token named Grizzly Bears stands for a vanilla 2/2 green Bear token."
+    }
+  ]
+}

@@ -1,0 +1,35 @@
+{"id": "700.1", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "700.2", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "700.2a", "category": "decision", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "700.2b", "category": "mechanical", "observability": "direct", "record_kinds": ["resolution"], "outcome": "A modal triggered ability with no mode chosen is removed from the stack without resolving.", "note": ""}
+{"id": "700.2c", "category": "decision", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "700.2d", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "A mode chosen multiple times is carried out that many times in sequence on resolution.", "note": ""}
+{"id": "700.2e", "category": "decision", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "700.2f", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "Redirecting a modal spell's target leaves its chosen mode unchanged.", "note": ""}
+{"id": "700.2g", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "A copy of a modal spell or ability resolves with the same modes as the original.", "note": ""}
+{"id": "700.2h", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "A modal spell with a costed mode shows a higher cost after adjustment when that mode is chosen.", "note": ""}
+{"id": "700.2i", "category": "decision", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "700.3", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "700.3a", "category": "decision", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "700.3b", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "700.3c", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "Cards split into piles stay in their zone until the effect moves them.", "note": ""}
+{"id": "700.3d", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "700.4", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "700.5", "category": "mechanical", "observability": "needs_new_fields", "record_kinds": ["continuous"], "outcome": "A devotion-based static ability turns a permanent on or off according to the count of matching mana symbols among the controller's permanents.", "note": ""}
+{"id": "700.5a", "category": "mechanical", "observability": "needs_new_fields", "record_kinds": ["continuous"], "outcome": "Devotion is computed after copy, control and text-changing effects but before other characteristic changes, so a god's own type change does not alter the count.", "note": ""}
+{"id": "700.6", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "700.7", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "A delayed effect that says 'this [something]' still acts on the original object even if it no longer has that quality.", "note": ""}
+{"id": "700.8", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "700.8a", "category": "mechanical", "observability": "needs_new_fields", "record_kinds": ["resolution"], "outcome": "A party-counting effect yields a number from zero to four computed automatically.", "note": ""}
+{"id": "700.8b", "category": "mechanical", "observability": "needs_new_fields", "record_kinds": ["resolution"], "outcome": "A multi-type creature counts as a member of only one party slot, chosen to maximise the party size.", "note": ""}
+{"id": "700.8c", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "700.8d", "category": "decision", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "700.9", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "700.10", "category": "mechanical", "observability": "needs_new_fields", "record_kinds": ["resolution"], "outcome": "A condition on a permanent that was activated this turn holds if it was the source of an activated ability this turn, even if it lost the ability.", "note": ""}
+{"id": "700.11", "category": "mechanical", "observability": "needs_new_fields", "record_kinds": ["resolution", "trigger"], "outcome": "A player has descended if a permanent card was put into their graveyard from anywhere this turn, even if it has since left.", "note": ""}
+{"id": "700.12", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "700.12a", "category": "mechanical", "observability": "needs_new_fields", "record_kinds": ["continuous", "resolution"], "outcome": "Effects that refer to outlaws count only outlaw permanents unless otherwise specified.", "note": ""}
+{"id": "700.13", "category": "mechanical", "observability": "indirect", "record_kinds": ["trigger"], "outcome": "A crime is committed, and crime triggers fire, when a spell or ability is cast, activated or put on the stack targeting an opponent, an opponent's permanent, spell or ability, or a card in an opponent's graveyard.", "note": ""}
+{"id": "700.14", "category": "mechanical", "observability": "indirect", "record_kinds": ["trigger"], "outcome": "An expend trigger fires when mana spent on spells this turn crosses the threshold N as a cost is paid.", "note": ""}
+{"id": "700.15", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "700.16", "category": "mechanical", "observability": "needs_new_fields", "record_kinds": ["continuous", "resolution"], "outcome": "A worthy-creature effect applies to a creature only if it is legendary, not a Villain, and red or white.", "note": ""}

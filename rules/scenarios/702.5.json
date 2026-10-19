@@ -1,0 +1,191 @@
+{
+  "unit": "702.5",
+  "verified": true,
+  "review": [],
+  "skipped": [
+    {
+      "id": "702.5b",
+      "reason": "pointer to rule 303 with no outcome of its own"
+    },
+    {
+      "id": "702.5c",
+      "reason": "cannot be illustrated: no card in Forge's cardsfolder has two enchant abilities on one Aura face (Radiant Grace // Radiant Restraints has one on each face), and no simple effect grants a second enchant ability; the single-instance restriction is covered by 702.5a-1 and 702.5a-2"
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "702.5a-1",
+      "rules": [
+        "702.5a"
+      ],
+      "title": "An Aura's enchant ability restricts what it can target: Enchant land cannot target a creature",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Forest",
+            "Forest",
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            }
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Wild Growth"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A tries to cast Wild Growth targeting Grizzly Bears, paying G with a Forest."
+      ],
+      "variants": [
+        {
+          "label": "target_creature",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The cast is illegal: Grizzly Bears is not a legal target for Wild Growth (enchant land)."
+        },
+        {
+          "label": "target_land",
+          "polarity": "does_not_fire",
+          "delta": "A targets the untapped Forest instead of Grizzly Bears.",
+          "expected": "The cast is legal. Wild Growth resolves and enters attached to that Forest."
+        }
+      ],
+      "cards": [
+        "Forest",
+        "Grizzly Bears",
+        "Wild Growth"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.5a-2",
+      "rules": [
+        "702.5a"
+      ],
+      "title": "An Aura with Enchant creature has no legal target when there is no creature",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Guard Duty"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A tries to cast Guard Duty, paying W with Plains."
+      ],
+      "variants": [
+        {
+          "label": "no_creature",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Guard Duty has no legal target and cannot be cast; the verdict reports no legal target."
+        },
+        {
+          "label": "creature_present",
+          "polarity": "does_not_fire",
+          "delta": "B controls Grizzly Bears.",
+          "expected": "Guard Duty has Grizzly Bears as its only legal target; the cast is legal and Guard Duty resolves attached to Grizzly Bears."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Guard Duty",
+        "Grizzly Bears"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.5d-1",
+      "rules": [
+        "702.5d"
+      ],
+      "title": "An Aura that enchants a player targets players and not permanents",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain"
+          ],
+          "B": [
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            }
+          ]
+        },
+        "hand": {
+          "A": [
+            "Curse of the Pierced Heart"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Curse of the Pierced Heart targeting player B, tapping both Mountains.",
+        "Both players pass; the Aura resolves."
+      ],
+      "variants": [
+        {
+          "label": "target_player",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The cast is legal. Curse of the Pierced Heart resolves and enters attached to player B."
+        },
+        {
+          "label": "target_creature",
+          "polarity": "does_not_fire",
+          "delta": "A targets Grizzly Bears instead of player B.",
+          "expected": "The cast is illegal: Grizzly Bears is not a legal target for an Aura that enchants a player."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Grizzly Bears",
+        "Curse of the Pierced Heart"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

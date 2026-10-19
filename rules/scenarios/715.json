@@ -1,0 +1,400 @@
+{
+  "unit": "715",
+  "verified": true,
+  "review": [
+    "715.3a-1: the does_not_fire variant was the one-Mountain Stomp, which tests mana rather than the rule; the contrast 715.3a decides is the normal creature cast, so normal_cast is now does_not_fire and stomp_one_mana is other."
+  ],
+  "skipped": [
+    {
+      "id": "715.2b",
+      "reason": "covered by 715.3c-1: the copy of Stomp has the Adventure's characteristics only because they are part of the copiable values; copies of permanents show nothing separate"
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "715.3a-1",
+      "rules": [
+        "715.3a"
+      ],
+      "title": "Casting an adventurer card as an Adventure is judged on the Adventure's characteristics only",
+      "record_kind": "playability",
+      "setup": {
+        "active": "B",
+        "step": "upkeep",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Bonecrusher Giant"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "It is B's upkeep and A holds priority. Bonecrusher Giant is a {2}{R} creature; its Adventure Stomp is a {1}{R} instant."
+      },
+      "decisions": [
+        "A attempts to cast Bonecrusher Giant as an Adventure (Stomp) targeting B, tapping both Mountains."
+      ],
+      "variants": [
+        {
+          "label": "stomp_two_mana",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Legal: only Stomp's {1}{R} cost and instant timing are evaluated, so A can cast it during B's upkeep with two Mountains, even though the creature half could neither be paid for nor cast at that time."
+        },
+        {
+          "label": "stomp_one_mana",
+          "polarity": "other",
+          "delta": "A has only one Mountain on the battlefield.",
+          "expected": "Not legal: Stomp's {1}{R} cost cannot be paid with one land."
+        },
+        {
+          "label": "normal_cast",
+          "polarity": "does_not_fire",
+          "delta": "A attempts to cast Bonecrusher Giant as a creature instead of as an Adventure.",
+          "expected": "Not legal: the creature half costs {2}{R} and has sorcery timing, and A has two Mountains and it is B's upkeep."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Bonecrusher Giant"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "715.3b-1",
+      "rules": [
+        "715.3b",
+        "715.4"
+      ],
+      "title": "On the stack an Adventure has only Adventure characteristics; otherwise the card is a creature",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Mountain"
+          ],
+          "B": [
+            "Island",
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Bonecrusher Giant"
+          ],
+          "B": [
+            "Essence Scatter"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Essence Scatter counters target creature spell."
+      },
+      "decisions": [
+        "A casts Bonecrusher Giant as an Adventure (Stomp) targeting B, tapping two Mountains.",
+        "With Stomp on the stack, B attempts to cast Essence Scatter targeting Stomp."
+      ],
+      "variants": [
+        {
+          "label": "cast_as_adventure",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "B cannot cast Essence Scatter: Stomp on the stack is an instant Adventure spell, not a creature spell, so it is not a legal target. Stomp resolves and deals 2 damage to B."
+        },
+        {
+          "label": "cast_as_creature",
+          "polarity": "does_not_fire",
+          "delta": "A casts Bonecrusher Giant as a creature (tapping three Mountains) instead of as an Adventure.",
+          "expected": "The spell on the stack has the card's normal characteristics and is a creature spell. Essence Scatter can legally target it and counters it; Bonecrusher Giant goes to A's graveyard."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Island",
+        "Bonecrusher Giant",
+        "Essence Scatter"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "715.3c-1",
+      "rules": [
+        "715.3c"
+      ],
+      "title": "A copy of an Adventure spell is an Adventure with the Adventure's characteristics",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Island",
+            "Island"
+          ],
+          "B": [
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Bonecrusher Giant",
+            "Twincast"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Twincast copies target instant or sorcery spell and lets its controller choose new targets for the copy."
+      },
+      "decisions": [
+        "A casts Bonecrusher Giant as an Adventure (Stomp) targeting Grizzly Bears, tapping two Mountains.",
+        "A holds priority and casts Twincast (tapping two Islands) targeting Stomp; both players pass and Twincast resolves, creating a copy of Stomp. A chooses B as the target of the copy.",
+        "Both players pass until the copy and then the original Stomp have resolved."
+      ],
+      "variants": [
+        {
+          "label": "copy_resolves_as_stomp",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The copy resolves as Stomp and deals 2 damage to B (B at 18). It is not a Bonecrusher Giant creature spell and no creature enters the battlefield. The original Stomp then deals 2 damage to Grizzly Bears, which dies, and the Bonecrusher Giant card is exiled. The copy ceases to exist."
+        },
+        {
+          "label": "no_copy",
+          "polarity": "does_not_fire",
+          "delta": "A does not cast Twincast.",
+          "expected": "Only the original Stomp resolves: Grizzly Bears dies, B stays at 20 life, and the Bonecrusher Giant card is exiled."
+        },
+        {
+          "label": "copy_of_creature_spell",
+          "polarity": "other",
+          "delta": "A casts Bonecrusher Giant as a creature (tapping three Mountains) and then tries to cast Twincast on it.",
+          "expected": "Twincast cannot be cast: a creature spell is not an instant or sorcery spell, so there is no legal target."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Island",
+        "Grizzly Bears",
+        "Bonecrusher Giant",
+        "Twincast"
+      ],
+      "forge_notes": "The copy's use of Stomp's alternative characteristics is also what 715.2b makes copiable."
+    },
+    {
+      "id": "715.3d-1",
+      "rules": [
+        "715.3d"
+      ],
+      "title": "A resolved Adventure is exiled and its creature half can be cast from exile, but not the Adventure again",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain"
+          ],
+          "B": [
+            "Grizzly Bears",
+            "Island",
+            "Island",
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Bonecrusher Giant"
+          ],
+          "B": [
+            "Cancel"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "B holds Cancel with three untapped Islands but passes in the base variant."
+      },
+      "decisions": [
+        "A casts Bonecrusher Giant as an Adventure (Stomp) targeting Grizzly Bears, tapping two Mountains.",
+        "B passes; Stomp resolves.",
+        "A, with an empty stack, attempts to cast Stomp again from exile, then casts Bonecrusher Giant as a creature from exile tapping three Mountains; both players pass and it resolves."
+      ],
+      "variants": [
+        {
+          "label": "resolves",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Stomp deals 2 damage to Grizzly Bears, which dies, and the card is exiled instead of going to the graveyard. Casting Stomp again from exile is not legal. Casting Bonecrusher Giant as a creature from exile is legal and it enters the battlefield as a 4/3."
+        },
+        {
+          "label": "countered",
+          "polarity": "does_not_fire",
+          "delta": "In response to Stomp, B casts Cancel (tapping three Islands) targeting it.",
+          "expected": "Stomp is countered and the Bonecrusher Giant card goes to A's graveyard, not exile. Grizzly Bears survives. A cannot cast the card from exile because it is not there."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Island",
+        "Grizzly Bears",
+        "Bonecrusher Giant",
+        "Cancel"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "715.2c-1",
+      "rules": [
+        "715.2c"
+      ],
+      "title": "An adventurer card is one card when discarded",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Swamp",
+            "Swamp",
+            "Swamp"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Mind Rot"
+          ],
+          "B": [
+            "Bonecrusher Giant"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Mind Rot: target player discards two cards."
+      },
+      "decisions": [
+        "A casts Mind Rot targeting B, tapping three Swamps.",
+        "Both players pass; Mind Rot resolves and B discards."
+      ],
+      "variants": [
+        {
+          "label": "giant_alone",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "B's hand holds one card, so B discards that one card: Bonecrusher Giant moves to B's graveyard, which holds exactly one card, and B's hand is empty. It does not count as two cards."
+        },
+        {
+          "label": "giant_and_island",
+          "polarity": "other",
+          "delta": "B's hand holds Bonecrusher Giant and Island.",
+          "expected": "B discards both cards: the graveyard holds exactly Bonecrusher Giant and Island, two cards in total, which is all Mind Rot asks for."
+        }
+      ],
+      "cards": [
+        "Swamp",
+        "Mind Rot",
+        "Bonecrusher Giant",
+        "Island"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "715.4-1",
+      "rules": [
+        "715.4"
+      ],
+      "title": "In the graveyard an adventurer card has only its normal characteristics",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Swamp"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Reanimate"
+          ]
+        },
+        "graveyard": {
+          "A": [
+            "Bonecrusher Giant"
+          ]
+        },
+        "library": {},
+        "exile": {},
+        "notes": "Reanimate: put target creature card from a graveyard onto the battlefield under your control; you lose life equal to its mana value."
+      },
+      "decisions": [
+        "A casts Reanimate targeting the card in A's graveyard, tapping Swamp.",
+        "Both players pass; Reanimate resolves."
+      ],
+      "variants": [
+        {
+          "label": "giant_in_graveyard",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Bonecrusher Giant in the graveyard is a creature card with mana value 3, so it is a legal target: it enters the battlefield as a 4/3 under A's control and A loses 3 life (A at 17)."
+        },
+        {
+          "label": "instant_in_graveyard",
+          "polarity": "other",
+          "delta": "The card in A's graveyard is Shock instead of Bonecrusher Giant.",
+          "expected": "Shock is not a creature card, so Reanimate has no legal target and cannot be cast; nothing changes."
+        }
+      ],
+      "cards": [
+        "Swamp",
+        "Reanimate",
+        "Bonecrusher Giant",
+        "Shock"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

@@ -1,0 +1,144 @@
+{
+  "unit": "702.23",
+  "verified": true,
+  "review": [],
+  "skipped": [
+    {
+      "id": "702.23c",
+      "reason": "cannot be illustrated with cards Forge implements: a creature needs two separate instances of rampage, and no Forge card has two Rampage keywords or grants rampage to a creature that already has it (Rapid Fire grants rampage 2 only to a creature without rampage, and Gabriel Angelfire grants one instance of rampage 3 to itself); the single-instance trigger is covered by 702.23a-1"
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "702.23a-1",
+      "rules": [
+        "702.23a"
+      ],
+      "title": "Rampage gives +N/+N for each blocker beyond the first",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Wolverine Pack",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            "Grizzly Bears",
+            "Grizzly Bears",
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A attacks player B with Wolverine Pack (2/4, rampage 2).",
+        "B blocks Wolverine Pack with two Grizzly Bears (the third Grizzly Bears does not block).",
+        "Wolverine Pack becomes blocked and its rampage trigger goes on the stack; both players pass and it resolves.",
+        "Combat damage: A assigns Wolverine Pack's damage as 2 to each blocking Grizzly Bears when it has 4 or more power, and all of it to the single blocker otherwise."
+      ],
+      "variants": [
+        {
+          "label": "two_blockers",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The rampage trigger resolves and Wolverine Pack gets +2/+2 until end of turn (one blocker beyond the first), becoming 4/6. It deals 2 damage to each blocking Grizzly Bears, so both are destroyed and move to B's graveyard. Wolverine Pack takes 4 damage and survives."
+        },
+        {
+          "label": "one_blocker",
+          "polarity": "does_not_fire",
+          "delta": "B blocks Wolverine Pack with only one Grizzly Bears.",
+          "expected": "The rampage trigger resolves with no blockers beyond the first, so Wolverine Pack gets +0/+0 and stays 2/4. It deals 2 damage to the blocking Grizzly Bears, which is destroyed. Wolverine Pack takes 2 damage and survives."
+        },
+        {
+          "label": "three_blockers",
+          "polarity": "other",
+          "delta": "B blocks Wolverine Pack with all three Grizzly Bears.",
+          "expected": "The rampage trigger resolves and Wolverine Pack gets +4/+4 until end of turn (two blockers beyond the first), becoming 6/8. It deals 2 damage to each of the three Grizzly Bears, so all three are destroyed. Wolverine Pack takes 6 damage and survives."
+        }
+      ],
+      "cards": [
+        "Wolverine Pack",
+        "Grizzly Bears"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.23b-1",
+      "rules": [
+        "702.23b"
+      ],
+      "title": "The rampage bonus is calculated once, when the trigger resolves",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Wolverine Pack",
+              "summoning_sick": false
+            },
+            "Mountain"
+          ],
+          "B": [
+            "Grizzly Bears",
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Lightning Bolt"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A attacks player B with Wolverine Pack (2/4, rampage 2).",
+        "B blocks Wolverine Pack with both Grizzly Bears.",
+        "Wolverine Pack becomes blocked and its rampage trigger goes on the stack.",
+        "Base: both players pass and the trigger resolves; then A casts Lightning Bolt targeting one blocking Grizzly Bears, tapping Mountain, and it resolves. Variant: A casts Lightning Bolt targeting one blocking Grizzly Bears with the trigger still on the stack, and it resolves before the trigger.",
+        "Combat damage: Wolverine Pack deals all of its damage to the remaining blocker."
+      ],
+      "variants": [
+        {
+          "label": "bolt_after_trigger_resolves",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The rampage trigger resolves with two blockers and Wolverine Pack gets +2/+2, becoming 4/6. Lightning Bolt then destroys one Grizzly Bears, and Wolverine Pack stays 4/6 for the rest of the turn. In combat damage it deals 4 damage to the remaining Grizzly Bears (destroyed) and takes 2 damage."
+        },
+        {
+          "label": "bolt_in_response",
+          "polarity": "does_not_fire",
+          "delta": "A casts Lightning Bolt in response to the rampage trigger instead of after it resolves.",
+          "expected": "Lightning Bolt destroys one Grizzly Bears first, so only one creature blocks Wolverine Pack when the rampage trigger resolves. Wolverine Pack gets +0/+0 and stays 2/4. In combat damage it deals 2 damage to the remaining Grizzly Bears (destroyed) and takes 2 damage."
+        }
+      ],
+      "cards": [
+        "Wolverine Pack",
+        "Mountain",
+        "Grizzly Bears",
+        "Lightning Bolt"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

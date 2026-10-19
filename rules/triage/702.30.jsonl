@@ -1,0 +1,3 @@
+{"id": "702.30", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.30a", "category": "mechanical", "observability": "direct", "record_kinds": ["trigger", "resolution"], "outcome": "At the beginning of its controller's upkeep, if the permanent came under their control since their last upkeep started, echo triggers and the permanent is sacrificed unless the echo cost is paid; otherwise it does not trigger.", "note": "the payment choice is a decision; the trigger condition and sacrifice are observable"}
+{"id": "702.30b", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}

@@ -1,0 +1,3 @@
+{"id": "701.64", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "701.64a", "category": "mechanical", "observability": "indirect", "record_kinds": ["trigger"], "outcome": "The permanent becomes harnessed, which abilities that check for harnessed then see.", "note": "No record field shows the designation; abilities conditioned on it show its effect."}
+{"id": "701.64b", "category": "mechanical", "observability": "indirect", "record_kinds": ["trigger"], "outcome": "A harnessed permanent stays harnessed until it leaves the battlefield, and the new object it becomes is not harnessed.", "note": ""}

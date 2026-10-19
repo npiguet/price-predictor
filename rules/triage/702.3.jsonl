@@ -1,0 +1,4 @@
+{"id": "702.3", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.3a", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.3b", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "A creature with defender is not a legal attacker.", "note": ""}
+{"id": "702.3c", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": "Redundancy of instances has no separate outcome."}

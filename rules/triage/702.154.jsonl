@@ -1,0 +1,5 @@
+{"id": "702.154", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.154a", "category": "mechanical", "observability": "indirect", "record_kinds": ["trigger", "continuous"], "outcome": "When this creature attacks and enlists a tapped creature, it gets +X/+0 until end of turn, X being the tapped creature power.", "note": ""}
+{"id": "702.154b", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.154c", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.154d", "category": "mechanical", "observability": "indirect", "record_kinds": ["trigger"], "outcome": "Each enlist instance triggers once, only for its own cost payment.", "note": ""}

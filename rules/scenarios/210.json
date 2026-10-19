@@ -1,0 +1,73 @@
+{
+  "unit": "210",
+  "verified": true,
+  "review": [],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "210.1-1",
+      "rules": [
+        "210.1"
+      ],
+      "title": "A battle enters with defense counters equal to its printed defense",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Plains"
+          ],
+          "B": [
+            "Island",
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Invasion of Gobakhan"
+          ],
+          "B": [
+            "Counterspell"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Invasion of Gobakhan, tapping two Plains.",
+        "B passes priority; Invasion of Gobakhan resolves.",
+        "As it enters, A chooses B as its protector.",
+        "Its enters trigger targets B; A looks at B's hand and chooses to exile no card."
+      ],
+      "variants": [
+        {
+          "label": "resolves",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Invasion of Gobakhan enters the battlefield with 3 defense counters, its printed defense, and B protects it."
+        },
+        {
+          "label": "countered",
+          "polarity": "does_not_fire",
+          "delta": "B responds with Counterspell, tapping two Islands.",
+          "expected": "Invasion of Gobakhan is countered and moves to A's graveyard; it never enters the battlefield, so no defense counters are placed."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Island",
+        "Invasion of Gobakhan",
+        "Counterspell"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

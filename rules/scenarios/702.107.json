@@ -1,0 +1,160 @@
+{
+  "unit": "702.107",
+  "verified": true,
+  "review": [
+    "702.107a-2 stack-not-empty: delta left Shock in B's hand and Mountain untapped while saying Shock was on the stack; restated it as B having cast Shock by tapping Mountain."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.107a-1",
+      "rules": [
+        "702.107a"
+      ],
+      "title": "Outlast taps the creature and puts a +1/+1 counter on it when it resolves",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Plains",
+            {
+              "card": "Salt Road Patrol",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            "Swamp",
+            "Swamp"
+          ]
+        },
+        "hand": {
+          "B": [
+            "Doom Blade"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Salt Road Patrol is a 2/5 with outlast {1}{W}."
+      },
+      "decisions": [
+        "A activates Salt Road Patrol's outlast ability, paying {1}{W} with both Plains and tapping Salt Road Patrol.",
+        "Both players pass; the ability resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Salt Road Patrol is tapped and has one +1/+1 counter after the ability resolves; it is 3/6."
+        },
+        {
+          "label": "creature-gone",
+          "polarity": "does_not_fire",
+          "delta": "In response, B casts Doom Blade targeting Salt Road Patrol, tapping both Swamps.",
+          "expected": "Doom Blade destroys Salt Road Patrol, which goes to A's graveyard. The outlast ability resolves and puts no counter anywhere."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Swamp",
+        "Salt Road Patrol",
+        "Doom Blade"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.107a-2",
+      "rules": [
+        "702.107a"
+      ],
+      "title": "Outlast can be activated only as a sorcery and only while the creature can tap",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Plains",
+            {
+              "card": "Salt Road Patrol",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            "Mountain"
+          ]
+        },
+        "hand": {
+          "B": [
+            "Shock"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A considers activating Salt Road Patrol's outlast ability ({1}{W}, {T}) with an empty stack."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Activating outlast is legal."
+        },
+        {
+          "label": "combat",
+          "polarity": "does_not_fire",
+          "delta": "The step is beginning_of_combat instead of main1.",
+          "expected": "Activating outlast is not legal because it is not a main phase."
+        },
+        {
+          "label": "stack-not-empty",
+          "polarity": "does_not_fire",
+          "delta": "B has cast Shock targeting A (tapping Mountain) and it is on the stack, with A holding priority.",
+          "expected": "Activating outlast is not legal because the stack is not empty."
+        },
+        {
+          "label": "summoning-sick",
+          "polarity": "does_not_fire",
+          "delta": "Salt Road Patrol came under A's control this turn (summoning_sick true).",
+          "expected": "Activating outlast is not legal because the {T} cost cannot be paid."
+        },
+        {
+          "label": "already-tapped",
+          "polarity": "does_not_fire",
+          "delta": "Salt Road Patrol is tapped.",
+          "expected": "Activating outlast is not legal because the {T} cost cannot be paid."
+        },
+        {
+          "label": "one-land",
+          "polarity": "does_not_fire",
+          "delta": "A controls only one Plains.",
+          "expected": "Activating outlast is not legal because {1}{W} cannot be paid."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Mountain",
+        "Salt Road Patrol",
+        "Shock"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

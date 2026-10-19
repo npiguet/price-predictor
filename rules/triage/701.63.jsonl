@@ -1,0 +1,3 @@
+{"id": "701.63", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "701.63a", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "The enduring permanent gets N +1/+1 counters, or its controller creates an N/N white Spirit token.", "note": "The branch is the controller's choice; a permanent no longer on the battlefield leaves only the token."}
+{"id": "701.63b", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "Endure 0 puts no counters and creates no token.", "note": ""}

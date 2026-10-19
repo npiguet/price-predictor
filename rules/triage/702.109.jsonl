@@ -1,0 +1,2 @@
+{"id": "702.109", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.109a", "category": "mechanical", "observability": "indirect", "record_kinds": ["playability", "resolution", "trigger", "continuous"], "outcome": "A card cast for its dash cost has haste and returns to its owner's hand at the beginning of the next end step; cast normally it has neither.", "note": ""}

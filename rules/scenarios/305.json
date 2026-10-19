@@ -1,0 +1,545 @@
+{
+  "unit": "305",
+  "verified": true,
+  "review": [
+    "305.3-1: base put B's Shock on the stack, so the own_turn variant changed two facts (active player and stack); base now has an empty stack with B having passed priority, the delta changes only the active player, Shock dropped."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "305.1-1",
+      "rules": [
+        "305.1"
+      ],
+      "title": "A land can be played only in a main phase of its owner's turn with an empty stack",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Forest"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "A has not played a land this turn and has priority. In the stack_not_empty variant the stack holds {'card': 'Shock', 'controller': 'A', 'targets': ['B']}; Shock is not in any other zone."
+      },
+      "decisions": [
+        "A, with priority, attempts to play Forest from hand."
+      ],
+      "variants": [
+        {
+          "label": "main_empty_stack",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Playing Forest is legal (can_play true); Forest moves from A's hand directly to the battlefield without using the stack, and no player gets priority in between."
+        },
+        {
+          "label": "combat_phase",
+          "polarity": "does_not_fire",
+          "delta": "The step is beginning_of_combat instead of main1.",
+          "expected": "Playing Forest is illegal (can_play false): it is not a main phase. Forest stays in A's hand."
+        },
+        {
+          "label": "stack_not_empty",
+          "polarity": "does_not_fire",
+          "delta": "A Shock spell controlled by A targeting B is on the stack.",
+          "expected": "Playing Forest is illegal (can_play false): the stack is not empty. Forest stays in A's hand."
+        }
+      ],
+      "cards": [
+        "Forest",
+        "Shock"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "305.2-1",
+      "rules": [
+        "305.2"
+      ],
+      "title": "A player can normally play one land per turn; Exploration raises the limit",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Forest"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Forest"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "The Forest on A's battlefield was played from hand earlier this turn (lands played this turn: 1)."
+      },
+      "decisions": [
+        "A, with priority and an empty stack, attempts to play the Forest in hand."
+      ],
+      "variants": [
+        {
+          "label": "one_already_played",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Playing the second Forest is illegal (can_play false): the limit is one land per turn and one has been played. The Forest stays in A's hand."
+        },
+        {
+          "label": "no_land_played",
+          "polarity": "does_not_fire",
+          "delta": "The Forest on A's battlefield was not played this turn; A has played no land this turn.",
+          "expected": "Playing Forest is legal (can_play true) and it moves to the battlefield."
+        },
+        {
+          "label": "exploration",
+          "polarity": "does_not_fire",
+          "delta": "A also controls Exploration on the battlefield.",
+          "expected": "Playing the second Forest is legal (can_play true): A may play an additional land this turn. The Forest moves to the battlefield."
+        }
+      ],
+      "cards": [
+        "Forest",
+        "Exploration"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "305.2a-1",
+      "rules": [
+        "305.2a"
+      ],
+      "title": "A land play is legal exactly when the lands allowed exceed the lands already played",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Forest",
+            "Forest",
+            "Exploration"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Forest"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Exploration allows two land plays this turn. One of the two Forests on the battlefield was played from hand earlier this turn (lands played this turn: 1)."
+      },
+      "decisions": [
+        "A, with priority and an empty stack, attempts to play the Forest in hand."
+      ],
+      "variants": [
+        {
+          "label": "allowed_2_played_1",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Playing Forest is legal (can_play true): 2 lands allowed is greater than 1 played. Forest moves to the battlefield."
+        },
+        {
+          "label": "allowed_2_played_2",
+          "polarity": "does_not_fire",
+          "delta": "Both Forests on the battlefield were played from hand this turn (lands played this turn: 2).",
+          "expected": "Playing Forest is illegal (can_play false): 2 allowed is not greater than 2 played. Forest stays in A's hand."
+        }
+      ],
+      "cards": [
+        "Forest",
+        "Exploration"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "305.2b-1",
+      "rules": [
+        "305.2b"
+      ],
+      "title": "A land cannot be played past the limit even when an effect permits it",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Abbot of Keral Keep"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Forest",
+            "Mountain",
+            "Mountain"
+          ],
+          "B": [
+            "Island"
+          ]
+        },
+        "exile": {},
+        "notes": "One of the two Mountains was played from hand earlier this turn (lands played this turn: 1). The top card of A's library is Forest. Abbot of Keral Keep costs {1}{R}."
+      },
+      "decisions": [
+        "A casts Abbot of Keral Keep, tapping both Mountains.",
+        "Both players pass; Abbot resolves and enters the battlefield.",
+        "Abbot's enters trigger goes on the stack; both players pass and it resolves: the top card of A's library (Forest) is exiled and A may play it until end of turn.",
+        "A, with priority and an empty stack, attempts to play the exiled Forest."
+      ],
+      "variants": [
+        {
+          "label": "land_already_played",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Playing the exiled Forest is illegal (can_play false): the effect permits it, but A has already played a land this turn. Forest stays in exile."
+        },
+        {
+          "label": "no_land_played",
+          "polarity": "does_not_fire",
+          "delta": "Neither Mountain was played this turn; A has played no land this turn.",
+          "expected": "Playing the exiled Forest is legal (can_play true); it moves from exile to the battlefield."
+        }
+      ],
+      "cards": [
+        "Abbot of Keral Keep",
+        "Mountain",
+        "Forest",
+        "Island"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "305.3-1",
+      "rules": [
+        "305.3"
+      ],
+      "title": "A land cannot be played on another player's turn",
+      "record_kind": "playability",
+      "setup": {
+        "active": "B",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Forest"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "A has not played a land this turn. B is the active player in main1, the stack is empty, and B has passed priority, so A holds priority."
+      },
+      "decisions": [
+        "A, holding priority with an empty stack during B's main phase, attempts to play Forest from hand."
+      ],
+      "variants": [
+        {
+          "label": "opponents_turn",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Playing Forest is illegal (can_play false): it is not A's turn. Forest stays in A's hand."
+        },
+        {
+          "label": "own_turn",
+          "polarity": "does_not_fire",
+          "delta": "A is the active player instead of B (main1, empty stack, A holding priority).",
+          "expected": "Playing Forest is legal (can_play true) and it moves to the battlefield."
+        }
+      ],
+      "cards": [
+        "Forest"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "305.4-1",
+      "rules": [
+        "305.4"
+      ],
+      "title": "A land put onto the battlefield by an effect does not count as the land played this turn",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Forest",
+            "Forest"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Rampant Growth",
+            "Forest",
+            "Forest"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Forest",
+            "Forest"
+          ],
+          "B": [
+            "Island"
+          ]
+        },
+        "exile": {},
+        "notes": "A has played no land this turn. Rampant Growth costs {1}{G}."
+      },
+      "decisions": [
+        "A casts Rampant Growth, tapping both Forests.",
+        "Both players pass; Rampant Growth resolves: A searches for a Forest and puts it onto the battlefield tapped.",
+        "A, with priority and an empty stack, attempts to play a Forest from hand."
+      ],
+      "variants": [
+        {
+          "label": "put_by_effect",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The Forest from the library enters tapped without counting as a land played. Playing the Forest from hand is legal (can_play true) and it moves to the battlefield."
+        },
+        {
+          "label": "played_from_hand_first",
+          "polarity": "does_not_fire",
+          "delta": "Instead of casting Rampant Growth, A plays one Forest from hand first, then attempts to play the second Forest from hand.",
+          "expected": "The first land play is legal. The second land play is illegal (can_play false): one land has been played this turn. The second Forest stays in A's hand."
+        }
+      ],
+      "cards": [
+        "Rampant Growth",
+        "Forest",
+        "Island"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "305.6-1",
+      "rules": [
+        "305.6"
+      ],
+      "title": "A land with a basic land type has that type's mana ability regardless of its text",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Dryad Arbor",
+              "summoning_sick": false
+            },
+            "Grizzly Bears"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Giant Growth"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Dryad Arbor has only reminder text but is a Forest Dryad land creature, under A's control since before the turn began. Giant Growth costs {G}."
+      },
+      "decisions": [
+        "A casts Giant Growth targeting Grizzly Bears, paying {G} by tapping Dryad Arbor for mana.",
+        "Both players pass; Giant Growth resolves."
+      ],
+      "variants": [
+        {
+          "label": "forest_type",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Dryad Arbor taps for {G}: Giant Growth is cast (can_play true) and Grizzly Bears is 5/5 until end of turn."
+        },
+        {
+          "label": "no_basic_type",
+          "polarity": "does_not_fire",
+          "delta": "A controls Wastes (a basic land without a basic land type, whose own ability adds only {C}) instead of Dryad Arbor.",
+          "expected": "Wastes can only add {C}; Giant Growth cannot be cast (can_play false) and stays in A's hand; Grizzly Bears stays 2/2."
+        }
+      ],
+      "cards": [
+        "Dryad Arbor",
+        "Wastes",
+        "Grizzly Bears",
+        "Giant Growth"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "305.7-1",
+      "rules": [
+        "305.7"
+      ],
+      "title": "Setting a land's subtype to a basic land type replaces its old types and abilities, while adding types keeps them",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Bayou",
+            "Blood Moon",
+            "Grizzly Bears"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Giant Growth"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Bayou is a Swamp Forest land and taps for {B} or {G}. Blood Moon makes nonbasic lands Mountains. Giant Growth costs {G}."
+      },
+      "decisions": [
+        "A attempts to cast Giant Growth targeting Grizzly Bears, paying {G} by tapping Bayou for mana.",
+        "If the cast is legal, both players pass and Giant Growth resolves."
+      ],
+      "variants": [
+        {
+          "label": "blood_moon",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Bayou is a Mountain only: it lost Swamp and Forest and their mana abilities, and taps only for {R}. Giant Growth cannot be paid (can_play false) and stays in A's hand; Grizzly Bears stays 2/2."
+        },
+        {
+          "label": "no_blood_moon",
+          "polarity": "does_not_fire",
+          "delta": "Blood Moon is not on the battlefield.",
+          "expected": "Bayou is a Swamp Forest and taps for {G}; Giant Growth is cast and resolves, Grizzly Bears is 5/5 until end of turn."
+        },
+        {
+          "label": "urborg_instead",
+          "polarity": "other",
+          "delta": "Urborg, Tomb of Yawgmoth is on A's battlefield instead of Blood Moon.",
+          "expected": "Bayou keeps Swamp and Forest (Swamp is added in addition) and keeps its mana abilities; it taps for {G}. Giant Growth is cast and resolves, Grizzly Bears is 5/5 until end of turn."
+        }
+      ],
+      "cards": [
+        "Bayou",
+        "Blood Moon",
+        "Urborg, Tomb of Yawgmoth",
+        "Grizzly Bears",
+        "Giant Growth"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "305.9-1",
+      "rules": [
+        "305.9"
+      ],
+      "title": "A card that is a land and another type can be played only as a land, never cast",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Forest",
+            "Forest"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Dryad Arbor"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Dryad Arbor is a land creature card. A has played no land this turn."
+      },
+      "decisions": [
+        "A, with priority and an empty stack, attempts to cast Dryad Arbor as a creature spell, tapping both Forests."
+      ],
+      "variants": [
+        {
+          "label": "cast_as_spell",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Casting Dryad Arbor is illegal (can_play false): a land card cannot be cast. It stays in A's hand and the Forests stay untapped."
+        },
+        {
+          "label": "play_as_land",
+          "polarity": "does_not_fire",
+          "delta": "A attempts to play Dryad Arbor as a land instead of casting it.",
+          "expected": "Playing Dryad Arbor as a land is legal (can_play true); it moves to the battlefield without using the stack."
+        }
+      ],
+      "cards": [
+        "Dryad Arbor",
+        "Forest"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

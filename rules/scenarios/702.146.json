@@ -1,0 +1,131 @@
+{
+  "unit": "702.146",
+  "verified": true,
+  "review": [],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.146a-1",
+      "rules": [
+        "702.146a"
+      ],
+      "title": "A card with disturb can be cast transformed from the graveyard for its disturb cost",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains"
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {
+          "A": [
+            "Mourning Patrol"
+          ]
+        },
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Mourning Patrol from the graveyard transformed using disturb, paying {3}{W} with four Plains."
+      ],
+      "variants": [
+        {
+          "label": "disturb_cost",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The cast is legal. Mourning Patrol moves from the graveyard to the stack and A taps four Plains."
+        },
+        {
+          "label": "front_face",
+          "polarity": "does_not_fire",
+          "delta": "A tries to cast Mourning Patrol front face up from the graveyard for its mana cost {2}{W}.",
+          "expected": "The cast is not legal: a card in the graveyard can be cast only through disturb. Mourning Patrol stays in the graveyard and no Plains are tapped."
+        },
+        {
+          "label": "one_land_short",
+          "polarity": "does_not_fire",
+          "delta": "A controls only three Plains.",
+          "expected": "The disturb cast is not legal because {3}{W} cannot be paid. Mourning Patrol stays in the graveyard."
+        }
+      ],
+      "cards": [
+        "Mourning Patrol",
+        "Plains"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.146b-1",
+      "rules": [
+        "702.146b"
+      ],
+      "title": "A spell cast with disturb enters the battlefield with its back face up",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Mourning Patrol"
+          ]
+        },
+        "graveyard": {
+          "A": [
+            "Mourning Patrol"
+          ]
+        },
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts the Mourning Patrol in the graveyard transformed using disturb, paying {3}{W} with four Plains.",
+        "Both players pass; the spell resolves."
+      ],
+      "variants": [
+        {
+          "label": "disturb",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The spell resolves and enters the battlefield back face up as Morning Apparition, a 2/1 white Spirit Soldier with flying and vigilance."
+        },
+        {
+          "label": "cast_from_hand",
+          "polarity": "does_not_fire",
+          "delta": "A casts the Mourning Patrol in hand front face up for its mana cost {2}{W} instead.",
+          "expected": "The spell resolves and enters the battlefield front face up as Mourning Patrol, a 2/3 white Human Soldier with vigilance."
+        }
+      ],
+      "cards": [
+        "Mourning Patrol",
+        "Plains"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

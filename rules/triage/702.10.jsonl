@@ -1,0 +1,5 @@
+{"id": "702.10", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.10a", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.10b", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "A creature with haste is a legal attacker the turn it comes under its controller's control.", "note": ""}
+{"id": "702.10c", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "A creature with haste can activate abilities with {T} or {Q} in their cost the turn it comes under its controller's control.", "note": ""}
+{"id": "702.10d", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": "Redundancy of instances has no separate outcome."}

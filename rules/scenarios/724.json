@@ -1,0 +1,831 @@
+{
+  "unit": "724",
+  "verified": true,
+  "review": [
+    "724.1f-1: the opponent_turn variant changed the active player and with it the whole turn; replaced it with the one-fact delta that Stonebinder's Familiar is B's, which stops the trigger because the exile happens outside its controller's turn.",
+    "724.2f-1: the opponent_turn variant changed the active player, the attacker, the blocker and Grizzly Bears' tapped state at once; replaced it with the one-fact delta that Stonebinder's Familiar is B's."
+  ],
+  "skipped": [
+    {
+      "id": "724.2a",
+      "reason": "cannot be illustrated: Mandate of Peace, the only card that ends the combat phase, creates its 'opponents can't cast spells' effect and then ends the phase with nothing in between that could trigger an ability, so no ability has triggered but not yet gone on the stack when the process begins; the sibling rule 724.1a is shown by 724.1a-1 (a draw effect that precedes the end-the-turn instruction in Day's Undoing)."
+    },
+    {
+      "id": "724.2c",
+      "reason": "cannot be illustrated: between exiling the stack and ending combat, Mandate of Peace changes nothing a state-based action reads, so the check finds nothing in Forge's card pool; the sibling rule 724.1c is shown by 724.1c-1, where Day's Undoing makes Mortivore die in the check."
+    },
+    {
+      "id": "724.2g",
+      "reason": "cannot be illustrated: Mandate of Peace can be cast only during combat, so no Forge card can attempt to end the combat phase while it is not a combat phase."
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "724.1-1",
+      "rules": [
+        "724.1",
+        "724.1d"
+      ],
+      "title": "Ending the turn during combat removes creatures from combat and skips straight to the cleanup step",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "declare_blockers",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            {
+              "card": "Grizzly Bears",
+              "tapped": true
+            }
+          ],
+          "B": [
+            "Hill Giant"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Time Stop"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Grizzly Bears (2/2, A's) is attacking B and is blocked by Hill Giant (3/3, B's). A has priority in the declare blockers step with an empty stack. Hill Giant is untapped (blocking does not tap)."
+      },
+      "decisions": [
+        "A casts Time Stop (4UU), tapping the six Islands.",
+        "B passes priority; Time Stop resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Time Stop resolves and is exiled. Grizzly Bears and Hill Giant are removed from combat and no combat damage is dealt: both have 0 damage marked and both stay on the battlefield. The end of combat step, the second main phase and the end step do not happen; the turn goes to the cleanup step and then B's turn begins. Life totals stay 20 and 20."
+        },
+        {
+          "label": "no_time_stop",
+          "polarity": "does_not_fire",
+          "delta": "A passes priority instead of casting Time Stop.",
+          "expected": "The game proceeds to combat damage: Hill Giant deals 3 damage to Grizzly Bears, which moves to A's graveyard, and Grizzly Bears deals 2 damage to Hill Giant, which stays with 2 damage marked. The turn continues through the end of combat step and the second main phase."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Grizzly Bears",
+        "Hill Giant",
+        "Time Stop"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "724.1b-1",
+      "rules": [
+        "724.1b"
+      ],
+      "title": "Ending the turn exiles every object on the stack, including the resolving spell",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Grizzly Bears"
+          ],
+          "B": [
+            {
+              "card": "Mountain",
+              "tapped": true
+            }
+          ]
+        },
+        "hand": {
+          "A": [
+            "Time Stop"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "B has cast Lightning Bolt targeting Grizzly Bears (tapping its Mountain); the Bolt is on the stack and A has priority.",
+        "stack": [
+          {
+            "card": "Lightning Bolt",
+            "controller": "B",
+            "targets": [
+              "Grizzly Bears"
+            ]
+          }
+        ]
+      },
+      "decisions": [
+        "A casts Time Stop in response, tapping the six Islands.",
+        "B passes priority; Time Stop resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Time Stop resolves, exiling the stack: Lightning Bolt is exiled without resolving and Time Stop is exiled instead of going to the graveyard. Grizzly Bears has no damage marked and stays on the battlefield. Both graveyards are empty. The turn ends."
+        },
+        {
+          "label": "no_response",
+          "polarity": "does_not_fire",
+          "delta": "A passes priority instead of casting Time Stop.",
+          "expected": "Lightning Bolt resolves and deals 3 damage to Grizzly Bears, which moves to A's graveyard in the state-based check. Lightning Bolt moves to B's graveyard. Time Stop stays in A's hand."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Mountain",
+        "Grizzly Bears",
+        "Lightning Bolt",
+        "Time Stop"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "724.1a-1",
+      "rules": [
+        "724.1a"
+      ],
+      "title": "Abilities that triggered before the turn-ending process began cease to exist",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Stonebinder's Familiar"
+          ],
+          "B": [
+            "Underworld Dreams",
+            "Swamp",
+            "Swamp",
+            "Swamp"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Day's Undoing",
+            "Divination",
+            "Time Stop"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island"
+          ],
+          "B": [
+            "Swamp",
+            "Swamp",
+            "Swamp",
+            "Swamp",
+            "Swamp",
+            "Swamp",
+            "Swamp",
+            "Swamp",
+            "Swamp",
+            "Swamp"
+          ]
+        },
+        "exile": {},
+        "notes": "Underworld Dreams is B's: whenever an opponent (A) draws a card, it deals 1 damage to that player. Both libraries hold ten cards. Day's Undoing makes each player shuffle hand and graveyard into library, draw seven cards, and then, because it is A's turn, end the turn."
+      },
+      "decisions": [
+        "A casts Day's Undoing (2U), tapping three Islands.",
+        "B passes priority; Day's Undoing resolves: each player shuffles hand and graveyard into library and draws seven cards, then the turn ends."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "A draws seven cards, and each draw triggers Underworld Dreams, but all seven triggers cease to exist when the turn ends and none is put onto the stack: A's life stays 20. Stonebinder's Familiar's trigger, which triggers when Day's Undoing is exiled during the turn-ending process, is kept: it goes on the stack in the cleanup step and resolves, so Familiar is a 2/2."
+        },
+        {
+          "label": "divination",
+          "polarity": "other",
+          "delta": "A casts Divination (2U) instead of Day's Undoing; no turn is ended.",
+          "expected": "A draws two cards, both Underworld Dreams triggers go on the stack and resolve, so A's life is 18. Divination moves to A's graveyard, nothing is exiled and Stonebinder's Familiar stays a 1/1. The turn continues."
+        },
+        {
+          "label": "time_stop",
+          "polarity": "does_not_fire",
+          "delta": "A casts Time Stop (4UU), tapping six Islands, instead of Day's Undoing.",
+          "expected": "No card is drawn, so no Underworld Dreams trigger exists to cease: A's life stays 20. The turn ends, and Stonebinder's Familiar's trigger from Time Stop's exile is kept and resolves in the cleanup step (2/2)."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Swamp",
+        "Stonebinder's Familiar",
+        "Underworld Dreams",
+        "Day's Undoing",
+        "Divination",
+        "Time Stop"
+      ],
+      "forge_notes": "Forge calls clearWaitingTriggers before the stack is exiled in EndTurnEffect. The seven drawn cards are random, so the scenario fixes only the library size."
+    },
+    {
+      "id": "724.1c-1",
+      "rules": [
+        "724.1c"
+      ],
+      "title": "State-based actions are checked during the turn-ending process but deaths put no trigger on the stack until the cleanup step",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Mortivore",
+            "Blood Artist"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Day's Undoing",
+            "Time Stop"
+          ]
+        },
+        "graveyard": {
+          "A": [
+            "Grizzly Bears"
+          ]
+        },
+        "library": {
+          "A": [
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island"
+          ],
+          "B": [
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains"
+          ]
+        },
+        "exile": {},
+        "notes": "Mortivore's power and toughness equal the number of creature cards in all graveyards, so it is a 1/1 while Grizzly Bears is in A's graveyard. Day's Undoing shuffles both graveyards into libraries."
+      },
+      "decisions": [
+        "A casts Day's Undoing (2U), tapping three Islands.",
+        "B passes priority; Day's Undoing resolves: both players shuffle hand and graveyard into library and draw seven cards, then the turn ends.",
+        "Blood Artist's trigger, once it is put onto the stack, targets B."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "With no creature card left in any graveyard Mortivore is a 0/0 and moves to A's graveyard in the state-based check of the turn-ending process. Blood Artist triggers but no player gets priority and nothing is put on the stack until the cleanup step, where the trigger resolves: B loses 1 life (19) and A gains 1 (21). The turn then ends."
+        },
+        {
+          "label": "no_blood_artist",
+          "polarity": "other",
+          "delta": "Blood Artist is not on the battlefield.",
+          "expected": "Mortivore still dies in the state-based check. No trigger exists, the stack stays empty in the cleanup step and the turn ends at once. Life totals stay 20 and 20."
+        },
+        {
+          "label": "time_stop",
+          "polarity": "does_not_fire",
+          "delta": "A casts Time Stop (4UU), tapping six Islands, instead of Day's Undoing.",
+          "expected": "The graveyard is not shuffled away, so Mortivore stays a 1/1 and the state-based check finds nothing: no creature dies, Blood Artist does not trigger and the turn ends. Life totals stay 20 and 20."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Plains",
+        "Mortivore",
+        "Blood Artist",
+        "Grizzly Bears",
+        "Day's Undoing",
+        "Time Stop"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "724.1e-1",
+      "rules": [
+        "724.1e"
+      ],
+      "title": "Ending the turn skips the end step, so its beginning-of-end-step triggers do not trigger",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Dogged Pursuit"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Time Stop"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Dogged Pursuit: at the beginning of A's end step, each opponent loses 1 life and A gains 1 life. A has priority in the first main phase with an empty stack."
+      },
+      "decisions": [
+        "A casts Time Stop (4UU), tapping the six Islands.",
+        "B passes priority; Time Stop resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The turn ends without an end step: Dogged Pursuit does not trigger (fired is false). Life totals stay 20 and 20."
+        },
+        {
+          "label": "no_time_stop",
+          "polarity": "does_not_fire",
+          "delta": "A passes priority through the turn instead of casting Time Stop.",
+          "expected": "The end step happens and Dogged Pursuit triggers and resolves: B loses 1 life (19) and A gains 1 life (21)."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Dogged Pursuit",
+        "Time Stop"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "724.1f-1",
+      "rules": [
+        "724.1f"
+      ],
+      "title": "A trigger that triggers during the turn-ending process goes on the stack in the cleanup step",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Stonebinder's Familiar"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Time Stop"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Stonebinder's Familiar: whenever one or more cards are put into exile during A's turn, put a +1/+1 counter on it (once each turn). Time Stop is itself exiled by the process."
+      },
+      "decisions": [
+        "A casts Time Stop (4UU), tapping the six Islands.",
+        "B passes priority; Time Stop resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Time Stop is exiled while A's turn is ending, so Stonebinder's Familiar triggers. No player has priority during the process; the trigger is put on the stack in the cleanup step, A gets priority, and it resolves: Familiar is a 2/2. A second cleanup step then begins and the turn ends."
+        },
+        {
+          "label": "familiar_is_bs",
+          "polarity": "does_not_fire",
+          "delta": "Stonebinder's Familiar is on B's battlefield instead of A's.",
+          "expected": "Time Stop is exiled during A's turn, which is not the Familiar controller's turn, so Stonebinder's Familiar does not trigger. No trigger is put on the stack in the cleanup step, no player gets priority there, Familiar stays a 1/1 and the turn ends."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Stonebinder's Familiar",
+        "Time Stop"
+      ],
+      "forge_notes": "Check that Forge puts triggers that fire during EndTurnEffect onto the stack in the cleanup step."
+    },
+    {
+      "id": "724.2-1",
+      "rules": [
+        "724.2",
+        "724.2d"
+      ],
+      "title": "Ending the combat phase removes creatures from combat and skips to the second main phase",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "declare_blockers",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Plains",
+            {
+              "card": "Grizzly Bears",
+              "tapped": true
+            }
+          ],
+          "B": [
+            "Hill Giant"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Mandate of Peace"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Grizzly Bears (2/2, A's) is attacking B and is blocked by Hill Giant (3/3, B's). A has priority in the declare blockers step."
+      },
+      "decisions": [
+        "A casts Mandate of Peace (1W), tapping both Plains.",
+        "B passes priority; Mandate of Peace resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Mandate of Peace resolves and is exiled. Grizzly Bears and Hill Giant are removed from combat and no combat damage is dealt: neither creature has damage marked. The end of combat step is skipped and the game goes to A's second main phase, so the turn does not end."
+        },
+        {
+          "label": "no_mandate",
+          "polarity": "does_not_fire",
+          "delta": "A passes priority instead of casting Mandate of Peace.",
+          "expected": "Combat damage is dealt: Hill Giant deals 3 damage to Grizzly Bears, which moves to A's graveyard, and Grizzly Bears deals 2 damage to Hill Giant, which stays with 2 damage marked. The end of combat step happens before the second main phase."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Grizzly Bears",
+        "Hill Giant",
+        "Mandate of Peace"
+      ],
+      "forge_notes": "Forge's EndCombatPhaseEffect returns early when no Combat object exists, which is the case in the beginning of combat step before attackers are declared."
+    },
+    {
+      "id": "724.2b-1",
+      "rules": [
+        "724.2b"
+      ],
+      "title": "Ending the combat phase exiles every object on the stack, including the resolving spell",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "declare_blockers",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Plains",
+            {
+              "card": "Grizzly Bears",
+              "tapped": true
+            }
+          ],
+          "B": [
+            "Hill Giant",
+            {
+              "card": "Mountain",
+              "tapped": true
+            }
+          ]
+        },
+        "hand": {
+          "A": [
+            "Mandate of Peace"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Grizzly Bears (2/2, A's) is attacking B and is blocked by Hill Giant (3/3, B's). A has priority in the declare blockers step. B has cast Lightning Bolt targeting Grizzly Bears (tapping its Mountain); it is on the stack.",
+        "stack": [
+          {
+            "card": "Lightning Bolt",
+            "controller": "B",
+            "targets": [
+              "Grizzly Bears"
+            ]
+          }
+        ]
+      },
+      "decisions": [
+        "A casts Mandate of Peace in response, tapping both Plains.",
+        "B passes priority; Mandate of Peace resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Lightning Bolt is exiled without resolving, and Mandate of Peace is exiled instead of going to the graveyard. Grizzly Bears has no damage marked and survives. Both graveyards are empty."
+        },
+        {
+          "label": "no_response",
+          "polarity": "does_not_fire",
+          "delta": "A passes priority instead of casting Mandate of Peace.",
+          "expected": "Lightning Bolt resolves, deals 3 damage to Grizzly Bears, which moves to A's graveyard, and Lightning Bolt moves to B's graveyard. Mandate of Peace stays in A's hand."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Mountain",
+        "Grizzly Bears",
+        "Hill Giant",
+        "Lightning Bolt",
+        "Mandate of Peace"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "724.2e-1",
+      "rules": [
+        "724.2e"
+      ],
+      "title": "Ending the combat phase skips the end of combat step, so its triggers do not trigger",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "declare_blockers",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Plains",
+            {
+              "card": "Grizzly Bears",
+              "tapped": true
+            }
+          ],
+          "B": [
+            "Hill Giant",
+            "Heat Stroke"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Mandate of Peace"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Grizzly Bears (2/2, A's) is attacking B and is blocked by Hill Giant (3/3, B's). A has priority in the declare blockers step. Heat Stroke (B's): at end of combat, destroy each creature that blocked or was blocked this turn."
+      },
+      "decisions": [
+        "A casts Mandate of Peace (1W), tapping both Plains.",
+        "B passes priority; Mandate of Peace resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The end of combat step is skipped: Heat Stroke does not trigger (fired is false). Grizzly Bears and Hill Giant, both removed from combat undamaged, stay on the battlefield."
+        },
+        {
+          "label": "no_mandate",
+          "polarity": "does_not_fire",
+          "delta": "A passes priority instead of casting Mandate of Peace.",
+          "expected": "Combat damage kills Grizzly Bears (3 damage). At the end of combat step Heat Stroke triggers and destroys Hill Giant, which blocked this turn: both creatures end in their owners' graveyards."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Grizzly Bears",
+        "Hill Giant",
+        "Heat Stroke",
+        "Mandate of Peace"
+      ],
+      "forge_notes": "Whether Forge's endCombatPhaseByEffect (setPhase COMBAT_END then advanceToNextPhase) skips Heat Stroke's EndCombat trigger needs checking."
+    },
+    {
+      "id": "724.2f-1",
+      "rules": [
+        "724.2f"
+      ],
+      "title": "A trigger that triggers while the combat phase is being ended goes on the stack in the following phase",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "declare_blockers",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Plains",
+            {
+              "card": "Grizzly Bears",
+              "tapped": true
+            },
+            "Stonebinder's Familiar"
+          ],
+          "B": [
+            "Hill Giant"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Mandate of Peace"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Grizzly Bears (2/2, A's) is attacking B and is blocked by Hill Giant (3/3, B's). A has priority in the declare blockers step. Stonebinder's Familiar (1/1, A's) is not attacking. It gets a +1/+1 counter when cards are put into exile during A's turn (once each turn)."
+      },
+      "decisions": [
+        "A casts Mandate of Peace (1W), tapping both Plains.",
+        "B passes priority; Mandate of Peace resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Mandate of Peace is exiled during A's turn, so Stonebinder's Familiar triggers. No player has priority during the process; the trigger is put onto the stack in A's second main phase, A gets priority, and it resolves: Familiar is a 2/2."
+        },
+        {
+          "label": "familiar_is_bs",
+          "polarity": "does_not_fire",
+          "delta": "Stonebinder's Familiar is on B's battlefield instead of A's.",
+          "expected": "Mandate of Peace is exiled during A's turn, which is not the Familiar controller's turn, so Stonebinder's Familiar does not trigger and stays a 1/1. The combat phase ends and no trigger goes on the stack in A's second main phase."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Grizzly Bears",
+        "Hill Giant",
+        "Stonebinder's Familiar",
+        "Mandate of Peace"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "724.2d-1",
+      "rules": [
+        "724.2d"
+      ],
+      "title": "Ending the combat phase makes an until-end-of-combat effect expire at once",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Jade Statue"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Mandate of Peace"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Jade Statue has been on the battlefield since an earlier turn. Its ability ({2}) makes it a 3/6 Golem artifact creature until end of combat; activate only during combat."
+      },
+      "decisions": [
+        "A activates Jade Statue, tapping two Plains.",
+        "Jade Statue resolves; A passes priority and the game proceeds to declare attackers.",
+        "A attacks B with Jade Statue; no blockers are declared since B has no creatures.",
+        "A casts Mandate of Peace (1W) in the declare attackers step, tapping the other two Plains.",
+        "B passes priority; Mandate of Peace resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Mandate of Peace resolves: Jade Statue is removed from combat and its until-end-of-combat effect has expired, so it is a noncreature artifact again. No combat damage is dealt; B's life is 20. The game goes to the second main phase."
+        },
+        {
+          "label": "no_mandate",
+          "polarity": "does_not_fire",
+          "delta": "A passes priority instead of casting Mandate of Peace.",
+          "expected": "Jade Statue, a 3/6 creature, deals 3 combat damage to B (17). It stops being a creature only when the end of combat step ends."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Jade Statue",
+        "Mandate of Peace"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

@@ -1,0 +1,209 @@
+{
+  "unit": "701.68",
+  "verified": true,
+  "review": [
+    "701.68b-1: polarities were inverted for a prohibition rule (the rule's effect is that blight cannot be chosen); has_creature is now does_not_fire and no_creature fires.",
+    "701.68c-1: the decisions had A blight when the trigger was put on the stack; 'you may blight 1' is chosen on resolution, so the blight now happens as the trigger resolves."
+  ],
+  "skipped": [
+    {
+      "id": "701.68d",
+      "reason": "cannot be illustrated: no card in Forge's cardsfolder has an ability that triggers whenever a player blights (the blight cards only pay or perform it); 701.68a-1 and 701.68b-1 cover the blight action itself"
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "701.68a-1",
+      "rules": [
+        "701.68a"
+      ],
+      "title": "Blighting N puts N -1/-1 counters on a creature you control",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            {
+              "card": "Hill Giant",
+              "summoning_sick": false
+            }
+          ]
+        },
+        "hand": {
+          "A": [
+            "Cinder Strike"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Cinder Strike (R, tapping Mountain) targeting Hill Giant. A chooses to pay the optional additional cost blight 1 and puts the -1/-1 counter on Grizzly Bears.",
+        "Both players pass; Cinder Strike resolves."
+      ],
+      "variants": [
+        {
+          "label": "blight_paid",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears has one -1/-1 counter and is 1/1. Cinder Strike was cast with its additional cost paid, deals 4 damage to Hill Giant, which moves to B's graveyard."
+        },
+        {
+          "label": "blight_not_paid",
+          "polarity": "does_not_fire",
+          "delta": "A does not pay the optional additional cost, so no creature is blighted.",
+          "expected": "Grizzly Bears has no counters and is 2/2. Cinder Strike deals 2 damage to Hill Giant, which stays on the battlefield with 2 damage marked."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Grizzly Bears",
+        "Hill Giant",
+        "Cinder Strike"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "701.68b-1",
+      "rules": [
+        "701.68b"
+      ],
+      "title": "A player with no creature cannot choose to blight",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Plains",
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            }
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {
+          "A": [
+            "Evershrike's Gift"
+          ]
+        },
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A tries to activate Evershrike's Gift from the graveyard ({1}{W}, blight 2), tapping both Plains and putting the two -1/-1 counters on Grizzly Bears."
+      ],
+      "variants": [
+        {
+          "label": "has_creature",
+          "polarity": "does_not_fire",
+          "delta": "",
+          "expected": "The activation is legal: A controls a creature to blight. Grizzly Bears receives two -1/-1 counters and dies as a 0/0; Evershrike's Gift returns to A's hand when the ability resolves."
+        },
+        {
+          "label": "no_creature",
+          "polarity": "fires",
+          "delta": "A controls no creature (Grizzly Bears is not on the battlefield).",
+          "expected": "The activation is not legal: A cannot pay blight 2. Evershrike's Gift stays in the graveyard and both Plains stay untapped."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Grizzly Bears",
+        "Evershrike's Gift"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "701.68c-1",
+      "rules": [
+        "701.68c"
+      ],
+      "title": "The blighted creature is the creature that received the -1/-1 counters",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Grub, Storied Matriarch",
+              "summoning_sick": false
+            },
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            },
+            {
+              "card": "Hill Giant",
+              "summoning_sick": false
+            }
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Grub is on the battlefield transformed, as Grub, Notorious Auntie (2/1 menace). Bears and Hill Giant do not attack."
+      },
+      "decisions": [
+        "A attacks player B with Grub only.",
+        "Grub's attack trigger goes on the stack; both players pass.",
+        "As the trigger resolves, A chooses to blight 1, putting the -1/-1 counter on Grizzly Bears, and the token is created tapped and attacking."
+      ],
+      "variants": [
+        {
+          "label": "blight_bears",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears has one -1/-1 counter (1/1). A tapped, attacking token copy of Grizzly Bears (2/2, no counters) is created, with a sacrifice trigger at the beginning of the end step."
+        },
+        {
+          "label": "blight_giant",
+          "polarity": "fires",
+          "delta": "A puts the -1/-1 counter on Hill Giant instead of Grizzly Bears.",
+          "expected": "Hill Giant has one -1/-1 counter (2/2). The token is a tapped, attacking copy of Hill Giant (3/3, no counters); no token copies Grizzly Bears."
+        },
+        {
+          "label": "no_blight",
+          "polarity": "does_not_fire",
+          "delta": "A chooses not to blight.",
+          "expected": "No creature receives a counter and no token is created."
+        }
+      ],
+      "cards": [
+        "Grub, Storied Matriarch",
+        "Grizzly Bears",
+        "Hill Giant"
+      ],
+      "forge_notes": "Grub, Notorious Auntie is the back face of Grub, Storied Matriarch; the setup needs Grub already transformed."
+    }
+  ]
+}

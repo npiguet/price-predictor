@@ -1,0 +1,1713 @@
+{
+  "unit": "508",
+  "verified": true,
+  "review": [
+    "508.1a-1: 'starts the turn tapped' is undone by the untap step; delta now says Grizzly Bears is tapped when the declare attackers step begins.",
+    "508.1d-1: same untap-step problem in juggernaut_tapped; delta now says Juggernaut is tapped when the declare attackers step begins.",
+    "508.1k-1: after_combat variant changed the observation time rather than a fact of the setup or decisions; base now declares both creatures and the contrast leaves Hill Giant unchosen.",
+    "508.4d-1: no_ninjutsu and blocked do not exercise 508.4d (nothing enters attacking), relabelled other; the does_not_fire contrast (entering attacking before blockers) is the new scenario 508.4d-2.",
+    "508.5-1: Shock deals 2 damage and cannot kill the 3/3 Crypt Cobra; swapped for Lightning Bolt. removed_before_resolution also switched the attacked defender (two facts); it now keeps the attack on Jace Beleren. killed_before_blockers is a 508.3f outcome, relabelled other (in a two-player game the defending player is always B, so 508.5 has no does_not_fire branch).",
+    "508.7b-1: with Propaganda both variants dealt 2 to B and tapped Islands either way, so nothing observable flipped, and the contrast changed two facts; replaced Propaganda with Blazing Archon (creatures can't attack you), so the direct declaration is illegal while the reselection stands.",
+    "508.7c-1: notes said Portal Mage was already cast while it sat in hand with the Islands untapped; the declaration and cast are now decisions and the notes are empty.",
+    "508.8-1: one_attacker also added a block by Hill Giant, two facts and not needed for False Orders' target; delta is now only the declaration.",
+    "skipped 508.4a: the skip claimed no reachable case, but ninjutsu enters attacking the returned creature's planeswalker (702.49c), so removing that planeswalker in response reaches it. Added scenario 508.4a-1, dropped the skip, and reworded the 508.4b skip reason.",
+    "triage 508.1f: record_kinds was resolution, but tapping on declaration happens in no resolution; changed to combat. triage 508.8: added playability, which 508.8-1 uses."
+  ],
+  "skipped": [
+    {
+      "id": "508.4b",
+      "reason": "no Forge card states that an existing creature is attacking a specific planeswalker or battle fixed before the effect resolves, and the only player such an effect could name in a two-player game cannot leave without ending the game; the gone-defender outcome for a creature entering attacking is covered by 508.4a-1"
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "508.1a-1",
+      "rules": [
+        "508.1a"
+      ],
+      "title": "Only an untapped creature controlled continuously since the turn began is a legal attacker",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "declare_attackers",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            }
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A reaches the declare attackers step and declares Grizzly Bears as an attacker against B."
+      ],
+      "variants": [
+        {
+          "label": "untapped",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Declaring Grizzly Bears as an attacker is legal."
+        },
+        {
+          "label": "tapped",
+          "polarity": "does_not_fire",
+          "delta": "Grizzly Bears is tapped when the declare attackers step begins (it was tapped earlier in the turn).",
+          "expected": "Declaring Grizzly Bears as an attacker is illegal; it is not a legal attacker."
+        },
+        {
+          "label": "summoning_sick",
+          "polarity": "does_not_fire",
+          "delta": "Grizzly Bears came under A's control this turn (summoning sick) and is untapped.",
+          "expected": "Declaring Grizzly Bears as an attacker is illegal; it is not a legal attacker."
+        }
+      ],
+      "cards": [
+        "Grizzly Bears"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "508.1a-2",
+      "rules": [
+        "508.1a"
+      ],
+      "title": "A summoning-sick creature with haste is a legal attacker, one without haste is not",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "declare_attackers",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Raging Goblin",
+              "summoning_sick": true
+            },
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": true
+            }
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Both creatures came under A's control this turn and are untapped."
+      },
+      "decisions": [
+        "A reaches the declare attackers step and declares Raging Goblin as an attacker against B."
+      ],
+      "variants": [
+        {
+          "label": "haste",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Declaring Raging Goblin (haste) as an attacker is legal."
+        },
+        {
+          "label": "no_haste",
+          "polarity": "does_not_fire",
+          "delta": "A declares Grizzly Bears (no haste) as the attacker instead of Raging Goblin.",
+          "expected": "Declaring Grizzly Bears as an attacker is illegal; it has not been controlled since the turn began and has no haste."
+        }
+      ],
+      "cards": [
+        "Raging Goblin",
+        "Grizzly Bears"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "508.1c-1",
+      "rules": [
+        "508.1c"
+      ],
+      "title": "A creature that can't attack alone makes a lone declaration illegal",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "declare_attackers",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Mogg Flunkies",
+              "summoning_sick": false
+            },
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            }
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A reaches the declare attackers step and declares Mogg Flunkies as the only attacker against B."
+      ],
+      "variants": [
+        {
+          "label": "alone",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The declaration is illegal: Mogg Flunkies can't attack alone, so the game returns to the moment before the declaration."
+        },
+        {
+          "label": "with_partner",
+          "polarity": "does_not_fire",
+          "delta": "A declares Mogg Flunkies and Grizzly Bears as attackers.",
+          "expected": "The declaration is legal; both creatures become attacking creatures."
+        },
+        {
+          "label": "partner_alone",
+          "polarity": "other",
+          "delta": "A declares only Grizzly Bears.",
+          "expected": "The declaration is legal; Grizzly Bears is the only attacking creature."
+        }
+      ],
+      "cards": [
+        "Mogg Flunkies",
+        "Grizzly Bears"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "508.1c-2",
+      "rules": [
+        "508.1c"
+      ],
+      "title": "A creature that can't attack unless the defending player controls an Island is checked at declaration",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "declare_attackers",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Dandân",
+              "summoning_sick": false
+            },
+            "Island"
+          ],
+          "B": [
+            "Mountain"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A reaches the declare attackers step and declares Dandân as an attacker against B."
+      ],
+      "variants": [
+        {
+          "label": "no_island",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Declaring Dandân is illegal: the defending player controls no Island, so it can't attack."
+        },
+        {
+          "label": "island",
+          "polarity": "does_not_fire",
+          "delta": "B controls an Island instead of a Mountain.",
+          "expected": "Declaring Dandân is legal; it becomes an attacking creature."
+        }
+      ],
+      "cards": [
+        "Dandân",
+        "Island",
+        "Mountain"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "508.1d-1",
+      "rules": [
+        "508.1d"
+      ],
+      "title": "A creature that attacks each combat if able must be in the declaration",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "declare_attackers",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Juggernaut",
+              "summoning_sick": false
+            },
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            }
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A reaches the declare attackers step and declares only Grizzly Bears as an attacker against B."
+      ],
+      "variants": [
+        {
+          "label": "requirement_ignored",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The declaration is illegal: Juggernaut must attack and is not declared, so fewer requirements are obeyed than possible."
+        },
+        {
+          "label": "requirement_met",
+          "polarity": "does_not_fire",
+          "delta": "A declares Juggernaut and Grizzly Bears.",
+          "expected": "The declaration is legal."
+        },
+        {
+          "label": "juggernaut_tapped",
+          "polarity": "does_not_fire",
+          "delta": "Juggernaut is tapped when the declare attackers step begins (it was tapped earlier in the turn), and A declares only Grizzly Bears.",
+          "expected": "The declaration is legal; a tapped Juggernaut is not able to attack, so the requirement does not apply."
+        }
+      ],
+      "cards": [
+        "Juggernaut",
+        "Grizzly Bears"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "508.1d-2",
+      "rules": [
+        "508.1d"
+      ],
+      "title": "The number of obeyed requirements must be the maximum possible without breaking a restriction",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "declare_attackers",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Juggernaut",
+              "summoning_sick": false
+            },
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            {
+              "card": "Silent Arbiter",
+              "summoning_sick": false
+            }
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A reaches the declare attackers step and declares only Juggernaut as an attacker against B."
+      ],
+      "variants": [
+        {
+          "label": "only_required",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The declaration is legal: it obeys Juggernaut's requirement without breaking Silent Arbiter's restriction of one attacker."
+        },
+        {
+          "label": "wrong_one",
+          "polarity": "does_not_fire",
+          "delta": "A declares only Grizzly Bears.",
+          "expected": "The declaration is illegal: zero requirements are obeyed while one could be."
+        },
+        {
+          "label": "both",
+          "polarity": "does_not_fire",
+          "delta": "A declares Juggernaut and Grizzly Bears.",
+          "expected": "The declaration is illegal: two attackers break the restriction that no more than one creature can attack."
+        },
+        {
+          "label": "none",
+          "polarity": "does_not_fire",
+          "delta": "A declares no attackers.",
+          "expected": "The declaration is illegal: Juggernaut's requirement could be obeyed and is not."
+        }
+      ],
+      "cards": [
+        "Juggernaut",
+        "Grizzly Bears",
+        "Silent Arbiter"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "508.1d-3",
+      "rules": [
+        "508.1d"
+      ],
+      "title": "A player is not required to pay an attack cost even if paying would obey a requirement",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "declare_attackers",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Juggernaut",
+              "summoning_sick": false
+            },
+            "Mountain",
+            "Mountain"
+          ],
+          "B": [
+            "Propaganda"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A reaches the declare attackers step with both Mountains untapped and declares no attackers."
+      ],
+      "variants": [
+        {
+          "label": "decline_to_pay",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The declaration is legal: Propaganda's {2} cost need not be paid, so Juggernaut is not required to attack even though A could pay."
+        },
+        {
+          "label": "pay",
+          "polarity": "other",
+          "delta": "A declares Juggernaut as an attacker against B and pays {2} with both Mountains.",
+          "expected": "The declaration is legal; Juggernaut becomes an attacking creature and both Mountains are tapped."
+        },
+        {
+          "label": "cannot_pay",
+          "polarity": "does_not_fire",
+          "delta": "Both Mountains are tapped and A declares Juggernaut as an attacker against B.",
+          "expected": "The declaration is illegal: the {2} cost can't be paid."
+        }
+      ],
+      "cards": [
+        "Juggernaut",
+        "Mountain",
+        "Propaganda"
+      ],
+      "forge_notes": "Propaganda's cost is an optional attack payment in Forge; check that declaring no attackers is accepted while Juggernaut could pay."
+    },
+    {
+      "id": "508.1f-1",
+      "rules": [
+        "508.1f"
+      ],
+      "title": "Declared attackers become tapped unless they have vigilance",
+      "record_kind": "combat",
+      "setup": {
+        "active": "A",
+        "step": "declare_attackers",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            },
+            {
+              "card": "Serra Angel",
+              "summoning_sick": false
+            }
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A declares Grizzly Bears as the only attacker against B.",
+        "No spells or abilities are used."
+      ],
+      "variants": [
+        {
+          "label": "tapped",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears becomes tapped as it is declared as an attacker, without any cost being paid. Serra Angel stays untapped."
+        },
+        {
+          "label": "vigilance",
+          "polarity": "does_not_fire",
+          "delta": "A declares Serra Angel as the only attacker instead of Grizzly Bears.",
+          "expected": "Serra Angel is an attacking creature and stays untapped. Grizzly Bears stays untapped."
+        },
+        {
+          "label": "not_declared",
+          "polarity": "does_not_fire",
+          "delta": "A declares no attackers.",
+          "expected": "Neither creature becomes tapped."
+        }
+      ],
+      "cards": [
+        "Grizzly Bears",
+        "Serra Angel"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "508.1k-1",
+      "rules": [
+        "508.1k"
+      ],
+      "title": "A chosen creature becomes an attacking creature and stays one until combat ends",
+      "record_kind": "combat",
+      "setup": {
+        "active": "A",
+        "step": "declare_attackers",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            },
+            {
+              "card": "Hill Giant",
+              "summoning_sick": false
+            }
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A declares Grizzly Bears and Hill Giant as attackers against B.",
+        "No spells or abilities are used, B declares no blockers, and combat damage is dealt."
+      ],
+      "variants": [
+        {
+          "label": "both_chosen",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears and Hill Giant are both attacking creatures and deal 5 combat damage to B (life 15)."
+        },
+        {
+          "label": "giant_not_chosen",
+          "polarity": "does_not_fire",
+          "delta": "A declares only Grizzly Bears; Hill Giant is not chosen.",
+          "expected": "Only Grizzly Bears is an attacking creature; Hill Giant is not attacking. B takes 2 combat damage (life 18)."
+        }
+      ],
+      "cards": [
+        "Grizzly Bears",
+        "Hill Giant"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "508.1m-1",
+      "rules": [
+        "508.1m",
+        "508.2b",
+        "508.3a"
+      ],
+      "title": "An attack trigger is on the stack before the active player first gets priority",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            },
+            "Island",
+            "Forest"
+          ],
+          "B": [
+            "Raking Canopy"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Jump",
+            "Giant Growth"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Jump targeting Grizzly Bears, tapping Island. Both players pass; Jump resolves and Grizzly Bears has flying until end of turn.",
+        "A moves to combat and declares Grizzly Bears as the only attacker against B.",
+        "Raking Canopy's trigger (a flying creature attacks B) goes on the stack before A receives priority.",
+        "A, holding priority first, casts Giant Growth targeting Grizzly Bears, tapping Forest. Both players pass; Giant Growth resolves.",
+        "Both players pass; Raking Canopy's trigger resolves and deals 4 damage to Grizzly Bears."
+      ],
+      "variants": [
+        {
+          "label": "respond",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Raking Canopy's trigger fires at declaration and is already on the stack when A first gets priority. Giant Growth resolves first, so Grizzly Bears is 5/5, takes 4 damage and survives; B takes 5 combat damage (life 15)."
+        },
+        {
+          "label": "no_response",
+          "polarity": "fires",
+          "delta": "A does not cast Giant Growth; A passes priority with the trigger on the stack.",
+          "expected": "The trigger resolves and deals 4 damage to Grizzly Bears (2/2), which dies in the state-based check. B takes no combat damage (life 20)."
+        },
+        {
+          "label": "no_flying",
+          "polarity": "does_not_fire",
+          "delta": "A does not cast Jump, so Grizzly Bears does not have flying when declared.",
+          "expected": "Raking Canopy's trigger does not fire. Grizzly Bears deals 2 combat damage to B (life 18)."
+        }
+      ],
+      "cards": [
+        "Grizzly Bears",
+        "Island",
+        "Forest",
+        "Raking Canopy",
+        "Jump",
+        "Giant Growth"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "508.2a-1",
+      "rules": [
+        "508.2a"
+      ],
+      "title": "An attack trigger does not fire when an attacker later gains the quality it names",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            },
+            "Island"
+          ],
+          "B": [
+            "Raking Canopy"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Jump"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A moves to combat and declares Grizzly Bears as the only attacker against B.",
+        "A casts Jump targeting Grizzly Bears, tapping Island. Both players pass; Jump resolves."
+      ],
+      "variants": [
+        {
+          "label": "flying_after_declaration",
+          "polarity": "does_not_fire",
+          "delta": "",
+          "expected": "Grizzly Bears has no flying when declared, so Raking Canopy does not trigger even after Jump gives it flying. Grizzly Bears survives and deals 2 combat damage to B (life 18)."
+        },
+        {
+          "label": "flying_before_declaration",
+          "polarity": "fires",
+          "delta": "A casts Jump in the first main phase, before combat, and then declares Grizzly Bears.",
+          "expected": "Grizzly Bears has flying when declared, so Raking Canopy's trigger fires and deals 4 damage to it. Grizzly Bears dies; B's life stays 20."
+        }
+      ],
+      "cards": [
+        "Grizzly Bears",
+        "Island",
+        "Raking Canopy",
+        "Jump"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "508.3a-1",
+      "rules": [
+        "508.3a",
+        "508.4"
+      ],
+      "title": "A creature put onto the battlefield attacking never attacked, so attack triggers do not fire for it",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "declare_attackers",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Hellrider",
+              "summoning_sick": false
+            },
+            {
+              "card": "Brimaz, King of Oreskos",
+              "summoning_sick": false
+            },
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            }
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A declares Brimaz, King of Oreskos as the only attacker against B; Hellrider and Grizzly Bears stay home.",
+        "Hellrider's trigger (for Brimaz) and Brimaz's trigger go on the stack. Brimaz's trigger creates a Cat Soldier token that is attacking B.",
+        "No further spells or abilities are used; B declares no blockers and combat damage is dealt."
+      ],
+      "variants": [
+        {
+          "label": "token_enters_attacking",
+          "polarity": "does_not_fire",
+          "delta": "",
+          "expected": "Hellrider triggers once, for Brimaz, and deals 1 damage to B. The Cat Soldier token that enters attacking never attacked, so Hellrider does not trigger for it. Combat damage is 3 from Brimaz and 1 from the token: B's life is 15."
+        },
+        {
+          "label": "declared_creature",
+          "polarity": "fires",
+          "delta": "A declares Brimaz and Grizzly Bears as attackers.",
+          "expected": "Hellrider triggers twice, for Brimaz and for Grizzly Bears (2 damage to B), and not for the token. Combat damage is 3 + 2 + 1: B's life is 12."
+        }
+      ],
+      "cards": [
+        "Hellrider",
+        "Brimaz, King of Oreskos",
+        "Grizzly Bears"
+      ],
+      "forge_notes": "The Cat Soldier token enters attacking without being declared; the count of Hellrider triggers is the observable."
+    },
+    {
+      "id": "508.3b-1",
+      "rules": [
+        "508.3b"
+      ],
+      "title": "A player-is-attacked trigger fires once when creatures are declared attacking that player",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "declare_attackers",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            },
+            {
+              "card": "Hill Giant",
+              "summoning_sick": false
+            },
+            "Curse of Vitality"
+          ],
+          "B": [
+            "Jace Beleren"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Curse of Vitality is controlled by A and attached to player B."
+      },
+      "decisions": [
+        "A declares Grizzly Bears and Hill Giant as attackers against B.",
+        "No spells or abilities are used besides triggers."
+      ],
+      "variants": [
+        {
+          "label": "two_attackers_player",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Curse of Vitality triggers once: A gains 2 life (life 22), not 4. B is the player attacked."
+        },
+        {
+          "label": "attack_planeswalker",
+          "polarity": "does_not_fire",
+          "delta": "A declares both creatures as attackers against Jace Beleren instead of B.",
+          "expected": "Curse of Vitality does not trigger, because B was not attacked. A's life stays 20."
+        },
+        {
+          "label": "no_attackers",
+          "polarity": "does_not_fire",
+          "delta": "A declares no attackers.",
+          "expected": "Curse of Vitality does not trigger. A's life stays 20."
+        }
+      ],
+      "cards": [
+        "Grizzly Bears",
+        "Hill Giant",
+        "Curse of Vitality",
+        "Jace Beleren"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "508.3c-1",
+      "rules": [
+        "508.3c"
+      ],
+      "title": "An attacks-with-a-creature trigger fires when a qualifying creature of that player is declared",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "declare_attackers",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Hired Claw",
+              "summoning_sick": false
+            },
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            }
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A declares Hired Claw as the only attacker against B.",
+        "Hired Claw's trigger targets B."
+      ],
+      "variants": [
+        {
+          "label": "lizard_attacks",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Hired Claw's trigger fires and deals 1 damage to B; B's life is 19 when the trigger has resolved."
+        },
+        {
+          "label": "only_bear_attacks",
+          "polarity": "does_not_fire",
+          "delta": "A declares Grizzly Bears as the only attacker instead of Hired Claw.",
+          "expected": "No Lizard is declared, so Hired Claw's trigger does not fire. B's life is 20 before combat damage."
+        },
+        {
+          "label": "lizard_and_bear",
+          "polarity": "fires",
+          "delta": "A declares Hired Claw and Grizzly Bears.",
+          "expected": "Hired Claw's trigger fires once and deals 1 damage to B; B's life is 19 when the trigger has resolved."
+        }
+      ],
+      "cards": [
+        "Hired Claw",
+        "Grizzly Bears"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "508.3d-1",
+      "rules": [
+        "508.3d"
+      ],
+      "title": "A whenever-you-attack trigger fires once however many creatures are declared",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "declare_attackers",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Ancestor Dragon",
+              "summoning_sick": false
+            },
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            },
+            {
+              "card": "Hill Giant",
+              "summoning_sick": false
+            }
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A declares Grizzly Bears and Hill Giant as attackers against B; Ancestor Dragon stays home."
+      ],
+      "variants": [
+        {
+          "label": "two_attackers",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Ancestor Dragon triggers once and A gains 1 life for each attacking creature: A's life is 22."
+        },
+        {
+          "label": "one_attacker",
+          "polarity": "fires",
+          "delta": "A declares only Grizzly Bears.",
+          "expected": "Ancestor Dragon triggers once and A gains 1 life: A's life is 21."
+        },
+        {
+          "label": "no_attackers",
+          "polarity": "does_not_fire",
+          "delta": "A declares no attackers.",
+          "expected": "Ancestor Dragon does not trigger. A's life stays 20."
+        }
+      ],
+      "cards": [
+        "Ancestor Dragon",
+        "Grizzly Bears",
+        "Hill Giant"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "508.3e-1",
+      "rules": [
+        "508.3e"
+      ],
+      "title": "A whenever-you-attack-a-player trigger fires for attackers attacking the player but not a planeswalker",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "declare_attackers",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Horizon Explorer",
+              "summoning_sick": false
+            },
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            "Jace Beleren"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A declares Grizzly Bears as the only attacker against B; Horizon Explorer stays home."
+      ],
+      "variants": [
+        {
+          "label": "attack_player",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Horizon Explorer's trigger fires and A creates a Lander token."
+        },
+        {
+          "label": "attack_planeswalker",
+          "polarity": "does_not_fire",
+          "delta": "A declares Grizzly Bears as an attacker against Jace Beleren instead of B.",
+          "expected": "Horizon Explorer's trigger does not fire; A creates no Lander token."
+        },
+        {
+          "label": "no_attackers",
+          "polarity": "does_not_fire",
+          "delta": "A declares no attackers.",
+          "expected": "Horizon Explorer's trigger does not fire; A creates no Lander token."
+        }
+      ],
+      "cards": [
+        "Horizon Explorer",
+        "Grizzly Bears",
+        "Jace Beleren"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "508.3f-1",
+      "rules": [
+        "508.3f"
+      ],
+      "title": "An attacks-and-isn't-blocked trigger fires in the declare blockers step",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "declare_attackers",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Crypt Cobra",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            {
+              "card": "Hill Giant",
+              "summoning_sick": false
+            }
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A declares Crypt Cobra as the only attacker against B.",
+        "B declares no blockers.",
+        "No spells or abilities are used."
+      ],
+      "variants": [
+        {
+          "label": "unblocked",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Nothing triggers when Crypt Cobra is declared. In the declare blockers step, once it is unblocked, its trigger fires and B gets 1 poison counter."
+        },
+        {
+          "label": "blocked",
+          "polarity": "does_not_fire",
+          "delta": "B blocks Crypt Cobra with Hill Giant.",
+          "expected": "Crypt Cobra's trigger does not fire. B has no poison counters."
+        }
+      ],
+      "cards": [
+        "Crypt Cobra",
+        "Hill Giant"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "508.4a-1",
+      "rules": [
+        "508.4a",
+        "508.4"
+      ],
+      "title": "A creature that would enter attacking a planeswalker that has left the battlefield enters but is not attacking",
+      "record_kind": "combat",
+      "setup": {
+        "active": "A",
+        "step": "declare_attackers",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            },
+            "Island",
+            "Island",
+            "Mountain"
+          ],
+          "B": [
+            "Jace Beleren"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Ninja of the Deep Hours",
+            "Lightning Bolt"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A declares Grizzly Bears as the only attacker against Jace Beleren.",
+        "B declares no blockers.",
+        "In the declare blockers step A activates ninjutsu of Ninja of the Deep Hours, tapping both Islands and returning Grizzly Bears to hand.",
+        "Holding priority, A casts Lightning Bolt targeting Jace Beleren, tapping Mountain. Both players pass; Lightning Bolt resolves.",
+        "Both players pass; the ninjutsu ability resolves. Combat damage is dealt."
+      ],
+      "variants": [
+        {
+          "label": "planeswalker_gone",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Jace Beleren (loyalty 3) is dealt 3 damage and goes to B's graveyard. Ninja of the Deep Hours enters the battlefield tapped but is not an attacking creature and deals no combat damage. B's life stays 20."
+        },
+        {
+          "label": "planeswalker_present",
+          "polarity": "does_not_fire",
+          "delta": "A does not cast Lightning Bolt.",
+          "expected": "Ninja of the Deep Hours enters tapped and attacking Jace Beleren and deals 2 combat damage to it; Jace Beleren has loyalty 1. B's life stays 20."
+        }
+      ],
+      "cards": [
+        "Grizzly Bears",
+        "Island",
+        "Mountain",
+        "Jace Beleren",
+        "Ninja of the Deep Hours",
+        "Lightning Bolt"
+      ],
+      "forge_notes": "Ninjutsu enters attacking the defender of the returned creature (702.49c). Check that Forge leaves the Ninja non-attacking rather than redirecting it to B when that planeswalker is gone."
+    },
+    {
+      "id": "508.4c-1",
+      "rules": [
+        "508.4c"
+      ],
+      "title": "A creature put onto the battlefield attacking ignores attack restrictions",
+      "record_kind": "combat",
+      "setup": {
+        "active": "A",
+        "step": "declare_attackers",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Brimaz, King of Oreskos",
+              "summoning_sick": false
+            },
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            {
+              "card": "Silent Arbiter",
+              "summoning_sick": false
+            }
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A declares Brimaz, King of Oreskos as the only attacker against B.",
+        "Brimaz's trigger creates a Cat Soldier token that is attacking B.",
+        "B declares no blockers and combat damage is dealt."
+      ],
+      "variants": [
+        {
+          "label": "token_ignores_cap",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The declaration is legal and Brimaz's token enters attacking despite Silent Arbiter's limit of one attacker, so two creatures attack. Combat damage is 3 + 1: B's life is 16."
+        },
+        {
+          "label": "second_declared",
+          "polarity": "does_not_fire",
+          "delta": "A declares Brimaz and Grizzly Bears as attackers.",
+          "expected": "The declaration is illegal: two declared attackers break Silent Arbiter's restriction."
+        }
+      ],
+      "cards": [
+        "Brimaz, King of Oreskos",
+        "Grizzly Bears",
+        "Silent Arbiter"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "508.4d-1",
+      "rules": [
+        "508.4d"
+      ],
+      "title": "A creature put onto the battlefield attacking after blockers are declared is unblocked",
+      "record_kind": "combat",
+      "setup": {
+        "active": "A",
+        "step": "declare_attackers",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            },
+            "Island",
+            "Island"
+          ],
+          "B": [
+            {
+              "card": "Hill Giant",
+              "summoning_sick": false
+            }
+          ]
+        },
+        "hand": {
+          "A": [
+            "Ninja of the Deep Hours"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A declares Grizzly Bears as the only attacker against B.",
+        "B declares no blockers (Hill Giant stays untapped but does not block).",
+        "In the declare blockers step A activates ninjutsu, tapping both Islands and returning Grizzly Bears to hand; Ninja of the Deep Hours enters tapped and attacking B.",
+        "Combat damage is dealt; A takes the optional draw."
+      ],
+      "variants": [
+        {
+          "label": "ninjutsu",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Ninja of the Deep Hours enters tapped, attacking and unblocked; Hill Giant cannot block it. It deals 2 combat damage to B (life 18) and A draws a card."
+        },
+        {
+          "label": "no_ninjutsu",
+          "polarity": "other",
+          "delta": "A does not activate ninjutsu.",
+          "expected": "Grizzly Bears stays unblocked and deals 2 combat damage to B (life 18). Ninja of the Deep Hours stays in A's hand and A draws no card."
+        },
+        {
+          "label": "blocked",
+          "polarity": "other",
+          "delta": "B blocks Grizzly Bears with Hill Giant.",
+          "expected": "Ninjutsu can't be activated because Grizzly Bears is blocked. Hill Giant deals 3 damage to Grizzly Bears, which dies; B's life stays 20."
+        }
+      ],
+      "cards": [
+        "Grizzly Bears",
+        "Island",
+        "Hill Giant",
+        "Ninja of the Deep Hours"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "508.4d-2",
+      "rules": [
+        "508.4d"
+      ],
+      "title": "A creature put onto the battlefield attacking before blockers are declared can still be blocked",
+      "record_kind": "combat",
+      "setup": {
+        "active": "A",
+        "step": "declare_attackers",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Brimaz, King of Oreskos",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            {
+              "card": "Hill Giant",
+              "summoning_sick": false
+            }
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A declares Brimaz, King of Oreskos as the only attacker against B.",
+        "Brimaz's trigger resolves in the declare attackers step and creates a 1/1 Cat Soldier token that is attacking B.",
+        "In the declare blockers step B blocks the Cat Soldier token with Hill Giant.",
+        "No spells or abilities are used; combat damage is dealt."
+      ],
+      "variants": [
+        {
+          "label": "token_blocked",
+          "polarity": "does_not_fire",
+          "delta": "",
+          "expected": "The token entered attacking in the declare attackers step, so it is not unblocked: Hill Giant blocks it and it dies. Brimaz deals 3 combat damage to B (life 17)."
+        },
+        {
+          "label": "no_block",
+          "polarity": "other",
+          "delta": "B declares no blockers.",
+          "expected": "The token and Brimaz are unblocked and deal 4 combat damage to B (life 16)."
+        }
+      ],
+      "cards": [
+        "Brimaz, King of Oreskos",
+        "Hill Giant"
+      ],
+      "forge_notes": "Pairs with 508.4d-1, where a creature entering attacking in the declare blockers step is unblocked and cannot be blocked."
+    },
+    {
+      "id": "508.5-1",
+      "rules": [
+        "508.5"
+      ],
+      "title": "The defending player is the attacked player or the controller of the attacked planeswalker, even after the creature leaves combat",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "declare_attackers",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Crypt Cobra",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            "Jace Beleren",
+            "Mountain"
+          ]
+        },
+        "hand": {
+          "B": [
+            "Lightning Bolt"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A declares Crypt Cobra as the only attacker against Jace Beleren.",
+        "B declares no blockers; B casts no spells.",
+        "Crypt Cobra's trigger fires and resolves."
+      ],
+      "variants": [
+        {
+          "label": "attacks_planeswalker",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The defending player is B, controller of the attacked planeswalker: B gets 1 poison counter and A gets none."
+        },
+        {
+          "label": "attacks_player",
+          "polarity": "fires",
+          "delta": "A declares Crypt Cobra as an attacker against B instead of Jace Beleren.",
+          "expected": "The defending player is B: B gets 1 poison counter and A gets none."
+        },
+        {
+          "label": "removed_before_resolution",
+          "polarity": "fires",
+          "delta": "With Crypt Cobra's trigger on the stack, B casts Lightning Bolt targeting Crypt Cobra, tapping Mountain.",
+          "expected": "Lightning Bolt resolves first and Crypt Cobra (3/3) dies, so it is no longer attacking. The trigger still refers to the controller of the planeswalker it was attacking: B gets 1 poison counter."
+        },
+        {
+          "label": "killed_before_blockers",
+          "polarity": "other",
+          "delta": "In the declare attackers step, before blockers are declared, B casts Lightning Bolt targeting Crypt Cobra, tapping Mountain.",
+          "expected": "Crypt Cobra dies before blockers are declared, so it never attacks unblocked and its trigger does not fire. B has no poison counters."
+        }
+      ],
+      "cards": [
+        "Crypt Cobra",
+        "Jace Beleren",
+        "Mountain",
+        "Lightning Bolt"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "508.7a-1",
+      "rules": [
+        "508.7a"
+      ],
+      "title": "A reselected attacker stays in combat and does not attack a second time",
+      "record_kind": "combat",
+      "setup": {
+        "active": "A",
+        "step": "declare_attackers",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Hellrider",
+              "summoning_sick": false
+            },
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            },
+            "Island",
+            "Island",
+            "Island"
+          ],
+          "B": [
+            "Jace Beleren"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Portal Mage"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A declares Grizzly Bears as the only attacker against Jace Beleren.",
+        "Hellrider triggers and deals 1 damage to Jace Beleren (loyalty 2).",
+        "A casts Portal Mage, tapping three Islands. Portal Mage enters during the declare attackers step; its trigger targets Grizzly Bears and A reselects B as the player it attacks.",
+        "B declares no blockers and combat damage is dealt."
+      ],
+      "variants": [
+        {
+          "label": "reselect_to_player",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears stays an attacking creature and now attacks B. Hellrider does not trigger a second time, so Jace Beleren stays at loyalty 2. Grizzly Bears deals 2 combat damage to B (life 18)."
+        },
+        {
+          "label": "no_reselect",
+          "polarity": "does_not_fire",
+          "delta": "A does not cast Portal Mage.",
+          "expected": "Grizzly Bears keeps attacking Jace Beleren and deals 2 damage to it. Jace Beleren has 0 loyalty after the Hellrider damage and combat damage and dies; B's life stays 20."
+        }
+      ],
+      "cards": [
+        "Hellrider",
+        "Grizzly Bears",
+        "Island",
+        "Jace Beleren",
+        "Portal Mage"
+      ],
+      "forge_notes": "Portal Mage's trigger is optional (OptionalDecider$ You); the scenario takes the 'may' as accepted."
+    },
+    {
+      "id": "508.7b-1",
+      "rules": [
+        "508.7b"
+      ],
+      "title": "A creature whose attacked defender is reselected ignores a restriction on attacking the new defender",
+      "record_kind": "combat",
+      "setup": {
+        "active": "A",
+        "step": "declare_attackers",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            },
+            "Island",
+            "Island",
+            "Island"
+          ],
+          "B": [
+            "Jace Beleren",
+            {
+              "card": "Blazing Archon",
+              "summoning_sick": false
+            }
+          ]
+        },
+        "hand": {
+          "A": [
+            "Portal Mage"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A declares Grizzly Bears as the only attacker against Jace Beleren; Blazing Archon forbids attacking B, not B's planeswalkers.",
+        "A casts Portal Mage, tapping three Islands. It enters during the declare attackers step; its trigger targets Grizzly Bears and A reselects B as the player it attacks.",
+        "B declares no blockers and combat damage is dealt."
+      ],
+      "variants": [
+        {
+          "label": "reselect",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears now attacks B despite Blazing Archon and stays in combat. It deals 2 combat damage to B (life 18); Jace Beleren keeps loyalty 3."
+        },
+        {
+          "label": "declare_at_player",
+          "polarity": "does_not_fire",
+          "delta": "A declares Grizzly Bears as an attacker against B instead of Jace Beleren.",
+          "expected": "The declaration is illegal: Blazing Archon says creatures can't attack B."
+        }
+      ],
+      "cards": [
+        "Grizzly Bears",
+        "Island",
+        "Jace Beleren",
+        "Blazing Archon",
+        "Portal Mage"
+      ],
+      "forge_notes": "Portal Mage's trigger is optional (OptionalDecider$ You); the scenario takes it as accepted. Check that Forge's ChangeCombatants does not filter the new defender by attack restrictions."
+    },
+    {
+      "id": "508.7c-1",
+      "rules": [
+        "508.7c"
+      ],
+      "title": "A reselected defender must be an opponent or an opposing planeswalker",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "declare_attackers",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            },
+            "Chandra Nalaar",
+            "Island",
+            "Island",
+            "Island"
+          ],
+          "B": [
+            "Jace Beleren"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Portal Mage"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A declares Grizzly Bears as the only attacker against Jace Beleren.",
+        "A casts Portal Mage, tapping three Islands. It enters during the declare attackers step and its trigger targets Grizzly Bears.",
+        "A reselects Grizzly Bears' defender: the chosen new defender is B."
+      ],
+      "variants": [
+        {
+          "label": "reselect_opponent",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Choosing B is legal."
+        },
+        {
+          "label": "reselect_own_planeswalker",
+          "polarity": "does_not_fire",
+          "delta": "The chosen new defender is A's own Chandra Nalaar.",
+          "expected": "Choosing Chandra Nalaar is illegal; it is not controlled by an opponent of the attacking creature's controller."
+        },
+        {
+          "label": "reselect_self",
+          "polarity": "does_not_fire",
+          "delta": "The chosen new defender is A.",
+          "expected": "Choosing A is illegal; A is not an opponent of the attacking creature's controller."
+        }
+      ],
+      "cards": [
+        "Grizzly Bears",
+        "Chandra Nalaar",
+        "Island",
+        "Jace Beleren",
+        "Portal Mage"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "508.8-1",
+      "rules": [
+        "508.8"
+      ],
+      "title": "With no attackers the declare blockers and combat damage steps are skipped",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "declare_attackers",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            {
+              "card": "Hill Giant",
+              "summoning_sick": false
+            },
+            "Mountain"
+          ]
+        },
+        "hand": {
+          "B": [
+            "False Orders"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A declares no attackers.",
+        "B wants to cast False Orders targeting Hill Giant during the declare blockers step, tapping Mountain."
+      ],
+      "variants": [
+        {
+          "label": "no_attackers",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The declare blockers step is skipped; combat goes from declare attackers to end of combat. B never has a declare blockers step in which False Orders can be cast."
+        },
+        {
+          "label": "one_attacker",
+          "polarity": "does_not_fire",
+          "delta": "A declares Grizzly Bears as an attacker against B.",
+          "expected": "The declare blockers step happens, and casting False Orders targeting Hill Giant is legal there."
+        }
+      ],
+      "cards": [
+        "Grizzly Bears",
+        "Hill Giant",
+        "Mountain",
+        "False Orders"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

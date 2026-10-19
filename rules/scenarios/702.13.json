@@ -1,0 +1,73 @@
+{
+  "unit": "702.13",
+  "verified": true,
+  "review": [],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.13b-1",
+      "rules": [
+        "702.13b"
+      ],
+      "title": "A creature with intimidate can be blocked only by artifact creatures and creatures sharing a color with it",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Bladetusk Boar",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            "Grizzly Bears",
+            "Hill Giant",
+            "Phyrexian Walker"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A attacks player B with Bladetusk Boar.",
+        "B declares Grizzly Bears as a blocker of Bladetusk Boar."
+      ],
+      "variants": [
+        {
+          "label": "green_blocker",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Declaring Grizzly Bears (green, not an artifact) as a blocker of Bladetusk Boar (red) is illegal; Grizzly Bears is not among Bladetusk Boar's legal blockers."
+        },
+        {
+          "label": "same_color_blocker",
+          "polarity": "does_not_fire",
+          "delta": "B declares Hill Giant (red) as the blocker instead of Grizzly Bears.",
+          "expected": "Declaring Hill Giant as a blocker of Bladetusk Boar is legal."
+        },
+        {
+          "label": "artifact_blocker",
+          "polarity": "does_not_fire",
+          "delta": "B declares Phyrexian Walker (a colorless artifact creature) as the blocker instead of Grizzly Bears.",
+          "expected": "Declaring Phyrexian Walker as a blocker of Bladetusk Boar is legal."
+        }
+      ],
+      "cards": [
+        "Bladetusk Boar",
+        "Grizzly Bears",
+        "Hill Giant",
+        "Phyrexian Walker"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

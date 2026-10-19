@@ -1,0 +1,1193 @@
+{
+  "unit": "121",
+  "verified": true,
+  "review": [
+    "121.2-1: one_card_library expected B at 19 life, but B loses at the state-based check made before the Dreams trigger can resolve; rewrote the expected.",
+    "121.2a-1: hand counts ignored the uncast second spell still in B's hand (base said B's hand has one card); rewrote both expected outcomes and dropped a confusing forge note.",
+    "121.5-1: empty_library delta restated the base's Impulse cast as if it were a change; the delta now names only the empty library.",
+    "121.7-2: cards list missed Island (in A's library) and forge_notes contradicted the base's 3/3 split; added Island and rewrote the note.",
+    "121.8-1: base expected stopped at 'cannot be cast' without the 733.1 reversal, under which the spell returns to hand but the Egg's sacrifice and draw stand; rewrote the expected and fixed the decisions so A pays the discard after the mana ability and passes after the reversal."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "121.1-1",
+      "rules": [
+        "121.1"
+      ],
+      "title": "A draw instruction moves the top card of the library into the hand",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island"
+          ],
+          "B": [
+            "Island",
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Ancestral Recall"
+          ],
+          "B": [
+            "Counterspell"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Forest",
+            "Mountain",
+            "Plains",
+            "Swamp"
+          ]
+        },
+        "exile": {},
+        "notes": "Libraries are listed top card first."
+      },
+      "decisions": [
+        "A casts Ancestral Recall targeting A, tapping Island.",
+        "B has priority with Counterspell available and passes in the base variant; Ancestral Recall resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Ancestral Recall resolves. Forest, Mountain and Plains move one at a time from the top of A's library to A's hand; A's library is left with Swamp."
+        },
+        {
+          "label": "countered",
+          "polarity": "does_not_fire",
+          "delta": "B casts Counterspell targeting Ancestral Recall in response, tapping both Islands.",
+          "expected": "Counterspell resolves and Ancestral Recall is countered and put into A's graveyard; no card moves from A's library to A's hand and the library still holds four cards."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Ancestral Recall",
+        "Counterspell",
+        "Forest",
+        "Mountain",
+        "Plains",
+        "Swamp"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "121.1-2",
+      "rules": [
+        "121.1"
+      ],
+      "title": "The draw step's turn-based action draws the active player a card",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "draw",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island"
+          ],
+          "B": [
+            "Island"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Forest",
+            "Mountain",
+            "Plains"
+          ],
+          "B": [
+            "Swamp",
+            "Swamp"
+          ]
+        },
+        "exile": {},
+        "notes": "Libraries are listed top card first. It is A's second turn, so the draw step is not skipped. The draw step has just begun."
+      },
+      "decisions": [
+        "The draw step begins and the turn-based draw is performed before any player receives priority.",
+        "Both players pass priority with an empty stack."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "A draws Forest from the top of A's library; A's hand is Forest and A's library is Mountain, Plains. B's hand and library are unchanged."
+        },
+        {
+          "label": "portal",
+          "polarity": "does_not_fire",
+          "delta": "Possessed Portal is on B's battlefield, so a player who would draw skips that draw.",
+          "expected": "A's turn-based draw is skipped: A's hand stays empty and A's library keeps all three cards."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Forest",
+        "Mountain",
+        "Plains",
+        "Swamp",
+        "Possessed Portal"
+      ],
+      "forge_notes": "Possessed Portal is an 8-mana artifact placed directly on the battlefield in the portal variant. Its end-step trigger is not reached in this scenario."
+    },
+    {
+      "id": "121.2-1",
+      "rules": [
+        "121.2"
+      ],
+      "title": "A multi-card draw is performed as individual draws, each of which fires its own draw trigger",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "B",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Underworld Dreams"
+          ],
+          "B": [
+            "Island",
+            "Island",
+            "Island"
+          ]
+        },
+        "hand": {
+          "B": [
+            "Divination"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "B": [
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island"
+          ]
+        },
+        "exile": {},
+        "notes": "Underworld Dreams is controlled by A. Libraries are listed top card first."
+      },
+      "decisions": [
+        "B casts Divination, tapping three Islands.",
+        "Both players pass; Divination resolves.",
+        "Underworld Dreams triggers go on the stack after the draws; both players pass and they resolve."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "B draws two cards one at a time. Underworld Dreams triggers once for each of the two draws and deals 1 damage to B each time: B is at 18 life with two cards in hand and three in the library."
+        },
+        {
+          "label": "one_card_library",
+          "polarity": "other",
+          "delta": "B's library holds one card.",
+          "expected": "B draws the one card and Underworld Dreams triggers once; the second draw finds no card, so it draws nothing and does not trigger Underworld Dreams. B loses the game in the state-based check before the trigger resolves."
+        },
+        {
+          "label": "own_dreams",
+          "polarity": "does_not_fire",
+          "delta": "Underworld Dreams is controlled by B instead of A.",
+          "expected": "B draws two cards but Underworld Dreams only triggers on an opponent's draws: no trigger fires and B stays at 20 life."
+        }
+      ],
+      "cards": [
+        "Underworld Dreams",
+        "Island",
+        "Divination"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "121.2a-1",
+      "rules": [
+        "121.2a"
+      ],
+      "title": "A replacement effect that refers to the number of cards drawn modifies the whole instruction before any draw",
+      "record_kind": "rewrite",
+      "setup": {
+        "active": "B",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Alms Collector"
+          ],
+          "B": [
+            "Island",
+            "Island",
+            "Island"
+          ]
+        },
+        "hand": {
+          "B": [
+            "Divination",
+            "Opt"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains"
+          ],
+          "B": [
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island"
+          ]
+        },
+        "exile": {},
+        "notes": "Libraries are listed top card first."
+      },
+      "decisions": [
+        "B casts Divination (Opt in the one_card variant), tapping the needed Islands.",
+        "Both players pass; the spell resolves.",
+        "For Opt, B leaves the scried card on top of the library."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The instruction to draw two cards is replaced as a whole by Alms Collector: B draws one card and A draws one card instead. B's hand is Opt plus one drawn card and four cards remain in B's library; A's hand has one card and three remain in A's library."
+        },
+        {
+          "label": "one_card",
+          "polarity": "does_not_fire",
+          "delta": "B casts Opt instead of Divination, so the instruction draws one card.",
+          "expected": "Alms Collector's replacement does not apply to a draw of fewer than two cards: B draws one card, so B's hand is Divination plus one drawn card, and A draws nothing, so A's library keeps all four cards."
+        }
+      ],
+      "cards": [
+        "Alms Collector",
+        "Plains",
+        "Island",
+        "Divination",
+        "Opt"
+      ],
+      "forge_notes": "The Forge replacement event is DrawCards with Number$ GE2, which sees the instruction's card count before the individual draws."
+    },
+    {
+      "id": "121.2b-1",
+      "rules": [
+        "121.2b"
+      ],
+      "title": "Under a one-draw-per-turn restriction a multi-card draw is partially carried out",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            "Island",
+            "Spirit of the Labyrinth"
+          ],
+          "B": [
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Divination"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Forest",
+            "Mountain",
+            "Plains",
+            "Swamp"
+          ]
+        },
+        "exile": {},
+        "notes": "It is A's first turn and A is on the play, so A has not drawn a card this turn. Libraries are listed top card first."
+      },
+      "decisions": [
+        "A casts Divination, tapping three Islands.",
+        "Both players pass; Divination resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Divination resolves and is partially carried out: A draws Forest and the second draw does not happen. A's hand has one card and A's library is Mountain, Plains, Swamp."
+        },
+        {
+          "label": "already_drew",
+          "polarity": "fires",
+          "delta": "It is A's second turn and A already drew a card in the draw step, so A has drawn one card this turn.",
+          "expected": "Divination resolves but A draws no card: every further draw this turn is blocked. A's library keeps its four cards."
+        },
+        {
+          "label": "no_spirit",
+          "polarity": "does_not_fire",
+          "delta": "Spirit of the Labyrinth is in A's graveyard instead of on the battlefield.",
+          "expected": "Divination resolves and A draws Forest and Mountain; A's hand has two cards and A's library is Plains, Swamp."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Spirit of the Labyrinth",
+        "Divination",
+        "Forest",
+        "Mountain",
+        "Plains",
+        "Swamp"
+      ],
+      "forge_notes": "In the already_drew variant the card drawn in the draw step is not tracked by the setup; the harness must set Forge's per-turn draw count to one."
+    },
+    {
+      "id": "121.2c-1",
+      "rules": [
+        "121.2c"
+      ],
+      "title": "When both players are told to draw, the active player draws first",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island"
+          ],
+          "B": [
+            "Island",
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Vision Skeins"
+          ],
+          "B": [
+            "Counterspell"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Forest",
+            "Mountain",
+            "Plains",
+            "Swamp"
+          ],
+          "B": [
+            "Island",
+            "Plains",
+            "Swamp",
+            "Mountain"
+          ]
+        },
+        "exile": {},
+        "notes": "A is the active player and B has priority to respond in the countered variant. Libraries are listed top card first."
+      },
+      "decisions": [
+        "A casts Vision Skeins, tapping two Islands.",
+        "B passes priority in the base variant; both players pass and Vision Skeins resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Each player draws two cards. A, the active player, draws Forest and Mountain first, then B draws Island and Plains; the event order shows both of A's draws before either of B's."
+        },
+        {
+          "label": "nonactive_turn",
+          "polarity": "fires",
+          "delta": "B is the active player and A casts Vision Skeins on B's turn.",
+          "expected": "B, now the active player, draws its two cards first and A draws its two cards second, although A cast the spell."
+        },
+        {
+          "label": "countered",
+          "polarity": "does_not_fire",
+          "delta": "B casts Counterspell targeting Vision Skeins, tapping both Islands.",
+          "expected": "Vision Skeins is countered; neither player draws and both libraries keep four cards."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Vision Skeins",
+        "Counterspell",
+        "Forest",
+        "Mountain",
+        "Plains",
+        "Swamp"
+      ],
+      "forge_notes": "In the nonactive_turn variant A has the two Islands and Vision Skeins, and B holds Counterspell unused; A casts it in B's main phase."
+    },
+    {
+      "id": "121.3-1",
+      "rules": [
+        "121.3"
+      ],
+      "title": "A player with an empty library can still choose to draw, unless an effect says they can't draw",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Dire Undercurrents",
+            "Island"
+          ],
+          "B": [
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Merfolk of the Pearl Trident"
+          ],
+          "B": [
+            "Omen Machine"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [],
+          "B": [
+            "Island",
+            "Island",
+            "Island"
+          ]
+        },
+        "exile": {},
+        "notes": "A's library is empty. Libraries are listed top card first."
+      },
+      "decisions": [
+        "A casts Merfolk of the Pearl Trident, tapping Island.",
+        "Both players pass; Merfolk of the Pearl Trident resolves and enters.",
+        "Dire Undercurrents triggers; if A is given the choice, A chooses to have A as target player draw a card.",
+        "Both players pass and the trigger resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The optional draw is offered to A and A can choose it with an empty library. A draws no card, and A loses the game at the next state-based check."
+        },
+        {
+          "label": "cant_draw",
+          "polarity": "does_not_fire",
+          "delta": "Omen Machine, which says players can't draw cards, is on B's battlefield instead of in B's hand.",
+          "expected": "A can't choose to have a player draw a card: the choice is not available, nothing happens and A stays in the game."
+        }
+      ],
+      "cards": [
+        "Dire Undercurrents",
+        "Island",
+        "Merfolk of the Pearl Trident",
+        "Omen Machine"
+      ],
+      "forge_notes": "The Forge trigger carries OptionalDecider$ You; with CantDraw in force the trigger may still be offered and then do nothing. The record kind is playability for the verdict on the choice."
+    },
+    {
+      "id": "121.3a-1",
+      "rules": [
+        "121.3a"
+      ],
+      "title": "An optional draw offered for another player's empty library can be taken unless that player can't draw",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Dire Undercurrents",
+            "Island"
+          ],
+          "B": [
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Merfolk of the Pearl Trident"
+          ],
+          "B": [
+            "Omen Machine"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Forest",
+            "Forest",
+            "Forest"
+          ],
+          "B": []
+        },
+        "exile": {},
+        "notes": "B's library is empty and A's is not. Libraries are listed top card first."
+      },
+      "decisions": [
+        "A casts Merfolk of the Pearl Trident, tapping Island.",
+        "Both players pass; Merfolk of the Pearl Trident resolves and enters.",
+        "Dire Undercurrents triggers; if A is given the choice, A chooses to have B as target player draw a card.",
+        "Both players pass and the trigger resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "A, the player making the choice, can choose to have B draw although B's library is empty. B draws no card, and B loses the game at the next state-based check."
+        },
+        {
+          "label": "cant_draw",
+          "polarity": "does_not_fire",
+          "delta": "Omen Machine, which says players can't draw cards, is on B's battlefield instead of in B's hand.",
+          "expected": "A can't choose to have B draw a card: the choice is not available, nothing happens and B stays in the game."
+        }
+      ],
+      "cards": [
+        "Dire Undercurrents",
+        "Island",
+        "Merfolk of the Pearl Trident",
+        "Omen Machine",
+        "Forest"
+      ],
+      "forge_notes": "As in 121.3-1, Forge may offer the optional trigger and then draw nothing under CantDraw."
+    },
+    {
+      "id": "121.4-1",
+      "rules": [
+        "121.4"
+      ],
+      "title": "A player who attempts to draw from an empty library loses at the next state-based check",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            "Island"
+          ],
+          "B": [
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Divination"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Forest"
+          ],
+          "B": [
+            "Island",
+            "Island"
+          ]
+        },
+        "exile": {},
+        "notes": "A's library holds one card. Libraries are listed top card first."
+      },
+      "decisions": [
+        "A casts Divination, tapping three Islands.",
+        "Both players pass; Divination resolves.",
+        "The next time a player would receive priority, state-based actions are checked."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "A draws Forest, then attempts a second draw from the empty library; A loses the game at the next state-based check."
+        },
+        {
+          "label": "two_cards",
+          "polarity": "does_not_fire",
+          "delta": "A's library holds two cards, Forest and Mountain.",
+          "expected": "A draws both cards, the library is now empty but no draw failed, and A stays in the game at 20 life."
+        },
+        {
+          "label": "empty",
+          "polarity": "fires",
+          "delta": "A's library is empty.",
+          "expected": "Both draws are attempted from an empty library and A loses the game at the next state-based check."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Divination",
+        "Forest",
+        "Mountain"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "121.5-1",
+      "rules": [
+        "121.5"
+      ],
+      "title": "Moving a card from library to hand without the word draw is not a draw",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "B",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Underworld Dreams"
+          ],
+          "B": [
+            "Island",
+            "Island",
+            "Island"
+          ]
+        },
+        "hand": {
+          "B": [
+            "Impulse",
+            "Divination"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "B": [
+            "Forest",
+            "Mountain",
+            "Plains",
+            "Swamp",
+            "Island"
+          ]
+        },
+        "exile": {},
+        "notes": "Underworld Dreams is controlled by A. Libraries are listed top card first."
+      },
+      "decisions": [
+        "B casts Impulse (Divination in the draw variant), tapping the needed Islands.",
+        "For Impulse, B looks at the top four cards, chooses Forest to put into hand and puts Mountain, Plains and Swamp on the bottom in that order.",
+        "Both players pass; the spell resolves and any triggers resolve."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Forest moves from B's library to B's hand without being drawn: Underworld Dreams does not trigger and B stays at 20 life. B's library is Island, Mountain, Plains, Swamp."
+        },
+        {
+          "label": "empty_library",
+          "polarity": "fires",
+          "delta": "B's library is empty.",
+          "expected": "Impulse looks at no cards and moves none; B has not attempted a draw, so B stays in the game at 20 life and Underworld Dreams does not trigger."
+        },
+        {
+          "label": "draw",
+          "polarity": "does_not_fire",
+          "delta": "B casts Divination instead of Impulse.",
+          "expected": "B draws two cards; Underworld Dreams triggers twice and B takes 2 damage, ending at 18 life."
+        }
+      ],
+      "cards": [
+        "Underworld Dreams",
+        "Island",
+        "Impulse",
+        "Divination",
+        "Forest",
+        "Mountain",
+        "Plains",
+        "Swamp"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "121.6a-1",
+      "rules": [
+        "121.6a"
+      ],
+      "title": "A draw replacement effect applies even when the library is empty",
+      "record_kind": "rewrite",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Words of Worship",
+            "Island",
+            "Island"
+          ],
+          "B": [
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Opt"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [],
+          "B": [
+            "Island",
+            "Island"
+          ]
+        },
+        "exile": {},
+        "notes": "A's library is empty."
+      },
+      "decisions": [
+        "A activates Words of Worship, paying {1} with Island; the ability resolves.",
+        "A casts Opt, tapping the other Island.",
+        "Both players pass; Opt resolves: A scries 1 (nothing to look at), then draws a card."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "A's draw is replaced although the library is empty: A gains 5 life and is at 25. No draw is attempted, so A stays in the game."
+        },
+        {
+          "label": "no_words",
+          "polarity": "does_not_fire",
+          "delta": "A does not activate Words of Worship and casts only Opt with one Island.",
+          "expected": "Opt's draw is attempted from the empty library; A stays at 20 life and loses the game at the next state-based check."
+        }
+      ],
+      "cards": [
+        "Words of Worship",
+        "Island",
+        "Opt"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "121.6b-1",
+      "rules": [
+        "121.6b"
+      ],
+      "title": "A replaced draw within a sequence is completed before the sequence resumes",
+      "record_kind": "rewrite",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Words of Worship",
+            "Island",
+            "Island",
+            "Island",
+            "Island"
+          ],
+          "B": [
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Divination"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Forest",
+            "Mountain",
+            "Plains"
+          ]
+        },
+        "exile": {},
+        "notes": "Libraries are listed top card first."
+      },
+      "decisions": [
+        "A activates Words of Worship, paying {1} with Island; the ability resolves.",
+        "A casts Divination, tapping three Islands.",
+        "Both players pass; Divination resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The first draw is replaced and A gains 5 life (25). That replacement is completed, then the second draw resumes and A draws Forest. A's hand has one card and A's library is Mountain, Plains."
+        },
+        {
+          "label": "no_words",
+          "polarity": "does_not_fire",
+          "delta": "A does not activate Words of Worship.",
+          "expected": "No draw is replaced: A draws Forest and Mountain and stays at 20 life; A's library is Plains."
+        }
+      ],
+      "cards": [
+        "Words of Worship",
+        "Island",
+        "Divination",
+        "Forest",
+        "Mountain",
+        "Plains"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "121.6c-1",
+      "rules": [
+        "121.6c"
+      ],
+      "title": "An additional action on a drawn card is not performed on cards drawn through a replacement",
+      "record_kind": "rewrite",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Jace, Mirror Mage",
+            "Thought Reflection"
+          ],
+          "B": [
+            "Island"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Grizzly Bears",
+            "Forest",
+            "Plains",
+            "Plains"
+          ]
+        },
+        "exile": {},
+        "notes": "Jace, Mirror Mage has its printed 4 loyalty counters. Libraries are listed top card first."
+      },
+      "decisions": [
+        "A activates Jace, Mirror Mage's 0 ability: draw a card and reveal it, then remove loyalty counters equal to its mana value.",
+        "Both players pass; the ability resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Thought Reflection replaces the draw with drawing two cards; Grizzly Bears and Forest go to A's hand. The additional action is not performed on them: nothing is revealed and Jace stays at 4 loyalty."
+        },
+        {
+          "label": "unreplaced",
+          "polarity": "does_not_fire",
+          "delta": "Thought Reflection is not on the battlefield.",
+          "expected": "A draws Grizzly Bears and reveals it; Jace loses 2 loyalty counters for its mana value of 2 and has 2 loyalty."
+        }
+      ],
+      "cards": [
+        "Jace, Mirror Mage",
+        "Thought Reflection",
+        "Island",
+        "Grizzly Bears",
+        "Forest",
+        "Plains"
+      ],
+      "forge_notes": "Jace's Forge script uses RememberDrawn$ True without AllReplaced, which is the behaviour this scenario depends on; the base variant is where Forge may deviate."
+    },
+    {
+      "id": "121.7-1",
+      "rules": [
+        "121.7"
+      ],
+      "title": "A prevention effect that results in card draws makes those draws one at a time",
+      "record_kind": "rewrite",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain"
+          ],
+          "B": [
+            "Swans of Bryn Argoll",
+            "Grizzly Bears",
+            "Underworld Dreams"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Lightning Bolt",
+            "Shock"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Forest",
+            "Mountain",
+            "Plains",
+            "Swamp",
+            "Island"
+          ]
+        },
+        "exile": {},
+        "notes": "Underworld Dreams is controlled by B. Libraries are listed top card first."
+      },
+      "decisions": [
+        "A casts Lightning Bolt targeting Swans of Bryn Argoll (Shock in the shock variant, Grizzly Bears as target in the other_target variant), tapping Mountain.",
+        "Both players pass; the spell resolves.",
+        "Underworld Dreams triggers go on the stack as A draws; both players pass and they resolve."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The 3 damage to Swans of Bryn Argoll is prevented and A draws 3 cards, one at a time (Forest, Mountain, Plains). Underworld Dreams triggers three times and A is at 17 life. Swans has no damage marked."
+        },
+        {
+          "label": "shock",
+          "polarity": "fires",
+          "delta": "A casts Shock targeting Swans of Bryn Argoll instead of Lightning Bolt.",
+          "expected": "The 2 damage is prevented and A draws 2 cards one at a time (Forest, Mountain); Underworld Dreams triggers twice and A is at 18 life."
+        },
+        {
+          "label": "other_target",
+          "polarity": "does_not_fire",
+          "delta": "A casts Lightning Bolt targeting Grizzly Bears instead of Swans of Bryn Argoll.",
+          "expected": "Grizzly Bears takes 3 damage and dies; no damage is prevented, A draws no cards and Underworld Dreams does not trigger."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Lightning Bolt",
+        "Shock",
+        "Swans of Bryn Argoll",
+        "Grizzly Bears",
+        "Underworld Dreams",
+        "Forest",
+        "Plains",
+        "Swamp",
+        "Island"
+      ],
+      "forge_notes": "A holds both spells but has one Mountain, so only the spell named in the variant is cast."
+    },
+    {
+      "id": "121.7-2",
+      "rules": [
+        "121.7"
+      ],
+      "title": "The parts of the original event that are not replaced occur first, then the resulting draws",
+      "record_kind": "combat",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Colossal Dreadmaw"
+          ],
+          "B": [
+            "Swans of Bryn Argoll",
+            "Underworld Dreams"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Forest",
+            "Mountain",
+            "Plains",
+            "Swamp",
+            "Island",
+            "Forest"
+          ]
+        },
+        "exile": {},
+        "notes": "Colossal Dreadmaw (6/6 trample) is not summoning sick. Underworld Dreams is controlled by B. Libraries are listed top card first."
+      },
+      "decisions": [
+        "A attacks B with Colossal Dreadmaw.",
+        "B blocks Colossal Dreadmaw with Swans of Bryn Argoll (4/3 flying).",
+        "A assigns 3 damage to Swans of Bryn Argoll and 3 damage to B; both players pass priority and combat damage is dealt.",
+        "Underworld Dreams triggers resolve."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The 3 damage to B is dealt, leaving B at 17, and the 3 damage to Swans is prevented. Then A draws 3 cards one at a time (Forest, Mountain, Plains) and Underworld Dreams deals 3 damage to A, leaving A at 17. Swans has no damage marked and Colossal Dreadmaw takes 4 damage and survives."
+        },
+        {
+          "label": "all_to_blocker",
+          "polarity": "fires",
+          "delta": "A assigns all 6 damage to Swans of Bryn Argoll and none to B.",
+          "expected": "All 6 damage to Swans is prevented, B stays at 20, and A draws 6 cards one at a time, emptying the library; Underworld Dreams triggers six times and A is at 14."
+        },
+        {
+          "label": "no_block",
+          "polarity": "does_not_fire",
+          "delta": "B does not block.",
+          "expected": "Colossal Dreadmaw deals 6 damage to B, who is at 14. No damage is prevented, A draws no cards and Underworld Dreams does not trigger."
+        }
+      ],
+      "cards": [
+        "Colossal Dreadmaw",
+        "Swans of Bryn Argoll",
+        "Underworld Dreams",
+        "Forest",
+        "Mountain",
+        "Plains",
+        "Swamp",
+        "Island"
+      ],
+      "forge_notes": "Forge's trample damage assignment must be set to the split named in the decisions (3 to Swans and 3 to B in the base, all 6 to Swans in all_to_blocker)."
+    },
+    {
+      "id": "121.8-1",
+      "rules": [
+        "121.8"
+      ],
+      "title": "A card drawn while a spell is being cast is face down and cannot pay the spell's cost",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Swamp",
+            "Swamp",
+            "Shadowblood Egg"
+          ],
+          "B": [
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Magmatic Insight"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Mountain",
+            "Forest",
+            "Plains",
+            "Plains"
+          ]
+        },
+        "exile": {},
+        "notes": "The only red mana source A has is Shadowblood Egg. Libraries are listed top card first."
+      },
+      "decisions": [
+        "A begins casting Magmatic Insight, whose additional cost is to discard a land card.",
+        "During the casting, before paying costs, A activates Shadowblood Egg's mana ability, paying {2} with both Swamps; the Egg adds {B}{R} and A draws Mountain while Magmatic Insight is being cast.",
+        "A pays {R} and tries to pay the discard cost with a land card in hand.",
+        "If the casting is reversed, A passes priority without casting again."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The Mountain A drew is face down with no characteristics and cannot be discarded as a land card; A has no other land card in hand, so the casting is reversed and Magmatic Insight returns to A's hand. The Egg's draw cannot be reversed: Shadowblood Egg stays in A's graveyard and Mountain stays in A's hand, now a normal card."
+        },
+        {
+          "label": "forest_in_hand",
+          "polarity": "does_not_fire",
+          "delta": "A also holds a Forest in hand.",
+          "expected": "A discards Forest to pay the discard cost; Magmatic Insight becomes cast and the Mountain A drew is then a normal card in hand. Magmatic Insight resolves and A draws Forest and Plains: A's hand is Mountain, Forest, Plains and the discarded Forest is in the graveyard."
+        }
+      ],
+      "cards": [
+        "Swamp",
+        "Shadowblood Egg",
+        "Magmatic Insight",
+        "Mountain",
+        "Forest",
+        "Plains"
+      ],
+      "forge_notes": "Forge puts a drawn card straight into the hand and does not model the face-down state, so it probably lets the drawn Mountain be discarded in the base variant. Forge will likely also refuse to begin casting Magmatic Insight with no land card in hand, which makes can_play false before the Egg is used."
+    }
+  ]
+}

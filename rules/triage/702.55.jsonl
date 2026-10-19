@@ -1,0 +1,4 @@
+{"id": "702.55", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.55a", "category": "mechanical", "observability": "direct", "record_kinds": ["trigger", "resolution"], "outcome": "When a haunt permanent dies or a haunt spell is put into the graveyard during resolution, it is exiled haunting a target creature.", "note": ""}
+{"id": "702.55b", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "The exiled card haunts the targeted object even if it stops being a creature.", "note": ""}
+{"id": "702.55c", "category": "mechanical", "observability": "direct", "record_kinds": ["trigger"], "outcome": "Triggered abilities of the haunting card that refer to the haunted creature can trigger from exile.", "note": ""}

@@ -1,0 +1,62 @@
+{
+  "unit": "702.159",
+  "verified": true,
+  "review": [],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.159a-1",
+      "rules": [
+        "702.159a"
+      ],
+      "title": "Visit triggers only when the roll equals a lit-up number",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Concession Stand"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Concession Stand is the printing variant whose lit-up numbers are 2 and 6. It has been on A's battlefield since a previous turn. Roll results are fixed by the scenario."
+      },
+      "decisions": [
+        "At the beginning of A's precombat main phase, A rolls to visit their Attractions. The d6 shows 2.",
+        "Both players pass priority until the stack is empty."
+      ],
+      "variants": [
+        {
+          "label": "roll_two",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The roll equals a lit-up number, so the visit ability triggers and resolves. A creates a Food token (A controls Concession Stand and a Food token)."
+        },
+        {
+          "label": "roll_six",
+          "polarity": "fires",
+          "delta": "The d6 shows 6.",
+          "expected": "6 is lit up: the visit ability triggers and A creates a Food token."
+        },
+        {
+          "label": "roll_four",
+          "polarity": "does_not_fire",
+          "delta": "The d6 shows 4.",
+          "expected": "4 is not a lit-up number. The visit ability does not trigger. A creates no Food token."
+        }
+      ],
+      "cards": [
+        "Concession Stand"
+      ],
+      "forge_notes": "Reaching this state needs an Attraction on the battlefield, which in Forge needs an attraction deck and the lit-up variant; the die result must be forced."
+    }
+  ]
+}

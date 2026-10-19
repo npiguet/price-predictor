@@ -1,0 +1,89 @@
+{
+  "unit": "728",
+  "verified": true,
+  "review": [
+    "728.1-1: the trigger does not fire at all in opponent_only, so it is the does_not_fire variant; all_lands (trigger fires, no life lost) relabelled other."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "728.1-1",
+      "rules": [
+        "728.1"
+      ],
+      "title": "Rad counters mill cards and cost life for nonland cards",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "draw",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {},
+        "hand": {},
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Grizzly Bears",
+            "Mountain",
+            "Shock",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain"
+          ],
+          "B": [
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain"
+          ]
+        },
+        "exile": {},
+        "notes": "A has 3 rad counters and B has 3 rad counters. A's draw for the turn has already been taken. Library lists are top first."
+      },
+      "decisions": [
+        "Both players pass priority in the draw step and the turn moves to A's precombat main phase.",
+        "At the beginning of the phase A's rad counter trigger goes on the stack; both players pass and it resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The trigger fires for A. A mills Grizzly Bears, Mountain and Shock, loses 2 life for the two nonland cards (18) and removes 2 rad counters (1 left). The three milled cards are in A's graveyard. B's counters are unchanged at 3."
+        },
+        {
+          "label": "all_lands",
+          "polarity": "other",
+          "delta": "The top three cards of A's library are Mountains instead of Grizzly Bears, Mountain and Shock.",
+          "expected": "The trigger fires and A mills three Mountains. A loses no life (20) and keeps all 3 rad counters."
+        },
+        {
+          "label": "all_nonland",
+          "polarity": "fires",
+          "delta": "The top three cards of A's library are Grizzly Bears, Shock and Hill Giant.",
+          "expected": "A mills all three nonland cards, loses 3 life (17) and has no rad counters left."
+        },
+        {
+          "label": "opponent_only",
+          "polarity": "does_not_fire",
+          "delta": "A has no rad counters (B still has 3).",
+          "expected": "The trigger does not fire for A during A's precombat main phase and B's counters do nothing. A's library is untouched, A's life stays 20 and B still has 3 rad counters."
+        }
+      ],
+      "cards": [
+        "Grizzly Bears",
+        "Mountain",
+        "Shock",
+        "Hill Giant"
+      ],
+      "forge_notes": "Forge puts rad counters on a player only through card scripts; setup assumes they are already there. The rad trigger is an internal trigger (InternalRadiation) rather than a printed one."
+    }
+  ]
+}

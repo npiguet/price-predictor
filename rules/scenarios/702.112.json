@@ -1,0 +1,213 @@
+{
+  "unit": "702.112",
+  "verified": true,
+  "review": [
+    "702.112a-1: blocked variant omitted that the 2/2 Grizzly Bears and the 2/2 Topan Freeblade kill each other; expected now records both deaths.",
+    "702.112c-1: base expected said the second trigger 'resolves and does nothing'; per 603.4 its intervening-if fails on resolution so it is removed without effect; reworded."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.112a-1",
+      "rules": [
+        "702.112a"
+      ],
+      "title": "Renown puts a +1/+1 counter on an unrenowned creature that deals combat damage to a player",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "declare_attackers",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Topan Freeblade",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Topan Freeblade (2/2 vigilance, renown 1) is not renowned."
+      },
+      "decisions": [
+        "A attacks B with Topan Freeblade.",
+        "B declares no blockers (Grizzly Bears does not block).",
+        "Combat damage is dealt; when the renown trigger goes on the stack both players pass and it resolves."
+      ],
+      "variants": [
+        {
+          "label": "unblocked_unrenowned",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Topan Freeblade deals 2 combat damage to B (life 18). The renown trigger fires and resolves: Topan Freeblade gets one +1/+1 counter, is 3/3 and is renowned."
+        },
+        {
+          "label": "blocked",
+          "polarity": "does_not_fire",
+          "delta": "B declares its Grizzly Bears as a blocker of Topan Freeblade instead of declaring no blockers.",
+          "expected": "Topan Freeblade deals its 2 damage to Grizzly Bears, not to a player; B's life stays 20 and the renown trigger does not fire. Grizzly Bears and Topan Freeblade each take lethal damage and both go to their owners' graveyards in the state-based check."
+        },
+        {
+          "label": "already_renowned",
+          "polarity": "does_not_fire",
+          "delta": "Topan Freeblade is already renowned and carries one +1/+1 counter (3/3) from an earlier combat.",
+          "expected": "Topan Freeblade deals 3 combat damage to B (life 17). The renown trigger does not fire because the creature is renowned; it keeps exactly one +1/+1 counter and stays 3/3."
+        }
+      ],
+      "cards": [
+        "Topan Freeblade",
+        "Grizzly Bears"
+      ],
+      "forge_notes": "The renowned designation is a flag on the permanent that the engine tracks (IsRenowned); the already_renowned variant needs it set in the puzzle state."
+    },
+    {
+      "id": "702.112b-1",
+      "rules": [
+        "702.112b"
+      ],
+      "title": "A renowned permanent that leaves the battlefield and returns is no longer renowned",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "end",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            {
+              "card": "Topan Freeblade",
+              "counters": {
+                "+1/+1": 2
+              },
+              "summoning_sick": false
+            }
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Cloudshift"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Plains",
+            "Plains",
+            "Plains"
+          ],
+          "B": [
+            "Forest",
+            "Forest",
+            "Forest"
+          ]
+        },
+        "exile": {},
+        "notes": "It is A's end step. Topan Freeblade (renown 1) is renowned and carries two +1/+1 counters, so it is a 4/4. A has an untapped Plains and Cloudshift in hand. Libraries are listed top first."
+      },
+      "decisions": [
+        "A casts Cloudshift targeting Topan Freeblade, tapping Plains; both players pass and Cloudshift resolves.",
+        "The turn ends. B's turn passes with no plays and no attacks.",
+        "On A's next turn A attacks B with Topan Freeblade.",
+        "B declares no blockers; combat damage is dealt and any trigger resolves."
+      ],
+      "variants": [
+        {
+          "label": "flickered",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Cloudshift exiles Topan Freeblade and returns it as a new object with no counters (2/2) and not renowned. When it attacks and deals 2 combat damage to B (life 18), the renown trigger fires; it gets one +1/+1 counter, is 3/3 and is renowned."
+        },
+        {
+          "label": "not_flickered",
+          "polarity": "does_not_fire",
+          "delta": "A does not cast Cloudshift; Topan Freeblade stays on the battlefield.",
+          "expected": "Topan Freeblade attacks as a 4/4 and deals 4 combat damage to B (life 16). The renown trigger does not fire because it is still renowned; it keeps its two +1/+1 counters."
+        }
+      ],
+      "cards": [
+        "Topan Freeblade",
+        "Cloudshift",
+        "Plains",
+        "Forest"
+      ],
+      "forge_notes": "Whether the returned permanent is treated as a new, unrenowned object depends on Forge clearing the renowned flag on a zone change."
+    },
+    {
+      "id": "702.112c-1",
+      "rules": [
+        "702.112c"
+      ],
+      "title": "With two instances of renown each triggers, but only the first to resolve adds a counter",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "declare_attackers",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Aragorn, Hornburg Hero",
+            {
+              "card": "Topan Freeblade",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Aragorn gives attacking creatures first strike and renown 1, so an attacking Topan Freeblade (renown 1 of its own, not renowned) has two instances of renown. Aragorn stays home."
+      },
+      "decisions": [
+        "A attacks B with Topan Freeblade only.",
+        "B declares no blockers (Grizzly Bears does not block).",
+        "First-strike combat damage is dealt; both renown triggers go on the stack, both players pass, and they resolve one after the other."
+      ],
+      "variants": [
+        {
+          "label": "two_instances",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Topan Freeblade deals 2 first-strike combat damage to B (life 18). Two renown triggers fire. The first resolves: one +1/+1 counter, Topan Freeblade is renowned. The second is removed from the stack on resolution without effect because Topan Freeblade is already renowned. Topan Freeblade ends with exactly one +1/+1 counter (3/3)."
+        },
+        {
+          "label": "single_instance",
+          "polarity": "other",
+          "delta": "Aragorn, Hornburg Hero is not on the battlefield, so Topan Freeblade has one instance of renown.",
+          "expected": "Topan Freeblade deals 2 combat damage to B (life 18). One renown trigger fires and resolves: one +1/+1 counter, Topan Freeblade is 3/3 and renowned."
+        },
+        {
+          "label": "blocked",
+          "polarity": "does_not_fire",
+          "delta": "B declares its Grizzly Bears as a blocker of Topan Freeblade instead of declaring no blockers.",
+          "expected": "Topan Freeblade deals its first-strike damage to Grizzly Bears, which dies. No combat damage is dealt to a player, neither renown trigger fires, and Topan Freeblade has no counters."
+        }
+      ],
+      "cards": [
+        "Aragorn, Hornburg Hero",
+        "Topan Freeblade",
+        "Grizzly Bears"
+      ],
+      "forge_notes": "Aragorn's own trigger (a renowned creature dealing combat damage) does not fire here because Topan Freeblade is not yet renowned when it deals damage."
+    }
+  ]
+}

@@ -1,0 +1,82 @@
+{
+  "unit": "701.29",
+  "verified": true,
+  "review": [
+    "701.29a-1: the base variant carried a non-empty delta; moved its choice (Hill Giant to the bottom) into decisions and emptied the delta"
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "701.29a-1",
+      "rules": [
+        "701.29a"
+      ],
+      "title": "Fateseal looks at the top of an opponent's library and moves the chosen card to the bottom or leaves it on top",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            "Island",
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Mesmeric Sliver"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "B": [
+            "Hill Giant",
+            "Grizzly Bears",
+            "Forest"
+          ]
+        },
+        "exile": {},
+        "notes": "Library lists are ordered top first. Mesmeric Sliver gives every Sliver 'When this permanent enters, you may fateseal 1'."
+      },
+      "decisions": [
+        "A casts Mesmeric Sliver, tapping four Islands.",
+        "Both players pass; it resolves and enters, and its enters trigger goes on the stack with A choosing to fateseal 1.",
+        "The trigger resolves: A looks at the top card of B's library (Hill Giant) and puts it on the bottom of B's library."
+      ],
+      "variants": [
+        {
+          "label": "bottom",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "B's library from the top is Grizzly Bears, Forest, Hill Giant."
+        },
+        {
+          "label": "top",
+          "polarity": "does_not_fire",
+          "delta": "A leaves Hill Giant on top of B's library.",
+          "expected": "B's library from the top is Hill Giant, Grizzly Bears, Forest."
+        },
+        {
+          "label": "declined",
+          "polarity": "other",
+          "delta": "A chooses not to fateseal when the trigger resolves.",
+          "expected": "B's library from the top is Hill Giant, Grizzly Bears, Forest and A looks at no card."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Mesmeric Sliver",
+        "Hill Giant",
+        "Grizzly Bears",
+        "Forest"
+      ],
+      "forge_notes": "Only Mesmeric Sliver fatesealed in Forge's cardsfolder, and only for N=1."
+    }
+  ]
+}

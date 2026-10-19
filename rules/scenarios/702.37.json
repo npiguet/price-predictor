@@ -1,0 +1,393 @@
+{
+  "unit": "702.37",
+  "verified": true,
+  "review": [
+    "702.37e-1: forge_notes claimed the enters-the-battlefield clause of 702.37e cannot be exercised; it can, through a permanent that triggers on creatures entering. Rewrote the note.",
+    "702.37e-2: added a scenario with Soul Warden showing that turning a permanent face up does not trigger enters abilities, against casting a face-down card that does enter."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.37a-1",
+      "rules": [
+        "702.37a",
+        "702.37c"
+      ],
+      "title": "A card cast with morph is a 2/2 face-down creature paid for with {3}",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Plains",
+            "Plains"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Daru Lancer"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Daru Lancer face down using its morph ability, paying {3} with the three Plains.",
+        "Both players pass; the face-down spell resolves."
+      ],
+      "variants": [
+        {
+          "label": "three_lands",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Daru Lancer enters the battlefield face down as a 2/2 creature with no name, no abilities (no first strike), no subtypes and no mana cost. All three Plains are tapped."
+        },
+        {
+          "label": "two_lands",
+          "polarity": "does_not_fire",
+          "delta": "A controls two Plains instead of three.",
+          "expected": "The face-down cast is not possible because {3} cannot be paid. Daru Lancer stays in A's hand and nothing is put on the stack."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Daru Lancer"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.37d-1",
+      "rules": [
+        "702.37d"
+      ],
+      "title": "A card can be cast face down only if it has a morph ability",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Plains",
+            "Plains"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Daru Lancer"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A attempts to cast the card in hand face down, paying {3} with the three Plains."
+      ],
+      "variants": [
+        {
+          "label": "has_morph",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Casting Daru Lancer face down is legal (can_play true)."
+        },
+        {
+          "label": "no_morph",
+          "polarity": "does_not_fire",
+          "delta": "The card in A's hand is Savannah Lions, which has no morph ability.",
+          "expected": "Casting Savannah Lions face down is not legal; it offers only the face-up cast for {W}."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Daru Lancer",
+        "Savannah Lions"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.37b-1",
+      "rules": [
+        "702.37b"
+      ],
+      "title": "A megamorph permanent turned face up gets a +1/+1 counter and a plain morph does not",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Plains",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest",
+            {
+              "card": "Aerie Bowmasters",
+              "face_down": true,
+              "summoning_sick": false
+            }
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A turns Aerie Bowmasters face up as a special action, paying its megamorph cost {5}{G} with all six lands."
+      ],
+      "variants": [
+        {
+          "label": "megamorph",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Aerie Bowmasters is face up with one +1/+1 counter, a 4/5 with reach. All six lands are tapped."
+        },
+        {
+          "label": "plain_morph",
+          "polarity": "does_not_fire",
+          "delta": "The face-down permanent is Daru Lancer, which A turns face up paying its morph cost {2}{W}{W} with both Plains and two Forests.",
+          "expected": "Daru Lancer is face up as a 3/4 with first strike and no counters. Two Forests stay untapped."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Forest",
+        "Aerie Bowmasters",
+        "Daru Lancer"
+      ],
+      "forge_notes": "The face-down permanent is placed directly on the battlefield by the harness."
+    },
+    {
+      "id": "702.37e-1",
+      "rules": [
+        "702.37e"
+      ],
+      "title": "Turning a face-down permanent face up is a special action that does not use the stack",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Plains",
+            "Forest",
+            "Forest",
+            {
+              "card": "Daru Lancer",
+              "face_down": true,
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            {
+              "card": "Mountain",
+              "tapped": true
+            }
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "stack": [
+          {
+            "card": "Shock",
+            "controller": "B",
+            "targets": [
+              "Daru Lancer"
+            ]
+          }
+        ],
+        "notes": ""
+      },
+      "decisions": [
+        "B has cast Shock targeting A's face-down creature, tapping Mountain; it is on the stack and A has priority.",
+        "A turns Daru Lancer face up as a special action, paying {2}{W}{W} with both Plains and both Forests; Shock is still on the stack afterwards.",
+        "Both players pass; Shock resolves."
+      ],
+      "variants": [
+        {
+          "label": "flip_in_response",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Daru Lancer is face up with its normal characteristics (3/4, first strike) while Shock is still on the stack. Shock deals 2 damage to it and it survives with 2 damage marked."
+        },
+        {
+          "label": "no_flip",
+          "polarity": "does_not_fire",
+          "delta": "A does not turn Daru Lancer face up and just passes priority.",
+          "expected": "Shock deals 2 damage to the 2/2 face-down creature and it dies; Daru Lancer goes to A's graveyard face up."
+        },
+        {
+          "label": "not_enough_mana",
+          "polarity": "does_not_fire",
+          "delta": "A controls only one Forest (three lands), so the morph cost cannot be paid.",
+          "expected": "The turn-face-up action is not possible; the permanent stays a face-down 2/2, Shock deals 2 damage and it dies."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Forest",
+        "Mountain",
+        "Daru Lancer",
+        "Shock"
+      ],
+      "forge_notes": "The enters-the-battlefield clause is exercised in 702.37e-2 through Soul Warden; Forge's morph cards with their own enters triggers (Efreet Weaponmaster, Ponyback Brigade) also trigger when turned face up, so they cannot show it."
+    },
+    {
+      "id": "702.37f-1",
+      "rules": [
+        "702.37f"
+      ],
+      "title": "X in a morph cost is the X chosen when the permanent is turned face up",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            {
+              "card": "Warbreak Trumpeter",
+              "face_down": true,
+              "summoning_sick": false
+            }
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A turns Warbreak Trumpeter face up as a special action, choosing X = 2 and paying {2}{2}{R} with five Mountains.",
+        "The turned-face-up trigger goes on the stack; both players pass and it resolves."
+      ],
+      "variants": [
+        {
+          "label": "x_is_2",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Two 1/1 red Goblin creature tokens are created for A. Warbreak Trumpeter is face up as a 1/1."
+        },
+        {
+          "label": "x_is_1",
+          "polarity": "fires",
+          "delta": "A chooses X = 1 and pays {1}{1}{R}, leaving two Mountains untapped.",
+          "expected": "One 1/1 red Goblin creature token is created."
+        },
+        {
+          "label": "x_is_0",
+          "polarity": "does_not_fire",
+          "delta": "A chooses X = 0 and pays only {R}.",
+          "expected": "No tokens are created; Warbreak Trumpeter is face up as a 1/1."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Warbreak Trumpeter"
+      ],
+      "forge_notes": "Forge counts the X paid through xPaid on the turn-face-up trigger; check it accepts X for a morph special action."
+    },
+    {
+      "id": "702.37e-2",
+      "rules": [
+        "702.37e"
+      ],
+      "title": "Turning a permanent face up is not entering the battlefield, so enters triggers do not fire",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Plains",
+            "Forest",
+            "Forest",
+            "Soul Warden",
+            {
+              "card": "Daru Lancer",
+              "face_down": true,
+              "summoning_sick": false
+            }
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Daru Lancer"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A turns the face-down Daru Lancer on the battlefield face up as a special action, paying {2}{W}{W} with both Plains and both Forests."
+      ],
+      "variants": [
+        {
+          "label": "turned_face_up",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Daru Lancer is face up as a 3/4 with first strike. Soul Warden's ability does not trigger; A's life stays 20."
+        },
+        {
+          "label": "cast_face_down",
+          "polarity": "does_not_fire",
+          "delta": "Instead of turning the face-down Daru Lancer face up, A casts the Daru Lancer in hand face down for {3} with both Plains and one Forest, and it resolves.",
+          "expected": "A second face-down 2/2 creature enters the battlefield. Soul Warden's ability triggers and resolves; A's life is 21."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Forest",
+        "Soul Warden",
+        "Daru Lancer"
+      ],
+      "forge_notes": "Soul Warden triggers on a zone change to the battlefield; Forge's TurnFaceUp is a separate event, so it should not fire."
+    }
+  ]
+}

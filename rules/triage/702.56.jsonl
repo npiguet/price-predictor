@@ -1,0 +1,3 @@
+{"id": "702.56", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.56a", "category": "mechanical", "observability": "direct", "record_kinds": ["playability", "trigger", "resolution"], "outcome": "Paying the replicate cost N times creates N copies of the spell when it is cast.", "note": ""}
+{"id": "702.56b", "category": "mechanical", "observability": "direct", "record_kinds": ["trigger"], "outcome": "Each instance of replicate is paid and triggers separately based on its own payments.", "note": ""}

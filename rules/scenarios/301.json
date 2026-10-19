@@ -1,0 +1,863 @@
+{
+  "unit": "301",
+  "verified": true,
+  "review": [
+    "301.1-1: the combat variant used a declare attackers step with no attackers, a step Forge may skip; moved it to the beginning of combat step.",
+    "301.5b-1: put_by_giant was labelled does_not_fire although Stonehewer Giant's ability also puts the Equipment onto the battlefield unattached and attaches it afterwards; relabelled it 'other' and stated the unattached entry in expected.",
+    "301.5b-2: the Brass Squire + Apostle's Blessing version made the creature target illegal (protection from an artifact source), so the attach did nothing through 608.2b targeting, not through 301.5b's 'cannot be equipped' clause; rewrote it with Sigarda's Aid, a non-artifact source whose trigger legally targets Angelic Curator (protection from artifacts) and then cannot attach Bonesplitter to it.",
+    "301.5c-3: the does_not_fire variant moved Bonesplitter to Centaur Courser but kept Shock on Grizzly Bears, yet expected Courser to have 2 damage marked; changed the delta to Shock targeting Centaur Courser so the equipped creature stays and the expected outcome holds.",
+    "301.5e-1: added a forge_note that Forge may leave Bonesplitter in the graveyard instead of returning it unattached.",
+    "301.7a-1: removed an unobservable, inaccurate clause ('cannot be dealt damage as a creature') from the base expected.",
+    "301.5b-1: no one-fact change makes a cast Equipment enter attached; recorded in forge_notes that the contrast lives in 301.5e-1, and left the scenario without a does_not_fire variant."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "301.1-1",
+      "rules": [
+        "301.1"
+      ],
+      "title": "An artifact can be cast only in a main phase of its controller's turn with an empty stack",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Bonesplitter"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Bonesplitter has no flash. A has priority."
+      },
+      "decisions": [
+        "A attempts to cast Bonesplitter, tapping one Mountain."
+      ],
+      "variants": [
+        {
+          "label": "main1_empty_stack",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Casting Bonesplitter is legal: can_play is true in A's first main phase with an empty stack, and the cost is {1}."
+        },
+        {
+          "label": "main2_empty_stack",
+          "polarity": "fires",
+          "delta": "It is A's second main phase (step main2).",
+          "expected": "Casting Bonesplitter is legal: can_play is true."
+        },
+        {
+          "label": "combat",
+          "polarity": "does_not_fire",
+          "delta": "It is A's beginning of combat step (step beginning_of_combat) and A has priority.",
+          "expected": "Casting Bonesplitter is not legal: can_play is false."
+        },
+        {
+          "label": "stack_not_empty",
+          "polarity": "does_not_fire",
+          "delta": "A has already cast Shock targeting B, tapping one Mountain. Shock is on the stack and A has priority.",
+          "expected": "Casting Bonesplitter is not legal: can_play is false while Shock is on the stack."
+        },
+        {
+          "label": "opponents_turn",
+          "polarity": "does_not_fire",
+          "delta": "It is B's turn (active B), B's first main phase, the stack is empty and A has priority.",
+          "expected": "Casting Bonesplitter is not legal: can_play is false on B's turn."
+        }
+      ],
+      "cards": [
+        "Bonesplitter",
+        "Mountain",
+        "Shock"
+      ],
+      "forge_notes": "The stack_not_empty variant puts Shock on the stack with the stack field of the setup: [{\"card\": \"Shock\", \"controller\": \"A\", \"targets\": [\"B\"]}]."
+    },
+    {
+      "id": "301.2-1",
+      "rules": [
+        "301.2"
+      ],
+      "title": "A resolving artifact spell is put onto the battlefield under its controller's control",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain"
+          ],
+          "B": [
+            "Island",
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Bonesplitter"
+          ],
+          "B": [
+            "Counterspell"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Bonesplitter, tapping Mountain.",
+        "B has priority, holds Counterspell and passes.",
+        "A passes; Bonesplitter resolves."
+      ],
+      "variants": [
+        {
+          "label": "resolves",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Bonesplitter resolves and moves from the stack to the battlefield under A's control, unattached."
+        },
+        {
+          "label": "countered",
+          "polarity": "does_not_fire",
+          "delta": "B responds with Counterspell targeting Bonesplitter, tapping both Islands; Counterspell resolves first.",
+          "expected": "Counterspell resolves and counters Bonesplitter. Bonesplitter moves to A's graveyard and never reaches the battlefield. Counterspell moves to B's graveyard."
+        }
+      ],
+      "cards": [
+        "Bonesplitter",
+        "Counterspell",
+        "Island",
+        "Mountain"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "301.5-1",
+      "rules": [
+        "301.5"
+      ],
+      "title": "An Equipment cannot be attached to a non-creature permanent",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Bonesplitter",
+            "Mutavault",
+            "Mountain",
+            "Mountain"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Mutavault is a land and not a creature unless animated. A has no creature."
+      },
+      "decisions": [
+        "A attempts to activate Bonesplitter's equip {1}, tapping one Mountain, with Mutavault as the only candidate permanent."
+      ],
+      "variants": [
+        {
+          "label": "mutavault_not_creature",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The equip ability has no legal target (has_legal_target is false) and cannot be activated. Bonesplitter stays unattached."
+        },
+        {
+          "label": "mutavault_animated",
+          "polarity": "does_not_fire",
+          "delta": "Before that, A activates Mutavault's animate ability {1}, tapping one Mountain, and it resolves; Mutavault is a 2/2 creature until end of turn. Then A activates equip {1} with the other Mountain, targeting Mutavault.",
+          "expected": "Mutavault is a legal target. Equip resolves and Bonesplitter is attached to Mutavault, which is a 4/2 land creature."
+        }
+      ],
+      "cards": [
+        "Bonesplitter",
+        "Mountain",
+        "Mutavault"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "301.5b-1",
+      "rules": [
+        "301.5b"
+      ],
+      "title": "An Equipment enters the battlefield unattached",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Plains",
+            "Stonehewer Giant",
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Bonesplitter"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Bonesplitter"
+          ]
+        },
+        "exile": {},
+        "notes": "Stonehewer Giant is untapped and not summoning sick. The library holds a second Bonesplitter (A's other card) for the Giant's search."
+      },
+      "decisions": [
+        "A casts Bonesplitter from hand, tapping one Plains.",
+        "Both players pass; Bonesplitter resolves."
+      ],
+      "variants": [
+        {
+          "label": "cast",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Bonesplitter enters the battlefield unattached under A's control. Grizzly Bears is a 2/2."
+        },
+        {
+          "label": "equip_after_cast",
+          "polarity": "other",
+          "delta": "After Bonesplitter resolves, A also activates equip {1} with the other Plains, targeting Grizzly Bears, and it resolves.",
+          "expected": "Bonesplitter was unattached on entering. After the equip ability resolves it is attached to Grizzly Bears, which is a 4/2."
+        },
+        {
+          "label": "put_by_giant",
+          "polarity": "other",
+          "delta": "A does not cast Bonesplitter. A activates Stonehewer Giant ({1}{W}, tap, tapping both Plains), searching the library for Bonesplitter, putting it onto the battlefield and attaching it to Grizzly Bears.",
+          "expected": "Bonesplitter enters the battlefield unattached; the ability then attaches it to Grizzly Bears, which is a 4/2. The library is shuffled."
+        }
+      ],
+      "cards": [
+        "Bonesplitter",
+        "Grizzly Bears",
+        "Plains",
+        "Stonehewer Giant"
+      ],
+      "forge_notes": "No does_not_fire variant: every Equipment spell enters unattached, and the only Equipment that enters attached is one an effect puts onto the battlefield attached, which 301.5e-1 covers (its ordinary_creature variant)."
+    },
+    {
+      "id": "301.5b-2",
+      "rules": [
+        "301.5b"
+      ],
+      "title": "An effect that attaches an Equipment to an object that cannot be equipped by it leaves the Equipment unmoved",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Sigarda's Aid",
+            "Angelic Curator",
+            "Grizzly Bears",
+            "Mountain"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Bonesplitter"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Angelic Curator has protection from artifacts, so it cannot be equipped by Bonesplitter. Sigarda's Aid is a white enchantment, so its trigger can target Angelic Curator."
+      },
+      "decisions": [
+        "A casts Bonesplitter, tapping Mountain; it resolves.",
+        "Sigarda's Aid triggers; A chooses to attach and targets Angelic Curator.",
+        "Both players pass; the trigger resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The trigger resolves and Bonesplitter does not move: it stays on the battlefield unattached. Angelic Curator is a 1/1."
+        },
+        {
+          "label": "equippable_creature",
+          "polarity": "does_not_fire",
+          "delta": "The trigger targets Grizzly Bears instead of Angelic Curator.",
+          "expected": "Bonesplitter becomes attached to Grizzly Bears, which is a 4/2."
+        }
+      ],
+      "cards": [
+        "Angelic Curator",
+        "Bonesplitter",
+        "Grizzly Bears",
+        "Mountain",
+        "Sigarda's Aid"
+      ],
+      "forge_notes": "Forge's Attach effect should refuse the attachment because of protection; confirm it leaves Bonesplitter unattached rather than attaching it."
+    },
+    {
+      "id": "301.5c-1",
+      "rules": [
+        "301.5c"
+      ],
+      "title": "An Equipment attached to a permanent that is no longer a creature becomes unattached",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Forest",
+            "Forest",
+            "Forest",
+            {
+              "card": "Bonesplitter",
+              "attached_to": "Grizzly Bears"
+            },
+            "Grizzly Bears",
+            "Hill Giant"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Song of the Dryads"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Song of the Dryads targeting Grizzly Bears, tapping three Forests.",
+        "Both players pass; Song of the Dryads resolves."
+      ],
+      "variants": [
+        {
+          "label": "equipped_creature_enchanted",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears becomes a colorless Forest land and is no longer a creature. In the state-based check Bonesplitter becomes unattached and stays on the battlefield under A's control."
+        },
+        {
+          "label": "other_creature_enchanted",
+          "polarity": "does_not_fire",
+          "delta": "Song of the Dryads targets Hill Giant instead.",
+          "expected": "Hill Giant becomes a colorless Forest land. Bonesplitter stays attached to Grizzly Bears, which is a 4/2."
+        }
+      ],
+      "cards": [
+        "Bonesplitter",
+        "Forest",
+        "Grizzly Bears",
+        "Hill Giant",
+        "Song of the Dryads"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "301.5c-2",
+      "rules": [
+        "301.5c"
+      ],
+      "title": "An Equipment that is also a creature cannot equip a creature",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            {
+              "card": "Bonesplitter",
+              "attached_to": "Grizzly Bears"
+            },
+            "Grizzly Bears",
+            "Sol Ring"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Ensoul Artifact"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Sol Ring is not tapped for mana."
+      },
+      "decisions": [
+        "A casts Ensoul Artifact targeting Bonesplitter, tapping both Islands.",
+        "Both players pass; Ensoul Artifact resolves."
+      ],
+      "variants": [
+        {
+          "label": "equipment_ensouled",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Bonesplitter is a 5/5 artifact creature. In the state-based check it becomes unattached from Grizzly Bears (a 2/2) and stays on the battlefield."
+        },
+        {
+          "label": "other_artifact_ensouled",
+          "polarity": "does_not_fire",
+          "delta": "Ensoul Artifact targets Sol Ring instead.",
+          "expected": "Sol Ring is a 5/5 artifact creature. Bonesplitter stays attached to Grizzly Bears, which is a 4/2."
+        }
+      ],
+      "cards": [
+        "Bonesplitter",
+        "Ensoul Artifact",
+        "Grizzly Bears",
+        "Island",
+        "Sol Ring"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "301.5c-3",
+      "rules": [
+        "301.5c"
+      ],
+      "title": "An Equipment whose creature has left the battlefield becomes unattached and stays on the battlefield",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            {
+              "card": "Bonesplitter",
+              "attached_to": "Grizzly Bears"
+            },
+            "Grizzly Bears",
+            "Centaur Courser"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Shock"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Shock targeting Grizzly Bears, tapping Mountain.",
+        "Both players pass; Shock resolves."
+      ],
+      "variants": [
+        {
+          "label": "equipped_creature_dies",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears (4/2 with Bonesplitter) has 2 damage and moves to A's graveyard. Bonesplitter stays on the battlefield, unattached, under A's control."
+        },
+        {
+          "label": "other_creature_shocked",
+          "polarity": "does_not_fire",
+          "delta": "Shock targets Centaur Courser instead of Grizzly Bears.",
+          "expected": "Centaur Courser (3/3) has 2 damage marked and survives. Bonesplitter stays attached to Grizzly Bears, which is a 4/2."
+        }
+      ],
+      "cards": [
+        "Bonesplitter",
+        "Centaur Courser",
+        "Grizzly Bears",
+        "Mountain",
+        "Shock"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "301.5d-1",
+      "rules": [
+        "301.5d"
+      ],
+      "title": "Only the Equipment's controller can activate it, whoever controls the equipped creature",
+      "record_kind": "playability",
+      "setup": {
+        "active": "B",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Bonesplitter",
+            "Hill Giant",
+            "Mountain"
+          ],
+          "B": [
+            "Control Magic",
+            "Grizzly Bears",
+            "Hill Giant",
+            "Mountain"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Grizzly Bears is owned by A. B controls it through Control Magic, which is attached to it. A controls Bonesplitter, which is attached to Grizzly Bears. Both Mountains are untapped."
+      },
+      "decisions": [
+        "B attempts to activate Bonesplitter's equip {1}, tapping Mountain, targeting B's Hill Giant."
+      ],
+      "variants": [
+        {
+          "label": "creature_controller_tries",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "B cannot activate the equip ability, because B does not control Bonesplitter: can_play is false. Bonesplitter stays attached to Grizzly Bears, which B controls as a 4/2. Bonesplitter stays under A's control."
+        },
+        {
+          "label": "equipment_controller_tries",
+          "polarity": "does_not_fire",
+          "delta": "It is A's turn (active A) and A attempts to activate equip, tapping A's Mountain and targeting A's Hill Giant.",
+          "expected": "The activation is legal. Equip resolves and Bonesplitter moves to A's Hill Giant (5/3). Grizzly Bears, still controlled by B, is a 2/2."
+        }
+      ],
+      "cards": [
+        "Bonesplitter",
+        "Control Magic",
+        "Grizzly Bears",
+        "Hill Giant",
+        "Mountain"
+      ],
+      "forge_notes": "Reach the base state by having B resolve Control Magic on A's equipped Grizzly Bears earlier, or build it as a puzzle state."
+    },
+    {
+      "id": "301.5e-1",
+      "rules": [
+        "301.5e"
+      ],
+      "title": "An Equipment put onto the battlefield attached to an object it cannot equip enters unattached",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Unfinished Business"
+          ]
+        },
+        "graveyard": {
+          "A": [
+            "Angelic Curator",
+            "Bonesplitter"
+          ]
+        },
+        "library": {},
+        "exile": {},
+        "notes": "Angelic Curator has protection from artifacts."
+      },
+      "decisions": [
+        "A casts Unfinished Business targeting Angelic Curator and Bonesplitter in A's graveyard, tapping five Plains.",
+        "Both players pass; Unfinished Business resolves."
+      ],
+      "variants": [
+        {
+          "label": "protected_creature",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Angelic Curator returns to the battlefield. Bonesplitter returns to the battlefield too, but unattached, because Angelic Curator has protection from artifacts. Unfinished Business moves to A's graveyard."
+        },
+        {
+          "label": "ordinary_creature",
+          "polarity": "does_not_fire",
+          "delta": "Grizzly Bears is in A's graveyard instead of Angelic Curator, and is the creature target.",
+          "expected": "Grizzly Bears returns to the battlefield and Bonesplitter returns attached to it. Grizzly Bears is a 4/2."
+        }
+      ],
+      "cards": [
+        "Angelic Curator",
+        "Bonesplitter",
+        "Grizzly Bears",
+        "Plains",
+        "Unfinished Business"
+      ],
+      "forge_notes": "Forge may treat an Equipment that cannot be attached like an Aura that cannot enchant and leave it in the graveyard; the rules put it onto the battlefield unattached."
+    },
+    {
+      "id": "301.6-1",
+      "rules": [
+        "301.6"
+      ],
+      "title": "A Fortification can be attached only to a land",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Darksteel Garrison",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A attempts to activate Darksteel Garrison's fortify {3}, targeting Grizzly Bears, paying with the three Mountains."
+      ],
+      "variants": [
+        {
+          "label": "target_creature",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears is not a legal target: the fortify ability has no legal target for it and cannot be activated with it. Darksteel Garrison stays unattached."
+        },
+        {
+          "label": "target_land",
+          "polarity": "does_not_fire",
+          "delta": "The fortify ability targets one of the Mountains instead.",
+          "expected": "The activation is legal. Fortify resolves and Darksteel Garrison is attached to that Mountain, which has indestructible."
+        }
+      ],
+      "cards": [
+        "Darksteel Garrison",
+        "Grizzly Bears",
+        "Mountain"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "301.6-2",
+      "rules": [
+        "301.6"
+      ],
+      "title": "A Fortification that is also a creature cannot fortify a land",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            "Mountain",
+            {
+              "card": "Darksteel Garrison",
+              "attached_to": "Mountain"
+            },
+            "Sol Ring"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Ensoul Artifact"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Sol Ring is not tapped for mana."
+      },
+      "decisions": [
+        "A casts Ensoul Artifact targeting Darksteel Garrison, tapping both Islands.",
+        "Both players pass; Ensoul Artifact resolves."
+      ],
+      "variants": [
+        {
+          "label": "fortification_ensouled",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Darksteel Garrison is a 5/5 artifact creature. In the state-based check it becomes unattached from Mountain and stays on the battlefield. Mountain no longer has indestructible."
+        },
+        {
+          "label": "other_artifact_ensouled",
+          "polarity": "does_not_fire",
+          "delta": "Ensoul Artifact targets Sol Ring instead.",
+          "expected": "Sol Ring is a 5/5 artifact creature. Darksteel Garrison stays attached to Mountain, which has indestructible."
+        }
+      ],
+      "cards": [
+        "Darksteel Garrison",
+        "Ensoul Artifact",
+        "Island",
+        "Mountain",
+        "Sol Ring"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "301.7a-1",
+      "rules": [
+        "301.7a"
+      ],
+      "title": "A Vehicle has power and toughness only while it is a creature",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Smuggler's Copter",
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Smuggler's Copter has printed power and toughness 3/3 and crew 1."
+      },
+      "decisions": [
+        "No action is taken; the board is observed in A's first main phase."
+      ],
+      "variants": [
+        {
+          "label": "not_crewed",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Smuggler's Copter is a noncreature artifact and has no power or toughness."
+        },
+        {
+          "label": "crewed",
+          "polarity": "does_not_fire",
+          "delta": "A first activates crew 1, tapping Grizzly Bears, and the ability resolves.",
+          "expected": "Smuggler's Copter is an artifact creature with power 3 and toughness 3 until end of turn."
+        }
+      ],
+      "cards": [
+        "Grizzly Bears",
+        "Smuggler's Copter"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "301.7b-1",
+      "rules": [
+        "301.7b"
+      ],
+      "title": "A Vehicle that becomes a creature immediately has its printed power and toughness, modified by other effects",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Smuggler's Copter",
+              "counters": {
+                "+1/+1": 1
+              }
+            },
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "The +1/+1 counter sits on Smuggler's Copter while it is not a creature."
+      },
+      "decisions": [
+        "A activates crew 1, tapping Grizzly Bears; the ability resolves."
+      ],
+      "variants": [
+        {
+          "label": "with_counter",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Smuggler's Copter becomes a creature with printed 3/3 plus the +1/+1 counter, so it is a 4/4 as soon as the crew ability resolves."
+        },
+        {
+          "label": "without_counter",
+          "polarity": "does_not_fire",
+          "delta": "Smuggler's Copter has no +1/+1 counter.",
+          "expected": "Smuggler's Copter becomes a creature with exactly its printed 3/3."
+        }
+      ],
+      "cards": [
+        "Grizzly Bears",
+        "Smuggler's Copter"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

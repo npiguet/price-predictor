@@ -1,0 +1,152 @@
+{
+  "unit": "702.127",
+  "verified": true,
+  "review": [],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.127a-1",
+      "rules": [
+        "702.127a"
+      ],
+      "title": "An aftermath half can be cast only from a graveyard",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Swamp",
+            "Swamp",
+            "Swamp",
+            "Swamp",
+            "Mountain"
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {
+          "A": [
+            "Cut"
+          ]
+        },
+        "library": {},
+        "exile": {},
+        "notes": "Cut is the first half of the split card Cut // Ribbons; Ribbons is the aftermath half."
+      },
+      "decisions": [
+        "A casts Ribbons with X=2, tapping four Swamps for {2}{B}{B}.",
+        "Both players pass; Ribbons resolves."
+      ],
+      "variants": [
+        {
+          "label": "from_graveyard",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Casting Ribbons from A's graveyard is legal. Ribbons resolves and B loses 2 life (18)."
+        },
+        {
+          "label": "from_hand",
+          "polarity": "does_not_fire",
+          "delta": "The split card Cut // Ribbons is in A's hand instead of A's graveyard.",
+          "expected": "Ribbons can't be cast from any zone other than a graveyard, so casting it from hand is not legal. The card stays in A's hand and B's life stays 20."
+        }
+      ],
+      "cards": [
+        "Swamp",
+        "Mountain",
+        "Cut",
+        "Ribbons"
+      ],
+      "forge_notes": "Forge lists the split card under the name of its first half; variant from_hand moves it to A's hand."
+    },
+    {
+      "id": "702.127a-2",
+      "rules": [
+        "702.127a"
+      ],
+      "title": "A spell cast from a graveyard with aftermath is exiled instead of going to the graveyard",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Swamp",
+            "Swamp",
+            "Swamp",
+            "Swamp",
+            "Mountain"
+          ],
+          "B": [
+            "Island",
+            "Island",
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            }
+          ]
+        },
+        "hand": {
+          "A": [
+            "Cut"
+          ],
+          "B": [
+            "Counterspell"
+          ]
+        },
+        "graveyard": {
+          "A": [
+            "Cut"
+          ]
+        },
+        "library": {},
+        "exile": {},
+        "notes": "One copy of Cut // Ribbons is in A's hand and another is in A's graveyard."
+      },
+      "decisions": [
+        "A casts Ribbons from the graveyard copy with X=2, tapping four Swamps for {2}{B}{B}.",
+        "B has priority with Ribbons on the stack and passes; A passes.",
+        "Ribbons resolves."
+      ],
+      "variants": [
+        {
+          "label": "ribbons_resolves",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Ribbons resolves and B loses 2 life (18). The graveyard copy is exiled instead of staying in the graveyard: it is in exile and A's graveyard is empty."
+        },
+        {
+          "label": "cut_from_hand",
+          "polarity": "does_not_fire",
+          "delta": "A casts the Cut half from the hand copy, targeting Grizzly Bears, tapping the Mountain and a Swamp, instead of casting Ribbons.",
+          "expected": "Cut resolves and deals 4 damage to Grizzly Bears, which is destroyed. The hand copy moves to A's graveyard, not to exile. The graveyard copy is untouched and B's life stays 20."
+        },
+        {
+          "label": "ribbons_countered",
+          "polarity": "fires",
+          "delta": "B responds by casting Counterspell with both Islands, targeting Ribbons.",
+          "expected": "Ribbons is countered and does not resolve; B's life stays 20. The graveyard copy is exiled instead of staying in the graveyard: it is in exile and A's graveyard is empty."
+        }
+      ],
+      "cards": [
+        "Swamp",
+        "Mountain",
+        "Cut",
+        "Ribbons",
+        "Grizzly Bears",
+        "Island",
+        "Counterspell"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

@@ -1,0 +1,206 @@
+{
+  "unit": "702.138",
+  "verified": true,
+  "review": [],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.138a-1",
+      "rules": [
+        "702.138a"
+      ],
+      "title": "Escape casts a card from the graveyard if its cost, including exiled cards, can be paid",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain"
+          ]
+        },
+        "hand": {},
+        "graveyard": {
+          "A": [
+            "Phoenix of Ash",
+            "Shock",
+            "Shock",
+            "Shock"
+          ]
+        },
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A considers casting Phoenix of Ash from the graveyard for its escape cost {2}{R}{R} and exiling three other cards from the graveyard."
+      ],
+      "variants": [
+        {
+          "label": "enough_cards",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Casting Phoenix of Ash from A's graveyard for its escape cost is legal."
+        },
+        {
+          "label": "too_few_cards",
+          "polarity": "does_not_fire",
+          "delta": "A's graveyard holds only two other cards besides Phoenix of Ash.",
+          "expected": "Casting Phoenix of Ash from A's graveyard is not legal: three other cards cannot be exiled."
+        },
+        {
+          "label": "too_little_mana",
+          "polarity": "does_not_fire",
+          "delta": "A controls three Mountains instead of four.",
+          "expected": "Casting Phoenix of Ash from A's graveyard is not legal: {2}{R}{R} cannot be paid."
+        }
+      ],
+      "cards": [
+        "Phoenix of Ash",
+        "Mountain",
+        "Shock"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.138c-1",
+      "rules": [
+        "702.138c"
+      ],
+      "title": "A permanent that escaped enters with counters and its linked enters-this-way trigger fires, even with no counters added",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Swamp",
+            "Swamp",
+            "Swamp",
+            "Swamp",
+            "Swamp",
+            "Swamp"
+          ],
+          "B": [
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {},
+        "graveyard": {
+          "A": [
+            "Pharika's Spawn",
+            "Swamp",
+            "Swamp",
+            "Swamp"
+          ]
+        },
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Pharika's Spawn from the graveyard for its escape cost {5}{B}, tapping six Swamps and exiling three other cards from the graveyard.",
+        "Both players pass; Pharika's Spawn resolves and the enters-this-way trigger resolves."
+      ],
+      "variants": [
+        {
+          "label": "escaped",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Pharika's Spawn enters with two +1/+1 counters as a 5/6, and its enters-this-way trigger fires: B sacrifices Grizzly Bears, which goes to B's graveyard."
+        },
+        {
+          "label": "hard_cast",
+          "polarity": "does_not_fire",
+          "delta": "Pharika's Spawn starts in A's hand instead of the graveyard and is cast for its mana cost {3}{B}.",
+          "expected": "Pharika's Spawn enters as a 3/4 with no counters; it did not escape, so no enters-this-way trigger fires and B keeps Grizzly Bears."
+        },
+        {
+          "label": "no_counters_added",
+          "polarity": "fires",
+          "delta": "Solemnity is on B's battlefield.",
+          "expected": "Pharika's Spawn enters as a 3/4 with no counters, but the enters-this-way trigger still fires: B sacrifices Grizzly Bears."
+        }
+      ],
+      "cards": [
+        "Pharika's Spawn",
+        "Swamp",
+        "Grizzly Bears",
+        "Solemnity"
+      ],
+      "forge_notes": "The Solemnity variant relies on Forge running the ImmediateTrigger sub-ability after a prevented PutCounter; if it does not, Forge deviates from rule 702.138c."
+    },
+    {
+      "id": "702.138d-1",
+      "rules": [
+        "702.138d"
+      ],
+      "title": "A permanent that escaped has the ability it escapes with",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            "Island",
+            "Island"
+          ]
+        },
+        "hand": {},
+        "graveyard": {
+          "A": [
+            "Skyway Robber",
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island"
+          ]
+        },
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Skyway Robber from the graveyard for its escape cost {3}{U}, tapping four Islands and exiling five other cards from the graveyard.",
+        "Both players pass; Skyway Robber resolves."
+      ],
+      "variants": [
+        {
+          "label": "escaped",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Skyway Robber (3/3 flying) is on the battlefield with the escape-granted triggered ability: whenever it deals combat damage to a player, A may cast an artifact, instant or sorcery card exiled with it without paying its mana cost."
+        },
+        {
+          "label": "hard_cast",
+          "polarity": "does_not_fire",
+          "delta": "Skyway Robber starts in A's hand instead of the graveyard and is cast for its mana cost {3}{U}.",
+          "expected": "Skyway Robber (3/3 flying) is on the battlefield without the combat-damage triggered ability, because it did not escape."
+        }
+      ],
+      "cards": [
+        "Skyway Robber",
+        "Island"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

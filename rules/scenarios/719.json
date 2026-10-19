@@ -1,0 +1,350 @@
+{
+  "unit": "719",
+  "verified": true,
+  "review": [],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "719.3a-1",
+      "rules": [
+        "719.3a"
+      ],
+      "title": "A Case becomes solved at the beginning of its controller's end step if its condition holds",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main2",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Case of the Locked Hothouse",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Forest",
+            "Forest"
+          ]
+        },
+        "exile": {},
+        "notes": "Case of the Locked Hothouse is unsolved. To solve: you control seven or more lands."
+      },
+      "decisions": [
+        "Both players pass priority in main2; the end step begins.",
+        "If the To-solve trigger fired, both players pass and it resolves."
+      ],
+      "variants": [
+        {
+          "label": "seven_lands",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "At the beginning of A's end step the condition holds: the To-solve trigger fires and the Case becomes solved."
+        },
+        {
+          "label": "six_lands",
+          "polarity": "does_not_fire",
+          "delta": "A controls six Forests instead of seven.",
+          "expected": "The condition does not hold: the To-solve trigger does not fire and the Case stays unsolved."
+        },
+        {
+          "label": "opponents_end_step",
+          "polarity": "does_not_fire",
+          "delta": "It is B's turn (B is the active player) and the step is B's end step; A controls seven Forests.",
+          "expected": "The trigger is for its controller's end step only: it does not fire and the Case stays unsolved."
+        }
+      ],
+      "cards": [
+        "Case of the Locked Hothouse",
+        "Forest"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "719.3b-1",
+      "rules": [
+        "719.3b"
+      ],
+      "title": "A solved Case stays solved until it leaves the battlefield",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main2",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Case of the Gorgon's Kiss",
+            "Island",
+            "Swamp"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Unsummon"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Case of the Gorgon's Kiss is already solved: a 4/4 Gorgon creature with deathtouch and lifelink in addition to its other types. No creature cards were put into graveyards this turn."
+      },
+      "decisions": [
+        "Both players pass priority in main2; the end step begins and ends; the To-solve trigger does not fire for a solved Case."
+      ],
+      "variants": [
+        {
+          "label": "stays_on_battlefield",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The Case is still solved after the end step although its condition is false: still a 4/4 Gorgon creature with deathtouch and lifelink."
+        },
+        {
+          "label": "leaves_and_returns",
+          "polarity": "does_not_fire",
+          "delta": "Before the end step A casts Unsummon (tapping Island) targeting the Case, then casts the Case again (tapping Swamp) and it resolves; its enters trigger has no target.",
+          "expected": "The new Case is not solved and is a noncreature enchantment; the condition is false at the end step, so it stays unsolved."
+        }
+      ],
+      "cards": [
+        "Case of the Gorgon's Kiss",
+        "Island",
+        "Swamp",
+        "Unsummon"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "719.3b-2",
+      "rules": [
+        "719.3b"
+      ],
+      "title": "The solved designation is not copied",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Case of the Uneaten Feast",
+            "Island",
+            "Island",
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Copy Enchantment"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "The original Case of the Uneaten Feast is already solved."
+      },
+      "decisions": [
+        "A casts Copy Enchantment, paying {2}{U} with three Islands; it resolves and enters as a copy of Case of the Uneaten Feast.",
+        "A checks whether the Solved ability (Sacrifice this Case: creature cards in your graveyard gain \"You may cast this card from your graveyard\" until end of turn) can be activated."
+      ],
+      "variants": [
+        {
+          "label": "copy_activation",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The copy is not solved: activating its Solved ability is not legal."
+        },
+        {
+          "label": "original_activation",
+          "polarity": "does_not_fire",
+          "delta": "A checks the original Case's Solved ability instead of the copy's.",
+          "expected": "The original is solved: activating its Solved ability is legal."
+        }
+      ],
+      "cards": [
+        "Case of the Uneaten Feast",
+        "Copy Enchantment",
+        "Island"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "719.3c-1",
+      "rules": [
+        "719.3c"
+      ],
+      "title": "A solved Case's static Solved ability applies only while it is solved",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Case of the Gateway Express",
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Case of the Gateway Express: Solved - creatures you control get +1/+0. Already solved in the base."
+      },
+      "decisions": [
+        "No actions; the board is observed."
+      ],
+      "variants": [
+        {
+          "label": "solved",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears is a 3/2."
+        },
+        {
+          "label": "unsolved",
+          "polarity": "does_not_fire",
+          "delta": "The Case is not solved.",
+          "expected": "Grizzly Bears is a 2/2."
+        }
+      ],
+      "cards": [
+        "Case of the Gateway Express",
+        "Grizzly Bears"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "719.3c-2",
+      "rules": [
+        "719.3c"
+      ],
+      "title": "A solved Case's triggered Solved ability triggers only while it is solved",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Case of the Ransacked Lab",
+            "Mountain"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Lightning Bolt"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Mountain",
+            "Mountain"
+          ]
+        },
+        "exile": {},
+        "notes": "Case of the Ransacked Lab: Solved - whenever you cast an instant or sorcery spell, draw a card. Already solved in the base. Its cost reduction only reduces generic mana, so Lightning Bolt still costs {R}."
+      },
+      "decisions": [
+        "A casts Lightning Bolt targeting B, tapping Mountain.",
+        "If the Case triggered, its trigger resolves first (both players pass).",
+        "Both players pass; Lightning Bolt resolves."
+      ],
+      "variants": [
+        {
+          "label": "solved",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The Case triggers on the cast and A draws a card. Lightning Bolt deals 3 damage to B (17 life)."
+        },
+        {
+          "label": "unsolved",
+          "polarity": "does_not_fire",
+          "delta": "The Case is not solved.",
+          "expected": "The Case does not trigger and A draws no card. Lightning Bolt deals 3 damage to B (17 life)."
+        }
+      ],
+      "cards": [
+        "Case of the Ransacked Lab",
+        "Mountain",
+        "Lightning Bolt"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "719.3c-3",
+      "rules": [
+        "719.3c"
+      ],
+      "title": "A solved Case's activated Solved ability can be activated only while it is solved",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Case of the Uneaten Feast"
+          ]
+        },
+        "hand": {},
+        "graveyard": {
+          "A": [
+            "Grizzly Bears"
+          ]
+        },
+        "library": {},
+        "exile": {},
+        "notes": "Case of the Uneaten Feast: Solved - Sacrifice this Case: creature cards in your graveyard gain \"You may cast this card from your graveyard\" until end of turn. Already solved in the base."
+      },
+      "decisions": [
+        "A checks whether the Solved ability (sacrificing the Case) can be activated."
+      ],
+      "variants": [
+        {
+          "label": "solved",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Activating the ability is legal."
+        },
+        {
+          "label": "unsolved",
+          "polarity": "does_not_fire",
+          "delta": "The Case is not solved.",
+          "expected": "Activating the ability is not legal."
+        }
+      ],
+      "cards": [
+        "Case of the Uneaten Feast",
+        "Grizzly Bears"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

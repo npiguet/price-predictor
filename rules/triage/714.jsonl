@@ -1,0 +1,13 @@
+{"id": "714.1", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "714.1a", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "714.2", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "714.2a", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "714.2b", "category": "mechanical", "observability": "indirect", "record_kinds": ["trigger"], "outcome": "A chapter ability triggers only when lore counters are put on the Saga and the count crosses from below N to at least N.", "note": ""}
+{"id": "714.2c", "category": "mechanical", "observability": "indirect", "record_kinds": ["trigger"], "outcome": "A multi-chapter symbol triggers its effect once for each listed chapter number reached.", "note": ""}
+{"id": "714.2d", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "714.2e", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "714.3", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "714.3a", "category": "mechanical", "observability": "indirect", "record_kinds": ["rewrite", "resolution"], "outcome": "A Saga without read ahead enters the battlefield with one lore counter.", "note": ""}
+{"id": "714.3b", "category": "mechanical", "observability": "indirect", "record_kinds": ["rewrite", "resolution"], "outcome": "A Saga with read ahead enters with the chosen number of lore counters, so earlier chapters are skipped.", "note": "the choice is a decision; the counters are the outcome"}
+{"id": "714.3c", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution", "trigger"], "outcome": "At the start of its controller's precombat main phase each Saga with chapter abilities gains a lore counter, triggering the matching chapter.", "note": ""}
+{"id": "714.4", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "A Saga whose lore counters reach its final chapter number is sacrificed once none of its chapter abilities remain on the stack.", "note": ""}

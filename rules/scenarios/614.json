@@ -1,0 +1,1948 @@
+{
+  "unit": "614",
+  "verified": true,
+  "review": [
+    "614.3-1: no_shield delta named two changes (no activation and no second Doom Blade); the second already follows from the conditional decision, so the delta now names only the missing activation.",
+    "614.7-1: base variant carried a non-empty delta; Boros Charm is now cast in the base decisions and the regenerates variant's delta removes it.",
+    "614.8-1: activation decision said 'as the variant says' with no step; it now fixes the activation in the declare blockers step after blocks.",
+    "614.9-1: giant_gone destroyed Palisade Giant, which removes the static redirection effect itself rather than leaving a redirection whose recipient is gone, so it did not exercise 614.9's does-nothing clause; dropped it (with Doom Blade and the Swamps), fixed the base's non-empty delta, made not_covered the does_not_fire variant, and added 614.9-2 for the recipient-gone case.",
+    "614.10a-2: Avizoa's skipped untap step shows a skipped step's own turn-based action, not something scheduled for it; re-identified it as 614.10-2 (rules 614.10, base delta emptied) and replaced 614.10a-2 with Eon Hub skipping the upkeep for which Phyrexian Arena's trigger is scheduled.",
+    "614.12-1: base variant carried a non-empty delta; base decisions now play Forest and the orb_enters delta names the single change.",
+    "614.12-2: without_jailer variant gave the same outcome as the base (enters tapped), so it flipped nothing; dropped it.",
+    "614.17a-1: base variant carried a non-empty delta; base decisions now cast Healing Salve after Skullcrack resolves and the in_response delta names the timing change.",
+    "614.17c-1: base variant carried a non-empty delta; Skullcrack is now cast in the base decisions and the replaced variant's delta removes it.",
+    "skipped 614.10b: reason claimed no Forge card schedules an action after a skip, but Time Vault does; reworded to the real reason, that its timing is not observable."
+  ],
+  "skipped": [
+    {
+      "id": "614.10b",
+      "reason": "not illustrable as an observable outcome: the one Forge card that skips and then acts, Time Vault (skip the turn, then untap it), performs the untap inside the same replacement, so 'first thing in the next turn that occurs' cannot be told apart from untapping at once; Elfhame Sanctuary, Meditate, Chronosavant and Magosi do their other action before or without the skip"
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "614.3-1",
+      "rules": [
+        "614.3"
+      ],
+      "title": "A regeneration shield stays in place until a destruction uses it up",
+      "record_kind": "rewrite",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Swamp",
+            "Swamp",
+            "Swamp",
+            "Swamp"
+          ],
+          "B": [
+            "River Boa",
+            "Forest",
+            "Forest"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Doom Blade",
+            "Doom Blade"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "River Boa is not black, so Doom Blade can target it. Doom Blade does not say it can't be regenerated."
+      },
+      "decisions": [
+        "A casts the first Doom Blade targeting River Boa, tapping two Swamps.",
+        "A passes priority. B responds by activating River Boa's regeneration ability once ({G}, tapping one Forest). B does not activate it again.",
+        "Both players pass; the regeneration ability resolves and creates a shield. Both players pass again; the first Doom Blade resolves.",
+        "If River Boa is still on the battlefield, A casts the second Doom Blade targeting River Boa, tapping two Swamps. B takes no action; both players pass and it resolves."
+      ],
+      "variants": [
+        {
+          "label": "one_shield",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The first Doom Blade's destruction is replaced: River Boa stays on the battlefield, tapped, and the shield is used up. The second Doom Blade resolves with no shield left and River Boa is destroyed and moves to B's graveyard."
+        },
+        {
+          "label": "two_shields",
+          "polarity": "fires",
+          "delta": "B activates the regeneration ability twice in response to the first Doom Blade, tapping both Forests.",
+          "expected": "Both shields stay in place until used: the first Doom Blade uses one and River Boa stays on the battlefield tapped; the second Doom Blade uses the other and River Boa is still on the battlefield. B's graveyard is empty."
+        },
+        {
+          "label": "no_shield",
+          "polarity": "does_not_fire",
+          "delta": "B does not activate the regeneration ability.",
+          "expected": "The first Doom Blade resolves and River Boa is destroyed and moves to B's graveyard. No replacement applies."
+        }
+      ],
+      "cards": [
+        "Swamp",
+        "Forest",
+        "River Boa",
+        "Doom Blade"
+      ],
+      "forge_notes": "Doom Blade's Forge script has no NoRegen parameter, unlike Terror, so regeneration works against it."
+    },
+    {
+      "id": "614.4-1",
+      "rules": [
+        "614.4"
+      ],
+      "title": "A replacement effect must exist before the event; regeneration set up after the destruction changes nothing",
+      "record_kind": "rewrite",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Swamp",
+            "Swamp"
+          ],
+          "B": [
+            "River Boa",
+            "Forest"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Doom Blade"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Doom Blade targeting River Boa, tapping two Swamps.",
+        "A passes priority. B either responds or passes, as the variant says; then both players pass and Doom Blade resolves."
+      ],
+      "variants": [
+        {
+          "label": "in_response",
+          "polarity": "fires",
+          "delta": "B responds by activating River Boa's regeneration ability ({G}, tapping the Forest); it resolves before Doom Blade.",
+          "expected": "The shield exists when Doom Blade's destruction would happen, so the destruction is replaced: River Boa stays on the battlefield, tapped. Doom Blade resolves and goes to A's graveyard."
+        },
+        {
+          "label": "too_late",
+          "polarity": "does_not_fire",
+          "delta": "B passes without activating the regeneration ability.",
+          "expected": "Doom Blade resolves and River Boa is destroyed and moves to B's graveyard. River Boa is no longer on the battlefield, so its regeneration ability can no longer be activated and no shield exists."
+        }
+      ],
+      "cards": [
+        "Swamp",
+        "Forest",
+        "River Boa",
+        "Doom Blade"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "614.5-1",
+      "rules": [
+        "614.5"
+      ],
+      "title": "Each replacement effect applies at most once to an event, so two doublers make 2 damage into 8",
+      "record_kind": "rewrite",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Furnace of Rath",
+            "Furnace of Rath"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Shock"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Both copies of Furnace of Rath are on A's battlefield and are not tapped lands; they need no mana."
+      },
+      "decisions": [
+        "A casts Shock targeting B, tapping the Mountain.",
+        "Both players pass; Shock resolves."
+      ],
+      "variants": [
+        {
+          "label": "two_doublers",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Shock's 2 damage is doubled once by each Furnace of Rath: B is dealt 8 damage, not 4 and not an unbounded amount. B's life total is 12."
+        },
+        {
+          "label": "one_doubler",
+          "polarity": "other",
+          "delta": "Only one Furnace of Rath is on A's battlefield.",
+          "expected": "Shock's 2 damage is doubled once: B is dealt 4 damage. B's life total is 16."
+        },
+        {
+          "label": "no_doubler",
+          "polarity": "does_not_fire",
+          "delta": "No Furnace of Rath is on A's battlefield.",
+          "expected": "B is dealt 2 damage. B's life total is 18."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Shock",
+        "Furnace of Rath"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "614.6-1",
+      "rules": [
+        "614.6"
+      ],
+      "title": "A replaced event never happens, so abilities that trigger on it do not trigger",
+      "record_kind": "rewrite",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Leyline of the Void"
+          ],
+          "B": [
+            "Grizzly Bears",
+            "Blood Artist"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Shock"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Shock targeting Grizzly Bears, tapping the Mountain.",
+        "Both players pass; Shock resolves.",
+        "If Blood Artist triggers, B targets A with it and both players pass."
+      ],
+      "variants": [
+        {
+          "label": "replaced",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears is dealt 2 damage and would die, but Leyline of the Void exiles it instead. It never goes to the graveyard, so it does not die and Blood Artist does not trigger. Grizzly Bears is in exile; both life totals stay 20."
+        },
+        {
+          "label": "no_replacement",
+          "polarity": "does_not_fire",
+          "delta": "Leyline of the Void is not on A's battlefield.",
+          "expected": "Grizzly Bears dies and moves to B's graveyard. Blood Artist triggers: A loses 1 life and B gains 1 life. A's life is 19 and B's life is 21."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Shock",
+        "Leyline of the Void",
+        "Grizzly Bears",
+        "Blood Artist"
+      ],
+      "forge_notes": "Leyline of the Void is put on the battlefield by the setup; its opening-hand clause is not used."
+    },
+    {
+      "id": "614.6-2",
+      "rules": [
+        "614.6"
+      ],
+      "title": "The modified event is the one that happens and the abilities it triggers see its amount",
+      "record_kind": "rewrite",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Torbran, Thane of Red Fell"
+          ],
+          "B": [
+            "Boros Reckoner"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Shock"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Shock targeting Boros Reckoner, tapping the Mountain.",
+        "Both players pass; Shock resolves.",
+        "Boros Reckoner's trigger goes on the stack; B targets A with it and both players pass."
+      ],
+      "variants": [
+        {
+          "label": "increased",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Torbran replaces Shock's 2 damage with 4 damage, so Boros Reckoner (3/3) is dealt 4 damage and dies. Its trigger sees 4 damage and deals 4 damage to A. A's life is 16."
+        },
+        {
+          "label": "not_replaced",
+          "polarity": "does_not_fire",
+          "delta": "Torbran, Thane of Red Fell is not on A's battlefield.",
+          "expected": "Boros Reckoner is dealt 2 damage and survives with 2 damage marked. Its trigger deals 2 damage to A. A's life is 18."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Shock",
+        "Torbran, Thane of Red Fell",
+        "Boros Reckoner"
+      ],
+      "forge_notes": "Torbran applies to red sources A controls dealing damage to a permanent an opponent controls; Boros Reckoner is B's, so its own damage to A is unaffected."
+    },
+    {
+      "id": "614.7-1",
+      "rules": [
+        "614.7"
+      ],
+      "title": "A regeneration shield does nothing when the destruction it would replace never happens",
+      "record_kind": "rewrite",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Swamp",
+            "Swamp"
+          ],
+          "B": [
+            "River Boa",
+            "Forest",
+            "Mountain",
+            "Plains"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Doom Blade"
+          ],
+          "B": [
+            "Boros Charm"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Doom Blade targeting River Boa, tapping two Swamps, and passes priority.",
+        "B responds by activating River Boa's regeneration ability ({G}, tapping the Forest).",
+        "B then casts Boros Charm choosing the mode 'permanents you control gain indestructible until end of turn', tapping the Mountain and the Plains.",
+        "All players pass until the stack is empty: Boros Charm resolves, then the regeneration ability, then Doom Blade."
+      ],
+      "variants": [
+        {
+          "label": "indestructible",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "River Boa is indestructible when Doom Blade resolves, so the destruction never happens and the regeneration shield has nothing to replace. River Boa stays on the battlefield untapped; the shield is not used."
+        },
+        {
+          "label": "regenerates",
+          "polarity": "does_not_fire",
+          "delta": "B does not cast Boros Charm.",
+          "expected": "Doom Blade's destruction is replaced by the regeneration shield: River Boa stays on the battlefield and is tapped by the shield."
+        }
+      ],
+      "cards": [
+        "Swamp",
+        "Forest",
+        "Mountain",
+        "Plains",
+        "River Boa",
+        "Doom Blade",
+        "Boros Charm"
+      ],
+      "forge_notes": "Assumes Forge checks indestructible before the regeneration replacement is applied, which is what the untapped/tapped contrast tests."
+    },
+    {
+      "id": "614.7a-1",
+      "rules": [
+        "614.7a"
+      ],
+      "title": "A source dealing 0 damage deals no damage, so a damage-increasing effect has nothing to replace",
+      "record_kind": "rewrite",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Torbran, Thane of Red Fell"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Blaze"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Blaze with X = 0 targeting B, tapping one Mountain.",
+        "Both players pass; Blaze resolves."
+      ],
+      "variants": [
+        {
+          "label": "x_zero",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Blaze deals no damage, so there is no damage event for Torbran to increase. B's life total stays 20."
+        },
+        {
+          "label": "x_one",
+          "polarity": "does_not_fire",
+          "delta": "A casts Blaze with X = 1, tapping both Mountains.",
+          "expected": "Blaze deals 1 damage, which Torbran increases by 2 to 3. B's life total is 17."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Blaze",
+        "Torbran, Thane of Red Fell"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "614.8-1",
+      "rules": [
+        "614.8"
+      ],
+      "title": "Regeneration removes damage, taps the creature and removes it from combat",
+      "record_kind": "rewrite",
+      "setup": {
+        "active": "A",
+        "step": "declare_attackers",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "White Knight",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            "River Boa",
+            "Forest"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "White Knight has first strike and protection from black. River Boa is green."
+      },
+      "decisions": [
+        "A attacks B with White Knight.",
+        "B blocks White Knight with River Boa.",
+        "In the declare blockers step, after blocks, B activates River Boa's regeneration ability ({G}, tapping the Forest). Both players pass until it resolves.",
+        "Both players pass; combat damage is dealt (first-strike step, then regular step)."
+      ],
+      "variants": [
+        {
+          "label": "regenerates",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "White Knight deals 2 first-strike damage to River Boa (toughness 1), which would be destroyed; regeneration replaces that: River Boa stays on the battlefield with no damage marked, tapped, and removed from combat. It deals no combat damage to White Knight, which has no damage. B's life stays 20."
+        },
+        {
+          "label": "no_regeneration",
+          "polarity": "does_not_fire",
+          "delta": "B does not activate the regeneration ability.",
+          "expected": "White Knight deals 2 first-strike damage to River Boa, which is destroyed and moves to B's graveyard. White Knight has no damage. B's life stays 20."
+        }
+      ],
+      "cards": [
+        "White Knight",
+        "River Boa",
+        "Forest"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "614.8-2",
+      "rules": [
+        "614.8"
+      ],
+      "title": "Damage triggers still trigger when the damaged permanent regenerates",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Swamp",
+            "Swamp",
+            "Kazarov, Sengir Pureblood"
+          ],
+          "B": [
+            "River Boa",
+            "Forest"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Shock",
+            "Doom Blade"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Kazarov, Sengir Pureblood has no counters at the start."
+      },
+      "decisions": [
+        "A casts the spell the variant names targeting River Boa, tapping the matching lands, and passes priority.",
+        "B responds by activating River Boa's regeneration ability ({G}, tapping the Forest); it resolves.",
+        "Both players pass; A's spell resolves."
+      ],
+      "variants": [
+        {
+          "label": "damage_regenerated",
+          "polarity": "fires",
+          "delta": "A casts Shock (tapping the Mountain).",
+          "expected": "Shock deals 2 damage to River Boa, so Kazarov triggers and gets a +1/+1 counter (5/5). River Boa would be destroyed and regenerates: it stays on the battlefield, tapped, with no damage marked."
+        },
+        {
+          "label": "destroy_no_damage",
+          "polarity": "does_not_fire",
+          "delta": "A casts Doom Blade (tapping both Swamps) instead of Shock.",
+          "expected": "Doom Blade deals no damage, so Kazarov does not trigger and stays 4/4. River Boa's destruction is replaced by regeneration: it stays on the battlefield, tapped."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Swamp",
+        "Forest",
+        "River Boa",
+        "Kazarov, Sengir Pureblood",
+        "Shock",
+        "Doom Blade"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "614.9-1",
+      "rules": [
+        "614.9"
+      ],
+      "title": "A redirection effect sends the damage to another permanent",
+      "record_kind": "rewrite",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Hill Giant"
+          ],
+          "B": [
+            "Palisade Giant",
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Shock"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Shock targeting Grizzly Bears, tapping the Mountain.",
+        "Both players pass; Shock resolves."
+      ],
+      "variants": [
+        {
+          "label": "redirected",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Palisade Giant redirects the damage: Palisade Giant (2/7) is dealt 2 damage and survives with 2 marked. Grizzly Bears has no damage and stays on the battlefield."
+        },
+        {
+          "label": "not_covered",
+          "polarity": "does_not_fire",
+          "delta": "Shock targets A's own Hill Giant instead of Grizzly Bears.",
+          "expected": "Palisade Giant protects only B and B's other permanents: Hill Giant (3/3) is dealt 2 damage, survives with 2 marked, and Palisade Giant has no damage."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Hill Giant",
+        "Palisade Giant",
+        "Grizzly Bears",
+        "Shock"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "614.9-2",
+      "rules": [
+        "614.9"
+      ],
+      "title": "A redirection whose recipient has left the battlefield does nothing",
+      "record_kind": "rewrite",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Swamp",
+            "Swamp"
+          ],
+          "B": [
+            "Daughter of Autumn",
+            "Glory Seeker",
+            "Plains"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Shock",
+            "Doom Blade"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Daughter of Autumn is green, so Doom Blade can target it. Glory Seeker is a white 2/2."
+      },
+      "decisions": [
+        "A casts Shock targeting Glory Seeker, tapping the Mountain, and passes priority.",
+        "B responds by activating Daughter of Autumn's ability ({W}, tapping the Plains) targeting Glory Seeker; both players pass and it resolves.",
+        "A receives priority and passes.",
+        "Both players pass; Shock resolves."
+      ],
+      "variants": [
+        {
+          "label": "redirected",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Of Shock's 2 damage, 1 is dealt to Daughter of Autumn instead of Glory Seeker: Daughter of Autumn has 1 damage marked, Glory Seeker has 1 damage marked, and both stay on the battlefield."
+        },
+        {
+          "label": "recipient_gone",
+          "polarity": "does_not_fire",
+          "delta": "When A receives priority after Daughter's ability resolves, A casts Doom Blade targeting Daughter of Autumn (tapping both Swamps) and it resolves before Shock.",
+          "expected": "Daughter of Autumn is in B's graveyard when Shock resolves, so the redirection does nothing: Glory Seeker is dealt 2 damage and moves to B's graveyard."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Swamp",
+        "Plains",
+        "Shock",
+        "Doom Blade",
+        "Daughter of Autumn",
+        "Glory Seeker"
+      ],
+      "forge_notes": "Forge scripts Daughter of Autumn's shield as an effect with Duration UntilHostLeavesPlayOrEOT and ExileOnMoved, so the shield is removed when Daughter leaves; the observable damage matches the rule."
+    },
+    {
+      "id": "614.10-1",
+      "rules": [
+        "614.10"
+      ],
+      "title": "A skip effect makes the next combat phase not happen, but not one that has already started",
+      "record_kind": "rewrite",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            }
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Moment of Silence"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "The variant says when A casts Moment of Silence and who it targets, tapping the Plains; both players pass and it resolves.",
+        "A attacks B with Grizzly Bears in any combat phase that occurs."
+      ],
+      "variants": [
+        {
+          "label": "skip_own_combat",
+          "polarity": "fires",
+          "delta": "In the main phase, before combat, A casts Moment of Silence targeting A.",
+          "expected": "A's combat phase is skipped: there is no beginning of combat, no attack and no combat damage. B's life stays 20."
+        },
+        {
+          "label": "combat_already_started",
+          "polarity": "does_not_fire",
+          "delta": "A attacks with Grizzly Bears first, then casts Moment of Silence targeting A during the declare attackers step.",
+          "expected": "The combat phase has already started, so it is not skipped; no later combat phase this turn exists to skip. Grizzly Bears deals 2 combat damage and B's life is 18."
+        },
+        {
+          "label": "skip_other_player",
+          "polarity": "other",
+          "delta": "In the main phase, A casts Moment of Silence targeting B.",
+          "expected": "The skip applies to B's next combat phase this turn, which does not exist on A's turn. A's combat phase happens: Grizzly Bears deals 2 combat damage and B's life is 18."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Grizzly Bears",
+        "Moment of Silence"
+      ],
+      "forge_notes": "Forge implements Moment of Silence as a SkipPhase effect with Duration NextThisTurn."
+    },
+    {
+      "id": "614.10a-1",
+      "rules": [
+        "614.10a"
+      ],
+      "title": "Two skip effects skip two successive occurrences of the step",
+      "record_kind": "rewrite",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            "Island",
+            "Island"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Fatigue",
+            "Fatigue"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Island",
+            "Island",
+            "Island",
+            "Island"
+          ],
+          "B": [
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest"
+          ]
+        },
+        "exile": {},
+        "notes": "Libraries are listed top first. B's hand is empty. Turn 1 is A's turn; turn 2 is B's; turn 3 is A's; turn 4 is B's."
+      },
+      "decisions": [
+        "A casts Fatigue targeting B, tapping two Islands; it resolves. In the base variant A casts the second Fatigue targeting B, tapping the other two Islands; it resolves.",
+        "Both players take no further actions; the game proceeds through B's turn 2, A's turn 3 and B's turn 4 up to the end of B's draw step on turn 4."
+      ],
+      "variants": [
+        {
+          "label": "two_skips",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "B skips the draw steps of turn 2 and of turn 4, one per Fatigue. After the draw step of turn 4 B's hand is empty and B's library still has 4 cards."
+        },
+        {
+          "label": "one_skip",
+          "polarity": "does_not_fire",
+          "delta": "A casts only one Fatigue.",
+          "expected": "B skips the draw step of turn 2 and draws normally in turn 4. After the draw step of turn 4 B has 1 Forest in hand and 3 cards in the library."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Forest",
+        "Fatigue"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "614.10-2",
+      "rules": [
+        "614.10"
+      ],
+      "title": "A skip effect makes the player's next untap step not happen",
+      "record_kind": "rewrite",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Island",
+              "tapped": true
+            },
+            {
+              "card": "Avizoa",
+              "summoning_sick": false
+            }
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Island",
+            "Island",
+            "Island",
+            "Island"
+          ]
+        },
+        "exile": {},
+        "notes": "Turn 1 is A's turn; turn 2 is B's; turn 3 is A's. Library listed top first."
+      },
+      "decisions": [
+        "A activates Avizoa's ability ({0}) in turn 1; it resolves and Avizoa gets +2/+2 until end of turn.",
+        "Both players take no further actions through B's turn 2 and A's turn 3, up to A's first main phase on turn 3."
+      ],
+      "variants": [
+        {
+          "label": "untap_skipped",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "A skips the untap step of turn 3, so the tapped Island is not untapped and is still tapped in A's main phase. The upkeep and draw steps still happen: A draws a card, library 3."
+        },
+        {
+          "label": "untap_happens",
+          "polarity": "does_not_fire",
+          "delta": "A does not activate Avizoa's ability.",
+          "expected": "The untap step of turn 3 happens and the Island untaps; it is untapped in A's main phase. A draws a card, library 3."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Avizoa"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "614.10a-2",
+      "rules": [
+        "614.10a"
+      ],
+      "title": "A trigger scheduled for a skipped upkeep step does not happen",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "B",
+        "step": "end",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Eon Hub",
+            "Phyrexian Arena"
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Island",
+            "Island"
+          ]
+        },
+        "exile": {},
+        "notes": "It is B's end step; A's hand is empty. Library listed top first."
+      },
+      "decisions": [
+        "Both players take no actions; B's turn ends and A's turn begins, up to A's first main phase."
+      ],
+      "variants": [
+        {
+          "label": "upkeep_skipped",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "A's upkeep step is skipped, so Phyrexian Arena does not trigger. A draws one Island in the draw step: A has 1 card in hand, 1 card in library, and life 20."
+        },
+        {
+          "label": "upkeep_happens",
+          "polarity": "does_not_fire",
+          "delta": "Eon Hub is not on A's battlefield.",
+          "expected": "Phyrexian Arena triggers in A's upkeep: A draws an Island and loses 1 life. A draws the other Island in the draw step: A has 2 cards in hand, 0 in library, and life 19."
+        }
+      ],
+      "cards": [
+        "Eon Hub",
+        "Phyrexian Arena",
+        "Island"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "614.11-1",
+      "rules": [
+        "614.11"
+      ],
+      "title": "A draw replacement applies even when the library is empty",
+      "record_kind": "rewrite",
+      "setup": {
+        "active": "A",
+        "step": "draw",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Laboratory Maniac"
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {
+          "A": []
+        },
+        "exile": {},
+        "notes": "A's library is empty. The draw step's draw is about to happen."
+      },
+      "decisions": [
+        "A's draw step begins and A draws a card for the turn."
+      ],
+      "variants": [
+        {
+          "label": "empty_library",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "A would draw from an empty library, so Laboratory Maniac's replacement applies and A wins the game instead. A does not lose."
+        },
+        {
+          "label": "one_card_left",
+          "polarity": "does_not_fire",
+          "delta": "A's library has one Island.",
+          "expected": "A draws the Island normally; the replacement does not apply and the game continues. A's library is empty and A has not won."
+        },
+        {
+          "label": "no_maniac",
+          "polarity": "other",
+          "delta": "Laboratory Maniac is not on the battlefield.",
+          "expected": "A draws from an empty library and loses the game at the next state-based action check."
+        }
+      ],
+      "cards": [
+        "Laboratory Maniac",
+        "Island"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "614.11a-1",
+      "rules": [
+        "614.11a"
+      ],
+      "title": "A replaced draw is completed in full before the next draw in the sequence",
+      "record_kind": "rewrite",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            "Island"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Divination"
+          ]
+        },
+        "graveyard": {
+          "A": [
+            "Darkblast"
+          ]
+        },
+        "library": {
+          "A": [
+            "Forest",
+            "Mountain",
+            "Plains",
+            "Swamp",
+            "Island",
+            "Forest"
+          ]
+        },
+        "exile": {},
+        "notes": "Library is listed top first."
+      },
+      "decisions": [
+        "A casts Divination, tapping three Islands.",
+        "Both players pass; Divination resolves. For the first of the two draws A chooses (or declines) to dredge Darkblast, as the variant says; the second draw is made normally."
+      ],
+      "variants": [
+        {
+          "label": "dredge_first",
+          "polarity": "fires",
+          "delta": "A dredges Darkblast for the first draw.",
+          "expected": "The first draw is replaced: A mills the top three cards (Forest, Mountain, Plains) and returns Darkblast to hand, completing before the second draw. The second draw then takes the new top card, Swamp. A's hand is Darkblast and Swamp; the graveyard holds Forest, Mountain, Plains and Divination."
+        },
+        {
+          "label": "no_dredge",
+          "polarity": "does_not_fire",
+          "delta": "A declines to dredge.",
+          "expected": "A draws Forest and Mountain. A's hand is Forest and Mountain; Darkblast stays in the graveyard with Divination."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Divination",
+        "Darkblast",
+        "Forest",
+        "Mountain",
+        "Plains",
+        "Swamp"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "614.11b-1",
+      "rules": [
+        "614.11b"
+      ],
+      "title": "The follow-up action of a draw is not performed on a card that replaced the draw",
+      "record_kind": "rewrite",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Sindbad",
+              "summoning_sick": false
+            }
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {
+          "A": [
+            "Darkblast"
+          ]
+        },
+        "library": {
+          "A": [
+            "Grizzly Bears",
+            "Forest",
+            "Mountain",
+            "Plains",
+            "Island"
+          ]
+        },
+        "exile": {},
+        "notes": "Library is listed top first. Sindbad: {T}: Draw a card and reveal it. If it isn't a land card, discard it."
+      },
+      "decisions": [
+        "A activates Sindbad ({T}); both players pass and it resolves.",
+        "A chooses (or declines) to dredge Darkblast for the draw, as the variant says."
+      ],
+      "variants": [
+        {
+          "label": "dredge",
+          "polarity": "fires",
+          "delta": "A dredges Darkblast for the draw.",
+          "expected": "The draw is replaced: A mills Grizzly Bears, Forest and Mountain and returns Darkblast to hand. The discard-if-nonland action is not performed on Darkblast, which stays in A's hand; the graveyard holds Grizzly Bears, Forest and Mountain."
+        },
+        {
+          "label": "draw_normally",
+          "polarity": "does_not_fire",
+          "delta": "A declines to dredge.",
+          "expected": "A draws Grizzly Bears and reveals it; it is not a land, so it is discarded. A's hand is empty; the graveyard holds Darkblast and Grizzly Bears."
+        }
+      ],
+      "cards": [
+        "Sindbad",
+        "Darkblast",
+        "Grizzly Bears",
+        "Forest",
+        "Mountain",
+        "Plains",
+        "Island"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "614.12-1",
+      "rules": [
+        "614.12"
+      ],
+      "title": "A permanent is not affected by its own all-permanents enters-tapped effect",
+      "record_kind": "rewrite",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Orb of Dreams",
+            "Mountain",
+            "Mountain",
+            "Mountain"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Forest"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A plays Forest from hand."
+      ],
+      "variants": [
+        {
+          "label": "land_enters",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Forest enters the battlefield tapped."
+        },
+        {
+          "label": "orb_enters",
+          "polarity": "does_not_fire",
+          "delta": "Orb of Dreams starts in A's hand instead of on the battlefield, and A casts it (tapping three Mountains; both players pass and it resolves) instead of playing Forest.",
+          "expected": "Orb of Dreams enters the battlefield untapped, since the effect it generates is not yet on the battlefield to apply to it."
+        }
+      ],
+      "cards": [
+        "Orb of Dreams",
+        "Mountain",
+        "Forest"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "614.12-2",
+      "rules": [
+        "614.12"
+      ],
+      "title": "An enters-tapped replacement is found by checking the permanent as it would exist on the battlefield",
+      "record_kind": "rewrite",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Swamp",
+            "Swamp",
+            "Swamp",
+            "Swamp",
+            "Yixlid Jailer"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Zombify"
+          ]
+        },
+        "graveyard": {
+          "A": [
+            "Scarwood Treefolk"
+          ]
+        },
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Zombify targeting the creature card in A's graveyard, tapping four Swamps.",
+        "Both players pass; Zombify resolves."
+      ],
+      "variants": [
+        {
+          "label": "with_jailer",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Cards in graveyards have no abilities, but Scarwood Treefolk is checked as it would exist on the battlefield: it enters the battlefield tapped."
+        },
+        {
+          "label": "no_replacement",
+          "polarity": "does_not_fire",
+          "delta": "A's graveyard holds Grizzly Bears instead of Scarwood Treefolk.",
+          "expected": "Grizzly Bears has no enters-tapped replacement and enters the battlefield untapped."
+        }
+      ],
+      "cards": [
+        "Swamp",
+        "Yixlid Jailer",
+        "Zombify",
+        "Scarwood Treefolk",
+        "Grizzly Bears"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "614.12c-1",
+      "rules": [
+        "614.12c"
+      ],
+      "title": "A permanent entering with an anchor-word choice has only the ability linked to the chosen word",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            }
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Citadel Siege"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Citadel Siege, tapping four Plains; both players pass and it resolves.",
+        "As it enters, A chooses the anchor word the variant names.",
+        "A moves to the beginning of combat; if Citadel Siege triggers, A targets Grizzly Bears."
+      ],
+      "variants": [
+        {
+          "label": "khans",
+          "polarity": "fires",
+          "delta": "A chooses Khans.",
+          "expected": "Citadel Siege has the Khans ability: at the beginning of combat it puts two +1/+1 counters on Grizzly Bears, which is 4/4."
+        },
+        {
+          "label": "dragons",
+          "polarity": "does_not_fire",
+          "delta": "A chooses Dragons.",
+          "expected": "Citadel Siege has the Dragons ability, which triggers only on an opponent's turn: nothing triggers at the beginning of A's combat and Grizzly Bears stays 2/2 with no counters."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Grizzly Bears",
+        "Citadel Siege"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "614.13-1",
+      "rules": [
+        "614.13"
+      ],
+      "title": "An enters-modifying replacement effect can make other objects change zones",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Swamp",
+            "Swamp",
+            "Swamp",
+            "Swamp",
+            "Swamp",
+            "Swamp",
+            "Swamp"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Sutured Ghoul"
+          ]
+        },
+        "graveyard": {
+          "A": [
+            "Grizzly Bears",
+            "Hill Giant"
+          ]
+        },
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Sutured Ghoul, tapping seven Swamps; both players pass and it resolves.",
+        "As it enters, A exiles the creature cards from A's graveyard that the variant names."
+      ],
+      "variants": [
+        {
+          "label": "exile_both",
+          "polarity": "fires",
+          "delta": "A exiles both Grizzly Bears and Hill Giant.",
+          "expected": "Both cards move from A's graveyard to exile as Sutured Ghoul enters. Sutured Ghoul enters as a 5/5 (2 + 3 power and 2 + 3 toughness) and stays on the battlefield."
+        },
+        {
+          "label": "exile_one",
+          "polarity": "fires",
+          "delta": "A exiles only Grizzly Bears.",
+          "expected": "Grizzly Bears moves to exile and Hill Giant stays in the graveyard. Sutured Ghoul enters as a 2/2."
+        },
+        {
+          "label": "exile_none",
+          "polarity": "does_not_fire",
+          "delta": "A exiles no cards.",
+          "expected": "No card changes zones. Sutured Ghoul has power and toughness 0 and is put into A's graveyard by the state-based check."
+        }
+      ],
+      "cards": [
+        "Swamp",
+        "Sutured Ghoul",
+        "Grizzly Bears",
+        "Hill Giant"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "614.13c-1",
+      "rules": [
+        "614.13c"
+      ],
+      "title": "A card entering from the library is left out of an exile-from-the-top replacement applied while it enters",
+      "record_kind": "rewrite",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Ashiok, Wicked Manipulator",
+            "Oracle of Mul Daya"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Breeding Pool"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Breeding Pool",
+            "Mountain",
+            "Plains",
+            "Island",
+            "Swamp"
+          ]
+        },
+        "exile": {},
+        "notes": "Library is listed top first. Oracle of Mul Daya lets A play lands from the top of the library and an additional land this turn. Ashiok has 5 loyalty."
+      },
+      "decisions": [
+        "A plays the Breeding Pool the variant names.",
+        "As it enters, A chooses to pay 2 life; Ashiok's replacement exiles cards from the top of A's library instead."
+      ],
+      "variants": [
+        {
+          "label": "from_library",
+          "polarity": "fires",
+          "delta": "A plays the Breeding Pool on top of the library with Oracle of Mul Daya.",
+          "expected": "Ashiok's effect ignores the entering Breeding Pool and exiles the next two cards, Mountain and Plains. A's life stays 20 and Breeding Pool enters untapped. A's library is Island, Swamp."
+        },
+        {
+          "label": "from_hand",
+          "polarity": "does_not_fire",
+          "delta": "A plays the Breeding Pool from hand; the Breeding Pool on top of the library stays there.",
+          "expected": "No entering card is in the library, so Ashiok exiles the top two cards, the library's Breeding Pool and Mountain. A's life stays 20 and the hand's Breeding Pool enters untapped. A's library is Plains, Island, Swamp."
+        }
+      ],
+      "cards": [
+        "Ashiok, Wicked Manipulator",
+        "Oracle of Mul Daya",
+        "Breeding Pool",
+        "Mountain",
+        "Plains",
+        "Island",
+        "Swamp"
+      ],
+      "forge_notes": "Forge's Breeding Pool pays life through an UnlessCost, which may not go through the PayLife replacement; Ashiok's exile effect uses NotDefinedReplacedSimultaneousETB to leave out the entering card."
+    },
+    {
+      "id": "614.14-1",
+      "rules": [
+        "614.14"
+      ],
+      "title": "A linked ability refers only to cards exiled by the replacement event of the ability it is linked to",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Void Maw",
+            "Mountain",
+            "Plains"
+          ],
+          "B": [
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Shock",
+            "Swords to Plowshares"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A removes Grizzly Bears as the variant says; both players pass until the spell resolves.",
+        "A then tries to activate Void Maw's ability, putting a card exiled with Void Maw into its owner's graveyard as the cost."
+      ],
+      "variants": [
+        {
+          "label": "exiled_by_replacement",
+          "polarity": "fires",
+          "delta": "A casts Shock targeting Grizzly Bears, tapping the Mountain.",
+          "expected": "Grizzly Bears would die; Void Maw exiles it instead. The activation is legal: A puts Grizzly Bears into B's graveyard as the cost and Void Maw gets +2/+2 until end of turn (6/7)."
+        },
+        {
+          "label": "exiled_by_spell",
+          "polarity": "does_not_fire",
+          "delta": "A casts Swords to Plowshares targeting Grizzly Bears, tapping the Plains.",
+          "expected": "Swords to Plowshares exiles Grizzly Bears; it was not exiled by Void Maw's replacement, so it is not exiled with Void Maw. B gains 2 life. The activation is not legal: A has no card exiled with Void Maw to pay the cost."
+        }
+      ],
+      "cards": [
+        "Void Maw",
+        "Mountain",
+        "Plains",
+        "Grizzly Bears",
+        "Shock",
+        "Swords to Plowshares"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "614.15-1",
+      "rules": [
+        "614.15"
+      ],
+      "title": "A self-replacement effect applies before other replacement effects to the same event",
+      "record_kind": "rewrite",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Furnace of Rath"
+          ],
+          "B": [
+            "Ironroot Treefolk"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Fiery Impulse"
+          ]
+        },
+        "graveyard": {
+          "A": [
+            "Shock",
+            "Lightning Bolt"
+          ]
+        },
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Fiery Impulse targeting Ironroot Treefolk, tapping the Mountain.",
+        "Both players pass; Fiery Impulse resolves."
+      ],
+      "variants": [
+        {
+          "label": "mastery_then_doubled",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Spell mastery is on (two instants in A's graveyard): the self-replacement makes the damage 3 first, then Furnace of Rath doubles it to 6. Ironroot Treefolk (3/5) is dealt 6 damage and moves to B's graveyard."
+        },
+        {
+          "label": "no_mastery",
+          "polarity": "does_not_fire",
+          "delta": "A's graveyard holds only Shock.",
+          "expected": "Only one instant is in the graveyard, so the damage is 2, doubled by Furnace of Rath to 4. Ironroot Treefolk survives with 4 damage marked."
+        },
+        {
+          "label": "no_doubler",
+          "polarity": "other",
+          "delta": "Furnace of Rath is not on A's battlefield.",
+          "expected": "Spell mastery makes the damage 3. Ironroot Treefolk survives with 3 damage marked."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Furnace of Rath",
+        "Ironroot Treefolk",
+        "Fiery Impulse",
+        "Shock",
+        "Lightning Bolt"
+      ],
+      "forge_notes": "Forge scripts Fiery Impulse's spell mastery as a conditional second DealDamage, not as a replacement effect; the observable damage is the same."
+    },
+    {
+      "id": "614.16-1",
+      "rules": [
+        "614.16"
+      ],
+      "title": "A token-creation replacement also applies to tokens created by another replacement effect",
+      "record_kind": "rewrite",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Kalitas, Traitor of Ghet",
+            "Parallel Lives"
+          ],
+          "B": [
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Shock"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Shock targeting Grizzly Bears, tapping the Mountain.",
+        "Both players pass; Shock resolves."
+      ],
+      "variants": [
+        {
+          "label": "doubled",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears would die; Kalitas exiles it instead and creates a 2/2 Zombie token. Parallel Lives applies to that token creation, so A creates two 2/2 Zombie tokens."
+        },
+        {
+          "label": "single",
+          "polarity": "does_not_fire",
+          "delta": "Parallel Lives is not on A's battlefield.",
+          "expected": "Kalitas exiles Grizzly Bears and A creates one 2/2 Zombie token."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Kalitas, Traitor of Ghet",
+        "Parallel Lives",
+        "Grizzly Bears",
+        "Shock"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "614.17a-1",
+      "rules": [
+        "614.17a"
+      ],
+      "title": "A can't effect stops only what happens after it exists",
+      "record_kind": "rewrite",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 10
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain"
+          ],
+          "B": [
+            "Plains"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Skullcrack"
+          ],
+          "B": [
+            "Healing Salve"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Skullcrack targeting B, tapping both Mountains.",
+        "Both players pass; Skullcrack resolves.",
+        "A passes priority; B casts Healing Salve choosing 'target player gains 3 life' targeting B, tapping the Plains.",
+        "Both players pass; Healing Salve resolves."
+      ],
+      "variants": [
+        {
+          "label": "after",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Skullcrack's effect already exists, so B can't gain life: Healing Salve resolves and B gains no life. B took 3 damage from Skullcrack: B's life total is 7."
+        },
+        {
+          "label": "in_response",
+          "polarity": "does_not_fire",
+          "delta": "B casts Healing Salve in response to Skullcrack, while Skullcrack is still on the stack.",
+          "expected": "The can't effect does not exist yet, so Healing Salve resolves first and B gains 3 life (13). Skullcrack then deals 3 damage: B's life total is 10."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Plains",
+        "Skullcrack",
+        "Healing Salve"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "614.17b-1",
+      "rules": [
+        "614.17b"
+      ],
+      "title": "A player cannot choose to pay a cost that includes an event that can't happen",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Platinum Emperion",
+            "Grizzly Bears"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Mutagenic Growth"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "A controls no lands. Mutagenic Growth costs {G/P}, which can be paid with 2 life instead of {G}."
+      },
+      "decisions": [
+        "A considers casting Mutagenic Growth targeting Grizzly Bears, paying {G/P} with 2 life."
+      ],
+      "variants": [
+        {
+          "label": "emperion_controlled",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Platinum Emperion means A's life total can't change, so A can't pay 2 life. A has no mana, so Mutagenic Growth is not castable."
+        },
+        {
+          "label": "emperion_opponent",
+          "polarity": "does_not_fire",
+          "delta": "Platinum Emperion is on B's battlefield instead.",
+          "expected": "A's life total can change, so A can pay 2 life for {G/P}. Mutagenic Growth is castable."
+        }
+      ],
+      "cards": [
+        "Platinum Emperion",
+        "Grizzly Bears",
+        "Mutagenic Growth"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "614.17c-1",
+      "rules": [
+        "614.17c"
+      ],
+      "title": "An event that can't happen is not modified by a replacement effect",
+      "record_kind": "rewrite",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Plains",
+            "Rain of Gore"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Skullcrack",
+            "Healing Salve"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Skullcrack targeting B, tapping two Mountains; both players pass and it resolves.",
+        "A casts Healing Salve choosing 'target player gains 3 life' targeting A, tapping the Plains.",
+        "Both players pass; Healing Salve resolves."
+      ],
+      "variants": [
+        {
+          "label": "cant_gain",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Skullcrack makes it so players can't gain life this turn, so the life gain can't happen and Rain of Gore's replacement does not turn it into life loss. A's life stays 20; B's life is 17 from Skullcrack."
+        },
+        {
+          "label": "replaced",
+          "polarity": "does_not_fire",
+          "delta": "A does not cast Skullcrack.",
+          "expected": "The life gain can happen, so Rain of Gore replaces it: A loses 3 life instead. A's life is 17 and B's life is 20."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Plains",
+        "Rain of Gore",
+        "Skullcrack",
+        "Healing Salve"
+      ],
+      "forge_notes": "Assumes Forge checks the CantGainLife static ability before applying the GainLife replacement."
+    },
+    {
+      "id": "614.17d-1",
+      "rules": [
+        "614.17d"
+      ],
+      "title": "A can't effect on entering can stop a permanent from entering the battlefield",
+      "record_kind": "rewrite",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Swamp",
+            "Swamp",
+            "Swamp",
+            "Swamp",
+            "Grafdigger's Cage"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Zombify"
+          ]
+        },
+        "graveyard": {
+          "A": [
+            "Grizzly Bears"
+          ]
+        },
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Zombify targeting Grizzly Bears in A's graveyard, tapping four Swamps.",
+        "Both players pass; Zombify resolves."
+      ],
+      "variants": [
+        {
+          "label": "cage",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grafdigger's Cage means creature cards in graveyards can't enter the battlefield: Grizzly Bears stays in A's graveyard. Zombify goes to A's graveyard."
+        },
+        {
+          "label": "no_cage",
+          "polarity": "does_not_fire",
+          "delta": "Grafdigger's Cage is not on the battlefield.",
+          "expected": "Grizzly Bears enters the battlefield under A's control. Zombify goes to A's graveyard."
+        }
+      ],
+      "cards": [
+        "Swamp",
+        "Grafdigger's Cage",
+        "Zombify",
+        "Grizzly Bears"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

@@ -1,0 +1,4 @@
+{"id": "702.12", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.12a", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.12b", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution", "combat"], "outcome": "A permanent with indestructible is not destroyed by destroy effects and stays on the battlefield with lethal damage marked.", "note": ""}
+{"id": "702.12c", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": "Redundancy of instances has no separate outcome."}

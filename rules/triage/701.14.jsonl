@@ -1,0 +1,5 @@
+{"id": "701.14", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "701.14a", "category": "mechanical", "observability": "direct", "record_kinds": ["resolution"], "outcome": "Each fighting creature deals damage equal to its power to the other creature.", "note": ""}
+{"id": "701.14b", "category": "mechanical", "observability": "direct", "record_kinds": ["resolution"], "outcome": "If either creature has left the battlefield, stopped being a creature, or is an illegal target on resolution, neither deals damage.", "note": ""}
+{"id": "701.14c", "category": "mechanical", "observability": "direct", "record_kinds": ["resolution"], "outcome": "A creature fighting itself is dealt damage equal to twice its power.", "note": ""}
+{"id": "701.14d", "category": "mechanical", "observability": "direct", "record_kinds": ["resolution"], "outcome": "Fight damage is noncombat damage, so effects that care about combat damage do not apply to it.", "note": ""}

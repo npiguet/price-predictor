@@ -1,0 +1,41 @@
+{"id": "113.1", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "113.1a", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "113.1b", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "113.1c", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "113.2", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "113.2a", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "113.2b", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "113.2c", "category": "mechanical", "observability": "indirect", "record_kinds": ["trigger", "resolution"], "outcome": "Two instances of the same ability each function independently, for example each triggers separately.", "note": ""}
+{"id": "113.2d", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "113.3", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "113.3a", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "113.3b", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "113.3c", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "113.3d", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "113.4", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "113.5", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "A second loyalty ability of the same permanent in one turn is not playable.", "note": ""}
+{"id": "113.6", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "113.6a", "category": "mechanical", "observability": "needs_new_fields", "record_kinds": ["continuous"], "outcome": "A characteristic-defining ability applies in every zone, such as a graveyard card having its defined power.", "note": ""}
+{"id": "113.6b", "category": "mechanical", "observability": "indirect", "record_kinds": ["trigger"], "outcome": "An ability that names its zones functions only from those zones.", "note": ""}
+{"id": "113.6c", "category": "mechanical", "observability": "indirect", "record_kinds": ["trigger"], "outcome": "An ability that names zones it does not function in functions everywhere else.", "note": ""}
+{"id": "113.6d", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "An alternative-cost ability of a spell is usable while it is cast, shown in the cost after adjustment.", "note": ""}
+{"id": "113.6e", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "A restriction on how an object can be cast applies from every zone it could be cast from and on the stack.", "note": ""}
+{"id": "113.6f", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "A restriction on casting zones applies everywhere, so the card is or is not castable from a zone.", "note": ""}
+{"id": "113.6g", "category": "mechanical", "observability": "direct", "record_kinds": ["resolution"], "outcome": "A spell that can't be countered resolves despite a counterspell.", "note": ""}
+{"id": "113.6h", "category": "mechanical", "observability": "indirect", "record_kinds": ["rewrite", "resolution"], "outcome": "An as-enters modification applies as the object enters the battlefield.", "note": ""}
+{"id": "113.6i", "category": "mechanical", "observability": "direct", "record_kinds": ["rewrite"], "outcome": "Counters can't be put on an object that says so, while it enters or on the battlefield.", "note": ""}
+{"id": "113.6j", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "An ability whose cost can't be paid on the battlefield is activatable from the zone where it can be paid.", "note": ""}
+{"id": "113.6k", "category": "mechanical", "observability": "direct", "record_kinds": ["trigger"], "outcome": "A trigger condition that can't trigger from the battlefield fires from the zone it works in.", "note": ""}
+{"id": "113.6m", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "An ability that moves its object out of a zone is activatable only while the object is in that zone.", "note": ""}
+{"id": "113.6n", "category": "out_of_scope", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "113.6p", "category": "mechanical", "observability": "indirect", "record_kinds": ["trigger", "continuous"], "outcome": "Abilities of emblems function in the command zone.", "note": ""}
+{"id": "113.7", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "113.7a", "category": "mechanical", "observability": "direct", "record_kinds": ["resolution"], "outcome": "An ability on the stack resolves even after its source has left the battlefield, using last known information.", "note": ""}
+{"id": "113.8", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "113.9", "category": "mechanical", "observability": "direct", "record_kinds": ["resolution"], "outcome": "A counterspell that counters only spells does not counter an ability on the stack.", "note": ""}
+{"id": "113.10", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "113.10a", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "113.10b", "category": "mechanical", "observability": "direct", "record_kinds": ["continuous"], "outcome": "An effect removing an ability removes all instances of it.", "note": ""}
+{"id": "113.10c", "category": "mechanical", "observability": "direct", "record_kinds": ["continuous"], "outcome": "When effects add and remove the same ability, the most recent one prevails.", "note": ""}
+{"id": "113.11", "category": "mechanical", "observability": "direct", "record_kinds": ["continuous"], "outcome": "An object that can't have an ability loses it and can't gain it.", "note": ""}
+{"id": "113.12", "category": "mechanical", "observability": "direct", "record_kinds": ["continuous"], "outcome": "An effect that sets a characteristic or states a quality grants no ability, so the object still counts as having no abilities, while a gained ability counts.", "note": "reclassified from definitional: its Muraganda Petroglyphs example has an observable power/toughness outcome"}

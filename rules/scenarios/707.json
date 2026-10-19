@@ -1,0 +1,2322 @@
+{
+  "unit": "707",
+  "verified": true,
+  "review": [
+    "707.9a-1: the turn passes through B's draw step with both libraries empty, so B would lose; gave A and B two-card libraries.",
+    "707.7-1: Banisher Priest has a single exile-until ability (610.3), not a linked pair, so it did not exercise 707.7; swapped in Fiend Hunter, whose two abilities are linked (607.2a).",
+    "707.9b-1: base expected said Clone 'targets' the Copy Artifact; Clone chooses, it does not target; reworded.",
+    "707.10a-1: had no does_not_fire variant; made countering the copy the base and added a variant countering the original card, which goes to the graveyard, keeping the uncountered case as 'other'.",
+    "707.10g-1: the turn passes through B's draw step with B's library empty, so B would lose; gave B a two-card library.",
+    "707.11-1: once the Shapeshifter became Ambush Viper the ability's damage came from a deathtouch source, so Centaur Courser would die, contradicting the expected; swapped Ambush Viper for the vanilla flash Ashcoat Bear (3/3 with the counter).",
+    "707.14-1: the turn passes to A's draw step with A's library empty, so A would lose; gave A a two-card library.",
+    "707.9c-1: first variant carried a delta instead of being the base; folded its choice into decisions and emptied its delta.",
+    "707.9d-1: first variant carried a delta instead of being the base; folded its choice into decisions and emptied its delta.",
+    "707.9d-2: first variant carried a delta instead of being the base; folded its choice into decisions and emptied its delta.",
+    "707.9e-1: first variant carried a delta instead of being the base; folded its choice into decisions and emptied its delta.",
+    "707.9f-1: first variant carried a delta instead of being the base; folded its choice into decisions and emptied its delta.",
+    "707.9g-1: first variant carried a delta instead of being the base; folded its choice into decisions and emptied its delta.",
+    "707.10-1: first variant carried a delta instead of being the base; folded its choice into decisions and emptied its delta.",
+    "707.10-3: first variant carried a delta instead of being the base; folded its choice into decisions and emptied its delta.",
+    "707.10b-1: first variant carried a delta instead of being the base; folded its choice into decisions and emptied its delta.",
+    "707.10c-1: first variant carried a delta instead of being the base; folded its choice into decisions and emptied its delta.",
+    "707.10e-1: first variant carried a delta instead of being the base; folded its choice into decisions and emptied its delta.",
+    "707.12-1: first variant carried a delta instead of being the base; folded its choice into decisions and emptied its delta.",
+    "707.14-1: first variant carried a delta instead of being the base; folded its choice into decisions and emptied its delta."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "707.2-1",
+      "rules": [
+        "707.2"
+      ],
+      "title": "A copy takes copiable values but not counters or other effects",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            "Island",
+            "Island"
+          ],
+          "B": [
+            "Forest",
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Clone"
+          ],
+          "B": [
+            "Giant Growth"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Grizzly Bears is a plain 2/2 in the base setup."
+      },
+      "decisions": [
+        "A casts Clone, tapping four Islands.",
+        "Both players pass; Clone resolves and A chooses to have it enter as a copy of Grizzly Bears."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Clone enters as a green 2/2 named Grizzly Bears; the original Grizzly Bears is a 2/2."
+        },
+        {
+          "label": "counter",
+          "polarity": "does_not_fire",
+          "delta": "Grizzly Bears has a +1/+1 counter on it before Clone is cast.",
+          "expected": "The original Grizzly Bears is a 3/3 with a +1/+1 counter; the Clone enters as a 2/2 named Grizzly Bears with no counter."
+        },
+        {
+          "label": "giant_growth",
+          "polarity": "does_not_fire",
+          "delta": "In response to Clone, B casts Giant Growth on Grizzly Bears (tapping Forest) and it resolves first.",
+          "expected": "The original Grizzly Bears is a 5/5 until end of turn; the Clone enters as a 2/2 named Grizzly Bears."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Forest",
+        "Clone",
+        "Grizzly Bears",
+        "Giant Growth"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "707.2-2",
+      "rules": [
+        "707.2"
+      ],
+      "title": "A copy of an animated artifact does not copy the type change",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Chimeric Staff",
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Clone"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Chimeric Staff is untapped and not animated at the start."
+      },
+      "decisions": [
+        "A activates Chimeric Staff with X=1, tapping an Island; it resolves and Chimeric Staff is a 1/1 Construct artifact creature until end of turn.",
+        "A casts Clone, tapping four Islands; it resolves and A chooses to have it enter as a copy of Chimeric Staff."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "does_not_fire",
+          "delta": "",
+          "expected": "Clone enters as a noncreature artifact named Chimeric Staff that is not a creature; the original Chimeric Staff is still a 1/1 Construct artifact creature."
+        },
+        {
+          "label": "activate_copy",
+          "polarity": "fires",
+          "delta": "After Clone has entered, A activates the copy's ability with X=1, tapping the sixth Island.",
+          "expected": "The copy has Chimeric Staff's ability and becomes a 1/1 Construct artifact creature until end of turn."
+        }
+      ],
+      "cards": [
+        "Chimeric Staff",
+        "Island",
+        "Clone"
+      ],
+      "forge_notes": "Clone can only choose a creature, so the Staff is animated first; Forge may not offer a noncreature copy target after the animation ends."
+    },
+    {
+      "id": "707.2a-1",
+      "rules": [
+        "707.2a"
+      ],
+      "title": "A copy acquires the original's color and exactly one set of its abilities",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            "Island",
+            "Island"
+          ],
+          "B": [
+            "Wall of Omens",
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Clone"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Island",
+            "Island"
+          ]
+        },
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Clone, tapping four Islands.",
+        "Both players pass; Clone resolves and A chooses to have it enter as a copy of Wall of Omens.",
+        "The copied enters trigger resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Clone is a white 0/4 Wall named Wall of Omens with defender; A drew exactly one card, so A's hand has one card."
+        },
+        {
+          "label": "bears",
+          "polarity": "does_not_fire",
+          "delta": "A chooses Grizzly Bears instead of Wall of Omens.",
+          "expected": "Clone is a green 2/2 named Grizzly Bears without defender; A drew no card."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Clone",
+        "Wall of Omens",
+        "Grizzly Bears"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "707.2b-1",
+      "rules": [
+        "707.2b"
+      ],
+      "title": "Turning the original face up does not change a copy of it",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Mountain",
+            "Mountain",
+            "Mountain"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Gathan Raiders",
+            "Clone",
+            "Mountain"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Gathan Raiders face down for {3}, tapping three Mountains; it resolves as a 2/2 face-down creature.",
+        "A casts Clone, tapping four Islands; it resolves and A chooses to have it enter as a copy of the face-down creature.",
+        "A turns the face-down creature face up by paying its morph cost, discarding the Mountain."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Gathan Raiders is face up as a 5/5 (hellbent, no cards in hand); Clone is still a colorless 2/2 with no name, no types and no abilities."
+        },
+        {
+          "label": "stays_face_down",
+          "polarity": "does_not_fire",
+          "delta": "A does not turn the creature face up.",
+          "expected": "Gathan Raiders is a face-down 2/2 and Clone is a colorless 2/2 with no name; A keeps the Mountain in hand."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Mountain",
+        "Gathan Raiders",
+        "Clone"
+      ],
+      "forge_notes": "Forge's Clone may or may not keep the face-down characteristics; 707.2 gives a copy of a face-down permanent the face-down values."
+    },
+    {
+      "id": "707.2c-1",
+      "rules": [
+        "707.2c"
+      ],
+      "title": "A static copy effect fixes its copiable values when it first applies",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Runeclaw Bear"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Gathan Raiders",
+            "Metamorphic Alteration",
+            "Mountain"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Gathan Raiders face down for {3}, tapping three Mountains; it resolves as a 2/2 face-down creature.",
+        "A casts Metamorphic Alteration, tapping two Islands, enchanting Runeclaw Bear; as it enters A chooses the face-down creature.",
+        "A turns the face-down creature face up by paying its morph cost, discarding the Mountain."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Gathan Raiders is a face-up 5/5 (hellbent); the enchanted creature is still a colorless 2/2 with no name."
+        },
+        {
+          "label": "stays_face_down",
+          "polarity": "does_not_fire",
+          "delta": "A does not turn the creature face up.",
+          "expected": "Gathan Raiders is a face-down 2/2 and the enchanted creature is a colorless 2/2 with no name; A keeps the Mountain in hand."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Mountain",
+        "Runeclaw Bear",
+        "Gathan Raiders",
+        "Metamorphic Alteration"
+      ],
+      "forge_notes": "Metamorphic Alteration is the static copy effect; choosing a face-down creature depends on Forge's ChooseCard accepting it."
+    },
+    {
+      "id": "707.3-1",
+      "rules": [
+        "707.3"
+      ],
+      "title": "A copy of a copy takes the first copy's copiable values",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island"
+          ],
+          "B": [
+            "Runeclaw Bear"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Vesuvan Doppelganger",
+            "Clone"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Vesuvan Doppelganger, tapping five Islands; as it enters A chooses to copy Runeclaw Bear.",
+        "A casts Clone, tapping four Islands; as it enters A chooses to copy the Vesuvan Doppelganger (a copy of Runeclaw Bear)."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Clone is a blue 2/2 Bear named Runeclaw Bear that has Vesuvan Doppelganger's upkeep ability."
+        },
+        {
+          "label": "direct",
+          "polarity": "does_not_fire",
+          "delta": "A has Clone copy B's Runeclaw Bear instead of the Doppelganger.",
+          "expected": "Clone is a green 2/2 Bear named Runeclaw Bear with no abilities."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Runeclaw Bear",
+        "Vesuvan Doppelganger",
+        "Clone"
+      ],
+      "forge_notes": "The face-down-becomes-a-copy part of 707.3 is not exercised here."
+    },
+    {
+      "id": "707.9a-1",
+      "rules": [
+        "707.9a"
+      ],
+      "title": "An ability a copy effect grants is copied by a later copy",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island"
+          ],
+          "B": [
+            "Runeclaw Bear"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Vesuvan Doppelganger",
+            "Clone"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Island",
+            "Island"
+          ],
+          "B": [
+            "Forest",
+            "Forest"
+          ]
+        },
+        "exile": {},
+        "notes": "Both libraries hold cards so neither player loses to an empty-library draw while the turn passes."
+      },
+      "decisions": [
+        "A casts Vesuvan Doppelganger, tapping five Islands; as it enters A chooses to copy Runeclaw Bear.",
+        "A casts Clone, tapping four Islands; as it enters A chooses to copy the Vesuvan Doppelganger.",
+        "The turn passes to B and back to A with no further actions.",
+        "In A's upkeep each upkeep trigger on the stack resolves and A declines to become a copy."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Two upkeep triggers are put on the stack, one from the Doppelganger and one from the Clone."
+        },
+        {
+          "label": "direct",
+          "polarity": "does_not_fire",
+          "delta": "A had Clone copy B's Runeclaw Bear instead of the Doppelganger.",
+          "expected": "One upkeep trigger is put on the stack, from the Doppelganger only; the Clone has no abilities."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Runeclaw Bear",
+        "Vesuvan Doppelganger",
+        "Clone",
+        "Forest"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "707.4-1",
+      "rules": [
+        "707.4"
+      ],
+      "title": "Becoming a copy while on the battlefield triggers no enters ability and keeps other effects",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Unstable Shapeshifter",
+            "Forest",
+            "Plains",
+            "Plains"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Wall of Omens",
+            "Giant Growth"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Island",
+            "Island"
+          ]
+        },
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Giant Growth on Unstable Shapeshifter, tapping Forest; it resolves.",
+        "A casts Wall of Omens, tapping two Plains; it resolves.",
+        "Wall of Omens' enters trigger and Unstable Shapeshifter's trigger both resolve; the Shapeshifter becomes a copy of Wall of Omens."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Unstable Shapeshifter is a 3/7 Wall named Wall of Omens (0/4 plus 3/3 from Giant Growth); A drew exactly one card, from the real Wall."
+        },
+        {
+          "label": "no_growth",
+          "polarity": "does_not_fire",
+          "delta": "A does not cast Giant Growth.",
+          "expected": "Unstable Shapeshifter is a 0/4 Wall named Wall of Omens; A drew exactly one card."
+        }
+      ],
+      "cards": [
+        "Unstable Shapeshifter",
+        "Forest",
+        "Plains",
+        "Wall of Omens",
+        "Giant Growth",
+        "Island"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "707.5-1",
+      "rules": [
+        "707.5"
+      ],
+      "title": "A permanent entering as a copy applies the copied enters replacement effects",
+      "record_kind": "rewrite",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            "Island",
+            "Island"
+          ],
+          "B": [
+            {
+              "card": "Skyshroud Behemoth",
+              "tapped": true,
+              "counters": {
+                "fade": 2
+              }
+            },
+            "Runeclaw Bear"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Clone"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Clone, tapping four Islands.",
+        "Both players pass; Clone resolves and A chooses to have it enter as a copy of Skyshroud Behemoth."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Clone enters as a 10/10 Skyshroud Behemoth that is tapped and has two fade counters."
+        },
+        {
+          "label": "bear",
+          "polarity": "does_not_fire",
+          "delta": "A chooses Runeclaw Bear instead.",
+          "expected": "Clone enters as an untapped 2/2 Runeclaw Bear with no counters."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Skyshroud Behemoth",
+        "Runeclaw Bear",
+        "Clone"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "707.5-2",
+      "rules": [
+        "707.5"
+      ],
+      "title": "A permanent entering as a copy triggers the copied enters ability",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            "Island",
+            "Island"
+          ],
+          "B": [
+            "Wall of Omens",
+            "Runeclaw Bear"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Clone"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Island",
+            "Island"
+          ]
+        },
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Clone, tapping four Islands.",
+        "Both players pass; Clone resolves and A chooses to have it enter as a copy of Wall of Omens.",
+        "Both players pass; the enters trigger resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Clone's copied enters trigger fires and A draws one card; A's hand has one card."
+        },
+        {
+          "label": "bear",
+          "polarity": "does_not_fire",
+          "delta": "A chooses Runeclaw Bear instead.",
+          "expected": "No enters trigger fires; A's hand is empty."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Wall of Omens",
+        "Runeclaw Bear",
+        "Clone"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "707.6-1",
+      "rules": [
+        "707.6"
+      ],
+      "title": "A copy makes its own as-enters choice",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Runeclaw Bear",
+            "Raging Goblin"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Adaptive Automaton",
+            "Clone"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Adaptive Automaton, tapping three Islands; as it enters A chooses Bear.",
+        "A casts Clone, tapping four Islands; as it enters A chooses to copy Adaptive Automaton and chooses Goblin."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Runeclaw Bear is a 3/3 (pumped by the Automaton only), Raging Goblin is a 2/2 (pumped by the Clone only), the Automaton is a 2/2 and the Clone is a 2/2."
+        },
+        {
+          "label": "same_choice",
+          "polarity": "does_not_fire",
+          "delta": "A chooses Bear for the Clone instead of Goblin.",
+          "expected": "Runeclaw Bear is a 4/4, Raging Goblin is a 1/1, the Automaton is a 3/3 and the Clone is a 3/3."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Runeclaw Bear",
+        "Raging Goblin",
+        "Adaptive Automaton",
+        "Clone"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "707.7-1",
+      "rules": [
+        "707.7"
+      ],
+      "title": "Copied linked abilities are linked only to each other on the copy",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Island"
+          ],
+          "B": [
+            "Mountain",
+            "Grizzly Bears",
+            "Centaur Courser"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Banisher Priest",
+            "Clone"
+          ],
+          "B": [
+            "Lightning Bolt"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Fiend Hunter, tapping three Plains; its enters trigger targets Grizzly Bears and A chooses to exile it.",
+        "A casts Clone, tapping Island and three Plains; as it enters A chooses to copy Fiend Hunter, and its copied enters trigger targets Centaur Courser and A chooses to exile it.",
+        "B casts Lightning Bolt, tapping Mountain, targeting the permanent named in the variant; it resolves and the leaves-the-battlefield trigger resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "B targets the original Fiend Hunter: it dies, Grizzly Bears returns to the battlefield, and Centaur Courser stays in exile."
+        },
+        {
+          "label": "clone_dies",
+          "polarity": "does_not_fire",
+          "delta": "B targets the Clone instead.",
+          "expected": "The Clone (a 1/3 Fiend Hunter) dies, Centaur Courser returns to the battlefield, and Grizzly Bears stays in exile."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Island",
+        "Mountain",
+        "Grizzly Bears",
+        "Centaur Courser",
+        "Fiend Hunter",
+        "Clone",
+        "Lightning Bolt"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "707.8-1",
+      "rules": [
+        "707.8"
+      ],
+      "title": "A copy uses the face that is up",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "upkeep",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Delver of Secrets",
+            "Island",
+            "Island",
+            "Island",
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Clone"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Lightning Bolt",
+            "Island"
+          ]
+        },
+        "exile": {},
+        "notes": "The first library card is the top card."
+      },
+      "decisions": [
+        "In A's upkeep Delver of Secrets' trigger resolves; A looks at the top card and reveals it if it is an instant or sorcery.",
+        "After the draw step, in main phase 1 A casts Clone, tapping four Islands, and chooses to have it enter as a copy of Delver of Secrets."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The top card Lightning Bolt is revealed and Delver transforms; Clone enters as a blue 3/2 flying Human Insect named Insectile Aberration."
+        },
+        {
+          "label": "no_flip",
+          "polarity": "does_not_fire",
+          "delta": "The top card of A's library is an Island.",
+          "expected": "Delver stays front face up; Clone enters as a blue 1/1 Human Wizard named Delver of Secrets."
+        }
+      ],
+      "cards": [
+        "Delver of Secrets",
+        "Island",
+        "Clone",
+        "Lightning Bolt"
+      ],
+      "forge_notes": "The Island variant replaces the top library card Lightning Bolt with Island."
+    },
+    {
+      "id": "707.8a-1",
+      "rules": [
+        "707.8a"
+      ],
+      "title": "A token copy of a double-faced permanent has both faces and keeps the face up",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "upkeep",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Delver of Secrets",
+            "Island",
+            "Island",
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Cackling Counterpart"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Lightning Bolt",
+            "Island"
+          ]
+        },
+        "exile": {},
+        "notes": "The first library card is the top card."
+      },
+      "decisions": [
+        "In A's upkeep Delver of Secrets' trigger resolves; A looks at the top card and reveals it if it is an instant or sorcery.",
+        "After the draw step, in main phase 1 A casts Cackling Counterpart, tapping three Islands, targeting Delver of Secrets; it resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Delver is transformed; the token enters back face up as a blue 3/2 flying Insectile Aberration, and it is a double-faced token whose other face is Delver of Secrets."
+        },
+        {
+          "label": "front_up",
+          "polarity": "does_not_fire",
+          "delta": "The top card of A's library is an Island, so Delver stays front face up.",
+          "expected": "The token enters front face up as a blue 1/1 Delver of Secrets, and it is a double-faced token whose other face is Insectile Aberration."
+        }
+      ],
+      "cards": [
+        "Delver of Secrets",
+        "Island",
+        "Cackling Counterpart",
+        "Lightning Bolt"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "707.9b-1",
+      "rules": [
+        "707.9b"
+      ],
+      "title": "A characteristic modified by a copy effect stays in the copiable values",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Juggernaut",
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Copy Artifact",
+            "Clone"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Copy Artifact, tapping two Islands; as it enters A chooses to copy Juggernaut; it is an enchantment in addition to its other types.",
+        "A casts Clone, tapping four Islands; as it enters A chooses the permanent named in the variant."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Clone copies the Copy Artifact: Clone is a 5/3 Juggernaut that is an artifact, creature and enchantment."
+        },
+        {
+          "label": "original",
+          "polarity": "does_not_fire",
+          "delta": "A has Clone copy the original Juggernaut.",
+          "expected": "Clone is a 5/3 Juggernaut that is an artifact and a creature, not an enchantment."
+        }
+      ],
+      "cards": [
+        "Juggernaut",
+        "Island",
+        "Copy Artifact",
+        "Clone"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "707.9c-1",
+      "rules": [
+        "707.9c"
+      ],
+      "title": "A characteristic a copy effect does not copy keeps its original value",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island"
+          ],
+          "B": [
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Vesuvan Doppelganger",
+            "Clone"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Vesuvan Doppelganger, tapping five Islands.",
+        "It resolves and A chooses to have it enter as a copy of Grizzly Bears."
+      ],
+      "variants": [
+        {
+          "label": "doppelganger",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The Doppelganger is a blue 2/2 Bear named Grizzly Bears; its color was not copied."
+        },
+        {
+          "label": "clone",
+          "polarity": "does_not_fire",
+          "delta": "A casts Clone (tapping four Islands) instead of Vesuvan Doppelganger.",
+          "expected": "Clone is a green 2/2 named Grizzly Bears; its color was copied."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Grizzly Bears",
+        "Vesuvan Doppelganger",
+        "Clone"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "707.9d-1",
+      "rules": [
+        "707.9d"
+      ],
+      "title": "A copy that sets power and toughness does not copy the characteristic-defining ability",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Tarmogoyf",
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Quicksilver Gargantuan",
+            "Clone"
+          ]
+        },
+        "graveyard": {
+          "A": [
+            "Lightning Bolt",
+            "Runeclaw Bear"
+          ]
+        },
+        "library": {},
+        "exile": {},
+        "notes": "Tarmogoyf is a 2/3 (instant and creature in graveyards)."
+      },
+      "decisions": [
+        "A casts Quicksilver Gargantuan, tapping seven Islands.",
+        "It resolves and A chooses to have it enter as a copy of Tarmogoyf."
+      ],
+      "variants": [
+        {
+          "label": "gargantuan",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The Gargantuan is a 7/7 Lhurgoyf named Tarmogoyf without the characteristic-defining ability, so it stays 7/7."
+        },
+        {
+          "label": "clone",
+          "polarity": "does_not_fire",
+          "delta": "A casts Clone (tapping four Islands) instead of Quicksilver Gargantuan.",
+          "expected": "Clone is a Tarmogoyf with the characteristic-defining ability and is a 2/3 (instant and creature in graveyards)."
+        }
+      ],
+      "cards": [
+        "Tarmogoyf",
+        "Island",
+        "Lightning Bolt",
+        "Runeclaw Bear",
+        "Quicksilver Gargantuan",
+        "Clone"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "707.9d-2",
+      "rules": [
+        "707.9d"
+      ],
+      "title": "An in-addition type exception still copies a characteristic-defining type ability",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Goblin King",
+            "Changeling Outcast",
+            "Wandering Ones",
+            "Island",
+            "Island",
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Glasspool Mimic"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Glasspool Mimic, tapping three Islands.",
+        "It resolves and A chooses to have it enter as a copy of Changeling Outcast."
+      ],
+      "variants": [
+        {
+          "label": "outcast",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The Mimic has changeling and every creature type, so Goblin King gives it +1/+1: it is a 2/2."
+        },
+        {
+          "label": "spirit",
+          "polarity": "does_not_fire",
+          "delta": "A chooses Wandering Ones instead of Changeling Outcast.",
+          "expected": "The Mimic is a Spirit, Shapeshifter and Rogue only, receives no bonus and is a 1/1."
+        }
+      ],
+      "cards": [
+        "Goblin King",
+        "Changeling Outcast",
+        "Wandering Ones",
+        "Island",
+        "Glasspool Mimic"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "707.9e-1",
+      "rules": [
+        "707.9e"
+      ],
+      "title": "A copy effect's additional-effect exception is lost if another copy effect applies",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Glorious Anthem",
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Forest"
+          ],
+          "B": [
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Clone",
+            "Altered Ego"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Glorious Anthem keeps an uncopied 0/0 Clone alive as a 1/1."
+      },
+      "decisions": [
+        "A casts Clone, tapping four Islands; it resolves and A chooses not to copy anything, so it enters as a 1/1 with the anthem.",
+        "A casts Altered Ego with X=2, tapping five Islands and Forest; as it enters A chooses to copy the Clone, then applies the replacement effect gained from Clone and chooses Grizzly Bears."
+      ],
+      "variants": [
+        {
+          "label": "via_clone",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Altered Ego is a Grizzly Bears 3/3 (2/2 plus anthem) with no +1/+1 counters."
+        },
+        {
+          "label": "direct",
+          "polarity": "does_not_fire",
+          "delta": "Altered Ego enters as a copy of Grizzly Bears directly instead of the Clone.",
+          "expected": "Altered Ego enters with two +1/+1 counters and is a 5/5."
+        }
+      ],
+      "cards": [
+        "Glorious Anthem",
+        "Island",
+        "Forest",
+        "Grizzly Bears",
+        "Clone",
+        "Altered Ego"
+      ],
+      "forge_notes": "Forge may not model applying a second copy effect to a copy of Clone; the Clone card is the unusual part."
+    },
+    {
+      "id": "707.9f-1",
+      "rules": [
+        "707.9f"
+      ],
+      "title": "A conditional copy exception applies only if the result has the stated characteristic",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mutavault",
+            "Grizzly Bears",
+            "Island",
+            "Island",
+            "Island",
+            "Forest",
+            "Forest",
+            "Forest"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Moritte of the Frost"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A pays {1} with a Forest to animate Mutavault; it is a 2/2 creature until end of turn.",
+        "A casts Moritte of the Frost, tapping three Islands and two Forests.",
+        "It resolves and A chooses to have it enter as a copy of the animated Mutavault."
+      ],
+      "variants": [
+        {
+          "label": "mutavault",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Moritte enters as a legendary snow land named Mutavault that is not a creature: no +1/+1 counters and no changeling."
+        },
+        {
+          "label": "bears",
+          "polarity": "does_not_fire",
+          "delta": "A chooses Grizzly Bears instead of Mutavault.",
+          "expected": "Moritte enters as a legendary snow Bear creature with two +1/+1 counters and changeling: a 4/4."
+        }
+      ],
+      "cards": [
+        "Mutavault",
+        "Grizzly Bears",
+        "Island",
+        "Forest",
+        "Moritte of the Frost"
+      ],
+      "forge_notes": "Forge checks the creature condition on the entering card, which may differ for a copied animated land."
+    },
+    {
+      "id": "707.9g-1",
+      "rules": [
+        "707.9g"
+      ],
+      "title": "A triggered ability linked to a copy-effect replacement does not trigger after a second copy effect",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            "Swamp",
+            "Swamp"
+          ],
+          "B": [
+            "Hill Giant"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Superior Spider-Man"
+          ]
+        },
+        "graveyard": {
+          "A": [
+            "Clone",
+            "Grizzly Bears"
+          ]
+        },
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Superior Spider-Man, tapping four lands.",
+        "It resolves and A chooses to have it enter as a copy of the Clone card in A's graveyard, then applies the replacement effect gained from Clone and chooses Hill Giant."
+      ],
+      "variants": [
+        {
+          "label": "via_clone",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Spider-Man ends as a 3/3 Hill Giant and the linked exile trigger does not trigger: Clone stays in A's graveyard."
+        },
+        {
+          "label": "bears_card",
+          "polarity": "does_not_fire",
+          "delta": "A chooses the Grizzly Bears card instead of the Clone card (no second copy effect).",
+          "expected": "Spider-Man enters as a 4/4 named Superior Spider-Man and the linked trigger exiles Grizzly Bears from A's graveyard."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Swamp",
+        "Hill Giant",
+        "Superior Spider-Man",
+        "Clone",
+        "Grizzly Bears"
+      ],
+      "forge_notes": "Forge's Spider-Man script may exile the Clone card regardless."
+    },
+    {
+      "id": "707.10-1",
+      "rules": [
+        "707.10"
+      ],
+      "title": "A spell copy keeps the objects used to pay the original's costs",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Grizzly Bears",
+            "Craw Wurm"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Fling",
+            "Reverberate"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Fling, sacrificing Grizzly Bears and tapping two Mountains, targeting B.",
+        "With Fling on the stack A casts Reverberate, tapping two Mountains, targeting Fling.",
+        "Reverberate resolves; A keeps the same target for the copy; the copy and Fling resolve."
+      ],
+      "variants": [
+        {
+          "label": "bears",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The copy of Fling deals 2 damage and Fling deals 2 damage: B is at 16."
+        },
+        {
+          "label": "wurm",
+          "polarity": "fires",
+          "delta": "A sacrifices Craw Wurm (power 6) instead of Grizzly Bears.",
+          "expected": "The copy deals 6 and Fling deals 6: B is at 8."
+        },
+        {
+          "label": "no_copy",
+          "polarity": "does_not_fire",
+          "delta": "A does not cast Reverberate.",
+          "expected": "Only Fling deals 2 damage: B is at 18."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Grizzly Bears",
+        "Craw Wurm",
+        "Fling",
+        "Reverberate"
+      ],
+      "forge_notes": "Both creatures are on the battlefield in the setup; the variant picks which is sacrificed."
+    },
+    {
+      "id": "707.10-2",
+      "rules": [
+        "707.10"
+      ],
+      "title": "A copy of a spell does not carry the mana spent on the original",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Forest",
+            "Island",
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Dawnglow Infusion",
+            "Twincast"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Dawnglow Infusion with X=1, paying X with Plains and the hybrid cost with Forest, so {W} and {G} were spent.",
+        "In the variant with Twincast, A casts it with two Islands targeting Dawnglow Infusion; the copy resolves first.",
+        "Dawnglow Infusion resolves."
+      ],
+      "variants": [
+        {
+          "label": "no_copy",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "A gains 2 life (1 for {G}, 1 for {W}): A is at 22."
+        },
+        {
+          "label": "copy",
+          "polarity": "does_not_fire",
+          "delta": "A casts Twincast to copy Dawnglow Infusion.",
+          "expected": "The copy gains A no life because no mana was spent on it; the original gains 2: A is at 22."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Forest",
+        "Island",
+        "Dawnglow Infusion",
+        "Twincast"
+      ],
+      "forge_notes": "Forge may count the original's spent mana for the copy."
+    },
+    {
+      "id": "707.10-3",
+      "rules": [
+        "707.10"
+      ],
+      "title": "A copy of a spell is a spell but is not cast",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Young Pyromancer"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Shock",
+            "Shock",
+            "Dualcaster Mage"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Shock targeting B, tapping a Mountain; Young Pyromancer's trigger resolves.",
+        "With Shock on the stack A casts Dualcaster Mage (flash), tapping three Mountains; its enters trigger copies Shock, keeping the target B.",
+        "All objects on the stack resolve."
+      ],
+      "variants": [
+        {
+          "label": "dualcaster",
+          "polarity": "does_not_fire",
+          "delta": "",
+          "expected": "Young Pyromancer triggered once only (for the cast Shock): A has one Elemental token; B took 2 from Shock and 2 from the copy and is at 16."
+        },
+        {
+          "label": "second_shock",
+          "polarity": "fires",
+          "delta": "A casts a second Shock targeting B (tapping a Mountain) instead of Dualcaster Mage.",
+          "expected": "Young Pyromancer triggered for both casts: A has two Elemental tokens; B is at 16."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Young Pyromancer",
+        "Shock",
+        "Dualcaster Mage"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "707.10a-1",
+      "rules": [
+        "707.10a"
+      ],
+      "title": "A copy of a spell ceases to exist outside the stack",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Mountain"
+          ],
+          "B": [
+            "Island",
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Shock",
+            "Reverberate"
+          ],
+          "B": [
+            "Counterspell"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Shock targeting B, tapping a Mountain.",
+        "A casts Reverberate targeting Shock, tapping two Mountains; it resolves and creates a copy of Shock with the same target.",
+        "B casts Counterspell targeting the copy of Shock, tapping two Islands.",
+        "All objects on the stack resolve."
+      ],
+      "variants": [
+        {
+          "label": "counter_copy",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The copy of Shock is countered and ceases to exist without moving to a graveyard; Shock deals 2 damage: B is at 18. A's graveyard holds Shock and Reverberate only; B's holds Counterspell."
+        },
+        {
+          "label": "counter_original",
+          "polarity": "does_not_fire",
+          "delta": "B's Counterspell targets the original Shock instead of the copy.",
+          "expected": "The Shock card is countered and moves to A's graveyard; the copy resolves, deals 2 damage and ceases to exist: B is at 18. A's graveyard holds Shock and Reverberate; B's holds Counterspell."
+        },
+        {
+          "label": "no_counter",
+          "polarity": "other",
+          "delta": "B does not cast Counterspell.",
+          "expected": "The copy resolves for 2 damage and ceases to exist; Shock deals 2: B is at 16. A's graveyard holds Shock and Reverberate only."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Island",
+        "Shock",
+        "Reverberate",
+        "Counterspell"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "707.10b-1",
+      "rules": [
+        "707.10b"
+      ],
+      "title": "A copy of an ability has the same source as the original",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Olivia Voldaren",
+            "Rings of Brighthearth"
+          ],
+          "B": [
+            "Centaur Courser"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A activates Olivia Voldaren's first ability targeting Centaur Courser, tapping two Mountains.",
+        "Rings of Brighthearth triggers; A pays {2} with the other two Mountains and keeps the target for the copy.",
+        "All objects on the stack resolve."
+      ],
+      "variants": [
+        {
+          "label": "pay",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Centaur Courser has 2 damage marked and is a Vampire; both resolutions put their +1/+1 counter on Olivia Voldaren herself: she has two counters and is a 5/5."
+        },
+        {
+          "label": "decline",
+          "polarity": "does_not_fire",
+          "delta": "A declines to pay {2} for Rings of Brighthearth.",
+          "expected": "Centaur Courser has 1 damage marked and is a Vampire; Olivia has one counter and is a 4/4."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Olivia Voldaren",
+        "Rings of Brighthearth",
+        "Centaur Courser"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "707.10c-1",
+      "rules": [
+        "707.10c"
+      ],
+      "title": "A copy may keep an illegal target but new targets must be legal",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Mountain"
+          ],
+          "B": [
+            "Plains",
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Shock",
+            "Reverberate"
+          ],
+          "B": [
+            "Gods Willing"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Shock targeting Grizzly Bears, tapping a Mountain.",
+        "B casts Gods Willing targeting Grizzly Bears, tapping Plains, choosing protection from red; it resolves, making Shock's target illegal.",
+        "A casts Reverberate targeting Shock, tapping two Mountains; it resolves and A leaves the copy's target unchanged.",
+        "All objects on the stack resolve."
+      ],
+      "variants": [
+        {
+          "label": "keep",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The copy is put on the stack targeting the illegal Grizzly Bears and fizzles; Shock fizzles; Grizzly Bears has no damage; B is at 20."
+        },
+        {
+          "label": "retarget",
+          "polarity": "does_not_fire",
+          "delta": "A changes the copy's target to B (a legal target) instead of leaving it unchanged.",
+          "expected": "The copy deals 2 damage to B: B is at 18; Shock fizzles; Grizzly Bears has no damage."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Plains",
+        "Grizzly Bears",
+        "Shock",
+        "Reverberate",
+        "Gods Willing"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "707.10d-1",
+      "rules": [
+        "707.10d"
+      ],
+      "title": "A copy is made for each permanent or player the spell could target",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain"
+          ],
+          "B": [
+            "Grizzly Bears",
+            "Abbey Gargoyles"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Shock",
+            "Radiate"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Shock targeting Grizzly Bears, tapping a Mountain.",
+        "A casts Radiate targeting Shock, tapping five Mountains; it resolves, putting a copy of Shock on the stack for each other permanent or player Shock could target, each targeting a different one.",
+        "All copies and Shock resolve."
+      ],
+      "variants": [
+        {
+          "label": "gargoyles",
+          "polarity": "does_not_fire",
+          "delta": "",
+          "expected": "B's battlefield is Grizzly Bears and Abbey Gargoyles. Copies target A and B only, not the protected Abbey Gargoyles: A is at 18, B is at 18, Grizzly Bears is dead and Abbey Gargoyles has no damage."
+        },
+        {
+          "label": "hill_giant",
+          "polarity": "fires",
+          "delta": "Hill Giant replaces Abbey Gargoyles on B's battlefield.",
+          "expected": "A copy also targets Hill Giant: it has 2 damage marked; A is at 18, B is at 18, Grizzly Bears is dead."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Grizzly Bears",
+        "Abbey Gargoyles",
+        "Hill Giant",
+        "Shock",
+        "Radiate"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "707.10e-1",
+      "rules": [
+        "707.10e"
+      ],
+      "title": "A copy with a specified new target is made only if that target is legal",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Frontline Heroism",
+            "Forest",
+            "Mountain",
+            "Mountain",
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Giant Growth",
+            "Unexpected Allies"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Giant Growth targeting Grizzly Bears, tapping Forest.",
+        "Frontline Heroism triggers, creating a 1/1 Soldier token and then trying to copy the spell with the copy targeting that token.",
+        "All objects on the stack resolve."
+      ],
+      "variants": [
+        {
+          "label": "giant_growth",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The copy is created targeting the Soldier token: the token is a 4/4 and Grizzly Bears is a 5/5 until end of turn."
+        },
+        {
+          "label": "unexpected_allies",
+          "polarity": "does_not_fire",
+          "delta": "A casts Unexpected Allies (nontoken creature only), tapping two Mountains, instead of Giant Growth.",
+          "expected": "The token is not a legal target, so no copy is created: the token is a 1/1 and Grizzly Bears is a 4/2 with double team until end of turn."
+        }
+      ],
+      "cards": [
+        "Frontline Heroism",
+        "Forest",
+        "Mountain",
+        "Grizzly Bears",
+        "Giant Growth",
+        "Unexpected Allies"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "707.10f-1",
+      "rules": [
+        "707.10f"
+      ],
+      "title": "A copy of a permanent spell becomes a token as it resolves",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Lithoform Engine",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest"
+          ],
+          "B": [
+            "Island",
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Grizzly Bears"
+          ],
+          "B": [
+            "Counterspell"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Grizzly Bears, tapping two Forests.",
+        "With it on the stack A activates Lithoform Engine's third ability ({4}, {T}) targeting Grizzly Bears, tapping four Forests; the copy goes on the stack.",
+        "If the variant says so, B casts Counterspell targeting the copy, tapping two Islands.",
+        "All objects on the stack resolve."
+      ],
+      "variants": [
+        {
+          "label": "resolves",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "A controls a Grizzly Bears card and a Grizzly Bears token."
+        },
+        {
+          "label": "copy_countered",
+          "polarity": "does_not_fire",
+          "delta": "B counters the copy with Counterspell.",
+          "expected": "A controls only the Grizzly Bears card; no token exists and the copy is not in any graveyard."
+        }
+      ],
+      "cards": [
+        "Lithoform Engine",
+        "Forest",
+        "Island",
+        "Grizzly Bears",
+        "Counterspell"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "707.10g-1",
+      "rules": [
+        "707.10g"
+      ],
+      "title": "A copy of a double-faced permanent spell becomes a double-faced token",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Lithoform Engine",
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Delver of Secrets"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Lightning Bolt",
+            "Island"
+          ],
+          "B": [
+            "Forest",
+            "Forest"
+          ]
+        },
+        "exile": {},
+        "notes": "The first library card is the top card. B's library holds cards so B does not lose in its draw step."
+      },
+      "decisions": [
+        "A casts Delver of Secrets, tapping an Island.",
+        "With it on the stack A activates Lithoform Engine's third ability ({4}, {T}) targeting Delver, tapping four Islands; the copy goes on the stack.",
+        "All objects on the stack resolve; both are 1/1 Delvers.",
+        "The turn passes to B and back to A; in A's upkeep both Delver of Secrets triggers resolve and A reveals the top card."
+      ],
+      "variants": [
+        {
+          "label": "flips",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Both Delvers transform; the token is a double-faced token and becomes a blue 3/2 flying Insectile Aberration, as does the card."
+        },
+        {
+          "label": "land_on_top",
+          "polarity": "does_not_fire",
+          "delta": "The top card of A's library is an Island.",
+          "expected": "Nothing transforms; the token and the card are both 1/1 Delver of Secrets."
+        }
+      ],
+      "cards": [
+        "Lithoform Engine",
+        "Island",
+        "Delver of Secrets",
+        "Lightning Bolt",
+        "Forest"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "707.11-1",
+      "rules": [
+        "707.11"
+      ],
+      "title": "An effect that refers to a permanent by name still tracks it after it changes",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "B",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Unstable Shapeshifter",
+            "Mountain",
+            "Mountain",
+            "Forest",
+            "Forest"
+          ],
+          "B": [
+            "Mountain",
+            "Mountain",
+            "Swamp",
+            "Swamp",
+            "Centaur Courser"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Ambush Viper"
+          ],
+          "B": [
+            "Olivia Voldaren"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "B casts Olivia Voldaren, tapping four lands; Unstable Shapeshifter triggers and becomes a copy of Olivia Voldaren. B passes priority.",
+        "A activates the copied ability ({1}{R}) targeting Centaur Courser, tapping two Mountains.",
+        "In the base variant A then casts Ashcoat Bear (flash) in response, tapping two Forests; it resolves and the Shapeshifter's trigger turns it into a copy of Ashcoat Bear.",
+        "The activated ability resolves."
+      ],
+      "variants": [
+        {
+          "label": "changes_again",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Centaur Courser has 1 damage marked and is a Vampire; the +1/+1 counter lands on the same permanent, now a 3/3 Ashcoat Bear."
+        },
+        {
+          "label": "stays_olivia",
+          "polarity": "does_not_fire",
+          "delta": "A does not cast Ashcoat Bear.",
+          "expected": "Centaur Courser has 1 damage marked and is a Vampire; the permanent is still a copy of Olivia Voldaren and is a 4/4 with a +1/+1 counter."
+        }
+      ],
+      "cards": [
+        "Unstable Shapeshifter",
+        "Mountain",
+        "Forest",
+        "Swamp",
+        "Centaur Courser",
+        "Ashcoat Bear",
+        "Olivia Voldaren"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "707.12-1",
+      "rules": [
+        "707.12",
+        "707.13",
+        "707.10a"
+      ],
+      "title": "A copy created by name is cast, can be countered, and ceases to exist afterwards",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Garth One-Eye",
+              "summoning_sick": false
+            },
+            "Plains",
+            "Plains"
+          ],
+          "B": [
+            "Juggernaut",
+            "Island",
+            "Island"
+          ]
+        },
+        "hand": {
+          "B": [
+            "Counterspell"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "No Disenchant is in any of A's zones."
+      },
+      "decisions": [
+        "A activates Garth One-Eye ({T}) and chooses the name Disenchant; the copy is created from the Oracle characteristics.",
+        "A casts the copy targeting Juggernaut, tapping two Plains.",
+        "All objects on the stack resolve."
+      ],
+      "variants": [
+        {
+          "label": "cast",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The copy resolves and Juggernaut is destroyed and goes to B's graveyard; the copy ceases to exist and A's graveyard is empty."
+        },
+        {
+          "label": "decline",
+          "polarity": "does_not_fire",
+          "delta": "A does not cast the copy.",
+          "expected": "Juggernaut stays on the battlefield; the copy ceases to exist; A's Plains stay untapped."
+        },
+        {
+          "label": "countered",
+          "polarity": "other",
+          "delta": "B casts Counterspell targeting the copy, tapping two Islands.",
+          "expected": "The copy is countered and ceases to exist instead of going to a graveyard; Juggernaut stays on the battlefield."
+        }
+      ],
+      "cards": [
+        "Garth One-Eye",
+        "Plains",
+        "Juggernaut",
+        "Island",
+        "Counterspell",
+        "Disenchant"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "707.14-1",
+      "rules": [
+        "707.14"
+      ],
+      "title": "A copy of a noted card uses its characteristics as in the graveyard",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "B",
+        "step": "end",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Magar of the Magic Strings",
+            "Mountain",
+            "Mountain",
+            "Swamp"
+          ],
+          "B": [
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {},
+        "graveyard": {
+          "A": [
+            "Lightning Bolt"
+          ]
+        },
+        "library": {
+          "A": [
+            "Mountain",
+            "Mountain"
+          ]
+        },
+        "exile": {},
+        "notes": "A's library holds cards so A does not lose in its draw step."
+      },
+      "decisions": [
+        "In B's end step A activates Magar's ability ({1}{B}{R}) targeting Lightning Bolt in A's graveyard; it resolves and Lightning Bolt enters face down as a 3/3 creature.",
+        "The turn passes to A; A attacks B with the face-down creature.",
+        "B declares no blockers; combat damage is dealt.",
+        "If the face-down creature dealt combat damage to B, its trigger resolves and A creates a copy of Lightning Bolt, casting it without paying its mana cost, targeting B."
+      ],
+      "variants": [
+        {
+          "label": "unblocked",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The creature deals 3 combat damage and the copy of Lightning Bolt deals 3 more: B is at 14."
+        },
+        {
+          "label": "blocked",
+          "polarity": "does_not_fire",
+          "delta": "B blocks with Grizzly Bears instead of declaring no blockers.",
+          "expected": "No combat damage reaches B so nothing triggers: B is at 20; Grizzly Bears dies and the face-down creature survives with 2 damage."
+        }
+      ],
+      "cards": [
+        "Magar of the Magic Strings",
+        "Mountain",
+        "Swamp",
+        "Grizzly Bears",
+        "Lightning Bolt"
+      ],
+      "forge_notes": "The setup starts in B's end step; the Magar activation is the first decision."
+    }
+  ]
+}

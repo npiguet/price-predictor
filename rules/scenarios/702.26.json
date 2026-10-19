@@ -1,0 +1,729 @@
+{
+  "unit": "702.26",
+  "verified": true,
+  "review": [
+    "702.26p-1: one_instance was labelled fires although it is the identical-outcome control for a redundancy rule; relabelled it other and noted in forge_notes that 702.26p genuinely has no does_not_fire branch."
+  ],
+  "skipped": [
+    {
+      "id": "702.26h",
+      "reason": "an object that would phase out both directly and indirectly phases in at the same untap step as its host either way, so no outcome in a two-player game distinguishes the two; 702.26g-1 covers the indirect case"
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "702.26a-1",
+      "rules": [
+        "702.26a",
+        "702.26c"
+      ],
+      "title": "Phasing happens in the controller's untap step: phased-in permanents with phasing phase out and phased-out ones phase in",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "B",
+        "step": "end",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Sandbar Crocodile",
+              "summoning_sick": false
+            }
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Sandbar Crocodile (6/5, phasing) is phased in. B's end step; the next turn is A's."
+      },
+      "decisions": [
+        "Both players pass in B's end step; the turn passes to A.",
+        "A's untap step begins: A's phasing permanents phase out and A's phased-out permanents phase in simultaneously, before untapping. No player receives priority during the untap step."
+      ],
+      "variants": [
+        {
+          "label": "phases_out",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Sandbar Crocodile phases out. It stays on the battlefield (no zone change) but is treated as not existing; A controls no creatures this turn."
+        },
+        {
+          "label": "phases_in",
+          "polarity": "fires",
+          "delta": "Sandbar Crocodile starts phased out (it phased out under A's control in A's previous untap step).",
+          "expected": "Sandbar Crocodile phases in and is treated as existing again: A controls a 6/5 creature and it does not phase out again this untap step."
+        },
+        {
+          "label": "opponents_untap_step",
+          "polarity": "does_not_fire",
+          "delta": "Sandbar Crocodile is controlled by B instead of A (phased in).",
+          "expected": "Sandbar Crocodile stays phased in during A's untap step; only its controller's untap step makes it phase."
+        },
+        {
+          "label": "no_phasing",
+          "polarity": "other",
+          "delta": "The permanent is Grizzly Bears (no phasing) instead of Sandbar Crocodile.",
+          "expected": "Grizzly Bears stays phased in; nothing phases."
+        }
+      ],
+      "cards": [
+        "Sandbar Crocodile",
+        "Grizzly Bears"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.26b-1",
+      "rules": [
+        "702.26b"
+      ],
+      "title": "A phased-out permanent is not destroyed by a sweeper",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Sandbar Crocodile",
+              "summoning_sick": false
+            },
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains"
+          ],
+          "B": [
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Wrath of God"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Sandbar Crocodile phased out during this turn's untap step (it is phased out now)."
+      },
+      "decisions": [
+        "A casts Wrath of God, tapping four Plains.",
+        "Both players pass; Wrath of God resolves."
+      ],
+      "variants": [
+        {
+          "label": "phased_out",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears is destroyed and moves to B's graveyard. The phased-out Sandbar Crocodile is not affected: it stays on the battlefield."
+        },
+        {
+          "label": "phased_in",
+          "polarity": "does_not_fire",
+          "delta": "Sandbar Crocodile is phased in (it phased in during this turn's untap step).",
+          "expected": "Both Grizzly Bears and Sandbar Crocodile are destroyed and move to their owners' graveyards."
+        }
+      ],
+      "cards": [
+        "Sandbar Crocodile",
+        "Grizzly Bears",
+        "Wrath of God",
+        "Plains"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.26b-2",
+      "rules": [
+        "702.26b"
+      ],
+      "title": "A permanent that phases out is removed from combat",
+      "record_kind": "combat",
+      "setup": {
+        "active": "A",
+        "step": "declare_blockers",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            },
+            "Island",
+            "Island"
+          ],
+          "B": [
+            "Hill Giant"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Reality Ripple"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Grizzly Bears is attacking B. Hill Giant has been declared as its blocker. Priority is with A in the declare blockers step."
+      },
+      "decisions": [
+        "A casts Reality Ripple targeting Hill Giant, tapping both Islands.",
+        "Both players pass; Reality Ripple resolves.",
+        "Combat damage is dealt."
+      ],
+      "variants": [
+        {
+          "label": "blocker_phases_out",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Hill Giant phases out and is removed from combat. Grizzly Bears stays blocked and deals no damage to B (B's life 20); Grizzly Bears takes no damage and survives."
+        },
+        {
+          "label": "no_phasing",
+          "polarity": "does_not_fire",
+          "delta": "A does not cast Reality Ripple.",
+          "expected": "Hill Giant deals 3 damage to Grizzly Bears, which dies; Hill Giant takes 2 damage and survives. B's life stays 20."
+        },
+        {
+          "label": "attacker_phases_out",
+          "polarity": "fires",
+          "delta": "Reality Ripple targets A's own Grizzly Bears instead of Hill Giant.",
+          "expected": "Grizzly Bears phases out and is removed from combat. No combat damage is dealt: Hill Giant survives undamaged, B's life stays 20."
+        }
+      ],
+      "cards": [
+        "Grizzly Bears",
+        "Hill Giant",
+        "Reality Ripple",
+        "Island"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.26d-1",
+      "rules": [
+        "702.26d"
+      ],
+      "title": "Phasing is not a zone change: no enter or leave triggers and counters stay",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Elvish Visionary",
+              "counters": {
+                "+1/+1": 1
+              },
+              "summoning_sick": false
+            },
+            "Island",
+            "Island",
+            "Plains"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Reality Ripple",
+            "Cloudshift"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Forest",
+            "Forest",
+            "Forest"
+          ]
+        },
+        "exile": {},
+        "notes": "Elvish Visionary has an enters-the-battlefield draw trigger and a +1/+1 counter. Observation point is the end of A's next untap step."
+      },
+      "decisions": [
+        "A casts Reality Ripple targeting Elvish Visionary, tapping Island and Island.",
+        "Both players pass; Reality Ripple resolves.",
+        "The turn passes; B does nothing. At A's next untap step Elvish Visionary phases in."
+      ],
+      "variants": [
+        {
+          "label": "phasing",
+          "polarity": "does_not_fire",
+          "delta": "",
+          "expected": "Elvish Visionary phases out then back in without changing zones: no enters-the-battlefield trigger and no card is drawn, and it keeps its +1/+1 counter (2/2)."
+        },
+        {
+          "label": "blink",
+          "polarity": "fires",
+          "delta": "A casts Cloudshift (tapping Plains) targeting Elvish Visionary instead of Reality Ripple.",
+          "expected": "Elvish Visionary is exiled and returns as a new object, its enters-the-battlefield trigger fires and A draws a card; the +1/+1 counter is gone (1/1)."
+        }
+      ],
+      "cards": [
+        "Elvish Visionary",
+        "Reality Ripple",
+        "Cloudshift",
+        "Island",
+        "Plains",
+        "Forest"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.26e-1",
+      "rules": [
+        "702.26e"
+      ],
+      "title": "A continuous effect from a resolved spell does not include a permanent that is phased out",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island"
+          ],
+          "B": [
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            }
+          ]
+        },
+        "hand": {
+          "A": [
+            "Mass Diminish"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Grizzly Bears (B's) is phased out and phases in during B's next untap step. Mass Diminish's effect lasts until A's next turn. Observation point is B's main phase 1 after that untap step."
+      },
+      "decisions": [
+        "A casts Mass Diminish targeting player B, tapping both Islands.",
+        "Both players pass; Mass Diminish resolves.",
+        "The turn passes to B; B's untap step phases Grizzly Bears in."
+      ],
+      "variants": [
+        {
+          "label": "phased_out_when_resolved",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears is not included in the effect: after phasing in it is a 2/2."
+        },
+        {
+          "label": "phased_in_when_resolved",
+          "polarity": "does_not_fire",
+          "delta": "Grizzly Bears is phased in when Mass Diminish resolves.",
+          "expected": "Grizzly Bears has base power and toughness 1/1 until A's next turn, including in B's main phase 1."
+        }
+      ],
+      "cards": [
+        "Mass Diminish",
+        "Grizzly Bears",
+        "Island"
+      ],
+      "forge_notes": "Setting up a phased-out Grizzly Bears needs either a previous Reality Ripple or a puzzle-state flag."
+    },
+    {
+      "id": "702.26f-1",
+      "rules": [
+        "702.26f"
+      ],
+      "title": "A for-as-long-as control effect ends when the permanent it tracks phases out",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Sower of Temptation",
+              "summoning_sick": false
+            },
+            {
+              "card": "Hill Giant",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            "Island",
+            "Island"
+          ]
+        },
+        "hand": {
+          "B": [
+            "Reality Ripple"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "A controls B's Hill Giant through Sower of Temptation's enters-the-battlefield effect (for as long as Sower of Temptation remains on the battlefield). Hill Giant is owned by B."
+      },
+      "decisions": [
+        "A passes priority in main phase 1.",
+        "B casts Reality Ripple targeting Sower of Temptation, tapping both Islands.",
+        "Both players pass; Reality Ripple resolves."
+      ],
+      "variants": [
+        {
+          "label": "sower_phases_out",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Sower of Temptation phases out and the control effect ends: Hill Giant returns to B's control."
+        },
+        {
+          "label": "no_phasing",
+          "polarity": "does_not_fire",
+          "delta": "B does not cast Reality Ripple.",
+          "expected": "Sower of Temptation stays phased in and A keeps control of Hill Giant."
+        }
+      ],
+      "cards": [
+        "Sower of Temptation",
+        "Hill Giant",
+        "Reality Ripple",
+        "Island"
+      ],
+      "forge_notes": "Forge ends Sower's effect via LoseControl$ LeavesPlay; phasing out may not be handled the same way."
+    },
+    {
+      "id": "702.26g-1",
+      "rules": [
+        "702.26g"
+      ],
+      "title": "Equipment phases out and in along with the permanent it is attached to",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "B",
+        "step": "end",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Sandbar Crocodile",
+              "summoning_sick": false
+            },
+            {
+              "card": "Bonesplitter",
+              "attached_to": "Sandbar Crocodile"
+            }
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Bonesplitter is attached to Sandbar Crocodile (phasing). B's end step; the next turn is A's."
+      },
+      "decisions": [
+        "Both players pass in B's end step; the turn passes to A.",
+        "A's untap step begins and phasing is applied."
+      ],
+      "variants": [
+        {
+          "label": "attached_equipment",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Sandbar Crocodile phases out and Bonesplitter phases out with it (indirectly); both are treated as not existing."
+        },
+        {
+          "label": "unattached_equipment",
+          "polarity": "does_not_fire",
+          "delta": "Bonesplitter is not attached to Sandbar Crocodile.",
+          "expected": "Sandbar Crocodile phases out; Bonesplitter stays phased in."
+        },
+        {
+          "label": "phasing_in",
+          "polarity": "fires",
+          "delta": "Sandbar Crocodile and Bonesplitter start phased out (Bonesplitter phased out indirectly with it).",
+          "expected": "Sandbar Crocodile phases in and Bonesplitter phases in with it, still attached; Sandbar Crocodile is 8/5."
+        }
+      ],
+      "cards": [
+        "Sandbar Crocodile",
+        "Bonesplitter"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.26i-1",
+      "rules": [
+        "702.26i"
+      ],
+      "title": "A directly phased-out Equipment phases in attached to its host if the host is still there",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "B",
+        "step": "end",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            },
+            {
+              "card": "Bonesplitter"
+            }
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Bonesplitter is phased out (directly, by an earlier Reality Ripple) and was attached to Grizzly Bears when it phased out. B's end step; the next turn is A's."
+      },
+      "decisions": [
+        "Both players pass in B's end step; the turn passes to A.",
+        "A's untap step begins: Bonesplitter phases in."
+      ],
+      "variants": [
+        {
+          "label": "host_still_there",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Bonesplitter phases in attached to Grizzly Bears, which is 4/2."
+        },
+        {
+          "label": "host_gone",
+          "polarity": "does_not_fire",
+          "delta": "Grizzly Bears is in A's graveyard instead of on the battlefield.",
+          "expected": "Bonesplitter phases in unattached and stays on the battlefield."
+        }
+      ],
+      "cards": [
+        "Grizzly Bears",
+        "Bonesplitter"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.26j-1",
+      "rules": [
+        "702.26j"
+      ],
+      "title": "Phasing out with an attachment causes no unattach trigger",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            },
+            {
+              "card": "Hill Giant",
+              "summoning_sick": false
+            },
+            {
+              "card": "Grafted Wargear",
+              "attached_to": "Grizzly Bears"
+            },
+            "Island",
+            "Island"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Reality Ripple"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Grafted Wargear: whenever it becomes unattached from a permanent, sacrifice that permanent."
+      },
+      "decisions": [
+        "A casts Reality Ripple targeting Grizzly Bears, tapping both Islands.",
+        "Both players pass; Reality Ripple resolves."
+      ],
+      "variants": [
+        {
+          "label": "phasing",
+          "polarity": "does_not_fire",
+          "delta": "",
+          "expected": "Grizzly Bears phases out and Grafted Wargear phases out with it. Grafted Wargear's unattach trigger does not fire and nothing is sacrificed."
+        },
+        {
+          "label": "equip_moves",
+          "polarity": "fires",
+          "delta": "Instead of casting Reality Ripple, A activates Equip {0} targeting Hill Giant.",
+          "expected": "Grafted Wargear becomes unattached from Grizzly Bears, its trigger fires, and Grizzly Bears is sacrificed (moves to A's graveyard). Hill Giant is 6/5."
+        }
+      ],
+      "cards": [
+        "Grizzly Bears",
+        "Hill Giant",
+        "Grafted Wargear",
+        "Reality Ripple",
+        "Island"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.26m-1",
+      "rules": [
+        "702.26m"
+      ],
+      "title": "If the untap step is skipped, no phasing occurs",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "B",
+        "step": "end",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Sandbar Crocodile",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            "Stasis",
+            "Island"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Stasis (players skip their untap steps) is on B's battlefield. B's end step; the next turn is A's."
+      },
+      "decisions": [
+        "Both players pass in B's end step; the turn passes to A.",
+        "A's untap step is skipped."
+      ],
+      "variants": [
+        {
+          "label": "untap_skipped",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Sandbar Crocodile does not phase out and stays phased in."
+        },
+        {
+          "label": "no_stasis",
+          "polarity": "does_not_fire",
+          "delta": "Stasis is not on the battlefield.",
+          "expected": "A's untap step happens and Sandbar Crocodile phases out."
+        },
+        {
+          "label": "phased_out_start",
+          "polarity": "fires",
+          "delta": "Sandbar Crocodile starts phased out.",
+          "expected": "Sandbar Crocodile does not phase in and stays phased out."
+        }
+      ],
+      "cards": [
+        "Sandbar Crocodile",
+        "Stasis",
+        "Island"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.26p-1",
+      "rules": [
+        "702.26p"
+      ],
+      "title": "Multiple instances of phasing on one permanent are redundant",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "B",
+        "step": "end",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Sandbar Crocodile",
+              "summoning_sick": false
+            },
+            {
+              "card": "Teferi's Curse",
+              "attached_to": "Sandbar Crocodile"
+            }
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Sandbar Crocodile has phasing printed and a second instance from Teferi's Curse. Observation points are after A's untap step this turn and after A's next untap step."
+      },
+      "decisions": [
+        "Both players pass in B's end step; the turn passes to A.",
+        "A's untap step: phasing is applied. The turn cycle repeats until A's next untap step."
+      ],
+      "variants": [
+        {
+          "label": "two_instances",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "After the first untap step Sandbar Crocodile (and Teferi's Curse, indirectly) is phased out once; after the next untap step it is phased in once."
+        },
+        {
+          "label": "one_instance",
+          "polarity": "other",
+          "delta": "Teferi's Curse is not on the battlefield.",
+          "expected": "Same result as with two instances: Sandbar Crocodile is phased out after the first untap step and phased in after the next."
+        }
+      ],
+      "cards": [
+        "Sandbar Crocodile",
+        "Teferi's Curse"
+      ],
+      "forge_notes": "Teferi's Curse phases out indirectly with the host, so the attached aura is part of the observed state. A redundancy rule has no does_not_fire branch: no board state lets a second instance change the outcome, so the one-instance variant is the identical-outcome control."
+    }
+  ]
+}

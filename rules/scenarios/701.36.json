@@ -1,0 +1,162 @@
+{
+  "unit": "701.36",
+  "verified": true,
+  "review": [
+    "701.36a-1: the only does_not_fire variant was Negate countering the spell, a counterspell mechanism rather than populate; replaced it with B controlling the Soldier token (populate copies only a creature token you control) and dropped Negate and the Islands",
+    "701.36b-1: decisions said A chooses a creature token A controls, which does not exist in the base; reworded to choose one only if there is one"
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "701.36a-1",
+      "rules": [
+        "701.36a"
+      ],
+      "title": "Populate creates a copy of a creature token the controller controls",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Plains",
+            "Plains",
+            {
+              "card": "Soldier",
+              "token": true,
+              "summoning_sick": false
+            },
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            }
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Rootborn Defenses"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "The Soldier token is a white 1/1 Soldier creature token. Grizzly Bears is a nontoken creature. In the two_kinds variant the Wolf is a green 2/2 Wolf creature token."
+      },
+      "decisions": [
+        "A casts Rootborn Defenses, tapping three Plains.",
+        "Both players pass; it resolves and A populates, choosing the Soldier token."
+      ],
+      "variants": [
+        {
+          "label": "one_token",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "A controls two 1/1 white Soldier creature tokens (the new one is a copy of the old). Rootborn Defenses is in A's graveyard."
+        },
+        {
+          "label": "counter_on_token",
+          "polarity": "other",
+          "delta": "The Soldier token has one +1/+1 counter.",
+          "expected": "A controls a 2/2 Soldier token with the counter and a new 1/1 Soldier token without a counter."
+        },
+        {
+          "label": "opponent_controls_token",
+          "polarity": "does_not_fire",
+          "delta": "B controls the Soldier token instead of A.",
+          "expected": "No token is created. B controls the one Soldier token; A controls Grizzly Bears. Rootborn Defenses resolves and is in A's graveyard."
+        },
+        {
+          "label": "two_kinds",
+          "polarity": "other",
+          "delta": "A also controls a 2/2 green Wolf token, and A chooses the Wolf.",
+          "expected": "A controls the Soldier token, the Wolf token and a new 2/2 green Wolf token."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Rootborn Defenses",
+        "Grizzly Bears"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "701.36b-1",
+      "rules": [
+        "701.36b"
+      ],
+      "title": "Populate with no creature token to copy creates no token",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Plains",
+            "Plains",
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            }
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Rootborn Defenses"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Grizzly Bears is a nontoken creature. The Soldier token is a white 1/1 Soldier creature token."
+      },
+      "decisions": [
+        "A casts Rootborn Defenses, tapping three Plains.",
+        "Both players pass; it resolves and A populates, choosing a creature token A controls if there is one."
+      ],
+      "variants": [
+        {
+          "label": "no_tokens",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "A controls only Grizzly Bears; no token is created. Rootborn Defenses resolves and is in A's graveyard."
+        },
+        {
+          "label": "treasure_only",
+          "polarity": "fires",
+          "delta": "A controls a Treasure token (an artifact, not a creature).",
+          "expected": "No token is created; A controls Grizzly Bears and the Treasure token."
+        },
+        {
+          "label": "opponent_token",
+          "polarity": "fires",
+          "delta": "B controls a Soldier creature token.",
+          "expected": "No token is created for A: populate copies only a creature token its controller controls."
+        },
+        {
+          "label": "creature_token",
+          "polarity": "does_not_fire",
+          "delta": "A controls a Soldier creature token.",
+          "expected": "A creates a new 1/1 white Soldier creature token."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Rootborn Defenses",
+        "Grizzly Bears"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

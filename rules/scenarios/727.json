@@ -1,0 +1,584 @@
+{
+  "unit": "727",
+  "verified": true,
+  "review": [
+    "727.2-1: Living Wish, which exiles itself, was in no zone though the notes say it fetched Hill Giant; added it to A's exile and corrected A's card counts (15 base, 14 in the variant).",
+    "727.3-1 seven_cards: dropped the claim about when B loses later, which the rule does not decide.",
+    "727.5-1 exiled_by_swords: the Swords to Plowshares card itself was in no zone, so A's count of 13 was wrong; replaced the variant with Shock exiled by Karn's +4, which the restart does not exempt because it is not a permanent card, and dropped Swords to Plowshares from cards.",
+    "727.6-1 a_short_deck: delta changed both decks at once; now changes only A's subgame library (1 Plains), giving a drawn subgame in which both lose half their main-game life."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "727.1-1",
+      "rules": [
+        "727.1",
+        "727.1a"
+      ],
+      "title": "Karn Liberated restarts the game and its controller takes the first turn",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 12,
+          "B": 5
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Karn Liberated",
+              "counters": {
+                "loyalty": 14
+              }
+            },
+            "Plains",
+            "Plains",
+            "Plains"
+          ],
+          "B": [
+            "Mountain",
+            "Mountain",
+            "Hill Giant"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Grizzly Bears"
+          ],
+          "B": [
+            "Shock"
+          ]
+        },
+        "graveyard": {
+          "A": [
+            "Shock"
+          ]
+        },
+        "library": {
+          "A": [
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains"
+          ],
+          "B": [
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain"
+          ]
+        },
+        "exile": {},
+        "notes": "A has 1 rad counter and B has 2 poison counters. A owns 16 cards in all zones and B owns 13."
+      },
+      "decisions": [
+        "A activates Karn Liberated's -14 ability, removing 14 loyalty counters as the cost.",
+        "Both players pass priority; the ability resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The game ends with no winner, loser or draw and a new game begins. Every card moves to its owner's library, so A's seven-card hand and 9-card library total 16 cards and B's seven-card hand and 6-card library total 13. Life totals are 20 and 20, all rad and poison counters are gone, the battlefields are empty and A takes the first turn."
+        },
+        {
+          "label": "b_controls_karn",
+          "polarity": "fires",
+          "delta": "B controls Karn Liberated with 14 loyalty counters (moved from A's battlefield) and it is B's turn with B as the active player; B activates the -14 ability.",
+          "expected": "The game restarts as in the base, with life totals 20 and 20, and B takes the first turn of the new game."
+        },
+        {
+          "label": "thirteen_loyalty",
+          "polarity": "does_not_fire",
+          "delta": "Karn Liberated has 13 loyalty counters instead of 14.",
+          "expected": "The -14 ability cannot be activated because its cost cannot be paid. The game is not restarted: life stays A 12, B 5 and every permanent stays on the battlefield."
+        }
+      ],
+      "cards": [
+        "Karn Liberated",
+        "Plains",
+        "Mountain",
+        "Hill Giant",
+        "Grizzly Bears",
+        "Shock"
+      ],
+      "forge_notes": "Forge's mulligan service runs when the new game opens; the expected hands assume every player keeps seven cards."
+    },
+    {
+      "id": "727.2-1",
+      "rules": [
+        "727.2"
+      ],
+      "title": "Every card involved in the game joins the new game under its owner",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Karn Liberated",
+              "counters": {
+                "loyalty": 14
+              }
+            },
+            {
+              "card": "Control Magic",
+              "attached_to": "Grizzly Bears"
+            },
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Hill Giant"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains"
+          ],
+          "B": [
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain"
+          ]
+        },
+        "exile": {
+          "A": [
+            "Living Wish"
+          ]
+        },
+        "notes": "Grizzly Bears is owned by B and controlled by A through Control Magic, which A owns. Hill Giant is in A's hand, brought into the game earlier from A's sideboard with Living Wish, which exiled itself. A owns 15 cards in the game and B owns 13."
+      },
+      "decisions": [
+        "A activates Karn Liberated's -14 ability, removing 14 loyalty counters as the cost.",
+        "Both players pass priority; the ability resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears goes to B's deck, not A's: B's seven-card hand and 6-card library hold 13 cards including Grizzly Bears, and A's seven-card hand and 8-card library hold 15 cards including Control Magic, Karn Liberated, Living Wish and Hill Giant. Both life totals are 20 and the battlefields are empty."
+        },
+        {
+          "label": "hill_giant_still_outside",
+          "polarity": "does_not_fire",
+          "delta": "Hill Giant was never brought into the game: it is in A's sideboard instead of A's hand (Living Wish found nothing).",
+          "expected": "Hill Giant is not part of the new game: A's seven-card hand and 7-card library hold 14 cards, including Living Wish but not Hill Giant, which remains outside the game. Grizzly Bears is in B's deck as in the base."
+        }
+      ],
+      "cards": [
+        "Karn Liberated",
+        "Control Magic",
+        "Grizzly Bears",
+        "Hill Giant",
+        "Plains",
+        "Mountain",
+        "Living Wish"
+      ],
+      "forge_notes": "Forge's mulligan service runs when the new game opens; the expected hands assume every player keeps seven cards. Forge keeps sideboard cards in a Sideboard zone that a restart does not touch."
+    },
+    {
+      "id": "727.3-1",
+      "rules": [
+        "727.3"
+      ],
+      "title": "A player with fewer than seven cards in total loses to the first state-based check",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Karn Liberated",
+              "counters": {
+                "loyalty": 14
+              }
+            }
+          ],
+          "B": [
+            "Mountain"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Plains"
+          ],
+          "B": [
+            "Shock"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains"
+          ],
+          "B": [
+            "Mountain",
+            "Mountain",
+            "Mountain"
+          ]
+        },
+        "exile": {},
+        "notes": "B owns 5 cards in all zones; A owns 14. A game with a five-card deck is a puzzle-style setup."
+      },
+      "decisions": [
+        "A activates Karn Liberated's -14 ability, removing 14 loyalty counters as the cost.",
+        "Both players pass priority; the ability resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "B draws its five cards, attempts to draw the other two from an empty library and loses the game at the first state-based check of the new game. A is the winner."
+        },
+        {
+          "label": "seven_cards",
+          "polarity": "does_not_fire",
+          "delta": "B owns 7 cards in all zones (its library has 5 Mountains) instead of 5.",
+          "expected": "B draws all seven cards into its hand with an empty library and is still in the game after the first upkeep's state-based check."
+        }
+      ],
+      "cards": [
+        "Karn Liberated",
+        "Plains",
+        "Mountain",
+        "Shock"
+      ],
+      "forge_notes": "Forge's mulligan service runs when the new game opens; the expected hands assume every player keeps seven cards."
+    },
+    {
+      "id": "727.4-1",
+      "rules": [
+        "727.4"
+      ],
+      "title": "The restart finishes before the first untap step and its triggers wait for priority",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 9,
+          "B": 9
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Karn Liberated",
+              "counters": {
+                "loyalty": 14
+              }
+            }
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains"
+          ],
+          "B": [
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain"
+          ]
+        },
+        "exile": {
+          "A": [
+            "Lone Missionary"
+          ]
+        },
+        "notes": "Lone Missionary was exiled with Karn Liberated's -3 ability earlier this game."
+      },
+      "decisions": [
+        "A activates Karn Liberated's -14 ability, removing 14 loyalty counters as the cost.",
+        "Both players pass priority; the ability resolves.",
+        "Both players pass priority each time they receive it through the first turn's upkeep; A's triggered ability, once on the stack, resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The ability's second instruction returns Lone Missionary to the battlefield under A's control while the restart finishes, before the first untap step, and no player has priority then. Life totals are 20 and 20 at that point. Its enters trigger goes on the stack in A's first upkeep and resolves, leaving A at 24 life."
+        },
+        {
+          "label": "no_enter_trigger",
+          "polarity": "does_not_fire",
+          "delta": "Grizzly Bears (no enters trigger) was exiled with Karn Liberated instead of Lone Missionary.",
+          "expected": "Grizzly Bears returns to the battlefield under A's control. No ability goes on the stack in the first upkeep and A's life stays 20."
+        }
+      ],
+      "cards": [
+        "Karn Liberated",
+        "Lone Missionary",
+        "Grizzly Bears",
+        "Plains",
+        "Mountain"
+      ],
+      "forge_notes": "Forge's mulligan service runs when the new game opens; the expected hands assume every player keeps seven cards."
+    },
+    {
+      "id": "727.5-1",
+      "rules": [
+        "727.5"
+      ],
+      "title": "Cards exiled with Karn are exempt from the restart",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Karn Liberated",
+              "counters": {
+                "loyalty": 14
+              }
+            },
+            "Plains",
+            "Plains"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains"
+          ],
+          "B": [
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain"
+          ]
+        },
+        "exile": {
+          "B": [
+            "Grizzly Bears"
+          ]
+        },
+        "notes": "Grizzly Bears is owned by B and was exiled with Karn Liberated's -3 ability earlier this game. A owns 13 cards and B owns 12 other cards."
+      },
+      "decisions": [
+        "A activates Karn Liberated's -14 ability, removing 14 loyalty counters as the cost.",
+        "Both players pass priority; the ability resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears is not in B's deck: it returns to the battlefield under A's control. B's seven-card hand and 5-card library hold 12 cards. A's seven-card hand and 6-card library hold 13 cards."
+        },
+        {
+          "label": "nonpermanent_exiled_by_karn",
+          "polarity": "does_not_fire",
+          "delta": "B's card in exile is Shock, exiled from B's hand with Karn Liberated's +4 ability, instead of Grizzly Bears.",
+          "expected": "Shock is not a permanent card, so it is not exempt: it joins B's deck, and B's seven-card hand and 6-card library hold 13 cards including Shock. A's battlefield is empty and A's seven-card hand and 6-card library hold 13 cards."
+        }
+      ],
+      "cards": [
+        "Karn Liberated",
+        "Plains",
+        "Mountain",
+        "Grizzly Bears",
+        "Shock"
+      ],
+      "forge_notes": "Forge's mulligan service runs when the new game opens; the expected hands assume every player keeps seven cards."
+    },
+    {
+      "id": "727.6-1",
+      "rules": [
+        "727.6"
+      ],
+      "title": "Restarting a subgame leaves the main game alone",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Karn Liberated",
+              "counters": {
+                "loyalty": 14
+              }
+            },
+            "Plains",
+            "Plains"
+          ],
+          "B": [
+            "Mountain"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Grizzly Bears"
+          ],
+          "B": [
+            "Shock"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains"
+          ],
+          "B": [
+            "Mountain",
+            "Mountain",
+            "Mountain"
+          ]
+        },
+        "exile": {},
+        "notes": "The listed zones and life totals belong to the subgame, which Shahrazad (cast by A) started. Main game: Shahrazad is on the stack, main-game life is A 20 and B 18, and A has Forest and Swamp on its main-game battlefield. In the subgame A owns 14 cards and B owns 5 cards in all zones."
+      },
+      "decisions": [
+        "A activates Karn Liberated's -14 ability, removing 14 loyalty counters as the cost.",
+        "Both players pass priority; the ability resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The subgame restarts; the main game is untouched (same battlefield, hand, graveyard and life totals, Shahrazad still resolving). B has five cards, loses the restarted subgame, and when Shahrazad finishes B's main-game life goes from 18 to 9. A's main-game life stays 20."
+        },
+        {
+          "label": "both_short",
+          "polarity": "other",
+          "delta": "A's subgame library has 1 Plains instead of 10, so A owns 5 cards in the subgame.",
+          "expected": "Both players lose the restarted subgame at its first upkeep, so it is a draw and nobody wins. Once Shahrazad finishes, A's main-game life goes from 20 to 10 and B's from 18 to 9."
+        },
+        {
+          "label": "thirteen_loyalty",
+          "polarity": "does_not_fire",
+          "delta": "Karn Liberated has 13 loyalty counters instead of 14.",
+          "expected": "The -14 ability cannot be activated; the subgame is not restarted and the main game and Shahrazad are unchanged."
+        }
+      ],
+      "cards": [
+        "Karn Liberated",
+        "Plains",
+        "Mountain",
+        "Grizzly Bears",
+        "Shock",
+        "Shahrazad",
+        "Forest",
+        "Swamp"
+      ],
+      "forge_notes": "Forge's RestartGame inside a SubGame has not been exercised by the card scripts. Setup lists the subgame zones; main-game state is in notes."
+    }
+  ]
+}

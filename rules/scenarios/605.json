@@ -1,0 +1,212 @@
+{
+  "unit": "605",
+  "verified": true,
+  "review": [
+    "605.3c-1: the no_other_source variant was illegal only because A had no mana at all (an unpayable cost), not because of 605.3c; Initiates of the Ebon Hand nets zero mana so re-entry changes nothing. Dropped the scenario and skipped 605.3c with that reason.",
+    "605.4a-1: variant manabarbs said the illegal cast still tapped Forest and dealt 1 damage to A; an illegal cast taps nothing. Removed the damage and set polarity does_not_fire (same outcome as no_flare, not a third branch)."
+  ],
+  "skipped": [
+    {
+      "id": "605.3c",
+      "reason": "no Forge card makes the restriction observable: every mana ability whose cost is mana alone (no tap or sacrifice) produces no more mana than it costs, so a forbidden nested activation would leave the same mana pool and board as a legal one"
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "605.3a-1",
+      "rules": [
+        "605.3a"
+      ],
+      "title": "A mana ability can be activated in the middle of casting a spell, other abilities cannot",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Llanowar Elves",
+              "summoning_sick": false
+            },
+            {
+              "card": "Prodigal Sorcerer",
+              "summoning_sick": false
+            },
+            "Forest",
+            "Forest"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Grizzly Bears"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Llanowar Elves and Prodigal Sorcerer have been under A's control since before this turn."
+      },
+      "decisions": [
+        "A begins casting Grizzly Bears and reaches the step of paying its {1}{G} cost.",
+        "While paying, A activates Llanowar Elves's mana ability for {G} and taps Forest for {1}.",
+        "Both players pass; Grizzly Bears resolves."
+      ],
+      "variants": [
+        {
+          "label": "mana_ability",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Activating Llanowar Elves's mana ability during the payment is legal; Grizzly Bears is cast and enters the battlefield."
+        },
+        {
+          "label": "non_mana_ability",
+          "polarity": "does_not_fire",
+          "delta": "During the payment A tries to activate Prodigal Sorcerer's damage ability targeting B instead of Llanowar Elves's mana ability.",
+          "expected": "Activating Prodigal Sorcerer's ability while casting a spell is illegal; Prodigal Sorcerer stays untapped and B takes no damage."
+        }
+      ],
+      "cards": [
+        "Llanowar Elves",
+        "Prodigal Sorcerer",
+        "Forest",
+        "Grizzly Bears"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "605.3b-1",
+      "rules": [
+        "605.3b"
+      ],
+      "title": "An activated mana ability does not use the stack and cannot be responded to",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Llanowar Elves",
+              "summoning_sick": false
+            },
+            {
+              "card": "Prodigal Sorcerer",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            "Island"
+          ]
+        },
+        "hand": {
+          "B": [
+            "Stifle"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "B holds Stifle with an untapped Island."
+      },
+      "decisions": [
+        "A activates Llanowar Elves's ability, tapping it for {G}.",
+        "B, if given priority with the ability on the stack, casts Stifle targeting it; otherwise B passes.",
+        "Both players pass until the stack is empty."
+      ],
+      "variants": [
+        {
+          "label": "mana_ability",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Llanowar Elves's ability never goes on the stack, B gets no priority and Stifle has no legal target; {G} is in A's mana pool at once."
+        },
+        {
+          "label": "damage_ability",
+          "polarity": "does_not_fire",
+          "delta": "A activates Prodigal Sorcerer's ability targeting B instead (and B responds with Stifle, tapping Island).",
+          "expected": "Prodigal Sorcerer's ability goes on the stack and Stifle counters it; B takes no damage and Stifle moves to B's graveyard."
+        }
+      ],
+      "cards": [
+        "Llanowar Elves",
+        "Prodigal Sorcerer",
+        "Island",
+        "Stifle"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "605.4a-1",
+      "rules": [
+        "605.4a"
+      ],
+      "title": "A triggered mana ability resolves at once and its mana can pay for the spell being cast",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Forest",
+            "Mana Flare"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Grizzly Bears"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Mana Flare: whenever a player taps a land for mana, that player adds one additional mana of any type that land produced. A has no other mana sources."
+      },
+      "decisions": [
+        "A casts Grizzly Bears and pays its {1}{G} cost by tapping Forest for {G}.",
+        "Mana Flare's triggered mana ability adds another {G} immediately, also used for the cost.",
+        "Both players pass; Grizzly Bears resolves."
+      ],
+      "variants": [
+        {
+          "label": "mana_flare",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Casting Grizzly Bears is legal (can_play true) with the single Forest; it enters the battlefield and Mana Flare's trigger never uses the stack."
+        },
+        {
+          "label": "no_flare",
+          "polarity": "does_not_fire",
+          "delta": "Mana Flare is absent from the battlefield.",
+          "expected": "Casting Grizzly Bears is illegal (can_play false): one Forest produces only {G}."
+        },
+        {
+          "label": "manabarbs",
+          "polarity": "does_not_fire",
+          "delta": "Manabarbs is on the battlefield instead of Mana Flare.",
+          "expected": "Casting Grizzly Bears is illegal (can_play false): Manabarbs's trigger is not a mana ability and adds no mana, so one Forest produces only {G}."
+        }
+      ],
+      "cards": [
+        "Forest",
+        "Mana Flare",
+        "Grizzly Bears",
+        "Manabarbs"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

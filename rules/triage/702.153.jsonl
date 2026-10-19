@@ -1,0 +1,3 @@
+{"id": "702.153", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.153a", "category": "mechanical", "observability": "direct", "record_kinds": ["trigger", "resolution"], "outcome": "When a spell is cast with its casualty cost paid by sacrificing a creature of sufficient power, the trigger fires and the spell is copied.", "note": ""}
+{"id": "702.153b", "category": "mechanical", "observability": "direct", "record_kinds": ["trigger"], "outcome": "Each casualty instance triggers only from its own payment.", "note": ""}

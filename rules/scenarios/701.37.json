@@ -1,0 +1,261 @@
+{
+  "unit": "701.37",
+  "verified": true,
+  "review": [
+    "701.37b: triage marked it definitional, but the designation persisting on the battlefield and resetting when the permanent leaves is observable; reclassified as mechanical and added scenario 701.37b-1 (Cloudshift on a monstrous Fleecemane Lion, then monstrosity again)."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "701.37a-1",
+      "rules": [
+        "701.37a"
+      ],
+      "title": "Monstrosity 1 puts a +1/+1 counter on a non-monstrous permanent and does nothing to a monstrous one",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Forest",
+            "Forest",
+            "Forest",
+            "Plains",
+            "Plains",
+            "Fleecemane Lion"
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Fleecemane Lion is not monstrous and has no counters. Both libraries are non-empty and irrelevant."
+      },
+      "decisions": [
+        "A activates Fleecemane Lion's monstrosity ability ({3}{G}{W}), tapping all five lands.",
+        "Both players pass; the ability resolves.",
+        "Both players pass with the stack empty."
+      ],
+      "variants": [
+        {
+          "label": "not_monstrous",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The ability resolves: Fleecemane Lion gets one +1/+1 counter and is monstrous, so it is a 4/4 with hexproof and indestructible."
+        },
+        {
+          "label": "already_monstrous",
+          "polarity": "does_not_fire",
+          "delta": "Fleecemane Lion is already monstrous and carries one +1/+1 counter from an earlier activation.",
+          "expected": "The ability resolves but puts no counter: Fleecemane Lion still has exactly one +1/+1 counter and is a 4/4 with hexproof and indestructible."
+        }
+      ],
+      "cards": [
+        "Forest",
+        "Plains",
+        "Fleecemane Lion"
+      ],
+      "forge_notes": "The monstrous designation is not a setup field. For the already_monstrous variant the Lion must be set up (or played up) as having become monstrous earlier, for example by a first activation resolved before the scenario's decisions."
+    },
+    {
+      "id": "701.37a-2",
+      "rules": [
+        "701.37a"
+      ],
+      "title": "Monstrosity N puts N counters, not one",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Hundred-Handed One"
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Hundred-Handed One is not monstrous and has no counters. Both libraries are non-empty and irrelevant. The monstrosity activation costs {3}{W}{W}{W}, paid with six Plains."
+      },
+      "decisions": [
+        "A activates Hundred-Handed One's monstrosity ability ({3}{W}{W}{W}), tapping all six Plains.",
+        "Both players pass; the ability resolves.",
+        "Both players pass with the stack empty."
+      ],
+      "variants": [
+        {
+          "label": "not_monstrous",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Hundred-Handed One gets three +1/+1 counters and is monstrous: it is a 6/8 with vigilance and reach."
+        },
+        {
+          "label": "already_monstrous",
+          "polarity": "does_not_fire",
+          "delta": "Hundred-Handed One is already monstrous and carries three +1/+1 counters from an earlier activation.",
+          "expected": "The ability resolves but puts no counters: Hundred-Handed One still has exactly three +1/+1 counters and is a 6/8 with vigilance and reach."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Hundred-Handed One"
+      ],
+      "forge_notes": "The monstrous designation is not a setup field; the already_monstrous variant needs a Hundred-Handed One that became monstrous earlier."
+    },
+    {
+      "id": "701.37c-1",
+      "rules": [
+        "701.37c"
+      ],
+      "title": "A permanent's other ability uses the X value it became monstrous with",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Polukranos, World Eater"
+          ],
+          "B": [
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Polukranos, World Eater is not monstrous and has no counters. Both libraries are non-empty and irrelevant."
+      },
+      "decisions": [
+        "A activates Polukranos's monstrosity ability with X = 2 ({X}{X}{G}), tapping all five Forests.",
+        "Both players pass; the ability resolves, Polukranos becomes monstrous, and its becomes-monstrous trigger goes on the stack.",
+        "A targets Grizzly Bears with the trigger and assigns all of the damage to it.",
+        "Both players pass; the trigger resolves.",
+        "Both players pass with the stack empty."
+      ],
+      "variants": [
+        {
+          "label": "x2",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Polukranos gets two +1/+1 counters and is monstrous (7/7). The trigger deals 2 damage to Grizzly Bears, which moves to B's graveyard in the state-based check. Grizzly Bears deals 2 damage to Polukranos, which stays on the battlefield with 2 damage marked."
+        },
+        {
+          "label": "x1",
+          "polarity": "other",
+          "delta": "A activates the ability with X = 1 ({X}{X}{G}, tapping three Forests) instead of X = 2.",
+          "expected": "Polukranos gets one +1/+1 counter and is monstrous (6/6). The trigger deals 1 damage to Grizzly Bears, which stays on the battlefield with 1 damage marked. Grizzly Bears deals 2 damage to Polukranos, which stays on the battlefield with 2 damage marked."
+        },
+        {
+          "label": "already_monstrous",
+          "polarity": "does_not_fire",
+          "delta": "Polukranos is already monstrous and carries one +1/+1 counter from an earlier activation.",
+          "expected": "The ability resolves but Polukranos does not become monstrous again: it keeps exactly one +1/+1 counter (6/6), the becomes-monstrous trigger does not fire, and Grizzly Bears takes no damage and stays on the battlefield."
+        }
+      ],
+      "cards": [
+        "Forest",
+        "Polukranos, World Eater",
+        "Grizzly Bears"
+      ],
+      "forge_notes": "Forge reads X for the trigger through the TriggerCount$Amount SVar on the BecomeMonstrous trigger. In the already_monstrous variant Polukranos must have become monstrous earlier."
+    },
+    {
+      "id": "701.37b-1",
+      "rules": [
+        "701.37b"
+      ],
+      "title": "A monstrous permanent that leaves and returns is no longer monstrous",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Forest",
+            "Forest",
+            "Forest",
+            "Plains",
+            "Plains",
+            "Plains",
+            {
+              "card": "Fleecemane Lion",
+              "counters": {
+                "+1/+1": 1
+              }
+            }
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Cloudshift"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Fleecemane Lion is already monstrous and carries one +1/+1 counter from an earlier activation. Both libraries are non-empty and irrelevant."
+      },
+      "decisions": [
+        "A casts Cloudshift targeting Fleecemane Lion, tapping a Plains.",
+        "Both players pass; Cloudshift resolves.",
+        "A activates Fleecemane Lion's monstrosity ability ({3}{G}{W}), tapping three Forests and two Plains.",
+        "Both players pass; the ability resolves.",
+        "Both players pass with the stack empty."
+      ],
+      "variants": [
+        {
+          "label": "flickered",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Fleecemane Lion is exiled and returns as a 3/3 with no counters, not monstrous and without hexproof or indestructible; the monstrosity ability then puts one +1/+1 counter on it and it is a monstrous 4/4 with hexproof and indestructible. Cloudshift is in A's graveyard."
+        },
+        {
+          "label": "not_flickered",
+          "polarity": "does_not_fire",
+          "delta": "A does not cast Cloudshift; Cloudshift stays in A's hand.",
+          "expected": "Fleecemane Lion stays monstrous; the monstrosity ability resolves but puts no counter, and Fleecemane Lion still has exactly one +1/+1 counter and is a 4/4 with hexproof and indestructible."
+        }
+      ],
+      "cards": [
+        "Forest",
+        "Plains",
+        "Fleecemane Lion",
+        "Cloudshift"
+      ],
+      "forge_notes": "The monstrous designation is not a setup field; the Lion must have become monstrous earlier, for example by a first activation resolved before the scenario's decisions."
+    }
+  ]
+}

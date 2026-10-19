@@ -1,0 +1,80 @@
+{
+  "unit": "408",
+  "verified": true,
+  "review": [
+    "408.2-1: the loyalty-7 variant flipped on whether the loyalty cost could be paid, not on emblem creation; replaced it with a Stifle variant where the -8 is activated and countered, adding Island and Stifle for B."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "408.2-1",
+      "rules": [
+        "408.2"
+      ],
+      "title": "An emblem is created in the command zone and persists after its source dies",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Elspeth, Knight-Errant",
+              "counters": {
+                "loyalty": 8
+              }
+            },
+            "Grizzly Bears"
+          ],
+          "B": [
+            "Mountain",
+            "Island"
+          ]
+        },
+        "hand": {
+          "B": [
+            "Shock",
+            "Stifle"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Elspeth has been under A's control since before this turn and has not activated this turn."
+      },
+      "decisions": [
+        "A activates Elspeth's -8 ability, removing eight loyalty counters.",
+        "B passes priority with Stifle unused; the ability resolves and A gets an emblem.",
+        "B casts Shock targeting Grizzly Bears, tapping Mountain.",
+        "Both players pass; Shock resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "A's emblem is in the command zone. Elspeth has 0 loyalty and moves to A's graveyard in the state-based check, while the emblem stays in the command zone. Grizzly Bears has 2 damage marked and stays on the battlefield because of the emblem's indestructible."
+        },
+        {
+          "label": "stifled",
+          "polarity": "does_not_fire",
+          "delta": "In response to the -8 ability, B casts Stifle targeting it, tapping Island, and Stifle resolves first.",
+          "expected": "The -8 ability is countered and no emblem is created; the command zone stays empty. Elspeth has 0 loyalty and moves to A's graveyard in the state-based check. Shock deals 2 damage to Grizzly Bears, which moves to A's graveyard."
+        }
+      ],
+      "cards": [
+        "Elspeth, Knight-Errant",
+        "Grizzly Bears",
+        "Mountain",
+        "Island",
+        "Shock",
+        "Stifle"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

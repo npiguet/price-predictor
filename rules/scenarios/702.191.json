@@ -1,0 +1,139 @@
+{
+  "unit": "702.191",
+  "verified": true,
+  "review": [],
+  "skipped": [
+    {
+      "id": "702.191b",
+      "reason": "cannot be illustrated: no card in Forge gives a creature a second instance of increment, so a creature never has two instances in a two-player game; each single instance's behavior is covered by 702.191a-1 and 702.191a-2"
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "702.191a-1",
+      "rules": [
+        "702.191a"
+      ],
+      "title": "Increment puts a +1/+1 counter when the mana spent exceeds the creature's power or toughness",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Cuboid Colony",
+            "Forest",
+            "Forest"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Grizzly Bears",
+            "Llanowar Elves"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Grizzly Bears, tapping two Forests (2 mana spent).",
+        "The increment trigger goes on the stack above Grizzly Bears; both players pass; the trigger resolves, then Grizzly Bears resolves."
+      ],
+      "variants": [
+        {
+          "label": "two_mana_spent",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Increment triggers: 2 mana spent is greater than Cuboid Colony's power 1 and toughness 1. Cuboid Colony gets a +1/+1 counter and is a 2/2."
+        },
+        {
+          "label": "colony_already_2_2",
+          "polarity": "does_not_fire",
+          "delta": "Cuboid Colony already has a +1/+1 counter (it is a 2/2).",
+          "expected": "Increment does not trigger: 2 mana spent is not greater than power 2 or toughness 2. Cuboid Colony stays a 2/2 with one counter."
+        },
+        {
+          "label": "one_mana_spent",
+          "polarity": "does_not_fire",
+          "delta": "A casts Llanowar Elves (1 mana spent) instead of Grizzly Bears.",
+          "expected": "Increment does not trigger: 1 mana spent is not greater than power 1 or toughness 1. Cuboid Colony stays a 1/1."
+        }
+      ],
+      "cards": [
+        "Cuboid Colony",
+        "Forest",
+        "Grizzly Bears",
+        "Llanowar Elves"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.191a-2",
+      "rules": [
+        "702.191a"
+      ],
+      "title": "Increment compares the mana spent with power and toughness separately",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Hungry Graffalon",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Hill Giant",
+            "Gray Ogre"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Hungry Graffalon is a 3/4."
+      },
+      "decisions": [
+        "A casts Hill Giant, tapping four Mountains (4 mana spent).",
+        "The increment trigger goes on the stack above Hill Giant; both players pass; the trigger resolves, then Hill Giant resolves."
+      ],
+      "variants": [
+        {
+          "label": "four_mana_spent",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Increment triggers: 4 mana spent is greater than Hungry Graffalon's power 3 (though not greater than its toughness 4). Hungry Graffalon gets a +1/+1 counter and is a 4/5."
+        },
+        {
+          "label": "three_mana_spent",
+          "polarity": "does_not_fire",
+          "delta": "A casts Gray Ogre, tapping three Mountains (3 mana spent), instead of Hill Giant.",
+          "expected": "Increment does not trigger: 3 mana spent is greater than neither power 3 nor toughness 4. Hungry Graffalon stays a 3/4."
+        }
+      ],
+      "cards": [
+        "Hungry Graffalon",
+        "Mountain",
+        "Hill Giant",
+        "Gray Ogre"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

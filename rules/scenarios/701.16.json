@@ -1,0 +1,71 @@
+{
+  "unit": "701.16",
+  "verified": true,
+  "review": [],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "701.16a-1",
+      "rules": [
+        "701.16a"
+      ],
+      "title": "Investigate creates a Clue token",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains"
+          ],
+          "B": [
+            "Island",
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Thraben Inspector"
+          ],
+          "B": [
+            "Counterspell"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Thraben Inspector, tapping Plains.",
+        "B passes priority; both players pass and Thraben Inspector resolves and enters the battlefield.",
+        "The enters trigger goes on the stack, both players pass, and it resolves (investigate)."
+      ],
+      "variants": [
+        {
+          "label": "resolves",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Thraben Inspector is on the battlefield under A's control. A controls one new Clue token, a colorless artifact."
+        },
+        {
+          "label": "countered",
+          "polarity": "does_not_fire",
+          "delta": "B casts Counterspell on Thraben Inspector, tapping both Islands.",
+          "expected": "Thraben Inspector is countered and moves to A's graveyard without entering the battlefield. No enters trigger fires and A controls no Clue token."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Island",
+        "Thraben Inspector",
+        "Counterspell"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

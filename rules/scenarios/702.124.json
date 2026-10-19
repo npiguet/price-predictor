@@ -1,0 +1,72 @@
+{
+  "unit": "702.124",
+  "verified": true,
+  "review": [],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.124j-1",
+      "rules": [
+        "702.124j"
+      ],
+      "title": "Partner with searches the library for the named card when the permanent enters",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Forest",
+            "Forest",
+            "Forest"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Pir, Imaginative Rascal"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Forest",
+            "Toothy, Imaginary Friend",
+            "Forest"
+          ]
+        },
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Pir, Imaginative Rascal, tapping the three Forests; it resolves and enters the battlefield.",
+        "The partner with trigger targets A; both players pass.",
+        "On resolution A chooses to search the library for Toothy, Imaginary Friend, reveals it, puts it into hand, and the library is shuffled."
+      ],
+      "variants": [
+        {
+          "label": "named_card_in_library",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Toothy, Imaginary Friend moves from A's library to A's hand and A's library is shuffled."
+        },
+        {
+          "label": "named_card_absent",
+          "polarity": "does_not_fire",
+          "delta": "A's library holds three Forests and no Toothy, Imaginary Friend.",
+          "expected": "The trigger resolves and A finds nothing. A's hand stays empty, and the library is shuffled."
+        }
+      ],
+      "cards": [
+        "Forest",
+        "Pir, Imaginative Rascal",
+        "Toothy, Imaginary Friend"
+      ],
+      "forge_notes": "The Commander-designation half of partner with is out of scope; only the enters trigger is illustrated."
+    }
+  ]
+}

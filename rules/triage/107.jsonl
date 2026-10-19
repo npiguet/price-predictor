@@ -1,0 +1,49 @@
+{"id": "107.1", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "107.1a", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "107.1b", "category": "mechanical", "observability": "indirect", "record_kinds": ["continuous", "resolution"], "outcome": "A negative intermediate value is used as zero in a calculation that determines an effect's result, while a creature's own power or toughness may stay below zero.", "note": ""}
+{"id": "107.1c", "category": "decision", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "107.2", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "A number that cannot be determined is treated as 0 in the result or calculation.", "note": ""}
+{"id": "107.3", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "107.3a", "category": "decision", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "107.3b", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "A spell with {X} in its mana cost cast without paying its mana cost or an alternative cost with X has X = 0, so X-dependent effects do nothing.", "note": "The choice of X is forced to 0; the observable consequence is the resolution's effect."}
+{"id": "107.3c", "category": "mechanical", "observability": "needs_new_fields", "record_kinds": ["resolution"], "outcome": "X takes the value defined by the spell or ability text, and follows that value if it changes while the object is on the stack.", "note": ""}
+{"id": "107.3d", "category": "decision", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "107.3e", "category": "mechanical", "observability": "needs_new_fields", "record_kinds": ["resolution"], "outcome": "X in a spell or ability uses the X value of the other object it refers to.", "note": ""}
+{"id": "107.3f", "category": "decision", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "107.3g", "category": "mechanical", "observability": "needs_new_fields", "record_kinds": ["continuous"], "outcome": "X in the mana cost of a card outside the stack counts as 0.", "note": ""}
+{"id": "107.3h", "category": "mechanical", "observability": "needs_new_fields", "record_kinds": ["resolution"], "outcome": "Paying an object's mana cost containing X uses 0 unless the object is a spell on the stack, where it uses the cast value.", "note": ""}
+{"id": "107.3i", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "107.3j", "category": "mechanical", "observability": "needs_new_fields", "record_kinds": ["resolution"], "outcome": "X in a gained ability has the value that ability defines, or 0 if it defines none.", "note": ""}
+{"id": "107.3k", "category": "mechanical", "observability": "needs_new_fields", "record_kinds": ["resolution"], "outcome": "X in an activated ability's cost is independent of other X values of the object.", "note": ""}
+{"id": "107.3m", "category": "mechanical", "observability": "needs_new_fields", "record_kinds": ["trigger", "resolution"], "outcome": "An enters-the-battlefield ability or replacement effect referring to X uses the X of the spell that became the permanent, while the permanent's own X is 0.", "note": ""}
+{"id": "107.3n", "category": "mechanical", "observability": "needs_new_fields", "record_kinds": ["trigger", "resolution"], "outcome": "A delayed triggered ability referring to an undefined X uses the X of the object that created it.", "note": ""}
+{"id": "107.3p", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "107.4", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "107.4a", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "107.4b", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "107.4c", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "A {C} cost can be paid only with colorless mana.", "note": ""}
+{"id": "107.4d", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "107.4e", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "A hybrid symbol can be paid with mana of either half: either color, or one mana of its color or two generic for a monocolored hybrid.", "note": ""}
+{"id": "107.4f", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "A Phyrexian symbol can be paid with one mana of its color or 2 life, so a spell is castable with no mana when its controller can pay the life.", "note": "Which way to pay is a decision; whether either way is available is a legality verdict."}
+{"id": "107.4g", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "107.4h", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "A {S} cost can be paid only with mana produced by a snow source, and generic cost reductions do not reduce it.", "note": ""}
+{"id": "107.5", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "An ability with {T} in its cost cannot be activated if the permanent is tapped or, for a creature, has not been under its controller's control since the turn began.", "note": ""}
+{"id": "107.6", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "An ability with {Q} in its cost cannot be activated if the permanent is untapped or, for a creature, has not been under its controller's control since the turn began.", "note": ""}
+{"id": "107.7", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "Paying a loyalty cost puts N loyalty counters on the planeswalker for [+N] or removes N for [-N].", "note": ""}
+{"id": "107.8", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "107.8a", "category": "mechanical", "observability": "direct", "record_kinds": ["continuous"], "outcome": "A leveler with level counters in the stated range has the base power and toughness and abilities of that level symbol.", "note": ""}
+{"id": "107.8b", "category": "mechanical", "observability": "direct", "record_kinds": ["continuous"], "outcome": "A leveler with at least N3 level counters has the base power and toughness and abilities of that level symbol.", "note": ""}
+{"id": "107.9", "category": "out_of_scope", "observability": "none", "record_kinds": [], "outcome": "", "note": "Icon with no effect on game play."}
+{"id": "107.10", "category": "out_of_scope", "observability": "none", "record_kinds": [], "outcome": "", "note": "Icon with no effect on game play."}
+{"id": "107.11", "category": "out_of_scope", "observability": "none", "record_kinds": [], "outcome": "", "note": "Planechase casual variant."}
+{"id": "107.12", "category": "out_of_scope", "observability": "none", "record_kinds": [], "outcome": "", "note": "Planechase casual variant."}
+{"id": "107.13", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "107.14", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "Paying {E} removes one energy counter from the player.", "note": ""}
+{"id": "107.15", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "107.15a", "category": "mechanical", "observability": "direct", "record_kinds": ["trigger"], "outcome": "A chapter ability triggers when lore counters are added and the count goes from below N to at least N.", "note": ""}
+{"id": "107.15b", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "107.16", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "107.16a", "category": "mechanical", "observability": "indirect", "record_kinds": ["continuous", "playability"], "outcome": "Activating a level bar sets the Class's level to N, only at sorcery speed from level N-1, and the Class has the level's abilities at level N or greater.", "note": ""}
+{"id": "107.17", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "107.17a", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "Paying a ticket cost removes that many ticket counters from the player.", "note": ""}
+{"id": "107.18", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}

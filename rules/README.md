@@ -26,6 +26,7 @@ survives, the spell resolves or fizzles, the trigger fires or does not.
 | `triage/<unit>.jsonl` | phase 1: one classification line per rule | triage agents |
 | `scenarios/<unit>.json` | phase 2: scenarios for the unit's mechanical and legality rules, with their variants | scenario agents |
 | `STATUS.md` | per-unit checklist and totals | `status` |
+| `RUN-NOTES.md` | per chunk of units, what the scenario writer flagged (interactions whose outcome depends on Forge's implementation, rules skipped as unreachable) and what the verifier fixed | from the workflow results |
 
 The subcommands are those of `python scripts/rules_catalogue.py`: `split`, `packets`,
 `validate [units...] [--no-cards] [--warnings]` and `status`.

@@ -1,0 +1,1224 @@
+{
+  "unit": "118",
+  "verified": true,
+  "review": [
+    "118.3b-1: two_life variant had A draw before losing, but the state-based check when A receives priority after activating ends the game first; expected corrected.",
+    "118.7a-1: the pair flipped only on land color (Plains vs Mountain), not on the generic-only rule; rewritten as Ember Hauler {R}{R} (reduction finds no generic, uncastable from one Mountain) vs Goblin Piker {1}{R} (reduced to {R}, castable).",
+    "118.7c-1: two Goblin Influx Arrays are two separate {R} reductions, the second hitting a cost with no {R} (rule 118.7b, not 118.7c); replaced by Eluge, the Shoreless Sea, a single {U}{U} reduction on Impulse {1}{U}.",
+    "118.8d-1: base variant carried a delta; Mental Misstep moved into setup and decisions, the Spell Snare variant now names the one swapped card.",
+    "118.9c-1: base variant carried a delta; Spell Snare moved into setup and decisions.",
+    "118.9a-1: base variant carried a delta and the polarities were inverted (the rule's restriction acts only in the both variant); choice moved into decisions, both variant made fires and base does_not_fire.",
+    "118.12-1: base variant carried a delta; A's no-response decision moved into decisions.",
+    "118.12a-1: base variant carried a delta; the decline moved into decisions.",
+    "118.12b-1: base variant carried a delta and the search_finds_nothing delta restated the whole library; choice moved into decisions and the variant now names the single swapped card.",
+    "118.14-1: Chromatic Orrery grants 'as though any color' (rule 609.4b), not the 'any type' permission 118.14 defines; swapped to Vizier of the Menagerie with Raging Goblin."
+  ],
+  "skipped": [
+    {
+      "id": "118.7d",
+      "reason": "cannot be illustrated: no card in Forge's cardsfolder reduces a cost by {C} colorless mana (every ReduceCost script reduces by generic, a color or a color list), so the rule cannot occur in a Forge game; 118.7b-1 and 118.7c-1 cover the sibling colored-reduction branches"
+    },
+    {
+      "id": "118.7e",
+      "reason": "cannot be illustrated: no card in Forge's cardsfolder reduces a cost by a hybrid mana symbol, so the rule cannot occur in a Forge game"
+    },
+    {
+      "id": "118.7f",
+      "reason": "cannot be illustrated: no card in Forge's cardsfolder reduces a cost by a Phyrexian mana symbol, so the rule cannot occur in a Forge game"
+    },
+    {
+      "id": "118.7g",
+      "reason": "cannot be illustrated: no card in Forge's cardsfolder reduces a cost by snow mana symbols, so the rule cannot occur in a Forge game"
+    },
+    {
+      "id": "118.8c",
+      "reason": "cannot be illustrated: it needs an effect that instructs a player to cast a spell 'if able' where that spell has a mandatory additional cost involving hidden-zone cards, and no card in Forge's cardsfolder forces such a cast"
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "118.3-1",
+      "rules": [
+        "118.3"
+      ],
+      "title": "A permanent that is already tapped cannot be tapped to pay a cost",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Prodigal Sorcerer",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A considers activating Prodigal Sorcerer's ability ({T}: 1 damage to any target) targeting Grizzly Bears."
+      ],
+      "variants": [
+        {
+          "label": "untapped",
+          "polarity": "does_not_fire",
+          "delta": "",
+          "expected": "The activation is legal: can_play is true, the cost {T} is payable, and Grizzly Bears is a legal target."
+        },
+        {
+          "label": "tapped",
+          "polarity": "fires",
+          "delta": "Prodigal Sorcerer starts tapped.",
+          "expected": "The activation is not legal: can_play is false because {T} cannot be paid by a permanent that is already tapped."
+        }
+      ],
+      "cards": [
+        "Prodigal Sorcerer",
+        "Grizzly Bears"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "118.3b-1",
+      "rules": [
+        "118.3",
+        "118.3b"
+      ],
+      "title": "Paying life subtracts it from the life total, and a player cannot pay more life than they have",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 5,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Greed",
+            "Swamp"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Island",
+            "Island"
+          ]
+        },
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A activates Greed ({B}, Pay 2 life: draw a card), tapping Swamp for {B} and paying 2 life.",
+        "Both players pass; the ability resolves."
+      ],
+      "variants": [
+        {
+          "label": "five_life",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "A pays 2 life, going from 5 to 3. The ability resolves and A draws an Island; A's hand holds 1 Island and the library 1."
+        },
+        {
+          "label": "two_life",
+          "polarity": "fires",
+          "delta": "A's life total is 2.",
+          "expected": "A pays 2 life, going from 2 to 0. In the state-based check before A next receives priority, with the ability still on the stack, A loses the game; the Island is never drawn."
+        },
+        {
+          "label": "one_life",
+          "polarity": "does_not_fire",
+          "delta": "A's life total is 1.",
+          "expected": "The activation is not legal: A cannot pay 2 life with a life total of 1. Swamp stays untapped, A's life stays 1 and nothing is drawn."
+        }
+      ],
+      "cards": [
+        "Greed",
+        "Swamp",
+        "Island"
+      ],
+      "forge_notes": "Library lists the top card first."
+    },
+    {
+      "id": "118.3a-1",
+      "rules": [
+        "118.3a"
+      ],
+      "title": "Mana left in the pool after a payment stays available for the next payment",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Shock",
+            "Shock"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A taps both Mountains for mana, so A's pool holds {R}{R}.",
+        "A casts Shock targeting player B, paying {R} from the pool; {R} remains in the pool.",
+        "A casts a second Shock targeting player B, paying the remaining {R} from the pool.",
+        "Both players pass; the second Shock resolves, then the first resolves."
+      ],
+      "variants": [
+        {
+          "label": "excess_floats",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Paying the first Shock removes exactly {R} from the pool, leaving {R}. The second Shock is castable with that mana. Each Shock deals 2 to B, so B is at 16."
+        },
+        {
+          "label": "no_excess",
+          "polarity": "does_not_fire",
+          "delta": "One Mountain starts tapped, so only one Mountain is tapped for mana and the pool holds {R}.",
+          "expected": "Paying the first Shock removes the only {R} from the pool, leaving it empty. The second Shock cannot be cast (can_play is false). Only the first Shock resolves, so B is at 18."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Shock"
+      ],
+      "forge_notes": "Both Mountains are listed untapped in the base setup; the no_excess variant starts the second one tapped."
+    },
+    {
+      "id": "118.6-1",
+      "rules": [
+        "118.6"
+      ],
+      "title": "A spell with no mana cost has an unpayable cost and cannot be cast from hand",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            "Island",
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Ancestral Vision"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A considers casting Ancestral Vision from hand with four untapped Islands."
+      ],
+      "variants": [
+        {
+          "label": "no_mana_cost",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Ancestral Vision cannot be cast: can_play is false, because its cost is unpayable. The four Islands stay untapped."
+        },
+        {
+          "label": "with_mana_cost",
+          "polarity": "does_not_fire",
+          "delta": "A's hand holds Divination ({2}{U}) instead of Ancestral Vision.",
+          "expected": "Divination is castable: can_play is true, with a cost of {2}{U}."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Ancestral Vision",
+        "Divination"
+      ],
+      "forge_notes": "Suspending Ancestral Vision is a special action, not casting, so it is not the thing under test."
+    },
+    {
+      "id": "118.6a-1",
+      "rules": [
+        "118.6a"
+      ],
+      "title": "An unpayable cost stays unpayable when increased, but a cast-for-free permission makes it payable",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Omniscience",
+            "Island"
+          ],
+          "B": [
+            "Sphere of Resistance"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Ancestral Vision"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A considers casting Ancestral Vision from hand, using Omniscience's permission to cast it without paying its mana cost and paying Sphere of Resistance's {1} increase with Island."
+      ],
+      "variants": [
+        {
+          "label": "omniscience_pays_tax",
+          "polarity": "does_not_fire",
+          "delta": "",
+          "expected": "Ancestral Vision is castable: can_play is true, with a cost after adjustment of {1} (only the Sphere increase), paid by tapping Island."
+        },
+        {
+          "label": "no_omniscience",
+          "polarity": "fires",
+          "delta": "Omniscience is not on the battlefield.",
+          "expected": "Ancestral Vision cannot be cast: can_play is false. The cost is unpayable and stays unpayable under Sphere of Resistance's increase, even with an untapped Island."
+        },
+        {
+          "label": "no_mana_for_increase",
+          "polarity": "fires",
+          "delta": "Island starts tapped.",
+          "expected": "Ancestral Vision cannot be cast: can_play is false. The free-cast permission applies, but the {1} increase from Sphere of Resistance cannot be paid."
+        }
+      ],
+      "cards": [
+        "Omniscience",
+        "Island",
+        "Sphere of Resistance",
+        "Ancestral Vision"
+      ],
+      "forge_notes": "Depends on Forge applying Sphere of Resistance's RaiseCost to a MayPlayWithoutManaCost cast."
+    },
+    {
+      "id": "118.7-1",
+      "rules": [
+        "118.7"
+      ],
+      "title": "A cost reduction lowers the amount actually paid",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Ruby Medallion",
+            "Mountain",
+            "Mountain",
+            "Mountain"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Hill Giant"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Hill Giant ({3}{R}) paying its reduced cost with three Mountains."
+      ],
+      "variants": [
+        {
+          "label": "with_medallion",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Ruby Medallion reduces Hill Giant's cost to {2}{R}. The cast is legal and all three Mountains are tapped. Hill Giant resolves and enters the battlefield."
+        },
+        {
+          "label": "two_lands",
+          "polarity": "does_not_fire",
+          "delta": "Only two Mountains are on the battlefield.",
+          "expected": "The reduced cost {2}{R} needs three mana and A has two, so Hill Giant cannot be cast (can_play is false)."
+        },
+        {
+          "label": "no_medallion",
+          "polarity": "does_not_fire",
+          "delta": "Ruby Medallion is not on the battlefield.",
+          "expected": "Hill Giant costs {3}{R}, which three Mountains cannot pay, so it cannot be cast (can_play is false)."
+        }
+      ],
+      "cards": [
+        "Ruby Medallion",
+        "Mountain",
+        "Hill Giant"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "118.7a-1",
+      "rules": [
+        "118.7a"
+      ],
+      "title": "A generic cost reduction cannot reduce the colored part of a cost",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Ruby Medallion",
+            "Mountain"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Ember Hauler"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A considers casting the red creature in hand with Ruby Medallion and one untapped Mountain."
+      ],
+      "variants": [
+        {
+          "label": "all_colored",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Ruby Medallion's {1} reduction cannot touch colored mana and Ember Hauler's cost {R}{R} has no generic part, so the cost stays {R}{R}. One Mountain cannot pay it: can_play is false."
+        },
+        {
+          "label": "generic_present",
+          "polarity": "does_not_fire",
+          "delta": "A's hand holds Goblin Piker ({1}{R}) instead of Ember Hauler.",
+          "expected": "The {1} reduction removes the generic part, so Goblin Piker costs {R}. The cast is legal (can_play is true), the Mountain is tapped and Goblin Piker resolves onto the battlefield."
+        }
+      ],
+      "cards": [
+        "Ruby Medallion",
+        "Mountain",
+        "Ember Hauler",
+        "Goblin Piker"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "118.7b-1",
+      "rules": [
+        "118.7b"
+      ],
+      "title": "A reduction by colored mana the cost does not require reduces generic mana instead",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Goblin Influx Array",
+            "Plains",
+            "Plains"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Mirror Entity"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Mirror Entity ({2}{W}), a Goblin spell through changeling, paying its reduced cost with the two Plains."
+      ],
+      "variants": [
+        {
+          "label": "no_red_in_cost",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Goblin Influx Array reduces by {R}, but Mirror Entity's cost has no {R}, so the generic part drops by one. The cost is {1}{W}, both Plains are tapped, and Mirror Entity resolves."
+        },
+        {
+          "label": "no_array",
+          "polarity": "does_not_fire",
+          "delta": "Goblin Influx Array is not on the battlefield.",
+          "expected": "Mirror Entity costs {2}{W}, which two Plains cannot pay, so it cannot be cast (can_play is false)."
+        },
+        {
+          "label": "red_in_cost",
+          "polarity": "other",
+          "delta": "A's hand holds Goblin Piker ({1}{R}) instead of Mirror Entity.",
+          "expected": "The {R} reduction removes the {R} component. Goblin Piker costs {1}, paid by tapping one Plains, and it resolves."
+        }
+      ],
+      "cards": [
+        "Goblin Influx Array",
+        "Plains",
+        "Mirror Entity",
+        "Goblin Piker"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "118.7c-1",
+      "rules": [
+        "118.7c"
+      ],
+      "title": "A single colored reduction that exceeds the cost's colored component also reduces generic mana",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Eluge, the Shoreless Sea",
+              "summoning_sick": false
+            },
+            {
+              "card": "Island",
+              "tapped": true,
+              "counters": {
+                "flood": 1
+              }
+            },
+            {
+              "card": "Island",
+              "tapped": true,
+              "counters": {
+                "flood": 1
+              }
+            }
+          ]
+        },
+        "hand": {
+          "A": [
+            "Impulse"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Island",
+            "Island",
+            "Island",
+            "Island"
+          ]
+        },
+        "exile": {},
+        "notes": "Both Islands are tapped and carry one flood counter each; A has no untapped land. A has cast no spell this turn."
+      },
+      "decisions": [
+        "A casts Impulse ({1}{U}), its first instant or sorcery spell this turn, paying the reduced cost with no mana.",
+        "Both players pass; Impulse resolves and A puts the top Island into hand, the other three on the bottom."
+      ],
+      "variants": [
+        {
+          "label": "two_flood_lands",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Eluge reduces the cost by {U}{U}, which exceeds Impulse's single {U}: the {U} is removed and the excess {U} reduces the generic part by 1. The cost is {0}, can_play is true, and Impulse resolves; A's hand holds one Island."
+        },
+        {
+          "label": "one_flood_land",
+          "polarity": "does_not_fire",
+          "delta": "Only one of the two Islands has a flood counter.",
+          "expected": "The reduction is {U}, which removes the {U} without exceeding it. The cost is {1} and A has no untapped land, so Impulse cannot be cast (can_play is false)."
+        }
+      ],
+      "cards": [
+        "Eluge, the Shoreless Sea",
+        "Island",
+        "Impulse"
+      ],
+      "forge_notes": "Eluge's ReduceCost carries Amount$ Y (lands with a flood counter) and Color$ U, so one static reduces by {U}{U}. The flood counters are set up directly; whether the Islands are Islands through Eluge's effect does not matter here."
+    },
+    {
+      "id": "118.8d-1",
+      "rules": [
+        "118.8d"
+      ],
+      "title": "An additional cost paid for a spell leaves its mana value unchanged",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain"
+          ],
+          "B": [
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Burst Lightning"
+          ],
+          "B": [
+            "Mental Misstep"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Burst Lightning ({R}) with kicker {4}, paying 5 mana by tapping all five Mountains, targeting player B.",
+        "B responds by casting Mental Misstep on Burst Lightning, paying {U} by tapping Island.",
+        "Both players pass and the stack resolves."
+      ],
+      "variants": [
+        {
+          "label": "mental_misstep",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Mental Misstep targets Burst Lightning legally, because the kicker did not change its mana value of 1. Burst Lightning is countered and goes to A's graveyard. B stays at 20."
+        },
+        {
+          "label": "spell_snare",
+          "polarity": "does_not_fire",
+          "delta": "B's counterspell is Spell Snare (counter target spell with mana value 2) instead of Mental Misstep.",
+          "expected": "Spell Snare cannot legally target Burst Lightning, whose mana value is 1 although A paid 5 mana. Burst Lightning resolves kicked and deals 4 damage to B, leaving B at 16."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Island",
+        "Burst Lightning",
+        "Mental Misstep",
+        "Spell Snare"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "118.9a-1",
+      "rules": [
+        "118.9a"
+      ],
+      "title": "Only one alternative cost can be applied to a spell as it is cast",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Omniscience",
+            "Mountain",
+            "Mountain"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Fireblast"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Fireblast ({4}{R}{R}) targeting player B, applying only Omniscience's permission to cast it without paying its mana cost.",
+        "Both players pass; Fireblast resolves."
+      ],
+      "variants": [
+        {
+          "label": "omniscience_only",
+          "polarity": "does_not_fire",
+          "delta": "",
+          "expected": "Fireblast is cast for no cost. Both Mountains stay on the battlefield. Fireblast deals 4 damage to B, leaving B at 16."
+        },
+        {
+          "label": "sacrifice_only",
+          "polarity": "other",
+          "delta": "A applies only Fireblast's own alternative cost, sacrificing two Mountains, instead of Omniscience's permission.",
+          "expected": "Both Mountains are sacrificed and go to A's graveyard. Fireblast deals 4 damage to B, leaving B at 16."
+        },
+        {
+          "label": "both",
+          "polarity": "fires",
+          "delta": "A proposes both alternative costs at once, sacrificing two Mountains and casting without paying the mana cost.",
+          "expected": "The attempt is not legal as proposed: only one alternative cost can apply, so the two cannot be combined. Fireblast can be cast with either one alone."
+        }
+      ],
+      "cards": [
+        "Omniscience",
+        "Mountain",
+        "Fireblast"
+      ],
+      "forge_notes": "Forge offers each alternative as a separate way to play Fireblast, so the both variant may not be reachable; it is the playability verdict on the combination."
+    },
+    {
+      "id": "118.9c-1",
+      "rules": [
+        "118.9c"
+      ],
+      "title": "An alternative cost leaves the spell's mana value unchanged",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Forest"
+          ],
+          "B": [
+            "Island",
+            "Ruby Medallion"
+          ]
+        },
+        "hand": {
+          "B": [
+            "Spell Snare"
+          ]
+        },
+        "graveyard": {
+          "A": [
+            "Ancient Grudge"
+          ]
+        },
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Ancient Grudge ({1}{R}) from the graveyard for its flashback cost {G}, tapping Forest, targeting Ruby Medallion.",
+        "B responds by casting Spell Snare on Ancient Grudge, tapping Island for {U}.",
+        "Both players pass and the stack resolves."
+      ],
+      "variants": [
+        {
+          "label": "spell_snare",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Spell Snare targets Ancient Grudge legally: its mana value is 2 even though A paid only {G}. Ancient Grudge is countered and exiled (flashback). Ruby Medallion stays on the battlefield."
+        },
+        {
+          "label": "mental_misstep",
+          "polarity": "does_not_fire",
+          "delta": "B's counterspell is Mental Misstep (counter target spell with mana value 1) instead of Spell Snare.",
+          "expected": "Mental Misstep cannot legally target Ancient Grudge, whose mana value is still 2. Ancient Grudge resolves and destroys Ruby Medallion, which goes to B's graveyard; Ancient Grudge is exiled (flashback)."
+        }
+      ],
+      "cards": [
+        "Forest",
+        "Island",
+        "Ruby Medallion",
+        "Ancient Grudge",
+        "Spell Snare",
+        "Mental Misstep"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "118.9d-1",
+      "rules": [
+        "118.9d"
+      ],
+      "title": "Cost increases apply on top of an alternative cost",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Mountain",
+              "tapped": true
+            },
+            {
+              "card": "Mountain",
+              "tapped": true
+            },
+            "Island"
+          ],
+          "B": [
+            "Sphere of Resistance"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Fireblast"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Fireblast targeting player B, paying its alternative cost (sacrificing two Mountains) and any cost increase with Island.",
+        "Both players pass; Fireblast resolves."
+      ],
+      "variants": [
+        {
+          "label": "increase_paid",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Sphere of Resistance adds {1} to the alternative cost. A sacrifices both Mountains and taps Island for {1}. Fireblast resolves and deals 4 damage to B, leaving B at 16."
+        },
+        {
+          "label": "island_tapped",
+          "polarity": "fires",
+          "delta": "Island starts tapped.",
+          "expected": "The {1} increase cannot be paid on top of the alternative cost, so Fireblast cannot be cast (can_play is false). Both Mountains stay on the battlefield and B stays at 20."
+        },
+        {
+          "label": "no_sphere",
+          "polarity": "does_not_fire",
+          "delta": "Sphere of Resistance is not on the battlefield.",
+          "expected": "No increase applies. A sacrifices both Mountains, pays no mana (Island stays untapped), and Fireblast resolves, leaving B at 16."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Island",
+        "Sphere of Resistance",
+        "Fireblast"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "118.10-1",
+      "rules": [
+        "118.10"
+      ],
+      "title": "One sacrifice cannot pay the costs of two abilities",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Viscera Seer",
+              "summoning_sick": false
+            },
+            "Goblin Bombardment"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Island",
+            "Island"
+          ]
+        },
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A activates Viscera Seer's ability (sacrifice a creature: scry 1), sacrificing Viscera Seer itself.",
+        "With that ability on the stack, A considers activating Goblin Bombardment (sacrifice a creature: 1 damage to any target) targeting player B."
+      ],
+      "variants": [
+        {
+          "label": "only_one_creature",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Viscera Seer's sacrifice has already been used. The Bombardment activation is not legal (can_play is false): A controls no other creature to sacrifice. B stays at 20."
+        },
+        {
+          "label": "second_creature",
+          "polarity": "does_not_fire",
+          "delta": "A also controls Grizzly Bears.",
+          "expected": "The Bombardment activation is legal, paid by sacrificing Grizzly Bears. When it resolves B takes 1 damage and is at 19; the Seer's scry also resolves."
+        }
+      ],
+      "cards": [
+        "Viscera Seer",
+        "Goblin Bombardment",
+        "Grizzly Bears",
+        "Island"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "118.11-1",
+      "rules": [
+        "118.11"
+      ],
+      "title": "A cost whose action a replacement effect modified still counts as paid",
+      "record_kind": "rewrite",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Goblin Bombardment",
+            "Grizzly Bears",
+            "Rest in Peace"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A activates Goblin Bombardment, sacrificing Grizzly Bears, targeting player B.",
+        "Both players pass; the ability resolves."
+      ],
+      "variants": [
+        {
+          "label": "replaced_sacrifice",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Rest in Peace replaces the graveyard move: Grizzly Bears is exiled instead of put into the graveyard. The cost still counts as paid, so Goblin Bombardment's ability resolves and B takes 1 damage, ending at 19."
+        },
+        {
+          "label": "no_replacement",
+          "polarity": "other",
+          "delta": "Rest in Peace is not on the battlefield.",
+          "expected": "Grizzly Bears is put into A's graveyard as the cost. The ability resolves and B is at 19."
+        },
+        {
+          "label": "nothing_to_sacrifice",
+          "polarity": "does_not_fire",
+          "delta": "Grizzly Bears is not on the battlefield.",
+          "expected": "A controls no creature, so the activation is not legal (can_play is false) and B stays at 20."
+        }
+      ],
+      "cards": [
+        "Goblin Bombardment",
+        "Grizzly Bears",
+        "Rest in Peace"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "118.12-1",
+      "rules": [
+        "118.12"
+      ],
+      "title": "An if-you-do clause after a resolution-time cost depends on being able to pay it",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "B",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Standstill",
+            "Seal of Cleansing"
+          ],
+          "B": [
+            "Mountain"
+          ]
+        },
+        "hand": {
+          "B": [
+            "Shock"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Island",
+            "Island",
+            "Island",
+            "Island"
+          ]
+        },
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "B casts Shock targeting player A, tapping Mountain. Standstill's trigger goes on the stack above Shock.",
+        "A makes no response.",
+        "Both players pass; the trigger resolves, then Shock resolves."
+      ],
+      "variants": [
+        {
+          "label": "sacrifice_paid",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "On resolution of the trigger Standstill is sacrificed (the cost is paid), so each opponent of B draws three cards: A draws three Islands. Shock then deals 2 to A, leaving A at 18."
+        },
+        {
+          "label": "destroyed_in_response",
+          "polarity": "does_not_fire",
+          "delta": "Instead of making no response, A activates Seal of Cleansing in response to the trigger, sacrificing it, targeting Standstill.",
+          "expected": "Standstill is destroyed before the trigger resolves. When the trigger resolves, Standstill cannot be sacrificed, so nobody draws. Shock deals 2 to A, leaving A at 18; A's library still has four Islands."
+        }
+      ],
+      "cards": [
+        "Standstill",
+        "Seal of Cleansing",
+        "Mountain",
+        "Shock",
+        "Island"
+      ],
+      "forge_notes": "Seal of Cleansing's activation is not a spell, so it does not trigger Standstill."
+    },
+    {
+      "id": "118.12a-1",
+      "rules": [
+        "118.12a"
+      ],
+      "title": "An unless clause applies its effect only when the player does not pay",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain"
+          ],
+          "B": [
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Shock"
+          ],
+          "B": [
+            "Force Spike"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Shock targeting player B, tapping one Mountain.",
+        "B responds with Force Spike targeting Shock, tapping Island.",
+        "When Force Spike resolves, A declines to pay {1}; the second Mountain stays untapped.",
+        "Both players pass; the remaining stack resolves."
+      ],
+      "variants": [
+        {
+          "label": "declines_to_pay",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Force Spike's effect happens: Shock is countered and goes to A's graveyard. B stays at 20."
+        },
+        {
+          "label": "pays",
+          "polarity": "does_not_fire",
+          "delta": "A pays {1} by tapping the second Mountain instead of declining.",
+          "expected": "Force Spike does nothing: Shock is not countered and resolves, dealing 2 to B, who is at 18."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Island",
+        "Shock",
+        "Force Spike"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "118.12b-1",
+      "rules": [
+        "118.12b"
+      ],
+      "title": "An if-you-do clause after an optional search checks the choice to search, not the result",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "upkeep",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Elfhame Sanctuary"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Shock",
+            "Forest"
+          ]
+        },
+        "exile": {},
+        "notes": "Library is listed top card first."
+      },
+      "decisions": [
+        "At the beginning of A's upkeep Elfhame Sanctuary triggers; A chooses to search and finds Forest.",
+        "The trigger resolves and play moves on to the draw step."
+      ],
+      "variants": [
+        {
+          "label": "search_finds_land",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Forest is put into A's hand, the library is shuffled, and A skips the draw step. A's hand is Forest; Shock stays in the library."
+        },
+        {
+          "label": "search_finds_nothing",
+          "polarity": "fires",
+          "delta": "A's library holds Lightning Bolt instead of Forest, so the search finds no basic land.",
+          "expected": "No card is found, the library is shuffled, and A still skips the draw step because A chose to search. A's hand is empty and Shock and Lightning Bolt stay in the library."
+        },
+        {
+          "label": "declines_search",
+          "polarity": "does_not_fire",
+          "delta": "A chooses not to search.",
+          "expected": "The draw step is not skipped: A draws the top card, Shock. A's hand is Shock and Forest stays in the library."
+        }
+      ],
+      "cards": [
+        "Elfhame Sanctuary",
+        "Shock",
+        "Forest",
+        "Lightning Bolt"
+      ],
+      "forge_notes": "Depends on Forge running the SkipPhase subability when the optional search finds no card."
+    },
+    {
+      "id": "118.14-1",
+      "rules": [
+        "118.14"
+      ],
+      "title": "Mana may be spent as though it were mana of any type when an effect allows it",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Vizier of the Menagerie",
+            "Plains"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Raging Goblin"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Raging Goblin ({R}), paying {R} with {W} from Plains."
+      ],
+      "variants": [
+        {
+          "label": "vizier",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Vizier of the Menagerie lets A spend mana as though it were mana of any type on creature spells, so {W} pays {R}. The cast is legal (can_play is true) and Raging Goblin enters the battlefield."
+        },
+        {
+          "label": "no_vizier",
+          "polarity": "does_not_fire",
+          "delta": "Vizier of the Menagerie is not on the battlefield.",
+          "expected": "{W} cannot pay {R}, so Raging Goblin cannot be cast (can_play is false)."
+        }
+      ],
+      "cards": [
+        "Vizier of the Menagerie",
+        "Plains",
+        "Raging Goblin"
+      ],
+      "forge_notes": "A's library is empty and nothing is drawn; Vizier's look-at-top and cast-from-top statics have nothing to act on."
+    }
+  ]
+}

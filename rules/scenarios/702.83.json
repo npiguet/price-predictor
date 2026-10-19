@@ -1,0 +1,187 @@
+{
+  "unit": "702.83",
+  "verified": true,
+  "review": [],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.83a-1",
+      "rules": [
+        "702.83a"
+      ],
+      "title": "Exalted gives a lone attacker +1/+1 until end of turn",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Akrasan Squire",
+              "summoning_sick": false
+            },
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            }
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A attacks player B with Grizzly Bears only.",
+        "Akrasan Squire's exalted trigger goes on the stack and resolves.",
+        "No blockers are declared; combat damage is dealt."
+      ],
+      "variants": [
+        {
+          "label": "with_exalted",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Exalted triggers once. Grizzly Bears is a 3/3 until end of turn and deals 3 damage to B, whose life becomes 17."
+        },
+        {
+          "label": "without_exalted",
+          "polarity": "does_not_fire",
+          "delta": "A's other creature is Savannah Lions (2/1, no abilities) instead of Akrasan Squire.",
+          "expected": "No exalted trigger. Grizzly Bears stays a 2/2 and deals 2 damage to B, whose life becomes 18."
+        }
+      ],
+      "cards": [
+        "Akrasan Squire",
+        "Grizzly Bears",
+        "Savannah Lions"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.83a-2",
+      "rules": [
+        "702.83a"
+      ],
+      "title": "Each instance of exalted triggers separately",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Akrasan Squire",
+              "summoning_sick": false
+            },
+            {
+              "card": "Aven Squire",
+              "summoning_sick": false
+            },
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            }
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A attacks player B with Grizzly Bears only.",
+        "Both exalted triggers go on the stack and resolve.",
+        "No blockers are declared; combat damage is dealt."
+      ],
+      "variants": [
+        {
+          "label": "two_instances",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Exalted triggers twice. Grizzly Bears is a 4/4 until end of turn and deals 4 damage to B, whose life becomes 16."
+        },
+        {
+          "label": "one_instance",
+          "polarity": "does_not_fire",
+          "delta": "Aven Squire is not on A's battlefield.",
+          "expected": "Exalted triggers once. Grizzly Bears is a 3/3 until end of turn and deals 3 damage to B, whose life becomes 17."
+        }
+      ],
+      "cards": [
+        "Akrasan Squire",
+        "Aven Squire",
+        "Grizzly Bears"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.83b-1",
+      "rules": [
+        "702.83b"
+      ],
+      "title": "A creature attacks alone only if it is the sole declared attacker",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Akrasan Squire",
+              "summoning_sick": false
+            },
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            }
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A declares attackers as the variant describes.",
+        "No blockers are declared; combat damage is dealt."
+      ],
+      "variants": [
+        {
+          "label": "one_attacker",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "A attacked player B with Grizzly Bears only. Grizzly Bears attacks alone and exalted triggers: it is a 3/3 until end of turn and B's life becomes 17."
+        },
+        {
+          "label": "two_attackers",
+          "polarity": "does_not_fire",
+          "delta": "A attacks player B with Grizzly Bears and Akrasan Squire instead of Grizzly Bears only.",
+          "expected": "Neither creature attacks alone, so exalted does not trigger. Grizzly Bears (2/2) and Akrasan Squire (1/1) deal 3 damage in total; B's life becomes 17 and neither creature gets a bonus."
+        }
+      ],
+      "cards": [
+        "Akrasan Squire",
+        "Grizzly Bears"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

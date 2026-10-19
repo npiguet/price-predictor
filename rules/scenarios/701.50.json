@@ -1,0 +1,440 @@
+{
+  "unit": "701.50",
+  "verified": true,
+  "review": [
+    "701.50f-1: the not_my_creature variant changed Glorious Purpose's controller, which tests the trigger's 'you control' condition rather than 701.50f; replaced it with nothing_to_discard (draw and discard both impossible, the connive still counts) and noted that 701.50f has no does_not_fire branch."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "701.50a-1",
+      "rules": [
+        "701.50a"
+      ],
+      "title": "Connive draws a card then discards a card, adding a counter only if the discard is nonland",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            "Island",
+            "Island"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Echo Inspector"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Grizzly Bears",
+            "Forest"
+          ]
+        },
+        "exile": {},
+        "notes": "Echo Inspector is the only card in A's hand; once it is cast, the card A draws is the only card A can discard. Library lists are top first; cards below the listed ones are irrelevant Forests."
+      },
+      "decisions": [
+        "A casts Echo Inspector, tapping four Islands.",
+        "Both players pass; Echo Inspector resolves and its enters trigger goes on the stack.",
+        "Both players pass; the trigger resolves: Echo Inspector connives. A draws Grizzly Bears and discards it."
+      ],
+      "variants": [
+        {
+          "label": "nonland_discard",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears moves from the library to the hand to A's graveyard. Echo Inspector gets one +1/+1 counter and is a 3/4 flier. A's hand is empty."
+        },
+        {
+          "label": "land_discard",
+          "polarity": "does_not_fire",
+          "delta": "The top card of A's library is Forest instead of Grizzly Bears.",
+          "expected": "Forest moves from the library to the hand to A's graveyard. Echo Inspector gets no counter and is a 2/3 flier. A's hand is empty."
+        }
+      ],
+      "cards": [
+        "Echo Inspector",
+        "Island",
+        "Grizzly Bears",
+        "Forest"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "701.50b-1",
+      "rules": [
+        "701.50b"
+      ],
+      "title": "A permanent that left the battlefield still connives using last known information",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Ledger Shredder",
+            "Mountain",
+            "Mountain"
+          ],
+          "B": [
+            "Mountain"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Shock",
+            "Shock"
+          ],
+          "B": [
+            "Lightning Bolt"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Grizzly Bears",
+            "Forest"
+          ]
+        },
+        "exile": {},
+        "notes": "Ledger Shredder (1/3 flier) triggers whenever a player casts their second spell each turn; nothing has been cast this turn. Library lists are top first; cards below the listed ones are irrelevant Forests."
+      },
+      "decisions": [
+        "A casts Shock targeting B, tapping a Mountain; both players pass and it resolves (B 18).",
+        "A casts Shock targeting B, tapping the other Mountain. Ledger Shredder's trigger goes on the stack above it.",
+        "B responds by casting Lightning Bolt targeting Ledger Shredder, tapping B's Mountain.",
+        "All players pass until everything resolves, the trigger resolving before the second Shock: Ledger Shredder connives, A draws Grizzly Bears and discards it."
+      ],
+      "variants": [
+        {
+          "label": "shredder_dies_in_response",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Lightning Bolt deals 3 damage and Ledger Shredder dies, so it is in A's graveyard when its trigger resolves. The trigger still resolves with Ledger Shredder's last known information: A draws Grizzly Bears and discards it (graveyard), and no counter is placed because Ledger Shredder is not on the battlefield. B's life is 16 after the second Shock."
+        },
+        {
+          "label": "no_response",
+          "polarity": "does_not_fire",
+          "delta": "B does not cast Lightning Bolt.",
+          "expected": "Ledger Shredder stays on the battlefield. It connives: A draws Grizzly Bears and discards it, and Ledger Shredder gets a +1/+1 counter and is a 2/4 flier. B's life is 16 after the second Shock."
+        }
+      ],
+      "cards": [
+        "Ledger Shredder",
+        "Mountain",
+        "Shock",
+        "Lightning Bolt",
+        "Grizzly Bears",
+        "Forest"
+      ],
+      "forge_notes": "ConniveEffect resolves against the trigger's host card; it checks that the card is still on the battlefield with the same timestamp before adding counters. Whether Forge keeps A drawing and discarding for a card in the graveyard needs checking when the scenario is played."
+    },
+    {
+      "id": "701.50c-1",
+      "rules": [
+        "701.50c"
+      ],
+      "title": "Permanents instructed to connive together connive one at a time",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Grizzly Bears",
+            "Runeclaw Bear"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Change of Plans"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Hill Giant",
+            "Forest"
+          ]
+        },
+        "exile": {},
+        "notes": "Both of A's creatures are controlled by A, who chooses the order. Change of Plans' optional phasing is declined. Library lists are top first; cards below the listed ones are irrelevant Forests."
+      },
+      "decisions": [
+        "A casts Change of Plans with X = 2, tapping four Islands, targeting Grizzly Bears and Runeclaw Bear.",
+        "Both players pass; Change of Plans resolves. A chooses Grizzly Bears to connive first.",
+        "Grizzly Bears connives: A draws Hill Giant and discards it. Then Runeclaw Bear connives: A draws Forest and discards it.",
+        "A chooses not to phase out either creature."
+      ],
+      "variants": [
+        {
+          "label": "bears_first",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears draws and discards Hill Giant (nonland) and gets a +1/+1 counter, a 3/3. Then Runeclaw Bear draws and discards Forest and gets no counter, a 2/2. Hill Giant and Forest are in A's graveyard; A's hand is empty."
+        },
+        {
+          "label": "runeclaw_first",
+          "polarity": "other",
+          "delta": "A chooses Runeclaw Bear to connive first.",
+          "expected": "Runeclaw Bear draws and discards Hill Giant and gets a +1/+1 counter, a 3/3. Then Grizzly Bears draws and discards Forest and gets no counter, a 2/2."
+        },
+        {
+          "label": "single_conniver",
+          "polarity": "does_not_fire",
+          "delta": "X = 1 and Grizzly Bears is the only target.",
+          "expected": "Only one permanent connives, so there is no ordering. Grizzly Bears draws and discards Hill Giant and is a 3/3. Forest stays on top of A's library."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Grizzly Bears",
+        "Runeclaw Bear",
+        "Change of Plans",
+        "Hill Giant",
+        "Forest"
+      ],
+      "forge_notes": "Only the same-controller part of 701.50c is reachable: no Forge card makes permanents of both players connive at the same time, so the APNAP ordering between players is not illustrated."
+    },
+    {
+      "id": "701.50d-1",
+      "rules": [
+        "701.50d"
+      ],
+      "title": "Connive N draws N, discards N and adds a counter per nonland card discarded",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            },
+            {
+              "card": "Mask of the Schemer",
+              "attached_to": "Grizzly Bears"
+            }
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Hill Giant",
+            "Forest",
+            "Island"
+          ]
+        },
+        "exile": {},
+        "notes": "A's hand is empty, so the cards A draws are the only cards A can discard. Library lists are top first; cards below the listed ones are irrelevant Forests."
+      },
+      "decisions": [
+        "A attacks B with Grizzly Bears (equipped with Mask of the Schemer). B has no blockers.",
+        "Combat damage is dealt: Grizzly Bears deals 2 damage to B and Mask of the Schemer's trigger resolves: Grizzly Bears connives 2.",
+        "A draws Hill Giant and Forest and discards both."
+      ],
+      "variants": [
+        {
+          "label": "one_nonland",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "B's life is 18. A draws two cards and discards two: Hill Giant and Forest are in A's graveyard and A's hand is empty. One of the two discarded cards is nonland, so Grizzly Bears gets one +1/+1 counter and is a 3/3."
+        },
+        {
+          "label": "two_lands",
+          "polarity": "does_not_fire",
+          "delta": "The top two cards of A's library are Forest and Island.",
+          "expected": "B's life is 18. Forest and Island are drawn and discarded, A's hand is empty, and Grizzly Bears gets no counter and stays a 2/2."
+        }
+      ],
+      "cards": [
+        "Grizzly Bears",
+        "Mask of the Schemer",
+        "Hill Giant",
+        "Forest",
+        "Island"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "701.50e-1",
+      "rules": [
+        "701.50e"
+      ],
+      "title": "Connive 0 is no event, so connive triggers do not fire",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Spymaster's Vault",
+            "Swamp",
+            "Mountain",
+            "Grizzly Bears",
+            "Glorious Purpose"
+          ],
+          "B": [
+            "Runeclaw Bear"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Shock"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Forest",
+            "Island"
+          ]
+        },
+        "exile": {},
+        "notes": "No creature has died this turn. Glorious Purpose: whenever a creature you control connives, put a +1/+1 counter on it and a plan counter on Glorious Purpose. Library lists are top first; cards below the listed ones are irrelevant Forests."
+      },
+      "decisions": [
+        "A activates Spymaster's Vault ({B}, {T}, tapping the Swamp) targeting Grizzly Bears.",
+        "Both players pass; the ability resolves: Grizzly Bears connives X, where X is the number of creatures that died this turn."
+      ],
+      "variants": [
+        {
+          "label": "x_zero",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "X is 0, so Grizzly Bears connives 0: no connive event occurs. A draws and discards nothing (Shock stays in hand, Forest stays on top of the library), Glorious Purpose does not trigger, Grizzly Bears has no counter and is a 2/2, and Glorious Purpose has no plan counter."
+        },
+        {
+          "label": "x_one",
+          "polarity": "does_not_fire",
+          "delta": "Before activating the Vault, A casts Shock (tapping the Mountain) targeting B's Runeclaw Bear, which dies.",
+          "expected": "X is 1, so Grizzly Bears connives 1: A draws Forest and discards it (the only card in hand), and the connives trigger fires. Glorious Purpose puts a +1/+1 counter on Grizzly Bears (3/3) and a plan counter on itself."
+        }
+      ],
+      "cards": [
+        "Spymaster's Vault",
+        "Swamp",
+        "Mountain",
+        "Grizzly Bears",
+        "Glorious Purpose",
+        "Runeclaw Bear",
+        "Shock",
+        "Forest",
+        "Island"
+      ],
+      "forge_notes": "ConniveEffect has no zero-count check: it runs the Connives trigger even when ConniveNum is 0, so Forge would fire Glorious Purpose in the x_zero variant. The expected text follows 701.50e."
+    },
+    {
+      "id": "701.50f-1",
+      "rules": [
+        "701.50f"
+      ],
+      "title": "A permanent connives, firing connive triggers, even if drawing is impossible",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Glorious Purpose"
+          ],
+          "B": [
+            "Spirit of the Labyrinth"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Echo Inspector",
+            "Grizzly Bears"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Forest"
+          ]
+        },
+        "exile": {},
+        "notes": "A has already drawn a card this turn in the draw step. Spirit of the Labyrinth: each player can't draw more than one card each turn. Library lists are top first; cards below the listed ones are irrelevant Forests."
+      },
+      "decisions": [
+        "A casts Echo Inspector, tapping four Islands.",
+        "Both players pass; Echo Inspector resolves and its enters trigger goes on the stack.",
+        "Both players pass; the trigger resolves: Echo Inspector connives. A cannot draw, and discards Grizzly Bears.",
+        "Glorious Purpose's connives trigger resolves."
+      ],
+      "variants": [
+        {
+          "label": "draw_impossible",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "No card is drawn: Forest stays on top of A's library. Grizzly Bears (nonland) is discarded, so Echo Inspector gets a counter. Echo Inspector still connived, so Glorious Purpose triggers: Echo Inspector gets a second +1/+1 counter (4/5) and Glorious Purpose gets a plan counter."
+        },
+        {
+          "label": "draw_possible",
+          "polarity": "other",
+          "delta": "B controls no Spirit of the Labyrinth.",
+          "expected": "A draws Forest, then discards Grizzly Bears; Forest stays in A's hand. Echo Inspector gets one counter from the discard and one from Glorious Purpose (4/5), and Glorious Purpose gets a plan counter."
+        },
+        {
+          "label": "nothing_to_discard",
+          "polarity": "fires",
+          "delta": "A's hand holds only Echo Inspector, so after it is cast A has no card to discard.",
+          "expected": "No card is drawn and none is discarded, so the connive itself adds no counter. Echo Inspector still connived, so Glorious Purpose triggers: Echo Inspector gets one +1/+1 counter (3/4) and Glorious Purpose gets a plan counter."
+        }
+      ],
+      "cards": [
+        "Echo Inspector",
+        "Island",
+        "Grizzly Bears",
+        "Glorious Purpose",
+        "Spirit of the Labyrinth",
+        "Forest"
+      ],
+      "forge_notes": "701.50f has no does_not_fire branch: a connive instruction with N of at least 1 always counts as conniving. The non-event case is connive 0, covered by 701.50e-1."
+    }
+  ]
+}

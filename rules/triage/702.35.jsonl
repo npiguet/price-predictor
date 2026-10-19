@@ -1,0 +1,4 @@
+{"id": "702.35", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.35a", "category": "mechanical", "observability": "direct", "record_kinds": ["rewrite", "trigger", "resolution"], "outcome": "A discarded card with madness is exiled instead of going to the graveyard; its owner may then cast it for the madness cost, otherwise it goes to the graveyard.", "note": "the casting choice is a decision; the replacement and fallback are observable"}
+{"id": "702.35b", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": "cost-payment procedure"}
+{"id": "702.35c", "category": "mechanical", "observability": "needs_new_fields", "record_kinds": ["resolution"], "outcome": "After the madness trigger resolves with the card uncast, effects referencing the discarded card can find it in its new public zone.", "note": ""}

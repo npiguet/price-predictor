@@ -1,0 +1,5 @@
+{"id": "701.68", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "701.68a", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "Blighting N puts N -1/-1 counters on one creature the blighting player controls.", "note": ""}
+{"id": "701.68b", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "A player who controls no creature cannot choose to blight, so a blight cost cannot be paid.", "note": ""}
+{"id": "701.68c", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "An effect referring to the blighted creature acts on the creature that received the -1/-1 counters.", "note": ""}
+{"id": "701.68d", "category": "mechanical", "observability": "direct", "record_kinds": ["trigger"], "outcome": "An ability that triggers whenever a player blights fires after the counters are put, whatever events occurred.", "note": ""}

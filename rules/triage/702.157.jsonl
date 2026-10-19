@@ -1,0 +1,3 @@
+{"id": "702.157", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.157a", "category": "mechanical", "observability": "direct", "record_kinds": ["trigger", "resolution"], "outcome": "When a squad creature enters having paid its squad cost, a token copy is created for each payment.", "note": ""}
+{"id": "702.157b", "category": "mechanical", "observability": "direct", "record_kinds": ["trigger"], "outcome": "Each squad instance triggers only from its own payments.", "note": ""}

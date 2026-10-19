@@ -1,0 +1,66 @@
+{
+  "unit": "701.65",
+  "verified": true,
+  "review": [
+    "triage: rules/triage/701.65.jsonl was missing, so validate never checked this file; wrote it."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "701.65a-1",
+      "rules": ["701.65a"],
+      "title": "An airbent card can be cast by its owner for {2} while it stays exiled",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {"A": 20, "B": 20},
+        "battlefield": {"A": ["Hill Giant", "Plains", "Plains", "Plains", "Mountain", "Mountain"], "B": []},
+        "hand": {"A": ["Airbending Lesson"]},
+        "graveyard": {},
+        "library": {"A": ["Forest"]},
+        "exile": {},
+        "notes": "Hill Giant has mana cost {3}{R}."
+      },
+      "decisions": [
+        "A casts Airbending Lesson targeting Hill Giant, tapping the three Plains.",
+        "Both players pass; Airbending Lesson resolves: Hill Giant is airbent (exiled) and A draws Forest.",
+        "A attempts to cast Hill Giant from exile for {2}, tapping both Mountains."
+      ],
+      "variants": [
+        {"label": "base", "polarity": "fires", "delta": "", "expected": "Hill Giant is exiled by Airbending Lesson. Casting it from exile is legal for A, its owner, with a cost of {2} instead of {3}{R}. Hill Giant resolves onto the battlefield under A's control; A has Forest in hand."},
+        {"label": "opponent_owned", "polarity": "does_not_fire", "delta": "The target is B's Hill Giant, on B's battlefield, instead of A's.", "expected": "Hill Giant is exiled. A's attempt to cast it from exile is not legal, because only its owner B may cast it for {2}; it stays in exile. B could cast it for {2} on B's own turn."}
+      ],
+      "cards": ["Hill Giant", "Plains", "Mountain", "Airbending Lesson", "Forest"],
+      "forge_notes": "Forge implements the permission as a command-zone effect with MayPlayAltManaCost$ 2 for the exiled card; it ends when the card leaves exile or is cast."
+    },
+    {
+      "id": "701.65b-1",
+      "rules": ["701.65b"],
+      "title": "Airbending triggers abilities only when something was exiled",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {"A": 20, "B": 20},
+        "battlefield": {"A": ["Avatar Aang", "Plains", "Plains", "Plains"], "B": ["Grizzly Bears"]},
+        "hand": {"A": ["Glider Staff"]},
+        "graveyard": {},
+        "library": {"A": ["Forest", "Mountain"]},
+        "exile": {},
+        "notes": "Libraries are listed top first. Avatar Aang has 'Whenever you waterbend, earthbend, firebend, or airbend, draw a card' and is not summoning sick."
+      },
+      "decisions": [
+        "A casts Glider Staff, tapping the three Plains.",
+        "Both players pass; Glider Staff resolves and enters.",
+        "Glider Staff's enters trigger targets B's Grizzly Bears; both players pass."
+      ],
+      "variants": [
+        {"label": "base", "polarity": "fires", "delta": "", "expected": "Grizzly Bears is airbent: it moves from B's battlefield to exile. Avatar Aang's trigger fires and A draws Forest."},
+        {"label": "no_target", "polarity": "does_not_fire", "delta": "Glider Staff's enters trigger is put on the stack with no target chosen.", "expected": "Nothing is airbent: Grizzly Bears stays on B's battlefield. Avatar Aang's trigger does not fire and A draws no card."}
+      ],
+      "cards": ["Avatar Aang", "Plains", "Grizzly Bears", "Glider Staff", "Forest", "Mountain"],
+      "forge_notes": "Forge fires the Airbend elemental-bend trigger only when its zone-movement table is non-empty after the exile."
+    }
+  ]
+}

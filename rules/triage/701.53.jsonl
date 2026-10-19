@@ -1,0 +1,3 @@
+{"id": "701.53", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "701.53a", "category": "mechanical", "observability": "direct", "record_kinds": ["resolution"], "outcome": "Incubate N creates an Incubator token with N +1/+1 counters.", "note": ""}
+{"id": "701.53b", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}

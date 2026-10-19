@@ -1,0 +1,307 @@
+{
+  "unit": "711",
+  "verified": true,
+  "review": [
+    "711.4-1: the no_white_mana and combat_timing variants flipped legality through cost payment and 702.87's sorcery timing, not through 711.4 (which cannot fail: level up is present at every counter count); dropped both, keeping the 0- and 9-counter variants.",
+    "711.6-1: the Lord of Shatterskull Pass variant is illegal whether power is read from the uppermost box (3) or a level box (6), so it does not test 711.6; relabelled it other as a control (711.6 has no failing branch) and removed the level-box comparison from its expected."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "711.2a-1",
+      "rules": [
+        "711.2a"
+      ],
+      "title": "A leveler within a level range has that range's power, toughness and abilities",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Student of Warfare",
+              "counters": {
+                "LEVEL": 2
+              },
+              "summoning_sick": false
+            }
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "No actions are taken; the board is observed in A's first main phase."
+      ],
+      "variants": [
+        {
+          "label": "two_counters",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Student of Warfare with 2 level counters is 3/3 with first strike."
+        },
+        {
+          "label": "six_counters",
+          "polarity": "fires",
+          "delta": "It has 6 level counters instead of 2.",
+          "expected": "Student of Warfare with 6 level counters (the top of LEVEL 2-6) is 3/3 with first strike."
+        },
+        {
+          "label": "one_counter",
+          "polarity": "does_not_fire",
+          "delta": "It has 1 level counter instead of 2.",
+          "expected": "Student of Warfare with 1 level counter is 1/1 with no first strike."
+        },
+        {
+          "label": "seven_counters",
+          "polarity": "other",
+          "delta": "It has 7 level counters instead of 2.",
+          "expected": "Student of Warfare with 7 level counters is 4/4 with double strike, not 3/3 with first strike."
+        }
+      ],
+      "cards": [
+        "Student of Warfare"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "711.2b-1",
+      "rules": [
+        "711.2b"
+      ],
+      "title": "A leveler with N3 or more level counters has the open-ended range's characteristics",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Student of Warfare",
+              "counters": {
+                "LEVEL": 7
+              },
+              "summoning_sick": false
+            }
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "No actions are taken; the board is observed in A's first main phase."
+      ],
+      "variants": [
+        {
+          "label": "seven_counters",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Student of Warfare with 7 level counters is 4/4 with double strike."
+        },
+        {
+          "label": "twelve_counters",
+          "polarity": "fires",
+          "delta": "It has 12 level counters instead of 7.",
+          "expected": "Student of Warfare with 12 level counters is 4/4 with double strike."
+        },
+        {
+          "label": "six_counters",
+          "polarity": "does_not_fire",
+          "delta": "It has 6 level counters instead of 7.",
+          "expected": "Student of Warfare with 6 level counters is 3/3 with first strike and not double strike."
+        }
+      ],
+      "cards": [
+        "Student of Warfare"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "711.4-1",
+      "rules": [
+        "711.4"
+      ],
+      "title": "A leveler can activate level up regardless of its level counters",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            {
+              "card": "Student of Warfare",
+              "summoning_sick": false
+            }
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A considers activating Student of Warfare's level up ability ({W}: put a level counter on it), tapping Plains."
+      ],
+      "variants": [
+        {
+          "label": "no_counters",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Level up is legal to activate with 0 level counters."
+        },
+        {
+          "label": "nine_counters",
+          "polarity": "fires",
+          "delta": "Student of Warfare has 9 level counters instead of 0.",
+          "expected": "Level up is legal to activate with 9 level counters."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Student of Warfare"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "711.5-1",
+      "rules": [
+        "711.5"
+      ],
+      "title": "A leveler below its first level has the uppermost power and toughness",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            {
+              "card": "Student of Warfare",
+              "summoning_sick": false
+            }
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A activates Student of Warfare's level up ability, tapping Plains. Both players pass; it resolves."
+      ],
+      "variants": [
+        {
+          "label": "zero_to_one",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Student of Warfare has 1 level counter, fewer than 2, so it is 1/1 with no keyword abilities."
+        },
+        {
+          "label": "one_to_two",
+          "polarity": "does_not_fire",
+          "delta": "Student of Warfare starts with 1 level counter instead of 0.",
+          "expected": "Student of Warfare has 2 level counters and is 3/3 with first strike."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Student of Warfare"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "711.6-1",
+      "rules": [
+        "711.6"
+      ],
+      "title": "A leveler card in the graveyard has its uppermost power and toughness",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Plains",
+            "Plains",
+            "Swamp",
+            "Swamp"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Graceful Restoration"
+          ]
+        },
+        "graveyard": {
+          "A": [
+            "Student of Warfare"
+          ]
+        },
+        "library": {},
+        "exile": {},
+        "notes": "Student of Warfare is in A's graveyard (it died with 7 level counters; counters do not persist outside the battlefield)."
+      },
+      "decisions": [
+        "A casts Graceful Restoration, tapping all five lands, choosing the mode that returns up to two creature cards with power 2 or less from the graveyard to the battlefield, targeting Student of Warfare."
+      ],
+      "variants": [
+        {
+          "label": "student",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Student of Warfare is a legal target: in the graveyard its power is 1 (uppermost box), so the spell resolves and Student of Warfare returns to the battlefield as a 1/1 with no level counters."
+        },
+        {
+          "label": "lord",
+          "polarity": "other",
+          "delta": "The creature card in A's graveyard is Lord of Shatterskull Pass instead of Student of Warfare.",
+          "expected": "Lord of Shatterskull Pass is not a legal target for that mode: in the graveyard its power is 3 (uppermost box)."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Swamp",
+        "Graceful Restoration",
+        "Student of Warfare",
+        "Lord of Shatterskull Pass"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

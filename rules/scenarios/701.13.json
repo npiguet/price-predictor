@@ -1,0 +1,214 @@
+{
+  "unit": "701.13",
+  "verified": true,
+  "review": [],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "701.13a-1",
+      "rules": [
+        "701.13a"
+      ],
+      "title": "Exiling a permanent moves it from the battlefield to exile",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains"
+          ],
+          "B": [
+            {
+              "card": "Hill Giant",
+              "summoning_sick": false
+            },
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Swords to Plowshares"
+          ],
+          "B": [
+            "Unsummon"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Swords to Plowshares targeting Hill Giant, tapping Plains.",
+        "Both players pass; Swords to Plowshares resolves."
+      ],
+      "variants": [
+        {
+          "label": "exiled",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Hill Giant moves from the battlefield to exile, not to the graveyard. B gains 3 life and is at 23."
+        },
+        {
+          "label": "target_returned",
+          "polarity": "does_not_fire",
+          "delta": "With Swords to Plowshares on the stack, B casts Unsummon targeting Hill Giant, tapping Island, and Unsummon resolves first.",
+          "expected": "Hill Giant returns to B's hand. Swords to Plowshares fizzles: nothing is exiled and B's life stays 20."
+        }
+      ],
+      "cards": [
+        "Hill Giant",
+        "Island",
+        "Plains",
+        "Swords to Plowshares",
+        "Unsummon"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "701.13a-2",
+      "rules": [
+        "701.13a"
+      ],
+      "title": "Exiling by name moves cards from hand, graveyard and library, but not from the battlefield",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Swamp",
+            "Swamp",
+            "Swamp",
+            "Swamp"
+          ],
+          "B": [
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Memoricide"
+          ],
+          "B": [
+            "Grizzly Bears"
+          ]
+        },
+        "graveyard": {
+          "B": [
+            "Grizzly Bears"
+          ]
+        },
+        "library": {
+          "B": [
+            "Grizzly Bears",
+            "Hill Giant"
+          ]
+        },
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Memoricide, naming Grizzly Bears and targeting B, tapping four Swamps.",
+        "Both players pass; Memoricide resolves and A takes every Grizzly Bears A finds."
+      ],
+      "variants": [
+        {
+          "label": "name_present",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The Grizzly Bears in B's hand, graveyard and library each move to exile. The Grizzly Bears on B's battlefield and Hill Giant in B's library are untouched."
+        },
+        {
+          "label": "name_absent",
+          "polarity": "does_not_fire",
+          "delta": "A names Typhoid Rats instead of Grizzly Bears.",
+          "expected": "No card with that name is in B's hand, graveyard or library, so nothing is exiled. All of B's Grizzly Bears stay where they are."
+        }
+      ],
+      "cards": [
+        "Grizzly Bears",
+        "Hill Giant",
+        "Memoricide",
+        "Swamp",
+        "Typhoid Rats"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "701.13a-3",
+      "rules": [
+        "701.13a"
+      ],
+      "title": "A spell can be exiled from the stack",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain"
+          ],
+          "B": [
+            "Island",
+            "Island",
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Lightning Bolt"
+          ],
+          "B": [
+            "Dissipate",
+            "Cancel"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "B's hand holds both counterspells; the base variant casts Dissipate."
+      },
+      "decisions": [
+        "A casts Lightning Bolt targeting B, tapping Mountain.",
+        "B casts the counterspell named in the variant targeting Lightning Bolt, tapping three Islands.",
+        "Both players pass; the counterspell resolves."
+      ],
+      "variants": [
+        {
+          "label": "dissipate",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Lightning Bolt is countered and moves from the stack to exile. B's life stays 20."
+        },
+        {
+          "label": "cancel",
+          "polarity": "does_not_fire",
+          "delta": "B casts Cancel instead of Dissipate.",
+          "expected": "Lightning Bolt is countered and moves from the stack to A's graveyard, not to exile. B's life stays 20."
+        }
+      ],
+      "cards": [
+        "Cancel",
+        "Dissipate",
+        "Island",
+        "Lightning Bolt",
+        "Mountain"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

@@ -1,0 +1,93 @@
+{
+  "unit": "702.115",
+  "verified": true,
+  "review": [
+    "702.115a-1: blocked variant omitted that the 2/2 Culling Drone and the 2/2 Grizzly Bears kill each other; expected now records both deaths.",
+    "skipped 702.115b: reason claimed no card can give a creature ingest, but Koh, the Face Stealer can borrow it (still only one instance); reason reworded, skip upheld."
+  ],
+  "skipped": [
+    {
+      "id": "702.115b",
+      "reason": "cannot be illustrated with Forge cards: no card prints ingest twice, no card grants ingest as a keyword, and the only way to borrow it (Koh, the Face Stealer) copies the abilities of one card, so no creature can have two instances; each instance is the single trigger 702.115a-1 covers"
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "702.115a-1",
+      "rules": [
+        "702.115a"
+      ],
+      "title": "Ingest exiles the top card of the damaged player's library",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "declare_attackers",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Culling Drone",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Swamp",
+            "Swamp",
+            "Swamp"
+          ],
+          "B": [
+            "Forest",
+            "Island",
+            "Plains"
+          ]
+        },
+        "exile": {},
+        "notes": "Culling Drone is a 2/2 with devoid and ingest. Libraries are listed top first; B's top card is Forest."
+      },
+      "decisions": [
+        "A attacks B with Culling Drone.",
+        "B declares no blockers (Grizzly Bears does not block).",
+        "Combat damage is dealt; the ingest trigger goes on the stack, both players pass and it resolves."
+      ],
+      "variants": [
+        {
+          "label": "unblocked",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Culling Drone deals 2 combat damage to B (life 18). The ingest trigger fires and resolves: B exiles Forest, the top card of B's library. B's library is Island, Plains."
+        },
+        {
+          "label": "blocked",
+          "polarity": "does_not_fire",
+          "delta": "B declares its Grizzly Bears as a blocker of Culling Drone instead of declaring no blockers.",
+          "expected": "Culling Drone deals its 2 damage to Grizzly Bears, not to a player; B's life stays 20 and the ingest trigger does not fire. B's library is unchanged and nothing is exiled. Culling Drone and Grizzly Bears each take lethal damage and both go to their owners' graveyards in the state-based check."
+        },
+        {
+          "label": "empty_library",
+          "polarity": "other",
+          "delta": "B's library is empty.",
+          "expected": "Culling Drone deals 2 combat damage to B (life 18) and the ingest trigger fires and resolves, but no card is exiled because B has none to exile; B has not lost the game."
+        }
+      ],
+      "cards": [
+        "Culling Drone",
+        "Grizzly Bears",
+        "Swamp",
+        "Forest",
+        "Island",
+        "Plains"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

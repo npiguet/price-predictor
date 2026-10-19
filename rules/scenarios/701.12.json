@@ -1,0 +1,570 @@
+{
+  "unit": "701.12",
+  "verified": true,
+  "review": [
+    "701.12c-1: cannot_gain_life had B losing 15 life while A could not gain; an exchange that can't be completed does nothing (701.12a, the card's ruling, Forge's LifeExchangeEffect), so both life totals now stay put.",
+    "701.12g-1: cannot_gain_life still set the toughness to 7 although B's life could not rise; under 701.12a nothing is exchanged (Forge's LifeExchangeVariantEffect agrees), so Tree of Perdition now stays 0/13.",
+    "701.12d-2: added; no scenario exercised the 701.12d clause that cards are exchanged only when one player owns them all. It uses Aura swap on an Arcanum Wings owned by A or by B."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "701.12a-1",
+      "rules": [
+        "701.12a"
+      ],
+      "title": "An exchange happens entirely or not at all",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            },
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island"
+          ],
+          "B": [
+            {
+              "card": "Hill Giant",
+              "summoning_sick": false
+            },
+            "Mountain"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Switcheroo"
+          ],
+          "B": [
+            "Shock"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Switcheroo targeting Grizzly Bears and Hill Giant, tapping five Islands.",
+        "Both players pass; Switcheroo resolves."
+      ],
+      "variants": [
+        {
+          "label": "both_legal",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "A controls Hill Giant and B controls Grizzly Bears. Switcheroo moves to A's graveyard."
+        },
+        {
+          "label": "one_target_destroyed",
+          "polarity": "does_not_fire",
+          "delta": "With Switcheroo on the stack, B casts Shock targeting Grizzly Bears, tapping Mountain, and Shock resolves first.",
+          "expected": "Grizzly Bears is destroyed and moves to A's graveyard. Switcheroo resolves with only one target left and no exchange occurs: Hill Giant stays under B's control."
+        }
+      ],
+      "cards": [
+        "Grizzly Bears",
+        "Hill Giant",
+        "Island",
+        "Mountain",
+        "Shock",
+        "Switcheroo"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "701.12b-1",
+      "rules": [
+        "701.12b"
+      ],
+      "title": "Exchanging control of two permanents with the same controller does nothing",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            },
+            {
+              "card": "Typhoid Rats",
+              "summoning_sick": false
+            },
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island"
+          ],
+          "B": [
+            {
+              "card": "Hill Giant",
+              "summoning_sick": false
+            }
+          ]
+        },
+        "hand": {
+          "A": [
+            "Switcheroo"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Switcheroo targeting Grizzly Bears and Hill Giant, tapping five Islands.",
+        "Both players pass; Switcheroo resolves."
+      ],
+      "variants": [
+        {
+          "label": "different_controllers",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Each player gains control of the other's creature at the same time. A controls Typhoid Rats and Hill Giant; B controls Grizzly Bears."
+        },
+        {
+          "label": "same_controller",
+          "polarity": "does_not_fire",
+          "delta": "Switcheroo targets Grizzly Bears and Typhoid Rats, both controlled by A.",
+          "expected": "Switcheroo resolves and does nothing. A still controls Grizzly Bears and Typhoid Rats; B still controls Hill Giant."
+        }
+      ],
+      "cards": [
+        "Grizzly Bears",
+        "Hill Giant",
+        "Island",
+        "Switcheroo",
+        "Typhoid Rats"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "701.12c-1",
+      "rules": [
+        "701.12c"
+      ],
+      "title": "Exchanging life totals sets each player to the other's previous total, unless a player can't gain life",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "upkeep",
+        "life": {
+          "A": 5,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Magus of the Mirror",
+              "summoning_sick": false
+            }
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "In the cannot_gain_life variant Everlasting Torment is added to B's battlefield."
+      },
+      "decisions": [
+        "A activates Magus of the Mirror ({T}, sacrifice it) targeting B.",
+        "Both players pass; the ability resolves."
+      ],
+      "variants": [
+        {
+          "label": "plain",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "A's life total goes from 5 to 20 and B's from 20 to 5. Magus of the Mirror is in A's graveyard."
+        },
+        {
+          "label": "cannot_gain_life",
+          "polarity": "does_not_fire",
+          "delta": "Everlasting Torment is on the battlefield under B's control (players can't gain life).",
+          "expected": "No part of the exchange occurs: A stays at 5 and B stays at 20. Magus of the Mirror is in A's graveyard."
+        }
+      ],
+      "cards": [
+        "Everlasting Torment",
+        "Magus of the Mirror"
+      ],
+      "forge_notes": "Forge's LifeExchangeEffect changes neither life total when the higher player can't lose life or the lower player can't gain life."
+    },
+    {
+      "id": "701.12d-1",
+      "rules": [
+        "701.12d",
+        "701.12f"
+      ],
+      "title": "Exchanging two zones moves the cards of each, even when one zone is empty",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Swamp",
+            "Swamp",
+            "Swamp",
+            "Swamp",
+            "Forest",
+            "Forest",
+            "Forest"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Harness Infinity",
+            "Grizzly Bears",
+            "Shock"
+          ]
+        },
+        "graveyard": {
+          "A": [
+            "Hill Giant"
+          ]
+        },
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Harness Infinity, tapping the four Swamps and three Forests.",
+        "Both players pass; Harness Infinity resolves."
+      ],
+      "variants": [
+        {
+          "label": "both_zones_full",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "A's hand and graveyard are exchanged: Grizzly Bears and Shock are in A's graveyard and Hill Giant is in A's hand. Harness Infinity is exiled."
+        },
+        {
+          "label": "empty_graveyard",
+          "polarity": "other",
+          "delta": "A's graveyard is empty.",
+          "expected": "The exchange still happens: Grizzly Bears and Shock move from A's hand to A's graveyard, and A's hand is empty. Harness Infinity is exiled."
+        },
+        {
+          "label": "empty_hand",
+          "polarity": "other",
+          "delta": "A's hand holds only Harness Infinity, which is cast, so A's hand is empty when it resolves.",
+          "expected": "The exchange still happens: Hill Giant moves from A's graveyard to A's hand, and A's graveyard is empty. Harness Infinity is exiled."
+        }
+      ],
+      "cards": [
+        "Forest",
+        "Grizzly Bears",
+        "Harness Infinity",
+        "Hill Giant",
+        "Shock",
+        "Swamp"
+      ],
+      "forge_notes": "The 701.12d ownership clause is exercised by 701.12d-2."
+    },
+    {
+      "id": "701.12d-2",
+      "rules": [
+        "701.12d"
+      ],
+      "title": "Cards in two zones are exchanged only if the same player owns them all",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            },
+            {
+              "card": "Arcanum Wings",
+              "attached_to": "Grizzly Bears"
+            },
+            {
+              "card": "Confiscate",
+              "attached_to": "Arcanum Wings"
+            },
+            "Island",
+            "Island",
+            "Island"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Holy Strength"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "A owns Arcanum Wings in the base variant. A controls Arcanum Wings through Confiscate in every variant. In the owned_by_opponent variant B cast Arcanum Wings on A's Grizzly Bears earlier and A then took control of it with Confiscate."
+      },
+      "decisions": [
+        "A activates Aura swap on Arcanum Wings ({2}{U}), tapping three Islands.",
+        "Both players pass; the ability resolves and A chooses Holy Strength."
+      ],
+      "variants": [
+        {
+          "label": "owned_by_controller",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Arcanum Wings returns to A's hand and Holy Strength enters the battlefield attached to Grizzly Bears. Grizzly Bears is 3/4 without flying. Confiscate goes to A's graveyard in the next state-based check."
+        },
+        {
+          "label": "owned_by_opponent",
+          "polarity": "does_not_fire",
+          "delta": "Arcanum Wings is owned by B instead of A.",
+          "expected": "No exchange occurs. Arcanum Wings stays attached to Grizzly Bears, which is 2/2 with flying, and Holy Strength stays in A's hand."
+        }
+      ],
+      "cards": [
+        "Arcanum Wings",
+        "Confiscate",
+        "Grizzly Bears",
+        "Holy Strength",
+        "Island"
+      ],
+      "forge_notes": "Forge's ZoneExchangeEffect does nothing unless the activating player owns the Aura on the battlefield."
+    },
+    {
+      "id": "701.12e-1",
+      "rules": [
+        "701.12e"
+      ],
+      "title": "Swapping an attached Aura with an Aura card in hand moves the attachment to the new card",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            },
+            {
+              "card": "Arcanum Wings",
+              "attached_to": "Grizzly Bears"
+            },
+            "Island",
+            "Island",
+            "Island"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Holy Strength"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A activates Aura swap on Arcanum Wings ({2}{U}), tapping three Islands.",
+        "Both players pass; the ability resolves."
+      ],
+      "variants": [
+        {
+          "label": "aura_in_hand",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Arcanum Wings returns to A's hand and Holy Strength enters the battlefield attached to Grizzly Bears. Grizzly Bears is 3/4 without flying."
+        },
+        {
+          "label": "no_aura_in_hand",
+          "polarity": "does_not_fire",
+          "delta": "A's hand holds Giant Growth instead of Holy Strength.",
+          "expected": "No exchange occurs. Arcanum Wings stays attached to Grizzly Bears, which is 2/2 with flying."
+        }
+      ],
+      "cards": [
+        "Arcanum Wings",
+        "Giant Growth",
+        "Grizzly Bears",
+        "Holy Strength",
+        "Island"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "701.12g-1",
+      "rules": [
+        "701.12g"
+      ],
+      "title": "Exchanging a life total with a toughness value sets the toughness and changes the life total",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 7
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Tree of Perdition",
+              "summoning_sick": false
+            }
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "In the cannot_gain_life variant Everlasting Torment is added to B's battlefield."
+      },
+      "decisions": [
+        "A activates Tree of Perdition ({T}) targeting B.",
+        "Both players pass; the ability resolves."
+      ],
+      "variants": [
+        {
+          "label": "opponent_below",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "B's life total goes from 7 to 13. Tree of Perdition's toughness is set to 7 and it is 0/7."
+        },
+        {
+          "label": "opponent_above",
+          "polarity": "fires",
+          "delta": "B's life total is 20 instead of 7.",
+          "expected": "B's life total goes from 20 to 13. Tree of Perdition's toughness is set to 20 and it is 0/20."
+        },
+        {
+          "label": "cannot_gain_life",
+          "polarity": "does_not_fire",
+          "delta": "Everlasting Torment is on the battlefield under B's control (players can't gain life).",
+          "expected": "No part of the exchange occurs: B stays at 7 and Tree of Perdition stays 0/13."
+        }
+      ],
+      "cards": [
+        "Everlasting Torment",
+        "Tree of Perdition"
+      ],
+      "forge_notes": "Forge's LifeExchangeVariantEffect returns without changing the life total or the toughness when the player can't gain (or lose) the life the exchange needs."
+    },
+    {
+      "id": "701.12h-1",
+      "rules": [
+        "701.12h"
+      ],
+      "title": "Exchanging text boxes gives each creature the other's rules text",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            },
+            "Island",
+            "Island",
+            "Island"
+          ],
+          "B": [
+            {
+              "card": "Typhoid Rats",
+              "summoning_sick": false
+            },
+            "Mountain"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Exchange of Words"
+          ],
+          "B": [
+            "Shock"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Exchange of Words, tapping three Islands.",
+        "Both players pass; Exchange of Words resolves and enters the battlefield.",
+        "Its enters trigger targets Grizzly Bears and Typhoid Rats.",
+        "Both players pass; the trigger resolves."
+      ],
+      "variants": [
+        {
+          "label": "text_with_ability",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears has deathtouch (Typhoid Rats' text) and Typhoid Rats has no abilities (Grizzly Bears' empty text). Both keep their own power, toughness and creature types: Grizzly Bears 2/2, Typhoid Rats 1/1."
+        },
+        {
+          "label": "both_vanilla",
+          "polarity": "other",
+          "delta": "B's creature is Hill Giant instead of Typhoid Rats.",
+          "expected": "Both text boxes are empty, so nothing changes: Grizzly Bears 2/2 and Hill Giant 3/3, neither with abilities."
+        },
+        {
+          "label": "target_destroyed",
+          "polarity": "does_not_fire",
+          "delta": "With the trigger on the stack, B casts Shock targeting Typhoid Rats, tapping Mountain, and Shock resolves first.",
+          "expected": "Typhoid Rats is destroyed. The exchange cannot be completed, so Grizzly Bears keeps its empty text and has no deathtouch."
+        }
+      ],
+      "cards": [
+        "Exchange of Words",
+        "Grizzly Bears",
+        "Hill Giant",
+        "Island",
+        "Mountain",
+        "Shock",
+        "Typhoid Rats"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

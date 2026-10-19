@@ -1,0 +1,302 @@
+{
+  "unit": "701.23",
+  "verified": true,
+  "review": [],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "701.23c-1",
+      "rules": [
+        "701.23c"
+      ],
+      "title": "A search for cards matching an undefined quality finds nothing",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            "Swamp",
+            "Swamp"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Lobotomy"
+          ]
+        },
+        "graveyard": {
+          "B": [
+            "Grizzly Bears"
+          ]
+        },
+        "library": {
+          "B": [
+            "Forest",
+            "Grizzly Bears",
+            "Forest"
+          ]
+        },
+        "exile": {},
+        "notes": "Library lists are top first. B's hand is empty."
+      },
+      "decisions": [
+        "A casts Lobotomy targeting B, tapping Island, Island, Swamp and Swamp.",
+        "Both players pass; Lobotomy resolves.",
+        "B reveals the hand; A chooses a card other than a basic land card if there is one."
+      ],
+      "variants": [
+        {
+          "label": "empty-hand",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "B's hand is empty, so no card is chosen. A searches B's graveyard, hand and library but finds nothing: B's Grizzly Bears stays in B's graveyard and in B's library, and nothing moves to exile. Lobotomy resolves."
+        },
+        {
+          "label": "bears-in-hand",
+          "polarity": "does_not_fire",
+          "delta": "B's hand holds one Grizzly Bears.",
+          "expected": "A chooses Grizzly Bears. A finds the same name in all three zones: the Grizzly Bears from B's hand, graveyard and library all move to exile, three cards in total."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Swamp",
+        "Lobotomy",
+        "Grizzly Bears",
+        "Forest"
+      ],
+      "forge_notes": "Lobotomy's ChooseCard step with no valid choice should end the chain; the library shuffle at the end may or may not still run."
+    },
+    {
+      "id": "701.23d-1",
+      "rules": [
+        "701.23d"
+      ],
+      "title": "A search for a quantity of cards must find a card when the library holds one",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Swamp",
+            "Swamp"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Demonic Tutor"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Forest",
+            "Grizzly Bears",
+            "Forest"
+          ]
+        },
+        "exile": {},
+        "notes": "Library lists are top first."
+      },
+      "decisions": [
+        "A casts Demonic Tutor, tapping Swamp and Swamp.",
+        "Both players pass; Demonic Tutor resolves.",
+        "A searches the library for a card and chooses Grizzly Bears."
+      ],
+      "variants": [
+        {
+          "label": "library-of-three",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears moves from A's library to A's hand. A's library has two cards left and is shuffled."
+        },
+        {
+          "label": "empty-library",
+          "polarity": "does_not_fire",
+          "delta": "A's library is empty.",
+          "expected": "Demonic Tutor resolves and finds no card because the library holds none. A's hand stays empty."
+        },
+        {
+          "label": "single-card-library",
+          "polarity": "fires",
+          "delta": "A's library holds only one Forest.",
+          "expected": "A has no choice and must find the Forest: it moves to A's hand and the library is empty."
+        }
+      ],
+      "cards": [
+        "Swamp",
+        "Demonic Tutor",
+        "Forest",
+        "Grizzly Bears"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "701.23e-1",
+      "rules": [
+        "701.23e"
+      ],
+      "title": "A found card is revealed only when the search says so",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Swamp",
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Vampiric Tutor"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Forest",
+            "Lightning Bolt",
+            "Forest"
+          ]
+        },
+        "exile": {},
+        "notes": "Library lists are top first."
+      },
+      "decisions": [
+        "A casts Vampiric Tutor, tapping Swamp.",
+        "Both players pass; Vampiric Tutor resolves.",
+        "A searches the library for a card and chooses Lightning Bolt."
+      ],
+      "variants": [
+        {
+          "label": "no-reveal",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Lightning Bolt is not revealed: B is shown nothing. Lightning Bolt ends on top of A's library after a shuffle of the other two cards, and A loses 2 life (18)."
+        },
+        {
+          "label": "reveal",
+          "polarity": "does_not_fire",
+          "delta": "A's hand holds Mystical Tutor instead of Vampiric Tutor and A casts it, tapping Island.",
+          "expected": "The instruction reveals the card: Lightning Bolt is revealed to B. It ends on top of A's library after a shuffle of the other two cards. A's life stays 20."
+        }
+      ],
+      "cards": [
+        "Swamp",
+        "Island",
+        "Vampiric Tutor",
+        "Forest",
+        "Lightning Bolt",
+        "Mystical Tutor"
+      ],
+      "forge_notes": "Forge has no trigger mode for revealing a card, so the reveal is visible only in the game log; record fields do not capture it."
+    },
+    {
+      "id": "701.23f-1",
+      "rules": [
+        "701.23f"
+      ],
+      "title": "Searching the top four cards instead still counts as searching the library",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Aven Mindcensor",
+              "summoning_sick": false
+            },
+            {
+              "card": "Archivist of Oghma",
+              "summoning_sick": false
+            },
+            "Swamp"
+          ],
+          "B": [
+            "Swamp"
+          ]
+        },
+        "hand": {
+          "B": [
+            "Vampiric Tutor"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Island",
+            "Island"
+          ],
+          "B": [
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Grizzly Bears"
+          ]
+        },
+        "exile": {},
+        "notes": "Library lists are top first."
+      },
+      "decisions": [
+        "A passes priority with an empty stack.",
+        "B casts Vampiric Tutor, tapping Swamp.",
+        "Both players pass; Vampiric Tutor resolves.",
+        "B searches the top four cards of the library (Aven Mindcensor) and chooses a Forest.",
+        "Archivist of Oghma's trigger goes on the stack and resolves."
+      ],
+      "variants": [
+        {
+          "label": "opponent-searches",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Archivist of Oghma triggers: A gains 1 life (21) and draws Island. B's chosen Forest ends on top of B's library, Grizzly Bears (the fifth card) was out of reach, and B loses 2 life (18)."
+        },
+        {
+          "label": "own-search",
+          "polarity": "does_not_fire",
+          "delta": "The searcher is A: Vampiric Tutor is in A's hand instead of B's, and A casts it, tapping A's Swamp, and chooses an Island.",
+          "expected": "Aven Mindcensor does not limit A's own search and Archivist of Oghma does not trigger on A's search: A's life is 18 and A draws nothing."
+        },
+        {
+          "label": "no-mindcensor",
+          "polarity": "other",
+          "delta": "Aven Mindcensor is not on the battlefield.",
+          "expected": "B searches the whole library. Archivist of Oghma still triggers: A gains 1 life (21) and draws Island."
+        }
+      ],
+      "cards": [
+        "Aven Mindcensor",
+        "Archivist of Oghma",
+        "Swamp",
+        "Vampiric Tutor",
+        "Island",
+        "Forest",
+        "Grizzly Bears"
+      ],
+      "forge_notes": "Aven Mindcensor is implemented as the LimitSearchLibrary keyword on opponents; whether Archivist's SearchedLibrary trigger fires on a limited search is the point to check."
+    }
+  ]
+}

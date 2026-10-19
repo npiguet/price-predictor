@@ -1,0 +1,230 @@
+{
+  "unit": "702.180",
+  "verified": true,
+  "review": [],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.180a-1",
+      "rules": [
+        "702.180a"
+      ],
+      "title": "Harmonize reduces the cost by the power of the creature tapped",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            }
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {
+          "A": [
+            "Unending Whisper"
+          ]
+        },
+        "library": {
+          "A": [
+            "Island"
+          ]
+        },
+        "exile": {},
+        "notes": "Unending Whisper (U, sorcery: draw a card) has Harmonize {5}{U}. All of A's Islands and Grizzly Bears are untapped."
+      },
+      "decisions": [
+        "A casts Unending Whisper from the graveyard using harmonize, tapping Grizzly Bears (power 2) and paying the reduced total cost with four Islands.",
+        "Both players pass; Unending Whisper resolves."
+      ],
+      "variants": [
+        {
+          "label": "tap_bears",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The cast is legal with a total cost of {3}{U}. Grizzly Bears becomes tapped and the four Islands are tapped. A draws Island."
+        },
+        {
+          "label": "tap_nothing",
+          "polarity": "does_not_fire",
+          "delta": "A taps no creature when paying the harmonize cost.",
+          "expected": "The cast is not legal: the total cost stays {5}{U} and A has only four Islands. Unending Whisper stays in A's graveyard."
+        },
+        {
+          "label": "bigger_creature",
+          "polarity": "fires",
+          "delta": "A controls Hill Giant (power 3) instead of Grizzly Bears and taps it.",
+          "expected": "The cast is legal with a total cost of {2}{U}. Hill Giant becomes tapped and three Islands are tapped, leaving one Island untapped. A draws Island."
+        }
+      ],
+      "cards": [
+        "Unending Whisper",
+        "Grizzly Bears",
+        "Hill Giant",
+        "Island"
+      ]
+    },
+    {
+      "id": "702.180a-2",
+      "rules": [
+        "702.180a"
+      ],
+      "title": "A spell cast with harmonize is exiled as it resolves",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            }
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Unending Whisper"
+          ]
+        },
+        "graveyard": {
+          "A": [
+            "Unending Whisper"
+          ]
+        },
+        "library": {
+          "A": [
+            "Island",
+            "Island"
+          ]
+        },
+        "exile": {},
+        "notes": "Unending Whisper (U, sorcery: draw a card) has Harmonize {5}{U}. Two copies: one in A's hand, one in A's graveyard."
+      },
+      "decisions": [
+        "A casts the graveyard copy of Unending Whisper using harmonize, tapping Grizzly Bears (power 2) and four Islands.",
+        "Both players pass; the spell resolves."
+      ],
+      "variants": [
+        {
+          "label": "harmonize_cast",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The spell resolves and A draws Island. The cast copy moves from the stack to exile, not to the graveyard. The hand copy stays in A's hand."
+        },
+        {
+          "label": "cast_from_hand",
+          "polarity": "does_not_fire",
+          "delta": "A instead casts the hand copy for its mana cost {U}, tapping one Island, without harmonize.",
+          "expected": "The spell resolves and A draws Island. It moves from the stack to A's graveyard, which now holds two Unending Whisper. The graveyard copy is unchanged."
+        }
+      ],
+      "cards": [
+        "Unending Whisper",
+        "Grizzly Bears",
+        "Island"
+      ]
+    },
+    {
+      "id": "702.180a-3",
+      "rules": [
+        "702.180a"
+      ],
+      "title": "A countered harmonize spell is exiled instead of going to the graveyard",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            "Island",
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Unending Whisper"
+          ],
+          "B": [
+            "Counterspell"
+          ]
+        },
+        "graveyard": {
+          "A": [
+            "Unending Whisper"
+          ]
+        },
+        "library": {
+          "A": [
+            "Island",
+            "Island"
+          ]
+        },
+        "exile": {},
+        "notes": "Unending Whisper (U, sorcery: draw a card) has Harmonize {5}{U}. Two copies: one in A's hand, one in A's graveyard. B's two Islands are untapped."
+      },
+      "decisions": [
+        "A casts the graveyard copy of Unending Whisper using harmonize, tapping Grizzly Bears (power 2) and four Islands.",
+        "B casts Counterspell targeting it, tapping both Islands.",
+        "Both players pass; Counterspell resolves."
+      ],
+      "variants": [
+        {
+          "label": "harmonize_countered",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The spell is countered and A draws nothing. It moves from the stack to exile, not to A's graveyard. B's Counterspell moves to B's graveyard."
+        },
+        {
+          "label": "hand_countered",
+          "polarity": "does_not_fire",
+          "delta": "A casts the hand copy for {U} (tapping one Island, no creature tapped) instead of the graveyard copy, and B counters it.",
+          "expected": "The spell is countered and A draws nothing. It moves from the stack to A's graveyard, which now holds two Unending Whisper. B's Counterspell moves to B's graveyard."
+        }
+      ],
+      "cards": [
+        "Unending Whisper",
+        "Counterspell",
+        "Grizzly Bears",
+        "Island"
+      ]
+    }
+  ]
+}

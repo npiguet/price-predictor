@@ -1,0 +1,165 @@
+{
+  "unit": "702.78",
+  "verified": true,
+  "review": [],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.78a-1",
+      "rules": [
+        "702.78a"
+      ],
+      "title": "Paying the conspire cost copies the spell",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            {
+              "card": "Goblin Piker",
+              "summoning_sick": false
+            },
+            {
+              "card": "Goblin Piker",
+              "summoning_sick": false
+            }
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Burn Trail"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Burn Trail targeting player B. As an additional cost A taps both Goblin Pikers for conspire, and taps four Mountains for {3}{R}.",
+        "The conspire trigger goes on the stack and resolves: the copy targets player B.",
+        "Both players pass; the copy and then the original resolve."
+      ],
+      "variants": [
+        {
+          "label": "conspire_paid",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The conspire trigger copies Burn Trail. Each deals 3 damage to B, who is at 14. The Goblin Pikers are tapped."
+        },
+        {
+          "label": "conspire_not_paid",
+          "polarity": "does_not_fire",
+          "delta": "A does not pay the conspire cost; both Goblin Pikers stay untapped.",
+          "expected": "No copy is made. Burn Trail deals 3 damage to B, who is at 17."
+        },
+        {
+          "label": "colors_differ",
+          "polarity": "does_not_fire",
+          "delta": "A controls two Grizzly Bears instead of two Goblin Pikers.",
+          "expected": "Grizzly Bears (green) do not share a color with Burn Trail (red), so the conspire cost cannot be paid. No copy is made and B is at 17."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Goblin Piker",
+        "Burn Trail",
+        "Grizzly Bears"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.78b-1",
+      "rules": [
+        "702.78b"
+      ],
+      "title": "Each instance of conspire is paid and triggers separately",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Raiding Schemes",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            {
+              "card": "Goblin Piker",
+              "summoning_sick": false
+            },
+            {
+              "card": "Goblin Piker",
+              "summoning_sick": false
+            },
+            {
+              "card": "Goblin Piker",
+              "summoning_sick": false
+            },
+            {
+              "card": "Goblin Piker",
+              "summoning_sick": false
+            }
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Burn Trail"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Burn Trail targeting player B. For its own conspire A taps two Goblin Pikers. For the conspire granted by Raiding Schemes A taps the other two. A taps four Mountains for {3}{R}.",
+        "Two conspire triggers go on the stack. Each copy targets player B.",
+        "Both players pass; the two copies and then the original resolve."
+      ],
+      "variants": [
+        {
+          "label": "both_paid",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Each instance triggers on its own payment and makes one copy. Three Burn Trail resolutions deal 9 damage in total: B is at 11. All four Goblin Pikers are tapped."
+        },
+        {
+          "label": "one_paid",
+          "polarity": "other",
+          "delta": "A pays only one conspire instance, tapping two Goblin Pikers.",
+          "expected": "Only the paid instance triggers. One copy is made, two Burn Trail resolutions deal 6 damage: B is at 14. Two Goblin Pikers stay untapped."
+        },
+        {
+          "label": "none_paid",
+          "polarity": "does_not_fire",
+          "delta": "A pays neither conspire instance.",
+          "expected": "No copies are made. Burn Trail deals 3 damage: B is at 17."
+        }
+      ],
+      "cards": [
+        "Raiding Schemes",
+        "Mountain",
+        "Goblin Piker",
+        "Burn Trail"
+      ],
+      "forge_notes": "Raiding Schemes grants conspire to a spell on the stack; confirm Forge offers the two conspire costs separately."
+    }
+  ]
+}

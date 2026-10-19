@@ -1,0 +1,659 @@
+{
+  "unit": "729",
+  "verified": true,
+  "review": [
+    "729.2a, 729.5a: the skip reasons did not hold (the Attraction deck's zone is observable and Forge's SubgameEffect implements the move); added scenario 729.2a-1 with Coming Attraction opening Concession Stand in the subgame, contrasted with the Stand sitting on the main-game battlefield."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "729.1b-1",
+      "rules": [
+        "729.1b"
+      ],
+      "title": "Only the subgame's winner and loser matter to the main game",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 15
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Plains"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Shahrazad"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Plains",
+            "Plains",
+            "Plains"
+          ],
+          "B": [
+            "Mountain",
+            "Mountain",
+            "Mountain"
+          ]
+        },
+        "exile": {},
+        "notes": "Subgame life totals start at 20 whatever the main-game totals."
+      },
+      "decisions": [
+        "A casts Shahrazad, tapping two Plains. Both players pass; Shahrazad resolves and the subgame is played."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Both players have three cards, draw them all, and lose the subgame at its first state-based check, so it is a draw and nobody wins. A loses 10 life (10) and B loses 8 (7), computed from the main-game totals. Nothing else from the subgame carries over."
+        },
+        {
+          "label": "b_wins",
+          "polarity": "does_not_fire",
+          "delta": "B's library has 20 Mountains instead of 3.",
+          "expected": "A loses the subgame and B wins. A loses 10 life (10) and B's life stays 15."
+        }
+      ],
+      "cards": [
+        "Shahrazad",
+        "Plains",
+        "Mountain"
+      ],
+      "forge_notes": "A subgame draw leaves both players not winning; Forge treats isWinner as false for both."
+    },
+    {
+      "id": "729.2-1",
+      "rules": [
+        "729.2",
+        "729.4"
+      ],
+      "title": "Only libraries enter the subgame; the main game's other zones stay outside",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Plains",
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Shahrazad",
+            "Shock"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains"
+          ],
+          "B": [
+            "Mountain",
+            "Mountain",
+            "Mountain"
+          ]
+        },
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Shahrazad, tapping two Plains. Both players pass; Shahrazad resolves and the subgame is played."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "does_not_fire",
+          "delta": "",
+          "expected": "The subgame starts with A's 20 Plains and B's 3 Mountains as libraries, empty hands and battlefields and 20 life each. Grizzly Bears and Shock are not in it. B has three cards and loses at the first state-based check. Afterwards Grizzly Bears is still on A's battlefield, Shock is still in A's hand, and B loses 10 life (10)."
+        },
+        {
+          "label": "bears_in_library",
+          "polarity": "fires",
+          "delta": "Grizzly Bears is in A's library (replacing one Plains) instead of on the battlefield.",
+          "expected": "Grizzly Bears is part of the subgame's library, so it may be drawn there. When the subgame ends it is back in A's main-game library, not on the battlefield, and B loses 10 life (10)."
+        }
+      ],
+      "cards": [
+        "Shahrazad",
+        "Plains",
+        "Mountain",
+        "Grizzly Bears",
+        "Shock"
+      ],
+      "forge_notes": "Which player goes first in the subgame is random and not asserted here."
+    },
+    {
+      "id": "729.2a-1",
+      "rules": [
+        "729.2a",
+        "729.5a"
+      ],
+      "title": "The Attraction deck moves into the subgame and back out of it",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Forest",
+            "Forest",
+            "Forest"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Coming Attraction"
+          ],
+          "B": [
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest"
+          ],
+          "B": []
+        },
+        "exile": {},
+        "notes": "The listed zones and life totals belong to the subgame, which Shahrazad (cast by A) started. Main game: Shahrazad is on the stack, main-game life is A 20 and B 20, and A's Attraction deck in the main-game command zone holds exactly one card, Concession Stand. B has no Attraction deck."
+      },
+      "decisions": [
+        "A casts Coming Attraction, tapping three Forests, searches for a Forest and puts it onto the battlefield tapped, then opens an Attraction. Both players pass; Coming Attraction resolves.",
+        "A passes through to B's turn. B draws from an empty library and loses the subgame; Shahrazad finishes resolving."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Opening an Attraction puts Concession Stand onto A's subgame battlefield. When the subgame ends, Concession Stand is in A's Attraction deck in the main-game command zone, not on a battlefield and not in A's library. B loses 10 life (10); A's life stays 20."
+        },
+        {
+          "label": "stand_on_main_battlefield",
+          "polarity": "does_not_fire",
+          "delta": "Concession Stand is on A's main-game battlefield, opened earlier, instead of in A's main-game Attraction deck.",
+          "expected": "A's subgame Attraction deck is empty, so opening an Attraction puts nothing onto the battlefield. After the subgame Concession Stand is still on A's main-game battlefield and A's Attraction deck is empty. B loses 10 life (10)."
+        }
+      ],
+      "cards": [
+        "Shahrazad",
+        "Coming Attraction",
+        "Concession Stand",
+        "Forest",
+        "Mountain"
+      ],
+      "forge_notes": "Forge's SubgameEffect copies the main-game Attraction deck into the subgame's AttractionDeck zone and leaves the main-game deck untouched; at the end it discards the subgame copies, so the main-game deck still holds the original Concession Stand rather than a card moved back face down. A one-card Attraction deck is a puzzle-style setup."
+    },
+    {
+      "id": "729.3-1",
+      "rules": [
+        "729.3"
+      ],
+      "title": "A subgame player with fewer than seven cards loses at the first upkeep",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Plains"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Shahrazad"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains"
+          ],
+          "B": [
+            "Mountain",
+            "Mountain",
+            "Mountain"
+          ]
+        },
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Shahrazad, tapping two Plains. Both players pass; Shahrazad resolves and the subgame is played."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "B draws its three cards, fails to draw four more, and loses the subgame at the state-based check of the first upkeep. B loses 10 life (10); A's life stays 20."
+        },
+        {
+          "label": "exactly_seven",
+          "polarity": "does_not_fire",
+          "delta": "B's library has 7 Mountains instead of 3.",
+          "expected": "B draws all seven cards and is not eliminated at the first upkeep. B loses later by drawing from an empty library, and still loses 10 life (10) once the subgame ends."
+        }
+      ],
+      "cards": [
+        "Shahrazad",
+        "Plains",
+        "Mountain"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "729.4a-1",
+      "rules": [
+        "729.4a"
+      ],
+      "title": "A card pulled out of the main game triggers its leave ability only after the main game resumes",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Forest",
+            "Forest"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Living Wish"
+          ],
+          "B": [
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest"
+          ],
+          "B": []
+        },
+        "exile": {},
+        "notes": "The listed zones and life totals belong to the subgame, which Shahrazad (cast by A) started. Main game: Shahrazad is on the stack, main-game life is A 20 and B 20, and A's main-game battlefield has Tocasia's Onulet and Grizzly Bears, both owned by A."
+      },
+      "decisions": [
+        "A casts Living Wish, tapping two Forests, and chooses Tocasia's Onulet from outside the game as the card to put into hand. Both players pass; Living Wish resolves.",
+        "A passes through to B's turn. B draws from an empty library and loses the subgame; Shahrazad finishes resolving and the main game resumes. Both players pass; the main-game trigger resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Tocasia's Onulet leaves the main-game battlefield while the subgame is in progress, but its trigger does not go on the stack then. After B loses and Shahrazad's life loss finishes (B 20 to 10), the trigger goes on the stack and resolves, A gaining 2 life (22). Tocasia's Onulet is in A's main-game library."
+        },
+        {
+          "label": "no_leave_trigger",
+          "polarity": "does_not_fire",
+          "delta": "A chooses Grizzly Bears from outside the game instead of Tocasia's Onulet.",
+          "expected": "Grizzly Bears leaves the main-game battlefield and no trigger goes on the stack. B loses 10 life (10), A's life stays 20, and Grizzly Bears is in A's main-game library."
+        }
+      ],
+      "cards": [
+        "Shahrazad",
+        "Living Wish",
+        "Forest",
+        "Mountain",
+        "Tocasia's Onulet",
+        "Grizzly Bears"
+      ],
+      "forge_notes": "Forge builds the subgame Sideboard zone from the main game's hand, battlefield, graveyard, exile and stack cards, and moves the original to its Subgame zone."
+    },
+    {
+      "id": "729.4b-1",
+      "rules": [
+        "729.4b"
+      ],
+      "title": "Main-game counters stay out of the subgame and subgame counters vanish",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            "Swamp",
+            "Swamp"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Contaminated Drink"
+          ],
+          "B": [
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island"
+          ],
+          "B": []
+        },
+        "exile": {},
+        "notes": "The listed zones and life totals belong to the subgame, which Shahrazad (cast by A) started. Main game: Shahrazad is on the stack, main-game life is A 20 and B 20, and A has 3 rad counters in the main game."
+      },
+      "decisions": [
+        "A casts Contaminated Drink with X = 2, tapping all four lands. Both players pass; it resolves.",
+        "A passes through to B's turn. B draws from an empty library and loses the subgame; Shahrazad finishes resolving."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "In the subgame A has only the 1 rad counter it just received, not the 3 main-game counters. When the subgame ends the subgame counter is gone and A has exactly 3 rad counters in the main game. B loses 10 life (10)."
+        },
+        {
+          "label": "no_main_counters",
+          "polarity": "fires",
+          "delta": "A has no rad counters in the main game instead of 3.",
+          "expected": "A's subgame rad counter does not survive: A has 0 rad counters in the main game afterwards. B loses 10 life (10)."
+        },
+        {
+          "label": "no_subgame_counters",
+          "polarity": "does_not_fire",
+          "delta": "A does not cast Contaminated Drink and gets no rad counter in the subgame.",
+          "expected": "A has exactly 3 rad counters in the main game afterwards and B loses 10 life (10)."
+        }
+      ],
+      "cards": [
+        "Shahrazad",
+        "Contaminated Drink",
+        "Island",
+        "Swamp",
+        "Mountain"
+      ],
+      "forge_notes": "Setup lists subgame zones; main-game state is in notes."
+    },
+    {
+      "id": "729.5-1",
+      "rules": [
+        "729.5"
+      ],
+      "title": "Subgame cards return to the main-game libraries when it ends",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Plains"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Shahrazad"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains"
+          ],
+          "B": [
+            "Mountain",
+            "Mountain",
+            "Mountain"
+          ]
+        },
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Shahrazad, tapping two Plains. Both players pass; Shahrazad resolves and the subgame is played."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The subgame ends when B loses at the first upkeep. B's three Mountains and A's seven drawn Plains return to the main-game libraries, which again hold 3 and 20 cards. Shahrazad then finishes resolving: B loses 10 life (10) and Shahrazad goes to A's graveyard."
+        },
+        {
+          "label": "long_subgame",
+          "polarity": "fires",
+          "delta": "B's library has 20 Mountains instead of 3.",
+          "expected": "Whatever happens in the subgame, once it ends both main-game libraries again hold 20 cards, no subgame object remains, and Shahrazad finishes resolving."
+        },
+        {
+          "label": "outside_cards_stay",
+          "polarity": "does_not_fire",
+          "delta": "B has Hill Giant in its main-game graveyard.",
+          "expected": "Hill Giant is outside the subgame and is not put into B's library: it stays in B's graveyard and B's library holds 3 cards. B loses 10 life (10)."
+        }
+      ],
+      "cards": [
+        "Shahrazad",
+        "Plains",
+        "Mountain",
+        "Hill Giant"
+      ],
+      "forge_notes": "Forge leaves the main-game library cards in place and discards the subgame's copies, so the main-game library keeps the same card count, though the card objects differ."
+    },
+    {
+      "id": "729.6-1",
+      "rules": [
+        "729.6"
+      ],
+      "title": "A subgame inside a subgame treats the first subgame as its main game",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Plains"
+          ],
+          "B": [
+            "Island",
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Shahrazad"
+          ],
+          "B": [
+            "Counterspell"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains"
+          ],
+          "B": [
+            "Mountain",
+            "Mountain",
+            "Mountain"
+          ]
+        },
+        "exile": {},
+        "notes": "The listed zones and life totals belong to the first subgame, which an earlier Shahrazad cast by A in the main game started. Main game: that Shahrazad is still on the stack and main-game life is A 20 and B 20. B has Counterspell available but only casts it in the countered variant."
+      },
+      "decisions": [
+        "A casts Shahrazad in the subgame, tapping two Plains. B passes (it does not cast Counterspell); Shahrazad resolves and the nested subgame is played."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The nested subgame uses the first subgame's libraries (A 20 Plains, B 3 Mountains). B has three cards and loses it. B loses 10 of its first-subgame life (10) and A's stays 20. The first subgame resumes at A's precombat main phase and the main game's life totals stay 20 and 20."
+        },
+        {
+          "label": "both_short",
+          "polarity": "other",
+          "delta": "A's library has 3 Plains instead of 20.",
+          "expected": "Both players lose the nested subgame, so it is a draw. A and B each lose 10 first-subgame life (10 and 10). The main game's life totals stay 20 and 20."
+        },
+        {
+          "label": "countered",
+          "polarity": "does_not_fire",
+          "delta": "B casts Counterspell on Shahrazad, tapping its two Islands.",
+          "expected": "Shahrazad is countered and no nested subgame starts. Both first-subgame life totals stay 20 and both libraries keep their cards."
+        }
+      ],
+      "cards": [
+        "Shahrazad",
+        "Plains",
+        "Island",
+        "Mountain",
+        "Counterspell"
+      ],
+      "forge_notes": "Forge SubgameEffect builds a Game with the first subgame as parent; nested use has no card script exercising it."
+    }
+  ]
+}

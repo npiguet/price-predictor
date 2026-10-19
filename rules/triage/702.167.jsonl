@@ -1,0 +1,4 @@
+{"id": "702.167", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.167a", "category": "mechanical", "observability": "direct", "record_kinds": ["resolution"], "outcome": "Activating craft exiles the permanent and the materials as cost, then returns the card to the battlefield transformed; it is sorcery-speed only.", "note": ""}
+{"id": "702.167b", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "A craft material described by type alone may be a permanent or a graveyard card of that type, deciding whether the cost can be paid.", "note": ""}
+{"id": "702.167c", "category": "mechanical", "observability": "indirect", "record_kinds": ["continuous"], "outcome": "An ability of the crafted permanent referring to the exiled cards sees the cards exiled to pay its craft cost.", "note": ""}

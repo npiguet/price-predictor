@@ -1,0 +1,2177 @@
+{
+  "unit": "111",
+  "verified": true,
+  "review": [
+    "111.10d-1: base variant had a non-empty delta and the Doom Blade pair (Walker vs Grizzly Bears as target) flipped nothing about the Walker token; rewrote as Michonne attacking with two Walker tokens (Zombie count fires her trigger, 2 damage each) against two Soldier tokens.",
+    "111.10h-1: base variant had a non-empty delta, and the multi-turn setup left both libraries empty so a player would lose on drawing; started on A's later turn with the untapped Powerstone token already on the battlefield and made Giant Spider the base, Juggernaut the delta.",
+    "111.10t-1: base variant had a non-empty delta; moved the main-phase timing into the decisions and left the end-step timing as the only delta.",
+    "111.10i-1: expected omitted that Tangled Skyline gives the transformed Phyrexian reach; added it.",
+    "111.10x-1: the prepared/not-prepared pair tested the prepare mechanic, not the Heartwood definition; the pair now spends the Heartwood's mana on Giant Growth ({G}, legal) against Dark Ritual ({B}, illegal).",
+    "111.2-2: the Counterspell variant tested countering, not ownership; replaced it with B casting the same instant so the creator (and so the owner and controller) flips, and dropped Counterspell and Islands."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "111.2-1",
+      "rules": [
+        "111.2"
+      ],
+      "title": "A token is owned and controlled by the player who creates it, even when another player's permanent causes it",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Forbidden Orchard",
+            "Mountain"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Shock"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Shock targeting B, paying {R} by tapping Forbidden Orchard for mana.",
+        "Forbidden Orchard's trigger goes on the stack targeting B (the only opponent); both players pass; the trigger resolves.",
+        "Both players pass; Shock resolves."
+      ],
+      "variants": [
+        {
+          "label": "orchard_tapped",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "B is the player who creates the 1/1 colorless Spirit creature token: B owns it and controls it; A controls no token. B's life is 18."
+        },
+        {
+          "label": "mountain_tapped",
+          "polarity": "does_not_fire",
+          "delta": "A pays {R} by tapping Mountain instead of Forbidden Orchard, so no creation instruction exists.",
+          "expected": "Forbidden Orchard's trigger does not fire; no token is created. B's life is 18."
+        }
+      ],
+      "cards": [
+        "Forbidden Orchard",
+        "Mountain",
+        "Shock"
+      ],
+      "forge_notes": "Forbidden Orchard's Mode$ TapsForMana trigger with Activator$ You; the token is created with TokenOwner$ Targeted."
+    },
+    {
+      "id": "111.2-2",
+      "rules": [
+        "111.2"
+      ],
+      "title": "The player who casts a token-making spell owns the tokens and controls them as they enter",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Plains"
+          ],
+          "B": [
+            "Plains",
+            "Plains"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Raise the Alarm"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Raise the Alarm, tapping both of A's Plains.",
+        "Both players pass; Raise the Alarm resolves."
+      ],
+      "variants": [
+        {
+          "label": "a_casts",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "A creates two 1/1 white Soldier creature tokens: A owns and controls both; B controls no token."
+        },
+        {
+          "label": "b_casts",
+          "polarity": "other",
+          "delta": "Raise the Alarm is in B's hand instead, and B casts it during A's main phase 1 with B's two Plains after A passes priority.",
+          "expected": "B creates the two Soldier tokens: B owns and controls both; A controls no token."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Raise the Alarm"
+      ],
+      "forge_notes": "111.2 has no does_not_fire branch: every created token is owned by its creator."
+    },
+    {
+      "id": "111.3-1",
+      "rules": [
+        "111.3"
+      ],
+      "title": "A token has only the characteristics its creating effect defines",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Plains",
+            "Plains"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Raise the Alarm",
+            "Lingering Souls"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Raise the Alarm, tapping two Plains.",
+        "Both players pass; Raise the Alarm resolves."
+      ],
+      "variants": [
+        {
+          "label": "plain_soldiers",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Each of the two tokens is a white Soldier creature 1/1 with no mana cost, no supertypes, no rules text and no abilities (no flying)."
+        },
+        {
+          "label": "flying_spirits",
+          "polarity": "does_not_fire",
+          "delta": "A casts Lingering Souls (tapping all three Plains) instead of Raise the Alarm.",
+          "expected": "Each of the two tokens is a white Spirit creature 1/1 whose only ability is flying, because that is the one extra characteristic the spell defines; they have no mana cost and no other abilities."
+        }
+      ],
+      "cards": [
+        "Lingering Souls",
+        "Plains",
+        "Raise the Alarm"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "111.4-1",
+      "rules": [
+        "111.4"
+      ],
+      "title": "A token is named after its subtypes plus Token unless the effect names it",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Island",
+            "Island",
+            "Island"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Dwarven Reinforcements",
+            "Crow Storm"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "No other spell has been cast this turn, so Crow Storm's storm count is 0 and it makes no copies."
+      },
+      "decisions": [
+        "A casts Dwarven Reinforcements, tapping four Mountains.",
+        "Both players pass; Dwarven Reinforcements resolves."
+      ],
+      "variants": [
+        {
+          "label": "unnamed",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "A creates two 2/1 red creature tokens whose subtypes are Dwarf and Berserker; each is named Dwarf Berserker Token."
+        },
+        {
+          "label": "named",
+          "polarity": "does_not_fire",
+          "delta": "A casts Crow Storm (tapping three Islands) instead, whose effect names the token Storm Crow.",
+          "expected": "A creates one 1/2 blue Bird creature token with flying; its name is Storm Crow (not Bird Token) and its subtype is Bird."
+        }
+      ],
+      "cards": [
+        "Crow Storm",
+        "Dwarven Reinforcements",
+        "Island",
+        "Mountain"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "111.4-2",
+      "rules": [
+        "111.4"
+      ],
+      "title": "Changing a token's subtype does not change its name",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Plains",
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Raise the Alarm",
+            "Xenograft"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Raise the Alarm, tapping both Plains; it resolves and creates two Soldier tokens.",
+        "A casts Xenograft with the five Islands, choosing the creature type Elf; both players pass; Xenograft resolves."
+      ],
+      "variants": [
+        {
+          "label": "type_changed",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Each token's creature types are now Soldier and Elf, and each is still named Soldier Token."
+        },
+        {
+          "label": "no_xenograft",
+          "polarity": "does_not_fire",
+          "delta": "A does not cast Xenograft.",
+          "expected": "Each token's creature type is Soldier and each is named Soldier Token."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Plains",
+        "Raise the Alarm",
+        "Xenograft"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "111.5-1",
+      "rules": [
+        "111.5"
+      ],
+      "title": "A token is not created if a permanent with its characteristics can't enter the battlefield",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Forest",
+            "Forest",
+            "Forest"
+          ],
+          "B": [
+            "Worms of the Earth"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Awaken the Woods"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Awaken the Woods with X=1, tapping three Forests.",
+        "Both players pass; Awaken the Woods resolves."
+      ],
+      "variants": [
+        {
+          "label": "lands_barred",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Worms of the Earth stops lands from entering the battlefield, so the 1/1 green Forest Dryad land creature token is not created; A controls only three Forests."
+        },
+        {
+          "label": "no_worms",
+          "polarity": "does_not_fire",
+          "delta": "B's battlefield is empty instead of containing Worms of the Earth.",
+          "expected": "A creates one 1/1 green Forest Dryad land creature token, which enters the battlefield under A's control."
+        }
+      ],
+      "cards": [
+        "Awaken the Woods",
+        "Forest",
+        "Worms of the Earth"
+      ],
+      "forge_notes": "Only the first sentence of 111.5 is illustrated; the token-copy-of-an-instant-or-sorcery case has no simple Forge card."
+    },
+    {
+      "id": "111.6-1",
+      "rules": [
+        "111.6"
+      ],
+      "title": "A token is affected by effects that look at its subtype",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Goblin King",
+            "Mountain",
+            "Mountain",
+            "Plains",
+            "Plains"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Dragon Fodder",
+            "Raise the Alarm"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Dragon Fodder, tapping two Mountains.",
+        "Both players pass; Dragon Fodder resolves."
+      ],
+      "variants": [
+        {
+          "label": "goblin_tokens",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The two Goblin creature tokens are each 2/2 (1/1 plus Goblin King's +1/+1) and have mountainwalk."
+        },
+        {
+          "label": "soldier_tokens",
+          "polarity": "does_not_fire",
+          "delta": "A casts Raise the Alarm (tapping two Plains) instead of Dragon Fodder.",
+          "expected": "The two Soldier creature tokens are each 1/1 with no mountainwalk, because Goblin King affects only Goblins."
+        }
+      ],
+      "cards": [
+        "Dragon Fodder",
+        "Goblin King",
+        "Mountain",
+        "Plains",
+        "Raise the Alarm"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "111.7-1",
+      "rules": [
+        "111.7"
+      ],
+      "title": "A token that dies ceases to exist at the next state-based check, after leaves-the-battlefield triggers have triggered",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Blood Artist",
+            "Mountain"
+          ],
+          "B": [
+            {
+              "card": "Soldier",
+              "token": true,
+              "summoning_sick": false
+            }
+          ]
+        },
+        "hand": {
+          "A": [
+            "Shock"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Shock targeting B's creature, tapping Mountain.",
+        "Both players pass; Shock resolves and deals 2 damage.",
+        "Blood Artist's trigger goes on the stack targeting B; both players pass; it resolves."
+      ],
+      "variants": [
+        {
+          "label": "token_dies",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The Soldier token is destroyed by lethal damage; Blood Artist triggers; B loses 1 life (19) and A gains 1 (21); B's graveyard is empty because the token ceased to exist."
+        },
+        {
+          "label": "card_dies",
+          "polarity": "does_not_fire",
+          "delta": "B's creature is Grizzly Bears (a card) instead of a Soldier token.",
+          "expected": "Grizzly Bears dies; Blood Artist triggers; B loses 1 life (19) and A gains 1 (21); Grizzly Bears remains in B's graveyard."
+        }
+      ],
+      "cards": [
+        "Blood Artist",
+        "Grizzly Bears",
+        "Mountain",
+        "Shock"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "111.7-2",
+      "rules": [
+        "111.7"
+      ],
+      "title": "A token moved to a zone other than the battlefield ceases to exist",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            {
+              "card": "Soldier",
+              "token": true,
+              "summoning_sick": false
+            }
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Unsummon"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Unsummon targeting its own creature, tapping Island.",
+        "Both players pass; Unsummon resolves."
+      ],
+      "variants": [
+        {
+          "label": "token_bounced",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The Soldier token leaves the battlefield for A's hand and ceases to exist at the next state-based check; A's hand does not contain it."
+        },
+        {
+          "label": "card_bounced",
+          "polarity": "does_not_fire",
+          "delta": "A's creature is Grizzly Bears (a card) instead of a Soldier token.",
+          "expected": "Grizzly Bears moves to A's hand and stays there."
+        }
+      ],
+      "cards": [
+        "Grizzly Bears",
+        "Island",
+        "Unsummon"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "111.8-1",
+      "rules": [
+        "111.8"
+      ],
+      "title": "A token that has left the battlefield can't return to it",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            {
+              "card": "Soldier",
+              "token": true,
+              "summoning_sick": false
+            }
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Cloudshift"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Cloudshift targeting its own creature, tapping Plains.",
+        "Both players pass; Cloudshift resolves: exile it, then return it."
+      ],
+      "variants": [
+        {
+          "label": "token_flickered",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The Soldier token is exiled and cannot move again, so it does not return; A controls no creature, and the token ceases to exist."
+        },
+        {
+          "label": "card_flickered",
+          "polarity": "does_not_fire",
+          "delta": "A's creature is Grizzly Bears (a card) instead of a Soldier token.",
+          "expected": "Grizzly Bears is exiled and returns to the battlefield under A's control as a new object."
+        }
+      ],
+      "cards": [
+        "Cloudshift",
+        "Grizzly Bears",
+        "Plains"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "111.10a-1",
+      "rules": [
+        "111.10a"
+      ],
+      "title": "A Treasure token has its predefined characteristics and mana ability",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain"
+          ],
+          "B": [
+            "Island",
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Strike It Rich"
+          ],
+          "B": [
+            "Negate"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Strike It Rich, tapping Mountain.",
+        "B passes; both players pass; Strike It Rich resolves.",
+        "A activates the Treasure token: tap it and sacrifice it, choosing {G}."
+      ],
+      "variants": [
+        {
+          "label": "resolves",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "A has a Treasure token: a colorless artifact with the subtype Treasure; activating it adds one {G} to A's mana pool and the token is sacrificed."
+        },
+        {
+          "label": "countered",
+          "polarity": "does_not_fire",
+          "delta": "B casts Negate on Strike It Rich, tapping both Islands.",
+          "expected": "Strike It Rich is countered; no Treasure token is created; A has no artifact."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Mountain",
+        "Negate",
+        "Strike It Rich"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "111.10b-1",
+      "rules": [
+        "111.10b"
+      ],
+      "title": "A Food token has its predefined characteristics and life-gain ability",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Forest",
+            "Forest",
+            "Forest"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Gilded Goose"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Gilded Goose, tapping one Forest; it resolves and its trigger creates a Food token.",
+        "A activates the Food token: pay {2} with the two remaining Forests, tap and sacrifice it."
+      ],
+      "variants": [
+        {
+          "label": "two_mana_left",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The Food token is a colorless artifact with the subtype Food; the ability resolves, A gains 3 life (23) and the token is sacrificed."
+        },
+        {
+          "label": "one_mana_left",
+          "polarity": "does_not_fire",
+          "delta": "A has only two Forests, so after Gilded Goose only one is untapped.",
+          "expected": "The Food token stays on the battlefield; its ability cannot be activated; A's life is 20."
+        }
+      ],
+      "cards": [
+        "Forest",
+        "Gilded Goose"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "111.10c-1",
+      "rules": [
+        "111.10c"
+      ],
+      "title": "A Gold token has its predefined characteristics and sacrifice-for-mana ability",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Swamp",
+            "Swamp",
+            "Swamp",
+            "Swamp"
+          ],
+          "B": [
+            "Grizzly Bears",
+            "Mountain"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Gild"
+          ],
+          "B": [
+            "Shock"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Gild targeting Grizzly Bears, tapping four Swamps.",
+        "B passes; both players pass; Gild resolves.",
+        "A activates the Gold token: sacrifice it, choosing {B}."
+      ],
+      "variants": [
+        {
+          "label": "resolves",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears is exiled; A has a Gold token (a colorless artifact with the subtype Gold); sacrificing it adds one {B}."
+        },
+        {
+          "label": "target_gone",
+          "polarity": "does_not_fire",
+          "delta": "In response, B casts Shock on its own Grizzly Bears, tapping Mountain.",
+          "expected": "Grizzly Bears dies; Gild's only target is illegal so it fizzles; no Gold token is created."
+        }
+      ],
+      "cards": [
+        "Gild",
+        "Grizzly Bears",
+        "Mountain",
+        "Shock",
+        "Swamp"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "111.10d-1",
+      "rules": [
+        "111.10d"
+      ],
+      "title": "A Walker token is a 2/2 black Zombie creature, so it counts as a Zombie",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "declare_attackers",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Michonne, Ruthless Survivor",
+              "summoning_sick": false
+            },
+            {
+              "card": "Walker",
+              "token": true,
+              "summoning_sick": false
+            },
+            {
+              "card": "Walker",
+              "token": true,
+              "summoning_sick": false
+            }
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "The two Walker tokens were created by Michonne's enters trigger on an earlier turn. B controls no creature."
+      },
+      "decisions": [
+        "A declares Michonne, Ruthless Survivor and both tokens as attackers against B.",
+        "Both players pass with any trigger on the stack; B declares no blockers; combat damage is dealt."
+      ],
+      "variants": [
+        {
+          "label": "walker_tokens",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Michonne's attack trigger fires because two attacking Zombies (the Walker tokens) attack with her; she gains indestructible until end of turn. Each Walker deals 2 damage; B's life is 13 (3 + 2 + 2)."
+        },
+        {
+          "label": "soldier_tokens",
+          "polarity": "does_not_fire",
+          "delta": "A's two tokens are 1/1 white Soldier creature tokens instead of Walker tokens.",
+          "expected": "Michonne's attack trigger does not fire, because no Zombie attacks; she does not gain indestructible. B's life is 15 (3 + 1 + 1)."
+        }
+      ],
+      "cards": [
+        "Michonne, Ruthless Survivor"
+      ],
+      "forge_notes": "Walker tokens use tokenscripts/walker.txt (Name Walker, black, Creature Zombie, 2/2). Michonne's trigger counts Zombie.attacking with NoResolvingCheck."
+    },
+    {
+      "id": "111.10e-1",
+      "rules": [
+        "111.10e"
+      ],
+      "title": "A Shard token has its predefined characteristics and scry-and-draw ability",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Plains",
+            "Island",
+            "Island",
+            "Island",
+            "Island"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Niko Aris"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Forest",
+            "Mountain",
+            "Swamp"
+          ]
+        },
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Niko Aris with X=1, tapping Plains, Island, Island and one more land; it resolves and its trigger creates one Shard token.",
+        "A activates the Shard token: pay {2} with the two remaining lands and sacrifice it; scry 1, keeping Forest on top; then draw a card."
+      ],
+      "variants": [
+        {
+          "label": "six_lands",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The Shard token is a colorless enchantment with the subtype Shard; the ability resolves, A scries 1, draws Forest into hand and the token is sacrificed."
+        },
+        {
+          "label": "four_lands",
+          "polarity": "does_not_fire",
+          "delta": "A has only two Plains and two Islands (four lands), all spent on Niko Aris.",
+          "expected": "The Shard token stays on the battlefield; its ability cannot be activated; A draws no card."
+        }
+      ],
+      "cards": [
+        "Forest",
+        "Island",
+        "Mountain",
+        "Niko Aris",
+        "Plains",
+        "Swamp"
+      ],
+      "forge_notes": "In the four-land variant A's battlefield is Plains x2 and Island x2."
+    },
+    {
+      "id": "111.10f-1",
+      "rules": [
+        "111.10f"
+      ],
+      "title": "A Clue token has its predefined characteristics and draw ability",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Plains",
+            "Plains"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Thraben Inspector"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Forest",
+            "Mountain"
+          ]
+        },
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Thraben Inspector, tapping one Plains; it resolves and its trigger creates a Clue token.",
+        "A activates the Clue token: pay {2} with the remaining Plains and sacrifice it."
+      ],
+      "variants": [
+        {
+          "label": "two_mana_left",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The Clue token is a colorless artifact with the subtype Clue; the ability resolves, A draws Forest and the token is sacrificed."
+        },
+        {
+          "label": "one_mana_left",
+          "polarity": "does_not_fire",
+          "delta": "A has only two Plains, so after Thraben Inspector only one is untapped.",
+          "expected": "The Clue token stays on the battlefield; its ability cannot be activated; A draws no card."
+        }
+      ],
+      "cards": [
+        "Forest",
+        "Mountain",
+        "Plains",
+        "Thraben Inspector"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "111.10g-1",
+      "rules": [
+        "111.10g"
+      ],
+      "title": "A Blood token has its predefined characteristics and rummage ability",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Voldaren Epicure",
+            "Mountain"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Forest"
+          ]
+        },
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Voldaren Epicure, tapping one Mountain; it resolves; its trigger deals 1 damage to B and creates a Blood token.",
+        "A activates the Blood token: pay {1} with the other Mountain, tap it, discard the Mountain from hand and sacrifice it."
+      ],
+      "variants": [
+        {
+          "label": "card_to_discard",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "B's life is 19; the Blood token is a colorless artifact with the subtype Blood; the ability resolves, A discards Mountain, draws Forest and the token is sacrificed."
+        },
+        {
+          "label": "empty_hand",
+          "polarity": "does_not_fire",
+          "delta": "A's hand holds only Voldaren Epicure, so after casting it A has no card to discard.",
+          "expected": "B's life is 19; the Blood token stays on the battlefield; its ability cannot be activated because its cost cannot be paid."
+        }
+      ],
+      "cards": [
+        "Forest",
+        "Mountain",
+        "Voldaren Epicure"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "111.10h-1",
+      "rules": [
+        "111.10h"
+      ],
+      "title": "A Powerstone token's mana can't be spent to cast a nonartifact spell",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Forest",
+            "Forest",
+            "Forest",
+            "Argothian Opportunist",
+            {
+              "card": "Powerstone",
+              "token": true
+            }
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Giant Spider",
+            "Juggernaut"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "The untapped Powerstone token was created tapped by Argothian Opportunist's enters trigger on A's previous turn and untapped in A's untap step. A plays no land this turn."
+      },
+      "decisions": [
+        "A considers casting Giant Spider, tapping the Powerstone for {C} and the three Forests."
+      ],
+      "variants": [
+        {
+          "label": "nonartifact_spell",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Illegal: the Powerstone's {C} can't be spent on a nonartifact spell, so only three mana is usable for Giant Spider ({3}{G}) (can_play false)."
+        },
+        {
+          "label": "artifact_spell",
+          "polarity": "does_not_fire",
+          "delta": "A considers casting Juggernaut ({4}, an artifact creature) instead of Giant Spider.",
+          "expected": "Legal: the Powerstone's {C} may be spent on an artifact spell, so all four mana is usable (can_play true)."
+        }
+      ],
+      "cards": [
+        "Argothian Opportunist",
+        "Forest",
+        "Giant Spider",
+        "Juggernaut"
+      ],
+      "forge_notes": "Powerstone token is tokenscripts/c_a_powerstone.txt (RestrictValid$ CantCastNonArtifactSpells)."
+    },
+    {
+      "id": "111.10i-1",
+      "rules": [
+        "111.10i"
+      ],
+      "title": "An Incubator token transforms into a Phyrexian artifact creature",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Tangled Skyline"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Tangled Skyline, tapping five Forests; it resolves: A gains 5 life and incubates 5 (an Incubator token with five +1/+1 counters).",
+        "A activates the Incubator token's ability: pay {2} with the two remaining Forests."
+      ],
+      "variants": [
+        {
+          "label": "transformed",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The Incubator token (a colorless artifact, not a creature, with five +1/+1 counters) transforms into Phyrexian Token, a 0/0 colorless Phyrexian artifact creature with those counters, so it is a 5/5; it has reach from Tangled Skyline."
+        },
+        {
+          "label": "five_lands",
+          "polarity": "does_not_fire",
+          "delta": "A has only five Forests, all spent on Tangled Skyline.",
+          "expected": "The Incubator token stays a noncreature artifact with five +1/+1 counters; its transform ability cannot be activated."
+        }
+      ],
+      "cards": [
+        "Forest",
+        "Tangled Skyline"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "111.10j-1",
+      "rules": [
+        "111.10j"
+      ],
+      "title": "A Cursed Role token makes the enchanted creature 1/1",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            "Island",
+            {
+              "card": "Soldier",
+              "token": true,
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            "Centaur Courser"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Diminisher Witch"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Diminisher Witch, bargaining by sacrificing the Soldier token, tapping three Islands.",
+        "Both players pass; the Witch resolves and its enters trigger targets Centaur Courser; both players pass; the trigger resolves."
+      ],
+      "variants": [
+        {
+          "label": "bargained",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "A creates a Cursed Role token (a colorless Aura Role enchantment named Cursed) attached to Centaur Courser, which is now 1/1."
+        },
+        {
+          "label": "not_bargained",
+          "polarity": "does_not_fire",
+          "delta": "A does not bargain: the Soldier token stays on the battlefield.",
+          "expected": "The enters trigger does not fire; no Role token is created; Centaur Courser stays 3/3."
+        }
+      ],
+      "cards": [
+        "Centaur Courser",
+        "Diminisher Witch",
+        "Island"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "111.10k-1",
+      "rules": [
+        "111.10k"
+      ],
+      "title": "A Monster Role token gives +1/+1 and trample",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Grizzly Bears"
+          ],
+          "B": [
+            "Mountain"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Monstrous Rage"
+          ],
+          "B": [
+            "Shock"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Monstrous Rage targeting Grizzly Bears, tapping Mountain.",
+        "B passes; both players pass; Monstrous Rage resolves."
+      ],
+      "variants": [
+        {
+          "label": "resolves",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears gets +2/+0 until end of turn and a Monster Role token (a colorless Aura Role enchantment named Monster) is attached to it: Grizzly Bears is 5/3 with trample."
+        },
+        {
+          "label": "target_gone",
+          "polarity": "does_not_fire",
+          "delta": "In response, B casts Shock on Grizzly Bears, tapping Mountain.",
+          "expected": "Grizzly Bears dies; Monstrous Rage's only target is illegal so it fizzles; no Role token is created."
+        }
+      ],
+      "cards": [
+        "Grizzly Bears",
+        "Monstrous Rage",
+        "Mountain",
+        "Shock"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "111.10m-1",
+      "rules": [
+        "111.10m"
+      ],
+      "title": "A Royal Role token gives +1/+1 and ward {1}",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Forest",
+            "Grizzly Bears"
+          ],
+          "B": [
+            "Mountain"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Royal Treatment"
+          ],
+          "B": [
+            "Shock"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Royal Treatment targeting Grizzly Bears, tapping Forest.",
+        "B passes; both players pass; Royal Treatment resolves."
+      ],
+      "variants": [
+        {
+          "label": "resolves",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears gains hexproof until end of turn and a Royal Role token (a colorless Aura Role enchantment named Royal) is attached to it: Grizzly Bears is 3/3 with ward {1}."
+        },
+        {
+          "label": "target_gone",
+          "polarity": "does_not_fire",
+          "delta": "In response, B casts Shock on Grizzly Bears, tapping Mountain.",
+          "expected": "Grizzly Bears dies; Royal Treatment's only target is illegal so it fizzles; no Role token is created."
+        }
+      ],
+      "cards": [
+        "Forest",
+        "Grizzly Bears",
+        "Mountain",
+        "Royal Treatment",
+        "Shock"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "111.10n-1",
+      "rules": [
+        "111.10n"
+      ],
+      "title": "A Sorcerer Role token gives +1/+1 and a scry-on-attack ability",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Plains",
+            "Plains"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Spellbook Vendor"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Spellbook Vendor, tapping two Plains; it resolves.",
+        "At the beginning of combat A pays {1} with the third Plains, and targets Spellbook Vendor with the resulting trigger; both players pass; it resolves."
+      ],
+      "variants": [
+        {
+          "label": "paid",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "A creates a Sorcerer Role token (a colorless Aura Role enchantment named Sorcerer) attached to Spellbook Vendor, which is 3/3 and has \"Whenever this creature attacks, scry 1.\""
+        },
+        {
+          "label": "cannot_pay",
+          "polarity": "does_not_fire",
+          "delta": "A has only two Plains, so no mana remains at the beginning of combat.",
+          "expected": "A cannot pay {1}; no Role token is created; Spellbook Vendor is 2/2."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Spellbook Vendor"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "111.10p-1",
+      "rules": [
+        "111.10p"
+      ],
+      "title": "A Virtuous Role token gives +1/+1 for each enchantment its controller controls",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Forest",
+            "Forest",
+            "Forest",
+            "Plains",
+            "Grizzly Bears"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Ellivere of the Wild Court"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Ellivere of the Wild Court, tapping all four lands; it resolves and its enters trigger targets Grizzly Bears; both players pass; it resolves."
+      ],
+      "variants": [
+        {
+          "label": "one_enchantment",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "A creates a Virtuous Role token (a colorless Aura Role enchantment named Virtuous) attached to Grizzly Bears; A controls one enchantment (the Role), so Grizzly Bears is 3/3."
+        },
+        {
+          "label": "two_enchantments",
+          "polarity": "other",
+          "delta": "A also controls Seal of Fire on the battlefield.",
+          "expected": "A controls two enchantments (Seal of Fire and the Role), so Grizzly Bears is 4/4."
+        },
+        {
+          "label": "no_other_creature",
+          "polarity": "does_not_fire",
+          "delta": "A controls no creature besides Ellivere (no Grizzly Bears).",
+          "expected": "The enters trigger has no legal target; no Role token is created."
+        }
+      ],
+      "cards": [
+        "Ellivere of the Wild Court",
+        "Forest",
+        "Grizzly Bears",
+        "Plains",
+        "Seal of Fire"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "111.10q-1",
+      "rules": [
+        "111.10q"
+      ],
+      "title": "A Wicked Role token gives +1/+1 and drains the opponent when it goes to the graveyard",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Grizzly Bears"
+          ],
+          "B": [
+            "Mountain"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Witch's Mark"
+          ],
+          "B": [
+            "Shock",
+            "Lightning Bolt"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Witch's Mark, tapping two Mountains, declining to discard, and targeting Grizzly Bears with the Role; B passes; both players pass; Witch's Mark resolves.",
+        "B casts Shock targeting Grizzly Bears, tapping Mountain; both players pass; Shock resolves."
+      ],
+      "variants": [
+        {
+          "label": "survives",
+          "polarity": "does_not_fire",
+          "delta": "",
+          "expected": "Grizzly Bears is 3/3 with a Wicked Role token (a colorless Aura Role enchantment named Wicked) attached; Shock deals 2 damage and Grizzly Bears survives; the Role stays; B's life is 20."
+        },
+        {
+          "label": "dies",
+          "polarity": "fires",
+          "delta": "B casts Lightning Bolt (3 damage) instead of Shock.",
+          "expected": "Grizzly Bears dies, the Wicked Role is put into a graveyard from the battlefield and its trigger makes B lose 1 life (19); the Role token ceases to exist."
+        }
+      ],
+      "cards": [
+        "Grizzly Bears",
+        "Lightning Bolt",
+        "Mountain",
+        "Shock",
+        "Witch's Mark"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "111.10r-1",
+      "rules": [
+        "111.10r"
+      ],
+      "title": "A Young Hero Role token adds a counter when a creature with toughness 3 or less attacks",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Grizzly Bears"
+          ],
+          "B": [
+            "Hill Giant"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Cut In"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Cut In targeting Hill Giant and targeting Grizzly Bears for the Role, tapping four Mountains; both players pass; Cut In resolves.",
+        "A moves to combat and attacks B with Grizzly Bears; its attack trigger is put on the stack and both players pass."
+      ],
+      "variants": [
+        {
+          "label": "toughness_2",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Hill Giant takes 4 damage and dies; Grizzly Bears has a Young Hero Role token (a colorless Aura Role enchantment named Young Hero) and its toughness is 2, so a +1/+1 counter is put on it (3/3)."
+        },
+        {
+          "label": "toughness_4",
+          "polarity": "does_not_fire",
+          "delta": "A's creature is Craw Wurm (6/4) instead of Grizzly Bears.",
+          "expected": "Craw Wurm has the Young Hero Role but its toughness is 4, so the trigger does not fire and no counter is put on it; it stays 6/4."
+        }
+      ],
+      "cards": [
+        "Craw Wurm",
+        "Cut In",
+        "Grizzly Bears",
+        "Hill Giant",
+        "Mountain"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "111.10s-1",
+      "rules": [
+        "111.10s"
+      ],
+      "title": "A Map token has its predefined characteristics and explore ability",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Spyglass Siren"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Forest",
+            "Island"
+          ]
+        },
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Spyglass Siren, tapping one Island; it resolves and its trigger creates a Map token.",
+        "A activates the Map token at sorcery speed with an empty stack: pay {1} with the other Island, tap and sacrifice it, targeting Spyglass Siren; both players pass."
+      ],
+      "variants": [
+        {
+          "label": "mana_available",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The Map token is a colorless artifact with the subtype Map; Spyglass Siren explores: Forest is revealed and put into A's hand; the Siren gets no counter."
+        },
+        {
+          "label": "no_mana",
+          "polarity": "does_not_fire",
+          "delta": "A has only one Island, spent on Spyglass Siren.",
+          "expected": "The Map token stays on the battlefield; its ability cannot be activated."
+        }
+      ],
+      "cards": [
+        "Forest",
+        "Island",
+        "Spyglass Siren"
+      ],
+      "forge_notes": "In the no_mana variant A's battlefield is a single Island."
+    },
+    {
+      "id": "111.10t-1",
+      "rules": [
+        "111.10t"
+      ],
+      "title": "A Junk token has its predefined characteristics and sorcery-speed exile-and-play ability",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Forest",
+            "Forest",
+            "Forest"
+          ],
+          "B": [
+            "Mind Stone"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Break Down"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Mountain",
+            "Forest"
+          ]
+        },
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Break Down targeting Mind Stone, tapping three Forests; both players pass; it resolves, Mind Stone is destroyed and A creates a Junk token.",
+        "With the stack empty in main phase 1, A considers activating the Junk token: tap and sacrifice it."
+      ],
+      "variants": [
+        {
+          "label": "main_phase",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Legal (can_play true): the Junk token is a colorless artifact with the subtype Junk; activating it exiles Mountain from the top of A's library and A may play it this turn."
+        },
+        {
+          "label": "end_step",
+          "polarity": "does_not_fire",
+          "delta": "A considers activating the Junk token in A's end step instead of main phase 1.",
+          "expected": "Illegal: the ability is activate-only-as-a-sorcery (can_play false)."
+        }
+      ],
+      "cards": [
+        "Break Down",
+        "Forest",
+        "Mind Stone",
+        "Mountain"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "111.10u-1",
+      "rules": [
+        "111.10u"
+      ],
+      "title": "A Lander token has its predefined characteristics and land-fetching ability",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain"
+          ],
+          "B": [
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Orbital Plunge"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Forest",
+            "Mountain",
+            "Island"
+          ]
+        },
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Orbital Plunge targeting Grizzly Bears, tapping four Mountains; both players pass; it resolves; excess damage was dealt, so A creates a Lander token.",
+        "A activates the Lander token: pay {2} with the two remaining Mountains, tap and sacrifice it; A searches for Forest."
+      ],
+      "variants": [
+        {
+          "label": "excess",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The Lander token is a colorless artifact with the subtype Lander; its ability puts Forest onto the battlefield tapped and A shuffles the library."
+        },
+        {
+          "label": "no_excess",
+          "polarity": "does_not_fire",
+          "delta": "B's creature is Colossus of Sardia (9/9) instead of Grizzly Bears.",
+          "expected": "Orbital Plunge deals 6 damage, no excess damage is dealt, and no Lander token is created; Colossus of Sardia survives."
+        }
+      ],
+      "cards": [
+        "Colossus of Sardia",
+        "Forest",
+        "Grizzly Bears",
+        "Island",
+        "Mountain",
+        "Orbital Plunge"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "111.10v-1",
+      "rules": [
+        "111.10v"
+      ],
+      "title": "A Mutagen token has its predefined characteristics and counter ability",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            "Island"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Crustacean Commando"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Crustacean Commando, tapping two Islands; it resolves and its trigger creates a Mutagen token.",
+        "A activates the Mutagen token at sorcery speed: pay {1} with the third Island, tap and sacrifice it, targeting Crustacean Commando; both players pass."
+      ],
+      "variants": [
+        {
+          "label": "mana_available",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The Mutagen token is a colorless artifact with the subtype Mutagen; Crustacean Commando gets a +1/+1 counter (1/4) and the token is sacrificed."
+        },
+        {
+          "label": "no_mana",
+          "polarity": "does_not_fire",
+          "delta": "A has only two Islands, both spent on Crustacean Commando.",
+          "expected": "The Mutagen token stays on the battlefield; its ability cannot be activated; Crustacean Commando is 0/3."
+        }
+      ],
+      "cards": [
+        "Crustacean Commando",
+        "Island"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "111.10w-1",
+      "rules": [
+        "111.10w"
+      ],
+      "title": "A Vibranium token is indestructible",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains"
+          ],
+          "B": [
+            "Mountain",
+            "Mountain"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Shuri's Fabricator"
+          ],
+          "B": [
+            "Shatter"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Shuri's Fabricator, tapping four Plains; it resolves and its trigger creates two tapped Vibranium tokens.",
+        "B casts Shatter targeting a Vibranium token, tapping both Mountains; both players pass; Shatter resolves."
+      ],
+      "variants": [
+        {
+          "label": "target_vibranium",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The Vibranium token is a colorless artifact with the subtype Vibranium and indestructible: it is not destroyed. A still controls Shuri's Fabricator and both tokens."
+        },
+        {
+          "label": "target_fabricator",
+          "polarity": "does_not_fire",
+          "delta": "Shatter targets Shuri's Fabricator instead of a Vibranium token.",
+          "expected": "Shuri's Fabricator is destroyed and goes to A's graveyard; both Vibranium tokens stay on the battlefield."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Plains",
+        "Shatter",
+        "Shuri's Fabricator"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "111.10x-1",
+      "rules": [
+        "111.10x"
+      ],
+      "title": "A Heartwood token is a red and green artifact whose mana ability adds {R} or {G}",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Woodwork Prodigy"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Giant Growth",
+            "Dark Ritual"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Woodwork Prodigy is prepared: its prepare spell Soul Tether ({2}{R/G}, sorcery: create a Heartwood token) may be cast as a copy."
+      },
+      "decisions": [
+        "A casts the prepared copy of Soul Tether, paying {2}{R/G} with the three Mountains; both players pass; it resolves and A creates a Heartwood token.",
+        "A considers casting Giant Growth targeting Woodwork Prodigy, paying {G} by tapping the Heartwood token."
+      ],
+      "variants": [
+        {
+          "label": "green_spell",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The Heartwood token is a red and green artifact with the subtype Heartwood; Giant Growth is castable (can_play true) with the Heartwood's {G}."
+        },
+        {
+          "label": "black_spell",
+          "polarity": "does_not_fire",
+          "delta": "A considers casting Dark Ritual ({B}) instead of Giant Growth.",
+          "expected": "Illegal: the Heartwood token adds only {R} or {G} and A has no other untapped mana source, so Dark Ritual can't be cast (can_play false)."
+        }
+      ],
+      "cards": [
+        "Dark Ritual",
+        "Giant Growth",
+        "Mountain",
+        "Woodwork Prodigy"
+      ],
+      "forge_notes": "Soul Tether is the prepare face of Woodwork Prodigy (cardsfolder/w/woodwork_prodigy_soul_tether.txt); Heartwood is tokenscripts/rg_a_heartwood.txt. Forge puzzle setup may need support for the prepared designation."
+    },
+    {
+      "id": "111.11-1",
+      "rules": [
+        "111.11"
+      ],
+      "title": "A token created by name takes the characteristics of the card of that name",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Disa the Restless"
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A attacks B with Disa the Restless; no blockers are declared.",
+        "Combat damage is dealt; Disa's trigger fires and both players pass; it resolves."
+      ],
+      "variants": [
+        {
+          "label": "unblocked",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Disa's damage to B (20 to 15) triggers it and A creates a Tarmogoyf token with the characteristics of the card Tarmogoyf: named Tarmogoyf, mana cost {1}{G}, green Lhurgoyf creature, with its power equal to the card types in all graveyards and toughness one more (0/1 with empty graveyards)."
+        },
+        {
+          "label": "blocked",
+          "polarity": "does_not_fire",
+          "delta": "B controls Grizzly Bears and blocks Disa with it.",
+          "expected": "No combat damage is dealt to B; the trigger does not fire; no token is created."
+        }
+      ],
+      "cards": [
+        "Disa the Restless",
+        "Grizzly Bears",
+        "Tarmogoyf"
+      ],
+      "forge_notes": "In the blocked variant B's battlefield is Grizzly Bears (untapped). Disa is not summoning sick."
+    },
+    {
+      "id": "111.12-1",
+      "rules": [
+        "111.12"
+      ],
+      "title": "An effect creating a token copy of a nonexistent object creates no token",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mimic Vat",
+            "Grizzly Bears",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Shock"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Shock targeting its own Grizzly Bears, tapping one Mountain; Shock resolves; Grizzly Bears dies.",
+        "Mimic Vat's trigger goes on the stack and A chooses to exile Grizzly Bears; it resolves.",
+        "A activates Mimic Vat ({3}, {T}) with the other three Mountains; both players pass; it resolves."
+      ],
+      "variants": [
+        {
+          "label": "card_exiled",
+          "polarity": "does_not_fire",
+          "delta": "",
+          "expected": "A creates a token that's a copy of Grizzly Bears with haste; it is exiled at the beginning of the next end step."
+        },
+        {
+          "label": "nothing_exiled",
+          "polarity": "fires",
+          "delta": "A declines to exile Grizzly Bears with Mimic Vat's trigger, so no card is exiled with it.",
+          "expected": "The ability copies a nonexistent object and no token is created; Grizzly Bears stays in A's graveyard."
+        }
+      ],
+      "cards": [
+        "Grizzly Bears",
+        "Mimic Vat",
+        "Mountain",
+        "Shock"
+      ],
+      "forge_notes": "Whether Forge permits activating Mimic Vat with nothing exiled is unverified."
+    },
+    {
+      "id": "111.13-1",
+      "rules": [
+        "111.13"
+      ],
+      "title": "A copy of a permanent spell becomes a token without having been created",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Parallel Lives",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Mountain",
+            "Mountain"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Hatchery Sliver",
+            "Dragon Fodder"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Hatchery Sliver, paying its replicate cost once, tapping four Forests; the replicate trigger copies the spell; both players pass; the copy resolves, then the original resolves."
+      ],
+      "variants": [
+        {
+          "label": "spell_copy",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The copy becomes a Hatchery Sliver token (2/2 Sliver, copying the spell's characteristics); it is not created by an effect, so Parallel Lives does not double it: A controls one Hatchery Sliver token and the Hatchery Sliver card."
+        },
+        {
+          "label": "created_tokens",
+          "polarity": "does_not_fire",
+          "delta": "A casts Dragon Fodder (tapping two Mountains) instead of Hatchery Sliver.",
+          "expected": "Dragon Fodder creates tokens, so Parallel Lives doubles them: A controls four 1/1 Goblin tokens."
+        }
+      ],
+      "cards": [
+        "Dragon Fodder",
+        "Forest",
+        "Hatchery Sliver",
+        "Mountain",
+        "Parallel Lives"
+      ],
+      "forge_notes": "Forge treats a copied permanent spell as a token created on resolution; whether it consults the CreateToken replacement for a copy is unverified."
+    }
+  ]
+}

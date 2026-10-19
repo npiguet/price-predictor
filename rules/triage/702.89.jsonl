@@ -1,0 +1,3 @@
+{"id": "702.89", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.89a", "category": "mechanical", "observability": "direct", "record_kinds": ["rewrite"], "outcome": "If the enchanted permanent would be destroyed, damage is removed from it and the Aura is destroyed instead.", "note": ""}
+{"id": "702.89b", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}

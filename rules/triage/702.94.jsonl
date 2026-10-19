@@ -1,0 +1,3 @@
+{"id": "702.94", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.94a", "category": "mechanical", "observability": "indirect", "record_kinds": ["trigger", "resolution", "playability"], "outcome": "When a miracle card is the first card drawn this turn and is revealed, its trigger lets it be cast for the miracle cost; otherwise it stays in hand.", "note": "Choice to reveal is a decision; the first-draw condition and cost substitution are the outcome."}
+{"id": "702.94b", "category": "out_of_scope", "observability": "none", "record_kinds": [], "outcome": "", "note": "Hidden-information bookkeeping about revealed cards; no game-state outcome."}

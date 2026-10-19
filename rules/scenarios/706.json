@@ -1,0 +1,481 @@
+{
+  "unit": "706",
+  "verified": true,
+  "review": [
+    "706.3c-1: the roll-again choice was fixed only after the first roll, leaving the 16, 16, 3 variant's second choice open; the decision now fixes rolling again after every 15-20 result.",
+    "706.3a-1: the roll 1 variant's delta also named 'A does not search', a consequence rather than a second fact; removed it.",
+    "706.6-1: with Berserker's Frenzy the lower roll is always the ignored one, so the 'kept roll too low' variant flipped Steel Squirrel's 5-or-higher condition rather than 706.6, and no single-fact change could stop the ignoring; rebuilt it around Wyll, Blade of Frontiers (its presence toggles the ignore) with Complaints Clerk's roll-a-1 trigger as observer, so ignoring the 1 is what suppresses the token."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "706.2-1",
+      "rules": [
+        "706.2",
+        "706.3a"
+      ],
+      "title": "The final die result is the natural result plus modifiers, and the range containing it picks the effect",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Song of Inspiration"
+          ]
+        },
+        "graveyard": {
+          "A": [
+            "Grizzly Bears",
+            "Centaur Courser"
+          ]
+        },
+        "library": {},
+        "exile": {},
+        "notes": "The natural d20 result is fixed by the scenario, not random."
+      },
+      "decisions": [
+        "A casts Song of Inspiration targeting Grizzly Bears in A's graveyard, tapping five Forests.",
+        "Both players pass; Song of Inspiration resolves.",
+        "A rolls a d20; the natural result is 12."
+      ],
+      "variants": [
+        {
+          "label": "total 14",
+          "polarity": "does_not_fire",
+          "delta": "",
+          "expected": "Final result is 12 + 2 (Grizzly Bears' mana value) = 14, in the 1-14 range. Grizzly Bears moves to A's hand. A gains no life (20). Song of Inspiration moves to A's graveyard."
+        },
+        {
+          "label": "modifier 3",
+          "polarity": "fires",
+          "delta": "A targets Centaur Courser instead of Grizzly Bears.",
+          "expected": "Final result is 12 + 3 = 15, in the 15+ range. Centaur Courser moves to A's hand and A gains 3 life (23). Grizzly Bears stays in the graveyard."
+        },
+        {
+          "label": "natural 13",
+          "polarity": "fires",
+          "delta": "The natural result is 13 instead of 12.",
+          "expected": "Final result is 13 + 2 = 15, in the 15+ range. Grizzly Bears moves to A's hand and A gains 2 life (22)."
+        }
+      ],
+      "cards": [
+        "Forest",
+        "Song of Inspiration",
+        "Grizzly Bears",
+        "Centaur Courser"
+      ],
+      "forge_notes": "Modifier$ X is applied after the natural result; the dice_rolled note records natural and final values per die."
+    },
+    {
+      "id": "706.3a-1",
+      "rules": [
+        "706.3a"
+      ],
+      "title": "A result that no range of the results table contains makes no effect happen",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Goblin Tutor"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Sol Ring",
+            "Shock",
+            "Mountain"
+          ]
+        },
+        "exile": {},
+        "notes": "The natural d6 result is fixed by the scenario, not random. Library order is bottom last; the order is observable because a search shuffles it."
+      },
+      "decisions": [
+        "A casts Goblin Tutor, tapping Mountain.",
+        "Both players pass; Goblin Tutor resolves.",
+        "A rolls a d6; the natural result is 4. A searches for Sol Ring."
+      ],
+      "variants": [
+        {
+          "label": "roll 4",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The 4 entry applies: A searches the library for an artifact, Sol Ring moves to A's hand, and the library is shuffled. Goblin Tutor moves to A's graveyard."
+        },
+        {
+          "label": "roll 1",
+          "polarity": "does_not_fire",
+          "delta": "The natural result is 1 instead of 4.",
+          "expected": "No range of the table contains 1, so nothing happens: A's hand is empty, the library still holds Sol Ring, Shock and Mountain in their original order and is not shuffled. Goblin Tutor moves to A's graveyard."
+        },
+        {
+          "label": "roll 6",
+          "polarity": "other",
+          "delta": "The natural result is 6 instead of 4; A searches for Shock.",
+          "expected": "The 6 entry applies: Shock (an instant) moves from the library to A's hand and the library is shuffled. Sol Ring stays in the library."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Goblin Tutor",
+        "Sol Ring",
+        "Shock"
+      ],
+      "forge_notes": "Forge's ResultSubAbilities for Goblin Tutor omit a key for 1, so no sub-ability resolves."
+    },
+    {
+      "id": "706.3c-1",
+      "rules": [
+        "706.3c"
+      ],
+      "title": "A Roll again result rolls the same kind of die again and the new result selects the effect",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "declare_attackers",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Delina, Wild Mage",
+              "summoning_sick": false
+            },
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            }
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "The natural d20 results are fixed by the scenario, in order, not random."
+      },
+      "decisions": [
+        "A declares Delina, Wild Mage as the only attacker.",
+        "Delina's attack trigger goes on the stack, targeting Grizzly Bears.",
+        "Both players pass; the trigger resolves and A rolls a d20: the first natural result is 16.",
+        "A creates a tapped and attacking token copy of Grizzly Bears and, after every result of 15-20, chooses to roll again; the second natural result is 8.",
+        "Both players pass through combat with no blocks; combat damage is dealt, and at end of combat the tokens are exiled."
+      ],
+      "variants": [
+        {
+          "label": "16 then 8",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The first roll (16) creates one token and rolls again with another d20. The second roll (8) creates one more token and stops. Two attacking Grizzly Bears tokens, so B takes 3 + 2 + 2 and ends at 13. The tokens are exiled at end of combat."
+        },
+        {
+          "label": "10 first",
+          "polarity": "does_not_fire",
+          "delta": "The first natural result is 10 instead of 16.",
+          "expected": "The 10 is in the 1-14 range: one token, no further roll. B takes 3 + 2 and ends at 15."
+        },
+        {
+          "label": "16, 16, 3",
+          "polarity": "other",
+          "delta": "The natural results are 16, 16 and 3.",
+          "expected": "The first 16 creates a token and rolls again; the second 16 creates another and rolls again; the 3 creates a third and stops. Three tokens, so B takes 3 + 2 + 2 + 2 and ends at 11."
+        }
+      ],
+      "cards": [
+        "Delina, Wild Mage",
+        "Grizzly Bears"
+      ],
+      "forge_notes": "Implemented with Repeat/RepeatOptional and an SVar RepeatCheck set by the 15-20 and 1-14 sub-abilities."
+    },
+    {
+      "id": "706.5-1",
+      "rules": [
+        "706.5"
+      ],
+      "title": "Celebr-8000 gains double strike only when both dice show equal results",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Celebr-8000",
+              "summoning_sick": false
+            }
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "The natural d6 results are fixed by the scenario, not random."
+      },
+      "decisions": [
+        "Celebr-8000's beginning-of-combat trigger goes on the stack.",
+        "Both players pass; the trigger resolves and A rolls two six-sided dice: the results are 3 and 3."
+      ],
+      "variants": [
+        {
+          "label": "doubles",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Both dice show 3, so Celebr-8000 gains vigilance and, because the results are equal, double strike until end of turn. It stays a 3/3."
+        },
+        {
+          "label": "not doubles",
+          "polarity": "does_not_fire",
+          "delta": "The results are 3 and 4.",
+          "expected": "Celebr-8000 gains vigilance and lifelink until end of turn and does not gain double strike. It stays a 3/3."
+        },
+        {
+          "label": "doubles of ones",
+          "polarity": "other",
+          "delta": "The results are 1 and 1.",
+          "expected": "Each 1 gives +1/+1, so Celebr-8000 is a 5/5 with double strike until end of turn and gains no other ability."
+        }
+      ],
+      "cards": [
+        "Celebr-8000"
+      ],
+      "forge_notes": "NoteDoubles$ True records equality and ConditionCheckSVar Doubles gates the double strike sub-ability."
+    },
+    {
+      "id": "706.6-1",
+      "rules": [
+        "706.6"
+      ],
+      "title": "An ignored roll never happened, so it triggers nothing",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            {
+              "card": "Steel Squirrel",
+              "summoning_sick": false
+            },
+            {
+              "card": "Complaints Clerk",
+              "summoning_sick": false
+            },
+            {
+              "card": "Wyll, Blade of Frontiers",
+              "summoning_sick": false
+            }
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "The natural d6 results are fixed by the scenario, in order: the first die rolled is 1 and the second is 3."
+      },
+      "decisions": [
+        "A activates Steel Squirrel's {6} ability (roll a six-sided die), tapping six Mountains.",
+        "Both players pass; the ability resolves. Wyll's replacement makes A roll two d6 instead of one and ignore the lowest roll."
+      ],
+      "variants": [
+        {
+          "label": "low roll ignored",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "A rolls 1 and 3 and the 1 is ignored. Complaints Clerk's roll-a-1 trigger does not fire and no Clown Robot token is created. Steel Squirrel does not trigger and stays 1/1. Wyll's roll trigger fires once and Wyll gets one +1/+1 counter (2/2)."
+        },
+        {
+          "label": "no Wyll",
+          "polarity": "does_not_fire",
+          "delta": "Wyll, Blade of Frontiers is not on the battlefield.",
+          "expected": "A rolls one d6 with natural result 1 and nothing is ignored. Complaints Clerk's trigger fires and A creates a 1/1 white Clown Robot artifact creature token. Steel Squirrel stays 1/1."
+        },
+        {
+          "label": "tie for lowest",
+          "polarity": "other",
+          "delta": "The second natural result is 1 instead of 3.",
+          "expected": "A rolls 1 and 1; one of the tied 1s is ignored and the other is kept. Complaints Clerk's trigger fires once and A creates exactly one 1/1 Clown Robot token. Wyll gets one +1/+1 counter (2/2)."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Steel Squirrel",
+        "Complaints Clerk",
+        "Wyll, Blade of Frontiers"
+      ],
+      "forge_notes": "Wyll's RollDice replacement raises the die count and sets Ignore; ignored dice are dropped before RolledDie triggers run. Complaints Clerk's Attraction enters trigger is irrelevant because it starts on the battlefield."
+    },
+    {
+      "id": "706.8a-1",
+      "rules": [
+        "706.8a"
+      ],
+      "title": "Rolling dice with a storing ability records each die's kind and value on the permanent",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Centaur of Attention"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "B": [
+            "Torpor Orb"
+          ]
+        },
+        "exile": {},
+        "notes": "The natural d6 results are fixed by the scenario, not random."
+      },
+      "decisions": [
+        "A casts Centaur of Attention, tapping five Forests.",
+        "Both players pass; Centaur of Attention resolves and its enter trigger goes on the stack.",
+        "Both players pass; the trigger resolves and A rolls five six-sided dice: the results are 4, 4, 4, 1 and 2."
+      ],
+      "variants": [
+        {
+          "label": "three of a kind",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Five stored results (4, 4, 4, 1, 2) are noted on Centaur of Attention. The greatest number of equal stored results is 3, so it is a 6/6."
+        },
+        {
+          "label": "all different",
+          "polarity": "other",
+          "delta": "The five results are 1, 2, 3, 4 and 5.",
+          "expected": "Five stored results (1 to 5) are noted. The greatest number of equal stored results is 1, so it is a 4/4."
+        },
+        {
+          "label": "trigger disabled",
+          "polarity": "does_not_fire",
+          "delta": "Torpor Orb is on B's battlefield instead of in B's library.",
+          "expected": "The enter trigger does not fire, no dice are rolled and nothing is stored. Centaur of Attention is a 3/3."
+        }
+      ],
+      "cards": [
+        "Forest",
+        "Centaur of Attention",
+        "Torpor Orb"
+      ],
+      "forge_notes": "Stored results are tracked through StoreResults$ True and read by Count$MaxSameStoredRolls."
+    },
+    {
+      "id": "706.8b-1",
+      "rules": [
+        "706.8b"
+      ],
+      "title": "Rerolling stored results rolls one die of each noted kind and replaces the old stored results",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Centaur of Attention",
+              "summoning_sick": false
+            }
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Centaur of Attention has stored results 4, 4, 1, 2, 3 (all six-sided), so it is a 5/5. The natural d6 results of any reroll are fixed by the scenario, not random."
+      },
+      "decisions": [
+        "Centaur of Attention's beginning-of-combat trigger goes on the stack.",
+        "Both players pass; the trigger resolves. A chooses to reroll the stored results 1, 2 and 3, and rolls three six-sided dice: the results are 4, 4 and 6."
+      ],
+      "variants": [
+        {
+          "label": "reroll three",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The stored 1, 2 and 3 stop being stored and the new 4, 4 and 6 are stored. Stored results are 4, 4, 4, 4, 6; the greatest number of equal results is 4, so it is a 7/7."
+        },
+        {
+          "label": "reroll none",
+          "polarity": "does_not_fire",
+          "delta": "A rerolls no stored results.",
+          "expected": "No dice are rolled. Stored results stay 4, 4, 1, 2, 3, so it stays a 5/5."
+        },
+        {
+          "label": "reroll one of a pair",
+          "polarity": "other",
+          "delta": "A rerolls one stored 4 only, and the result is 5.",
+          "expected": "That 4 stops being stored and the 5 is stored. Stored results are 4, 1, 2, 3, 5; the greatest number of equal results is 1, so it is a 4/4."
+        }
+      ],
+      "cards": [
+        "Centaur of Attention"
+      ],
+      "forge_notes": "Needs the Centaur to start with prearranged stored results; reach this by running its enter trigger with forced die results earlier in the puzzle setup. Forge implements the reroll as RerollResults$ True."
+    }
+  ]
+}

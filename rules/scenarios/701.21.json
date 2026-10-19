@@ -1,0 +1,86 @@
+{
+  "unit": "701.21",
+  "verified": true,
+  "review": [],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "701.21a-1",
+      "rules": [
+        "701.21a"
+      ],
+      "title": "Sacrificing is not destruction, so regeneration cannot save the permanent, and only the instructed player's own permanents are sacrificed",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Swamp",
+            "Swamp",
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            {
+              "card": "Cudgel Troll",
+              "summoning_sick": false
+            },
+            "Forest"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Diabolic Edict",
+            "Doom Blade"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Diabolic Edict targeting B, tapping both Swamps.",
+        "A passes priority; B activates Cudgel Troll's regenerate ability, tapping Forest.",
+        "Both players pass; the regeneration ability resolves and creates a shield.",
+        "Both players pass; Diabolic Edict resolves and B sacrifices a creature."
+      ],
+      "variants": [
+        {
+          "label": "sacrifice",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "B sacrifices Cudgel Troll, the only creature B controls: it moves directly to B's graveyard despite the regeneration shield. A's Grizzly Bears stays on the battlefield, because A is not the player who sacrifices."
+        },
+        {
+          "label": "destroy",
+          "polarity": "does_not_fire",
+          "delta": "A casts Doom Blade targeting Cudgel Troll instead of Diabolic Edict.",
+          "expected": "The destruction is replaced by the regeneration shield: Cudgel Troll stays on the battlefield, tapped, with damage removed."
+        },
+        {
+          "label": "no_creature",
+          "polarity": "does_not_fire",
+          "delta": "B controls no creature (only Forest).",
+          "expected": "B has nothing to sacrifice. Nothing is sacrificed, and A's Grizzly Bears stays on the battlefield."
+        }
+      ],
+      "cards": [
+        "Swamp",
+        "Forest",
+        "Diabolic Edict",
+        "Doom Blade",
+        "Cudgel Troll",
+        "Grizzly Bears"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

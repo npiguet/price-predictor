@@ -1,0 +1,2 @@
+{"id": "702.32", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.32a", "category": "mechanical", "observability": "direct", "record_kinds": ["resolution", "trigger"], "outcome": "The permanent enters with N fade counters; at each upkeep of its controller one is removed, and if none can be removed it is sacrificed.", "note": ""}

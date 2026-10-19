@@ -1,0 +1,137 @@
+{
+  "unit": "702.148",
+  "verified": true,
+  "review": [],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.148a-1",
+      "rules": [
+        "702.148a"
+      ],
+      "title": "A spell cast for its cleave cost loses its bracketed text",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Swamp",
+            "Swamp",
+            "Swamp",
+            "Swamp",
+            "Plains",
+            "Plains",
+            "Savannah Lions"
+          ],
+          "B": [
+            "Hill Giant",
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Path of Peril"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Path of Peril for its cleave cost {4}{W}{B}, tapping all six lands.",
+        "Both players pass; the spell resolves."
+      ],
+      "variants": [
+        {
+          "label": "cleave",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The bracketed text is removed, so the spell destroys all creatures: Savannah Lions, Hill Giant and Grizzly Bears all move to their owners' graveyards."
+        },
+        {
+          "label": "mana_cost",
+          "polarity": "does_not_fire",
+          "delta": "A casts Path of Peril for its mana cost {1}{B}{B}, tapping three Swamps.",
+          "expected": "The spell destroys only creatures with mana value 2 or less: Savannah Lions and Grizzly Bears are destroyed, Hill Giant (mana value 4) stays on the battlefield."
+        }
+      ],
+      "cards": [
+        "Path of Peril",
+        "Swamp",
+        "Plains",
+        "Savannah Lions",
+        "Hill Giant",
+        "Grizzly Bears"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.148a-2",
+      "rules": [
+        "702.148a"
+      ],
+      "title": "Cleaving removes a targeting restriction, so a spell has a legal target it would not otherwise have",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains"
+          ],
+          "B": [
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Fierce Retribution"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Fierce Retribution for its cleave cost {5}{W} targeting Grizzly Bears (which is not attacking), tapping all six Plains.",
+        "Both players pass; the spell resolves."
+      ],
+      "variants": [
+        {
+          "label": "cleave",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The cast is legal because the text 'attacking' is removed: Fierce Retribution destroys Grizzly Bears, which moves to B's graveyard."
+        },
+        {
+          "label": "mana_cost",
+          "polarity": "does_not_fire",
+          "delta": "A tries to cast Fierce Retribution for its mana cost {1}{W}.",
+          "expected": "The cast is not legal: the spell needs a target attacking creature and none exists. Grizzly Bears is unaffected and no Plains are tapped."
+        }
+      ],
+      "cards": [
+        "Fierce Retribution",
+        "Plains",
+        "Grizzly Bears"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

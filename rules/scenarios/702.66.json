@@ -1,0 +1,144 @@
+{
+  "unit": "702.66",
+  "verified": true,
+  "review": [],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.66a-1",
+      "rules": [
+        "702.66a"
+      ],
+      "title": "Delve pays generic mana by exiling cards from the graveyard",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Swamp",
+            "Swamp"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Gurmag Angler"
+          ]
+        },
+        "graveyard": {
+          "A": [
+            "Walking Corpse",
+            "Walking Corpse",
+            "Walking Corpse",
+            "Walking Corpse",
+            "Walking Corpse"
+          ]
+        },
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Gurmag Angler ({6}{B}), exiling all five cards from A's graveyard for delve and tapping Swamp and Swamp."
+      ],
+      "variants": [
+        {
+          "label": "five_cards",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The cast is legal: five exiled cards pay five generic mana, one Swamp pays the generic mana and the other pays {B}. Gurmag Angler is on the stack and A's graveyard is empty."
+        },
+        {
+          "label": "four_cards",
+          "polarity": "does_not_fire",
+          "delta": "A's graveyard holds four cards.",
+          "expected": "The cast is not legal: four exiled cards and two lands cover only six of the seven mana."
+        },
+        {
+          "label": "no_black_source",
+          "polarity": "does_not_fire",
+          "delta": "A's two lands are Mountains instead of Swamps.",
+          "expected": "The cast is not legal: delve cannot pay the colored {B}."
+        }
+      ],
+      "cards": [
+        "Swamp",
+        "Mountain",
+        "Gurmag Angler",
+        "Walking Corpse"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.66b-1",
+      "rules": [
+        "702.66b"
+      ],
+      "title": "Delve applies after the total cost is determined",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            {
+              "summoning_sick": false,
+              "card": "Goblin Electromancer"
+            }
+          ]
+        },
+        "hand": {
+          "A": [
+            "Treasure Cruise"
+          ]
+        },
+        "graveyard": {
+          "A": [
+            "Walking Corpse",
+            "Walking Corpse",
+            "Walking Corpse",
+            "Walking Corpse",
+            "Walking Corpse"
+          ]
+        },
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Treasure Cruise ({7}{U}), exiling all five cards from A's graveyard for delve and tapping Island and Island."
+      ],
+      "variants": [
+        {
+          "label": "cost_reduced",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The cast is legal: Goblin Electromancer first reduces the total cost to {6}{U}, then five exiled cards and one Island pay the generic mana and the other Island pays {U}."
+        },
+        {
+          "label": "no_reduction",
+          "polarity": "does_not_fire",
+          "delta": "Goblin Electromancer is not on the battlefield.",
+          "expected": "The cast is not legal: the total cost stays {7}{U} and five exiled cards plus two Islands cover only seven of the eight mana."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Goblin Electromancer",
+        "Treasure Cruise",
+        "Walking Corpse"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

@@ -1,0 +1,4 @@
+{"id": "702.13", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.13a", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.13b", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "A creature with intimidate is not a legal blocker for it unless the blocker is an artifact creature or shares a color with it.", "note": ""}
+{"id": "702.13c", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": "Redundancy has no separate outcome."}

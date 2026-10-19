@@ -1,0 +1,464 @@
+{
+  "unit": "718",
+  "verified": true,
+  "review": [
+    "718.3a-1: variant seven_plains changed two facts against the base (land count and land type); dropped it, the base, two_mountains and three_plains variants already show castability judged by the alternative cost only."
+  ],
+  "skipped": [
+    {
+      "id": "718.2a",
+      "reason": "the alternative values being part of copiable values shows only when a copy is a prototyped spell or permanent, which scenarios 718.3c-1 and 718.3d-1 cover; a copy of a normally cast permanent has the normal characteristics and shows nothing further"
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "718.3a-1",
+      "rules": [
+        "718.3a"
+      ],
+      "title": "A prototyped spell is judged for casting by its alternative mana cost only",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Mountain"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Blitz Automaton"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Blitz Automaton: normal mana cost {7}, 6/4; prototype {2}{R}, 3/2."
+      },
+      "decisions": [
+        "A checks whether Blitz Automaton can be cast as a prototyped spell (cost {2}{R}) and whether it can be cast normally (cost {7})."
+      ],
+      "variants": [
+        {
+          "label": "three_mountains",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Casting as a prototyped spell is legal, with cost {2}{R}. Casting normally is not legal (cost {7}, only 3 mana available)."
+        },
+        {
+          "label": "two_mountains",
+          "polarity": "does_not_fire",
+          "delta": "A controls two Mountains instead of three.",
+          "expected": "Neither is legal: {2}{R} and {7} both exceed the available mana."
+        },
+        {
+          "label": "three_plains",
+          "polarity": "does_not_fire",
+          "delta": "A controls three Plains instead of three Mountains.",
+          "expected": "Neither is legal: {2}{R} cannot be paid without red mana, and {7} exceeds the available mana."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Plains",
+        "Blitz Automaton"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "718.3b-1",
+      "rules": [
+        "718.3b",
+        "718.4"
+      ],
+      "title": "A prototyped permanent has the alternative power, toughness, mana cost and color; cast normally it has the normal ones",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Blitz Automaton"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Blitz Automaton: normal mana cost {7}, colorless 6/4; prototype {2}{R}, 3/2."
+      },
+      "decisions": [
+        "A casts Blitz Automaton as a prototyped spell, paying {2}{R} with three Mountains.",
+        "Both players pass; it resolves."
+      ],
+      "variants": [
+        {
+          "label": "prototyped",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Blitz Automaton on the battlefield is a red 3/2 artifact creature with mana value 3 and haste."
+        },
+        {
+          "label": "cast_normally",
+          "polarity": "does_not_fire",
+          "delta": "A casts Blitz Automaton normally, paying {7} with all seven Mountains.",
+          "expected": "Blitz Automaton on the battlefield is a colorless 6/4 artifact creature with mana value 7 and haste."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Blitz Automaton"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "718.3b-2",
+      "rules": [
+        "718.3b"
+      ],
+      "title": "A prototyped spell on the stack has the colors of its alternative mana cost",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain"
+          ],
+          "B": [
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Blitz Automaton"
+          ],
+          "B": [
+            "Hydroblast"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Hydroblast mode: counter target spell if it's red."
+      },
+      "decisions": [
+        "A casts Blitz Automaton as a prototyped spell, paying {2}{R} with three Mountains.",
+        "A passes priority.",
+        "B casts Hydroblast in response, choosing the counter mode and targeting Blitz Automaton, tapping Island.",
+        "Both players pass; Hydroblast resolves.",
+        "If Blitz Automaton is still on the stack, both players pass and it resolves."
+      ],
+      "variants": [
+        {
+          "label": "prototyped_red",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Blitz Automaton is a red spell: Hydroblast counters it and it goes to A's graveyard."
+        },
+        {
+          "label": "cast_normally_colorless",
+          "polarity": "does_not_fire",
+          "delta": "A casts Blitz Automaton normally, paying {7} with all seven Mountains.",
+          "expected": "Blitz Automaton is a colorless spell: Hydroblast resolves and does nothing. Blitz Automaton then resolves and a 6/4 enters the battlefield."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Island",
+        "Blitz Automaton",
+        "Hydroblast"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "718.3c-1",
+      "rules": [
+        "718.3c"
+      ],
+      "title": "A copy of a prototyped spell is itself a prototyped spell",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Forest",
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Blitz Automaton",
+            "Double Major"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Blitz Automaton as a prototyped spell, paying {2}{R} with three Mountains.",
+        "A casts Double Major in response, paying {G}{U}, targeting the Blitz Automaton spell.",
+        "Both players pass; Double Major resolves and copies the spell.",
+        "Both players pass; the copy resolves, then both players pass and the original resolves."
+      ],
+      "variants": [
+        {
+          "label": "prototyped",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "A controls two permanents: the original and a token copy. Both are red 3/2 artifact creatures with mana value 3."
+        },
+        {
+          "label": "cast_normally",
+          "polarity": "does_not_fire",
+          "delta": "A casts Blitz Automaton normally, paying {7} with the seven Mountains.",
+          "expected": "A controls two permanents: the original and a token copy. Both are colorless 6/4 artifact creatures with mana value 7."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Forest",
+        "Island",
+        "Blitz Automaton",
+        "Double Major"
+      ],
+      "forge_notes": "Double Major copies the creature spell; the copy becomes a token on resolution."
+    },
+    {
+      "id": "718.3d-1",
+      "rules": [
+        "718.3d"
+      ],
+      "title": "A copy of a permanent that was a prototyped spell has the alternative characteristics",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Island",
+            "Island",
+            "Island",
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Blitz Automaton",
+            "Clone"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Blitz Automaton as a prototyped spell, paying {2}{R} with three Mountains.",
+        "Both players pass; it resolves.",
+        "A casts Clone, paying {3}{U} with four Islands.",
+        "Both players pass; Clone resolves and A has it enter as a copy of Blitz Automaton."
+      ],
+      "variants": [
+        {
+          "label": "prototyped_original",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The Clone is a red 3/2 artifact creature Construct with mana value 3 and haste, like the original."
+        },
+        {
+          "label": "normal_original",
+          "polarity": "does_not_fire",
+          "delta": "A casts Blitz Automaton normally, paying {7} with all seven Mountains.",
+          "expected": "The Clone is a colorless 6/4 artifact creature Construct with mana value 7 and haste, like the original."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Island",
+        "Blitz Automaton",
+        "Clone"
+      ],
+      "forge_notes": "Whether Forge's Clone copies the prototype state of the permanent is to be checked."
+    },
+    {
+      "id": "718.4-1",
+      "rules": [
+        "718.4"
+      ],
+      "title": "A prototype card in a zone other than the stack or battlefield has only its normal characteristics",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Swamp"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Unearth"
+          ]
+        },
+        "graveyard": {
+          "A": [
+            "Blitz Automaton"
+          ]
+        },
+        "library": {},
+        "exile": {},
+        "notes": "Blitz Automaton died earlier as a prototyped permanent. Unearth: return target creature card with mana value 3 or less from your graveyard to the battlefield."
+      },
+      "decisions": [
+        "A attempts to cast Unearth, targeting the creature card in A's graveyard."
+      ],
+      "variants": [
+        {
+          "label": "prototype_card_in_graveyard",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Blitz Automaton has mana value 7 in the graveyard: Unearth has no legal target and cannot be cast."
+        },
+        {
+          "label": "ordinary_creature_in_graveyard",
+          "polarity": "does_not_fire",
+          "delta": "The creature card in A's graveyard is Grizzly Bears (mana value 2) instead of Blitz Automaton.",
+          "expected": "Grizzly Bears is a legal target: Unearth can be cast and returns it to the battlefield."
+        }
+      ],
+      "cards": [
+        "Swamp",
+        "Unearth",
+        "Blitz Automaton",
+        "Grizzly Bears"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "718.5-1",
+      "rules": [
+        "718.5"
+      ],
+      "title": "A prototyped permanent keeps every characteristic other than power, toughness, mana cost and color",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Combat Thresher"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Plains",
+            "Plains"
+          ]
+        },
+        "exile": {},
+        "notes": "Combat Thresher: normal mana cost {7}, colorless 3/3; prototype {2}{W}, 1/1. Double strike; when it enters, draw a card."
+      },
+      "decisions": [
+        "A casts Combat Thresher as a prototyped spell, paying {2}{W} with three Plains.",
+        "Both players pass; it resolves.",
+        "Its enters trigger resolves."
+      ],
+      "variants": [
+        {
+          "label": "prototyped",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Combat Thresher is a white 1/1 artifact creature Construct with double strike. A drew one card."
+        },
+        {
+          "label": "cast_normally",
+          "polarity": "does_not_fire",
+          "delta": "A casts Combat Thresher normally, paying {7} with all seven Plains.",
+          "expected": "Combat Thresher is a colorless 3/3 artifact creature Construct with double strike. A drew one card: types, keyword and trigger match the prototyped case."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Combat Thresher"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

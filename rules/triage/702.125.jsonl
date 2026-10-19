@@ -1,0 +1,4 @@
+{"id": "702.125", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.125a", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "A spell with undaunted costs {1} less for each opponent, so in a two-player game it costs {1} less.", "note": ""}
+{"id": "702.125b", "category": "out_of_scope", "observability": "none", "record_kinds": [], "outcome": "", "note": "Players leaving the game does not occur in a two-player game before it ends."}
+{"id": "702.125c", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "Multiple instances of undaunted each reduce the cost, so two instances reduce it by {2} in a two-player game.", "note": ""}

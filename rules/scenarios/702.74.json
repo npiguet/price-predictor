@@ -1,0 +1,135 @@
+{
+  "unit": "702.74",
+  "verified": true,
+  "review": [
+    "702.74a-2: the only does_not_fire variant removed a land, which tests mana payability rather than the evoke alternative cost; added a no_evoke variant swapping Mulldrifter for Air Elemental (same three Islands)."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.74a-1",
+      "rules": [
+        "702.74a"
+      ],
+      "title": "An evoked permanent is sacrificed when it enters",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Mulldrifter"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Island",
+            "Island",
+            "Island"
+          ]
+        },
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Mulldrifter for its evoke cost {2}{U}, tapping three Islands.",
+        "Both players pass; Mulldrifter resolves and enters.",
+        "The draw trigger and the evoke sacrifice trigger go on the stack; A puts them in any order and both resolve."
+      ],
+      "variants": [
+        {
+          "label": "evoked",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "A draws two cards and Mulldrifter is sacrificed and goes to A's graveyard. Two Islands are untapped."
+        },
+        {
+          "label": "hard_cast",
+          "polarity": "does_not_fire",
+          "delta": "A casts Mulldrifter for its mana cost {4}{U}, tapping all five Islands.",
+          "expected": "A draws two cards and Mulldrifter, a 2/2 flier, stays on the battlefield. No sacrifice trigger fires."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Mulldrifter"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.74a-2",
+      "rules": [
+        "702.74a"
+      ],
+      "title": "The evoke cost is an alternative cost for casting the card",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Mulldrifter"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "Evaluate whether A may cast Mulldrifter with three untapped Islands, the stack empty and main1 as the step."
+      ],
+      "variants": [
+        {
+          "label": "three_lands",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Casting Mulldrifter is legal (can_play true) with the cost adjusted to the evoke cost {2}{U}; the mana cost {4}{U} cannot be paid."
+        },
+        {
+          "label": "two_lands",
+          "polarity": "does_not_fire",
+          "delta": "A controls two Islands instead of three.",
+          "expected": "Casting Mulldrifter is not legal (can_play false); neither the evoke cost nor the mana cost can be paid."
+        },
+        {
+          "label": "no_evoke",
+          "polarity": "does_not_fire",
+          "delta": "A's hand holds Air Elemental ({3}{U}{U}, no evoke) instead of Mulldrifter.",
+          "expected": "Casting Air Elemental is not legal (can_play false); with no evoke cost, only its mana cost {3}{U}{U} is available and three Islands cannot pay it."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Mulldrifter",
+        "Air Elemental"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

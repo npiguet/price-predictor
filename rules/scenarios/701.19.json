@@ -1,0 +1,280 @@
+{
+  "unit": "701.19",
+  "verified": true,
+  "review": [
+    "701.19b-1: the one_shield_only delta left the timing of the activation open; it now names the response to the first Doom Blade."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "701.19a-1",
+      "rules": [
+        "701.19a"
+      ],
+      "title": "A regeneration shield replaces the next destruction this turn",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Swamp",
+            "Swamp",
+            "Swamp",
+            "Swamp"
+          ],
+          "B": [
+            {
+              "card": "Cudgel Troll",
+              "summoning_sick": false
+            },
+            "Forest"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Doom Blade",
+            "Doom Blade"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Doom Blade targeting Cudgel Troll, tapping two Swamps.",
+        "A passes priority; B activates Cudgel Troll's regenerate ability, tapping Forest.",
+        "Both players pass; the regeneration ability resolves and creates a shield.",
+        "Both players pass; Doom Blade resolves."
+      ],
+      "variants": [
+        {
+          "label": "shielded",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Doom Blade's destruction is replaced: Cudgel Troll stays on the battlefield, tapped, with all damage removed."
+        },
+        {
+          "label": "no_shield",
+          "polarity": "does_not_fire",
+          "delta": "B does not activate Cudgel Troll's regenerate ability.",
+          "expected": "Cudgel Troll is destroyed and moves to B's graveyard."
+        },
+        {
+          "label": "shield_used_up",
+          "polarity": "does_not_fire",
+          "delta": "After the first Doom Blade resolves, A casts the second Doom Blade on Cudgel Troll, tapping the other two Swamps, and B does not activate the ability again.",
+          "expected": "The first Doom Blade is regenerated. The shield was used up by the first destruction, so the second Doom Blade destroys Cudgel Troll and it moves to B's graveyard."
+        }
+      ],
+      "cards": [
+        "Swamp",
+        "Forest",
+        "Doom Blade",
+        "Cudgel Troll"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "701.19a-2",
+      "rules": [
+        "701.19a"
+      ],
+      "title": "A regenerated blocker is tapped, healed and removed from combat",
+      "record_kind": "combat",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Halberdier",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            {
+              "card": "Cudgel Troll",
+              "summoning_sick": false
+            },
+            "Forest"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A attacks player B with Halberdier.",
+        "B blocks Halberdier with Cudgel Troll.",
+        "B activates Cudgel Troll's regenerate ability, tapping Forest; both players pass and the shield is created.",
+        "Both players pass; the first-strike combat damage step begins."
+      ],
+      "variants": [
+        {
+          "label": "shielded",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Halberdier (3/1, first strike) deals 3 first-strike damage to Cudgel Troll (4/3). The destruction is replaced: Cudgel Troll becomes tapped, its damage is removed and it is removed from combat, so it deals no regular combat damage. Halberdier survives undamaged. B's life stays 20."
+        },
+        {
+          "label": "no_shield",
+          "polarity": "does_not_fire",
+          "delta": "B does not activate the regenerate ability.",
+          "expected": "Halberdier deals 3 first-strike damage to Cudgel Troll, which is destroyed and moves to B's graveyard before dealing damage. Halberdier survives undamaged. B's life stays 20."
+        }
+      ],
+      "cards": [
+        "Halberdier",
+        "Cudgel Troll",
+        "Forest"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "701.19b-1",
+      "rules": [
+        "701.19b"
+      ],
+      "title": "A static regeneration ability replaces every destruction",
+      "record_kind": "rewrite",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Swamp",
+            "Swamp",
+            "Swamp",
+            "Swamp"
+          ],
+          "B": [
+            {
+              "card": "Mossbridge Troll",
+              "summoning_sick": false
+            },
+            "Forest"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Doom Blade",
+            "Doom Blade"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Doom Blade targeting Mossbridge Troll, tapping two Swamps; both players pass and it resolves.",
+        "A casts the second Doom Blade targeting Mossbridge Troll, tapping the other two Swamps; both players pass and it resolves."
+      ],
+      "variants": [
+        {
+          "label": "static_regeneration",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Both destructions are replaced by regeneration: Mossbridge Troll stays on the battlefield, tapped, with no damage, after each Doom Blade."
+        },
+        {
+          "label": "one_shield_only",
+          "polarity": "does_not_fire",
+          "delta": "B's creature is Cudgel Troll, whose regeneration is a shield from an activated ability, and B activates it once (tapping Forest) in response to the first Doom Blade.",
+          "expected": "The first Doom Blade is regenerated; the second finds no shield and destroys Cudgel Troll, which moves to B's graveyard."
+        }
+      ],
+      "cards": [
+        "Swamp",
+        "Forest",
+        "Doom Blade",
+        "Mossbridge Troll",
+        "Cudgel Troll"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "701.19c-1",
+      "rules": [
+        "701.19c"
+      ],
+      "title": "A regeneration shield can be created under can't-be-regenerated, but it does not apply",
+      "record_kind": "rewrite",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Swamp",
+            "Swamp"
+          ],
+          "B": [
+            {
+              "card": "Cudgel Troll",
+              "summoning_sick": false
+            },
+            "Forest"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Terror",
+            "Doom Blade"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Terror targeting Cudgel Troll, tapping both Swamps.",
+        "A passes priority; B activates Cudgel Troll's regenerate ability, tapping Forest.",
+        "Both players pass; the regeneration ability resolves and creates a shield.",
+        "Both players pass; Terror resolves."
+      ],
+      "variants": [
+        {
+          "label": "terror",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "B's activation is legal and the shield is created, but Terror's destruction can't be regenerated: Cudgel Troll is destroyed and moves to B's graveyard."
+        },
+        {
+          "label": "doom_blade",
+          "polarity": "does_not_fire",
+          "delta": "A casts Doom Blade instead of Terror.",
+          "expected": "The shield applies: Cudgel Troll stays on the battlefield, tapped, with damage removed."
+        }
+      ],
+      "cards": [
+        "Swamp",
+        "Forest",
+        "Terror",
+        "Doom Blade",
+        "Cudgel Troll"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

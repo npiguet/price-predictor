@@ -1,0 +1,242 @@
+{
+  "unit": "701.15",
+  "verified": true,
+  "review": [
+    "701.15d-1: the twice-goaded variant had the same verdict as the once-goaded base, so 701.15d was never observable; dropped it and replaced it with 701.15c-1, where Silent Arbiter allows one attacker and the requirement count decides which one may attack.",
+    "701.15c: the skip claimed no distinct verdict exists in two-player games, but B can goad its own creature (Laser Screwdriver targets any creature) and the extra requirement decides the attack under Silent Arbiter; removed the skip, covered by 701.15c-1 together with 701.15d."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "701.15a-1",
+      "rules": [
+        "701.15a"
+      ],
+      "title": "A goaded creature stays goaded only until the next turn of the player who goaded it",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain"
+          ],
+          "B": [
+            {
+              "card": "Llanowar Elves",
+              "summoning_sick": false
+            }
+          ]
+        },
+        "hand": {
+          "A": [
+            "Disrupt Decorum"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "A is the active player in main1 of A's turn. Llanowar Elves is untapped and not summoning sick."
+      },
+      "decisions": [
+        "A casts Disrupt Decorum, tapping four Mountains.",
+        "Both players pass; Disrupt Decorum resolves and Llanowar Elves is goaded by A.",
+        "A passes the turn. B takes B's turn and reaches the declare attackers step with Llanowar Elves untapped."
+      ],
+      "variants": [
+        {
+          "label": "b_next_turn",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Llanowar Elves is goaded during B's turn: declaring no attackers is not a legal attack declaration, and Llanowar Elves must attack A."
+        },
+        {
+          "label": "b_second_turn",
+          "polarity": "does_not_fire",
+          "delta": "The attack declaration examined is in B's second turn after the cast, after A's own next turn has begun (A passes that turn without casting a spell).",
+          "expected": "Llanowar Elves is no longer goaded. Declaring no attackers is a legal attack declaration."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Disrupt Decorum",
+        "Llanowar Elves"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "701.15b-1",
+      "rules": [
+        "701.15b"
+      ],
+      "title": "A goaded creature must attack each combat if able",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain"
+          ],
+          "B": [
+            {
+              "card": "Llanowar Elves",
+              "summoning_sick": false
+            }
+          ]
+        },
+        "hand": {
+          "A": [
+            "Disrupt Decorum"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "A is the active player in main1 of A's turn. Llanowar Elves is untapped and not summoning sick."
+      },
+      "decisions": [
+        "A casts Disrupt Decorum, tapping four Mountains.",
+        "Both players pass; Disrupt Decorum resolves and Llanowar Elves is goaded by A.",
+        "A passes the turn. B takes B's turn, taps nothing, and reaches the declare attackers step."
+      ],
+      "variants": [
+        {
+          "label": "untapped",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Llanowar Elves must attack, and the only player it can attack is A. An attack declaration that leaves Llanowar Elves home is illegal."
+        },
+        {
+          "label": "tapped_for_mana",
+          "polarity": "does_not_fire",
+          "delta": "In B's upkeep B taps Llanowar Elves for mana, so it is tapped at the declare attackers step.",
+          "expected": "Llanowar Elves is not able to attack, so the requirement does not apply. Declaring no attackers is a legal attack declaration."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Disrupt Decorum",
+        "Llanowar Elves"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "701.15c-1",
+      "rules": [
+        "701.15c",
+        "701.15d"
+      ],
+      "title": "A goad by a second player adds a combat requirement, a second goad by the same player adds none",
+      "record_kind": "playability",
+      "setup": {
+        "active": "B",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Silent Arbiter",
+              "summoning_sick": false
+            },
+            {
+              "card": "Laser Screwdriver",
+              "tapped": true
+            },
+            {
+              "card": "Mountain",
+              "tapped": true
+            },
+            {
+              "card": "Mountain",
+              "tapped": true
+            },
+            {
+              "card": "Mountain",
+              "tapped": true
+            },
+            {
+              "card": "Mountain",
+              "tapped": true
+            },
+            {
+              "card": "Mountain",
+              "tapped": true
+            },
+            {
+              "card": "Mountain",
+              "tapped": true
+            },
+            {
+              "card": "Mountain",
+              "tapped": true
+            }
+          ],
+          "B": [
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            },
+            {
+              "card": "Centaur Courser",
+              "summoning_sick": false
+            },
+            "Laser Screwdriver",
+            "Mountain",
+            "Mountain",
+            "Mountain"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "B's turn. On A's previous turn A cast Disrupt Decorum (four Mountains), so Grizzly Bears and Centaur Courser are each goaded by A until A's next turn. A's Laser Screwdriver and Mountains are still tapped from that turn. Silent Arbiter (A's) lets no more than one creature attack each combat, so the attack declaration must obey the most requirements possible with a single attacker (rule 508.1d)."
+      },
+      "decisions": [
+        "In main1 B activates B's Laser Screwdriver's goad ability ({3}, tapping three Mountains and Laser Screwdriver) targeting Grizzly Bears; both players pass and it resolves, so Grizzly Bears is goaded by B as well.",
+        "B moves to combat and declares attackers; every attacker attacks A."
+      ],
+      "variants": [
+        {
+          "label": "goaded_by_both_players",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears carries a requirement from A's goad and another from B's goad, Centaur Courser only A's. The only legal attack declaration is Grizzly Bears attacking A alone; Centaur Courser attacking alone and no attack are both illegal."
+        },
+        {
+          "label": "second_goad_by_same_player",
+          "polarity": "does_not_fire",
+          "delta": "The second goad on Grizzly Bears is A's instead of B's: on A's previous turn A also activated A's Laser Screwdriver targeting Grizzly Bears (paying with three of A's Mountains), and B does not activate B's.",
+          "expected": "A goading Grizzly Bears again adds no requirement, so Grizzly Bears and Centaur Courser carry one requirement each. Grizzly Bears attacking A alone and Centaur Courser attacking A alone are both legal; no attack is illegal."
+        }
+      ],
+      "cards": [
+        "Silent Arbiter",
+        "Laser Screwdriver",
+        "Disrupt Decorum",
+        "Mountain",
+        "Grizzly Bears",
+        "Centaur Courser"
+      ],
+      "forge_notes": "Depends on Forge counting goad requirements per goading player when it maximises requirements under Silent Arbiter's attack restriction."
+    }
+  ]
+}

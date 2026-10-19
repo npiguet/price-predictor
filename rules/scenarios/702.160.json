@@ -1,0 +1,127 @@
+{
+  "unit": "702.160",
+  "verified": true,
+  "review": [],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.160a-1",
+      "rules": [
+        "702.160a"
+      ],
+      "title": "A prototyped spell and the permanent it becomes use the alternative characteristics",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Boulderbranch Golem"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Boulderbranch Golem is a 6/5 colorless {7} artifact creature with prototype {3}{G} 3/3, and gains its controller life equal to its power when it enters."
+      },
+      "decisions": [
+        "A casts Boulderbranch Golem prototyped, paying {3}{G} by tapping four Forests. It resolves."
+      ],
+      "variants": [
+        {
+          "label": "prototyped",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "On the stack and on the battlefield Boulderbranch Golem is a green 3/3 with mana value 4. Its enters trigger gains A 3 life: A is at 23. Three Forests stay untapped."
+        },
+        {
+          "label": "full_cost",
+          "polarity": "does_not_fire",
+          "delta": "A casts Boulderbranch Golem for its normal mana cost {7}, tapping all seven Forests.",
+          "expected": "Boulderbranch Golem is a colorless 6/5 with mana value 7. Its enters trigger gains A 6 life: A is at 26."
+        }
+      ],
+      "cards": [
+        "Forest",
+        "Boulderbranch Golem"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.160a-2",
+      "rules": [
+        "702.160a"
+      ],
+      "title": "A prototype card can be cast prototyped for the smaller cost",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Boulderbranch Golem"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Evaluated in A's main phase with an empty stack. The verdict is about casting Boulderbranch Golem."
+      },
+      "decisions": [
+        "No action is taken; the engine evaluates whether A can cast Boulderbranch Golem prototyped and for its mana cost."
+      ],
+      "variants": [
+        {
+          "label": "four_forests",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Casting prototyped for {3}{G} is legal (can_play true). Casting for the full {7} is not legal."
+        },
+        {
+          "label": "three_forests",
+          "polarity": "does_not_fire",
+          "delta": "A controls three Forests, not four.",
+          "expected": "Neither casting is legal: the prototyped cost {3}{G} needs four mana."
+        },
+        {
+          "label": "seven_forests",
+          "polarity": "other",
+          "delta": "A controls seven Forests.",
+          "expected": "Both castings are legal: prototyped for {3}{G} and for the full {7}."
+        }
+      ],
+      "cards": [
+        "Forest",
+        "Boulderbranch Golem"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

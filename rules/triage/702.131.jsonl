@@ -1,0 +1,5 @@
+{"id": "702.131", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.131a", "category": "mechanical", "observability": "direct", "record_kinds": ["resolution"], "outcome": "Resolving an instant or sorcery with ascend gives its controller the city's blessing if they control ten or more permanents.", "note": ""}
+{"id": "702.131b", "category": "mechanical", "observability": "needs_new_fields", "record_kinds": ["continuous"], "outcome": "A player controlling a permanent with ascend and ten or more permanents gets the city's blessing as soon as the condition holds.", "note": "The designation is not a field of today's records."}
+{"id": "702.131c", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.131d", "category": "mechanical", "observability": "needs_new_fields", "record_kinds": ["trigger"], "outcome": "After the city's blessing is gained, continuous effects are reapplied before triggers are checked, so a trigger conditioned on the blessing fires.", "note": ""}

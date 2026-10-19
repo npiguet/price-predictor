@@ -1,0 +1,4 @@
+{"id": "702.63", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.63a", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution", "trigger"], "outcome": "A vanishing permanent enters with N time counters, loses one each upkeep, and is sacrificed when the last is removed.", "note": ""}
+{"id": "702.63b", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution", "trigger"], "outcome": "Vanishing without a number removes a time counter each upkeep and sacrifices the permanent when the last is removed.", "note": ""}
+{"id": "702.63c", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution", "trigger"], "outcome": "Each vanishing instance works separately.", "note": ""}

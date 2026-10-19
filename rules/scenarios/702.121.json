@@ -1,0 +1,129 @@
+{
+  "unit": "702.121",
+  "verified": true,
+  "review": [],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.121a-1",
+      "rules": [
+        "702.121a"
+      ],
+      "title": "Melee gives +1/+1 when the creature attacks",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Wings of the Guard",
+              "summoning_sick": false
+            },
+            {
+              "card": "Mons's Goblin Raiders",
+              "summoning_sick": false
+            }
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A moves to combat and declares Wings of the Guard as the only attacker, attacking player B.",
+        "Both players pass priority; the melee trigger resolves, then combat damage is dealt."
+      ],
+      "variants": [
+        {
+          "label": "melee_creature_attacks",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The melee trigger of Wings of the Guard fires and resolves: it is 2/2 until end of turn. B is unblocked, takes 2 combat damage and is at 18."
+        },
+        {
+          "label": "melee_creature_stays_home",
+          "polarity": "does_not_fire",
+          "delta": "A attacks with Mons's Goblin Raiders only; Wings of the Guard does not attack.",
+          "expected": "The melee trigger does not fire. Wings of the Guard stays 1/1. B takes 1 combat damage and is at 19."
+        }
+      ],
+      "cards": [
+        "Wings of the Guard",
+        "Mons's Goblin Raiders"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.121b-1",
+      "rules": [
+        "702.121b"
+      ],
+      "title": "Each instance of melee triggers separately",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Wings of the Guard",
+              "summoning_sick": false
+            },
+            {
+              "card": "Fang of the Pack",
+              "summoning_sick": false
+            },
+            {
+              "card": "Mons's Goblin Raiders",
+              "summoning_sick": false
+            }
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A moves to the beginning of combat; the Fang of the Pack trigger targets Wings of the Guard.",
+        "The trigger resolves and Wings of the Guard gains melee until end of turn, on top of its own melee.",
+        "A declares Wings of the Guard as the only attacker, attacking player B. Fang of the Pack and Mons's Goblin Raiders stay home.",
+        "Both players pass priority; both melee triggers resolve, then combat damage is dealt."
+      ],
+      "variants": [
+        {
+          "label": "two_instances",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Two separate melee triggers of Wings of the Guard fire and resolve: it is 3/3 until end of turn. B is unblocked, takes 3 combat damage and is at 17."
+        },
+        {
+          "label": "one_instance",
+          "polarity": "does_not_fire",
+          "delta": "The Fang of the Pack trigger targets Mons's Goblin Raiders instead of Wings of the Guard.",
+          "expected": "Wings of the Guard has one instance of melee, so one melee trigger fires and it is 2/2 until end of turn. B takes 2 combat damage and is at 18."
+        }
+      ],
+      "cards": [
+        "Wings of the Guard",
+        "Fang of the Pack",
+        "Mons's Goblin Raiders"
+      ],
+      "forge_notes": "Fang of the Pack grants melee as a keyword through a pump effect; Forge must keep the granted instance distinct from the printed one."
+    }
+  ]
+}

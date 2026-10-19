@@ -1,0 +1,85 @@
+{
+  "unit": "702.155",
+  "verified": true,
+  "review": [
+    "702.155a-1: choose_three said chapter III 'exiles nothing'; under 603.3d a chapter ability with no legal target is removed from the stack, expected rewritten and Forge's up-to-one targeting noted in forge_notes."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.155a-1",
+      "rules": [
+        "702.155a",
+        "702.155b"
+      ],
+      "title": "A read ahead Saga enters with the chosen number of lore counters and only that chapter triggers",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Founding the Third Path"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "B": [
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island"
+          ]
+        },
+        "exile": {},
+        "notes": "Founding the Third Path has read ahead and three chapters: I casts a free instant or sorcery with mana value 1 or 2 from hand, II makes target player mill four cards, III exiles and copies an instant or sorcery from A's graveyard. A's hand is empty besides the Saga and A's graveyard is empty. B's library holds 10 cards."
+      },
+      "decisions": [
+        "A casts Founding the Third Path, tapping two Islands. It resolves.",
+        "As it enters, A chooses 2 for read ahead; the Saga enters with 2 lore counters.",
+        "If chapter II triggers, A targets player B with it. Both players pass priority until the stack is empty."
+      ],
+      "variants": [
+        {
+          "label": "choose_two",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The Saga enters with 2 lore counters. Chapter II triggers; chapter I does not. Chapter II resolves and B mills four cards: B's library holds 6 cards. The Saga stays on the battlefield."
+        },
+        {
+          "label": "choose_one",
+          "polarity": "does_not_fire",
+          "delta": "A chooses 1 for read ahead.",
+          "expected": "The Saga enters with 1 lore counter. Only chapter I triggers (nothing to cast, A's hand is empty). Chapter II does not trigger and B's library holds 10 cards. The Saga stays on the battlefield."
+        },
+        {
+          "label": "choose_three",
+          "polarity": "other",
+          "delta": "A chooses 3 for read ahead.",
+          "expected": "The Saga enters with 3 lore counters. Only chapter III triggers; chapters I and II do not. B's library holds 10 cards. A's graveyard holds no instant or sorcery card, so chapter III has no legal target and is removed from the stack without resolving. With 3 lore counters and no chapter ability on the stack, the Saga is sacrificed and moves to A's graveyard."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Founding the Third Path"
+      ],
+      "forge_notes": "Forge scripts chapter III with TargetMax 1, so it may put the ability on the stack with no target and resolve it doing nothing; the observable result (nothing exiled, Saga sacrificed) is the same."
+    }
+  ]
+}

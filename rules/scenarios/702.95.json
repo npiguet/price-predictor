@@ -1,0 +1,355 @@
+{
+  "unit": "702.95",
+  "verified": true,
+  "review": [
+    "702.95e-1 stops_being_creature: Song of the Dryads costs {2}{G} but the delta tapped four lands; it now taps Forest, Island and Mountain."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.95a-1",
+      "rules": [
+        "702.95a"
+      ],
+      "title": "Soulbond pairs the entering creature with an unpaired creature",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            },
+            "Forest",
+            "Forest"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Nightshade Peddler"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Nightshade Peddler, tapping both Forests; it resolves.",
+        "If the soulbond trigger fires, both players pass; on resolution A chooses to pair Nightshade Peddler with Grizzly Bears."
+      ],
+      "variants": [
+        {
+          "label": "partner_present",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Soulbond triggers and resolves. Nightshade Peddler and Grizzly Bears are paired, so both have deathtouch."
+        },
+        {
+          "label": "no_partner",
+          "polarity": "does_not_fire",
+          "delta": "Grizzly Bears is not on the battlefield; Nightshade Peddler is A's only creature.",
+          "expected": "Soulbond does not trigger because A controls no other creature. Nightshade Peddler stays unpaired, 1/1, without deathtouch."
+        }
+      ],
+      "cards": [
+        "Grizzly Bears",
+        "Forest",
+        "Nightshade Peddler"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.95a-2",
+      "rules": [
+        "702.95a"
+      ],
+      "title": "Soulbond triggers when another creature you control enters, not when the opponent's does",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Nightshade Peddler",
+              "summoning_sick": false
+            },
+            "Forest",
+            "Forest"
+          ],
+          "B": [
+            "Forest",
+            "Forest"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Ambush Viper"
+          ],
+          "B": [
+            "Ambush Viper"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Nightshade Peddler is unpaired."
+      },
+      "decisions": [
+        "A casts Ambush Viper with flash, tapping both Forests; B passes and it resolves.",
+        "If the soulbond trigger fires, both players pass and on resolution A chooses to pair Nightshade Peddler with Ambush Viper."
+      ],
+      "variants": [
+        {
+          "label": "own_creature_enters",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Ambush Viper enters under A's control, soulbond triggers and resolves. Nightshade Peddler and Ambush Viper are paired, so Nightshade Peddler has deathtouch."
+        },
+        {
+          "label": "opponent_creature_enters",
+          "polarity": "does_not_fire",
+          "delta": "B casts its own Ambush Viper (tapping both of B's Forests) instead of A casting one.",
+          "expected": "Ambush Viper enters under B's control. A's Nightshade Peddler does not trigger and stays unpaired, 1/1, without deathtouch."
+        }
+      ],
+      "cards": [
+        "Nightshade Peddler",
+        "Forest",
+        "Ambush Viper"
+      ],
+      "forge_notes": "B must cast a flash creature during A's turn; the harness needs to give B priority in A's beginning of combat after A passes."
+    },
+    {
+      "id": "702.95c-1",
+      "rules": [
+        "702.95c"
+      ],
+      "title": "If a creature to be paired leaves before soulbond resolves, neither becomes paired",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Nightshade Peddler",
+              "summoning_sick": false
+            },
+            "Forest",
+            "Forest"
+          ],
+          "B": [
+            "Mountain"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Grizzly Bears"
+          ],
+          "B": [
+            "Shock"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Nightshade Peddler is unpaired."
+      },
+      "decisions": [
+        "A casts Grizzly Bears, tapping both Forests; it resolves.",
+        "Nightshade Peddler's soulbond trigger for Grizzly Bears goes on the stack. A will pair them if it resolves.",
+        "B passes priority without responding; the trigger resolves."
+      ],
+      "variants": [
+        {
+          "label": "no_response",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "B passes. The soulbond trigger resolves and Nightshade Peddler and Grizzly Bears become paired; both have deathtouch."
+        },
+        {
+          "label": "partner_killed_in_response",
+          "polarity": "does_not_fire",
+          "delta": "In response to the trigger, B casts Shock targeting Grizzly Bears, tapping Mountain.",
+          "expected": "Shock resolves first and Grizzly Bears is destroyed and goes to A's graveyard. The soulbond trigger resolves but Grizzly Bears is no longer on the battlefield, so neither creature becomes paired. Nightshade Peddler is 1/1 without deathtouch."
+        }
+      ],
+      "cards": [
+        "Nightshade Peddler",
+        "Forest",
+        "Mountain",
+        "Grizzly Bears",
+        "Shock"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.95d-1",
+      "rules": [
+        "702.95d"
+      ],
+      "title": "A creature can be paired with only one other creature",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Nightshade Peddler",
+              "summoning_sick": false
+            },
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Grizzly Bears",
+            "Runeclaw Bear"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Nightshade Peddler starts unpaired."
+      },
+      "decisions": [
+        "A casts Grizzly Bears, tapping two Forests; it resolves. The soulbond trigger resolves and A pairs Nightshade Peddler with Grizzly Bears.",
+        "A casts Runeclaw Bear, tapping the other two Forests; it resolves. If a soulbond trigger fires, A pairs Nightshade Peddler with Runeclaw Bear."
+      ],
+      "variants": [
+        {
+          "label": "already_paired",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Nightshade Peddler is already paired with Grizzly Bears, so Runeclaw Bear's entering does not pair it. Nightshade Peddler and Grizzly Bears have deathtouch; Runeclaw Bear has no deathtouch."
+        },
+        {
+          "label": "first_not_cast",
+          "polarity": "does_not_fire",
+          "delta": "A skips casting Grizzly Bears and casts only Runeclaw Bear, so Nightshade Peddler is still unpaired.",
+          "expected": "Soulbond triggers for Runeclaw Bear and resolves. Nightshade Peddler and Runeclaw Bear are paired and both have deathtouch. Grizzly Bears stays in A's hand."
+        }
+      ],
+      "cards": [
+        "Nightshade Peddler",
+        "Forest",
+        "Grizzly Bears",
+        "Runeclaw Bear"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.95e-1",
+      "rules": [
+        "702.95e"
+      ],
+      "title": "A pair is broken when a member leaves, changes control, or stops being a creature",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "B",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Nightshade Peddler",
+              "summoning_sick": false
+            },
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            "Island",
+            "Island",
+            "Forest",
+            "Forest",
+            "Mountain"
+          ]
+        },
+        "hand": {
+          "B": [
+            "Shock",
+            "Control Magic",
+            "Song of the Dryads"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Nightshade Peddler and Grizzly Bears are both controlled by A and are paired, so both have deathtouch. The pairing was made on an earlier turn."
+      },
+      "decisions": [
+        "B casts Shock targeting Grizzly Bears, tapping Mountain; A passes and Shock resolves.",
+        "No other spells or abilities are used."
+      ],
+      "variants": [
+        {
+          "label": "partner_dies",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears is destroyed and goes to A's graveyard. Nightshade Peddler becomes unpaired and loses deathtouch (1/1)."
+        },
+        {
+          "label": "control_changes",
+          "polarity": "fires",
+          "delta": "Instead of Shock, B casts Control Magic on Grizzly Bears, tapping Island, Island, Forest and Mountain.",
+          "expected": "B controls Grizzly Bears. The pair is broken: Nightshade Peddler loses deathtouch and Grizzly Bears has no deathtouch."
+        },
+        {
+          "label": "stops_being_creature",
+          "polarity": "fires",
+          "delta": "Instead of Shock, B casts Song of the Dryads on Grizzly Bears, tapping Forest, Island and Mountain.",
+          "expected": "Grizzly Bears is a colorless Forest land and no longer a creature. The pair is broken: Nightshade Peddler loses deathtouch (1/1)."
+        },
+        {
+          "label": "no_change",
+          "polarity": "does_not_fire",
+          "delta": "Instead of casting Shock, B casts nothing and passes.",
+          "expected": "Nightshade Peddler and Grizzly Bears stay paired and both have deathtouch."
+        }
+      ],
+      "cards": [
+        "Nightshade Peddler",
+        "Grizzly Bears",
+        "Island",
+        "Forest",
+        "Mountain",
+        "Shock",
+        "Control Magic",
+        "Song of the Dryads"
+      ],
+      "forge_notes": "Pairing cannot be written in a puzzle file; it may need the Peddler cast first. Check that a Forge pair is dropped when the partner loses the creature type."
+    }
+  ]
+}

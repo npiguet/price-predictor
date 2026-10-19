@@ -1,0 +1,4 @@
+{"id": "702.187", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.187a", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.187b", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "A card with mayhem in the graveyard can be cast for its mayhem cost only if it was discarded this turn.", "note": "Cast permission verdict, with the alternative cost shown in the playability record."}
+{"id": "702.187c", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "A card with mayhem and no cost can be played from the graveyard only if it was discarded this turn.", "note": ""}

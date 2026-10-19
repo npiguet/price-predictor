@@ -1,0 +1,131 @@
+{
+  "unit": "702.183",
+  "verified": true,
+  "review": [],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.183a-1",
+      "rules": [
+        "702.183a"
+      ],
+      "title": "Only the chosen tier's mode happens on resolution",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain"
+          ],
+          "B": [
+            "Hill Giant"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Thunder Magic"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Thunder Magic (R, instant, tiered): Thunder {0}: 2 damage to target creature; Thundara {3}: 4 damage to target creature; Thundaga {5}{R}: 8 damage to target creature."
+      },
+      "decisions": [
+        "A casts Thunder Magic choosing Thundara, targeting Hill Giant, and pays {R} plus the tier cost {3} with four Mountains.",
+        "Both players pass; Thunder Magic resolves."
+      ],
+      "variants": [
+        {
+          "label": "thundara",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Hill Giant is dealt 4 damage and moves to B's graveyard. All four Mountains are tapped."
+        },
+        {
+          "label": "thunder",
+          "polarity": "does_not_fire",
+          "delta": "A chooses the Thunder tier (cost {0}) instead of Thundara and pays only {R} with one Mountain.",
+          "expected": "Hill Giant is dealt 2 damage and stays on the battlefield with 2 damage marked. Three Mountains stay untapped."
+        }
+      ],
+      "cards": [
+        "Thunder Magic",
+        "Hill Giant",
+        "Mountain"
+      ]
+    },
+    {
+      "id": "702.183a-2",
+      "rules": [
+        "702.183a"
+      ],
+      "title": "The cost of the chosen tier is added to the total cost",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain"
+          ],
+          "B": [
+            "Hill Giant"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Thunder Magic"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Thunder Magic (R, instant, tiered): Thunder {0}: 2 damage to target creature; Thundara {3}: 4 damage to target creature; Thundaga {5}{R}: 8 damage to target creature. A's Mountains are untapped."
+      },
+      "decisions": [
+        "A attempts to cast Thunder Magic choosing the Thundara tier, targeting Hill Giant."
+      ],
+      "variants": [
+        {
+          "label": "four_mountains_thundara",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The cast is legal: the total cost is {3}{R} and A can pay it with four Mountains."
+        },
+        {
+          "label": "three_mountains_thundara",
+          "polarity": "does_not_fire",
+          "delta": "A controls three Mountains instead of four.",
+          "expected": "The cast with the Thundara tier is not legal: the total cost {3}{R} exceeds A's available mana. Thunder Magic stays in A's hand."
+        },
+        {
+          "label": "four_mountains_thundaga",
+          "polarity": "does_not_fire",
+          "delta": "A chooses the Thundaga tier instead of Thundara.",
+          "expected": "The cast with the Thundaga tier is not legal: the total cost is {5}{R}{R} and A has only four Mountains."
+        }
+      ],
+      "cards": [
+        "Thunder Magic",
+        "Hill Giant",
+        "Mountain"
+      ]
+    }
+  ]
+}

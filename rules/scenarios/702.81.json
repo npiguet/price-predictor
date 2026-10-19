@@ -1,0 +1,74 @@
+{
+  "unit": "702.81",
+  "verified": true,
+  "review": [],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.81a-1",
+      "rules": [
+        "702.81a"
+      ],
+      "title": "A retrace card can be cast from the graveyard only by discarding a land card",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain"
+          ],
+          "B": [
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Mountain"
+          ]
+        },
+        "graveyard": {
+          "A": [
+            "Flame Jab"
+          ]
+        },
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A has priority in main phase 1 with an empty stack and considers casting Flame Jab from the graveyard via retrace, paying {R} with the battlefield Mountain and discarding the Mountain in hand as the additional cost."
+      ],
+      "variants": [
+        {
+          "label": "land_in_hand",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Casting Flame Jab from A's graveyard is legal (can_play true)."
+        },
+        {
+          "label": "no_land_in_hand",
+          "polarity": "does_not_fire",
+          "delta": "A's hand holds Grizzly Bears instead of Mountain.",
+          "expected": "A has no land card to discard, so casting Flame Jab from the graveyard is not legal (can_play false)."
+        },
+        {
+          "label": "mana_unavailable",
+          "polarity": "other",
+          "delta": "The Mountain on A's battlefield is tapped.",
+          "expected": "A cannot pay {R}, so casting Flame Jab from the graveyard is not legal (can_play false), although a land card is in hand."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Grizzly Bears",
+        "Flame Jab"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

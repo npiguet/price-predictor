@@ -1,0 +1,2 @@
+{"id": "702.133", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.133a", "category": "mechanical", "observability": "direct", "record_kinds": ["playability", "resolution", "rewrite"], "outcome": "An instant or sorcery with jump-start can be cast from the graveyard by discarding a card, and when it leaves the stack it is exiled instead.", "note": ""}

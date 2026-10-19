@@ -1,0 +1,75 @@
+{
+  "unit": "702.144",
+  "verified": true,
+  "review": [
+    "702.144a-1: base expected called the original spell a copy ('three copies'); reworded to the original plus two copies."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.144a-1",
+      "rules": [
+        "702.144a"
+      ],
+      "title": "Demonstrate copies the spell for its caster and for an opponent",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Savannah Lions"
+          ],
+          "B": [
+            "Grizzly Bears",
+            "Hill Giant"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Excavation Technique"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Excavation Technique targeting Grizzly Bears, tapping four Plains.",
+        "The demonstrate trigger goes on the stack and resolves: A chooses to copy the spell and chooses Hill Giant as the new target of A's copy; A chooses B as the opponent, and B copies the spell and chooses Savannah Lions as the new target of B's copy.",
+        "Both players pass until the stack is empty (B's copy resolves first, then A's copy, then the original)."
+      ],
+      "variants": [
+        {
+          "label": "copy",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The original and two copies are on the stack: A's copy and B's copy. Savannah Lions, Hill Giant and Grizzly Bears are each destroyed. A creates 2 Treasure tokens (for Savannah Lions) and B creates 4 Treasure tokens. Excavation Technique goes to A's graveyard; the copies cease to exist."
+        },
+        {
+          "label": "decline",
+          "polarity": "does_not_fire",
+          "delta": "A chooses not to copy the spell when the demonstrate trigger resolves.",
+          "expected": "No copies are created. Only Grizzly Bears is destroyed. B creates 2 Treasure tokens, A creates none. Hill Giant and Savannah Lions stay on the battlefield."
+        }
+      ],
+      "cards": [
+        "Excavation Technique",
+        "Plains",
+        "Savannah Lions",
+        "Grizzly Bears",
+        "Hill Giant"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

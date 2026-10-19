@@ -1,0 +1,3 @@
+{"id": "702.113", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.113a", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution", "playability", "continuous"], "outcome": "A spell cast for its awaken cost puts N +1/+1 counters on the target land you control, which becomes a 0/0 Elemental creature with haste that is still a land; cast normally, it does not.", "note": ""}
+{"id": "702.113b", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "The awaken target is required only if the awaken cost was paid; otherwise the spell has no land target.", "note": ""}

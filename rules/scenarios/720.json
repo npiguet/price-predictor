@@ -1,0 +1,556 @@
+{
+  "unit": "720",
+  "verified": true,
+  "review": [
+    "720.3c-1: the does_not_fire variant countered Twincast, so no copy existed and the rule never applied; replaced Twincast/Cancel with See Double (copy target spell) and contrasted a copy of the Omen (Soldier token) with a copy of the same card cast normally as a creature spell (Riling Dawnbreaker token).",
+    "720.4-2: the does_not_fire variant targeted Lava Axe with Zombify, an illegal cast rather than a resolution outcome; switched to Exhume (no target) so both variants resolve, with Lava Axe replacing Riling Dawnbreaker in the graveyard."
+  ],
+  "skipped": [
+    {
+      "id": "720.2b",
+      "reason": "cannot be illustrated directly: the only difference between a copy that has the Omen characteristics and one that does not is whether the Omen face survives copying, and no card Forge implements refers to a card that 'has an Omen'; the copiable-values consequence is shown by 720.3c-1, where a copy of an Omen spell resolves as the Omen's effect rather than as the creature card's"
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "720.3a-1",
+      "rules": [
+        "720.3a"
+      ],
+      "title": "Casting an omen card as an Omen is judged on the Omen's cost and targets only",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Swamp",
+            "Swamp"
+          ],
+          "B": [
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Disruptive Stormbrood"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "A has priority in the first main phase with an empty stack. Disruptive Stormbrood is 4G (creature, 3/3); its Omen Petty Revenge is 1B (sorcery, destroy target creature with power 3 or less)."
+      },
+      "decisions": [
+        "No action is taken yet; the playability verdicts for A's candidate plays are evaluated at A's priority."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Casting Disruptive Stormbrood as the Omen Petty Revenge is legal: can_play is true, with Grizzly Bears (power 2) as a legal target and a cost of {1}{B}, payable by the two Swamps. Casting it as the creature (cost {4}{G}) is not legal."
+        },
+        {
+          "label": "no_legal_target",
+          "polarity": "does_not_fire",
+          "delta": "B's creature is Craw Wurm (6/4) instead of Grizzly Bears.",
+          "expected": "Casting the card as the Omen Petty Revenge is not legal: has_legal_target is false, because no creature has power 3 or less. can_play is false."
+        },
+        {
+          "label": "cost_unpayable",
+          "polarity": "does_not_fire",
+          "delta": "A controls a single Swamp instead of two.",
+          "expected": "Casting the card as the Omen Petty Revenge is not legal: A cannot pay {1}{B} with one land. can_play is false."
+        }
+      ],
+      "cards": [
+        "Disruptive Stormbrood",
+        "Petty Revenge",
+        "Swamp",
+        "Grizzly Bears",
+        "Craw Wurm"
+      ],
+      "forge_notes": "Forge lists the Omen as a separate alternate spell ability of the card; the playability record should report it as its own candidate."
+    },
+    {
+      "id": "720.3a-2",
+      "rules": [
+        "720.3a"
+      ],
+      "title": "An Omen's own card type decides the timing at which it can be cast",
+      "record_kind": "playability",
+      "setup": {
+        "active": "B",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Plains"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Dirgur Island Dragon"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "It is B's turn, the stack is empty and A has priority after B passed. Dirgur Island Dragon is a 5U creature without flash; its Omen Skimming Strike is a 1U instant. Riling Dawnbreaker is a 4W creature; its Omen Signaling Roar is a 1W sorcery."
+      },
+      "decisions": [
+        "No action is taken yet; the playability verdicts for A's candidate plays are evaluated at A's priority on B's turn."
+      ],
+      "variants": [
+        {
+          "label": "instant_omen",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Casting Dirgur Island Dragon as the Omen Skimming Strike is legal on B's turn: can_play is true, cost {1}{U}, payable by Island and Plains. Casting it as the creature is not legal."
+        },
+        {
+          "label": "sorcery_omen",
+          "polarity": "does_not_fire",
+          "delta": "A's card in hand is Riling Dawnbreaker instead of Dirgur Island Dragon.",
+          "expected": "Casting Riling Dawnbreaker as the Omen Signaling Roar is not legal on B's turn: can_play is false, because the Omen is a sorcery and A is not the active player. The cost {1}{W} would be payable."
+        }
+      ],
+      "cards": [
+        "Dirgur Island Dragon",
+        "Skimming Strike",
+        "Riling Dawnbreaker",
+        "Signaling Roar",
+        "Island",
+        "Plains"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "720.3b-1",
+      "rules": [
+        "720.3b"
+      ],
+      "title": "An omen card on the stack as an Omen is a noncreature spell, not a creature spell",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains"
+          ],
+          "B": [
+            "Island",
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Riling Dawnbreaker"
+          ],
+          "B": [
+            "Essence Scatter",
+            "Negate"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Riling Dawnbreaker is a 4W creature; its Omen Signaling Roar is a 1W sorcery. B has priority with A's spell on the stack."
+      },
+      "decisions": [
+        "A casts Riling Dawnbreaker as the Omen Signaling Roar, tapping two Plains.",
+        "A passes priority; B receives priority with Signaling Roar on the stack, and B's candidate plays are evaluated."
+      ],
+      "variants": [
+        {
+          "label": "cast_as_omen",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Essence Scatter has no legal target (has_legal_target false, can_play false), because the spell on the stack is not a creature spell. Negate has Signaling Roar as a legal target (has_legal_target true, can_play true)."
+        },
+        {
+          "label": "cast_as_creature",
+          "polarity": "does_not_fire",
+          "delta": "A casts Riling Dawnbreaker normally as a creature spell, tapping all five Plains.",
+          "expected": "Essence Scatter has Riling Dawnbreaker as a legal target (has_legal_target true, can_play true). Negate has no legal target (has_legal_target false, can_play false)."
+        }
+      ],
+      "cards": [
+        "Riling Dawnbreaker",
+        "Signaling Roar",
+        "Essence Scatter",
+        "Negate",
+        "Plains",
+        "Island"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "720.3c-1",
+      "rules": [
+        "720.3c"
+      ],
+      "title": "A copy of an Omen spell is also an Omen and resolves as the Omen's effect",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Island",
+            "Island",
+            "Island",
+            "Island"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Riling Dawnbreaker",
+            "See Double"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Plains"
+          ]
+        },
+        "exile": {},
+        "notes": "Signaling Roar: sorcery Omen {1}{W}, create a 2/2 white Soldier creature token. Riling Dawnbreaker: 4W creature, 3/4 flying, vigilance. See Double (2UU instant) in its first mode copies target spell; a copy of a permanent spell becomes a token. B has no cards and no mana and passes every priority."
+      },
+      "decisions": [
+        "A casts Riling Dawnbreaker as the Omen Signaling Roar, tapping two Plains.",
+        "A keeps priority and casts See Double, choosing the mode 'Copy target spell' and targeting Signaling Roar, tapping four Islands.",
+        "Both players pass; See Double resolves and A creates a copy of the spell on the stack.",
+        "Both players pass until the copy and then the original spell have resolved."
+      ],
+      "variants": [
+        {
+          "label": "copy_of_omen",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The copy is a Signaling Roar sorcery and resolves first: A creates a 2/2 white Soldier token. The original Signaling Roar then resolves: A creates a second 2/2 white Soldier token, and Riling Dawnbreaker is shuffled into A's library, which has two cards (Plains and Riling Dawnbreaker). A controls two Soldier tokens and no Riling Dawnbreaker; A's graveyard holds only See Double."
+        },
+        {
+          "label": "copy_of_creature_spell",
+          "polarity": "does_not_fire",
+          "delta": "A casts Riling Dawnbreaker normally as a creature spell, tapping all five Plains, instead of as the Omen.",
+          "expected": "The copy is a Riling Dawnbreaker creature spell and resolves as a 3/4 flying, vigilance Riling Dawnbreaker token under A's control; the original then resolves and Riling Dawnbreaker enters the battlefield as a card. No Soldier token is created. A's library has one card (Plains); A's graveyard holds only See Double."
+        }
+      ],
+      "cards": [
+        "Riling Dawnbreaker",
+        "Signaling Roar",
+        "See Double",
+        "Plains",
+        "Island"
+      ],
+      "forge_notes": "Forge copies the spell ability in its alternate state; a copy that lost the Omen state would resolve as a creature token instead of a Soldier token."
+    },
+    {
+      "id": "720.3d-1",
+      "rules": [
+        "720.3d"
+      ],
+      "title": "An Omen spell that resolves is shuffled into its owner's library instead of the graveyard",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Swamp",
+            "Swamp"
+          ],
+          "B": [
+            "Grizzly Bears",
+            "Island",
+            "Island",
+            "Island",
+            "Forest"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Disruptive Stormbrood"
+          ],
+          "B": [
+            "Cancel",
+            "Giant Growth"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Forest"
+          ]
+        },
+        "exile": {},
+        "notes": "Petty Revenge: sorcery Omen {1}{B}, destroy target creature with power 3 or less. Order of the library after the shuffle is not checked, only zone membership."
+      },
+      "decisions": [
+        "A casts Disruptive Stormbrood as the Omen Petty Revenge targeting Grizzly Bears, tapping both Swamps.",
+        "A passes priority; B passes priority without responding.",
+        "Petty Revenge resolves."
+      ],
+      "variants": [
+        {
+          "label": "resolves",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears is destroyed and is in B's graveyard. Disruptive Stormbrood is shuffled into A's library, which has two cards (Forest and Disruptive Stormbrood). A's graveyard is empty."
+        },
+        {
+          "label": "countered",
+          "polarity": "does_not_fire",
+          "delta": "In response, B casts Cancel targeting Petty Revenge, tapping three Islands.",
+          "expected": "Petty Revenge is countered and Disruptive Stormbrood moves from the stack to A's graveyard. A's library still has only Forest. Grizzly Bears stays on the battlefield undamaged."
+        },
+        {
+          "label": "fizzles",
+          "polarity": "does_not_fire",
+          "delta": "In response, B casts Giant Growth on Grizzly Bears (5/5), tapping Forest, making it an illegal target.",
+          "expected": "Petty Revenge fizzles because its only target is illegal, and Disruptive Stormbrood moves from the stack to A's graveyard. A's library still has only Forest. Grizzly Bears stays on the battlefield as a 5/5 until end of turn."
+        }
+      ],
+      "cards": [
+        "Disruptive Stormbrood",
+        "Petty Revenge",
+        "Swamp",
+        "Forest",
+        "Island",
+        "Grizzly Bears",
+        "Cancel",
+        "Giant Growth"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "720.4-1",
+      "rules": [
+        "720.4"
+      ],
+      "title": "An omen card in a hand has only its creature characteristics",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Swamp"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Duress"
+          ],
+          "B": [
+            "Riling Dawnbreaker",
+            "Lava Axe"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Duress makes the opponent reveal their hand and lets A choose a noncreature, nonland card. The Omen face of Riling Dawnbreaker (Signaling Roar) is a sorcery, a noncreature type."
+      },
+      "decisions": [
+        "A casts Duress targeting B, tapping Swamp.",
+        "Both players pass; Duress resolves.",
+        "B reveals the hand; A chooses a legal card if one exists."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Only Lava Axe is a legal choice. A chooses Lava Axe and B discards it. Riling Dawnbreaker stays in B's hand."
+        },
+        {
+          "label": "only_omen_card",
+          "polarity": "fires",
+          "delta": "B's hand is only Riling Dawnbreaker.",
+          "expected": "No card in B's hand is a legal choice. Nothing is discarded; Riling Dawnbreaker stays in B's hand and B's graveyard is empty."
+        },
+        {
+          "label": "no_omen_card",
+          "polarity": "does_not_fire",
+          "delta": "B's hand is only Lava Axe.",
+          "expected": "A chooses Lava Axe and B discards it. B's hand is empty."
+        }
+      ],
+      "cards": [
+        "Duress",
+        "Swamp",
+        "Riling Dawnbreaker",
+        "Signaling Roar",
+        "Lava Axe"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "720.4-2",
+      "rules": [
+        "720.4"
+      ],
+      "title": "An omen card in a graveyard is a creature card",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Swamp",
+            "Swamp"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Exhume"
+          ]
+        },
+        "graveyard": {
+          "A": [
+            "Riling Dawnbreaker"
+          ]
+        },
+        "library": {},
+        "exile": {},
+        "notes": "Exhume: each player puts a creature card from their graveyard onto the battlefield. B's graveyard is empty."
+      },
+      "decisions": [
+        "A casts Exhume, tapping two Swamps.",
+        "Both players pass; Exhume resolves; A puts the only creature card in A's graveyard, if any, onto the battlefield."
+      ],
+      "variants": [
+        {
+          "label": "omen_card_in_graveyard",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Exhume resolves. Riling Dawnbreaker enters the battlefield under A's control as a 3/4 creature with flying and vigilance. A's graveyard holds only Exhume."
+        },
+        {
+          "label": "sorcery_card_in_graveyard",
+          "polarity": "does_not_fire",
+          "delta": "A's graveyard holds Lava Axe instead of Riling Dawnbreaker.",
+          "expected": "Exhume resolves and nothing enters the battlefield. A's graveyard holds Lava Axe and Exhume."
+        }
+      ],
+      "cards": [
+        "Exhume",
+        "Swamp",
+        "Riling Dawnbreaker",
+        "Lava Axe"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "720.2c-1",
+      "rules": [
+        "720.2c"
+      ],
+      "title": "Discarding an omen card discards one card",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Swamp",
+            "Swamp",
+            "Swamp"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Mind Rot"
+          ],
+          "B": [
+            "Riling Dawnbreaker",
+            "Forest",
+            "Plains"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Mind Rot makes the target player discard two cards of that player's choice."
+      },
+      "decisions": [
+        "A casts Mind Rot targeting B, tapping three Swamps.",
+        "Both players pass; Mind Rot resolves.",
+        "B chooses to discard Riling Dawnbreaker and Forest."
+      ],
+      "variants": [
+        {
+          "label": "three_card_hand",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "B discards exactly two cards: Riling Dawnbreaker and Forest are in B's graveyard. Plains stays in B's hand."
+        },
+        {
+          "label": "omen_card_alone",
+          "polarity": "does_not_fire",
+          "delta": "B's hand is only Riling Dawnbreaker.",
+          "expected": "B discards Riling Dawnbreaker, one card, and no second card is discarded because there is none. B's hand is empty and B's graveyard holds one card."
+        }
+      ],
+      "cards": [
+        "Mind Rot",
+        "Swamp",
+        "Riling Dawnbreaker",
+        "Forest",
+        "Plains"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

@@ -1,0 +1,4 @@
+{"id": "702.9", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.9a", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": "Classifies flying as evasion; 702.9b carries the outcome."}
+{"id": "702.9b", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "A creature with flying cannot be blocked by a creature lacking both flying and reach, while a flier may block any creature.", "note": ""}
+{"id": "702.9c", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": "Redundancy of instances has no separate outcome."}

@@ -1,0 +1,2 @@
+{"id": "701.71", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "701.71a", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "Empowering Jace N creates a 0-loyalty Jace planeswalker token if its controller has none, then puts N loyalty counters on a Jace token they control.", "note": "No Forge card performs it."}

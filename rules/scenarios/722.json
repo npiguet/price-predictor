@@ -1,0 +1,273 @@
+{
+  "unit": "722",
+  "verified": true,
+  "review": [
+    "722.3c-1: decisions had B declare no blockers before Jump resolved in the declare attackers step; reordered so Jump resolves first, and added the unblocked Aviator's 2 combat damage to the base expected."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "722.3-1",
+      "rules": [
+        "722.3"
+      ],
+      "title": "A prepare spell cannot be cast from the card; only the copy created in exile can be cast",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            "Island"
+          ],
+          "B": [
+            "Hill Giant"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Encouraging Aviator"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Encouraging Aviator is a 2/3 flying creature whose prepare spell is the instant Jump ({U}: target creature gains flying until end of turn). The stack is empty. The candidates are Jump and Encouraging Aviator."
+      },
+      "decisions": [
+        "The engine evaluates A's candidates; nothing is cast."
+      ],
+      "variants": [
+        {
+          "label": "in_hand",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Casting Jump from Encouraging Aviator in A's hand is not legal (can_play false for Jump). Casting Encouraging Aviator as a creature spell for {2}{U} is legal (can_play true)."
+        },
+        {
+          "label": "prepared_on_battlefield",
+          "polarity": "does_not_fire",
+          "delta": "Encouraging Aviator is on A's battlefield and prepared, with a copy of Jump in A's exile, instead of in A's hand.",
+          "expected": "Casting the Jump copy from exile is legal (can_play true, has_legal_target true, legal targets are Encouraging Aviator and Hill Giant, cost {U}). Encouraging Aviator is not castable because it is on the battlefield."
+        }
+      ],
+      "cards": [
+        "Encouraging Aviator",
+        "Jump",
+        "Island",
+        "Hill Giant"
+      ],
+      "forge_notes": "Forge models the prepare spell as an alternate face (AlternateMode:Prepare, CopyFaceFrom:Jump); the exiled copy exists only while the permanent is prepared."
+    },
+    {
+      "id": "722.3a-1",
+      "rules": [
+        "722.3a"
+      ],
+      "title": "Only a permanent with a prepare spell that is not already prepared becomes prepared",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Skycoach Waypoint",
+            "Island",
+            "Island",
+            "Island",
+            "Encouraging Aviator",
+            "Grizzly Bears"
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Skycoach Waypoint has '{3}, {T}: Target creature becomes prepared.' Encouraging Aviator has a prepare spell (Jump) and is not prepared. Grizzly Bears has no prepare spell."
+      },
+      "decisions": [
+        "A activates Skycoach Waypoint targeting Encouraging Aviator, tapping Skycoach Waypoint and paying {3} by tapping three Islands.",
+        "Both players pass; the ability resolves."
+      ],
+      "variants": [
+        {
+          "label": "has_prepare_spell",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The ability resolves. Encouraging Aviator gains the prepared designation and a copy of Jump is created in A's exile. Exactly one Jump copy is in exile."
+        },
+        {
+          "label": "no_prepare_spell",
+          "polarity": "does_not_fire",
+          "delta": "The ability targets Grizzly Bears instead of Encouraging Aviator.",
+          "expected": "The ability resolves (Grizzly Bears is a legal target) and does nothing. Grizzly Bears is not prepared and A's exile stays empty."
+        },
+        {
+          "label": "already_prepared",
+          "polarity": "does_not_fire",
+          "delta": "Encouraging Aviator is already prepared, with one copy of Jump in A's exile, before the ability resolves.",
+          "expected": "The ability resolves and does nothing. Encouraging Aviator stays prepared and A's exile still holds exactly one Jump copy."
+        }
+      ],
+      "cards": [
+        "Skycoach Waypoint",
+        "Island",
+        "Encouraging Aviator",
+        "Grizzly Bears",
+        "Jump"
+      ],
+      "forge_notes": "In the already_prepared variant the prepared state and the exiled copy are set up as in a game where Aviator attacked earlier this turn."
+    },
+    {
+      "id": "722.3b-1",
+      "rules": [
+        "722.3b"
+      ],
+      "title": "An unprepare effect removes the prepared designation",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Encouraging Aviator",
+            "Grizzly Bears"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Biblioplex Tomekeeper"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {
+          "A": [
+            "Jump"
+          ]
+        },
+        "notes": "Encouraging Aviator is prepared; the Jump in A's exile is its prepare-spell copy. Biblioplex Tomekeeper: 'When it enters, choose up to one: target creature becomes prepared; target creature becomes unprepared.'"
+      },
+      "decisions": [
+        "A casts Biblioplex Tomekeeper, tapping four Plains.",
+        "Both players pass; Biblioplex Tomekeeper resolves and enters.",
+        "A puts its enters trigger on the stack choosing the unprepare mode, targeting Encouraging Aviator.",
+        "Both players pass; the trigger resolves."
+      ],
+      "variants": [
+        {
+          "label": "unprepare_prepared",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The trigger resolves. Encouraging Aviator loses the prepared designation and the Jump copy no longer exists in A's exile (A's exile is empty). Encouraging Aviator stays on the battlefield."
+        },
+        {
+          "label": "unprepare_unprepared",
+          "polarity": "does_not_fire",
+          "delta": "The trigger's unprepare mode targets Grizzly Bears instead of Encouraging Aviator.",
+          "expected": "The trigger resolves and does nothing to Grizzly Bears. Encouraging Aviator is still prepared and the Jump copy is still in A's exile."
+        },
+        {
+          "label": "prepare_mode",
+          "polarity": "other",
+          "delta": "The trigger's mode is 'target creature becomes prepared' instead of unprepared, targeting Encouraging Aviator.",
+          "expected": "The trigger resolves and does nothing, because Encouraging Aviator is already prepared. It stays prepared and exactly one Jump copy is in A's exile."
+        }
+      ],
+      "cards": [
+        "Biblioplex Tomekeeper",
+        "Plains",
+        "Encouraging Aviator",
+        "Grizzly Bears",
+        "Jump"
+      ],
+      "forge_notes": "The prepared state and exiled copy of the base setup are assumed; the same state is reached by attacking with Aviator earlier in the turn."
+    },
+    {
+      "id": "722.3c-1",
+      "rules": [
+        "722.3c"
+      ],
+      "title": "Becoming prepared creates a castable copy in exile, and casting it removes the designation",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Encouraging Aviator",
+              "summoning_sick": false
+            },
+            "Island"
+          ],
+          "B": [
+            "Hill Giant"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Encouraging Aviator: 'Whenever this creature attacks, it becomes prepared.' Its prepare spell is the instant Jump ({U}: target creature gains flying until end of turn)."
+      },
+      "decisions": [
+        "A attacks B with Encouraging Aviator.",
+        "Both players pass; the prepare trigger resolves in the declare attackers step.",
+        "A casts the Jump copy from exile targeting Hill Giant, tapping Island.",
+        "Both players pass; Jump resolves. B declares no blockers and combat damage is dealt."
+      ],
+      "variants": [
+        {
+          "label": "attacks_and_casts",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The trigger makes Encouraging Aviator prepared and a copy of Jump (a blue instant with only Jump's characteristics) appears in A's exile. When A casts it, Encouraging Aviator loses the prepared designation and the copy leaves exile as a spell. Jump resolves: Hill Giant has flying until end of turn. A's exile is empty afterwards. Encouraging Aviator deals 2 combat damage to B (B at 18)."
+        },
+        {
+          "label": "no_attack",
+          "polarity": "does_not_fire",
+          "delta": "A declares no attackers.",
+          "expected": "The trigger does not fire. Encouraging Aviator is not prepared, A's exile is empty, and there is no Jump copy to cast. Hill Giant does not gain flying."
+        },
+        {
+          "label": "copy_not_cast",
+          "polarity": "other",
+          "delta": "A does not cast the Jump copy.",
+          "expected": "Encouraging Aviator stays prepared and the Jump copy remains in A's exile at the end of combat. Hill Giant does not gain flying."
+        }
+      ],
+      "cards": [
+        "Encouraging Aviator",
+        "Jump",
+        "Island",
+        "Hill Giant"
+      ],
+      "forge_notes": "Forge's exiled prepare copy may be represented as a ghost card in the exile zone."
+    }
+  ]
+}

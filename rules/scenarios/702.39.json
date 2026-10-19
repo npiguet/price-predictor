@@ -1,0 +1,141 @@
+{
+  "unit": "702.39",
+  "verified": true,
+  "review": [
+    "702.39b: the skip claimed no Forge card can have two instances of provoke, but two Hunter Slivers give each Sliver provoke twice. Removed the skip and added scenario 702.39b-1."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.39a-1",
+      "rules": [
+        "702.39a"
+      ],
+      "title": "A provoked creature untaps and must block the provoking attacker if able",
+      "record_kind": "combat",
+      "setup": {
+        "active": "A",
+        "step": "declare_attackers",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Crested Craghorn",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            {
+              "card": "Grizzly Bears",
+              "tapped": true
+            }
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A attacks player B with Crested Craghorn.",
+        "Provoke triggers; A targets Grizzly Bears and chooses to have it block.",
+        "Both players pass; the trigger resolves and Grizzly Bears untaps.",
+        "B declares blockers: Grizzly Bears blocks Crested Craghorn, as required.",
+        "Combat damage is dealt; no spells or abilities are used."
+      ],
+      "variants": [
+        {
+          "label": "bears_must_block",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears untaps and blocks. Crested Craghorn (4/1) deals 4 damage to Grizzly Bears and Grizzly Bears deals 2 damage to it; both die. B's life stays 20."
+        },
+        {
+          "label": "blocker_unable",
+          "polarity": "does_not_fire",
+          "delta": "B's creature is Ironclaw Orcs (tapped), which cannot block creatures with power 2 or greater.",
+          "expected": "Ironclaw Orcs untaps but cannot block, so Crested Craghorn is unblocked and deals 4 damage to B (life 16). Both creatures survive."
+        }
+      ],
+      "cards": [
+        "Crested Craghorn",
+        "Grizzly Bears",
+        "Ironclaw Orcs"
+      ],
+      "forge_notes": "Provoke is a may-trigger; the harness fixes the choice to use it."
+    },
+    {
+      "id": "702.39b-1",
+      "rules": [
+        "702.39b"
+      ],
+      "title": "A creature with two instances of provoke triggers twice and can force two blockers",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "declare_attackers",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Hunter Sliver",
+              "summoning_sick": false
+            },
+            {
+              "card": "Hunter Sliver",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            {
+              "card": "Grizzly Bears",
+              "tapped": true
+            },
+            {
+              "card": "Grizzly Bears",
+              "tapped": true
+            }
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Each Hunter Sliver grants provoke to every Sliver, so each Hunter Sliver has two instances of provoke. The two Grizzly Bears are called Bears 1 and Bears 2."
+      },
+      "decisions": [
+        "A attacks player B with the first Hunter Sliver only.",
+        "Each provoke instance triggers; A chooses to use both, targeting Bears 1 with one and Bears 2 with the other.",
+        "Both players pass; both triggers resolve.",
+        "B declares blockers: every creature required to block the Hunter Sliver does so; no other blocks.",
+        "A assigns the Hunter Sliver's 1 combat damage to Bears 1. No spells or abilities are used."
+      ],
+      "variants": [
+        {
+          "label": "two_instances",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Two provoke triggers fire. Bears 1 and Bears 2 both untap and both block the attacking Hunter Sliver. Bears 1 is dealt 1 damage and survives; the attacking Hunter Sliver is dealt 4 damage and dies. B's life stays 20."
+        },
+        {
+          "label": "one_instance",
+          "polarity": "does_not_fire",
+          "delta": "A controls only one Hunter Sliver (the attacker); the second is absent, so the attacker has a single provoke.",
+          "expected": "One provoke trigger fires, targeting Bears 1. Bears 1 untaps and blocks; Bears 2 stays tapped and does not block. Bears 1 is dealt 1 damage and survives; Hunter Sliver is dealt 2 damage and dies. B's life stays 20."
+        }
+      ],
+      "cards": [
+        "Hunter Sliver",
+        "Grizzly Bears"
+      ],
+      "forge_notes": "Relies on Forge creating one provoke trigger per granted keyword instance."
+    }
+  ]
+}

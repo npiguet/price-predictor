@@ -1,0 +1,3 @@
+{"id": "702.193", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.193a", "category": "mechanical", "observability": "direct", "record_kinds": ["playability", "resolution"], "outcome": "A power-up ability costs less by the permanent's mana cost if it entered this turn, and can be activated only once.", "note": ""}
+{"id": "702.193b", "category": "mechanical", "observability": "direct", "record_kinds": ["playability"], "outcome": "The permanent's generic mana reduces generic cost, its colored and colorless mana reduce matching mana, and any excess reduces generic cost.", "note": ""}

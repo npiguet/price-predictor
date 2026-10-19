@@ -1,0 +1,259 @@
+{
+  "unit": "702.64",
+  "verified": true,
+  "review": [
+    "702.64b-1: three_blockers was labelled does_not_fire although absorb still applied per source and only the damage total changed; replaced it with one_source, a 4/4 Rumbling Baloth blocking alone, which deals the same total from one source and kills the Sliver.",
+    "702.64b-2: two Shocks are two different sources, so it never showed the same source dealing damage at a different time; rewrote it as Lymph Sliver blocking double-striking Mirran Crusader, contrasted with a non-double-striking 4/4 Rumbling Baloth."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.64a-1",
+      "rules": [
+        "702.64a"
+      ],
+      "title": "Absorb N prevents N of the damage dealt to the creature",
+      "record_kind": "rewrite",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            {
+              "summoning_sick": false,
+              "card": "Prodigal Sorcerer"
+            }
+          ],
+          "B": [
+            "Lymph Sliver",
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Shock"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Shock targeting B's Lymph Sliver, tapping Mountain.",
+        "Both players pass; Shock resolves."
+      ],
+      "variants": [
+        {
+          "label": "shock_on_sliver",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Absorb 1 prevents 1 of Shock's 2 damage. Lymph Sliver has 1 damage marked and stays on the battlefield."
+        },
+        {
+          "label": "one_damage_source",
+          "polarity": "fires",
+          "delta": "A activates Prodigal Sorcerer ({T}: 1 damage) targeting Lymph Sliver instead of casting Shock.",
+          "expected": "Absorb 1 prevents the whole 1 damage. Lymph Sliver has 0 damage marked."
+        },
+        {
+          "label": "no_absorb",
+          "polarity": "does_not_fire",
+          "delta": "Shock targets B's Grizzly Bears (which has no absorb) instead of Lymph Sliver.",
+          "expected": "No damage is prevented. Grizzly Bears is dealt 2 damage and moves to B's graveyard."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Prodigal Sorcerer",
+        "Lymph Sliver",
+        "Grizzly Bears",
+        "Shock"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.64b-1",
+      "rules": [
+        "702.64b"
+      ],
+      "title": "Absorb applies separately to each damage source dealing damage at the same time",
+      "record_kind": "combat",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "summoning_sick": false,
+              "card": "Lymph Sliver"
+            }
+          ],
+          "B": [
+            "Grizzly Bears",
+            "Grizzly Bears",
+            "Rumbling Baloth"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A attacks player B with Lymph Sliver.",
+        "B blocks Lymph Sliver with both Grizzly Bears.",
+        "A assigns 2 damage to the first Grizzly Bears and 1 damage to the second. Combat damage is dealt."
+      ],
+      "variants": [
+        {
+          "label": "two_sources",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Each Grizzly Bears deals 2 damage and absorb prevents 1 from each, so Lymph Sliver has 2 damage marked and survives. The first Grizzly Bears dies; the second has 1 damage marked and survives."
+        },
+        {
+          "label": "one_source",
+          "polarity": "does_not_fire",
+          "delta": "B blocks Lymph Sliver with Rumbling Baloth alone instead of the two Grizzly Bears, and A assigns all 3 damage to it.",
+          "expected": "Rumbling Baloth deals 4 damage and absorb prevents only 1 of it, so Lymph Sliver has 3 damage marked and is destroyed. Rumbling Baloth has 3 damage marked and survives."
+        }
+      ],
+      "cards": [
+        "Lymph Sliver",
+        "Grizzly Bears",
+        "Rumbling Baloth"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.64b-2",
+      "rules": [
+        "702.64b"
+      ],
+      "title": "Absorb applies afresh to damage from the same source at a different time",
+      "record_kind": "combat",
+      "setup": {
+        "active": "B",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Lymph Sliver"
+          ],
+          "B": [
+            {
+              "card": "Mirran Crusader",
+              "summoning_sick": false
+            },
+            {
+              "card": "Rumbling Baloth",
+              "summoning_sick": false
+            }
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "B attacks player A with Mirran Crusader.",
+        "A blocks Mirran Crusader with Lymph Sliver.",
+        "Combat damage is dealt in the first-strike combat damage step and again in the regular combat damage step."
+      ],
+      "variants": [
+        {
+          "label": "double_strike",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Mirran Crusader deals 2 damage in each of the two combat damage steps and absorb prevents 1 each time, so Lymph Sliver has 2 damage marked and survives. Mirran Crusader is dealt 3 damage in the regular step and moves to B's graveyard."
+        },
+        {
+          "label": "single_hit",
+          "polarity": "does_not_fire",
+          "delta": "B attacks with Rumbling Baloth (4/4, no double strike) instead of Mirran Crusader.",
+          "expected": "Rumbling Baloth deals 4 damage at one time and absorb prevents only 1 of it, so Lymph Sliver has 3 damage marked and is destroyed. Rumbling Baloth has 3 damage marked and survives."
+        }
+      ],
+      "cards": [
+        "Lymph Sliver",
+        "Mirran Crusader",
+        "Rumbling Baloth"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.64c-1",
+      "rules": [
+        "702.64c"
+      ],
+      "title": "Multiple absorb instances each apply separately",
+      "record_kind": "rewrite",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain"
+          ],
+          "B": [
+            "Lymph Sliver",
+            "Lymph Sliver"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Shock"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Shock targeting one of B's Lymph Slivers, tapping Mountain.",
+        "Both players pass; Shock resolves."
+      ],
+      "variants": [
+        {
+          "label": "two_instances",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Each Lymph Sliver grants absorb 1, so the target has two instances of absorb 1. Both apply and prevent 2 damage in total. The target has 0 damage marked."
+        },
+        {
+          "label": "one_instance",
+          "polarity": "does_not_fire",
+          "delta": "B controls only one Lymph Sliver.",
+          "expected": "The target has one instance of absorb 1, which prevents 1 damage. The Lymph Sliver has 1 damage marked."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Lymph Sliver",
+        "Shock"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

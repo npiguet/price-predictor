@@ -1,0 +1,71 @@
+{
+  "unit": "702.156",
+  "verified": true,
+  "review": [],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.156a-1",
+      "rules": [
+        "702.156a"
+      ],
+      "title": "A ravenous creature enters with X counters and draws a card if X is 5 or more",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Aberrant"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Forest",
+            "Forest"
+          ]
+        },
+        "exile": {},
+        "notes": "Aberrant is {X}{1}{G}, 0/0 with ravenous and trample. Its other ability is inert here."
+      },
+      "decisions": [
+        "A casts Aberrant with X = 5, tapping seven Forests. It resolves."
+      ],
+      "variants": [
+        {
+          "label": "x_five",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Aberrant enters with five +1/+1 counters and is a 5/5. Its ravenous trigger fires (X is 5) and A draws a card: hand Forest, library 1 card."
+        },
+        {
+          "label": "x_four",
+          "polarity": "does_not_fire",
+          "delta": "A casts Aberrant with X = 4, tapping six Forests.",
+          "expected": "Aberrant enters with four +1/+1 counters and is a 4/4. The ravenous trigger does not fire (X is less than 5): A draws no card, hand is empty, library 2 cards."
+        }
+      ],
+      "cards": [
+        "Forest",
+        "Aberrant"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

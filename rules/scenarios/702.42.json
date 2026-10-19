@@ -1,0 +1,189 @@
+{
+  "unit": "702.42",
+  "verified": true,
+  "review": [
+    "702.42b-1: the setup had seven Mountains for a six-mana cost and the decision said all seven paid it; reduced the setup to six Mountains."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.42a-1",
+      "rules": [
+        "702.42a"
+      ],
+      "title": "Paying the entwine cost lets a modal spell use all its modes",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain"
+          ],
+          "B": [
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Barbed Lightning"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Barbed Lightning choosing both modes by paying the entwine cost {2}: the creature mode targets Grizzly Bears and the player mode targets player B. A pays {2}{R} plus {2} with the five Mountains.",
+        "Both players pass; Barbed Lightning resolves."
+      ],
+      "variants": [
+        {
+          "label": "entwined",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Both modes happen. Grizzly Bears takes 3 damage and dies; B takes 3 damage, life 17."
+        },
+        {
+          "label": "not_entwined",
+          "polarity": "does_not_fire",
+          "delta": "A does not pay the entwine cost, chooses only the creature mode, and pays {2}{R} with three Mountains.",
+          "expected": "Only the creature mode happens. Grizzly Bears dies; B's life stays 20."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Grizzly Bears",
+        "Barbed Lightning"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.42a-2",
+      "rules": [
+        "702.42a"
+      ],
+      "title": "Entwine is available only when its additional cost can be paid",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain"
+          ],
+          "B": [
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Barbed Lightning"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A considers casting Barbed Lightning, choosing both modes with entwine."
+      ],
+      "variants": [
+        {
+          "label": "five_lands",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Casting Barbed Lightning with both modes is legal; the total cost is {2}{R} plus the entwine cost {2}, which five Mountains pay."
+        },
+        {
+          "label": "four_lands",
+          "polarity": "does_not_fire",
+          "delta": "A controls four Mountains instead of five.",
+          "expected": "Casting with both modes is not legal because the five mana cannot be paid; casting with a single mode for {2}{R} is legal."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Grizzly Bears",
+        "Barbed Lightning"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.42b-1",
+      "rules": [
+        "702.42b"
+      ],
+      "title": "An entwined spell follows the text of its modes in the order written",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Goblin War Party"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Goblin War Party choosing both modes by paying the entwine cost {2}{R}, paying {3}{R} plus {2}{R} with the six Mountains.",
+        "Both players pass; Goblin War Party resolves."
+      ],
+      "variants": [
+        {
+          "label": "entwined",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The tokens mode is performed first, then the buff mode: A has three Goblin tokens, each 2/2 with haste until end of turn."
+        },
+        {
+          "label": "tokens_only",
+          "polarity": "does_not_fire",
+          "delta": "A does not pay the entwine cost and chooses only the tokens mode, paying {3}{R} with four Mountains.",
+          "expected": "A has three 1/1 red Goblin tokens without haste."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Goblin War Party"
+      ],
+      "forge_notes": "A sorcery, so cast in main1; the tokens get the buff only if the modes run in written order."
+    }
+  ]
+}

@@ -1,0 +1,137 @@
+{
+  "unit": "702.187",
+  "verified": true,
+  "review": [],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.187b-1",
+      "rules": [
+        "702.187b"
+      ],
+      "title": "A card with mayhem can be cast from the graveyard for its mayhem cost only if it was discarded this turn",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Wild Mongrel",
+            "Mountain",
+            "Mountain"
+          ],
+          "B": [
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Electro's Bolt"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A activates Wild Mongrel, discarding Electro's Bolt as the cost.",
+        "Both players pass; the ability resolves.",
+        "A casts Electro's Bolt from A's graveyard for its mayhem cost {1}{R}, tapping two Mountains, targeting Grizzly Bears.",
+        "Both players pass; Electro's Bolt resolves."
+      ],
+      "variants": [
+        {
+          "label": "discarded_this_turn",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Casting Electro's Bolt from the graveyard for {1}{R} is legal. It deals 4 damage to Grizzly Bears, which moves to B's graveyard, and Electro's Bolt then goes to A's graveyard."
+        },
+        {
+          "label": "in_graveyard_from_earlier",
+          "polarity": "does_not_fire",
+          "delta": "Electro's Bolt has been in A's graveyard since an earlier turn, so it was not discarded this turn; A's hand is empty and A does not activate Wild Mongrel.",
+          "expected": "Casting Electro's Bolt from the graveyard is not legal. Grizzly Bears takes no damage."
+        },
+        {
+          "label": "one_mountain",
+          "polarity": "does_not_fire",
+          "delta": "A controls only one Mountain.",
+          "expected": "Casting Electro's Bolt from the graveyard is not legal: the mayhem cost {1}{R} cannot be paid. Grizzly Bears takes no damage."
+        }
+      ],
+      "cards": [
+        "Electro's Bolt",
+        "Wild Mongrel",
+        "Mountain",
+        "Grizzly Bears"
+      ],
+      "forge_notes": "Wild Mongrel is only a way to discard a card at a chosen time."
+    },
+    {
+      "id": "702.187c-1",
+      "rules": [
+        "702.187c"
+      ],
+      "title": "A card with mayhem and no cost can be played from the graveyard only if it was discarded this turn",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Wild Mongrel"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Oscorp Industries"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A activates Wild Mongrel, discarding Oscorp Industries as the cost.",
+        "Both players pass; the ability resolves.",
+        "A plays Oscorp Industries from A's graveyard as A's land play for the turn."
+      ],
+      "variants": [
+        {
+          "label": "discarded_this_turn",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Playing Oscorp Industries from the graveyard is legal. It enters the battlefield tapped, and A loses 2 life (18) because it entered from a graveyard."
+        },
+        {
+          "label": "in_graveyard_from_earlier",
+          "polarity": "does_not_fire",
+          "delta": "Oscorp Industries has been in A's graveyard since an earlier turn, so it was not discarded this turn; A's hand is empty and A does not activate Wild Mongrel.",
+          "expected": "Playing Oscorp Industries from the graveyard is not legal. A's life stays 20."
+        },
+        {
+          "label": "land_play_already_used",
+          "polarity": "does_not_fire",
+          "delta": "A has already played a land earlier this turn.",
+          "expected": "Playing Oscorp Industries from the graveyard is not legal: A has no land play left. Oscorp Industries stays in A's graveyard and A's life stays 20."
+        }
+      ],
+      "cards": [
+        "Oscorp Industries",
+        "Wild Mongrel"
+      ],
+      "forge_notes": "Oscorp Industries carries K:Mayhem with no cost."
+    }
+  ]
+}

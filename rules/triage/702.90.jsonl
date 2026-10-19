@@ -1,0 +1,7 @@
+{"id": "702.90", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.90a", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.90b", "category": "mechanical", "observability": "direct", "record_kinds": ["resolution", "rewrite"], "outcome": "Damage from an infect source to a player gives that many poison counters instead of life loss.", "note": ""}
+{"id": "702.90c", "category": "mechanical", "observability": "direct", "record_kinds": ["resolution", "rewrite"], "outcome": "Damage from an infect source to a creature puts that many -1/-1 counters on it instead of marking damage.", "note": ""}
+{"id": "702.90d", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution", "rewrite"], "outcome": "Last known information decides whether a source that left its zone had infect.", "note": ""}
+{"id": "702.90e", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution", "rewrite"], "outcome": "Infect applies from whatever zone the source deals damage.", "note": ""}
+{"id": "702.90f", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}

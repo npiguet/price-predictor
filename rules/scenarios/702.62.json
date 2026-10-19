@@ -1,0 +1,312 @@
+{
+  "unit": "702.62",
+  "verified": true,
+  "review": [
+    "702.62d: triaged as decision, but it decides that cost increases (601.2f) still apply to the free cast from suspend, which decides whether the cast is possible; reclassified as legality/direct/playability and added 702.62d-1 with Thalia, Guardian of Thraben."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.62a-1",
+      "rules": [
+        "702.62a"
+      ],
+      "title": "A card with suspend can be suspended only when it could begin to be cast",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Rift Bolt"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A suspends Rift Bolt from hand, paying its suspend cost {R} with Mountain."
+      ],
+      "variants": [
+        {
+          "label": "main_phase",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Suspending is legal. Rift Bolt moves from A's hand to exile with one time counter, without using the stack, and Mountain is tapped."
+        },
+        {
+          "label": "end_step",
+          "polarity": "does_not_fire",
+          "delta": "The step is A's end step, where a sorcery cannot be cast.",
+          "expected": "Suspending is not legal: Rift Bolt could not begin to be cast, so it stays in A's hand."
+        },
+        {
+          "label": "cannot_pay",
+          "polarity": "does_not_fire",
+          "delta": "A's Mountain is tapped.",
+          "expected": "Suspending is not legal: the suspend cost {R} cannot be paid, so Rift Bolt stays in A's hand."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Rift Bolt"
+      ],
+      "forge_notes": "The end-step variant sets setup.step to end; the tapped variant sets the Mountain's tapped flag."
+    },
+    {
+      "id": "702.62a-2",
+      "rules": [
+        "702.62a"
+      ],
+      "title": "At the owner's upkeep a time counter is removed; removing the last allows a free cast",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "upkeep",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "B": [
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {
+          "A": [
+            {
+              "counters": {
+                "time": 1
+              },
+              "card": "Rift Bolt"
+            }
+          ]
+        },
+        "notes": ""
+      },
+      "decisions": [
+        "Beginning of A's upkeep: the suspend trigger goes on the stack and resolves, removing a time counter.",
+        "When the last time counter is removed, A casts Rift Bolt without paying its mana cost, targeting player B, and it resolves."
+      ],
+      "variants": [
+        {
+          "label": "last_counter",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The upkeep trigger fires and the last time counter is removed. Rift Bolt is cast from exile, resolves, and B's life is 17."
+        },
+        {
+          "label": "two_counters",
+          "polarity": "does_not_fire",
+          "delta": "Rift Bolt has two time counters.",
+          "expected": "The upkeep trigger fires and one time counter is removed. Rift Bolt stays in exile with one time counter and B's life is 20."
+        },
+        {
+          "label": "opponents_upkeep",
+          "polarity": "does_not_fire",
+          "delta": "It is B's upkeep (B is the active player) instead of A's.",
+          "expected": "The suspend trigger does not fire. Rift Bolt stays in exile with one time counter and B's life is 20."
+        }
+      ],
+      "cards": [
+        "Rift Bolt",
+        "Grizzly Bears"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.62a-3",
+      "rules": [
+        "702.62a"
+      ],
+      "title": "A creature cast from suspend gains haste unless it cannot be cast",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "upkeep",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {},
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {
+          "A": [
+            {
+              "counters": {
+                "time": 1
+              },
+              "card": "Durkwood Baloth"
+            }
+          ]
+        },
+        "notes": ""
+      },
+      "decisions": [
+        "Beginning of A's upkeep: the suspend trigger resolves and removes the last time counter.",
+        "A casts Durkwood Baloth without paying its mana cost; it resolves and enters the battlefield.",
+        "In the declare attackers step A declares Durkwood Baloth as an attacker against player B."
+      ],
+      "variants": [
+        {
+          "label": "castable",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Durkwood Baloth enters with haste and attacking is legal."
+        },
+        {
+          "label": "cast_prohibited",
+          "polarity": "does_not_fire",
+          "delta": "A controls Steel Golem, so A cannot cast creature spells.",
+          "expected": "Durkwood Baloth cannot be cast and stays in exile with no time counters. It never enters and cannot attack."
+        }
+      ],
+      "cards": [
+        "Durkwood Baloth",
+        "Steel Golem"
+      ],
+      "forge_notes": "In the second variant, Steel Golem is on A's battlefield and not summoning sick; the attack decision does not occur."
+    },
+    {
+      "id": "702.62c-1",
+      "rules": [
+        "702.62c"
+      ],
+      "title": "An effect that prohibits casting also prevents suspending",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Forest",
+            {
+              "summoning_sick": false,
+              "card": "Steel Golem"
+            }
+          ]
+        },
+        "hand": {
+          "A": [
+            "Durkwood Baloth"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A tries to suspend Durkwood Baloth from hand, paying {G} with Forest."
+      ],
+      "variants": [
+        {
+          "label": "casting_prohibited",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Suspending is not legal: A cannot cast creature spells, so Durkwood Baloth stays in A's hand."
+        },
+        {
+          "label": "no_prohibition",
+          "polarity": "does_not_fire",
+          "delta": "Steel Golem is not on the battlefield.",
+          "expected": "Suspending is legal. Durkwood Baloth moves from A's hand to exile with five time counters."
+        }
+      ],
+      "cards": [
+        "Forest",
+        "Steel Golem",
+        "Durkwood Baloth"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.62d-1",
+      "rules": [
+        "702.62d"
+      ],
+      "title": "A cost increase applies to the free cast from suspend",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "upkeep",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "B": [
+            {
+              "card": "Thalia, Guardian of Thraben",
+              "summoning_sick": false
+            }
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {
+          "A": [
+            {
+              "card": "Rift Bolt",
+              "counters": {
+                "time": 1
+              }
+            }
+          ]
+        },
+        "notes": ""
+      },
+      "decisions": [
+        "Beginning of A's upkeep: the suspend trigger resolves and removes the last time counter.",
+        "When the last-counter trigger resolves, A tries to cast Rift Bolt without paying its mana cost, targeting player B."
+      ],
+      "variants": [
+        {
+          "label": "increase_unpayable",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Thalia raises the cost to {1}, which A cannot pay, so Rift Bolt cannot be cast. It stays in exile with no time counters and B's life is 20."
+        },
+        {
+          "label": "no_increase",
+          "polarity": "does_not_fire",
+          "delta": "Thalia, Guardian of Thraben is not on the battlefield.",
+          "expected": "Rift Bolt is cast for no mana, resolves, and B's life is 17."
+        },
+        {
+          "label": "increase_paid",
+          "polarity": "other",
+          "delta": "A controls an untapped Mountain.",
+          "expected": "Rift Bolt is cast by paying {1}, tapping Mountain. It resolves and B's life is 17."
+        }
+      ],
+      "cards": [
+        "Rift Bolt",
+        "Thalia, Guardian of Thraben",
+        "Mountain"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

@@ -1,0 +1,228 @@
+{
+  "unit": "701.47",
+  "verified": true,
+  "review": [
+    "701.47a-1: decision text about choosing among several Armies was garbled; restated.",
+    "701.47b-1, 701.47c-1: base decisions now say B passes (B holds Counterspell); 701.47b-1 base expected now orders the token's state-based death before the reflexive trigger goes on the stack and takes the 0 damage from last known power."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "701.47a-1",
+      "rules": [
+        "701.47a"
+      ],
+      "title": "Amass creates an Army token only if the player controls none, then puts counters on an Army",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Lazotep Plating"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "In the has_zombie_army and has_orc_army variants the token is on A's battlefield at the start."
+      },
+      "decisions": [
+        "A casts Lazotep Plating (Amass Zombies 1), tapping both Islands.",
+        "Both players pass; Lazotep Plating resolves. Where A already controls an Army, A chooses that Army."
+      ],
+      "variants": [
+        {
+          "label": "no_army",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "A creates a 0/0 black Zombie Army creature token and puts one +1/+1 counter on it. A controls exactly one Army: a 1/1 Zombie Army token."
+        },
+        {
+          "label": "has_zombie_army",
+          "polarity": "does_not_fire",
+          "delta": "A controls a Zombie Army token with two +1/+1 counters.",
+          "expected": "No new token is created. The existing Zombie Army gets a +1/+1 counter and is 3/3 with three counters. A controls exactly one Army."
+        },
+        {
+          "label": "has_orc_army",
+          "polarity": "other",
+          "delta": "A controls an Orc Army token with one +1/+1 counter.",
+          "expected": "No new token is created. The Orc Army gets a +1/+1 counter and becomes a Zombie in addition to its other types: it is a 2/2 Orc Zombie Army with two counters."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Lazotep Plating"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "701.47b-1",
+      "rules": [
+        "701.47b"
+      ],
+      "title": "A player amasses even when no counter can be put on the Army",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Solemnity"
+          ],
+          "B": [
+            "Craw Wurm",
+            "Island",
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Foray of Orcs"
+          ],
+          "B": [
+            "Counterspell"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Foray of Orcs (Amass Orcs 2; when you do, it deals X damage to target creature an opponent controls, where X is the amassed Army's power), tapping all four Mountains.",
+        "B passes; Foray of Orcs resolves. The when-you-do trigger, if it fires, targets Craw Wurm and resolves."
+      ],
+      "variants": [
+        {
+          "label": "counters_prevented",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "With Solemnity on the battlefield A creates a 0/0 Orc Army token but no counters can be put on it. A has still amassed, so the when-you-do trigger fires. The 0/0 token dies to state-based actions before the trigger is put on the stack, and on resolution the trigger deals 0 damage to Craw Wurm (the token's last known power): Craw Wurm has no damage marked."
+        },
+        {
+          "label": "no_solemnity",
+          "polarity": "other",
+          "delta": "Solemnity is not on the battlefield.",
+          "expected": "A creates a 0/0 Orc Army token and puts two +1/+1 counters on it (2/2). The when-you-do trigger fires and deals 2 damage to Craw Wurm, which has 2 damage marked and survives. The token stays on the battlefield."
+        },
+        {
+          "label": "foray_countered",
+          "polarity": "does_not_fire",
+          "delta": "B casts Counterspell on Foray of Orcs, tapping both Islands.",
+          "expected": "Foray of Orcs is countered and goes to A's graveyard. A does not amass, no token is created and no trigger fires. Craw Wurm has no damage marked."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Island",
+        "Solemnity",
+        "Foray of Orcs",
+        "Craw Wurm",
+        "Counterspell"
+      ],
+      "forge_notes": "The reflexive trigger in Forge is an ImmediateTrigger gated on the remembered Army, which is set before counters are placed."
+    },
+    {
+      "id": "701.47c-1",
+      "rules": [
+        "701.47c"
+      ],
+      "title": "The amassed Army is the chosen creature whether or not it received counters",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Solemnity",
+            {
+              "card": "Orc Army",
+              "token": true,
+              "counters": {
+                "+1/+1": 3
+              }
+            }
+          ],
+          "B": [
+            "Craw Wurm",
+            "Island",
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Foray of Orcs"
+          ],
+          "B": [
+            "Counterspell"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Foray of Orcs (Amass Orcs 2; when you do, it deals X damage to target creature an opponent controls, where X is the amassed Army's power), tapping all four Mountains.",
+        "B passes; Foray of Orcs resolves; A's only Army is the Orc Army token. The when-you-do trigger targets Craw Wurm and resolves."
+      ],
+      "variants": [
+        {
+          "label": "counters_prevented",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Solemnity stops the two counters, so the Orc Army token stays 3/3. It is still the amassed Army: the trigger deals 3 damage to Craw Wurm (6/4), which survives with 3 damage marked."
+        },
+        {
+          "label": "no_solemnity",
+          "polarity": "other",
+          "delta": "Solemnity is not on the battlefield.",
+          "expected": "The Orc Army token gets two +1/+1 counters and is 5/5. The trigger deals 5 damage to Craw Wurm, which dies and goes to B's graveyard."
+        },
+        {
+          "label": "foray_countered",
+          "polarity": "does_not_fire",
+          "delta": "B casts Counterspell on Foray of Orcs, tapping both Islands.",
+          "expected": "Foray of Orcs is countered and goes to A's graveyard. A does not amass: the Orc Army token stays 3/3 and Craw Wurm has no damage marked."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Island",
+        "Solemnity",
+        "Foray of Orcs",
+        "Craw Wurm",
+        "Counterspell"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

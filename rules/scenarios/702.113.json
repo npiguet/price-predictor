@@ -1,0 +1,133 @@
+{
+  "unit": "702.113",
+  "verified": true,
+  "review": [
+    "702.113b-1: decisions listed two separate casts and variant normal_cast_no_land changed two facts from the base (no Island and the cost paid); rebuilt with no land in the setup, a single {U} cast as base and the awaken-cost payment as the one-fact variant; Island dropped."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.113a-1",
+      "rules": [
+        "702.113a"
+      ],
+      "title": "A spell cast for its awaken cost animates the target land with counters",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island"
+          ],
+          "B": [
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Clutch of Currents"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Clutch of Currents costs {U} and has awaken 3 with cost {4}{U}."
+      },
+      "decisions": [
+        "A casts Clutch of Currents for its awaken cost {4}{U}, tapping all five Islands, targeting B's Grizzly Bears and the first Island.",
+        "Both players pass; Clutch of Currents resolves."
+      ],
+      "variants": [
+        {
+          "label": "awaken_paid",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Clutch of Currents resolves. Grizzly Bears returns to B's hand. The targeted Island gets three +1/+1 counters and is a 3/3 Elemental land creature with haste. Clutch of Currents goes to A's graveyard."
+        },
+        {
+          "label": "normal_cast",
+          "polarity": "does_not_fire",
+          "delta": "A casts Clutch of Currents for its mana cost {U}, tapping one Island, with Grizzly Bears as its only target.",
+          "expected": "Clutch of Currents resolves. Grizzly Bears returns to B's hand. All five Islands are plain lands with no counters and none is a creature."
+        }
+      ],
+      "cards": [
+        "Clutch of Currents",
+        "Island",
+        "Grizzly Bears"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.113b-1",
+      "rules": [
+        "702.113b"
+      ],
+      "title": "The awaken land target is required only when the awaken cost is paid",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mox Sapphire",
+            "Sol Ring",
+            "Mind Stone",
+            "Thought Vessel"
+          ],
+          "B": [
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Clutch of Currents"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "A controls no land. Its four mana artifacts together produce exactly five mana, one of it blue ({U} from Mox Sapphire, {C}{C} from Sol Ring, {C} each from Mind Stone and Thought Vessel). Clutch of Currents costs {U} and has awaken 3 with cost {4}{U}."
+      },
+      "decisions": [
+        "A casts Clutch of Currents paying only its mana cost {U} with Mox Sapphire, choosing Grizzly Bears as its target; the engine's verdict and the targets required are read."
+      ],
+      "variants": [
+        {
+          "label": "normal_cast_no_land",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Casting for {U} is legal with Grizzly Bears as its only target; no land target is chosen or required although A controls no land."
+        },
+        {
+          "label": "awaken_no_land",
+          "polarity": "does_not_fire",
+          "delta": "A pays the awaken cost {4}{U} with all four mana artifacts instead of the mana cost {U}.",
+          "expected": "Casting for the awaken cost is illegal: the awaken ability then requires a target land A controls and A controls none."
+        }
+      ],
+      "cards": [
+        "Clutch of Currents",
+        "Mox Sapphire",
+        "Sol Ring",
+        "Mind Stone",
+        "Thought Vessel",
+        "Grizzly Bears"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

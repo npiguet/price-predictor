@@ -1,0 +1,2128 @@
+{
+  "unit": "603",
+  "verified": true,
+  "review": [
+    "603.2h-1: Morbid Opportunist's 'This ability triggers only once each turn' is not the 'Do this only once each turn' wording 603.2h governs, and the scenario could not show the rule's point that a declined action leaves the ability able to trigger again; rewrote it with Ancient Cornucopia, Grizzly Bears and Watchwolf, base accepting the first gain and the variant declining it.",
+    "603.2g-1: decisions did not resolve Jackal Pup's trigger, which the base outcome needs; added the step.",
+    "603.6d-1: the variant's delta chose a target for a trigger that never triggers; removed the targeting clause.",
+    "603.7-1: B's library was empty and the scenario passes through B's draw step, so B would lose the game; gave B three Islands in library.",
+    "603.7a-1: the end-step variant plays through B's draw step with B's library empty, so B would lose the game; gave B three Islands in library.",
+    "603.7c-1: the bounced-and-recast variant changed two facts at once (a bounce, then a recast); replaced it with a one-action Cloudshift flicker, with Plains replacing the two Forests.",
+    "603.9, 603.10f: removed from skipped and reclassified as out_of_scope in the triage, since their own skip reason says they cannot occur in a two-player Forge game.",
+    "603.7g: the skip reason claimed no Forge card has this shape, but dash and blitz are static abilities allowing an action that creates a delayed trigger; rewrote the reason around the fact that no reachable state changes the source or controller."
+  ],
+  "skipped": [
+    {
+      "id": "603.1a",
+      "reason": "cannot be illustrated: no card in Forge's cardsfolder has a triggered ability that carries a 'this ability can't be countered' or targeting-limit instruction after its effect (Spider-Punk's 'abilities can't be countered' is a static ability, which is a different rule)"
+    },
+    {
+      "id": "603.1b",
+      "reason": "cannot be illustrated: no card in Forge's cardsfolder has a triggered ability with several trigger conditions and an instruction about whether 'all' of them occurred"
+    },
+    {
+      "id": "603.2f",
+      "reason": "cannot be illustrated with a Forge state: a triggered ability whose source is never visible to all players needs a hidden-zone source with a trigger, which no Forge card script models"
+    },
+    {
+      "id": "603.7f",
+      "reason": "cannot be illustrated: no card in Forge's cardsfolder has a static ability whose replacement effect creates a delayed triggered ability"
+    },
+    {
+      "id": "603.7g",
+      "reason": "no state flips what this rule decides: the Forge mechanics of this shape, such as dash and blitz, put the static ability on the card being cast, so the delayed trigger's source and controller are that permanent and its caster in every reachable case, and its effect does not depend on who controls it"
+    },
+    {
+      "id": "603.7h",
+      "reason": "cannot be illustrated: no card in Forge's cardsfolder creates a delayed trigger that counts the resolutions of its creating ability; Ashling the Pilgrim and Ashling, Flame Dancer count resolutions inside the ability instead"
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "603.2-1",
+      "rules": [
+        "603.2"
+      ],
+      "title": "A triggered ability triggers when its trigger event happens and does nothing until it resolves",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Soul Warden",
+            "Forest",
+            "Forest"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Grizzly Bears",
+            "Forest"
+          ],
+          "B": []
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Grizzly Bears, tapping both Forests.",
+        "Both players pass; Grizzly Bears resolves and enters the battlefield.",
+        "Soul Warden's triggered ability goes on the stack the next time a player would receive priority; both players pass and it resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Soul Warden triggers exactly once when Grizzly Bears enters; the trigger has changed nothing (A's life is 20) until it resolves, and after it resolves A's life is 21."
+        },
+        {
+          "label": "land-instead",
+          "polarity": "does_not_fire",
+          "delta": "A plays Forest from hand instead of casting Grizzly Bears (a land, not a creature, enters).",
+          "expected": "Soul Warden does not trigger and nothing goes on the stack; A's life stays 20."
+        }
+      ],
+      "cards": [
+        "Soul Warden",
+        "Forest",
+        "Grizzly Bears"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "603.2a-1",
+      "rules": [
+        "603.2a"
+      ],
+      "title": "A triggered ability triggers even when its controller cannot cast spells",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Forest",
+            "Forest"
+          ],
+          "B": [
+            "Soul Warden"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Silence",
+            "Grizzly Bears",
+            "Forest"
+          ],
+          "B": []
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Silence, tapping Plains. Both players pass; Silence resolves and B can't cast spells this turn.",
+        "A casts Grizzly Bears, tapping both Forests. Both players pass; Grizzly Bears resolves.",
+        "B's Soul Warden trigger goes on the stack; both players pass and it resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "B's Soul Warden triggers although B can't cast spells this turn; B's life is 21."
+        },
+        {
+          "label": "land-instead",
+          "polarity": "does_not_fire",
+          "delta": "After Silence resolves, A plays Forest from hand instead of casting Grizzly Bears.",
+          "expected": "No creature enters, so Soul Warden does not trigger; B's life stays 20."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Forest",
+        "Soul Warden",
+        "Silence",
+        "Grizzly Bears"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "603.2b-1",
+      "rules": [
+        "603.2b"
+      ],
+      "title": "All abilities that trigger at the beginning of a step trigger when it begins",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "upkeep",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Phyrexian Arena",
+            "Phyrexian Arena"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [],
+          "B": []
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Forest",
+            "Forest",
+            "Forest"
+          ]
+        },
+        "exile": {},
+        "notes": "The upkeep has just begun; abilities that trigger at the beginning of it have not yet been put on the stack. In the variant the active player is B and B's upkeep has just begun."
+      },
+      "decisions": [
+        "A's upkeep begins. Both Phyrexian Arena abilities trigger and A puts them on the stack in either order.",
+        "Both players pass until both abilities have resolved."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Both Phyrexian Arenas trigger as the upkeep begins; A draws 2 cards and loses 2 life (life 18)."
+        },
+        {
+          "label": "opponent-upkeep",
+          "polarity": "does_not_fire",
+          "delta": "It is B's upkeep (B is the active player), not A's.",
+          "expected": "Neither Phyrexian Arena triggers, since each reads 'your upkeep'; A draws nothing and A's life stays 20."
+        }
+      ],
+      "cards": [
+        "Phyrexian Arena"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "603.2c-1",
+      "rules": [
+        "603.2c"
+      ],
+      "title": "An ability triggers once per occurrence, so one event with two occurrences triggers it twice",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Impact Tremors",
+            "Plains",
+            "Plains"
+          ],
+          "B": [
+            "Plains",
+            "Plains"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Raise the Alarm",
+            "Savannah Lions"
+          ],
+          "B": [
+            "Raise the Alarm"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Raise the Alarm, tapping both Plains. Both players pass; it resolves and creates two 1/1 white Soldier tokens at the same time.",
+        "Impact Tremors' triggers go on the stack; both players pass until they have resolved."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Impact Tremors triggers twice, once for each token; B takes 2 damage (life 18)."
+        },
+        {
+          "label": "single-creature",
+          "polarity": "other",
+          "delta": "A casts Savannah Lions instead of Raise the Alarm (one creature enters).",
+          "expected": "Impact Tremors triggers once; B takes 1 damage (life 19)."
+        },
+        {
+          "label": "opponent-creatures",
+          "polarity": "does_not_fire",
+          "delta": "A passes priority in main phase 1 with an empty stack, and B casts Raise the Alarm (tapping B's Plains) instead of A. B's two tokens enter under B's control.",
+          "expected": "Impact Tremors does not trigger, since the creatures enter under B's control; B's life stays 20."
+        }
+      ],
+      "cards": [
+        "Impact Tremors",
+        "Plains",
+        "Raise the Alarm",
+        "Savannah Lions"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "603.2d-1",
+      "rules": [
+        "603.2d"
+      ],
+      "title": "An effect can make a triggered ability trigger an additional time",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Panharmonicon",
+            "Forest",
+            "Forest"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Elvish Visionary"
+          ],
+          "B": []
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Forest",
+            "Forest",
+            "Forest"
+          ]
+        },
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Elvish Visionary, tapping both Forests. Both players pass; it resolves.",
+        "Elvish Visionary's enters trigger triggers; both players pass until all its triggers have resolved."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Elvish Visionary's ability triggers twice because of Panharmonicon; A draws 2 cards."
+        },
+        {
+          "label": "opponent-panharmonicon",
+          "polarity": "does_not_fire",
+          "delta": "Panharmonicon is on B's battlefield instead of A's.",
+          "expected": "Elvish Visionary's ability triggers once; A draws 1 card."
+        }
+      ],
+      "cards": [
+        "Panharmonicon",
+        "Forest",
+        "Elvish Visionary"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "603.2e-1",
+      "rules": [
+        "603.2e"
+      ],
+      "title": "A 'becomes tapped' trigger fires for a permanent that changes from untapped to tapped but not for one that enters tapped",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "B",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Lifetap",
+            "Island",
+            "Island"
+          ],
+          "B": [
+            "Forest"
+          ]
+        },
+        "hand": {
+          "A": [],
+          "B": [
+            "Temple Garden"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "B plays Temple Garden and pays 2 life, so it enters untapped (B's life 18).",
+        "B taps Temple Garden for mana (the mana is not used). Lifetap's trigger goes on the stack; both players pass and it resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Temple Garden (a Forest) becomes tapped, so Lifetap triggers once; A's life is 21."
+        },
+        {
+          "label": "enters-tapped",
+          "polarity": "does_not_fire",
+          "delta": "B does not pay the 2 life, so Temple Garden enters tapped, and B does not tap it afterwards.",
+          "expected": "Temple Garden enters tapped; it never becomes tapped, so Lifetap does not trigger; A's life stays 20 and B's life stays 20."
+        }
+      ],
+      "cards": [
+        "Lifetap",
+        "Island",
+        "Forest",
+        "Temple Garden"
+      ],
+      "forge_notes": "Temple Garden has the Forest subtype, which Lifetap's trigger condition needs."
+    },
+    {
+      "id": "603.2g-1",
+      "rules": [
+        "603.2g"
+      ],
+      "title": "A prevented event does not trigger anything",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain"
+          ],
+          "B": [
+            "Jackal Pup",
+            "Plains"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Shock"
+          ],
+          "B": [
+            "Healing Salve"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Shock targeting Jackal Pup, tapping Mountain.",
+        "Both players pass; Shock resolves.",
+        "Jackal Pup's trigger goes on the stack if it triggered; both players pass and it resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Shock deals 2 damage to Jackal Pup (2/1); Jackal Pup's ability triggers and deals 2 damage to B (life 18); Jackal Pup dies."
+        },
+        {
+          "label": "damage-prevented",
+          "polarity": "does_not_fire",
+          "delta": "After A casts Shock, B responds with Healing Salve choosing the prevention mode targeting Jackal Pup, tapping Plains; Healing Salve resolves first, then Shock resolves.",
+          "expected": "Healing Salve's shield prevents all 2 damage from Shock, so Jackal Pup is not dealt damage and its ability does not trigger; Jackal Pup stays on the battlefield undamaged and B's life stays 20."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Jackal Pup",
+        "Plains",
+        "Shock",
+        "Healing Salve"
+      ],
+      "forge_notes": "Jackal Pup dies to the damage in the base variant; its trigger still happens because it triggers as the damage is dealt."
+    },
+    {
+      "id": "603.2h-1",
+      "rules": [
+        "603.2h"
+      ],
+      "title": "An ability with 'Do this only once each turn' triggers again only if its controller has not yet taken the action this turn",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Ancient Cornucopia",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Plains"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Grizzly Bears",
+            "Watchwolf"
+          ],
+          "B": []
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Grizzly Bears, tapping two Forests. Ancient Cornucopia triggers; both players pass and the trigger resolves; A chooses to gain life.",
+        "Both players pass; Grizzly Bears resolves.",
+        "A casts Watchwolf, tapping the third Forest and Plains. If Ancient Cornucopia triggers, A chooses to gain life when it resolves; both players pass until the stack is empty."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "does_not_fire",
+          "delta": "",
+          "expected": "Ancient Cornucopia triggers on Grizzly Bears and A gains 1 life (life 21); it does not trigger on Watchwolf because A has already gained life with it this turn; A's life stays 21."
+        },
+        {
+          "label": "declined-first",
+          "polarity": "fires",
+          "delta": "When the first Ancient Cornucopia trigger resolves, A chooses not to gain life.",
+          "expected": "A gains nothing from the first trigger; Ancient Cornucopia triggers again on Watchwolf (green and white) and A gains 2 life (life 22)."
+        }
+      ],
+      "cards": [
+        "Ancient Cornucopia",
+        "Forest",
+        "Plains",
+        "Grizzly Bears",
+        "Watchwolf"
+      ],
+      "forge_notes": "Forge scripts the clause as ResolvedLimit$ 1 on the trigger; check that a resolution where the optional gain was declined does not count toward the limit."
+    },
+    {
+      "id": "603.3-1",
+      "rules": [
+        "603.3"
+      ],
+      "title": "A triggered ability goes on the stack as the topmost object, where it can be responded to",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Kor Firewalker",
+            "Mountain"
+          ],
+          "B": [
+            "Island",
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Shock"
+          ],
+          "B": [
+            "Stifle"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Shock targeting Grizzly Bears, tapping Mountain. Kor Firewalker's trigger goes on the stack above Shock.",
+        "Both players pass; the trigger resolves and A chooses to gain 1 life.",
+        "Both players pass; Shock resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The trigger is on top of Shock and resolves first: A's life is 21 before Shock resolves; then Shock resolves and Grizzly Bears (2/2) dies."
+        },
+        {
+          "label": "stifled",
+          "polarity": "does_not_fire",
+          "delta": "With the trigger on the stack, B responds with Stifle targeting Kor Firewalker's trigger, tapping Island.",
+          "expected": "Stifle counters the trigger, so A gains no life (life stays 20); Shock then resolves and Grizzly Bears dies."
+        }
+      ],
+      "cards": [
+        "Kor Firewalker",
+        "Mountain",
+        "Island",
+        "Grizzly Bears",
+        "Shock",
+        "Stifle"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "603.3a-1",
+      "rules": [
+        "603.3a"
+      ],
+      "title": "A triggered ability is controlled by whoever controlled its source when it triggered",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Forest",
+            "Forest"
+          ],
+          "B": [
+            "Soul Warden"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Act of Treason",
+            "Grizzly Bears"
+          ],
+          "B": []
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Act of Treason targeting Soul Warden, tapping three Mountains. Both players pass; it resolves and A gains control of Soul Warden until end of turn.",
+        "A casts Grizzly Bears, tapping both Forests. Both players pass; it resolves.",
+        "Soul Warden's trigger goes on the stack; both players pass and it resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Soul Warden's trigger is controlled by A, who controlled Soul Warden when it triggered: A's life is 21 and B's life stays 20."
+        },
+        {
+          "label": "no-steal",
+          "polarity": "does_not_fire",
+          "delta": "A does not cast Act of Treason; A only casts Grizzly Bears, so B still controls Soul Warden.",
+          "expected": "Soul Warden's trigger is controlled by B: B's life is 21 and A's life stays 20."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Forest",
+        "Soul Warden",
+        "Act of Treason",
+        "Grizzly Bears"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "603.3c-1",
+      "rules": [
+        "603.3c"
+      ],
+      "title": "A modal triggered ability with no legal mode to choose is removed from the stack",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Swamp",
+            "Swamp",
+            "Swamp",
+            "Swamp"
+          ],
+          "B": [
+            "Savannah Lions"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Downwind Ambusher"
+          ],
+          "B": []
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Downwind Ambusher, tapping four Swamps. Both players pass; it resolves.",
+        "Its enters trigger is put on the stack: A chooses the mode 'Target creature an opponent controls gets -1/-1 until end of turn' targeting Savannah Lions, if that mode is legal.",
+        "Both players pass; the trigger resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "does_not_fire",
+          "delta": "",
+          "expected": "The -1/-1 mode is legal (the 'destroy a damaged creature' mode is not, since Savannah Lions is undamaged); Savannah Lions (2/1) gets -1/-1 and dies."
+        },
+        {
+          "label": "no-opposing-creature",
+          "polarity": "fires",
+          "delta": "B controls no creatures (Savannah Lions is not on the battlefield).",
+          "expected": "Neither mode has a legal target, so no mode can be chosen and the trigger is removed from the stack; nothing happens and Downwind Ambusher stays on the battlefield."
+        }
+      ],
+      "cards": [
+        "Swamp",
+        "Savannah Lions",
+        "Downwind Ambusher"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "603.3d-1",
+      "rules": [
+        "603.3d"
+      ],
+      "title": "A triggered ability with no legal choices is removed from the stack",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Swamp",
+            "Swamp",
+            "Swamp",
+            "Swamp"
+          ],
+          "B": [
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Nekrataal"
+          ],
+          "B": []
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Nekrataal, tapping four Swamps. Both players pass; it resolves.",
+        "Its enters trigger is put on the stack targeting a nonartifact, nonblack creature if there is one.",
+        "Both players pass; the trigger resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "does_not_fire",
+          "delta": "",
+          "expected": "The trigger targets Grizzly Bears and destroys it; Grizzly Bears moves to B's graveyard."
+        },
+        {
+          "label": "only-black-creature",
+          "polarity": "fires",
+          "delta": "B's creature is Walking Corpse (a black 2/2) instead of Grizzly Bears.",
+          "expected": "No nonblack, nonartifact creature can be targeted (Nekrataal itself is black), so the trigger is removed from the stack without resolving; Walking Corpse stays on the battlefield."
+        }
+      ],
+      "cards": [
+        "Swamp",
+        "Grizzly Bears",
+        "Walking Corpse",
+        "Nekrataal"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "603.4-1",
+      "rules": [
+        "603.4"
+      ],
+      "title": "An intervening 'if' clause is checked when the trigger event occurs and again on resolution",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "upkeep",
+        "life": {
+          "A": 40,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Felidar Sovereign"
+          ],
+          "B": [
+            "Mountain"
+          ]
+        },
+        "hand": {
+          "A": [],
+          "B": [
+            "Shock"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "In the one-life-short variant A's life is 39. A's upkeep has just begun."
+      },
+      "decisions": [
+        "A's upkeep begins and Felidar Sovereign's condition (40 or more life) is checked.",
+        "If it triggers, both players pass and the ability resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "A has 40 life when the upkeep begins, so the ability triggers; it still holds 40 life on resolution, and A wins the game."
+        },
+        {
+          "label": "life-lost-in-response",
+          "polarity": "does_not_fire",
+          "delta": "With the trigger on the stack, B casts Shock targeting A (tapping Mountain); Shock resolves first, A's life becomes 38.",
+          "expected": "The ability triggered, but on resolution A has 38 life, so it is removed from the stack and does nothing; A does not win and A's life is 38."
+        },
+        {
+          "label": "one-life-short",
+          "polarity": "does_not_fire",
+          "delta": "A's life total is 39 as the upkeep begins.",
+          "expected": "The ability does not trigger and nothing goes on the stack; A does not win and A's life stays 39."
+        }
+      ],
+      "cards": [
+        "Felidar Sovereign",
+        "Mountain",
+        "Shock"
+      ],
+      "forge_notes": "Check that Forge re-evaluates LifeTotal/LifeAmount on resolution (intervening if)."
+    },
+    {
+      "id": "603.5-1",
+      "rules": [
+        "603.5"
+      ],
+      "title": "An optional triggered ability goes on the stack and the choice is made on resolution",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Kor Firewalker",
+            "Mountain"
+          ],
+          "B": [
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Shock"
+          ],
+          "B": []
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Shock targeting Grizzly Bears, tapping Mountain. Kor Firewalker's trigger goes on the stack.",
+        "Both players pass; the trigger resolves and A decides whether to gain 1 life."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The trigger goes on the stack and A chooses to gain 1 life on resolution; A's life is 21."
+        },
+        {
+          "label": "decline",
+          "polarity": "does_not_fire",
+          "delta": "On resolution A chooses not to gain 1 life.",
+          "expected": "The trigger still went on the stack and resolved, but A gains nothing; A's life stays 20."
+        }
+      ],
+      "cards": [
+        "Kor Firewalker",
+        "Mountain",
+        "Grizzly Bears",
+        "Shock"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "603.6-1",
+      "rules": [
+        "603.6"
+      ],
+      "title": "A zone-change trigger cannot find its object if the object left the zone it moved to",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Grizzly Bears"
+            },
+            {
+              "card": "Rancor",
+              "attached_to": "Grizzly Bears"
+            }
+          ],
+          "B": [
+            "Mountain",
+            "Tormod's Crypt"
+          ]
+        },
+        "hand": {
+          "A": [],
+          "B": [
+            "Shock"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A passes priority with an empty stack. B casts Shock targeting Grizzly Bears (4/2 with Rancor), tapping Mountain.",
+        "Both players pass; Shock resolves, Grizzly Bears dies, and Rancor is put into A's graveyard in the state-based check. Rancor's trigger goes on the stack.",
+        "Both players pass; the trigger resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Rancor's trigger finds Rancor in A's graveyard and returns it to A's hand."
+        },
+        {
+          "label": "exiled-in-response",
+          "polarity": "does_not_fire",
+          "delta": "With Rancor's trigger on the stack, B activates Tormod's Crypt targeting A (tapping and sacrificing it); the ability resolves first, exiling A's graveyard.",
+          "expected": "Rancor is in exile when the trigger resolves, so the trigger cannot find it and does nothing; Rancor stays in exile and A's hand is empty."
+        }
+      ],
+      "cards": [
+        "Grizzly Bears",
+        "Rancor",
+        "Mountain",
+        "Tormod's Crypt",
+        "Shock"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "603.6a-1",
+      "rules": [
+        "603.6a"
+      ],
+      "title": "Enter-the-battlefield abilities of every permanent, newcomers included, are checked when a permanent enters",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Soul Warden",
+            "Forest",
+            "Forest"
+          ],
+          "B": [
+            "Island",
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Elvish Visionary"
+          ],
+          "B": [
+            "Counterspell"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Forest",
+            "Forest"
+          ]
+        },
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Elvish Visionary, tapping both Forests. Both players pass; it resolves and enters the battlefield.",
+        "The abilities of Soul Warden (already on the battlefield) and of Elvish Visionary (the newcomer) both trigger; A puts them on the stack in either order and both players pass until they resolve."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Both abilities trigger from the one event: A gains 1 life (life 21) and draws 1 card."
+        },
+        {
+          "label": "countered",
+          "polarity": "does_not_fire",
+          "delta": "When A casts Elvish Visionary, B responds with Counterspell, tapping both Islands, before it resolves.",
+          "expected": "Elvish Visionary never enters the battlefield, so neither ability triggers; A's life stays 20, A draws nothing, and Elvish Visionary is in A's graveyard."
+        }
+      ],
+      "cards": [
+        "Soul Warden",
+        "Forest",
+        "Island",
+        "Elvish Visionary",
+        "Counterspell"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "603.6b-1",
+      "rules": [
+        "603.6b"
+      ],
+      "title": "Continuous effects apply to a permanent as it enters, so a creature under Humility does not trigger its own enters ability",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Humility",
+            "Forest",
+            "Forest"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Elvish Visionary"
+          ],
+          "B": []
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Forest",
+            "Forest"
+          ]
+        },
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Elvish Visionary, tapping both Forests. Both players pass; it resolves and enters the battlefield."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "does_not_fire",
+          "delta": "",
+          "expected": "Elvish Visionary enters as a 1/1 with no abilities, so its enters ability does not trigger; A draws nothing."
+        },
+        {
+          "label": "no-humility",
+          "polarity": "fires",
+          "delta": "Humility is not on the battlefield.",
+          "expected": "Elvish Visionary's enters ability triggers and resolves; A draws 1 card."
+        }
+      ],
+      "cards": [
+        "Humility",
+        "Forest",
+        "Elvish Visionary"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "603.6b-2",
+      "rules": [
+        "603.6b"
+      ],
+      "title": "Continuous effects apply to a permanent as it enters, so a land made a creature triggers creature-enters abilities",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Soul Warden",
+            "Living Plane",
+            "Forest"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Forest"
+          ],
+          "B": []
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A plays Forest from hand.",
+        "Soul Warden's trigger goes on the stack if it triggers; both players pass and it resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Under Living Plane the played Forest is a 1/1 creature the moment it enters, so Soul Warden triggers; A's life is 21."
+        },
+        {
+          "label": "no-living-plane",
+          "polarity": "does_not_fire",
+          "delta": "Living Plane is not on the battlefield.",
+          "expected": "The played Forest is only a land, so Soul Warden does not trigger; A's life stays 20."
+        }
+      ],
+      "cards": [
+        "Soul Warden",
+        "Living Plane",
+        "Forest"
+      ],
+      "forge_notes": "Check that Forge applies the Living Plane type change as the land enters, before checking triggers."
+    },
+    {
+      "id": "603.6c-1",
+      "rules": [
+        "603.6c"
+      ],
+      "title": "A leaves-the-battlefield ability triggers when the permanent moves from the battlefield to another zone",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Grixis Slavedriver"
+          ],
+          "B": [
+            "Island",
+            "Mountain"
+          ]
+        },
+        "hand": {
+          "A": [],
+          "B": [
+            "Unsummon",
+            "Shock"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A passes priority with an empty stack.",
+        "B casts Unsummon targeting Grixis Slavedriver, tapping Island. Both players pass; it resolves.",
+        "Grixis Slavedriver's trigger goes on the stack if it triggered; both players pass and it resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grixis Slavedriver returns to A's hand, its leaves-the-battlefield ability triggers and A creates a 2/2 black Zombie token."
+        },
+        {
+          "label": "shock-instead",
+          "polarity": "does_not_fire",
+          "delta": "B casts Shock (tapping Mountain) targeting Grixis Slavedriver (4/4) instead of Unsummon.",
+          "expected": "Grixis Slavedriver stays on the battlefield with 2 damage marked and its ability does not trigger; A gets no Zombie token."
+        }
+      ],
+      "cards": [
+        "Grixis Slavedriver",
+        "Island",
+        "Mountain",
+        "Unsummon",
+        "Shock"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "603.6d-1",
+      "rules": [
+        "603.6d"
+      ],
+      "title": "'Enters tapped' is a static ability that does not use the stack, unlike an enters trigger",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Torpor Orb",
+            "Swamp",
+            "Island",
+            "Island"
+          ],
+          "B": [
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Diregraf Ghoul",
+            "Frost Lynx"
+          ],
+          "B": []
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Diregraf Ghoul, tapping Swamp. Both players pass; it resolves and enters the battlefield."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Diregraf Ghoul enters tapped even though Torpor Orb stops creatures entering from causing abilities to trigger; nothing goes on the stack."
+        },
+        {
+          "label": "triggered-tap",
+          "polarity": "does_not_fire",
+          "delta": "A casts Frost Lynx (tapping Swamp and both Islands) instead of Diregraf Ghoul.",
+          "expected": "Torpor Orb stops Frost Lynx's enters trigger from triggering; Grizzly Bears is not tapped."
+        }
+      ],
+      "cards": [
+        "Torpor Orb",
+        "Swamp",
+        "Island",
+        "Grizzly Bears",
+        "Diregraf Ghoul",
+        "Frost Lynx"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "603.6e-1",
+      "rules": [
+        "603.6e"
+      ],
+      "title": "An Aura's trigger on the enchanted creature dying finds the Aura's new object in the graveyard",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Grizzly Bears"
+            },
+            {
+              "card": "Angelic Destiny",
+              "attached_to": "Grizzly Bears"
+            }
+          ],
+          "B": [
+            "Swamp",
+            "Swamp",
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [],
+          "B": [
+            "Doom Blade",
+            "Unsummon"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A passes priority with an empty stack.",
+        "B casts Doom Blade targeting Grizzly Bears (a 6/6 with Angelic Destiny), tapping both Swamps. Both players pass; it resolves.",
+        "Angelic Destiny is put into A's graveyard in a state-based check; its trigger goes on the stack if it triggered; both players pass and it resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears dies, Angelic Destiny's trigger finds Angelic Destiny in A's graveyard and returns it to A's hand."
+        },
+        {
+          "label": "bounced-instead",
+          "polarity": "does_not_fire",
+          "delta": "B casts Unsummon (tapping Island) targeting Grizzly Bears instead of Doom Blade.",
+          "expected": "Grizzly Bears returns to A's hand without dying, so the trigger does not trigger; Angelic Destiny stays in A's graveyard."
+        }
+      ],
+      "cards": [
+        "Grizzly Bears",
+        "Angelic Destiny",
+        "Swamp",
+        "Island",
+        "Doom Blade",
+        "Unsummon"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "603.7-1",
+      "rules": [
+        "603.7",
+        "603.7b",
+        "603.7d"
+      ],
+      "title": "A spell creates a delayed triggered ability that triggers once, later, and is controlled by the spell's controller",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Mountain"
+          ],
+          "B": [
+            "Island",
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Flare"
+          ],
+          "B": [
+            "Counterspell"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Forest",
+            "Forest",
+            "Forest"
+          ],
+          "B": [
+            "Island",
+            "Island",
+            "Island"
+          ]
+        },
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Flare targeting B, tapping three Mountains. Both players pass; Flare resolves, dealing 1 damage to B and creating the delayed ability.",
+        "Both players pass priority through the rest of A's turn. B's upkeep begins and the delayed ability goes on the stack; both players pass and it resolves.",
+        "Play continues to A's next upkeep and draw step."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "B's life is 19. At the beginning of B's upkeep (the next turn's upkeep) the delayed ability triggers and A, who controlled Flare as it resolved, draws 1 card. It does not trigger again at A's following upkeep, where A draws only the normal draw-step card."
+        },
+        {
+          "label": "countered",
+          "polarity": "does_not_fire",
+          "delta": "When A casts Flare, B responds with Counterspell, tapping both Islands.",
+          "expected": "Flare is countered and never resolves, so no delayed ability is created: B's life stays 20 and A draws nothing at B's upkeep."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Island",
+        "Flare",
+        "Counterspell"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "603.7a-1",
+      "rules": [
+        "603.7a"
+      ],
+      "title": "A delayed triggered ability does not trigger on an event that happened before it was created",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main2",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Sneak Attack",
+            "Mountain"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Grizzly Bears"
+          ],
+          "B": []
+        },
+        "graveyard": {},
+        "library": {
+          "B": [
+            "Island",
+            "Island",
+            "Island"
+          ]
+        },
+        "exile": {},
+        "notes": "In the end-step variant the setup step is 'end' instead of 'main2'."
+      },
+      "decisions": [
+        "A activates Sneak Attack, tapping Mountain, and puts Grizzly Bears from hand onto the battlefield. Both players pass; the ability resolves.",
+        "Play proceeds to the end step."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The delayed ability, created in main phase 2, triggers at the beginning of this turn's end step and A sacrifices Grizzly Bears; it is in A's graveyard."
+        },
+        {
+          "label": "end-step",
+          "polarity": "does_not_fire",
+          "delta": "A activates Sneak Attack during the end step, after the end step has begun.",
+          "expected": "The beginning of this turn's end step has already passed, so the delayed ability does not trigger this turn: Grizzly Bears stays on the battlefield for the rest of this turn and through B's turn, and is sacrificed at the beginning of B's end step."
+        }
+      ],
+      "cards": [
+        "Sneak Attack",
+        "Mountain",
+        "Grizzly Bears"
+      ],
+      "forge_notes": "Check how Forge schedules AtEOT when it is applied during the end step itself."
+    },
+    {
+      "id": "603.7c-1",
+      "rules": [
+        "603.7c",
+        "603.7e"
+      ],
+      "title": "A delayed triggered ability created by an ability affects only the object it refers to, in the zone it is expected to be in",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Sneak Attack",
+            "Mountain",
+            "Plains"
+          ],
+          "B": [
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Grizzly Bears",
+            "Cloudshift"
+          ],
+          "B": [
+            "Unsummon"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A activates Sneak Attack, tapping Mountain, and puts Grizzly Bears from hand onto the battlefield. Both players pass; the ability resolves and creates the delayed ability.",
+        "Both players pass priority through the turn to the end step; at the beginning of the end step the delayed ability triggers, both players pass and it resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The delayed ability is controlled by A, the controller of Sneak Attack's ability as it resolved, and A sacrifices Grizzly Bears; it is in A's graveyard."
+        },
+        {
+          "label": "flickered",
+          "polarity": "does_not_fire",
+          "delta": "After the ability resolves, A casts Cloudshift targeting Grizzly Bears, tapping Plains; it resolves, exiling Grizzly Bears and returning it to the battlefield.",
+          "expected": "The delayed ability triggers at the end step, but the returned Grizzly Bears is a new object, so it is not sacrificed and stays on the battlefield."
+        },
+        {
+          "label": "bounced",
+          "polarity": "other",
+          "delta": "After the ability resolves, B casts Unsummon targeting Grizzly Bears, tapping Island, returning it to A's hand.",
+          "expected": "The delayed ability triggers at the end step but Grizzly Bears is no longer on the battlefield, so it does nothing; Grizzly Bears stays in A's hand."
+        }
+      ],
+      "cards": [
+        "Sneak Attack",
+        "Mountain",
+        "Plains",
+        "Island",
+        "Grizzly Bears",
+        "Cloudshift",
+        "Unsummon"
+      ],
+      "forge_notes": "Check that Forge's AtEOT sacrifice does not follow the card across the Cloudshift zone change."
+    },
+    {
+      "id": "603.8-1",
+      "rules": [
+        "603.8"
+      ],
+      "title": "A state trigger triggers when the game state matches and does not trigger again until it has left the stack",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Emperor Crocodile",
+            "Grizzly Bears"
+          ],
+          "B": [
+            "Mountain",
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [],
+          "B": [
+            "Shock",
+            "Stifle"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A passes priority with an empty stack. B casts Shock targeting Grizzly Bears, tapping Mountain.",
+        "Both players pass; Shock resolves and Grizzly Bears dies. A now controls no other creature, so Emperor Crocodile's state trigger triggers and goes on the stack.",
+        "Both players pass; the trigger resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The trigger triggers exactly once while it is on the stack, although the state keeps matching; it resolves and A sacrifices Emperor Crocodile."
+        },
+        {
+          "label": "stifled",
+          "polarity": "fires",
+          "delta": "With the trigger on the stack, B casts Stifle targeting it, tapping Island.",
+          "expected": "Stifle counters the first trigger; the state still matches and the Crocodile is still on the battlefield, so the trigger triggers a second time, resolves and A sacrifices Emperor Crocodile (two triggers in total)."
+        },
+        {
+          "label": "larger-creature",
+          "polarity": "does_not_fire",
+          "delta": "A's other creature is Centaur Courser (3/3) instead of Grizzly Bears.",
+          "expected": "Shock leaves Centaur Courser on the battlefield with 2 damage marked; A still controls another creature, so Emperor Crocodile does not trigger and stays on the battlefield."
+        }
+      ],
+      "cards": [
+        "Emperor Crocodile",
+        "Grizzly Bears",
+        "Centaur Courser",
+        "Mountain",
+        "Island",
+        "Shock",
+        "Stifle"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "603.10-1",
+      "rules": [
+        "603.10",
+        "603.10a"
+      ],
+      "title": "A leaves-the-battlefield trigger looks back in time, so a permanent destroyed together with creatures still triggers",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Bastion of Remembrance",
+            "Nevinyrral's Disk",
+            "Grizzly Bears",
+            "Grizzly Bears",
+            "Swamp"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [],
+          "B": []
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A activates Nevinyrral's Disk, paying {1} with Swamp and tapping the Disk. Both players pass; the ability resolves and destroys all artifacts, creatures and enchantments at once.",
+        "Bastion of Remembrance's triggers go on the stack; both players pass until they have resolved."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Bastion of Remembrance is destroyed at the same time as the two Grizzly Bears but still triggers once for each Bears; B loses 2 life (life 18) and A gains 2 life (life 22)."
+        },
+        {
+          "label": "bastion-gone",
+          "polarity": "does_not_fire",
+          "delta": "Bastion of Remembrance is in A's graveyard instead of on the battlefield.",
+          "expected": "The two Grizzly Bears die with no Bastion of Remembrance to trigger; life totals stay 20 and 20."
+        }
+      ],
+      "cards": [
+        "Bastion of Remembrance",
+        "Nevinyrral's Disk",
+        "Grizzly Bears",
+        "Swamp"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "603.10b-1",
+      "rules": [
+        "603.10b"
+      ],
+      "title": "An ability that triggers when a permanent phases out looks back in time",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "upkeep",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Teferi's Imp"
+            }
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Island"
+          ],
+          "B": []
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "In the base variant the Imp is phased out. The variant's step is B's upkeep."
+      },
+      "decisions": [
+        "Teferi's Imp has phased out during A's untap step, which has just ended, and its 'whenever phases out' ability is waiting to be put on the stack.",
+        "Both players pass; the ability resolves and A discards a card."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Teferi's Imp is phased out when the ability triggers, but the ability still triggers; A discards Island (hand empty)."
+        },
+        {
+          "label": "opponent-turn",
+          "polarity": "does_not_fire",
+          "delta": "It is B's upkeep (B is the active player) and Teferi's Imp is phased in on A's battlefield.",
+          "expected": "Teferi's Imp does not phase out on B's untap step; its ability does not trigger and A's hand stays Island."
+        }
+      ],
+      "cards": [
+        "Teferi's Imp",
+        "Island"
+      ],
+      "forge_notes": "The phased-out state of a permanent set up before the upkeep may need to be reached by playing through the untap step."
+    },
+    {
+      "id": "603.10c-1",
+      "rules": [
+        "603.10c"
+      ],
+      "title": "An ability that triggers when an object becomes unattached looks back in time",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Grizzly Bears"
+            },
+            {
+              "card": "Grafted Wargear",
+              "attached_to": "Grizzly Bears"
+            }
+          ],
+          "B": [
+            "Mountain",
+            "Mountain"
+          ]
+        },
+        "hand": {
+          "A": [],
+          "B": [
+            "Shatter"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A passes priority with an empty stack.",
+        "B casts Shatter targeting Grafted Wargear, tapping both Mountains. Both players pass; it resolves and Grafted Wargear is destroyed.",
+        "The Wargear's 'becomes unattached' trigger goes on the stack if it triggered; both players pass and it resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grafted Wargear becomes unattached as it leaves the battlefield and its trigger still triggers; A sacrifices Grizzly Bears, which moves to A's graveyard."
+        },
+        {
+          "label": "not-attached",
+          "polarity": "does_not_fire",
+          "delta": "Grafted Wargear is not attached to Grizzly Bears (it is unattached on the battlefield).",
+          "expected": "Grafted Wargear is destroyed without becoming unattached from anything; no trigger; Grizzly Bears stays on the battlefield."
+        }
+      ],
+      "cards": [
+        "Grizzly Bears",
+        "Grafted Wargear",
+        "Mountain",
+        "Shatter"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "603.10d-1",
+      "rules": [
+        "603.10d"
+      ],
+      "title": "An ability that triggers when a player loses control of an object looks back in time",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Coffin Queen",
+            "Swamp",
+            "Swamp",
+            "Swamp"
+          ],
+          "B": [
+            "Mountain"
+          ]
+        },
+        "hand": {
+          "A": [],
+          "B": [
+            "Shock"
+          ]
+        },
+        "graveyard": {
+          "A": [
+            "Grizzly Bears"
+          ]
+        },
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A activates Coffin Queen ({2}{B}, {T}) targeting Grizzly Bears in A's graveyard. Both players pass; it resolves and Grizzly Bears enters under A's control.",
+        "A passes priority. B casts Shock targeting Coffin Queen, tapping Mountain. Both players pass; Shock resolves and Coffin Queen (1/1) dies.",
+        "Coffin Queen's 'when you lose control of Coffin Queen' ability goes on the stack if it triggered; both players pass and it resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "A loses control of Coffin Queen as it leaves the battlefield and the ability still triggers; Grizzly Bears is exiled."
+        },
+        {
+          "label": "shock-the-creature",
+          "polarity": "does_not_fire",
+          "delta": "B's Shock targets Grizzly Bears instead of Coffin Queen.",
+          "expected": "Grizzly Bears dies and goes to A's graveyard; A keeps control of Coffin Queen, so nothing is exiled."
+        }
+      ],
+      "cards": [
+        "Coffin Queen",
+        "Swamp",
+        "Mountain",
+        "Grizzly Bears",
+        "Shock"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "603.10e-1",
+      "rules": [
+        "603.10e"
+      ],
+      "title": "An ability that triggers when a spell is countered triggers when its spell is countered",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Multani's Presence",
+            "Forest",
+            "Forest"
+          ],
+          "B": [
+            "Island",
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Grizzly Bears"
+          ],
+          "B": [
+            "Counterspell"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Forest",
+            "Forest"
+          ]
+        },
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Grizzly Bears, tapping both Forests.",
+        "B responds with Counterspell targeting Grizzly Bears, tapping both Islands. Both players pass; Counterspell resolves and counters Grizzly Bears.",
+        "Multani's Presence's trigger goes on the stack if it triggered; both players pass and it resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears is countered and goes to A's graveyard; Multani's Presence triggers and A draws 1 card."
+        },
+        {
+          "label": "not-countered",
+          "polarity": "does_not_fire",
+          "delta": "B does not cast Counterspell.",
+          "expected": "Grizzly Bears resolves and enters the battlefield; Multani's Presence does not trigger and A draws nothing."
+        }
+      ],
+      "cards": [
+        "Multani's Presence",
+        "Forest",
+        "Island",
+        "Grizzly Bears",
+        "Counterspell"
+      ],
+      "forge_notes": "Multani's Presence is a permanent, so this does not stress the look-back part of the rule on its own; it covers the trigger on a countered spell."
+    },
+    {
+      "id": "603.12-1",
+      "rules": [
+        "603.12"
+      ],
+      "title": "A reflexive triggered ability triggers only if the stated action happened during the resolution that created it",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Grizzly Bears"
+          ],
+          "B": [
+            "Savannah Lions"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Heart-Piercer Manticore"
+          ],
+          "B": []
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Heart-Piercer Manticore, tapping four Mountains. Both players pass; it resolves.",
+        "Its enters trigger goes on the stack and resolves: A may sacrifice another creature; A chooses to sacrifice Grizzly Bears.",
+        "The reflexive trigger triggers; A targets Savannah Lions; both players pass and it resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears is sacrificed, the reflexive 'when you do' ability triggers and Heart-Piercer Manticore deals 2 damage (Grizzly Bears's power) to Savannah Lions, which dies."
+        },
+        {
+          "label": "declined",
+          "polarity": "does_not_fire",
+          "delta": "A chooses not to sacrifice a creature.",
+          "expected": "No creature is sacrificed, so the reflexive ability does not trigger; Grizzly Bears stays on the battlefield and Savannah Lions takes no damage."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Grizzly Bears",
+        "Savannah Lions",
+        "Heart-Piercer Manticore"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "603.12a-1",
+      "rules": [
+        "603.12a"
+      ],
+      "title": "Paying a cost several times makes a reflexive triggered ability trigger only once",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "declare_attackers",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Nyssa of Traken",
+            "Mishra's Bauble",
+            "Mishra's Bauble"
+          ],
+          "B": [
+            "Grizzly Bears",
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "A": [],
+          "B": []
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest"
+          ]
+        },
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A attacks with Nyssa of Traken. Its attack trigger goes on the stack; both players pass and it resolves.",
+        "On resolution A sacrifices both Mishra's Baubles as the cost. The 'when you sacrifice one or more artifacts this way' ability triggers.",
+        "A targets both Grizzly Bears with it; both players pass and it resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The reflexive ability triggers once, not once per artifact: both Grizzly Bears become tapped and A draws 2 cards."
+        },
+        {
+          "label": "none-sacrificed",
+          "polarity": "does_not_fire",
+          "delta": "A sacrifices no artifacts.",
+          "expected": "The reflexive ability does not trigger; neither Grizzly Bears is tapped and A draws no cards."
+        }
+      ],
+      "cards": [
+        "Nyssa of Traken",
+        "Mishra's Bauble",
+        "Grizzly Bears"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

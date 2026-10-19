@@ -1,0 +1,185 @@
+{
+  "unit": "110",
+  "verified": true,
+  "review": [
+    "110.2a-1: variant no-creature-in-library flipped whether anything enters at all (Polymorph's own text), not under whose control it enters, so it did not test 110.2a; dropped it and made own-creature (instructed player equals caster) the does_not_fire contrast.",
+    "110.5b-1: a land play uses no stack and produces no resolution record, so the declared record kind could never show it; rebuilt the pair as Nature's Lore (puts a Forest onto the battlefield untapped) against Rampant Growth (says 'tapped'), same cost, one changed card.",
+    "triage 110.2b: outcome said the permanent is controlled by the player who cast the spell, the opposite of the rule; rewrote it as entering under the control of the player who gained control of the spell."
+  ],
+  "skipped": [
+    {
+      "id": "110.4c",
+      "reason": "cannot be illustrated: no Forge card or effect strips a permanent of every permanent type without giving it another (every RemoveCardTypes script adds Creature, Land, Enchantment, Artifact or Aura at the same time, and Athreos-style 'isn't a creature' permanents keep their enchantment type), so a typeless permanent cannot be reached in a Forge game"
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "110.2-1",
+      "rules": ["110.2"],
+      "title": "A permanent's controller is who it entered under, its owner stays the card's owner",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {"A": 20, "B": 20},
+        "battlefield": {"A": ["Swamp", "Mountain"], "B": []},
+        "hand": {"A": ["Reanimate", "Shock"]},
+        "graveyard": {"B": ["Grizzly Bears"]},
+        "library": {}, "exile": {},
+        "notes": "Grizzly Bears is owned by B and sits in B's graveyard."
+      },
+      "decisions": [
+        "A casts Reanimate targeting Grizzly Bears in B's graveyard, tapping Swamp.",
+        "Both players pass; Reanimate resolves and A loses 2 life (the mana value of Grizzly Bears).",
+        "A casts Shock targeting Grizzly Bears, tapping Mountain.",
+        "Both players pass; Shock resolves and the state-based check destroys Grizzly Bears."
+      ],
+      "variants": [
+        {"label": "base", "polarity": "fires", "delta": "", "expected": "After Reanimate resolves, Grizzly Bears is on the battlefield controlled by A, not by its owner B. A is at 18 life. After Shock, Grizzly Bears moves to B's graveyard, the graveyard of its owner."},
+        {"label": "own-card", "polarity": "does_not_fire", "delta": "Grizzly Bears is owned by A and sits in A's graveyard.", "expected": "After Reanimate resolves, Grizzly Bears is on the battlefield controlled by A, who is also its owner. A is at 18 life. After Shock, Grizzly Bears moves to A's graveyard."}
+      ],
+      "cards": ["Swamp", "Mountain", "Reanimate", "Shock", "Grizzly Bears"],
+      "forge_notes": ""
+    },
+    {
+      "id": "110.2a-1",
+      "rules": ["110.2a"],
+      "title": "An object an effect puts onto the battlefield enters under the instructed player's control",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {"A": 20, "B": 20},
+        "battlefield": {
+          "A": ["Island", "Island", "Island", "Island", "Hill Giant"],
+          "B": ["Hill Giant"]
+        },
+        "hand": {"A": ["Polymorph"]},
+        "graveyard": {},
+        "library": {
+          "A": ["Grizzly Bears", "Mountain"],
+          "B": ["Grizzly Bears", "Mountain"]
+        },
+        "exile": {},
+        "notes": "Libraries are listed top first. Polymorph destroys the target creature, then its controller reveals cards from the top of their library until a creature card is revealed and puts that card onto the battlefield."
+      },
+      "decisions": [
+        "A casts Polymorph targeting B's Hill Giant, tapping all four Islands.",
+        "Both players pass; Polymorph resolves."
+      ],
+      "variants": [
+        {"label": "base", "polarity": "fires", "delta": "", "expected": "B's Hill Giant is destroyed and moves to B's graveyard. B's Grizzly Bears (top of B's library) enters the battlefield under B's control, not under the control of A, who cast Polymorph. A's Hill Giant and A's library are untouched."},
+        {"label": "own-creature", "polarity": "does_not_fire", "delta": "Polymorph targets A's Hill Giant instead.", "expected": "A's Hill Giant is destroyed. A's Grizzly Bears enters the battlefield under A's control. B's Hill Giant and B's library are untouched."}
+      ],
+      "cards": ["Island", "Hill Giant", "Polymorph", "Grizzly Bears", "Mountain"],
+      "forge_notes": "The 'states otherwise' branch of the rule is illustrated by 110.2-1, whose Reanimate puts the card under the caster's control."
+    },
+    {
+      "id": "110.2b-1",
+      "rules": ["110.2b"],
+      "title": "A permanent spell whose control was gained becomes a permanent controlled by the new controller",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "B",
+        "step": "main1",
+        "life": {"A": 20, "B": 20},
+        "battlefield": {
+          "A": ["Island", "Island", "Island", "Island", "Island", "Island"],
+          "B": ["Forest", "Forest"]
+        },
+        "hand": {"A": ["Aethersnatch"], "B": ["Grizzly Bears"]},
+        "graveyard": {}, "library": {}, "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "B casts Grizzly Bears, tapping both Forests.",
+        "B passes priority. A casts Aethersnatch targeting the Grizzly Bears spell, tapping all six Islands, and chooses not to change targets (the creature spell has none).",
+        "Both players pass; Aethersnatch resolves and A gains control of the Grizzly Bears spell.",
+        "Both players pass; the Grizzly Bears spell resolves."
+      ],
+      "variants": [
+        {"label": "base", "polarity": "fires", "delta": "", "expected": "Aethersnatch resolves and goes to A's graveyard. Grizzly Bears resolves and enters the battlefield under A's control; B is its owner."},
+        {"label": "no-response", "polarity": "does_not_fire", "delta": "A does not cast Aethersnatch and passes priority.", "expected": "The Grizzly Bears spell resolves and Grizzly Bears enters the battlefield under B's control. Aethersnatch stays in A's hand."}
+      ],
+      "cards": ["Island", "Forest", "Aethersnatch", "Grizzly Bears"],
+      "forge_notes": "In a two-player game the default-controller distinction of 110.2b never shows; the observable outcome is the permanent's controller after the stolen spell resolves."
+    },
+    {
+      "id": "110.3-1",
+      "rules": ["110.3"],
+      "title": "A nontoken permanent has its printed characteristics as modified by continuous effects",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {"A": 20, "B": 20},
+        "battlefield": {"A": ["Grizzly Bears", "Glorious Anthem"], "B": ["Grizzly Bears"]},
+        "hand": {}, "graveyard": {}, "library": {}, "exile": {},
+        "notes": "Glorious Anthem: Creatures you control get +1/+1. Grizzly Bears is printed 2/2."
+      },
+      "decisions": ["No action is taken; the board is stable and the continuous effects are read."],
+      "variants": [
+        {"label": "base", "polarity": "fires", "delta": "", "expected": "A's Grizzly Bears is 3/3 (printed 2/2 modified by Glorious Anthem). B's Grizzly Bears is 2/2."},
+        {"label": "anthem-gone", "polarity": "does_not_fire", "delta": "Glorious Anthem is in A's graveyard instead of on the battlefield.", "expected": "A's Grizzly Bears is 2/2, its printed characteristics. B's Grizzly Bears is 2/2."}
+      ],
+      "cards": ["Grizzly Bears", "Glorious Anthem"],
+      "forge_notes": ""
+    },
+    {
+      "id": "110.5b-1",
+      "rules": ["110.5b"],
+      "title": "A permanent enters untapped, face up and phased in unless a spell or ability says otherwise",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {"A": 20, "B": 20},
+        "battlefield": {"A": ["Forest", "Forest"], "B": []},
+        "hand": {"A": ["Nature's Lore"]},
+        "graveyard": {}, "library": {"A": ["Forest"]}, "exile": {},
+        "notes": "Nature's Lore: search your library for a Forest card, put that card onto the battlefield, then shuffle. Rampant Growth: search your library for a basic land card, put that card onto the battlefield tapped, then shuffle."
+      },
+      "decisions": [
+        "A casts Nature's Lore, tapping both Forests.",
+        "Both players pass; the spell resolves and A finds the Forest in A's library."
+      ],
+      "variants": [
+        {"label": "base", "polarity": "fires", "delta": "", "expected": "Nature's Lore resolves; the Forest from A's library enters the battlefield untapped, face up and phased in. A's two original Forests stay tapped."},
+        {"label": "spell-says-tapped", "polarity": "does_not_fire", "delta": "The spell in A's hand is Rampant Growth instead of Nature's Lore.", "expected": "Rampant Growth resolves; the Forest from A's library enters the battlefield tapped, face up and phased in."}
+      ],
+      "cards": ["Forest", "Nature's Lore", "Rampant Growth"],
+      "forge_notes": ""
+    },
+    {
+      "id": "110.5c-1",
+      "rules": ["110.5c"],
+      "title": "A permanent keeps its flipped status through changes that make it irrelevant",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {"A": 20, "B": 20},
+        "battlefield": {
+          "A": ["Jushi Apprentice", "Forest", "Island", "Island"],
+          "B": ["Nezumi Shortfang", "Grizzly Bears"]
+        },
+        "hand": {"A": ["Cytoshape"]},
+        "graveyard": {}, "library": {}, "exile": {},
+        "notes": "A's Jushi Apprentice is flipped, so it is Tomoya the Revealer (2/3, legendary). B's Nezumi Shortfang (1/1) is unflipped. Cytoshape: choose a nonlegendary creature on the battlefield; target creature becomes a copy of it until end of turn."
+      },
+      "decisions": [
+        "A casts Cytoshape targeting the flipped Jushi Apprentice (Tomoya the Revealer), tapping Forest and both Islands, and chooses Nezumi Shortfang to copy.",
+        "Both players pass; Cytoshape resolves.",
+        "The continuous characteristics of A's creature are read.",
+        "The turn reaches its end step and then cleanup, when 'until end of turn' effects end."
+      ],
+      "variants": [
+        {"label": "base", "polarity": "fires", "delta": "", "expected": "A's creature becomes a copy of Nezumi Shortfang and, because its flipped status is kept, shows the flipped characteristics of Stabwhisker the Odious: 3/3, legendary, black. After cleanup the copy effect ends and it is Tomoya the Revealer again, 2/3, still flipped."},
+        {"label": "unflipped", "polarity": "does_not_fire", "delta": "A's Jushi Apprentice is unflipped (1/2).", "expected": "A's creature becomes a copy of Nezumi Shortfang with its front-face characteristics: 1/1, nonlegendary. After cleanup it is Jushi Apprentice again, 1/2, unflipped."},
+        {"label": "copy-non-flip-card", "polarity": "other", "delta": "A chooses B's Grizzly Bears to copy instead of Nezumi Shortfang.", "expected": "A's creature becomes a copy of Grizzly Bears, 2/2, whose characteristics do not depend on flipped status. After cleanup it is Tomoya the Revealer again, 2/3, still flipped."}
+      ],
+      "cards": ["Jushi Apprentice", "Nezumi Shortfang", "Grizzly Bears", "Cytoshape", "Forest", "Island"],
+      "forge_notes": "Needs a flipped Jushi Apprentice, reachable in play by flipping it with nine or more cards in hand or by a puzzle state. Whether Forge keeps the flipped state through a Clone effect and resolves the copy to the flipped face of a copied flip card is not verified. Cytoshape's Choices$ filter Creature.nonLegendary excludes the flipped Tomoya as a copy source, not as a target."
+    }
+  ]
+}

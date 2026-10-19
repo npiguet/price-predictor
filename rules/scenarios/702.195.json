@@ -1,0 +1,245 @@
+{
+  "unit": "702.195",
+  "verified": true,
+  "review": [
+    "702.195a-1: expected strings carried reasoning; reduced to observable outcomes. record_kind trigger -> resolution, since the outcome is the damage of Balin's trigger on resolution, not whether it fires.",
+    "702.195a-2: same expected cleanup; record_kind trigger -> resolution for the same reason.",
+    "702.195c-1: expected strings carried reasoning; reduced to the trigger count. Checked that Bifur's Panharmonicon static (ValidCard Dwarf.YouCtrl, Condition EnduringStory) covers Balin's own enters trigger.",
+    "triage 702.195a: added resolution to record_kinds, since Balin's damage on resolution is where the designation shows."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.195a-1",
+      "rules": [
+        "702.195a"
+      ],
+      "title": "Three artifact, Saga or legendary permanents give a Storied player an enduring story",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Ornithopter",
+            "Ornithopter"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Balin, Loremaster",
+            "Mountain",
+            "Mountain"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Mountain"
+          ]
+        },
+        "exile": {},
+        "notes": "Balin, Loremaster is legendary and has Storied. Ornithopter is an artifact creature. Nothing else on the board is an artifact, Saga or legendary permanent."
+      },
+      "decisions": [
+        "A casts Balin, Loremaster, tapping all five Mountains.",
+        "Both players pass; Balin resolves and enters the battlefield.",
+        "Balin's enters trigger goes on the stack; both players pass; on resolution A chooses to discard their hand (two Mountains).",
+        "A draws two cards; the ability then checks whether A has an enduring story."
+      ],
+      "variants": [
+        {
+          "label": "three_qualifying",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "A has an enduring story. Balin's trigger resolves: A discards two Mountains, draws two Mountains, and Balin deals 2 damage to B (B at 18)."
+        },
+        {
+          "label": "two_qualifying",
+          "polarity": "does_not_fire",
+          "delta": "A controls only one Ornithopter.",
+          "expected": "A has no enduring story. Balin's trigger resolves: A discards two Mountains and draws two Mountains; B stays at 20."
+        },
+        {
+          "label": "third_is_plain",
+          "polarity": "does_not_fire",
+          "delta": "The second Ornithopter is replaced by Grizzly Bears, which is not an artifact, Saga or legendary.",
+          "expected": "A has no enduring story. Balin's trigger resolves: A discards two Mountains and draws two Mountains; B stays at 20."
+        },
+        {
+          "label": "third_is_legendary",
+          "polarity": "fires",
+          "delta": "The second Ornithopter is replaced by Isamaru, Hound of Konda, a legendary creature.",
+          "expected": "A has an enduring story. Balin's trigger resolves: A discards two Mountains, draws two Mountains, and Balin deals 2 damage to B (B at 18)."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Balin, Loremaster",
+        "Ornithopter",
+        "Grizzly Bears",
+        "Isamaru, Hound of Konda"
+      ],
+      "forge_notes": "Forge reads the designation through Condition$ EnduringStory on the damage sub-ability. Whether the discard prompt (OptionalDecider$ You) can be pre-answered depends on the harness."
+    },
+    {
+      "id": "702.195a-2",
+      "rules": [
+        "702.195a"
+      ],
+      "title": "An enduring story lasts for the rest of the game",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Ornithopter",
+            "Ornithopter"
+          ],
+          "B": [
+            "Mountain",
+            "Mountain"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Balin, Loremaster",
+            "Dwarven Trader",
+            "Mountain"
+          ],
+          "B": [
+            "Shatter"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Mountain",
+            "Mountain"
+          ]
+        },
+        "exile": {},
+        "notes": "Balin has Storied. Dwarven Trader is a Dwarf, so it triggers Balin; it is neither an artifact nor legendary."
+      },
+      "decisions": [
+        "A casts Balin, Loremaster, tapping five Mountains.",
+        "Base order: both players pass and Balin resolves; Balin's own enters trigger goes on the stack and A declines to discard on resolution; A passes priority with an empty stack and B casts Shatter targeting one Ornithopter, tapping both Mountains; both players pass and Shatter resolves.",
+        "A casts Dwarven Trader, tapping the sixth Mountain; both players pass; Dwarven Trader resolves.",
+        "Balin's enters trigger for Dwarven Trader goes on the stack; both players pass; on resolution A discards their hand (one Mountain) and draws one card."
+      ],
+      "variants": [
+        {
+          "label": "shatter_after_balin",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "A has an enduring story from the moment Balin enters. Shatter destroys one Ornithopter. Balin's trigger for Dwarven Trader resolves: A discards one Mountain, draws one Mountain, and Balin deals 1 damage to B (B at 19)."
+        },
+        {
+          "label": "shatter_in_response",
+          "polarity": "does_not_fire",
+          "delta": "B casts Shatter on one Ornithopter in response to Balin, while Balin is on the stack, instead of after Balin resolves.",
+          "expected": "Shatter destroys one Ornithopter before Balin enters; A never has an enduring story. Balin's trigger for Dwarven Trader resolves: A discards one Mountain and draws one Mountain; B stays at 20."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Balin, Loremaster",
+        "Ornithopter",
+        "Dwarven Trader",
+        "Shatter"
+      ],
+      "forge_notes": "B needs priority with an empty stack after A passes in A's main phase; in Forge the harness must hand B priority there."
+    },
+    {
+      "id": "702.195c-1",
+      "rules": [
+        "702.195c"
+      ],
+      "title": "Continuous effects are reapplied after the enduring story is gained, before triggers are checked",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Bifur, Melodic Rider",
+            "Ornithopter"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Balin, Loremaster"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Mountain",
+            "Mountain"
+          ]
+        },
+        "exile": {},
+        "notes": "Bifur's static ability doubles Dwarf triggers only while its controller has an enduring story. Bifur is legendary; with Ornithopter A controls two qualifying permanents before Balin enters."
+      },
+      "decisions": [
+        "A casts Balin, Loremaster, tapping all five Mountains.",
+        "Both players pass; Balin resolves and enters, which gives A a third qualifying permanent.",
+        "A's Balin triggers are put on the stack; for each instance A declines to discard on resolution."
+      ],
+      "variants": [
+        {
+          "label": "story_gained_on_entry",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "A gets an enduring story as Balin enters, and Balin's enters trigger triggers twice: two instances are put on the stack."
+        },
+        {
+          "label": "no_story",
+          "polarity": "does_not_fire",
+          "delta": "No Ornithopter on A's battlefield.",
+          "expected": "A has no enduring story. Balin's enters trigger triggers once: one instance is put on the stack."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Balin, Loremaster",
+        "Bifur, Melodic Rider",
+        "Ornithopter"
+      ],
+      "forge_notes": "Forge implements the doubling as a Panharmonicon-style static with Condition$ EnduringStory; whether the designation is applied before trigger checking on the same state-based pass should be verified."
+    }
+  ]
+}

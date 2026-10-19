@@ -1,0 +1,4 @@
+{"id": "702.99", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.99a", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution", "trigger"], "outcome": "When a cipher spell resolves it may be exiled encoded on a creature; that creature then triggers on combat damage to a player and its controller may cast a copy for free.", "note": ""}
+{"id": "702.99b", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.99c", "category": "mechanical", "observability": "indirect", "record_kinds": ["continuous", "trigger"], "outcome": "The card stays encoded while it remains exiled and the creature remains on the battlefield, even through control changes or losing creature type; once the creature leaves, the trigger no longer fires.", "note": ""}

@@ -1,0 +1,5 @@
+{"id": "701.15", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "701.15a", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution", "playability"], "outcome": "The creature becomes goaded until the goading player's next turn.", "note": ""}
+{"id": "701.15b", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "A goaded creature must attack each combat if able, and attacks a player other than the goader if able.", "note": "Goaded is a designation, not an ability or copiable value."}
+{"id": "701.15c", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "A creature goaded by several players carries each player's attack requirement.", "note": ""}
+{"id": "701.15d", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "The same player goading the creature again adds no further requirement.", "note": ""}

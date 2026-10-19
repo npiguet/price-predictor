@@ -1,0 +1,225 @@
+{
+  "unit": "702.51",
+  "verified": true,
+  "review": [],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.51a-1",
+      "rules": [
+        "702.51a"
+      ],
+      "title": "Convoke lets untapped creatures pay generic mana",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Forest",
+            "Forest",
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            },
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            },
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            },
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            },
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            }
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Siege Wurm"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Siege Wurm costs {5}{G}{G} and has convoke. The Grizzly Bears have been under A's control since the start of the turn."
+      },
+      "decisions": [
+        "A considers casting Siege Wurm, tapping both Forests for {G}{G} and tapping five untapped Grizzly Bears to pay the five generic mana."
+      ],
+      "variants": [
+        {
+          "label": "five_untapped",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Casting Siege Wurm is legal (can_play true): both Forests pay {G}{G} and five Grizzly Bears pay the generic {5}."
+        },
+        {
+          "label": "one_bear_tapped",
+          "polarity": "does_not_fire",
+          "delta": "One of the five Grizzly Bears is already tapped.",
+          "expected": "Casting Siege Wurm is not legal (can_play false): only four creatures can convoke, so {1} of the cost cannot be paid."
+        }
+      ],
+      "cards": [
+        "Forest",
+        "Grizzly Bears",
+        "Siege Wurm"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.51a-2",
+      "rules": [
+        "702.51a"
+      ],
+      "title": "A convoking creature pays colored mana only if it has that color",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            },
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            }
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Siege Wurm"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Siege Wurm costs {5}{G}{G} and has convoke. A controls no green mana source."
+      },
+      "decisions": [
+        "A considers casting Siege Wurm, tapping five Mountains for the generic {5} and tapping two untapped creatures to pay {G}{G}."
+      ],
+      "variants": [
+        {
+          "label": "green_creatures",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Casting Siege Wurm is legal (can_play true): each green Grizzly Bears pays one {G}."
+        },
+        {
+          "label": "red_creatures",
+          "polarity": "does_not_fire",
+          "delta": "The two creatures are Raging Goblin (red) instead of Grizzly Bears (green).",
+          "expected": "Casting Siege Wurm is not legal (can_play false): red creatures cannot pay {G}, and no green mana is available."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Grizzly Bears",
+        "Raging Goblin",
+        "Siege Wurm"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.51b-1",
+      "rules": [
+        "702.51b"
+      ],
+      "title": "Convoke applies to the cost after reductions",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Heartless Summoning",
+            "Forest",
+            "Forest",
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            },
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            },
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            }
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Siege Wurm"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Heartless Summoning makes creature spells cost {2} less and gives A's creatures -1/-1 (Grizzly Bears are 1/1). Siege Wurm costs {5}{G}{G} and has convoke."
+      },
+      "decisions": [
+        "A considers casting Siege Wurm: the total cost is {3}{G}{G}; A taps both Forests for {G}{G} and three untapped Grizzly Bears for the generic {3}."
+      ],
+      "variants": [
+        {
+          "label": "with_reduction",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Casting Siege Wurm is legal (can_play true): the total cost is {3}{G}{G}, and three convoking creatures pay its generic part."
+        },
+        {
+          "label": "without_reduction",
+          "polarity": "does_not_fire",
+          "delta": "Heartless Summoning is not on the battlefield.",
+          "expected": "Casting Siege Wurm is not legal (can_play false): the total cost is {5}{G}{G}, and three creatures cannot pay the generic {5}."
+        },
+        {
+          "label": "one_bear_tapped",
+          "polarity": "does_not_fire",
+          "delta": "One of the three Grizzly Bears is tapped.",
+          "expected": "Casting Siege Wurm is not legal (can_play false): only two creatures can convoke against a total cost of {3}{G}{G}."
+        }
+      ],
+      "cards": [
+        "Heartless Summoning",
+        "Forest",
+        "Grizzly Bears",
+        "Siege Wurm"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

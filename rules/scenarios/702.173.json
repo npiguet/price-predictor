@@ -1,0 +1,91 @@
+{
+  "unit": "702.173",
+  "verified": true,
+  "review": [],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.173a-1",
+      "rules": [
+        "702.173a"
+      ],
+      "title": "A spell can be cast for its freerunning cost only after an Assassin dealt combat damage to a player",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            {
+              "card": "Assassin Initiate",
+              "summoning_sick": false
+            },
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            }
+          ]
+        },
+        "hand": {
+          "A": [
+            "Eagle Vision"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A moves to combat and attacks B with Assassin Initiate only.",
+        "B declares no blockers; combat damage is dealt; combat ends and the game moves to A's second main phase.",
+        "A, with priority in main2 and two untapped Islands, considers casting Eagle Vision for its freerunning cost {1}{U}."
+      ],
+      "variants": [
+        {
+          "label": "assassin_connects",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Assassin Initiate deals 1 combat damage to B (life 19). Casting Eagle Vision for its freerunning cost {1}{U} is legal."
+        },
+        {
+          "label": "blocked",
+          "polarity": "does_not_fire",
+          "delta": "B blocks Assassin Initiate with Grizzly Bears.",
+          "expected": "Assassin Initiate deals its damage to Grizzly Bears, so no player is dealt combat damage this turn (B stays at 20). Casting Eagle Vision for its freerunning cost is not legal; its full cost {4}{U} cannot be paid with two Islands either."
+        },
+        {
+          "label": "non_assassin",
+          "polarity": "does_not_fire",
+          "delta": "A attacks with Grizzly Bears instead of Assassin Initiate.",
+          "expected": "Grizzly Bears deals 2 combat damage to B (life 18), but it is not an Assassin. Casting Eagle Vision for its freerunning cost is not legal."
+        },
+        {
+          "label": "no_attack",
+          "polarity": "does_not_fire",
+          "delta": "A does not attack.",
+          "expected": "No combat damage is dealt this turn. Casting Eagle Vision for its freerunning cost is not legal."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Assassin Initiate",
+        "Grizzly Bears",
+        "Eagle Vision"
+      ],
+      "forge_notes": "Forge checks Player.hasFreerunning() when the cast is attempted. A commander branch cannot be set up with these cards and is not illustrated."
+    }
+  ]
+}

@@ -1,0 +1,3 @@
+{"id": "702.68", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.68a", "category": "mechanical", "observability": "direct", "record_kinds": ["trigger"], "outcome": "When a creature with frenzy attacks and is not blocked, it gets +N/+0 until end of turn.", "note": ""}
+{"id": "702.68b", "category": "mechanical", "observability": "direct", "record_kinds": ["trigger"], "outcome": "Each frenzy instance triggers separately.", "note": ""}

@@ -1,0 +1,4 @@
+{"id": "702.184", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.184a", "category": "mechanical", "observability": "direct", "record_kinds": ["resolution"], "outcome": "Activating station taps another untapped creature and puts charge counters on the permanent equal to the tapped creature's power.", "note": ""}
+{"id": "702.184b", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.184c", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "A static ability makes station put counters equal to the tapped creature's toughness instead of its power.", "note": ""}

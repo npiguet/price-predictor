@@ -1,0 +1,76 @@
+{
+  "unit": "402",
+  "verified": true,
+  "review": [
+    "402.2-1: reliquary_tower variant is the rule applying with its discard not happening; polarity other -> does_not_fire."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "402.2-1",
+      "rules": [
+        "402.2"
+      ],
+      "title": "A player discards down to the maximum hand size during the cleanup step",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "cleanup",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {},
+        "hand": {
+          "A": [
+            "Forest",
+            "Forest",
+            "Mountain",
+            "Mountain",
+            "Shock",
+            "Grizzly Bears",
+            "Lightning Bolt",
+            "Giant Growth"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "It is A's cleanup step and A's maximum hand size is seven."
+      },
+      "decisions": [
+        "A discards Giant Growth to reduce the hand to seven."
+      ],
+      "variants": [
+        {
+          "label": "eight_cards",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "A discards one card, Giant Growth, which goes to A's graveyard; A ends with seven cards in hand."
+        },
+        {
+          "label": "seven_cards",
+          "polarity": "does_not_fire",
+          "delta": "A's hand holds seven cards (Giant Growth removed).",
+          "expected": "A discards nothing and keeps seven cards; the graveyard stays empty."
+        },
+        {
+          "label": "reliquary_tower",
+          "polarity": "does_not_fire",
+          "delta": "A controls Reliquary Tower, so A has no maximum hand size, with eight cards in hand.",
+          "expected": "A discards nothing and keeps eight cards in hand."
+        }
+      ],
+      "cards": [
+        "Forest",
+        "Mountain",
+        "Shock",
+        "Grizzly Bears",
+        "Lightning Bolt",
+        "Giant Growth",
+        "Reliquary Tower"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

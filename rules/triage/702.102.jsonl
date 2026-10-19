@@ -1,0 +1,5 @@
+{"id": "702.102", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.102a", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "A split card with fuse may be cast as both halves only from hand; cast from another zone, only one half is castable.", "note": "Choosing both halves is a decision; castability from hand only is the verdict."}
+{"id": "702.102b", "category": "mechanical", "observability": "indirect", "record_kinds": ["continuous"], "outcome": "A fused split spell on the stack has the combined characteristics (colors, mana value, types) of both halves.", "note": ""}
+{"id": "702.102c", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "The cost to cast a fused split spell is the sum of both halves' mana costs.", "note": ""}
+{"id": "702.102d", "category": "mechanical", "observability": "direct", "record_kinds": ["resolution"], "outcome": "A fused split spell resolves by performing the left half's instructions and then the right half's.", "note": ""}

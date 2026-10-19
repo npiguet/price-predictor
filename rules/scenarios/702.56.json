@@ -1,0 +1,142 @@
+{
+  "unit": "702.56",
+  "verified": true,
+  "review": [
+    "702.56b: skip reason was false (Djinn Illuminatus grants a second replicate instance); replaced the skip with scenario 702.56b-1."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.56a-1",
+      "rules": [
+        "702.56a"
+      ],
+      "title": "Replicate creates one copy per payment of the replicate cost",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain"
+          ],
+          "B": [
+            "Centaur Courser"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Pyromatics"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Pyromatics costs {1}{R} and has replicate {1}{R}: it deals 1 damage to any target. Centaur Courser is a 3/3."
+      },
+      "decisions": [
+        "A casts Pyromatics targeting Centaur Courser, paying the replicate cost twice: {1}{R} plus two times {1}{R}, tapping all six Mountains.",
+        "The replicate trigger puts a copy per payment on the stack; both copies keep the target Centaur Courser. All players pass; the stack resolves."
+      ],
+      "variants": [
+        {
+          "label": "paid_twice",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Two copies are created. Pyromatics and its copies deal 3 damage in total to Centaur Courser, which dies."
+        },
+        {
+          "label": "paid_once",
+          "polarity": "fires",
+          "delta": "The replicate cost is paid once; four Mountains are tapped.",
+          "expected": "One copy is created. Pyromatics and the copy deal 2 damage in total; Centaur Courser survives with 2 damage."
+        },
+        {
+          "label": "not_paid",
+          "polarity": "does_not_fire",
+          "delta": "The replicate cost is not paid; two Mountains are tapped.",
+          "expected": "No replicate trigger fires and no copy is created. Pyromatics deals 1 damage; Centaur Courser survives with 1 damage."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Centaur Courser",
+        "Pyromatics"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.56b-1",
+      "rules": [
+        "702.56b"
+      ],
+      "title": "Each replicate instance copies the spell for its own payments",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Djinn Illuminatus",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain"
+          ],
+          "B": [
+            "Centaur Courser"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Pyromatics"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Pyromatics ({1}{R}, 1 damage to any target) has replicate {1}{R}. Djinn Illuminatus gives it a second replicate instance whose cost equals its mana cost, {1}{R}. Centaur Courser is a 3/3."
+      },
+      "decisions": [
+        "A casts Pyromatics targeting Centaur Courser, paying its own replicate cost once and Djinn Illuminatus's replicate cost once, tapping all six Mountains.",
+        "Each replicate instance's trigger resolves; every copy keeps the target Centaur Courser. Both players pass until the stack is empty."
+      ],
+      "variants": [
+        {
+          "label": "both_paid_once",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Two replicate triggers fire, each creating one copy. Pyromatics and its two copies deal 3 damage to Centaur Courser, which dies."
+        },
+        {
+          "label": "granted_unpaid",
+          "polarity": "does_not_fire",
+          "delta": "Djinn Illuminatus's replicate cost is not paid; four Mountains are tapped.",
+          "expected": "Only the native replicate instance's trigger fires and creates one copy; the granted instance creates none. 2 damage total; Centaur Courser survives with 2 damage."
+        }
+      ],
+      "cards": [
+        "Djinn Illuminatus",
+        "Mountain",
+        "Centaur Courser",
+        "Pyromatics"
+      ],
+      "forge_notes": "Djinn Illuminatus grants Replicate:CardManaCost on the stack; check that Forge offers both instances' payments separately at casting."
+    }
+  ]
+}

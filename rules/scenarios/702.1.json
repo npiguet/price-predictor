@@ -1,0 +1,199 @@
+{
+  "unit": "702.1",
+  "verified": true,
+  "review": [
+    "702.1b-1: setup notes said Volcano Hellion had been under A's control since before A's last upkeep, in which case echo does not trigger; it now came under A's control after that upkeep."
+  ],
+  "skipped": [
+    {
+      "id": "702.1",
+      "reason": "introductory definition of keyword abilities; has no outcome of its own"
+    },
+    {
+      "id": "702.1d",
+      "reason": "wording equivalence ('with [keyword]' means 'with a [keyword] ability'); no distinct outcome"
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "702.1a-1",
+      "rules": [
+        "702.1a"
+      ],
+      "title": "A keyword ability cost refers only to the variable cost: scavenge cost equals mana cost",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Varolz, the Scar-Striped",
+              "summoning_sick": false
+            },
+            "Forest",
+            "Forest"
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {
+          "A": [
+            "Grizzly Bears"
+          ]
+        },
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A activates the scavenge ability granted to Grizzly Bears in the graveyard, targeting Varolz, the Scar-Striped, tapping both Forests and exiling Grizzly Bears from the graveyard."
+      ],
+      "variants": [
+        {
+          "label": "two_lands",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The activation is legal at cost {1}{G} (Grizzly Bears' mana cost) plus exiling it. On resolution Varolz gets two +1/+1 counters (4/4)."
+        },
+        {
+          "label": "one_land",
+          "polarity": "does_not_fire",
+          "delta": "A controls one Forest instead of two.",
+          "expected": "The activation is not legal: {1}{G} cannot be paid. Grizzly Bears stays in the graveyard and Varolz has no counters."
+        }
+      ],
+      "cards": [
+        "Varolz, the Scar-Striped",
+        "Forest",
+        "Grizzly Bears"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.1b-1",
+      "rules": [
+        "702.1b"
+      ],
+      "title": "A variable in a keyword ability is reevaluated constantly: echo X where X is life total",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "upkeep",
+        "life": {
+          "A": 5,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Volcano Hellion",
+              "summoning_sick": false
+            },
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Shock"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Volcano Hellion came under A's control during A's previous turn, after that turn's upkeep, so its echo ability triggered at the beginning of this upkeep and is on the stack. Its enters trigger resolved on that earlier turn."
+      },
+      "decisions": [
+        "With the echo trigger on the stack, A casts Shock targeting A, tapping one Mountain (A's life becomes 3 when it resolves).",
+        "Both players pass; Shock resolves, then the echo trigger resolves and A pays the echo cost if able, tapping the untapped Mountains."
+      ],
+      "variants": [
+        {
+          "label": "life_lowered",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "A's life is 3 when the echo trigger resolves, so the echo cost is {3}. A pays it with the three untapped Mountains and Volcano Hellion stays on the battlefield."
+        },
+        {
+          "label": "no_response",
+          "polarity": "does_not_fire",
+          "delta": "A does not cast Shock, so A's life stays 5.",
+          "expected": "The echo cost is {5} when the trigger resolves; A controls only four Mountains and cannot pay it, so Volcano Hellion is sacrificed and moves to A's graveyard."
+        }
+      ],
+      "cards": [
+        "Volcano Hellion",
+        "Mountain",
+        "Shock"
+      ],
+      "forge_notes": "Forge evaluates the echo cost through the X SVar (Count$YourLifeTotal); whether it is evaluated at resolution needs checking when played."
+    },
+    {
+      "id": "702.1c-1",
+      "rules": [
+        "702.1c"
+      ],
+      "title": "'The same is true for' grants each variant of a listed keyword to the affected creatures",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "upkeep",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Concerted Effort",
+            {
+              "card": "White Knight",
+              "summoning_sick": false
+            },
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            }
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "The beginning of upkeep trigger of Concerted Effort goes on the stack; both players pass and it resolves."
+      ],
+      "variants": [
+        {
+          "label": "knight_present",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears gains first strike and protection from black until end of turn (the same variant White Knight has). White Knight is unchanged."
+        },
+        {
+          "label": "no_keywords",
+          "polarity": "does_not_fire",
+          "delta": "Hill Giant (no keywords) replaces White Knight.",
+          "expected": "No creature has first strike or protection; Grizzly Bears and Hill Giant gain nothing."
+        }
+      ],
+      "cards": [
+        "Concerted Effort",
+        "White Knight",
+        "Grizzly Bears",
+        "Hill Giant"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

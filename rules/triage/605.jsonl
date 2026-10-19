@@ -1,0 +1,13 @@
+{"id": "605.1", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "605.1a", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "605.1b", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "605.2", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "605.3", "category": "decision", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "605.3a", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "A mana ability can be activated while paying a cost mid-cast or mid-resolution, not only when the player has priority.", "note": ""}
+{"id": "605.3b", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "An activated mana ability never uses the stack, so it cannot be responded to or countered and its mana is added at once.", "note": ""}
+{"id": "605.3c", "category": "legality", "observability": "indirect", "record_kinds": ["playability"], "outcome": "A mana ability cannot be activated again by a player who has begun activating it until it has resolved.", "note": ""}
+{"id": "605.4", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "605.4a", "category": "mechanical", "observability": "indirect", "record_kinds": ["trigger", "resolution"], "outcome": "A triggered mana ability resolves immediately after its triggering mana ability without using the stack, and the mana is available to pay the spell being cast.", "note": ""}
+{"id": "605.5", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "605.5a", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "605.5b", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}

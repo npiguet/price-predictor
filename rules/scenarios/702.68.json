@@ -1,0 +1,130 @@
+{
+  "unit": "702.68",
+  "verified": true,
+  "review": [],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.68a-1",
+      "rules": [
+        "702.68a"
+      ],
+      "title": "Frenzy pumps the attacker only when it is not blocked",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Frenzy Sliver",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A attacks player B with Frenzy Sliver.",
+        "B declares no blockers.",
+        "No spells or abilities are used; combat damage is dealt."
+      ],
+      "variants": [
+        {
+          "label": "unblocked",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The frenzy trigger fires. Frenzy Sliver is 2/1 until end of turn and deals 2 damage to B (life 18)."
+        },
+        {
+          "label": "blocked",
+          "polarity": "does_not_fire",
+          "delta": "B blocks Frenzy Sliver with Grizzly Bears.",
+          "expected": "The frenzy trigger does not fire. Frenzy Sliver stays 1/1, deals 1 damage to Grizzly Bears and dies to its 2 damage. B's life stays 20."
+        }
+      ],
+      "cards": [
+        "Frenzy Sliver",
+        "Grizzly Bears"
+      ],
+      "forge_notes": "Frenzy Sliver gives every Sliver, itself included, an AttackerUnblocked trigger rather than a Frenzy keyword."
+    },
+    {
+      "id": "702.68b-1",
+      "rules": [
+        "702.68b"
+      ],
+      "title": "Each instance of frenzy triggers separately",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Frenzy Sliver",
+              "summoning_sick": false
+            },
+            {
+              "card": "Frenzy Sliver",
+              "summoning_sick": true
+            }
+          ],
+          "B": [
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A attacks player B with the Frenzy Sliver that is not summoning sick.",
+        "B declares no blockers.",
+        "No spells or abilities are used; combat damage is dealt."
+      ],
+      "variants": [
+        {
+          "label": "two_instances",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The attacking Frenzy Sliver has two frenzy 1 instances. Both trigger separately. It is 3/1 until end of turn and deals 3 damage to B (life 17)."
+        },
+        {
+          "label": "one_instance",
+          "polarity": "other",
+          "delta": "A controls only one Frenzy Sliver (the attacker).",
+          "expected": "The attacking Frenzy Sliver has one frenzy 1 instance. It triggers once. It is 2/1 until end of turn and deals 2 damage to B (life 18)."
+        },
+        {
+          "label": "blocked",
+          "polarity": "does_not_fire",
+          "delta": "B blocks the attacking Frenzy Sliver with Grizzly Bears.",
+          "expected": "Neither frenzy instance triggers. The attacker stays 1/1, deals 1 damage to Grizzly Bears and dies. B's life stays 20."
+        }
+      ],
+      "cards": [
+        "Frenzy Sliver",
+        "Grizzly Bears"
+      ],
+      "forge_notes": "Each Frenzy Sliver grants the trigger to every Sliver, so two of them give the attacker two separate triggers; confirm Forge does not merge identical granted triggers."
+    }
+  ]
+}

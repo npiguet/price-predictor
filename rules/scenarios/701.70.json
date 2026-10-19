@@ -1,0 +1,78 @@
+{
+  "unit": "701.70",
+  "verified": true,
+  "review": [
+    "701.70a-1: the library order was implicit; setup notes now state that Forest is the top card."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "701.70a-1",
+      "rules": [
+        "701.70a"
+      ],
+      "title": "Recruit draws, discards, and makes a Human Soldier only if the discard was a nonland card",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Esgaroth Garrison",
+            "Grizzly Bears"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Forest",
+            "Mountain"
+          ]
+        },
+        "exile": {},
+        "notes": "A's library is listed top first: Forest is the top card."
+      },
+      "decisions": [
+        "A casts Esgaroth Garrison, tapping all five Plains.",
+        "Both players pass; the creature resolves and its enter trigger (recruit) goes on the stack. Both players pass.",
+        "On resolution A draws Forest from the top of the library, then discards Grizzly Bears."
+      ],
+      "variants": [
+        {
+          "label": "discard_nonland",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "A drew Forest and discarded Grizzly Bears (in A's graveyard). A 1/1 white Human Soldier creature token is created; Esgaroth Garrison's power is 2."
+        },
+        {
+          "label": "discard_land",
+          "polarity": "does_not_fire",
+          "delta": "A discards the drawn Forest instead of Grizzly Bears.",
+          "expected": "Forest is in A's graveyard and Grizzly Bears stays in A's hand. No token is created; Esgaroth Garrison's power is 1."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Esgaroth Garrison",
+        "Grizzly Bears",
+        "Forest",
+        "Mountain"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

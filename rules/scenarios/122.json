@@ -1,0 +1,1262 @@
+{
+  "unit": "122",
+  "verified": true,
+  "review": [
+    "122.1g-1: trigger_pending left the Siege trigger's 'you may cast it transformed' choice open and did not say the trigger exiles the battle; fixed the decision (A declines) and stated the exile outcome.",
+    "122.1i-1: library put Forest on top, so two rad counters would mill Forest and one Grizzly Bears, contradicting both firing variants' expected outcomes; reordered the library to put both Grizzly Bears on top."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "122.1a-1",
+      "rules": [
+        "122.1a"
+      ],
+      "title": "+X/+Y and -X/-Y counters change power and toughness",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Grizzly Bears",
+              "counters": {
+                "+1/+1": 2
+              }
+            }
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "No action is taken; the stable board is read."
+      ],
+      "variants": [
+        {
+          "label": "plus_counters",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears has two +1/+1 counters and is a 4/4."
+        },
+        {
+          "label": "charge_counters",
+          "polarity": "does_not_fire",
+          "delta": "Grizzly Bears has two charge counters instead of +1/+1 counters.",
+          "expected": "Grizzly Bears is a 2/2; charge counters change no characteristic."
+        },
+        {
+          "label": "minus_counter",
+          "polarity": "other",
+          "delta": "Grizzly Bears has one -1/-1 counter instead of two +1/+1 counters.",
+          "expected": "Grizzly Bears is a 1/1."
+        }
+      ],
+      "cards": [
+        "Grizzly Bears"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "122.1b-1",
+      "rules": [
+        "122.1b"
+      ],
+      "title": "A keyword counter gives the permanent that keyword",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Grizzly Bears",
+              "counters": {
+                "flying": 1
+              }
+            }
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "No action is taken; the stable board is read."
+      ],
+      "variants": [
+        {
+          "label": "flying_counter",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears has flying and is a 2/2."
+        },
+        {
+          "label": "charge_counter",
+          "polarity": "does_not_fire",
+          "delta": "Grizzly Bears has one charge counter instead of a flying counter.",
+          "expected": "Grizzly Bears has no flying and is a 2/2."
+        },
+        {
+          "label": "deathtouch_counter",
+          "polarity": "other",
+          "delta": "Grizzly Bears has one deathtouch counter instead of a flying counter.",
+          "expected": "Grizzly Bears has deathtouch and does not have flying."
+        }
+      ],
+      "cards": [
+        "Grizzly Bears"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "122.1c-1",
+      "rules": [
+        "122.1c"
+      ],
+      "title": "A shield counter prevents damage and is removed instead",
+      "record_kind": "rewrite",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Swamp"
+          ],
+          "B": [
+            {
+              "card": "Grizzly Bears",
+              "counters": {
+                "shield": 1
+              }
+            }
+          ]
+        },
+        "hand": {
+          "A": [
+            "Shock",
+            "Disfigure"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Shock targeting Grizzly Bears, tapping Mountain.",
+        "Both players pass; Shock resolves."
+      ],
+      "variants": [
+        {
+          "label": "shield_damage",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The 2 damage to Grizzly Bears is prevented and its shield counter is removed; Grizzly Bears stays on the battlefield with no damage marked and no counters."
+        },
+        {
+          "label": "no_shield",
+          "polarity": "other",
+          "delta": "Grizzly Bears has no shield counter.",
+          "expected": "Grizzly Bears is dealt 2 damage and moves to B's graveyard in the state-based check."
+        },
+        {
+          "label": "shrunk_not_damaged",
+          "polarity": "does_not_fire",
+          "delta": "A casts Disfigure targeting Grizzly Bears, tapping Swamp, instead of Shock.",
+          "expected": "Grizzly Bears becomes 0/0 and moves to B's graveyard in the state-based check; its shield counter did not apply."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Swamp",
+        "Shock",
+        "Disfigure",
+        "Grizzly Bears"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "122.1c-2",
+      "rules": [
+        "122.1c"
+      ],
+      "title": "A shield counter replaces destruction by an effect with removing the counter",
+      "record_kind": "rewrite",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Swamp",
+            "Swamp"
+          ],
+          "B": [
+            {
+              "card": "Grizzly Bears",
+              "counters": {
+                "shield": 1
+              }
+            }
+          ]
+        },
+        "hand": {
+          "A": [
+            "Doom Blade",
+            "Disfigure"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Doom Blade targeting Grizzly Bears, tapping two Swamps.",
+        "Both players pass; Doom Blade resolves."
+      ],
+      "variants": [
+        {
+          "label": "shield_destroy",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears is not destroyed; its shield counter is removed and it stays on the battlefield with no counters."
+        },
+        {
+          "label": "no_shield",
+          "polarity": "other",
+          "delta": "Grizzly Bears has no shield counter.",
+          "expected": "Grizzly Bears is destroyed and moves to B's graveyard."
+        },
+        {
+          "label": "shrunk_not_destroyed",
+          "polarity": "does_not_fire",
+          "delta": "A casts Disfigure targeting Grizzly Bears, tapping one Swamp, instead of Doom Blade.",
+          "expected": "Grizzly Bears becomes 0/0 and moves to B's graveyard in the state-based check; its shield counter is not used because nothing destroyed it."
+        }
+      ],
+      "cards": [
+        "Swamp",
+        "Doom Blade",
+        "Disfigure",
+        "Grizzly Bears"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "122.1d-1",
+      "rules": [
+        "122.1d"
+      ],
+      "title": "A stun counter replaces untapping with removing the counter",
+      "record_kind": "rewrite",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Forest",
+            {
+              "card": "Grizzly Bears",
+              "tapped": true,
+              "counters": {
+                "stun": 1
+              }
+            }
+          ]
+        },
+        "hand": {
+          "A": [
+            "Vitalize"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Vitalize, tapping Forest.",
+        "Both players pass; Vitalize resolves."
+      ],
+      "variants": [
+        {
+          "label": "one_stun",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears does not untap; its stun counter is removed and it stays tapped with no counters."
+        },
+        {
+          "label": "no_stun",
+          "polarity": "does_not_fire",
+          "delta": "Grizzly Bears has no stun counter.",
+          "expected": "Grizzly Bears untaps."
+        },
+        {
+          "label": "two_stun",
+          "polarity": "other",
+          "delta": "Grizzly Bears has two stun counters.",
+          "expected": "Grizzly Bears stays tapped and keeps one stun counter."
+        }
+      ],
+      "cards": [
+        "Forest",
+        "Grizzly Bears",
+        "Vitalize"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "122.1e-1",
+      "rules": [
+        "122.1e"
+      ],
+      "title": "A planeswalker with 0 loyalty counters is put into the graveyard",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "B",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "B": [
+            {
+              "card": "Jace Beleren",
+              "counters": {
+                "loyalty": 1
+              }
+            }
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {
+          "B": [
+            "Island",
+            "Island"
+          ]
+        },
+        "exile": {},
+        "notes": "Jace Beleren has been on the battlefield since an earlier turn; no loyalty ability has been activated this turn."
+      },
+      "decisions": [
+        "B activates Jace Beleren's -1 ability targeting B, removing one loyalty counter as the cost.",
+        "Both players pass; the ability resolves."
+      ],
+      "variants": [
+        {
+          "label": "one_loyalty",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Jace Beleren has 0 loyalty after paying the cost and is put into B's graveyard in the state-based check before the ability resolves; the ability still resolves and B draws a card."
+        },
+        {
+          "label": "two_loyalty",
+          "polarity": "does_not_fire",
+          "delta": "Jace Beleren has 2 loyalty.",
+          "expected": "Jace Beleren has 1 loyalty and stays on the battlefield; B draws a card."
+        }
+      ],
+      "cards": [
+        "Jace Beleren",
+        "Island"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "122.1f-1",
+      "rules": [
+        "122.1f"
+      ],
+      "title": "Ten poison counters lose the game",
+      "record_kind": "combat",
+      "setup": {
+        "active": "A",
+        "step": "declare_attackers",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Plague Stinger",
+              "summoning_sick": false
+            },
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            }
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "B has 9 poison counters. B controls no creatures."
+      },
+      "decisions": [
+        "A declares Plague Stinger as an attacker against B.",
+        "No blockers are declared.",
+        "Combat damage is dealt: Plague Stinger deals 1 damage with infect."
+      ],
+      "variants": [
+        {
+          "label": "nine_poison",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "B receives 1 poison counter instead of losing life, now has 10 poison counters and loses the game in the state-based check. B's life stays 20."
+        },
+        {
+          "label": "eight_poison",
+          "polarity": "does_not_fire",
+          "delta": "B has 8 poison counters.",
+          "expected": "B receives 1 poison counter, now has 9, and stays in the game. B's life stays 20."
+        },
+        {
+          "label": "no_infect",
+          "polarity": "other",
+          "delta": "A attacks with Grizzly Bears instead of Plague Stinger.",
+          "expected": "Grizzly Bears deals 2 damage to B: B's life is 18, B still has 9 poison counters and stays in the game."
+        }
+      ],
+      "cards": [
+        "Plague Stinger",
+        "Grizzly Bears"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "122.1g-1",
+      "rules": [
+        "122.1g"
+      ],
+      "title": "A battle with 0 defense counters goes to the graveyard unless it is the source of a pending trigger",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Island",
+            {
+              "card": "Invasion of Zendikar",
+              "counters": {
+                "defense": 3
+              }
+            }
+          ]
+        },
+        "hand": {
+          "A": [
+            "Lightning Bolt",
+            "Stifle"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "B is the protector of A's Invasion of Zendikar."
+      },
+      "decisions": [
+        "A casts Lightning Bolt targeting Invasion of Zendikar, tapping Mountain.",
+        "Both players pass; Lightning Bolt resolves and removes the last 3 defense counters; the Siege's defeat trigger goes on the stack.",
+        "A casts Stifle targeting the defeat trigger, tapping Island.",
+        "Both players pass; Stifle resolves."
+      ],
+      "variants": [
+        {
+          "label": "stifled",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The defeat trigger is countered. Invasion of Zendikar has 0 defense and is not the source of an ability on the stack, so it is put into A's graveyard."
+        },
+        {
+          "label": "trigger_pending",
+          "polarity": "other",
+          "delta": "A does not cast Stifle; both players pass, the defeat trigger resolves, and A chooses not to cast Invasion of Zendikar transformed.",
+          "expected": "While the defeat trigger is on the stack, Invasion of Zendikar stays on the battlefield with 0 defense and is not put into the graveyard. The trigger resolves and exiles it; it stays in A's exile and A's graveyard is empty."
+        },
+        {
+          "label": "four_defense",
+          "polarity": "does_not_fire",
+          "delta": "Invasion of Zendikar has 4 defense counters, so no defeat trigger goes on the stack and Stifle is not cast.",
+          "expected": "Invasion of Zendikar keeps 1 defense counter and stays on the battlefield."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Island",
+        "Invasion of Zendikar",
+        "Lightning Bolt",
+        "Stifle"
+      ],
+      "forge_notes": "Damage to a battle removes defense counters (310.6). Forge may implement the Siege's intrinsic defeat trigger engine-side rather than in the card script."
+    },
+    {
+      "id": "122.1h-1",
+      "rules": [
+        "122.1h"
+      ],
+      "title": "A permanent with a finality counter is exiled instead of going to the graveyard",
+      "record_kind": "rewrite",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Island"
+          ],
+          "B": [
+            {
+              "card": "Grizzly Bears",
+              "counters": {
+                "finality": 1
+              }
+            }
+          ]
+        },
+        "hand": {
+          "A": [
+            "Shock",
+            "Unsummon"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Shock targeting Grizzly Bears, tapping Mountain.",
+        "Both players pass; Shock resolves."
+      ],
+      "variants": [
+        {
+          "label": "finality_dies",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears is dealt lethal damage and is exiled instead of moving to B's graveyard; B's graveyard is empty."
+        },
+        {
+          "label": "no_finality",
+          "polarity": "other",
+          "delta": "Grizzly Bears has no finality counter.",
+          "expected": "Grizzly Bears moves to B's graveyard."
+        },
+        {
+          "label": "bounced",
+          "polarity": "does_not_fire",
+          "delta": "A casts Unsummon targeting Grizzly Bears, tapping Island, instead of Shock.",
+          "expected": "Grizzly Bears returns to B's hand; it does not go to the graveyard, so nothing is exiled."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Island",
+        "Shock",
+        "Unsummon",
+        "Grizzly Bears"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "122.1i-1",
+      "rules": [
+        "122.1i"
+      ],
+      "title": "Rad counters trigger a mill at the start of the precombat main phase",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "draw",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {},
+        "hand": {},
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Grizzly Bears",
+            "Grizzly Bears",
+            "Forest",
+            "Forest"
+          ]
+        },
+        "exile": {},
+        "notes": "A has 2 rad counters. A's draw for the turn has already been made; the top of A's library is listed first. B has no rad counters."
+      },
+      "decisions": [
+        "Both players pass priority in the draw step.",
+        "The precombat main phase begins and the rad trigger, if any, goes on the stack.",
+        "Both players pass; the trigger resolves."
+      ],
+      "variants": [
+        {
+          "label": "two_rad",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The rad trigger fires: A mills 2 cards (both Grizzly Bears), loses 2 life (18) and loses 2 rad counters, leaving 0."
+        },
+        {
+          "label": "no_rad",
+          "polarity": "does_not_fire",
+          "delta": "A has no rad counters.",
+          "expected": "No rad trigger fires; nothing is milled and A's life stays 20."
+        },
+        {
+          "label": "one_rad",
+          "polarity": "other",
+          "delta": "A has 1 rad counter.",
+          "expected": "The rad trigger fires: A mills 1 card (a Grizzly Bears), loses 1 life (19) and has 0 rad counters."
+        }
+      ],
+      "cards": [
+        "Forest",
+        "Grizzly Bears"
+      ],
+      "forge_notes": "Rad counters on a player are not a card state, so they are given in notes."
+    },
+    {
+      "id": "122.1j-1",
+      "rules": [
+        "122.1j"
+      ],
+      "title": "Hone counters on an Equipment give +1/+0 to the equipped creature",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Grizzly Bears",
+            {
+              "card": "Sting, Bilbo's Sword",
+              "attached_to": "Grizzly Bears",
+              "counters": {
+                "hone": 2
+              }
+            }
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "No action is taken; the stable board is read."
+      ],
+      "variants": [
+        {
+          "label": "two_hone",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears is a 4/2."
+        },
+        {
+          "label": "no_hone",
+          "polarity": "does_not_fire",
+          "delta": "Sting has no hone counters.",
+          "expected": "Grizzly Bears is a 2/2."
+        },
+        {
+          "label": "unattached",
+          "polarity": "other",
+          "delta": "Sting is not attached to Grizzly Bears.",
+          "expected": "Grizzly Bears is a 2/2; the hone counters give nothing to a creature that is not equipped."
+        }
+      ],
+      "cards": [
+        "Sting, Bilbo's Sword",
+        "Grizzly Bears"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "122.2-1",
+      "rules": [
+        "122.2"
+      ],
+      "title": "Counters cease to exist when an object changes zones",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Island",
+            "Island",
+            {
+              "card": "Grizzly Bears",
+              "counters": {
+                "+1/+1": 2
+              }
+            }
+          ]
+        },
+        "hand": {
+          "A": [
+            "Cloudshift",
+            "Reality Ripple"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Cloudshift targeting Grizzly Bears, tapping Plains.",
+        "Both players pass; Cloudshift resolves."
+      ],
+      "variants": [
+        {
+          "label": "exile_return",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears is exiled and returns to the battlefield as a new object with no counters, a 2/2."
+        },
+        {
+          "label": "phase_out",
+          "polarity": "does_not_fire",
+          "delta": "A casts Reality Ripple targeting Grizzly Bears, tapping two Islands, instead of Cloudshift.",
+          "expected": "Grizzly Bears phases out without changing zones and keeps its two +1/+1 counters."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Island",
+        "Grizzly Bears",
+        "Cloudshift",
+        "Reality Ripple"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "122.3-1",
+      "rules": [
+        "122.3"
+      ],
+      "title": "+1/+1 and -1/-1 counters on one permanent cancel in pairs",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Fume Spitter"
+          ],
+          "B": [
+            {
+              "card": "Grizzly Bears",
+              "counters": {
+                "+1/+1": 1
+              }
+            }
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A activates Fume Spitter's ability, sacrificing it, targeting Grizzly Bears.",
+        "Both players pass; the ability resolves and puts a -1/-1 counter on Grizzly Bears."
+      ],
+      "variants": [
+        {
+          "label": "one_each",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears has one +1/+1 and one -1/-1 counter; both are removed in the state-based check, leaving no counters and a 2/2."
+        },
+        {
+          "label": "only_minus",
+          "polarity": "does_not_fire",
+          "delta": "Grizzly Bears has no +1/+1 counter.",
+          "expected": "Grizzly Bears keeps its one -1/-1 counter and is a 1/1."
+        },
+        {
+          "label": "two_plus",
+          "polarity": "other",
+          "delta": "Grizzly Bears has two +1/+1 counters.",
+          "expected": "One +1/+1 and the -1/-1 counter are removed, leaving one +1/+1 counter; Grizzly Bears is a 3/3."
+        }
+      ],
+      "cards": [
+        "Fume Spitter",
+        "Grizzly Bears"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "122.4-1",
+      "rules": [
+        "122.4"
+      ],
+      "title": "Counters above a stated maximum are removed",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "upkeep",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Rasputin Dreamweaver",
+              "counters": {
+                "dream": 7
+              },
+              "summoning_sick": false
+            }
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Rasputin Dreamweaver started the turn untapped."
+      },
+      "decisions": [
+        "Rasputin Dreamweaver's upkeep trigger goes on the stack.",
+        "Both players pass; the trigger resolves and puts a dream counter on Rasputin Dreamweaver."
+      ],
+      "variants": [
+        {
+          "label": "at_cap",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Rasputin Dreamweaver ends with 7 dream counters; the counter above the maximum of seven is removed."
+        },
+        {
+          "label": "below_cap",
+          "polarity": "does_not_fire",
+          "delta": "Rasputin Dreamweaver has 5 dream counters.",
+          "expected": "Rasputin Dreamweaver ends with 6 dream counters; nothing is removed."
+        }
+      ],
+      "cards": [
+        "Rasputin Dreamweaver"
+      ],
+      "forge_notes": "Forge scripts the cap as a MaxCounter static, which may refuse the eighth counter rather than remove it in a state-based check; the end count (7) is the same either way."
+    },
+    {
+      "id": "122.5-1",
+      "rules": [
+        "122.5"
+      ],
+      "title": "Moving a counter removes it from one object and puts it on another, or does nothing",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            "Island",
+            {
+              "card": "Grizzly Bears",
+              "counters": {
+                "+1/+1": 2
+              }
+            },
+            "Runeclaw Bear"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Fate Transfer",
+            "Unsummon"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Fate Transfer targeting Grizzly Bears (source) and Runeclaw Bear, tapping two Islands.",
+        "Both players pass; Fate Transfer resolves."
+      ],
+      "variants": [
+        {
+          "label": "counters_move",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Both +1/+1 counters leave Grizzly Bears (now 2/2) and are put on Runeclaw Bear (now 4/4)."
+        },
+        {
+          "label": "no_counters",
+          "polarity": "does_not_fire",
+          "delta": "Grizzly Bears has no counters.",
+          "expected": "No counter is removed or put on anything; both creatures stay 2/2."
+        },
+        {
+          "label": "target_leaves",
+          "polarity": "other",
+          "delta": "In response to Fate Transfer, A casts Unsummon targeting Runeclaw Bear, tapping the third Island; both players pass and Unsummon resolves first.",
+          "expected": "Runeclaw Bear returns to A's hand; no counter moves, and Grizzly Bears keeps its two +1/+1 counters (a 4/4)."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Grizzly Bears",
+        "Runeclaw Bear",
+        "Fate Transfer",
+        "Unsummon"
+      ],
+      "forge_notes": "Forge's MoveCounter effect may handle a missing second target differently from the rule; the expected outcome is that nothing moves."
+    },
+    {
+      "id": "122.6a-1",
+      "rules": [
+        "122.6a"
+      ],
+      "title": "The controller puts the counters on an object entering with counters",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest",
+            {
+              "card": "Vorinclex, Monstrous Raider",
+              "summoning_sick": false
+            }
+          ]
+        },
+        "hand": {
+          "A": [
+            "Hangarback Walker"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Hangarback Walker with X=2, tapping four Forests.",
+        "Both players pass; Hangarback Walker resolves and enters with its counters."
+      ],
+      "variants": [
+        {
+          "label": "own_vorinclex",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "A is the player putting the counters, so Vorinclex doubles them: Hangarback Walker enters with 4 +1/+1 counters and is a 4/4."
+        },
+        {
+          "label": "opponent_vorinclex",
+          "polarity": "other",
+          "delta": "Vorinclex, Monstrous Raider is on B's battlefield instead of A's.",
+          "expected": "A is an opponent of Vorinclex's controller, so the counters are halved: Hangarback Walker enters with 1 +1/+1 counter and is a 1/1."
+        },
+        {
+          "label": "no_vorinclex",
+          "polarity": "does_not_fire",
+          "delta": "Neither player controls Vorinclex, Monstrous Raider.",
+          "expected": "Hangarback Walker enters with 2 +1/+1 counters and is a 2/2."
+        }
+      ],
+      "cards": [
+        "Forest",
+        "Vorinclex, Monstrous Raider",
+        "Hangarback Walker"
+      ],
+      "forge_notes": "Forge's Vorinclex replacement keys on the source of the AddCounter event; whether an etbCounter replacement names the entering permanent's controller as the source is the point being tested."
+    },
+    {
+      "id": "122.7-1",
+      "rules": [
+        "122.7"
+      ],
+      "title": "An Nth-counter trigger fires only when the count crosses from below N",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            "Island",
+            {
+              "card": "Midnight Clock",
+              "counters": {
+                "hour": 11
+              }
+            }
+          ]
+        },
+        "hand": {},
+        "graveyard": {
+          "A": [
+            "Grizzly Bears"
+          ]
+        },
+        "library": {
+          "A": [
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest"
+          ]
+        },
+        "exile": {},
+        "notes": "The turn is in its first main phase, so Midnight Clock's upkeep trigger is not involved."
+      },
+      "decisions": [
+        "A activates Midnight Clock's {2}{U} ability, tapping three Islands.",
+        "Both players pass; the ability resolves and puts an hour counter on Midnight Clock."
+      ],
+      "variants": [
+        {
+          "label": "eleven_to_twelve",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Midnight Clock goes from 11 to 12 hour counters and its trigger fires: A's hand and graveyard are shuffled into the library, A draws seven cards, and Midnight Clock is exiled; A's graveyard is empty."
+        },
+        {
+          "label": "ten_to_eleven",
+          "polarity": "does_not_fire",
+          "delta": "Midnight Clock has 10 hour counters.",
+          "expected": "Midnight Clock goes from 10 to 11 hour counters; its trigger does not fire and Grizzly Bears stays in A's graveyard."
+        },
+        {
+          "label": "twelve_to_thirteen",
+          "polarity": "does_not_fire",
+          "delta": "Midnight Clock already has 12 hour counters.",
+          "expected": "Midnight Clock goes from 12 to 13 hour counters; it already had 12 or more beforehand, so its trigger does not fire and it stays on the battlefield."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Midnight Clock",
+        "Grizzly Bears",
+        "Forest"
+      ],
+      "forge_notes": "The twelve-counter start in the last variant is reachable if the twelfth-counter trigger was countered earlier. Forge scripts the trigger as CounterAmount$ EQ12 on the counter total."
+    },
+    {
+      "id": "122.8-1",
+      "rules": [
+        "122.8"
+      ],
+      "title": "A leaves-the-battlefield trigger gives the other object the same counters the leaver had",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Island",
+            {
+              "card": "Iron Apprentice",
+              "counters": {
+                "+1/+1": 2
+              }
+            },
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Shock",
+            "Unsummon"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Shock targeting Iron Apprentice, tapping Mountain.",
+        "Both players pass; Shock resolves and Iron Apprentice dies.",
+        "Iron Apprentice's trigger targets Grizzly Bears; both players pass and it resolves."
+      ],
+      "variants": [
+        {
+          "label": "two_counters",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Iron Apprentice moves to A's graveyard; Grizzly Bears receives two +1/+1 counters (the number the Apprentice had) and is a 4/4."
+        },
+        {
+          "label": "two_kinds",
+          "polarity": "other",
+          "delta": "Iron Apprentice has one +1/+1 counter and one charge counter.",
+          "expected": "Grizzly Bears receives one +1/+1 counter and one charge counter and is a 3/3."
+        },
+        {
+          "label": "bounced",
+          "polarity": "does_not_fire",
+          "delta": "A casts Unsummon targeting Iron Apprentice, tapping Island, instead of Shock.",
+          "expected": "Iron Apprentice returns to A's hand; it did not die, so its trigger does not fire and Grizzly Bears stays a 2/2."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Island",
+        "Iron Apprentice",
+        "Grizzly Bears",
+        "Shock",
+        "Unsummon"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "122.9-1",
+      "rules": [
+        "122.9"
+      ],
+      "title": "An ability with a sacrifice cost gives the other object the same counters the sacrificed object had",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Plains",
+            {
+              "card": "Zack Fair",
+              "counters": {
+                "+1/+1": 2
+              }
+            },
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A activates Zack Fair's ability, paying {1} with a Plains and sacrificing Zack Fair, targeting Grizzly Bears.",
+        "Both players pass; the ability resolves."
+      ],
+      "variants": [
+        {
+          "label": "two_counters",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Zack Fair moves to A's graveyard; Grizzly Bears gains indestructible until end of turn and receives two +1/+1 counters (the number Zack Fair had), making it a 4/4."
+        },
+        {
+          "label": "one_counter",
+          "polarity": "other",
+          "delta": "Zack Fair has one +1/+1 counter.",
+          "expected": "Grizzly Bears receives one +1/+1 counter and is a 3/3."
+        },
+        {
+          "label": "no_counters",
+          "polarity": "does_not_fire",
+          "delta": "Zack Fair has no counters.",
+          "expected": "Grizzly Bears gains indestructible until end of turn and receives no counters; it stays a 2/2."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Zack Fair",
+        "Grizzly Bears"
+      ],
+      "forge_notes": "Zack Fair normally enters with a +1/+1 counter; the setup gives it two counters directly."
+    }
+  ]
+}

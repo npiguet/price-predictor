@@ -1,0 +1,135 @@
+{
+  "unit": "103",
+  "verified": true,
+  "review": [
+    "103.1c-1: Power Play is a conspiracy that exists only in Conspiracy Draft (rule 905, a chapter 9 casual variant) and the rule governs starting-player determination, which the README puts out of scope; reclassified 103.1c as out_of_scope in triage and dropped the scenario."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "103.6a-1",
+      "rules": [
+        "103.6a"
+      ],
+      "title": "A card allowing it begins the game on the battlefield",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "upkeep",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {},
+        "hand": {
+          "A": [
+            "Leyline of Sanctity",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Plains"
+          ]
+        },
+        "exile": {},
+        "notes": "Pre-game, after mulligans and before turn 1. The seven cards in A's hand are A's opening hand; A takes the opening-hand action."
+      },
+      "decisions": [
+        "A chooses to begin the game with Leyline of Sanctity on the battlefield."
+      ],
+      "variants": [
+        {
+          "label": "in_opening_hand",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Leyline of Sanctity moves from A's hand to the battlefield before turn 1; A's hand has six Plains and A has hexproof."
+        },
+        {
+          "label": "on_top_of_library",
+          "polarity": "does_not_fire",
+          "delta": "Leyline of Sanctity is the top card of A's library and the opening hand is seven Plains.",
+          "expected": "Leyline of Sanctity stays in A's library; nothing is put onto the battlefield before turn 1 and A does not have hexproof."
+        }
+      ],
+      "cards": [
+        "Leyline of Sanctity",
+        "Plains"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "103.8a-1",
+      "rules": [
+        "103.8a"
+      ],
+      "title": "The starting player skips the draw step of their first turn",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "draw",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {},
+        "hand": {
+          "A": [
+            "Mountain"
+          ],
+          "B": [
+            "Mountain"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Plains",
+            "Island"
+          ],
+          "B": [
+            "Plains",
+            "Island"
+          ]
+        },
+        "exile": {},
+        "notes": "Turn 1 of a two-player game; A is the starting player and the draw step is about to begin."
+      },
+      "decisions": [
+        "Both players pass in the draw step with no responses."
+      ],
+      "variants": [
+        {
+          "label": "starting_player_first_turn",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "A draws no card: A's hand stays at Mountain and A's library keeps Plains and Island."
+        },
+        {
+          "label": "opponent_first_turn",
+          "polarity": "does_not_fire",
+          "delta": "It is B's first turn (turn 2) and B is the active player.",
+          "expected": "B draws Plains: B's hand is Mountain and Plains, B's library is Island."
+        },
+        {
+          "label": "starting_player_second_turn",
+          "polarity": "does_not_fire",
+          "delta": "It is A's second turn (turn 3) instead of turn 1.",
+          "expected": "A draws Plains: A's hand is Mountain and Plains, A's library is Island."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Plains",
+        "Island"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

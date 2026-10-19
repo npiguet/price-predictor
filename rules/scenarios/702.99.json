@@ -1,0 +1,242 @@
+{
+  "unit": "702.99",
+  "verified": true,
+  "review": [],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.99a-1",
+      "rules": [
+        "702.99a"
+      ],
+      "title": "A cipher card encoded on a creature casts a free copy when the creature hits a player",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            "Island",
+            "Island",
+            {
+              "card": "Runeclaw Bear",
+              "summoning_sick": false
+            }
+          ]
+        },
+        "hand": {
+          "A": [
+            "Last Thoughts"
+          ],
+          "B": [
+            "Counterspell"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Island",
+            "Island"
+          ]
+        },
+        "exile": {},
+        "notes": "A's library lists the top card first."
+      },
+      "decisions": [
+        "A casts Last Thoughts, tapping the four Islands. B passes (see variants) and it resolves: A draws a card.",
+        "A exiles Last Thoughts encoded on Grizzly Bears.",
+        "A moves to combat and attacks player B with Grizzly Bears. B declares no blockers. Combat damage is dealt.",
+        "If Grizzly Bears's trigger fires, A casts a copy of Last Thoughts without paying its mana cost; it resolves."
+      ],
+      "variants": [
+        {
+          "label": "unblocked",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Last Thoughts is in exile, encoded on Grizzly Bears. Grizzly Bears deals 2 combat damage to B (life 18), the trigger fires, and the free copy resolves. A draws a second card; A's library is empty."
+        },
+        {
+          "label": "blocked",
+          "polarity": "does_not_fire",
+          "delta": "B blocks Grizzly Bears with Runeclaw Bear.",
+          "expected": "Grizzly Bears deals combat damage to Runeclaw Bear, not to a player, so the trigger does not fire. Both creatures are destroyed. B's life stays 20. Last Thoughts stays in exile; A drew only one card."
+        },
+        {
+          "label": "countered",
+          "polarity": "does_not_fire",
+          "delta": "B casts Counterspell on Last Thoughts, tapping both Islands.",
+          "expected": "Last Thoughts is countered and goes to A's graveyard; A draws no card and nothing is encoded. Grizzly Bears deals 2 combat damage to B (life 18) and no trigger fires."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Grizzly Bears",
+        "Runeclaw Bear",
+        "Last Thoughts",
+        "Counterspell"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.99c-1",
+      "rules": [
+        "702.99c"
+      ],
+      "title": "Encoding is lost when the creature leaves the battlefield and returns",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            {
+              "card": "Raging Goblin",
+              "summoning_sick": false
+            }
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Cloudshift"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Island"
+          ]
+        },
+        "exile": {
+          "A": [
+            "Last Thoughts"
+          ]
+        },
+        "notes": "Last Thoughts is exiled and encoded on Raging Goblin."
+      },
+      "decisions": [
+        "A moves to combat and attacks player B with Raging Goblin. B has no creatures and declares no blockers. Combat damage is dealt.",
+        "If Raging Goblin's trigger fires, A casts a copy of Last Thoughts without paying its mana cost; it resolves."
+      ],
+      "variants": [
+        {
+          "label": "still_encoded",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Raging Goblin deals 1 combat damage to B (life 19). The trigger fires and the free copy of Last Thoughts resolves: A draws the Island."
+        },
+        {
+          "label": "flickered",
+          "polarity": "does_not_fire",
+          "delta": "Before combat, A casts Cloudshift targeting Raging Goblin, tapping Plains, and it resolves; the returned Raging Goblin then attacks.",
+          "expected": "Raging Goblin returns as a new object, no longer encoded. It deals 1 combat damage to B (life 19) but no trigger fires; A draws no card."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Raging Goblin",
+        "Cloudshift",
+        "Island",
+        "Last Thoughts"
+      ],
+      "forge_notes": "Raging Goblin has haste, so the returned object can attack. In the flickered variant Cloudshift is cast in main1 before combat."
+    },
+    {
+      "id": "702.99c-2",
+      "rules": [
+        "702.99c"
+      ],
+      "title": "A card stays encoded when the creature changes controller",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "B",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Raging Goblin",
+              "summoning_sick": false
+            },
+            {
+              "card": "Mons's Goblin Raiders",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            "Mountain",
+            "Mountain",
+            "Mountain"
+          ]
+        },
+        "hand": {
+          "B": [
+            "Act of Treason"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "B": [
+            "Island"
+          ]
+        },
+        "exile": {
+          "A": [
+            "Last Thoughts"
+          ]
+        },
+        "notes": "Last Thoughts is owned by A, exiled and encoded on A's Raging Goblin."
+      },
+      "decisions": [
+        "B casts Act of Treason targeting Raging Goblin, tapping all three Mountains; it resolves. B gains control of Raging Goblin until end of turn, untaps it and it gains haste.",
+        "B moves to combat and attacks player A with Raging Goblin. A declares no blockers. Combat damage is dealt.",
+        "If Raging Goblin's trigger fires, B casts a copy of Last Thoughts without paying its mana cost; it resolves."
+      ],
+      "variants": [
+        {
+          "label": "encoded_creature_stolen",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Raging Goblin deals 1 combat damage to A (life 19). The trigger fires for B, its new controller, and the free copy resolves: B draws the Island. Last Thoughts stays in exile."
+        },
+        {
+          "label": "other_creature_stolen",
+          "polarity": "does_not_fire",
+          "delta": "B targets Mons's Goblin Raiders with Act of Treason and attacks with it instead.",
+          "expected": "Mons's Goblin Raiders deals 1 combat damage to A (life 19). It has no encoded card, so no trigger fires; B draws no card."
+        }
+      ],
+      "cards": [
+        "Raging Goblin",
+        "Mons's Goblin Raiders",
+        "Mountain",
+        "Act of Treason",
+        "Island",
+        "Last Thoughts"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

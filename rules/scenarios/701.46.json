@@ -1,0 +1,69 @@
+{
+  "unit": "701.46",
+  "verified": true,
+  "review": [],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "701.46a-1",
+      "rules": [
+        "701.46a"
+      ],
+      "title": "Adapt N adds N +1/+1 counters only if the permanent has none",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Sauroform Hybrid"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "In the has_plus_counter and other_counter_type variants the Hybrid starts with the counter named in the delta."
+      },
+      "decisions": [
+        "A activates Sauroform Hybrid's adapt ability (Adapt 4), tapping all six Forests.",
+        "Both players pass; the ability resolves."
+      ],
+      "variants": [
+        {
+          "label": "no_counters",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Sauroform Hybrid gets four +1/+1 counters and is 6/6."
+        },
+        {
+          "label": "has_plus_counter",
+          "polarity": "does_not_fire",
+          "delta": "Sauroform Hybrid already has one +1/+1 counter.",
+          "expected": "The ability resolves and no counters are added. Sauroform Hybrid keeps its single +1/+1 counter and is 3/3."
+        },
+        {
+          "label": "other_counter_type",
+          "polarity": "fires",
+          "delta": "Sauroform Hybrid already has one charge counter and no +1/+1 counter.",
+          "expected": "A charge counter does not stop adapt: Sauroform Hybrid gets four +1/+1 counters and is 6/6 with one charge counter."
+        }
+      ],
+      "cards": [
+        "Forest",
+        "Sauroform Hybrid"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

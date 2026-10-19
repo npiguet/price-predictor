@@ -1,0 +1,161 @@
+{
+  "unit": "702.85",
+  "verified": true,
+  "review": [
+    "702.85c-1: the base variant carried the cast as its delta; moved the Maelstrom Wanderer cast into decisions, base delta now empty, and the Bloodbraid Elf variant names the lands it taps."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.85a-1",
+      "rules": [
+        "702.85a"
+      ],
+      "title": "Cascade exiles until a cheaper nonland card, casts it free, and bottoms the rest",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Forest",
+            "Forest"
+          ],
+          "B": [
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Bloodbraid Elf"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Mountain",
+            "Shock",
+            "Hill Giant"
+          ]
+        },
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Bloodbraid Elf (mana value 4), tapping all four lands.",
+        "The cascade trigger goes on the stack and resolves: A exiles cards from the top of the library until a nonland card with mana value less than 4 is exiled.",
+        "If such a card was exiled, A casts it without paying its mana cost, targeting Grizzly Bears if it needs a target.",
+        "Both players pass until the stack is empty."
+      ],
+      "variants": [
+        {
+          "label": "cheaper_card",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Mountain and Shock are exiled; A casts Shock free and it kills Grizzly Bears (B's graveyard). Mountain goes to the bottom of A's library, so A's library is Hill Giant then Mountain. Bloodbraid Elf resolves onto the battlefield."
+        },
+        {
+          "label": "no_cheaper_card",
+          "polarity": "does_not_fire",
+          "delta": "A's library, top to bottom, is Mountain, Craw Wurm, Hill Giant instead of Mountain, Shock, Hill Giant.",
+          "expected": "Craw Wurm (mana value 6) and Hill Giant (mana value 4) are not less than 4, so cascade exiles the whole library and casts nothing. All three exiled cards go to the bottom of A's library in random order. Grizzly Bears survives. Bloodbraid Elf resolves onto the battlefield."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Forest",
+        "Bloodbraid Elf",
+        "Shock",
+        "Hill Giant",
+        "Craw Wurm",
+        "Grizzly Bears"
+      ],
+      "forge_notes": "The top of A's library must be pinned. The bottom cards are put in random order, so only the set of bottom cards is asserted when more than one is bottomed."
+    },
+    {
+      "id": "702.85c-1",
+      "rules": [
+        "702.85c"
+      ],
+      "title": "Each instance of cascade triggers separately",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Forest",
+            "Forest",
+            "Forest",
+            "Island",
+            "Island",
+            "Mountain",
+            "Mountain",
+            "Mountain"
+          ],
+          "B": [
+            "Grizzly Bears",
+            "Hill Giant"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Maelstrom Wanderer",
+            "Bloodbraid Elf"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Shock",
+            "Lightning Bolt",
+            "Mountain"
+          ]
+        },
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Maelstrom Wanderer (mana value 8, two instances of cascade), tapping all eight lands.",
+        "Each cascade trigger goes on the stack. The first resolves: A exiles cards until a cheaper nonland card and casts it free (Shock, targeting Grizzly Bears); Shock resolves.",
+        "If a second cascade trigger exists, it resolves: A casts the next cheaper nonland card free (Lightning Bolt, targeting Hill Giant); it resolves."
+      ],
+      "variants": [
+        {
+          "label": "two_instances",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Two cascade triggers. Shock kills Grizzly Bears and Lightning Bolt kills Hill Giant. A's library is Mountain only. Maelstrom Wanderer is on the battlefield."
+        },
+        {
+          "label": "one_instance",
+          "polarity": "does_not_fire",
+          "delta": "A casts Bloodbraid Elf (mana value 4, one instance of cascade), tapping two Mountains and two Forests, instead of Maelstrom Wanderer.",
+          "expected": "One cascade trigger. Shock kills Grizzly Bears; Hill Giant is undamaged. A's library is Lightning Bolt then Mountain, with Lightning Bolt on top. Bloodbraid Elf is on the battlefield."
+        }
+      ],
+      "cards": [
+        "Forest",
+        "Island",
+        "Mountain",
+        "Maelstrom Wanderer",
+        "Bloodbraid Elf",
+        "Shock",
+        "Lightning Bolt",
+        "Grizzly Bears",
+        "Hill Giant"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

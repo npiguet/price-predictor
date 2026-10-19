@@ -1,0 +1,3 @@
+{"id": "702.104", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.104a", "category": "mechanical", "observability": "indirect", "record_kinds": ["rewrite", "resolution"], "outcome": "As a creature with tribute N enters, the chosen opponent may have it enter with N additional +1/+1 counters; the creature enters with them or without.", "note": "Opponent's choice is a decision; entering with counters is the outcome."}
+{"id": "702.104b", "category": "mechanical", "observability": "direct", "record_kinds": ["trigger"], "outcome": "The \"if tribute wasn't paid\" trigger fires only when the chosen opponent declined to add the counters.", "note": ""}

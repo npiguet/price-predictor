@@ -1,0 +1,1202 @@
+{
+  "unit": "709",
+  "verified": true,
+  "review": [
+    "709.2-1: the second variant changed two facts (removed Forest and Island) under a does_not_fire label and its expected carried reasoning; reworded the delta as one fact (B's hand holds only Fire // Ice), set polarity other (a card-count identity has no does_not_fire branch) and stripped reasoning from both expecteds.",
+    "709.3a-1: decisions left the half unnamed; the short_on_mana variant (three Forests) is illegal under the combined cost too, so it did not exercise 709.3a; forge_notes named the wrong card. Fixed decisions to cast Battery, dropped short_on_mana, corrected forge_notes.",
+    "709.3b-1: cast_fire expected carried reasoning; restated as the legality verdict plus outcome.",
+    "709.3c-1: the single_card variant swapped in Shock and produced the same observable outcome as base (2 damage, Bears dies), so it flipped nothing; dropped it and Shock, set ice_half polarity to other (the rule cannot fail to apply) and cleaned the expecteds.",
+    "709.4-1: variants mislabelled (only_split_card was the real test yet marked fires alongside base; no_split_card was not a flip of base); forge_notes named Fire. Made the library hold only Turn // Burn in base (nothing found), with one does_not_fire variant swapping in Shock (found); added 709.4b, whose combined-mana-value clause this exercises.",
+    "709.4b-1: forge_notes named Fire; corrected to Turn and removed AI-behaviour wording from cast_turn's expected.",
+    "709.4c-1: forge_notes named Fire; corrected to Commit.",
+    "709.4d-1: forge_notes named Fire; corrected to Turn and removed AI-behaviour wording from burn_only's expected.",
+    "709.5a-1: the Central Elevator search ran over a Room card in the library, where 709.4 already gives the combined types, so it did not exercise the shared type line; replaced it with a playability scenario where Annul can target a cast Bottomless Pool half (an enchantment spell) but not the Ice half of Fire // Ice.",
+    "709.5d-1: decisions left the half unnamed; named Central Elevator in the decisions.",
+    "709.5d-2: cast_instead's delta named several changes loosely; restated it as the one fact varied (how the Room reaches the battlefield) with the mana it uses.",
+    "709.5f-1: in nothing_locked Locker Room is unlocked, so its combat-damage draw trigger fires and A would draw from an empty library; added Island to A's library and the draw to the expected.",
+    "709.5g-1: nothing_unlocked changed two facts (the Room's state and A's choice, switching to unlock); now changes only the starting state and A still chooses to lock, so no designation changes.",
+    "709.5h-1: other_door's delta reworded as the single varied fact (which door is locked) with its payment."
+  ],
+  "skipped": [
+    {
+      "id": "709.5b",
+      "reason": "cannot be illustrated reliably: the rule concerns the copiable values of a Room spell on the stack, whose only observable consequence (the designation a copied Room spell's token enters with) is fixed by rulings outside the rule text, and no record field exposes copiable values"
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "709.2-1",
+      "rules": [
+        "709.2"
+      ],
+      "title": "A split card is one card when discarded",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Swamp",
+            "Swamp",
+            "Swamp"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Mind Rot"
+          ],
+          "B": [
+            "Fire",
+            "Forest",
+            "Island"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Fire is the split card Fire // Ice."
+      },
+      "decisions": [
+        "A casts Mind Rot targeting B, tapping three Swamps.",
+        "Both players pass; Mind Rot resolves.",
+        "B chooses to discard Fire // Ice and Forest."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "B discards exactly two cards, Fire // Ice and Forest, which move to B's graveyard; Island stays in B's hand."
+        },
+        {
+          "label": "lone_split_card",
+          "polarity": "other",
+          "delta": "B's hand holds only Fire // Ice.",
+          "expected": "B discards Fire // Ice and B's hand is empty; one card moved to B's graveyard."
+        }
+      ],
+      "cards": [
+        "Swamp",
+        "Mind Rot",
+        "Fire",
+        "Ice",
+        "Forest",
+        "Island"
+      ],
+      "forge_notes": "Forge names a split card by its first half's Name: line, so the card appears as 'Fire' in zones; its second half is the ALTERNATE Name: line. The rule has no does_not_fire branch: a split card is always one card."
+    },
+    {
+      "id": "709.3a-1",
+      "rules": [
+        "709.3a"
+      ],
+      "title": "Only the chosen half of a split card is checked for castability",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest"
+          ],
+          "B": [
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Assault"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Assault is the split card Assault // Battery, combined mana cost {3}{R}{G}; Assault costs {R}, Battery costs {3}{G}."
+      },
+      "decisions": [
+        "A casts the Battery half ({3}{G}) of Assault // Battery, tapping the four Forests."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Casting Battery is legal; it resolves and A creates a 3/3 green Elephant token."
+        },
+        {
+          "label": "other_half",
+          "polarity": "does_not_fire",
+          "delta": "A chooses the Assault half ({R}) targeting Grizzly Bears instead, still with only the four Forests.",
+          "expected": "Casting Assault is illegal: {R} cannot be paid with Forests."
+        }
+      ],
+      "cards": [
+        "Forest",
+        "Assault",
+        "Battery",
+        "Grizzly Bears"
+      ],
+      "forge_notes": "Forge names a split card by its first half's Name: line, so the card appears as 'Assault' in zones; its second half is the ALTERNATE Name: line."
+    },
+    {
+      "id": "709.3b-1",
+      "rules": [
+        "709.3b"
+      ],
+      "title": "A split spell on the stack has only the characteristics of the half cast",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Mountain"
+          ],
+          "B": [
+            "Mountain",
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Fire"
+          ],
+          "B": [
+            "Red Elemental Blast"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Island"
+          ]
+        },
+        "exile": {},
+        "notes": "Fire is the split card Fire // Ice: Fire is red, Ice is blue, the card in hand is both."
+      },
+      "decisions": [
+        "A casts the Ice half ({1}{U}) targeting Grizzly Bears, tapping Island and Mountain.",
+        "A passes priority.",
+        "B casts Red Elemental Blast choosing the mode 'counter target blue spell', targeting Ice and tapping Mountain.",
+        "Both players pass; Red Elemental Blast resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Ice is a blue spell, so Red Elemental Blast has a legal target and counters it: Ice goes to A's graveyard, Grizzly Bears is not tapped, A draws no card."
+        },
+        {
+          "label": "cast_fire",
+          "polarity": "does_not_fire",
+          "delta": "A casts the Fire half ({1}{R}) instead, dealing 2 damage to Grizzly Bears; B has Red Elemental Blast available.",
+          "expected": "Fire is a red spell only: Red Elemental Blast cannot be cast (no blue spell or blue permanent to target); Fire resolves and Grizzly Bears dies."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Mountain",
+        "Fire",
+        "Ice",
+        "Grizzly Bears",
+        "Red Elemental Blast"
+      ],
+      "forge_notes": "Forge names a split card by its first half's Name: line, so the card appears as 'Fire' in zones; its second half is the ALTERNATE Name: line."
+    },
+    {
+      "id": "709.3c-1",
+      "rules": [
+        "709.3c"
+      ],
+      "title": "A cast copy of a split card keeps both halves",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain"
+          ],
+          "B": [
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Mizzix's Mastery"
+          ]
+        },
+        "graveyard": {
+          "A": [
+            "Fire"
+          ]
+        },
+        "library": {
+          "A": [
+            "Island"
+          ]
+        },
+        "exile": {},
+        "notes": "Fire is the split card Fire // Ice in A's graveyard."
+      },
+      "decisions": [
+        "A casts Mizzix's Mastery ({3}{R}) targeting Fire // Ice in A's graveyard, tapping four Mountains.",
+        "Both players pass; Mizzix's Mastery resolves, exiling Fire // Ice and copying it.",
+        "A casts the copy without paying its mana cost, choosing the Fire half, dealing 2 damage to Grizzly Bears.",
+        "Both players pass; the copy resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The copy is cast as Fire: Grizzly Bears is dealt 2 damage and dies. The copy ceases to exist and Mizzix's Mastery is exiled."
+        },
+        {
+          "label": "ice_half",
+          "polarity": "other",
+          "delta": "A casts the copy as the Ice half, targeting Grizzly Bears.",
+          "expected": "The copy is cast as Ice: Grizzly Bears becomes tapped and A draws Island. Mizzix's Mastery is exiled."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Mizzix's Mastery",
+        "Fire",
+        "Ice",
+        "Grizzly Bears",
+        "Island"
+      ],
+      "forge_notes": "Forge names a split card by its first half's Name: line, so the card appears as 'Fire' in zones; its second half is the ALTERNATE Name: line. Forge's Play effect with CopyCard$ True may not offer the half choice for a copied split card. The rule has no does_not_fire branch: a cast copy of a split card always keeps both halves."
+    },
+    {
+      "id": "709.4-1",
+      "rules": [
+        "709.4",
+        "709.4b"
+      ],
+      "title": "Outside the stack a split card has its combined mana value",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Spellseeker"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Turn"
+          ]
+        },
+        "exile": {},
+        "notes": "Turn is the split card Turn // Burn: Turn {2}{U} (MV 3), Burn {1}{R} (MV 2), combined mana cost {2}{U}{1}{R} (MV 5). Spellseeker searches for an instant or sorcery card with mana value 2 or less."
+      },
+      "decisions": [
+        "A casts Spellseeker, tapping three Islands.",
+        "Both players pass; Spellseeker resolves and enters.",
+        "Its enters trigger resolves; A accepts the optional search."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "No card in A's library is a legal find: A puts nothing into hand, Turn // Burn stays in the library and A's hand is empty."
+        },
+        {
+          "label": "single_card",
+          "polarity": "does_not_fire",
+          "delta": "A's library holds Shock instead of Turn // Burn.",
+          "expected": "A finds Shock and puts it into hand."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Spellseeker",
+        "Turn",
+        "Burn",
+        "Shock"
+      ],
+      "forge_notes": "Forge names a split card by its first half's Name: line, so the card appears as 'Turn' in zones; its second half is the ALTERNATE Name: line."
+    },
+    {
+      "id": "709.4b-1",
+      "rules": [
+        "709.4b"
+      ],
+      "title": "A split spell on the stack has the mana value of its half, not the combined value",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            "Mountain"
+          ],
+          "B": [
+            "Island",
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Turn"
+          ],
+          "B": [
+            "Spell Snare"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Turn is the split card Turn // Burn. Combined mana cost {2}{U}{1}{R}; Burn has MV 2, Turn has MV 3."
+      },
+      "decisions": [
+        "A casts the Burn half ({1}{R}) targeting B, tapping Mountain and Island.",
+        "A passes priority.",
+        "B casts Spell Snare targeting Burn, tapping Island.",
+        "Both players pass; Spell Snare resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Burn is a spell with mana value 2, so Spell Snare has a legal target and counters it: Burn goes to A's graveyard and B stays at 20 life."
+        },
+        {
+          "label": "cast_turn",
+          "polarity": "does_not_fire",
+          "delta": "A casts the Turn half ({2}{U}) targeting Grizzly Bears, tapping three lands.",
+          "expected": "Turn is a spell with mana value 3: Spell Snare cannot be cast. Turn resolves and Grizzly Bears loses all abilities and becomes a red 0/1 Weird until end of turn."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Mountain",
+        "Turn",
+        "Burn",
+        "Spell Snare",
+        "Grizzly Bears"
+      ],
+      "forge_notes": "Forge names a split card by its first half's Name: line, so the card appears as 'Turn' in zones; its second half is the ALTERNATE Name: line."
+    },
+    {
+      "id": "709.4c-1",
+      "rules": [
+        "709.4c"
+      ],
+      "title": "A split card in the graveyard has the card types of both halves",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Dragon's Rage Channeler"
+          ]
+        },
+        "hand": {},
+        "graveyard": {
+          "A": [
+            "Commit",
+            "Grizzly Bears",
+            "Forest"
+          ]
+        },
+        "library": {},
+        "exile": {},
+        "notes": "Commit is the split card Commit // Memory: Commit is an instant, Memory a sorcery. Dragon's Rage Channeler checks for four or more card types among cards in its controller's graveyard."
+      },
+      "decisions": [
+        "No decisions; the board is stable at the start of A's main phase."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The graveyard holds instant, sorcery, creature and land types: four card types, so Dragon's Rage Channeler is a 3/3 with flying."
+        },
+        {
+          "label": "instant_only",
+          "polarity": "does_not_fire",
+          "delta": "A's graveyard holds Shock instead of Commit // Memory.",
+          "expected": "The graveyard holds instant, creature and land types: three card types, so Dragon's Rage Channeler is a 1/1 without flying."
+        }
+      ],
+      "cards": [
+        "Dragon's Rage Channeler",
+        "Commit",
+        "Memory",
+        "Grizzly Bears",
+        "Forest",
+        "Shock"
+      ],
+      "forge_notes": "Forge names a split card by its first half's Name: line, so the card appears as 'Commit' in zones; its second half is the ALTERNATE Name: line."
+    },
+    {
+      "id": "709.4a-1",
+      "rules": [
+        "709.4a"
+      ],
+      "title": "A split card has the chosen name if either of its names is chosen",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Swamp",
+            "Swamp",
+            "Swamp",
+            "Swamp"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Memoricide"
+          ],
+          "B": [
+            "Fire",
+            "Grizzly Bears"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Fire is the split card Fire // Ice in B's hand."
+      },
+      "decisions": [
+        "A casts Memoricide targeting B, tapping four Swamps.",
+        "On resolution A chooses the card name Ice.",
+        "A exiles all cards named Ice from B's graveyard, hand and library."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Fire // Ice has the name Ice, so it is exiled from B's hand; Grizzly Bears stays in B's hand."
+        },
+        {
+          "label": "first_name",
+          "polarity": "fires",
+          "delta": "A chooses the name Fire.",
+          "expected": "Fire // Ice has the name Fire, so it is exiled from B's hand; Grizzly Bears stays in B's hand."
+        },
+        {
+          "label": "other_name",
+          "polarity": "does_not_fire",
+          "delta": "A chooses the name Grizzly Bears.",
+          "expected": "Only Grizzly Bears is exiled; Fire // Ice stays in B's hand."
+        }
+      ],
+      "cards": [
+        "Swamp",
+        "Memoricide",
+        "Fire",
+        "Ice",
+        "Grizzly Bears"
+      ],
+      "forge_notes": "Forge names a split card by its first half's Name: line, so the card appears as 'Fire' in zones; its second half is the ALTERNATE Name: line. Forge's NamedCard matching for a card with two halves may only compare the combined or first name."
+    },
+    {
+      "id": "709.4d-1",
+      "rules": [
+        "709.4d"
+      ],
+      "title": "A fused split spell has the characteristics of both halves",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            "Island",
+            "Mountain",
+            "Mountain"
+          ],
+          "B": [
+            "Mountain",
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Turn"
+          ],
+          "B": [
+            "Red Elemental Blast"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Turn is the split card Turn // Burn with fuse. Turn is blue, Burn is red."
+      },
+      "decisions": [
+        "A casts Turn // Burn fused ({2}{U} plus {1}{R}), tapping all five lands; Turn targets Grizzly Bears and Burn targets B.",
+        "A passes priority.",
+        "B casts Red Elemental Blast choosing 'counter target blue spell', targeting the fused spell and tapping Mountain.",
+        "Both players pass; Red Elemental Blast resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The fused spell is blue and red, so it is a legal target and is countered: Grizzly Bears is unchanged and B stays at 20 life."
+        },
+        {
+          "label": "burn_only",
+          "polarity": "does_not_fire",
+          "delta": "A casts only the Burn half ({1}{R}) targeting B instead of fusing.",
+          "expected": "Burn is a red spell only: Red Elemental Blast cannot be cast. Burn resolves and B is at 18 life."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Mountain",
+        "Turn",
+        "Burn",
+        "Red Elemental Blast",
+        "Grizzly Bears"
+      ],
+      "forge_notes": "Forge names a split card by its first half's Name: line, so the card appears as 'Turn' in zones; its second half is the ALTERNATE Name: line."
+    },
+    {
+      "id": "709.5-1",
+      "rules": [
+        "709.5"
+      ],
+      "title": "A locked half gives the permanent none of its name, cost or rules text",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Bottomless Pool",
+              "tapped": false
+            },
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            }
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Island"
+          ]
+        },
+        "exile": {},
+        "notes": "Bottomless Pool is the Room Bottomless Pool // Locker Room with only the right half (Locker Room) unlocked. Locker Room: whenever one or more creatures you control deal combat damage to a player, draw a card."
+      },
+      "decisions": [
+        "A attacks B with Grizzly Bears.",
+        "B declares no blockers.",
+        "Combat damage is dealt."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Locker Room is unlocked, so its triggered ability exists: it fires and A draws a card. B is at 18 life."
+        },
+        {
+          "label": "pool_only",
+          "polarity": "does_not_fire",
+          "delta": "Only the left half (Bottomless Pool) is unlocked, not Locker Room.",
+          "expected": "The Room has the name Bottomless Pool and no Locker Room rules text: no trigger fires, A draws no card. B is at 18 life."
+        }
+      ],
+      "cards": [
+        "Bottomless Pool",
+        "Locker Room",
+        "Grizzly Bears",
+        "Island"
+      ],
+      "forge_notes": "Rooms are split cards in Forge (AlternateMode:Split, CardStateName LeftSplit/RightSplit) with locked and unlocked doors tracked per permanent; a Room put on the battlefield in a scenario setup needs its designations set explicitly."
+    },
+    {
+      "id": "709.5a-1",
+      "rules": [
+        "709.5a"
+      ],
+      "title": "A half of a Room cast as a spell has the shared Enchantment type",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island"
+          ],
+          "B": [
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Bottomless Pool"
+          ],
+          "B": [
+            "Annul"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Island"
+          ]
+        },
+        "exile": {},
+        "notes": "Bottomless Pool is the Room Bottomless Pool // Locker Room, shared type line Enchantment - Room. Fire is the split card Fire // Ice, two instants with no shared type line."
+      },
+      "decisions": [
+        "A casts the Bottomless Pool half ({U}), tapping one Island.",
+        "A passes priority.",
+        "B casts Annul targeting the Room spell, tapping Island.",
+        "Both players pass; Annul resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The Bottomless Pool spell is an enchantment spell: Annul is castable with it as target and counters it; the Room card goes to A's graveyard."
+        },
+        {
+          "label": "no_shared_type_line",
+          "polarity": "does_not_fire",
+          "delta": "A's hand holds Fire // Ice instead of the Room, and A casts the Ice half ({1}{U}) targeting B's Island, tapping both Islands.",
+          "expected": "Ice is an instant spell only: Annul cannot be cast. Ice resolves, B's Island becomes tapped and A draws Island."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Bottomless Pool",
+        "Locker Room",
+        "Annul",
+        "Fire",
+        "Ice"
+      ],
+      "forge_notes": "Rooms are split cards in Forge (AlternateMode:Split) whose halves each carry Types:Enchantment Room."
+    },
+    {
+      "id": "709.5d-1",
+      "rules": [
+        "709.5d",
+        "709.5h"
+      ],
+      "title": "A Room enters with the unlocked designation of the half cast",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            "Island",
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Central Elevator"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Bottomless Pool"
+          ]
+        },
+        "exile": {},
+        "notes": "Central Elevator's 'when you unlock this door' trigger is tied to its own door. Promising Stairs is the other half."
+      },
+      "decisions": [
+        "A casts the Central Elevator half ({3}{U}), tapping four Islands.",
+        "Both players pass; the Room spell resolves and enters.",
+        "Any triggered ability resolves; a search takes Bottomless Pool // Locker Room."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "A casts Central Elevator ({3}{U}): the Room enters with the left half unlocked, the unlock trigger fires and A searches for and takes Bottomless Pool // Locker Room."
+        },
+        {
+          "label": "right_half",
+          "polarity": "does_not_fire",
+          "delta": "A casts Promising Stairs ({2}{U}) instead.",
+          "expected": "The Room enters with the right half unlocked and the left half locked: Central Elevator's unlock trigger does not fire, and A's hand stays empty."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Central Elevator",
+        "Promising Stairs",
+        "Bottomless Pool",
+        "Locker Room"
+      ],
+      "forge_notes": "Rooms are split cards in Forge (AlternateMode:Split, CardStateName LeftSplit/RightSplit) with locked and unlocked doors tracked per permanent; a Room put on the battlefield in a scenario setup needs its designations set explicitly."
+    },
+    {
+      "id": "709.5d-2",
+      "rules": [
+        "709.5d"
+      ],
+      "title": "A Room that was not cast enters with neither half unlocked",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Island",
+            "Island",
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Replenish"
+          ]
+        },
+        "graveyard": {
+          "A": [
+            "Central Elevator"
+          ]
+        },
+        "library": {
+          "A": [
+            "Bottomless Pool"
+          ]
+        },
+        "exile": {},
+        "notes": "Central Elevator is the Room Central Elevator // Promising Stairs in A's graveyard."
+      },
+      "decisions": [
+        "A casts Replenish ({3}{W}), tapping Plains and three Islands.",
+        "Both players pass; Replenish resolves, returning the Room to the battlefield."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The Room enters without being cast and has neither unlocked designation: no unlock trigger fires, A's library is unchanged and the permanent has no name or rules text of either half."
+        },
+        {
+          "label": "cast_instead",
+          "polarity": "does_not_fire",
+          "delta": "The Room starts in A's hand instead of A's graveyard, and A casts its Central Elevator half ({3}{U}) with the same four lands instead of casting Replenish.",
+          "expected": "The Room enters with the left half unlocked and the unlock trigger fires: A takes Bottomless Pool // Locker Room from the library."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Island",
+        "Replenish",
+        "Central Elevator",
+        "Promising Stairs",
+        "Bottomless Pool",
+        "Locker Room"
+      ],
+      "forge_notes": "Rooms are split cards in Forge (AlternateMode:Split, CardStateName LeftSplit/RightSplit) with locked and unlocked doors tracked per permanent; a Room put on the battlefield in a scenario setup needs its designations set explicitly. Forge may give a non-cast Room an empty name or fail to show it."
+    },
+    {
+      "id": "709.5e-1",
+      "rules": [
+        "709.5e"
+      ],
+      "title": "Unlocking a door by paying its cost is a special action for a main phase with an empty stack",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Mountain",
+            "Bottomless Pool"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Shock"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Bottomless Pool is the Room Bottomless Pool // Locker Room with only the right half (Locker Room) unlocked; the unlock cost of the left half is {U}. Shock is inert unless a variant says otherwise."
+      },
+      "decisions": [
+        "A tries to pay {U} to unlock the left half of the Room, tapping Island."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "A has priority in their own main phase with an empty stack: the special action is legal."
+        },
+        {
+          "label": "stack_not_empty",
+          "polarity": "does_not_fire",
+          "delta": "A has first cast Shock targeting B, tapping Mountain, and Shock is still on the stack.",
+          "expected": "The special action is illegal while the stack is not empty."
+        },
+        {
+          "label": "opponent_turn",
+          "polarity": "does_not_fire",
+          "delta": "B is the active player and it is B's main phase with an empty stack.",
+          "expected": "The special action is illegal: it is not A's turn."
+        },
+        {
+          "label": "combat",
+          "polarity": "does_not_fire",
+          "delta": "The step is beginning_of_combat on A's turn with an empty stack.",
+          "expected": "The special action is illegal: it is not a main phase."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Mountain",
+        "Bottomless Pool",
+        "Locker Room",
+        "Shock"
+      ],
+      "forge_notes": "Rooms are split cards in Forge (AlternateMode:Split, CardStateName LeftSplit/RightSplit) with locked and unlocked doors tracked per permanent; a Room put on the battlefield in a scenario setup needs its designations set explicitly."
+    },
+    {
+      "id": "709.5f-1",
+      "rules": [
+        "709.5f"
+      ],
+      "title": "Unlocking a locked half gives the matching designation",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Ghostly Keybearer",
+              "summoning_sick": false
+            },
+            "Bottomless Pool"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Island"
+          ]
+        },
+        "exile": {},
+        "notes": "Bottomless Pool is the Room Bottomless Pool // Locker Room with only the left half (Bottomless Pool) unlocked; the right half (Locker Room) is locked."
+      },
+      "decisions": [
+        "A attacks B with Ghostly Keybearer (3/3 flying).",
+        "B declares no blockers.",
+        "Combat damage is dealt and Ghostly Keybearer's trigger targets the Room.",
+        "On resolution A chooses to unlock Locker Room."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The Room gains the right half unlocked designation: both doors are now unlocked. B is at 17 life."
+        },
+        {
+          "label": "nothing_locked",
+          "polarity": "does_not_fire",
+          "delta": "Both halves of the Room are already unlocked.",
+          "expected": "Locker Room's trigger fires on the combat damage and A draws Island; Ghostly Keybearer's trigger unlocks nothing and the Room keeps both designations. B is at 17 life."
+        }
+      ],
+      "cards": [
+        "Ghostly Keybearer",
+        "Bottomless Pool",
+        "Locker Room",
+        "Island"
+      ],
+      "forge_notes": "Rooms are split cards in Forge (AlternateMode:Split, CardStateName LeftSplit/RightSplit) with locked and unlocked doors tracked per permanent; a Room put on the battlefield in a scenario setup needs its designations set explicitly."
+    },
+    {
+      "id": "709.5g-1",
+      "rules": [
+        "709.5g"
+      ],
+      "title": "Locking an unlocked half removes the matching designation",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            "Island",
+            "Keys to the House",
+            "Bottomless Pool"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Bottomless Pool is the Room Bottomless Pool // Locker Room with both halves unlocked."
+      },
+      "decisions": [
+        "A activates Keys to the House's second ability ({3}, {T}, sacrifice it) targeting the Room, tapping three Islands.",
+        "Both players pass; the ability resolves.",
+        "A chooses to lock the right half (Locker Room)."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The Room loses the right half unlocked designation: only Bottomless Pool is unlocked, so the Room has the name and text of Bottomless Pool only."
+        },
+        {
+          "label": "lock_left",
+          "polarity": "fires",
+          "delta": "A chooses to lock the left half (Bottomless Pool) instead.",
+          "expected": "The Room loses the left half unlocked designation: only Locker Room is unlocked, so the Room has the name and text of Locker Room only."
+        },
+        {
+          "label": "nothing_unlocked",
+          "polarity": "does_not_fire",
+          "delta": "The Room starts with neither half unlocked.",
+          "expected": "No door is unlocked, so none can be locked: the Room keeps neither designation."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Keys to the House",
+        "Bottomless Pool",
+        "Locker Room"
+      ],
+      "forge_notes": "Rooms are split cards in Forge (AlternateMode:Split, CardStateName LeftSplit/RightSplit) with locked and unlocked doors tracked per permanent; a Room put on the battlefield in a scenario setup needs its designations set explicitly. Forge's LockOrUnlock mode may not offer the lock choice when no door is unlocked."
+    },
+    {
+      "id": "709.5h-1",
+      "rules": [
+        "709.5h"
+      ],
+      "title": "A 'when you unlock this door' ability triggers when its own door is unlocked later",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Bottomless Pool"
+          ],
+          "B": [
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Bottomless Pool is the Room Bottomless Pool // Locker Room, starting with only the right half (Locker Room) unlocked. Bottomless Pool's door: when you unlock this door, return up to one target creature to its owner's hand; unlock cost {U}. Locker Room's unlock cost is {4}{U}."
+      },
+      "decisions": [
+        "A pays {U} as a special action, tapping an Island, to unlock the left half (Bottomless Pool).",
+        "Its trigger targets Grizzly Bears.",
+        "Both players pass; the trigger resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The left half gets its unlocked designation: the trigger fires and Grizzly Bears returns to B's hand."
+        },
+        {
+          "label": "other_door",
+          "polarity": "does_not_fire",
+          "delta": "Which door starts locked is swapped: only Bottomless Pool is unlocked, so A pays {4}{U} (five Islands) to unlock Locker Room.",
+          "expected": "The right half is unlocked; Bottomless Pool's trigger is tied to its own door and does not fire. Grizzly Bears stays on the battlefield."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Bottomless Pool",
+        "Locker Room",
+        "Grizzly Bears"
+      ],
+      "forge_notes": "Rooms are split cards in Forge (AlternateMode:Split, CardStateName LeftSplit/RightSplit) with locked and unlocked doors tracked per permanent; a Room put on the battlefield in a scenario setup needs its designations set explicitly."
+    },
+    {
+      "id": "709.5i-1",
+      "rules": [
+        "709.5i"
+      ],
+      "title": "A 'fully unlock' ability triggers when the second half is unlocked",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Erratic Apparition",
+            "Bottomless Pool"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Bottomless Pool is the Room Bottomless Pool // Locker Room with only the left half unlocked. Erratic Apparition: whenever you fully unlock a Room, it gets +1/+1 until end of turn."
+      },
+      "decisions": [
+        "A pays {4}{U} as a special action, tapping five Islands, to unlock the right half (Locker Room)."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The Room has one designation and gets the other: it is fully unlocked, the trigger fires and Erratic Apparition is a 2/4 until end of turn."
+        },
+        {
+          "label": "neither_unlocked",
+          "polarity": "does_not_fire",
+          "delta": "The Room starts with neither half unlocked.",
+          "expected": "The Room gains one designation only, so it is not fully unlocked: Erratic Apparition stays a 1/3."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Erratic Apparition",
+        "Bottomless Pool",
+        "Locker Room"
+      ],
+      "forge_notes": "Rooms are split cards in Forge (AlternateMode:Split, CardStateName LeftSplit/RightSplit) with locked and unlocked doors tracked per permanent; a Room put on the battlefield in a scenario setup needs its designations set explicitly. A Room with neither designation is reachable via Replenish."
+    }
+  ]
+}

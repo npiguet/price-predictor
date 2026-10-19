@@ -1,0 +1,3 @@
+{"id": "702.101", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.101a", "category": "mechanical", "observability": "direct", "record_kinds": ["trigger", "resolution"], "outcome": "When its controller casts a spell, extort fires; if {W/B} is paid, each opponent loses 1 life and the controller gains that much life, otherwise nothing happens.", "note": ""}
+{"id": "702.101b", "category": "mechanical", "observability": "direct", "record_kinds": ["trigger"], "outcome": "Each instance of extort triggers separately on a cast spell.", "note": ""}

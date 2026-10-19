@@ -1,0 +1,5 @@
+{"id": "701.22", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "701.22a", "category": "decision", "observability": "none", "record_kinds": [], "outcome": "", "note": "The look-and-order choice is a player decision; the resulting library order is covered by the card movement."}
+{"id": "701.22b", "category": "mechanical", "observability": "direct", "record_kinds": ["trigger"], "outcome": "Scrying 0 produces no scry event, so scry triggers do not fire.", "note": ""}
+{"id": "701.22c", "category": "decision", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "701.22d", "category": "mechanical", "observability": "direct", "record_kinds": ["trigger"], "outcome": "A scry trigger fires after the scry process completes, even if some or all of it was impossible.", "note": ""}

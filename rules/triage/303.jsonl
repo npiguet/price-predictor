@@ -1,0 +1,20 @@
+{"id": "303.1", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "An enchantment card can be cast from hand only in a main phase of its controller's turn with an empty stack.", "note": ""}
+{"id": "303.2", "category": "mechanical", "observability": "direct", "record_kinds": ["resolution"], "outcome": "A resolving enchantment spell moves to the battlefield under its controller's control.", "note": ""}
+{"id": "303.3", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "303.4", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "An Aura enters the battlefield attached to an object or player allowed by its enchant ability.", "note": ""}
+{"id": "303.4a", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "An Aura spell needs a legal target defined by its enchant ability to be cast.", "note": ""}
+{"id": "303.4b", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "303.4c", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "An Aura enchanting an illegal or missing object or player is put into its owner's graveyard in the state-based check.", "note": ""}
+{"id": "303.4d", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "An Aura enchanting itself, or an Aura creature, is put into its owner's graveyard in the state-based check.", "note": ""}
+{"id": "303.4e", "category": "mechanical", "observability": "indirect", "record_kinds": ["continuous", "playability"], "outcome": "Changing control of an Aura or its enchanted object does not change the other's controller, and only the Aura's controller can activate its abilities.", "note": ""}
+{"id": "303.4f", "category": "decision", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "303.4g", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "An Aura entering with no legal object or player to enchant stays in its zone, or goes to the graveyard from the stack, or is not created as a token.", "note": ""}
+{"id": "303.4h", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "A permanent that is not an Aura, Equipment or Fortification put onto the battlefield attached to something enters unattached.", "note": ""}
+{"id": "303.4i", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "An Aura put onto the battlefield attached to an illegal or undefined object stays in its zone, or goes to the graveyard from the stack, or is not created as a token.", "note": ""}
+{"id": "303.4j", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "An effect attaching an Aura on the battlefield to an object it cannot legally enchant leaves the Aura where it is.", "note": ""}
+{"id": "303.4k", "category": "decision", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "303.4m", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "303.5", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "303.6", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "303.7", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "303.7a", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "When a permanent has several Roles controlled by one player, all but the most recent are put into their owners' graveyards in the state-based check.", "note": ""}

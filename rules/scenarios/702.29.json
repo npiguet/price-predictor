@@ -1,0 +1,462 @@
+{
+  "unit": "702.29",
+  "verified": true,
+  "review": [
+    "702.29d-1: the does_not_fire variant moved Drake Haven to B, which flips the 'you' condition rather than the once-per-cycle rule 702.29d decides; replaced it with a discard-by-Tormenting-Voice variant showing the same single trigger, added the lands and card it needs, and noted that a count rule has no does_not_fire branch."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.29a-1",
+      "rules": [
+        "702.29a"
+      ],
+      "title": "Cycling discards the card as a cost and draws a card, and only works from hand",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Lonely Sandbar"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Mountain",
+            "Swamp"
+          ]
+        },
+        "exile": {},
+        "notes": "Library lists the top card first. B has no permanents and no cards."
+      },
+      "decisions": [
+        "A activates the cycling ability of Lonely Sandbar from hand, paying {U} by tapping Island; Lonely Sandbar is discarded as part of the cost.",
+        "Both players pass; the ability resolves."
+      ],
+      "variants": [
+        {
+          "label": "from_hand",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Lonely Sandbar is in A's graveyard as soon as the ability is activated (cost). When the ability resolves A draws Mountain: A's hand is [Mountain] and A's library is [Swamp]."
+        },
+        {
+          "label": "on_battlefield",
+          "polarity": "does_not_fire",
+          "delta": "Lonely Sandbar is on A's battlefield (untapped) instead of in A's hand.",
+          "expected": "Activating the cycling ability is illegal (can_play false): Lonely Sandbar stays on the battlefield, nothing is discarded, nothing is drawn, Island stays untapped."
+        },
+        {
+          "label": "cost_unpayable",
+          "polarity": "does_not_fire",
+          "delta": "Island is tapped.",
+          "expected": "Activating the cycling ability is illegal (can_play false) because {U} cannot be paid: Lonely Sandbar stays in A's hand and nothing is drawn."
+        }
+      ],
+      "cards": [
+        "Lonely Sandbar",
+        "Island",
+        "Mountain",
+        "Swamp"
+      ],
+      "forge_notes": "In the on_battlefield variant the land is untapped so that tapping it for mana is not what makes the activation fail; its only activated abilities are the mana ability and cycling."
+    },
+    {
+      "id": "702.29b-1",
+      "rules": [
+        "702.29b"
+      ],
+      "title": "A land with cycling on the battlefield still counts as having a non-mana activated ability",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "B",
+        "step": "end",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Tsabo's Web",
+            {
+              "card": "Lonely Sandbar",
+              "tapped": true
+            }
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "A's untap step is the next step of the game after B's end step and cleanup: the decisions skip to it."
+      },
+      "decisions": [
+        "Both players pass through the rest of B's turn; no spells or abilities are used.",
+        "A's turn begins and A's untap step untaps A's permanents."
+      ],
+      "variants": [
+        {
+          "label": "cycling_land",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Tsabo's Web stops Lonely Sandbar from untapping: it has cycling, an activated ability that is not a mana ability, even on the battlefield. Lonely Sandbar is still tapped after A's untap step."
+        },
+        {
+          "label": "plain_land",
+          "polarity": "does_not_fire",
+          "delta": "The tapped land is Island instead of Lonely Sandbar.",
+          "expected": "Island has only a mana ability, so Tsabo's Web does not affect it: Island is untapped after A's untap step."
+        }
+      ],
+      "cards": [
+        "Tsabo's Web",
+        "Lonely Sandbar",
+        "Island"
+      ],
+      "forge_notes": "Forge's hasNonManaActivatedAbility filter may or may not count the keyword-derived cycling ability on a battlefield permanent; if it does not, the fires variant is a Forge discrepancy."
+    },
+    {
+      "id": "702.29c-1",
+      "rules": [
+        "702.29c"
+      ],
+      "title": "A 'when you cycle this card' ability triggers on cycling and not on an ordinary discard",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Mountain",
+            "Mountain",
+            {
+              "card": "Glory Seeker",
+              "summoning_sick": false
+            }
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Gempalm Avenger",
+            "Tormenting Voice"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Plains",
+            "Mountain",
+            "Mountain"
+          ]
+        },
+        "exile": {},
+        "notes": "Glory Seeker is a 2/2 Human Soldier with no abilities. Library lists the top card first."
+      },
+      "decisions": [
+        "A activates the cycling ability of Gempalm Avenger, paying {2}{W} by tapping Plains, Mountain and Mountain; Gempalm Avenger is discarded as part of the cost.",
+        "The cycle trigger goes on the stack above the draw ability. Both players pass; the trigger resolves, then both players pass again and the draw ability resolves."
+      ],
+      "variants": [
+        {
+          "label": "cycled",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The trigger 'when you cycle Gempalm Avenger' fires from the graveyard, where the card now is. Glory Seeker becomes 3/3 with first strike until end of turn. A then draws Plains."
+        },
+        {
+          "label": "discarded",
+          "polarity": "does_not_fire",
+          "delta": "Instead of cycling, A casts Tormenting Voice (paying {1}{R} with the two Mountains) and discards Gempalm Avenger as its additional cost.",
+          "expected": "Gempalm Avenger is in A's graveyard but no trigger fires: it was discarded, not cycled. Glory Seeker stays a 2/2 with no first strike. A draws Plains and Mountain."
+        }
+      ],
+      "cards": [
+        "Gempalm Avenger",
+        "Tormenting Voice",
+        "Glory Seeker",
+        "Plains",
+        "Mountain"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.29d-1",
+      "rules": [
+        "702.29d"
+      ],
+      "title": "A 'cycles or discards' ability triggers once when a card is cycled",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            "Mountain",
+            "Mountain",
+            "Drake Haven"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Lonely Sandbar",
+            "Tormenting Voice"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Island",
+            "Island"
+          ]
+        },
+        "exile": {},
+        "notes": "Library lists the top card first. The Mountains and Tormenting Voice are used only by the discarded variant."
+      },
+      "decisions": [
+        "A activates the cycling ability of Lonely Sandbar, paying {U} by tapping an Island; Lonely Sandbar is discarded as part of the cost.",
+        "Drake Haven's trigger goes on the stack; A pays {1} by tapping the other Island when it resolves.",
+        "Both players pass until the trigger and the draw ability have resolved."
+      ],
+      "variants": [
+        {
+          "label": "own_haven",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Drake Haven triggers exactly once for the one card cycled: A creates exactly one 2/2 blue Drake token with flying, and then draws one card (Island)."
+        },
+        {
+          "label": "discarded",
+          "polarity": "other",
+          "delta": "Instead of cycling, A casts Tormenting Voice (paying {1}{R} with the two Mountains) and discards Lonely Sandbar as its additional cost; A pays Drake Haven's {1} with an Island.",
+          "expected": "Drake Haven triggers exactly once for the one card discarded: A creates exactly one 2/2 blue Drake token with flying, and Tormenting Voice draws A two cards (Island, Island)."
+        }
+      ],
+      "cards": [
+        "Drake Haven",
+        "Lonely Sandbar",
+        "Tormenting Voice",
+        "Island",
+        "Mountain"
+      ],
+      "forge_notes": "702.29d is a count (one trigger, not two), so it has no does_not_fire branch: no legal situation makes a cycled card trigger a 'cycles or discards' ability zero or two times. The discarded variant shows a cycle and a plain discard trigger it the same single time."
+    },
+    {
+      "id": "702.29e-1",
+      "rules": [
+        "702.29e"
+      ],
+      "title": "Typecycling discards the card and searches the library for a card of the type",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Eternal Dragon"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Island",
+            "Plains",
+            "Swamp"
+          ]
+        },
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A activates the Plainscycling ability of Eternal Dragon, paying {2} by tapping both Islands; Eternal Dragon is discarded as part of the cost.",
+        "Both players pass; the ability resolves. A searches for a Plains card, reveals it and puts it into hand, and the library is shuffled."
+      ],
+      "variants": [
+        {
+          "label": "plains_in_library",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Eternal Dragon is in A's graveyard. A's hand is [Plains] (no card is drawn) and A's library is [Island, Swamp] in shuffled order."
+        },
+        {
+          "label": "no_plains",
+          "polarity": "does_not_fire",
+          "delta": "A's library is [Island, Swamp] with no Plains.",
+          "expected": "Eternal Dragon is in A's graveyard. The search finds nothing: A's hand is empty and the library is shuffled."
+        }
+      ],
+      "cards": [
+        "Eternal Dragon",
+        "Island",
+        "Plains",
+        "Swamp"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.29f-1",
+      "rules": [
+        "702.29f"
+      ],
+      "title": "An effect that stops players from cycling stops typecycling",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            "Stabilizer"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Eternal Dragon"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Plains"
+          ]
+        },
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A tries to activate the Plainscycling ability of Eternal Dragon, paying {2} by tapping both Islands."
+      ],
+      "variants": [
+        {
+          "label": "with_stabilizer",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The activation is illegal (can_play false): Stabilizer says players can't cycle cards, and typecycling is cycling. Eternal Dragon stays in A's hand."
+        },
+        {
+          "label": "without_stabilizer",
+          "polarity": "does_not_fire",
+          "delta": "Stabilizer is not on the battlefield.",
+          "expected": "The activation is legal (can_play true); Eternal Dragon is discarded as a cost."
+        }
+      ],
+      "cards": [
+        "Eternal Dragon",
+        "Stabilizer",
+        "Island",
+        "Plains"
+      ],
+      "forge_notes": "Stabilizer is implemented as CantBeActivated for ValidSA$ Activated.Cycling; check that Forge's Cycling filter includes TypeCycling abilities."
+    },
+    {
+      "id": "702.29f-2",
+      "rules": [
+        "702.29f"
+      ],
+      "title": "Typecycling triggers 'whenever a player cycles a card' abilities, an ordinary discard does not",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Lightning Rift"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Eternal Dragon",
+            "Tormenting Voice"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Plains",
+            "Mountain",
+            "Mountain"
+          ]
+        },
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A activates the Plainscycling ability of Eternal Dragon, paying {2} by tapping two Mountains; Eternal Dragon is discarded as part of the cost.",
+        "Lightning Rift's trigger goes on the stack; when it resolves A pays {1} by tapping the third Mountain and chooses player B as the target.",
+        "Both players pass until the stack is empty."
+      ],
+      "variants": [
+        {
+          "label": "typecycled",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Lightning Rift triggers on the typecycling: A pays {1} and the Rift deals 2 damage to B (B's life 20 to 18). The search puts Plains into A's hand."
+        },
+        {
+          "label": "discarded",
+          "polarity": "does_not_fire",
+          "delta": "Instead of typecycling, A casts Tormenting Voice (paying {1}{R}) and discards Eternal Dragon as its additional cost.",
+          "expected": "Lightning Rift does not trigger: Eternal Dragon was discarded, not cycled. B's life stays 20. A draws Plains and Mountain."
+        }
+      ],
+      "cards": [
+        "Eternal Dragon",
+        "Lightning Rift",
+        "Tormenting Voice",
+        "Mountain",
+        "Plains"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

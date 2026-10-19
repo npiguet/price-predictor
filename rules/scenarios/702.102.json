@@ -1,0 +1,294 @@
+{
+  "unit": "702.102",
+  "verified": true,
+  "review": [],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.102a-1",
+      "rules": [
+        "702.102a"
+      ],
+      "title": "A split card with fuse can be cast as both halves only from hand",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Grizzly Bears"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Give",
+            "Snapcaster Mage"
+          ],
+          "B": []
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Give is the left half of the split card Give // Take, which has fuse. All eight lands are untapped."
+      },
+      "decisions": [
+        "A considers casting Give // Take from hand with both halves chosen (cost {2}{G}{2}{U}), targeting Grizzly Bears with both halves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Casting Give // Take as a fused split spell from hand is legal, with a total cost of {4}{G}{U}."
+        },
+        {
+          "label": "from-graveyard",
+          "polarity": "does_not_fire",
+          "delta": "Give // Take is in A's graveyard instead of A's hand, and A has cast Snapcaster Mage (tapping two Islands) targeting it, so it has flashback until end of turn.",
+          "expected": "Casting only Give for its flashback cost {2}{G}, or only Take for {2}{U}, is legal; casting both halves as a fused split spell is not legal."
+        }
+      ],
+      "cards": [
+        "Forest",
+        "Island",
+        "Give",
+        "Take",
+        "Snapcaster Mage",
+        "Grizzly Bears"
+      ],
+      "forge_notes": "The split card Give // Take is two faces in Forge, Name:Give and Name:Take; the hand entry stands for the whole card. Forge implements fuse with the Fuse keyword on the first face and may offer it only from hand; flashback on a split card may or may not offer each half separately, so the graveyard variant is the one to check."
+    },
+    {
+      "id": "702.102b-1",
+      "rules": [
+        "702.102b"
+      ],
+      "title": "A fused split spell has the combined colors of both halves",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Forest",
+            "Forest",
+            "Forest",
+            "Island",
+            "Island",
+            "Island",
+            "Grizzly Bears"
+          ],
+          "B": [
+            "Mountain"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Give"
+          ],
+          "B": [
+            "Pyroblast"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Plains",
+            "Plains",
+            "Plains"
+          ]
+        },
+        "exile": {},
+        "notes": "Give is the left half of Give // Take. Give is green and Take is blue. Pyroblast's counter mode counters target spell if it is blue."
+      },
+      "decisions": [
+        "A casts Give // Take as a fused split spell, choosing both halves, targeting Grizzly Bears with both Give and Take, tapping all six lands.",
+        "A passes priority; B casts Pyroblast in counter mode targeting the fused spell, tapping Mountain.",
+        "Both players pass; Pyroblast resolves, then (if it is still on the stack) the split spell resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The fused split spell is blue (it has the colors of both halves), so Pyroblast counters it. Give // Take goes to A's graveyard, Grizzly Bears gets no counters and A draws no cards."
+        },
+        {
+          "label": "give-only",
+          "polarity": "does_not_fire",
+          "delta": "A casts only the Give half (cost {2}{G}, tapping Forest, Forest, Forest, targeting Grizzly Bears) instead of both halves.",
+          "expected": "The spell on the stack is green only, so Pyroblast resolves and does nothing. Give resolves: Grizzly Bears gets three +1/+1 counters and is 5/5."
+        }
+      ],
+      "cards": [
+        "Forest",
+        "Island",
+        "Mountain",
+        "Give",
+        "Take",
+        "Pyroblast",
+        "Grizzly Bears",
+        "Plains"
+      ],
+      "forge_notes": "Needs Forge to compute the color of a fused spell from both faces. In the give-only variant, A taps only three of its six lands."
+    },
+    {
+      "id": "702.102c-1",
+      "rules": [
+        "702.102c"
+      ],
+      "title": "A fused split spell costs the sum of both halves' mana costs",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Forest",
+            "Forest",
+            "Forest",
+            "Island",
+            "Island",
+            "Island",
+            "Grizzly Bears"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Give"
+          ],
+          "B": []
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Give is the left half of Give // Take: Give costs {2}{G}, Take costs {2}{U}. All lands are untapped."
+      },
+      "decisions": [
+        "A considers casting Give // Take from hand with both halves chosen, targeting Grizzly Bears with both halves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The fused cast is legal and costs {4}{G}{U}, six mana, which A can pay with all six lands."
+        },
+        {
+          "label": "one-land-short",
+          "polarity": "does_not_fire",
+          "delta": "A controls only five lands (Forest, Forest, Forest, Island, Island).",
+          "expected": "The fused cast is not legal because the total cost is six mana. Casting only Give ({2}{G}) is legal and casting only Take ({2}{U}) is legal."
+        },
+        {
+          "label": "no-blue-source",
+          "polarity": "does_not_fire",
+          "delta": "A's six lands are Forests only (no Island).",
+          "expected": "The fused cast is not legal because its total cost includes {U}, while casting only Give ({2}{G}) is legal."
+        }
+      ],
+      "cards": [
+        "Forest",
+        "Island",
+        "Give",
+        "Take",
+        "Grizzly Bears"
+      ],
+      "forge_notes": "The split card Give // Take is two faces in Forge, Name:Give and Name:Take."
+    },
+    {
+      "id": "702.102d-1",
+      "rules": [
+        "702.102d"
+      ],
+      "title": "A fused split spell follows the left half and then the right half",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Forest",
+            "Forest",
+            "Forest",
+            "Island",
+            "Island",
+            "Island",
+            "Grizzly Bears"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Give"
+          ],
+          "B": []
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains"
+          ]
+        },
+        "exile": {},
+        "notes": "Give is the left half of Give // Take. Give puts three +1/+1 counters on target creature; Take removes all +1/+1 counters from target creature you control and draws that many cards."
+      },
+      "decisions": [
+        "A casts Give // Take as a fused split spell, choosing both halves, targeting Grizzly Bears with both Give and Take, tapping all six lands.",
+        "Both players pass; the spell resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Give resolves first and puts three +1/+1 counters on Grizzly Bears, then Take removes those three counters and A draws three cards. Grizzly Bears is 2/2 with no counters, A's hand holds three Plains, and Give // Take is in A's graveyard."
+        },
+        {
+          "label": "give-only",
+          "polarity": "does_not_fire",
+          "delta": "A casts only the Give half, tapping three lands.",
+          "expected": "Grizzly Bears has three +1/+1 counters and is 5/5. A draws no cards."
+        }
+      ],
+      "cards": [
+        "Forest",
+        "Island",
+        "Give",
+        "Take",
+        "Grizzly Bears",
+        "Plains"
+      ],
+      "forge_notes": "The result depends on order: right half first would draw no cards."
+    }
+  ]
+}

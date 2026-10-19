@@ -1,0 +1,203 @@
+{
+  "unit": "702.134",
+  "verified": true,
+  "review": [],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.134a-1",
+      "rules": [
+        "702.134a"
+      ],
+      "title": "Mentor puts a +1/+1 counter on an attacking creature with lesser power",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Blade Instructor",
+              "summoning_sick": false
+            },
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            }
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A attacks player B with Blade Instructor and Grizzly Bears.",
+        "The mentor trigger targets Grizzly Bears; both players pass and it resolves."
+      ],
+      "variants": [
+        {
+          "label": "lesser_power",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Blade Instructor (power 3) triggers on attacking; Grizzly Bears (power 2) is a legal target. Grizzly Bears gets a +1/+1 counter and is a 3/3."
+        },
+        {
+          "label": "equal_power",
+          "polarity": "does_not_fire",
+          "delta": "A's second attacker is Hill Giant (3/3) instead of Grizzly Bears.",
+          "expected": "Hill Giant's power is not less than Blade Instructor's, so the mentor trigger has no legal target and puts no counter on anything; Hill Giant stays a 3/3."
+        },
+        {
+          "label": "mentor_alone",
+          "polarity": "does_not_fire",
+          "delta": "Grizzly Bears does not attack; Blade Instructor attacks alone.",
+          "expected": "The mentor trigger has no legal target (the only attacker is Blade Instructor itself) and no counter is put on anything; Grizzly Bears has no counter."
+        }
+      ],
+      "cards": [
+        "Blade Instructor",
+        "Grizzly Bears",
+        "Hill Giant"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.134b-1",
+      "rules": [
+        "702.134b"
+      ],
+      "title": "Two instances of mentor trigger separately",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Blade Instructor",
+              "summoning_sick": false
+            },
+            {
+              "card": "Nyxborn Unicorn",
+              "attached_to": "Blade Instructor"
+            },
+            {
+              "card": "Fugitive Wizard",
+              "summoning_sick": false
+            }
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Nyxborn Unicorn is on the battlefield bestowed on Blade Instructor, an Aura giving +2/+2 and mentor."
+      },
+      "decisions": [
+        "A attacks player B with Blade Instructor (5/3) and Fugitive Wizard.",
+        "Both mentor triggers target Fugitive Wizard; both players pass and they resolve one after the other."
+      ],
+      "variants": [
+        {
+          "label": "two_instances",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Blade Instructor has mentor twice (printed and from Nyxborn Unicorn), so two triggers resolve separately and Fugitive Wizard ends with two +1/+1 counters as a 3/3."
+        },
+        {
+          "label": "one_instance",
+          "polarity": "does_not_fire",
+          "delta": "Nyxborn Unicorn is not on the battlefield.",
+          "expected": "Blade Instructor (3/1) has one mentor trigger and Fugitive Wizard ends with one +1/+1 counter as a 2/2."
+        }
+      ],
+      "cards": [
+        "Blade Instructor",
+        "Nyxborn Unicorn",
+        "Fugitive Wizard"
+      ],
+      "forge_notes": "Bestow is a setup that Forge may not reach directly; the Aura could instead be cast with bestow in an earlier step."
+    },
+    {
+      "id": "702.134c-1",
+      "rules": [
+        "702.134c"
+      ],
+      "title": "A mentored-creature trigger fires when the mentor ability resolves",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            },
+            {
+              "card": "Aegis of the Legion",
+              "attached_to": "Grizzly Bears"
+            },
+            {
+              "card": "Fugitive Wizard",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            "Mountain"
+          ]
+        },
+        "hand": {
+          "B": [
+            "Shock"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Aegis of the Legion gives Grizzly Bears +1/+1 and mentor, making it a 3/3."
+      },
+      "decisions": [
+        "A attacks player B with Grizzly Bears and Fugitive Wizard.",
+        "The mentor trigger targets Fugitive Wizard.",
+        "B passes with Shock in hand; the mentor trigger resolves."
+      ],
+      "variants": [
+        {
+          "label": "mentor_resolves",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The mentor ability resolves: Fugitive Wizard gets a +1/+1 counter (2/2), and Aegis of the Legion's mentored trigger fires and puts a shield counter on Fugitive Wizard."
+        },
+        {
+          "label": "mentor_fizzles",
+          "polarity": "does_not_fire",
+          "delta": "In response to the mentor trigger, B casts Shock targeting Fugitive Wizard, tapping the Mountain.",
+          "expected": "Shock resolves first and Fugitive Wizard dies. The mentor trigger has no legal target when it resolves and fizzles, so no mentor ability resolves and the mentored trigger does not fire; no counter is placed."
+        }
+      ],
+      "cards": [
+        "Grizzly Bears",
+        "Aegis of the Legion",
+        "Fugitive Wizard",
+        "Mountain",
+        "Shock"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

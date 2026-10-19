@@ -1,0 +1,267 @@
+{
+  "unit": "702.15",
+  "verified": true,
+  "review": [
+    "702.15c-1: the lifelink creature (Child of Night) has lifelink printed, so the graveyard card has lifelink too and the pair did not depend on last known information; replaced it with Grizzly Bears whose lifelink comes from the Lifelink Aura, which is gone by the time the trigger deals damage, and made the variant remove the Aura."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.15b-1",
+      "rules": [
+        "702.15b"
+      ],
+      "title": "Damage dealt by a lifelink source makes its controller gain that much life",
+      "record_kind": "combat",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Child of Night",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            "Grizzly Bears",
+            "Plains"
+          ]
+        },
+        "hand": {
+          "B": [
+            "Holy Day"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A attacks player B with Child of Night.",
+        "B declares no blockers and passes priority without casting a spell.",
+        "Combat damage is dealt."
+      ],
+      "variants": [
+        {
+          "label": "unblocked",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Child of Night deals 2 damage to B, whose life is 18. A gains 2 life and is at 22."
+        },
+        {
+          "label": "blocked",
+          "polarity": "fires",
+          "delta": "B blocks Child of Night with Grizzly Bears.",
+          "expected": "Child of Night and Grizzly Bears deal 2 damage to each other and both are destroyed. A gains 2 life and is at 22. B stays at 20."
+        },
+        {
+          "label": "damage_prevented",
+          "polarity": "does_not_fire",
+          "delta": "B casts Holy Day (tapping Plains) in the declare blockers step, without blocking.",
+          "expected": "Holy Day resolves and all combat damage is prevented. B stays at 20 and A stays at 20."
+        }
+      ],
+      "cards": [
+        "Child of Night",
+        "Grizzly Bears",
+        "Plains",
+        "Holy Day"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.15c-1",
+      "rules": [
+        "702.15c"
+      ],
+      "title": "A creature that dies with lifelink granted by an Aura still gains life when it deals damage from the graveyard, by last known information",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Stalking Vengeance",
+            "Grizzly Bears",
+            {
+              "card": "Lifelink",
+              "attached_to": "Grizzly Bears"
+            },
+            "Mountain"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Shock"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Lifelink (the Aura) is controlled by A and attached to A's Grizzly Bears."
+      },
+      "decisions": [
+        "A casts Shock targeting Grizzly Bears, tapping Mountain.",
+        "Both players pass; Shock resolves, and in the state-based check Grizzly Bears dies and Lifelink (the Aura) goes to A's graveyard.",
+        "Stalking Vengeance triggers; A targets player B with it. Both players pass; it resolves."
+      ],
+      "variants": [
+        {
+          "label": "lifelink_aura_attached",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears and Lifelink go to A's graveyard. The trigger makes Grizzly Bears deal 2 damage to B (life 18), and A gains 2 life (life 22)."
+        },
+        {
+          "label": "no_aura",
+          "polarity": "does_not_fire",
+          "delta": "Lifelink (the Aura) is not on the battlefield.",
+          "expected": "Grizzly Bears goes to A's graveyard. The trigger makes Grizzly Bears deal 2 damage to B (life 18), and A gains no life (life 20)."
+        }
+      ],
+      "cards": [
+        "Stalking Vengeance",
+        "Grizzly Bears",
+        "Lifelink",
+        "Mountain",
+        "Shock"
+      ],
+      "forge_notes": "Stalking Vengeance is cast for seven mana in real play; here it is already on the battlefield. Forge's trigger uses TriggeredCardLKICopy as the damage source, so the last known Grizzly Bears, with the Aura's lifelink, deals the damage."
+    },
+    {
+      "id": "702.15d-1",
+      "rules": [
+        "702.15d"
+      ],
+      "title": "A spell on the stack with lifelink causes life gain when it deals damage",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Soulfire Grand Master",
+            "Mountain"
+          ],
+          "B": [
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Shock"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Shock targeting Grizzly Bears, tapping Mountain.",
+        "Both players pass; Shock resolves."
+      ],
+      "variants": [
+        {
+          "label": "own_grand_master",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Shock, a spell with lifelink from the stack, deals 2 damage to Grizzly Bears, which is destroyed. A gains 2 life and is at 22."
+        },
+        {
+          "label": "opposing_grand_master",
+          "polarity": "does_not_fire",
+          "delta": "Soulfire Grand Master is on B's battlefield instead of A's.",
+          "expected": "Shock deals 2 damage to Grizzly Bears, which is destroyed. A gains no life and stays at 20."
+        }
+      ],
+      "cards": [
+        "Soulfire Grand Master",
+        "Mountain",
+        "Grizzly Bears",
+        "Shock"
+      ],
+      "forge_notes": "Lifelink is granted to the spell by Soulfire Grand Master's static ability while the spell is on the stack."
+    },
+    {
+      "id": "702.15e-1",
+      "rules": [
+        "702.15e"
+      ],
+      "title": "Simultaneous lifelink damage from several sources causes separate life gain events",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Ajani's Pridemate",
+              "summoning_sick": false
+            },
+            {
+              "card": "Child of Night",
+              "summoning_sick": false
+            },
+            {
+              "card": "Child of Night",
+              "summoning_sick": false
+            },
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            }
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A attacks player B with both Child of Night, and not with Ajani's Pridemate or Grizzly Bears.",
+        "B declares no blockers.",
+        "Combat damage is dealt; each Pridemate trigger is put on the stack and resolves."
+      ],
+      "variants": [
+        {
+          "label": "two_lifelink_attackers",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "A gains 2 life twice (life 24) and B is at 16. Ajani's Pridemate triggers twice and gets two +1/+1 counters (4/4)."
+        },
+        {
+          "label": "one_lifelink_attacker",
+          "polarity": "does_not_fire",
+          "delta": "A attacks with one Child of Night and Grizzly Bears instead of both Child of Night.",
+          "expected": "B is at 16. A gains 2 life once (life 22). Ajani's Pridemate triggers once and gets one +1/+1 counter (3/3)."
+        }
+      ],
+      "cards": [
+        "Ajani's Pridemate",
+        "Child of Night",
+        "Grizzly Bears"
+      ],
+      "forge_notes": "Each lifelink source gains life separately in Forge; the Pridemate trigger count is the observable."
+    }
+  ]
+}

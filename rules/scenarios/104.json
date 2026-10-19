@@ -1,0 +1,641 @@
+{
+  "unit": "104",
+  "verified": true,
+  "review": [
+    "104.2b-1: A's library was empty, so the one_short variant would end with A losing in the draw step; added a Plains to A's library.",
+    "104.3e-1: Phage the Untouchable costs {3}{B}{B}{B}{B} (seven mana), not six; A now has seven Swamps and the cast_from_hand variant taps seven.",
+    "104.4c-1: the draw is a separate 'when you remove the last counter' trigger, not part of the upkeep trigger's resolution; added that step to decisions and expected, and noted Forge folds it into one resolution. Added a Plains to A's library so the two_counters variant does not end with A decking.",
+    "104.6-1: both libraries were empty, so per 727.3 both players would lose in the new game's first upkeep after drawing seven from a short library; notes now give each player a 40-card library, and the base expected says Grizzly Bears enters just before the first untap step (727.4)."
+  ],
+  "skipped": [
+    {
+      "id": "104.3f",
+      "reason": "cannot be illustrated in a two-player Forge game: a win effect takes effect the instant it resolves and every loss condition is a state-based action already applied before any ability resolves, so no board holds both outcomes pending at once; 104.4a-1 covers the case where both players lose at the same moment"
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "104.2a-1",
+      "rules": [
+        "104.2a"
+      ],
+      "title": "The last opponent leaving the game makes the remaining player win, overriding effects that preclude winning",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains"
+          ],
+          "B": [
+            "Forest"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "B concedes the game while A has priority in the first main phase."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "B leaves the game and A, the only player left, wins immediately; the game ends with A as winner."
+        },
+        {
+          "label": "angel",
+          "polarity": "fires",
+          "delta": "B also controls Platinum Angel, which says B's opponents can't win the game.",
+          "expected": "B still leaves the game by conceding and A still wins immediately; Platinum Angel's effect does not stop it."
+        },
+        {
+          "label": "no_concession",
+          "polarity": "does_not_fire",
+          "delta": "B does not concede; both players keep passing priority with an empty stack and B stays at 20 life.",
+          "expected": "No player has left the game, nobody wins, and the game continues."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Forest",
+        "Platinum Angel"
+      ],
+      "forge_notes": "In the angel variant Platinum Angel is on B's battlefield from the start of that variant. Player.hasWon() in Forge returns false while cantWin() holds, so with Platinum Angel on B's side Forge may report the game as not won even though B conceded; the angel variant records the Comprehensive Rules result and may be where Forge deviates."
+    },
+    {
+      "id": "104.2b-1",
+      "rules": [
+        "104.2b"
+      ],
+      "title": "A resolving effect that states a player wins the game ends the game",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "upkeep",
+        "life": {
+          "A": 40,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Felidar Sovereign"
+          ],
+          "B": [
+            "Forest"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Plains"
+          ]
+        },
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "Felidar Sovereign's beginning-of-upkeep trigger goes on the stack if its condition holds.",
+        "Both players pass priority; the trigger resolves if it was put on the stack."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "A has 40 life, Felidar Sovereign's trigger fires and resolves, and A wins the game; the game ends before the draw step."
+        },
+        {
+          "label": "one_short",
+          "polarity": "does_not_fire",
+          "delta": "A has 39 life instead of 40.",
+          "expected": "Felidar Sovereign's trigger does not fire; nobody wins and the game proceeds to the draw step, where A draws Plains."
+        }
+      ],
+      "cards": [
+        "Felidar Sovereign",
+        "Forest",
+        "Plains"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "104.3b-1",
+      "rules": [
+        "104.3b",
+        "104.5"
+      ],
+      "title": "A player at 0 or less life loses at the next state-based check and leaves the game",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 3
+        },
+        "battlefield": {
+          "A": [
+            "Mountain"
+          ],
+          "B": [
+            "Forest"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Lightning Bolt"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Lightning Bolt targeting B, tapping Mountain.",
+        "Both players pass priority; Lightning Bolt resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Lightning Bolt deals 3 damage to B, whose life total goes from 3 to 0; B loses the game at the next state-based check, leaves the game, and the game ends with A as the winner."
+        },
+        {
+          "label": "one_more_life",
+          "polarity": "does_not_fire",
+          "delta": "B has 4 life instead of 3.",
+          "expected": "B's life total goes from 4 to 1; B stays in the game and the game continues."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Forest",
+        "Lightning Bolt"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "104.3c-1",
+      "rules": [
+        "104.3c"
+      ],
+      "title": "A player required to draw more cards than are left in the library draws what is left, then loses",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            "Island"
+          ],
+          "B": [
+            "Forest"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Divination"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Mountain"
+          ]
+        },
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Divination, tapping three Islands.",
+        "Both players pass priority; Divination resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "A draws the only card in the library (Mountain), tries to draw a second card from the empty library, and loses the game at the next state-based check; B wins."
+        },
+        {
+          "label": "enough_cards",
+          "polarity": "does_not_fire",
+          "delta": "A's library holds two cards (Mountain on top of Swamp) instead of one.",
+          "expected": "A draws both cards and the library is empty, but A attempted no draw from an empty library, so A stays in the game."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Forest",
+        "Mountain",
+        "Swamp",
+        "Divination"
+      ],
+      "forge_notes": "The enough_cards variant adds a Swamp below the Mountain in A's library."
+    },
+    {
+      "id": "104.3d-1",
+      "rules": [
+        "104.3d"
+      ],
+      "title": "A player with ten or more poison counters loses at the next state-based check",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Swamp",
+            "Swamp",
+            "Swamp"
+          ],
+          "B": [
+            "Forest"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Ichor Rats"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "B has 9 poison counters and A has none."
+      },
+      "decisions": [
+        "A casts Ichor Rats, tapping three Swamps.",
+        "Both players pass priority; Ichor Rats resolves and enters the battlefield.",
+        "Ichor Rats's enters trigger goes on the stack; both players pass and it resolves, giving each player a poison counter."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "B goes from 9 to 10 poison counters and A from 0 to 1; B loses the game at the next state-based check and A wins."
+        },
+        {
+          "label": "eight",
+          "polarity": "does_not_fire",
+          "delta": "B has 8 poison counters instead of 9.",
+          "expected": "B goes from 8 to 9 poison counters and A from 0 to 1; nobody loses and the game continues."
+        }
+      ],
+      "cards": [
+        "Swamp",
+        "Forest",
+        "Ichor Rats"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "104.3e-1",
+      "rules": [
+        "104.3e"
+      ],
+      "title": "A resolving effect that states a player loses the game makes that player lose",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Swamp",
+            "Swamp",
+            "Swamp",
+            "Swamp",
+            "Swamp",
+            "Swamp",
+            "Swamp"
+          ],
+          "B": [
+            "Forest"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Phage the Untouchable",
+            "Zombify"
+          ]
+        },
+        "graveyard": {
+          "A": [
+            "Phage the Untouchable"
+          ]
+        },
+        "library": {},
+        "exile": {},
+        "notes": "A owns two copies of Phage the Untouchable for the purposes of the scenario: one in hand and one in the graveyard. Zombify costs four of the seven Swamps; Phage costs all seven."
+      },
+      "decisions": [
+        "A casts Zombify targeting Phage the Untouchable in A's graveyard, tapping four Swamps.",
+        "Both players pass priority; Zombify resolves and Phage enters the battlefield without having been cast.",
+        "Phage's enters trigger goes on the stack; both players pass and it resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Phage enters from the graveyard, not cast from A's hand, so its trigger resolves and A loses the game; B wins."
+        },
+        {
+          "label": "cast_from_hand",
+          "polarity": "does_not_fire",
+          "delta": "A casts Phage the Untouchable from hand, tapping seven Swamps, instead of casting Zombify.",
+          "expected": "Phage was cast from A's hand, so its enters trigger does not fire; A stays in the game with Phage on the battlefield."
+        }
+      ],
+      "cards": [
+        "Swamp",
+        "Forest",
+        "Phage the Untouchable",
+        "Zombify"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "104.4a-1",
+      "rules": [
+        "104.4a"
+      ],
+      "title": "If all remaining players lose simultaneously the game is a draw",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 4,
+          "B": 4
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain"
+          ],
+          "B": [
+            "Forest"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Flame Rift"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Flame Rift, tapping two Mountains.",
+        "Both players pass priority; Flame Rift resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Flame Rift deals 4 damage to each player; both go to 0 life, both lose at the same state-based check, and the game ends as a draw."
+        },
+        {
+          "label": "b_has_more",
+          "polarity": "does_not_fire",
+          "delta": "B has 5 life instead of 4.",
+          "expected": "A goes to 0 life and loses; B goes to 1 life and stays in the game, so B wins and the game is not a draw."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Forest",
+        "Flame Rift"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "104.4b-1",
+      "rules": [
+        "104.4b"
+      ],
+      "title": "A loop of mandatory actions with no way to stop makes the game a draw",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Forest",
+            "Forest",
+            "Scalelord Reckoner"
+          ],
+          "B": [
+            "Scalelord Reckoner"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Lightning Bolt",
+            "Grizzly Bears"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Lightning Bolt targeting B's Scalelord Reckoner, tapping Mountain.",
+        "B's Reckoner triggers because an opponent's spell targets a Dragon B controls; B puts its trigger on the stack with the only legal target, A's Scalelord Reckoner.",
+        "A's Reckoner triggers because an opponent's ability targets it; A puts its trigger on the stack with the only legal target, B's Scalelord Reckoner, and so on; no target choice and no trigger is optional."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "A's only nonland permanent and B's only nonland permanent are each a Scalelord Reckoner, so each trigger must target the other Reckoner and that Reckoner triggers again without end; the game ends as a draw."
+        },
+        {
+          "label": "other_target",
+          "polarity": "does_not_fire",
+          "delta": "Before casting Lightning Bolt, A casts Grizzly Bears (tapping both Forests) and it resolves; B then targets Grizzly Bears with the Reckoner trigger.",
+          "expected": "Grizzly Bears is not a Dragon, so no further trigger happens; the trigger resolves and destroys Grizzly Bears, then Lightning Bolt deals 3 damage to B's Reckoner, which survives as a 4/4; the game goes on."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Forest",
+        "Scalelord Reckoner",
+        "Lightning Bolt",
+        "Grizzly Bears"
+      ],
+      "forge_notes": "Forge ends such a game as a draw only once the stack exceeds 999 objects (MagicStack.add)."
+    },
+    {
+      "id": "104.4c-1",
+      "rules": [
+        "104.4c"
+      ],
+      "title": "A resolving effect that states the game is a draw ends the game as a draw",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "upkeep",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Divine Intervention",
+              "counters": {
+                "intervention": 1
+              }
+            }
+          ],
+          "B": [
+            "Plains"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Plains"
+          ]
+        },
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "Divine Intervention's beginning-of-upkeep trigger goes on the stack.",
+        "Both players pass priority; the trigger resolves and removes an intervention counter.",
+        "If that removed the last intervention counter, Divine Intervention's 'when you remove the last intervention counter' trigger goes on the stack; both players pass and it resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The last intervention counter is removed from Divine Intervention, its second trigger fires and resolves, and the game ends as a draw; nobody wins."
+        },
+        {
+          "label": "two_counters",
+          "polarity": "does_not_fire",
+          "delta": "Divine Intervention has two intervention counters instead of one.",
+          "expected": "One counter is removed and one remains; the second trigger does not fire, the game is not a draw and proceeds to the draw step, where A draws Plains."
+        }
+      ],
+      "cards": [
+        "Divine Intervention",
+        "Plains"
+      ],
+      "forge_notes": "Divine Intervention's counter type is INTERVENTION in Forge. Forge folds the draw into the upkeep trigger as a conditional sub-ability (GameDrawn when no INTERVENTION counters remain) rather than a separate triggered ability, so Forge records one resolution where the rules have two."
+    },
+    {
+      "id": "104.6-1",
+      "rules": [
+        "104.6"
+      ],
+      "title": "Karn Liberated restarts the game and returns the cards it exiled",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Karn Liberated",
+              "counters": {
+                "loyalty": 14
+              }
+            }
+          ],
+          "B": [
+            "Forest"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {
+          "A": [
+            "Grizzly Bears",
+            "Hill Giant"
+          ]
+        },
+        "notes": "Grizzly Bears was exiled by Karn Liberated's second ability. Hill Giant was exiled by a different effect and was not exiled with Karn. A's library holds 40 Mountains and B's library holds 40 Forests, so neither player loses to rule 727.3 for drawing a seven-card opening hand from a short library."
+      },
+      "decisions": [
+        "A activates Karn Liberated's minus-14 ability, removing 14 loyalty counters.",
+        "Both players pass priority; the ability resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The game restarts: no player wins, loses or draws. Every card except Grizzly Bears (exiled with Karn) goes to its owner's library, including Karn Liberated and Hill Giant; each player starts a new game at 20 life with a seven-card hand; just before the first turn's untap step Grizzly Bears enters the battlefield under A's control; A takes the first turn."
+        },
+        {
+          "label": "not_exiled_with_karn",
+          "polarity": "other",
+          "delta": "Grizzly Bears was exiled by another effect instead of by Karn Liberated's second ability.",
+          "expected": "The game restarts as in the base, but neither exiled card returns to the battlefield; both go to A's library with the rest of A's cards."
+        },
+        {
+          "label": "loyalty_13",
+          "polarity": "does_not_fire",
+          "delta": "Karn Liberated has 13 loyalty counters instead of 14.",
+          "expected": "A cannot pay the minus-14 cost, so the ability cannot be activated; the game does not restart."
+        }
+      ],
+      "cards": [
+        "Karn Liberated",
+        "Forest",
+        "Grizzly Bears",
+        "Hill Giant",
+        "Mountain"
+      ],
+      "forge_notes": "Forge's RestartGame effect shuffles every non-exempt card into its owner's library and leaves the new hands to the phase handler. Whether a mulligan prompt appears for the AI is outside the scenario."
+    }
+  ]
+}

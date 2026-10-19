@@ -1,0 +1,806 @@
+{
+  "unit": "611",
+  "verified": true,
+  "review": [
+    "611.2a-2: the new_object variant changed several facts and illustrated 400.7 (a new object) rather than the stated duration, and a decision said 'instead of Purelace' with no Purelace in the scenario; replaced it with a Crimson Wisps variant (same color change, 'until end of turn') and trimmed Unsummon, Island and the extra Forests.",
+    "611.2d-1: the first variant was labelled 'after_resolution'; relabelled it 'base'.",
+    "611.2e-1: 'it gets a +1/+1 counter (2/2)' read as Grizzly Bears getting the counter; named Champion of the Perished explicitly in both expectations.",
+    "611.3b-1: the base decisions had both players pass with an empty stack, which ends main1 before the board is read; the base now reads the board with no action and the variant states the Disenchant sequence in full.",
+    "611.3d: the skip claimed no Forge card grants a castable ability with battlefield-only parts, but Henzie \"Toolbox\" Torre grants blitz (haste, a dies-draw trigger and an end-step sacrifice) to creature spells; removed the skip and added 611.3d-1."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "611.2a-1",
+      "rules": [
+        "611.2a"
+      ],
+      "title": "A continuous effect from a resolved spell ends when its stated duration ends",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Forest",
+            "Grizzly Bears"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Giant Growth"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Giant Growth targeting Grizzly Bears, tapping Forest.",
+        "Both players pass; Giant Growth resolves.",
+        "Both players pass through combat and main2 to the end step; the board is read at the end step (base) or after the cleanup step (variant)."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "At the end step Grizzly Bears is 5/5: the +3/+3 is still applied. Giant Growth is in A's graveyard."
+        },
+        {
+          "label": "after_cleanup",
+          "polarity": "does_not_fire",
+          "delta": "The board is read after the cleanup step of the same turn instead of at the end step.",
+          "expected": "Grizzly Bears is 2/2 again: the 'until end of turn' effect ended in the cleanup step."
+        }
+      ],
+      "cards": [
+        "Forest",
+        "Grizzly Bears",
+        "Giant Growth"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "611.2a-2",
+      "rules": [
+        "611.2a"
+      ],
+      "title": "A continuous effect with no stated duration lasts until the end of the game",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Grizzly Bears"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Chaoslace",
+            "Crimson Wisps"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Forest"
+          ]
+        },
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Chaoslace targeting Grizzly Bears, tapping Mountain.",
+        "Both players pass; Chaoslace resolves.",
+        "Both players pass through combat, main2 and the end of turn; the board is read at the beginning of B's upkeep."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "At B's upkeep Grizzly Bears is still red: Chaoslace's color change states no duration and lasts until the end of the game. It is 2/2."
+        },
+        {
+          "label": "until_end_of_turn",
+          "polarity": "does_not_fire",
+          "delta": "A casts Crimson Wisps targeting Grizzly Bears, tapping Mountain, instead of Chaoslace.",
+          "expected": "A draws Forest. At B's upkeep Grizzly Bears is green again and has no haste: Crimson Wisps' 'until end of turn' color change ended in A's cleanup step."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Forest",
+        "Grizzly Bears",
+        "Chaoslace",
+        "Crimson Wisps"
+      ],
+      "forge_notes": "Chaoslace is Animate with Duration$ Permanent; Crimson Wisps' Animate has no Duration$ and so lasts until end of turn."
+    },
+    {
+      "id": "611.2b-1",
+      "rules": [
+        "611.2b"
+      ],
+      "title": "A 'for as long as you control it' effect whose duration ended before it began does nothing",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            "Island",
+            "Island"
+          ],
+          "B": [
+            "Mountain",
+            "Ornithopter"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Master Thief"
+          ],
+          "B": [
+            "Lightning Bolt"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Master Thief, tapping four Islands; both players pass; Master Thief resolves and enters.",
+        "Its enters trigger goes on the stack targeting Ornithopter.",
+        "A passes priority; B casts Lightning Bolt targeting Master Thief, tapping Mountain; B passes, then A passes; Lightning Bolt resolves.",
+        "Both players pass; the enters trigger resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Lightning Bolt deals 3 damage to Master Thief (2/2), which dies before the trigger resolves. The trigger resolves and does nothing: Ornithopter stays under B's control and never changes controller."
+        },
+        {
+          "label": "no_response",
+          "polarity": "does_not_fire",
+          "delta": "B does not cast Lightning Bolt; both players pass and the trigger resolves with Master Thief still on the battlefield.",
+          "expected": "The trigger resolves and A gains control of Ornithopter for as long as A controls Master Thief; Ornithopter is on A's side of the battlefield."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Mountain",
+        "Master Thief",
+        "Ornithopter",
+        "Lightning Bolt"
+      ],
+      "forge_notes": "Master Thief uses GainControl with LoseControl$ LeavesPlay,LoseControl; Forge should skip the effect when the host has already left the battlefield."
+    },
+    {
+      "id": "611.2c-1",
+      "rules": [
+        "611.2c"
+      ],
+      "title": "A resolved effect that changes characteristics affects only the creatures present when it resolves",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Plains",
+            "Forest",
+            "Forest",
+            "Grizzly Bears"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Glorious Charge",
+            "Ambush Viper"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Glorious Charge, tapping Plains and Forest; both players pass; it resolves.",
+        "A casts Ambush Viper, tapping Plains and Forest; both players pass; it resolves and enters.",
+        "The board is read in main1."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears is 3/3 until end of turn. Ambush Viper, which entered after Glorious Charge resolved, is 2/1: it is not in the set the effect locked in."
+        },
+        {
+          "label": "viper_first",
+          "polarity": "does_not_fire",
+          "delta": "A casts and resolves Ambush Viper first, then Glorious Charge.",
+          "expected": "Grizzly Bears is 3/3 and Ambush Viper is 3/2: it was on the battlefield when Glorious Charge resolved."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Forest",
+        "Grizzly Bears",
+        "Glorious Charge",
+        "Ambush Viper"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "611.2c-2",
+      "rules": [
+        "611.2c"
+      ],
+      "title": "A resolved effect that modifies the rules of the game also reaches creatures that enter later",
+      "record_kind": "rewrite",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Grizzly Bears"
+          ],
+          "B": [
+            "Plains",
+            "Plains",
+            "Forest"
+          ]
+        },
+        "hand": {
+          "B": [
+            "Holy Day",
+            "Ambush Viper"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Grizzly Bears has been under A's control since before this turn, so it can attack."
+      },
+      "decisions": [
+        "A passes priority in the beginning of combat step; B casts Holy Day, tapping Plains; both players pass; it resolves.",
+        "A attacks B with Grizzly Bears.",
+        "In the declare attackers step B casts Ambush Viper, tapping Plains and Forest; both players pass; it resolves and enters.",
+        "B blocks Grizzly Bears with Ambush Viper. Both players pass into combat damage."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Ambush Viper entered after Holy Day resolved, yet the combat damage Grizzly Bears and Ambush Viper would deal is prevented: no damage is dealt, both creatures survive and B's life is 20."
+        },
+        {
+          "label": "no_holy_day",
+          "polarity": "other",
+          "delta": "B does not cast Holy Day and keeps its Plains untapped; the rest is unchanged.",
+          "expected": "Grizzly Bears deals 2 damage to Ambush Viper (toughness 1) and Ambush Viper deals deathtouch damage to Grizzly Bears: both creatures die."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Forest",
+        "Grizzly Bears",
+        "Holy Day",
+        "Ambush Viper"
+      ],
+      "forge_notes": "Holy Day is the Fog effect; Forge implements prevention as a replacement effect, so it should apply to a blocker that entered after resolution."
+    },
+    {
+      "id": "611.2d-1",
+      "rules": [
+        "611.2d"
+      ],
+      "title": "A variable in a continuous effect is evaluated once, on resolution",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Hill Giant",
+            "Grizzly Bears"
+          ],
+          "B": [
+            "Mountain"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Chorus of Might"
+          ],
+          "B": [
+            "Lightning Bolt"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Chorus of Might targeting Hill Giant, tapping four Forests.",
+        "Both players pass; Chorus of Might resolves.",
+        "B casts Lightning Bolt targeting Grizzly Bears, tapping Mountain; both players pass; it resolves.",
+        "The board is read in main1."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Chorus of Might resolves with X = 2 (Hill Giant and Grizzly Bears): Hill Giant is 5/5 with trample. Lightning Bolt then kills Grizzly Bears, and Hill Giant stays 5/5 because X was fixed on resolution."
+        },
+        {
+          "label": "in_response",
+          "polarity": "other",
+          "delta": "B casts Lightning Bolt in response to Chorus of Might, before it resolves, instead of after.",
+          "expected": "Grizzly Bears dies first, so Chorus of Might resolves with X = 1: Hill Giant is 4/4 with trample."
+        }
+      ],
+      "cards": [
+        "Forest",
+        "Mountain",
+        "Hill Giant",
+        "Grizzly Bears",
+        "Chorus of Might",
+        "Lightning Bolt"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "611.2e-1",
+      "rules": [
+        "611.2e"
+      ],
+      "title": "An 'is a Zombie' effect applies as the permanent enters, so enters triggers see it",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Swamp",
+            "Swamp",
+            "Swamp",
+            "Swamp",
+            "Swamp",
+            "Champion of the Perished"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Rise from the Grave",
+            "Zombify"
+          ]
+        },
+        "graveyard": {
+          "A": [
+            "Grizzly Bears"
+          ]
+        },
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Rise from the Grave targeting Grizzly Bears in A's graveyard, tapping five Swamps.",
+        "Both players pass; Rise from the Grave resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears enters under A's control as a black Zombie Bear, so Champion of the Perished's trigger fires and Champion of the Perished gets a +1/+1 counter (2/2)."
+        },
+        {
+          "label": "zombify",
+          "polarity": "does_not_fire",
+          "delta": "A casts Zombify instead of Rise from the Grave, tapping four Swamps.",
+          "expected": "Grizzly Bears enters as a green Bear only; Champion of the Perished's trigger does not fire and Champion of the Perished stays 1/1 with no counter."
+        }
+      ],
+      "cards": [
+        "Swamp",
+        "Champion of the Perished",
+        "Rise from the Grave",
+        "Zombify",
+        "Grizzly Bears"
+      ],
+      "forge_notes": "Rise from the Grave applies its Zombie type through StaticEffect$ Animate; check that Forge applies it before the enters trigger is evaluated."
+    },
+    {
+      "id": "611.2f-1",
+      "rules": [
+        "611.2f"
+      ],
+      "title": "A next-spell effect applies to the next appropriate spell cast, and only that one",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest"
+          ],
+          "B": [
+            "Island",
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Insist",
+            "Grizzly Bears",
+            "Runeclaw Bear"
+          ],
+          "B": [
+            "Counterspell"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Forest"
+          ]
+        },
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Insist, tapping Forest; both players pass; it resolves and A draws Forest.",
+        "A casts Grizzly Bears, tapping two Forests.",
+        "B responds with Counterspell targeting Grizzly Bears, tapping two Islands; all stack objects resolve."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Insist's effect applies to Grizzly Bears as it is cast: Counterspell resolves but Grizzly Bears is not countered and enters the battlefield."
+        },
+        {
+          "label": "second_creature",
+          "polarity": "does_not_fire",
+          "delta": "A first casts Runeclaw Bear, tapping two Forests, and B passes so it resolves; A then casts Grizzly Bears, tapping two Forests, and B casts Counterspell on it.",
+          "expected": "Runeclaw Bear took Insist's effect when it was cast; Grizzly Bears has no such effect and is countered, moving to A's graveyard."
+        }
+      ],
+      "cards": [
+        "Forest",
+        "Island",
+        "Insist",
+        "Grizzly Bears",
+        "Runeclaw Bear",
+        "Counterspell"
+      ],
+      "forge_notes": "Insist uses a delayed SpellCast trigger that creates an Effect holding a replacement for Counter."
+    },
+    {
+      "id": "611.3a-1",
+      "rules": [
+        "611.3a"
+      ],
+      "title": "A static ability's effect applies at each moment to whatever its text indicates",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Mountain",
+            "Crusade",
+            "Grizzly Bears",
+            "Savannah Lions"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Purelace",
+            "Chaoslace"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Savannah Lions is white (2/1) and has Crusade's bonus from the start (3/2)."
+      },
+      "decisions": [
+        "A casts Purelace targeting Grizzly Bears, tapping Plains; both players pass; it resolves.",
+        "The board is read in main1."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears becomes white and immediately gets Crusade's bonus: it is 3/3. Savannah Lions stays 3/2."
+        },
+        {
+          "label": "turns_red",
+          "polarity": "does_not_fire",
+          "delta": "A casts Chaoslace targeting Grizzly Bears, tapping Mountain, instead of Purelace.",
+          "expected": "Grizzly Bears becomes red, not white, and gets no bonus: it stays 2/2. Savannah Lions stays 3/2."
+        },
+        {
+          "label": "loses_white",
+          "polarity": "does_not_fire",
+          "delta": "A casts Chaoslace targeting Savannah Lions, tapping Mountain, instead of Purelace on Grizzly Bears.",
+          "expected": "Savannah Lions becomes red and loses Crusade's bonus: it is 2/1. Grizzly Bears stays 2/2."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Mountain",
+        "Crusade",
+        "Grizzly Bears",
+        "Savannah Lions",
+        "Purelace",
+        "Chaoslace"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "611.3b-1",
+      "rules": [
+        "611.3b"
+      ],
+      "title": "A static ability's effect applies exactly while its source is on the battlefield",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Crusade",
+            "Savannah Lions"
+          ],
+          "B": [
+            "Plains",
+            "Plains"
+          ]
+        },
+        "hand": {
+          "B": [
+            "Disenchant"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "No spell is cast; the board is read in main1 while A holds priority."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Crusade is on the battlefield, so Savannah Lions (white) is 3/2."
+        },
+        {
+          "label": "destroyed",
+          "polarity": "does_not_fire",
+          "delta": "A passes priority in main1 and B casts Disenchant targeting Crusade, tapping two Plains; A passes; it resolves; the board is read afterwards in main1.",
+          "expected": "Crusade is destroyed and moves to A's graveyard; Savannah Lions loses the bonus and is 2/1."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Crusade",
+        "Savannah Lions",
+        "Disenchant"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "611.3c-1",
+      "rules": [
+        "611.3c"
+      ],
+      "title": "A static characteristic change applies as a permanent enters, before enters triggers are checked",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Forest",
+            "Forest",
+            "Gaea's Anthem",
+            "Garruk's Packleader"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Grizzly Bears"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Forest"
+          ]
+        },
+        "exile": {},
+        "notes": "In the no_anthem variant the battlefield holds a third Forest in place of Gaea's Anthem."
+      },
+      "decisions": [
+        "A casts Grizzly Bears, tapping two Forests; both players pass; it resolves and enters.",
+        "If Garruk's Packleader's trigger goes on the stack, A chooses to draw and it resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears (2/2) enters as a 3/3 thanks to Gaea's Anthem, so Garruk's Packleader's power-3-or-greater trigger fires and A draws Forest."
+        },
+        {
+          "label": "no_anthem",
+          "polarity": "does_not_fire",
+          "delta": "Gaea's Anthem is not on the battlefield (A controls a third Forest instead).",
+          "expected": "Grizzly Bears enters as a 2/2; Garruk's Packleader's trigger does not fire and A draws nothing."
+        }
+      ],
+      "cards": [
+        "Forest",
+        "Gaea's Anthem",
+        "Garruk's Packleader",
+        "Grizzly Bears"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "611.3d-1",
+      "rules": [
+        "611.3d"
+      ],
+      "title": "Blitz granted to a creature spell by a static ability keeps its battlefield effects after the source leaves",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Henzie \"Toolbox\" Torre"
+          ],
+          "B": [
+            "Mountain"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Hill Giant"
+          ],
+          "B": [
+            "Lightning Bolt"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Forest"
+          ]
+        },
+        "exile": {},
+        "notes": "Henzie gives each creature spell A casts with mana value 4 or greater blitz at a cost equal to its mana cost; no commander has been cast, so the blitz cost is not reduced."
+      },
+      "decisions": [
+        "A casts Hill Giant for its blitz cost {3}{R}, tapping four Mountains; both players pass; it resolves.",
+        "A passes priority; B casts Lightning Bolt targeting Henzie \"Toolbox\" Torre, tapping Mountain; both players pass; it resolves and Henzie dies.",
+        "In the declare attackers step A attacks B with Hill Giant if that is legal; B does not block.",
+        "Both players pass through main2 to the end step; the blitz sacrifice trigger and then the dies trigger resolve."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Henzie \"Toolbox\" Torre is in A's graveyard, yet Hill Giant keeps haste: it attacks and B goes to 17 life. At the end step Hill Giant is sacrificed and moves to A's graveyard, and A draws Forest."
+        },
+        {
+          "label": "normal_cast",
+          "polarity": "does_not_fire",
+          "delta": "A casts Hill Giant for its mana cost instead of its blitz cost.",
+          "expected": "Hill Giant has no haste and cannot be declared as an attacker; B stays at 20 life. At the end step Hill Giant stays on the battlefield and A draws nothing."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Forest",
+        "Henzie \"Toolbox\" Torre",
+        "Hill Giant",
+        "Lightning Bolt"
+      ],
+      "forge_notes": "Henzie grants Blitz through AddKeyword$ Blitz to creature spells on the stack only; check that Forge keeps the blitz haste, dies-draw trigger and end-step sacrifice on the permanent after Henzie has left the battlefield."
+    }
+  ]
+}

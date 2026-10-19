@@ -1,0 +1,337 @@
+{
+  "unit": "702.126",
+  "verified": true,
+  "review": [
+    "all scenarios: A's library was empty while Reverse Engineer's expected outcome draws three cards; gave A a library of five Islands.",
+    "702.126b-1 (now 702.126a-2): the two_blue_sources variant changed two facts (Islands and Ornithopters); it now adds one Island only. The scenario shows improvise paying only generic mana, which rule 702.126a states, so it moved to 702.126a; 702.126b stays covered by the Thalia scenario.",
+    "702.126b-2: renumbered 702.126b-1 after the previous 702.126b-1 moved to 702.126a."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.126a-1",
+      "rules": [
+        "702.126a"
+      ],
+      "title": "Improvise lets untapped artifacts pay for generic mana",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            {
+              "card": "Ornithopter",
+              "summoning_sick": false
+            },
+            {
+              "card": "Ornithopter",
+              "summoning_sick": false
+            },
+            {
+              "card": "Ornithopter",
+              "summoning_sick": false
+            }
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Reverse Engineer"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island"
+          ]
+        },
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Reverse Engineer, tapping both Islands for {U}{U} and tapping all three Ornithopters with improvise to pay the {3}.",
+        "Both players pass; Reverse Engineer resolves."
+      ],
+      "variants": [
+        {
+          "label": "three_artifacts",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Casting is legal. The three Ornithopters are tapped for the generic mana and Reverse Engineer resolves: A draws three cards."
+        },
+        {
+          "label": "two_artifacts",
+          "polarity": "does_not_fire",
+          "delta": "A controls two Ornithopters instead of three.",
+          "expected": "Only two of the three generic mana can be paid by improvise, and A has no other source. Casting is not legal and Reverse Engineer stays in A's hand."
+        },
+        {
+          "label": "one_artifact_tapped",
+          "polarity": "does_not_fire",
+          "delta": "One of the three Ornithopters is tapped.",
+          "expected": "Only two untapped artifacts can be tapped, so the {3} cannot be paid. Casting is not legal and Reverse Engineer stays in A's hand."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Ornithopter",
+        "Reverse Engineer"
+      ],
+      "forge_notes": "Variant one_artifact_tapped sets tapped=true on one Ornithopter in the base setup; variant two_artifacts removes one."
+    },
+    {
+      "id": "702.126a-2",
+      "rules": [
+        "702.126a"
+      ],
+      "title": "Improvise pays only generic mana, never colored mana",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            {
+              "card": "Ornithopter",
+              "summoning_sick": false
+            },
+            {
+              "card": "Ornithopter",
+              "summoning_sick": false
+            },
+            {
+              "card": "Ornithopter",
+              "summoning_sick": false
+            },
+            {
+              "card": "Ornithopter",
+              "summoning_sick": false
+            },
+            {
+              "card": "Ornithopter",
+              "summoning_sick": false
+            }
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Reverse Engineer"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island"
+          ]
+        },
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Reverse Engineer, tapping its Islands for blue mana and tapping Ornithopters with improvise for the generic mana.",
+        "Both players pass; Reverse Engineer resolves."
+      ],
+      "variants": [
+        {
+          "label": "one_blue_source",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Improvise can pay the {3} but not the second {U}, and A has only one blue source. Casting is not legal and Reverse Engineer stays in A's hand."
+        },
+        {
+          "label": "two_blue_sources",
+          "polarity": "does_not_fire",
+          "delta": "A controls two Islands instead of one.",
+          "expected": "Both Islands pay {U}{U} and three Ornithopters pay the {3}; casting is legal and Reverse Engineer resolves: A draws three cards. Two Ornithopters stay untapped."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Ornithopter",
+        "Reverse Engineer"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.126b-1",
+      "rules": [
+        "702.126b"
+      ],
+      "title": "Improvise applies after cost increases are included in the total cost",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            {
+              "card": "Ornithopter",
+              "summoning_sick": false
+            },
+            {
+              "card": "Ornithopter",
+              "summoning_sick": false
+            },
+            {
+              "card": "Ornithopter",
+              "summoning_sick": false
+            },
+            {
+              "card": "Ornithopter",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            {
+              "card": "Thalia, Guardian of Thraben",
+              "summoning_sick": false
+            }
+          ]
+        },
+        "hand": {
+          "A": [
+            "Reverse Engineer"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island"
+          ]
+        },
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Reverse Engineer, tapping both Islands for {U}{U} and tapping all four Ornithopters with improvise to pay the generic mana.",
+        "Both players pass; Reverse Engineer resolves."
+      ],
+      "variants": [
+        {
+          "label": "four_artifacts",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Thalia, Guardian of Thraben raises the total cost to {4}{U}{U}. The four Ornithopters pay the four generic mana, casting is legal and Reverse Engineer resolves: A draws three cards."
+        },
+        {
+          "label": "three_artifacts",
+          "polarity": "does_not_fire",
+          "delta": "A controls three Ornithopters instead of four.",
+          "expected": "The total cost is {4}{U}{U} and only three generic mana can be paid by improvise. Casting is not legal and Reverse Engineer stays in A's hand."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Ornithopter",
+        "Thalia, Guardian of Thraben",
+        "Reverse Engineer"
+      ],
+      "forge_notes": "Variant three_artifacts removes one Ornithopter from the base setup."
+    },
+    {
+      "id": "702.126c-1",
+      "rules": [
+        "702.126c"
+      ],
+      "title": "A spell with two instances of improvise pays each generic mana at most once",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            "Inspiring Statuary",
+            {
+              "card": "Ornithopter",
+              "summoning_sick": false
+            },
+            {
+              "card": "Ornithopter",
+              "summoning_sick": false
+            }
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Reverse Engineer"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island"
+          ]
+        },
+        "exile": {},
+        "notes": "Reverse Engineer has printed improvise and gains a second instance from Inspiring Statuary."
+      },
+      "decisions": [
+        "A casts Reverse Engineer, tapping both Islands for {U}{U} and tapping Inspiring Statuary and both Ornithopters with improvise to pay the {3}.",
+        "Both players pass; Reverse Engineer resolves."
+      ],
+      "variants": [
+        {
+          "label": "three_artifacts",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The total cost is {3}{U}{U}. The three artifacts pay the {3}, casting is legal and Reverse Engineer resolves: A draws three cards."
+        },
+        {
+          "label": "two_artifacts",
+          "polarity": "does_not_fire",
+          "delta": "A controls one Ornithopter instead of two.",
+          "expected": "The second instance of improvise adds no further payment ability: only two generic mana can be paid, so casting is not legal and Reverse Engineer stays in A's hand."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Inspiring Statuary",
+        "Ornithopter",
+        "Reverse Engineer"
+      ],
+      "forge_notes": "Variant two_artifacts removes one Ornithopter from the base setup."
+    }
+  ]
+}

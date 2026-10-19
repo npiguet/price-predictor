@@ -1,0 +1,3 @@
+{"id": "702.52", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.52a", "category": "mechanical", "observability": "direct", "record_kinds": ["rewrite"], "outcome": "Instead of drawing, a player with at least N cards in library may mill N and return the dredge card from graveyard to hand.", "note": ""}
+{"id": "702.52b", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "A player with fewer cards in library than N cannot dredge.", "note": ""}

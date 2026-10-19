@@ -1,0 +1,146 @@
+{
+  "unit": "702.48",
+  "verified": true,
+  "review": [],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.48a-1",
+      "rules": [
+        "702.48a"
+      ],
+      "title": "Sacrificing a permanent of the offering type lets the spell be cast at instant speed for a reduced cost",
+      "record_kind": "playability",
+      "setup": {
+        "active": "B",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mons's Goblin Raiders",
+            "Grizzly Bears",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Patron of the Akki"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Patron of the Akki costs {4}{R}{R} and has Goblin offering. Mons's Goblin Raiders is a {R} Goblin. It is B's turn and A holds priority in B's beginning of combat step."
+      },
+      "decisions": [
+        "A casts Patron of the Akki, choosing to pay the additional cost of sacrificing Mons's Goblin Raiders.",
+        "A pays the reduced cost {4}{R} with the five Mountains.",
+        "Both players pass; Patron of the Akki resolves."
+      ],
+      "variants": [
+        {
+          "label": "sacrifice_goblin",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Casting Patron of the Akki is legal during B's turn and costs {4}{R}. Mons's Goblin Raiders moves to A's graveyard, all five Mountains are tapped and Patron of the Akki enters the battlefield under A's control."
+        },
+        {
+          "label": "no_offering",
+          "polarity": "does_not_fire",
+          "delta": "A does not pay the offering cost.",
+          "expected": "Casting Patron of the Akki is not legal: it is a creature spell and it is not A's main phase with an empty stack, and the cost would be {4}{R}{R}."
+        },
+        {
+          "label": "wrong_type",
+          "polarity": "does_not_fire",
+          "delta": "A tries to sacrifice Grizzly Bears (not a Goblin) as the offering instead of Mons's Goblin Raiders.",
+          "expected": "Casting Patron of the Akki by sacrificing Grizzly Bears is not legal because Grizzly Bears is not a Goblin; Grizzly Bears stays on the battlefield and Patron of the Akki stays in hand."
+        }
+      ],
+      "cards": [
+        "Mons's Goblin Raiders",
+        "Grizzly Bears",
+        "Mountain",
+        "Patron of the Akki"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.48c-1",
+      "rules": [
+        "702.48c"
+      ],
+      "title": "The sacrificed permanent's mana cost reduces the matching parts of the total cost, and excess colored mana reduces generic",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Avian Changeling",
+            "Goblin Piker",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Patron of the Akki"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Patron of the Akki costs {4}{R}{R}. Avian Changeling ({2}{W}) is a Goblin by changeling. Goblin Piker ({1}{R}) is a Goblin."
+      },
+      "decisions": [
+        "A casts Patron of the Akki, choosing to pay the additional cost of sacrificing Avian Changeling.",
+        "A pays the reduced cost with Mountains.",
+        "Both players pass; Patron of the Akki resolves."
+      ],
+      "variants": [
+        {
+          "label": "sacrifice_changeling",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The cost after adjustment is {1}{R}{R}: the generic {2} reduces generic, and the excess {W} reduces one more generic. A taps three Mountains, two Mountains stay untapped, and Patron of the Akki enters the battlefield. Avian Changeling is in A's graveyard."
+        },
+        {
+          "label": "sacrifice_piker",
+          "polarity": "fires",
+          "delta": "A sacrifices Goblin Piker instead of Avian Changeling.",
+          "expected": "The cost after adjustment is {3}{R}: the generic {1} reduces generic and the {R} reduces one of the {R}. A taps four Mountains and Patron of the Akki enters the battlefield. Goblin Piker is in A's graveyard."
+        },
+        {
+          "label": "no_sacrifice",
+          "polarity": "does_not_fire",
+          "delta": "A does not pay the offering cost.",
+          "expected": "The cost is the full {4}{R}{R}, which is six mana; A controls only five Mountains, so casting Patron of the Akki is not legal."
+        }
+      ],
+      "cards": [
+        "Avian Changeling",
+        "Goblin Piker",
+        "Mountain",
+        "Patron of the Akki"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

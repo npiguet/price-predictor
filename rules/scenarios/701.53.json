@@ -1,0 +1,86 @@
+{
+  "unit": "701.53",
+  "verified": true,
+  "review": [
+    "701.53a-1: typo 'A Incubator token' in the base expected text; corrected."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "701.53a-1",
+      "rules": [
+        "701.53a"
+      ],
+      "title": "Incubate N creates an Incubator token with N +1/+1 counters",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island"
+          ],
+          "B": [
+            "Island",
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Eyes of Gitaxias"
+          ],
+          "B": [
+            "Counterspell"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Forest"
+          ]
+        },
+        "exile": {},
+        "notes": "The Incubator token is a colorless Incubator artifact with '{2}: Transform this token.' Library lists are top first; cards below the listed ones are irrelevant Forests."
+      },
+      "decisions": [
+        "A casts Eyes of Gitaxias, tapping three Islands.",
+        "B passes; Eyes of Gitaxias resolves: A incubates 3, then draws a card."
+      ],
+      "variants": [
+        {
+          "label": "resolves",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "An Incubator token enters the battlefield under A's control with three +1/+1 counters; it is a colorless noncreature artifact. A draws Forest."
+        },
+        {
+          "label": "countered",
+          "polarity": "does_not_fire",
+          "delta": "B casts Counterspell in response, tapping two Islands.",
+          "expected": "Eyes of Gitaxias is countered and moves to A's graveyard. No Incubator token is created and A draws no card; Forest stays on top of A's library."
+        },
+        {
+          "label": "transformed",
+          "polarity": "other",
+          "delta": "After Eyes of Gitaxias resolves, A pays {2} (the two remaining Islands) to transform the Incubator token.",
+          "expected": "The token transforms into a Phyrexian Token, a 0/0 colorless Phyrexian artifact creature, keeping its three +1/+1 counters and so a 3/3. A draws Forest."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Eyes of Gitaxias",
+        "Counterspell",
+        "Forest"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

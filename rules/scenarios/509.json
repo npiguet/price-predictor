@@ -1,0 +1,1347 @@
+{
+  "unit": "509",
+  "verified": true,
+  "review": [
+    "509.3e-2: Seifer was controlled by the defending player B, so its trigger (a creature attacking one of Seifer's controller's opponents) could never fire for A's attacker; moved Seifer to A, fixed its goad-trigger target, and stated the trigger resolution.",
+    "509.3e-1: blocks_one left the two-attacker damage assignment of the base in force; delta now states the Giant blocks the first Grizzly Bears and assigns all its damage to it.",
+    "509.3g-1: blocker_removed differed from the base in two facts (a block and an Unsummon); Unsummon on Grizzly Bears now happens in every variant, the plain blocked variant is dropped, and blocked_then_removed changes only the block.",
+    "509.4-1: base was labelled does_not_fire although the rule's effect (the token never counts as having blocked) happens in it; relabelled fires. A does_not_fire case cannot exist, since every creature put onto the battlefield blocking never blocked.",
+    "509.1b-3: flying_before_block jumped from an illegal declaration to an unblocked attacker; expected now states the declaration is undone and B declares no blockers."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "509.1a-1",
+      "rules": [
+        "509.1a"
+      ],
+      "title": "A tapped creature cannot be chosen as a blocker",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            "Hill Giant"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "In the tapped_blocker variant Hill Giant is entered as {\"card\": \"Hill Giant\", \"tapped\": true}."
+      },
+      "decisions": [
+        "A attacks B with Grizzly Bears.",
+        "In the declare blockers step B declares Hill Giant as a blocker of Grizzly Bears.",
+        "No spells or abilities are used."
+      ],
+      "variants": [
+        {
+          "label": "untapped_blocker",
+          "polarity": "does_not_fire",
+          "delta": "",
+          "expected": "The declaration is legal: untapped Hill Giant is a legal blocker for Grizzly Bears, which is attacking B. Grizzly Bears becomes blocked by Hill Giant."
+        },
+        {
+          "label": "tapped_blocker",
+          "polarity": "fires",
+          "delta": "B's Hill Giant starts the turn tapped.",
+          "expected": "Hill Giant is not a legal blocker: the declaration is illegal. Grizzly Bears is not blocked by it."
+        }
+      ],
+      "cards": [
+        "Grizzly Bears",
+        "Hill Giant"
+      ],
+      "forge_notes": "The tapped state of a non-active player's creature must be set as a puzzle starting condition."
+    },
+    {
+      "id": "509.1b-1",
+      "rules": [
+        "509.1b"
+      ],
+      "title": "A creature without flying or reach cannot block an attacker with flying",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Wind Drake",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            "Grizzly Bears",
+            "Giant Spider"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A attacks B with Wind Drake.",
+        "In the declare blockers step B declares Grizzly Bears as a blocker of Wind Drake.",
+        "No spells or abilities are used."
+      ],
+      "variants": [
+        {
+          "label": "ground_blocker",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The declaration is illegal: Grizzly Bears has neither flying nor reach, so the evasion restriction of Wind Drake is disobeyed. Wind Drake is not blocked by it."
+        },
+        {
+          "label": "reach_blocker",
+          "polarity": "does_not_fire",
+          "delta": "B declares Giant Spider (reach) as the blocker instead of Grizzly Bears.",
+          "expected": "The declaration is legal: Giant Spider has reach. Wind Drake becomes blocked by Giant Spider."
+        }
+      ],
+      "cards": [
+        "Wind Drake",
+        "Grizzly Bears",
+        "Giant Spider"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "509.1b-2",
+      "rules": [
+        "509.1b"
+      ],
+      "title": "A creature that can block only flyers cannot block a ground attacker",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            },
+            {
+              "card": "Wind Drake",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            "Cloud Sprite"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A attacks B with Grizzly Bears.",
+        "In the declare blockers step B declares Cloud Sprite as a blocker of the attacker.",
+        "No spells or abilities are used."
+      ],
+      "variants": [
+        {
+          "label": "ground_attacker",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The declaration is illegal: Cloud Sprite can block only creatures with flying and Grizzly Bears has none. Grizzly Bears is not blocked."
+        },
+        {
+          "label": "flying_attacker",
+          "polarity": "does_not_fire",
+          "delta": "A attacks B with Wind Drake instead of Grizzly Bears.",
+          "expected": "The declaration is legal: Wind Drake has flying and Cloud Sprite has flying. Wind Drake becomes blocked by Cloud Sprite."
+        }
+      ],
+      "cards": [
+        "Grizzly Bears",
+        "Wind Drake",
+        "Cloud Sprite"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "509.1b-3",
+      "rules": [
+        "509.1b"
+      ],
+      "title": "An evasion ability gained after a legal block does not undo the block",
+      "record_kind": "combat",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            },
+            "Plains",
+            "Plains"
+          ],
+          "B": [
+            "Hill Giant"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Aerial Maneuver"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A attacks B with Grizzly Bears.",
+        "B declares Hill Giant as a blocker of Grizzly Bears.",
+        "A casts Aerial Maneuver targeting Grizzly Bears, tapping both Plains, with priority in the declare blockers step; both players pass and it resolves.",
+        "Combat damage is dealt; no other spells or abilities are used."
+      ],
+      "variants": [
+        {
+          "label": "flying_after_block",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Hill Giant stays a blocker: Grizzly Bears (3/3, flying, first strike) remains blocked by it. In the first-strike damage step Grizzly Bears deals 3 damage to Hill Giant, which is destroyed before dealing damage. B's life stays 20."
+        },
+        {
+          "label": "flying_before_block",
+          "polarity": "does_not_fire",
+          "delta": "A casts Aerial Maneuver on Grizzly Bears during the declare attackers step, before blockers are declared; B then tries to declare Hill Giant as a blocker.",
+          "expected": "Declaring Hill Giant as a blocker is illegal: Grizzly Bears has flying and Hill Giant does not. The declaration is undone and B declares no blockers; Grizzly Bears is unblocked and deals 3 damage to B (life 17); Hill Giant survives."
+        }
+      ],
+      "cards": [
+        "Grizzly Bears",
+        "Hill Giant",
+        "Plains",
+        "Aerial Maneuver"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "509.1c-1",
+      "rules": [
+        "509.1c"
+      ],
+      "title": "A creature that blocks each combat if able must block when it can",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            "Razorgrass Screen"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A attacks B with Grizzly Bears.",
+        "In the declare blockers step B declares no blockers.",
+        "No spells or abilities are used."
+      ],
+      "variants": [
+        {
+          "label": "no_block_declared",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The declaration is illegal: Razorgrass Screen is untapped, able to block Grizzly Bears, and must block, so declaring no blockers obeys fewer requirements than possible."
+        },
+        {
+          "label": "block_declared",
+          "polarity": "does_not_fire",
+          "delta": "B declares Razorgrass Screen as a blocker of Grizzly Bears.",
+          "expected": "The declaration is legal. Grizzly Bears becomes blocked by Razorgrass Screen."
+        },
+        {
+          "label": "screen_tapped",
+          "polarity": "does_not_fire",
+          "delta": "B's Razorgrass Screen starts the turn tapped.",
+          "expected": "Declaring no blockers is legal: a tapped creature cannot block, so no requirement can be obeyed. Grizzly Bears is unblocked and deals 2 damage to B (life 18)."
+        }
+      ],
+      "cards": [
+        "Grizzly Bears",
+        "Razorgrass Screen"
+      ],
+      "forge_notes": "The requirement check against the maximum obeyable set is implemented by Forge's blocking-requirement validation; the tapped state of a non-active creature is a puzzle starting condition."
+    },
+    {
+      "id": "509.1c-2",
+      "rules": [
+        "509.1c"
+      ],
+      "title": "A block requirement is obeyed as far as restrictions allow",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Boggart Brute",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            "Razorgrass Screen",
+            "Dune Beetle"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A attacks B with Boggart Brute (menace).",
+        "In the declare blockers step B declares both Razorgrass Screen and Dune Beetle as blockers of Boggart Brute.",
+        "No spells or abilities are used."
+      ],
+      "variants": [
+        {
+          "label": "both_block",
+          "polarity": "does_not_fire",
+          "delta": "",
+          "expected": "The declaration is legal: two creatures block the menace attacker and the blocking requirement of Razorgrass Screen is obeyed. Boggart Brute becomes blocked by both."
+        },
+        {
+          "label": "neither_blocks",
+          "polarity": "fires",
+          "delta": "B declares no blockers.",
+          "expected": "The declaration is illegal: the requirement of Razorgrass Screen could be obeyed without disobeying menace (both blocking), but is not."
+        },
+        {
+          "label": "only_screen_blocks",
+          "polarity": "other",
+          "delta": "B declares only Razorgrass Screen as a blocker.",
+          "expected": "The declaration is illegal: it violates the menace restriction, which needs two or more blockers."
+        }
+      ],
+      "cards": [
+        "Boggart Brute",
+        "Razorgrass Screen",
+        "Dune Beetle"
+      ],
+      "forge_notes": "Forge's handling of must-block requirements that conflict with menace should be confirmed."
+    },
+    {
+      "id": "509.1g-1",
+      "rules": [
+        "509.1g"
+      ],
+      "title": "A declared blocker becomes a blocking creature until it is removed from combat",
+      "record_kind": "combat",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            },
+            "Island"
+          ],
+          "B": [
+            "Hill Giant"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Unsummon"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A attacks B with Grizzly Bears.",
+        "B declares Hill Giant as a blocker of Grizzly Bears.",
+        "Neither player casts a spell or activates an ability unless a variant says so; combat damage is dealt."
+      ],
+      "variants": [
+        {
+          "label": "blocker_stays",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Hill Giant is a blocking creature of Grizzly Bears: Grizzly Bears deals 2 damage to Hill Giant (2 damage marked, survives) and Hill Giant deals 3 damage to Grizzly Bears, which is destroyed."
+        },
+        {
+          "label": "no_block",
+          "polarity": "does_not_fire",
+          "delta": "B declares no blockers.",
+          "expected": "Hill Giant is not a blocking creature and takes no damage. Grizzly Bears is unblocked and deals 2 damage to B (life 18)."
+        },
+        {
+          "label": "blocker_removed",
+          "polarity": "other",
+          "delta": "After blockers are declared, A casts Unsummon targeting Hill Giant, tapping Island, and it resolves.",
+          "expected": "Hill Giant returns to B's hand and is no longer a blocking creature. Grizzly Bears remains blocked, deals no damage and takes no damage (B's life stays 20)."
+        }
+      ],
+      "cards": [
+        "Grizzly Bears",
+        "Hill Giant",
+        "Island",
+        "Unsummon"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "509.1h-1",
+      "rules": [
+        "509.1h"
+      ],
+      "title": "A blocked creature stays blocked after its blockers leave combat",
+      "record_kind": "combat",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            },
+            "Island"
+          ],
+          "B": [
+            "Hill Giant"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Unsummon"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A attacks B with Grizzly Bears.",
+        "B declares Hill Giant as a blocker of Grizzly Bears (in the never_blocked variant B declares no blockers).",
+        "With priority in the declare blockers step A casts Unsummon targeting Hill Giant, tapping Island; it resolves.",
+        "Combat damage is dealt."
+      ],
+      "variants": [
+        {
+          "label": "blocked_then_blocker_removed",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears remains a blocked creature although Hill Giant returned to B's hand. It has no trample, so it deals no combat damage and B's life stays 20."
+        },
+        {
+          "label": "never_blocked",
+          "polarity": "does_not_fire",
+          "delta": "B declares no blockers.",
+          "expected": "Grizzly Bears is an unblocked creature and deals 2 damage to B (life 18) even though Hill Giant is returned to B's hand."
+        }
+      ],
+      "cards": [
+        "Grizzly Bears",
+        "Hill Giant",
+        "Island",
+        "Unsummon"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "509.1i-1",
+      "rules": [
+        "509.1i"
+      ],
+      "title": "A trigger on being blocked triggers when blockers are declared",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Deepwood Tantiv",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A attacks B with Deepwood Tantiv.",
+        "B declares Grizzly Bears as a blocker of Deepwood Tantiv (in the unblocked variant B declares no blockers).",
+        "Both players pass priority so any trigger resolves."
+      ],
+      "variants": [
+        {
+          "label": "blocked",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Deepwood Tantiv's trigger fires on the declaration of blockers; it resolves and A gains 2 life (22)."
+        },
+        {
+          "label": "unblocked",
+          "polarity": "does_not_fire",
+          "delta": "B declares no blockers.",
+          "expected": "No trigger fires; A's life stays 20."
+        }
+      ],
+      "cards": [
+        "Deepwood Tantiv",
+        "Grizzly Bears"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "509.2a-1",
+      "rules": [
+        "509.2a"
+      ],
+      "title": "Block triggers are on the stack before the active player gets priority",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Deepwood Tantiv",
+              "summoning_sick": false
+            },
+            "Mountain"
+          ],
+          "B": [
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Shock"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A attacks B with Deepwood Tantiv.",
+        "B declares Grizzly Bears as a blocker of Deepwood Tantiv (in the unblocked variant B declares no blockers).",
+        "When A first receives priority in the declare blockers step, A casts Shock targeting player B, tapping Mountain.",
+        "Both players pass until the stack is empty."
+      ],
+      "variants": [
+        {
+          "label": "blocked",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "When A gets priority, Deepwood Tantiv's trigger is already on the stack, so Shock is put above it. Shock resolves first (B life 18), then the trigger resolves (A life 22)."
+        },
+        {
+          "label": "unblocked",
+          "polarity": "does_not_fire",
+          "delta": "B declares no blockers.",
+          "expected": "No trigger is on the stack when A gets priority; the stack holds only Shock. Shock resolves (B life 18) and A's life stays 20."
+        }
+      ],
+      "cards": [
+        "Deepwood Tantiv",
+        "Grizzly Bears",
+        "Mountain",
+        "Shock"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "509.3a-1",
+      "rules": [
+        "509.3a"
+      ],
+      "title": "A 'whenever this creature blocks' ability triggers once even if it blocks several creatures",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Phyrexian Walker",
+              "summoning_sick": false
+            },
+            {
+              "card": "Phyrexian Walker",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            {
+              "card": "Clockwork Beetle",
+              "counters": {
+                "+1/+1": 2
+              }
+            },
+            "Brave the Sands"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A attacks B with both Phyrexian Walkers.",
+        "B declares Clockwork Beetle as a blocker of both Phyrexian Walkers (it can block an additional creature).",
+        "Beetle assigns its 2 damage to the first Walker; combat damage is dealt and the end of combat step passes."
+      ],
+      "variants": [
+        {
+          "label": "blocks_two",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Beetle's blocks trigger fires once and creates one delayed trigger; at end of combat one +1/+1 counter is removed. Beetle stays on the battlefield with one counter (1/1)."
+        },
+        {
+          "label": "blocks_one",
+          "polarity": "fires",
+          "delta": "B declares Clockwork Beetle as a blocker of only one Phyrexian Walker.",
+          "expected": "The trigger fires once; at end of combat one counter is removed. Beetle stays with one counter (1/1)."
+        },
+        {
+          "label": "no_block",
+          "polarity": "does_not_fire",
+          "delta": "B declares no blockers.",
+          "expected": "No blocks trigger fires. Beetle keeps both counters (2/2). B's life stays 20."
+        }
+      ],
+      "cards": [
+        "Phyrexian Walker",
+        "Clockwork Beetle",
+        "Brave the Sands"
+      ],
+      "forge_notes": "Forge fires Mode$ Blocks once per blocker, so the single-trigger result with two blocked attackers needs confirming."
+    },
+    {
+      "id": "509.3b-1",
+      "rules": [
+        "509.3b"
+      ],
+      "title": "A 'whenever this creature blocks a creature' ability triggers once per attacker blocked",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Phyrexian Walker",
+              "summoning_sick": false
+            },
+            {
+              "card": "Phyrexian Walker",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            "Brimaz, King of Oreskos",
+            "Brave the Sands"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A attacks B with both Phyrexian Walkers.",
+        "B declares Brimaz, King of Oreskos as a blocker of both Phyrexian Walkers (it can block an additional creature).",
+        "B puts the two Brimaz triggers on the stack in either order; each token blocks the attacker its trigger names. Both players pass until the stack is empty."
+      ],
+      "variants": [
+        {
+          "label": "blocks_two",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Brimaz triggers twice. B gets two 1/1 Cat Soldier tokens with vigilance, one blocking each Phyrexian Walker."
+        },
+        {
+          "label": "blocks_one",
+          "polarity": "fires",
+          "delta": "B declares Brimaz as a blocker of only one Phyrexian Walker.",
+          "expected": "Brimaz triggers once. B gets one Cat Soldier token, blocking that Walker."
+        },
+        {
+          "label": "no_block",
+          "polarity": "does_not_fire",
+          "delta": "B declares no blockers.",
+          "expected": "Brimaz does not trigger; B gets no token."
+        }
+      ],
+      "cards": [
+        "Phyrexian Walker",
+        "Brimaz, King of Oreskos",
+        "Brave the Sands"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "509.3c-1",
+      "rules": [
+        "509.3c"
+      ],
+      "title": "A 'becomes blocked' ability triggers once per combat however many creatures block",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Deepwood Tantiv",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            "Grizzly Bears",
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A attacks B with Deepwood Tantiv.",
+        "B declares one Grizzly Bears as a blocker of Deepwood Tantiv (the two_blockers variant declares both).",
+        "Both players pass so any trigger resolves. A assigns Deepwood Tantiv's 2 combat damage to the first Grizzly Bears."
+      ],
+      "variants": [
+        {
+          "label": "one_blocker",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The trigger fires once and A gains 2 life (22)."
+        },
+        {
+          "label": "two_blockers",
+          "polarity": "fires",
+          "delta": "B declares both Grizzly Bears as blockers of Deepwood Tantiv.",
+          "expected": "The trigger still fires only once: A gains 2 life (22), not 4."
+        },
+        {
+          "label": "unblocked",
+          "polarity": "does_not_fire",
+          "delta": "B declares no blockers.",
+          "expected": "No trigger fires; A's life stays 20."
+        }
+      ],
+      "cards": [
+        "Deepwood Tantiv",
+        "Grizzly Bears"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "509.3d-1",
+      "rules": [
+        "509.3d"
+      ],
+      "title": "A 'becomes blocked by a creature' ability triggers once for each blocking creature",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Cave Tiger",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            "Grizzly Bears",
+            "Grizzly Bears",
+            "Brimaz, King of Oreskos"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A attacks B with Cave Tiger (2/2).",
+        "B declares one Grizzly Bears as a blocker of Cave Tiger (other variants declare differently).",
+        "Both players pass until the stack is empty at the declare blockers step."
+      ],
+      "variants": [
+        {
+          "label": "one_blocker",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Cave Tiger triggers once and becomes 3/3 until end of turn."
+        },
+        {
+          "label": "two_blockers",
+          "polarity": "fires",
+          "delta": "B declares both Grizzly Bears as blockers of Cave Tiger.",
+          "expected": "Cave Tiger triggers twice and becomes 4/4 until end of turn."
+        },
+        {
+          "label": "token_blocks_too",
+          "polarity": "fires",
+          "delta": "B declares Brimaz as the blocker of Cave Tiger (no Grizzly Bears block).",
+          "expected": "Brimaz's trigger creates a Cat Soldier token that enters blocking Cave Tiger. Cave Tiger triggers for Brimaz and again for the token, and becomes 4/4 until end of turn."
+        },
+        {
+          "label": "unblocked",
+          "polarity": "does_not_fire",
+          "delta": "B declares no blockers.",
+          "expected": "Cave Tiger does not trigger and stays 2/2."
+        }
+      ],
+      "cards": [
+        "Cave Tiger",
+        "Grizzly Bears",
+        "Brimaz, King of Oreskos"
+      ],
+      "forge_notes": "Whether Forge fires AttackerBlockedByCreature for a creature put onto the battlefield blocking needs confirming."
+    },
+    {
+      "id": "509.3e-1",
+      "rules": [
+        "509.3e"
+      ],
+      "title": "A trigger on blocking two or more creatures needs that count when blockers are declared",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            },
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            "Lairwatch Giant"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A attacks B with both Grizzly Bears.",
+        "B declares Lairwatch Giant as a blocker of both Grizzly Bears (it can block an additional creature).",
+        "The Giant assigns 2 first-strike damage to the first Grizzly Bears and 3 to the second. No spells or abilities are used."
+      ],
+      "variants": [
+        {
+          "label": "blocks_two",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Lairwatch Giant's trigger fires and it gains first strike until end of turn. Both Grizzly Bears are destroyed in the first-strike damage step and the Giant takes no damage."
+        },
+        {
+          "label": "blocks_one",
+          "polarity": "does_not_fire",
+          "delta": "B declares Lairwatch Giant as a blocker of only the first Grizzly Bears (the Giant assigns all its damage to it).",
+          "expected": "The trigger does not fire; the Giant has no first strike. The blocked Grizzly Bears is destroyed in the regular damage step while the Giant takes 2 damage and survives; the other Grizzly Bears is unblocked and deals 2 damage to B (life 18)."
+        }
+      ],
+      "cards": [
+        "Grizzly Bears",
+        "Lairwatch Giant"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "509.3e-2",
+      "rules": [
+        "509.3e"
+      ],
+      "title": "A trigger on an attacker becoming blocked by two or more creatures needs that count",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            },
+            "Seifer, Balamb Rival"
+          ],
+          "B": [
+            "Phyrexian Walker",
+            "Phyrexian Walker"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A attacks B with Grizzly Bears; Seifer, Balamb Rival does not attack.",
+        "Seifer's attack trigger targets the first Phyrexian Walker; both players pass and it resolves (the Walker is goaded).",
+        "B declares both Phyrexian Walkers as blockers of Grizzly Bears.",
+        "Both players pass so any trigger resolves. A assigns 1 damage to each Phyrexian Walker. No other spells or abilities are used."
+      ],
+      "variants": [
+        {
+          "label": "two_blockers",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Seifer's trigger fires and Grizzly Bears gains deathtouch until end of turn. Both Phyrexian Walkers are destroyed by 1 damage each and Grizzly Bears takes no damage."
+        },
+        {
+          "label": "one_blocker",
+          "polarity": "does_not_fire",
+          "delta": "B declares only one Phyrexian Walker as a blocker; A assigns all 2 damage to it.",
+          "expected": "The trigger does not fire; Grizzly Bears has no deathtouch. The Phyrexian Walker (0/3) takes 2 damage and survives."
+        }
+      ],
+      "cards": [
+        "Grizzly Bears",
+        "Seifer, Balamb Rival",
+        "Phyrexian Walker"
+      ],
+      "forge_notes": "Seifer's goad trigger fires because A attacks B; goad does not restrict blocking."
+    },
+    {
+      "id": "509.3f-1",
+      "rules": [
+        "509.3f"
+      ],
+      "title": "A block trigger with a characteristic condition checks the characteristic when blocked",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Dread Specter",
+              "summoning_sick": false
+            },
+            "Distorting Lens"
+          ],
+          "B": [
+            "Dune Beetle"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A attacks B with Dread Specter.",
+        "B declares Dune Beetle as a blocker of Dread Specter.",
+        "Combat damage is dealt and the end of combat step passes. No other spells or abilities are used unless a variant says so."
+      ],
+      "variants": [
+        {
+          "label": "black_blocker",
+          "polarity": "does_not_fire",
+          "delta": "",
+          "expected": "Dune Beetle is black, so Dread Specter's trigger does not fire. Both creatures survive combat (Dune Beetle has 2 damage, Dread Specter 1)."
+        },
+        {
+          "label": "recolored_before_block",
+          "polarity": "fires",
+          "delta": "In the beginning of combat step A activates Distorting Lens targeting Dune Beetle and chooses green.",
+          "expected": "Dune Beetle is nonblack when it blocks, so the trigger fires and Dune Beetle is destroyed at end of combat. Dread Specter survives."
+        },
+        {
+          "label": "recolored_after_block",
+          "polarity": "does_not_fire",
+          "delta": "After blockers are declared A activates Distorting Lens targeting Dune Beetle and chooses green.",
+          "expected": "Dune Beetle was black when it blocked, so the trigger does not fire even though it is now green. Dune Beetle survives combat."
+        }
+      ],
+      "cards": [
+        "Dread Specter",
+        "Distorting Lens",
+        "Dune Beetle"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "509.3g-1",
+      "rules": [
+        "509.3g"
+      ],
+      "title": "An 'attacks and isn't blocked' ability needs no blockers declared",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Crypt Cobra",
+              "summoning_sick": false
+            },
+            "Island"
+          ],
+          "B": [
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Unsummon"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A attacks B with Crypt Cobra.",
+        "B declares no blockers.",
+        "With priority in the declare blockers step, after any trigger is on the stack, A casts Unsummon targeting Grizzly Bears, tapping Island; both players pass until the stack is empty.",
+        "Combat damage is dealt."
+      ],
+      "variants": [
+        {
+          "label": "unblocked",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Crypt Cobra's trigger fires and B gets 1 poison counter. Grizzly Bears returns to B's hand. Crypt Cobra deals 3 damage to B (life 17)."
+        },
+        {
+          "label": "blocked_then_removed",
+          "polarity": "does_not_fire",
+          "delta": "B declares Grizzly Bears as a blocker of Crypt Cobra.",
+          "expected": "The trigger does not fire; B has no poison counters. Grizzly Bears returns to B's hand, Crypt Cobra stays blocked, deals no damage and B's life stays 20."
+        }
+      ],
+      "cards": [
+        "Crypt Cobra",
+        "Grizzly Bears",
+        "Island",
+        "Unsummon"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "509.4-1",
+      "rules": [
+        "509.4"
+      ],
+      "title": "A creature put onto the battlefield blocking never 'blocked'",
+      "record_kind": "combat",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Phyrexian Walker",
+              "summoning_sick": false
+            },
+            {
+              "card": "Carnage Gladiator",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            "Brimaz, King of Oreskos",
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A attacks B with Phyrexian Walker.",
+        "B declares Brimaz as a blocker of Phyrexian Walker (the other variants differ in the declaration).",
+        "Both players pass until the stack is empty."
+      ],
+      "variants": [
+        {
+          "label": "brimaz_blocks",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Carnage Gladiator triggers once for Brimaz; B loses 1 life (19). Brimaz's trigger creates a Cat Soldier token blocking Phyrexian Walker; Gladiator does not trigger for the token."
+        },
+        {
+          "label": "brimaz_and_bears_block",
+          "polarity": "fires",
+          "delta": "B declares Brimaz and Grizzly Bears as blockers of Phyrexian Walker.",
+          "expected": "Carnage Gladiator triggers for each declared blocker; B loses 2 life (18). The token that enters blocking does not add a trigger."
+        },
+        {
+          "label": "no_block",
+          "polarity": "other",
+          "delta": "B declares no blockers.",
+          "expected": "No block triggers fire; B's life stays 20 and no token is created."
+        }
+      ],
+      "cards": [
+        "Phyrexian Walker",
+        "Carnage Gladiator",
+        "Brimaz, King of Oreskos",
+        "Grizzly Bears"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "509.4a-1",
+      "rules": [
+        "509.4a"
+      ],
+      "title": "A creature put onto the battlefield blocking an attacker that left combat is not blocking",
+      "record_kind": "combat",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            },
+            "Island"
+          ],
+          "B": [
+            "Brimaz, King of Oreskos"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Unsummon"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A attacks B with Grizzly Bears.",
+        "B declares Brimaz as a blocker of Grizzly Bears; Brimaz's trigger is put on the stack naming Grizzly Bears.",
+        "In the attacker_removed variant A responds by casting Unsummon targeting Grizzly Bears, tapping Island.",
+        "Both players pass until the stack is empty."
+      ],
+      "variants": [
+        {
+          "label": "attacker_still_attacking",
+          "polarity": "does_not_fire",
+          "delta": "",
+          "expected": "The Cat Soldier token enters blocking Grizzly Bears."
+        },
+        {
+          "label": "attacker_removed",
+          "polarity": "fires",
+          "delta": "In response to Brimaz's trigger A casts Unsummon targeting Grizzly Bears, tapping Island.",
+          "expected": "Grizzly Bears returns to A's hand. The Cat Soldier token enters the battlefield but is not blocking any creature."
+        }
+      ],
+      "cards": [
+        "Grizzly Bears",
+        "Brimaz, King of Oreskos",
+        "Island",
+        "Unsummon"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "509.4b-1",
+      "rules": [
+        "509.4b"
+      ],
+      "title": "A creature put onto the battlefield blocking ignores block restrictions",
+      "record_kind": "combat",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Arlinn's Wolf",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            "Brimaz, King of Oreskos",
+            "Savannah Lions"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A attacks B with Arlinn's Wolf (can't be blocked by creatures with power 2 or less).",
+        "B declares Brimaz (power 3) as a blocker of Arlinn's Wolf.",
+        "Both players pass until the stack is empty."
+      ],
+      "variants": [
+        {
+          "label": "brimaz_blocks",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The declaration is legal. Brimaz's trigger creates a 1/1 Cat Soldier token that enters blocking Arlinn's Wolf although its power is 1."
+        },
+        {
+          "label": "lions_blocks",
+          "polarity": "does_not_fire",
+          "delta": "B declares Savannah Lions (power 2) as the blocker instead of Brimaz.",
+          "expected": "The declaration is illegal: a declared blocker with power 2 or less disobeys the restriction. Arlinn's Wolf is not blocked."
+        }
+      ],
+      "cards": [
+        "Arlinn's Wolf",
+        "Brimaz, King of Oreskos",
+        "Savannah Lions"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

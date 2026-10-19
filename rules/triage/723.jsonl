@@ -1,0 +1,13 @@
+{"id": "723.1", "category": "mechanical", "observability": "needs_new_fields", "record_kinds": ["resolution"], "outcome": "The controlled player is controlled for the entire next turn that player actually takes.", "note": "Observable only as who makes the decisions."}
+{"id": "723.1a", "category": "mechanical", "observability": "needs_new_fields", "record_kinds": ["resolution"], "outcome": "With several player-controlling effects on the same player, the last one created applies.", "note": ""}
+{"id": "723.1b", "category": "mechanical", "observability": "needs_new_fields", "record_kinds": ["resolution"], "outcome": "A pending player-controlling effect waits through a skipped turn and applies on the next turn actually taken.", "note": ""}
+{"id": "723.2", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "723.3", "category": "mechanical", "observability": "needs_new_fields", "record_kinds": ["resolution", "playability"], "outcome": "Objects keep their normal controllers and the controlled player remains the active player.", "note": ""}
+{"id": "723.4", "category": "out_of_scope", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "723.5", "category": "decision", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "723.5a", "category": "decision", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "723.5b", "category": "out_of_scope", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "723.6", "category": "out_of_scope", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "723.7", "category": "legality", "observability": "needs_new_fields", "record_kinds": ["playability"], "outcome": "The controlled player's allowed or required actions are restricted as the effect specifies.", "note": ""}
+{"id": "723.8", "category": "decision", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "723.9", "category": "decision", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}

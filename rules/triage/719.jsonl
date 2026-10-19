@@ -1,0 +1,6 @@
+{"id": "719.1", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "719.2", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "719.3", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "719.3a", "category": "mechanical", "observability": "indirect", "record_kinds": ["trigger", "resolution"], "outcome": "At the beginning of its controller's end step a Case becomes solved if its condition holds and it is not already solved.", "note": ""}
+{"id": "719.3b", "category": "mechanical", "observability": "needs_new_fields", "record_kinds": ["continuous"], "outcome": "A Case stays solved until it leaves the battlefield, and the designation is not copied.", "note": ""}
+{"id": "719.3c", "category": "mechanical", "observability": "indirect", "record_kinds": ["continuous", "trigger"], "outcome": "A solved Case's Solved ability applies, triggers or can be activated only while the Case is solved.", "note": ""}

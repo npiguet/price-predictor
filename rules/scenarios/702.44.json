@@ -1,0 +1,289 @@
+{
+  "unit": "702.44",
+  "verified": true,
+  "review": [],
+  "skipped": [
+    {
+      "id": "702.44d",
+      "reason": "no card in Forge's card pool has two instances of sunburst and no effect grants a second one, so the situation cannot be reached in a Forge game; each instance would simply repeat the counting shown in 702.44a-1 and 702.44a-2"
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "702.44a-1",
+      "rules": [
+        "702.44a",
+        "702.44b"
+      ],
+      "title": "A noncreature permanent with sunburst enters with one charge counter per color of mana spent, and none for colorless mana",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Plains",
+            "Island",
+            "Sol Ring"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Pentad Prism"
+          ],
+          "B": []
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Sol Ring is untapped and can produce {C}{C}."
+      },
+      "decisions": [
+        "A casts Pentad Prism (cost {2}), paying with one Plains ({W}) and the Island ({U}).",
+        "Both players pass; Pentad Prism resolves."
+      ],
+      "variants": [
+        {
+          "label": "two_colors",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Pentad Prism enters the battlefield with 2 charge counters (one for white, one for blue)."
+        },
+        {
+          "label": "one_color",
+          "polarity": "fires",
+          "delta": "A pays {2} with both Plains ({W}{W}) instead.",
+          "expected": "Pentad Prism enters the battlefield with 1 charge counter (white was the only color spent)."
+        },
+        {
+          "label": "colorless_only",
+          "polarity": "does_not_fire",
+          "delta": "A pays {2} by tapping Sol Ring for {C}{C} instead.",
+          "expected": "Pentad Prism enters the battlefield with 0 charge counters, because no colored mana was spent."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Island",
+        "Sol Ring",
+        "Pentad Prism"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.44a-2",
+      "rules": [
+        "702.44a"
+      ],
+      "title": "A creature with sunburst enters with one +1/+1 counter per color of mana spent",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Island",
+            "Sol Ring",
+            "Sol Ring"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Etched Oracle"
+          ],
+          "B": []
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Etched Oracle is a 0/0 artifact creature costing {4}. The two Sol Rings are untapped and each can produce {C}{C}."
+      },
+      "decisions": [
+        "A casts Etched Oracle (cost {4}), paying with three Plains and the Island.",
+        "Both players pass; Etched Oracle resolves."
+      ],
+      "variants": [
+        {
+          "label": "two_colors",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Etched Oracle enters with 2 +1/+1 counters and is a 2/2 on the battlefield."
+        },
+        {
+          "label": "one_color",
+          "polarity": "fires",
+          "delta": "A pays {4} with all four Plains instead.",
+          "expected": "Etched Oracle enters with 1 +1/+1 counter and is a 1/1 on the battlefield."
+        },
+        {
+          "label": "colorless_only",
+          "polarity": "does_not_fire",
+          "delta": "A pays {4} by tapping both Sol Rings for {C}{C}{C}{C} instead.",
+          "expected": "Etched Oracle enters with no +1/+1 counters, because no colored mana was spent, and is put into the graveyard as a 0/0 by the next state-based check."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Island",
+        "Etched Oracle",
+        "Sol Ring"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.44b-1",
+      "rules": [
+        "702.44a",
+        "702.44b"
+      ],
+      "title": "Sunburst adds no counters when the permanent enters from somewhere other than the stack",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Swamp",
+            "Plains",
+            "Plains",
+            "Plains"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Etched Oracle",
+            "Zombify"
+          ],
+          "B": []
+        },
+        "graveyard": {
+          "A": [
+            "Etched Oracle"
+          ]
+        },
+        "library": {},
+        "exile": {},
+        "notes": "A has two copies of Etched Oracle: one in hand and one in the graveyard."
+      },
+      "decisions": [
+        "A casts the Etched Oracle from hand (cost {4}), paying with the Swamp and the three Plains.",
+        "Both players pass; Etched Oracle resolves."
+      ],
+      "variants": [
+        {
+          "label": "cast_from_hand",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Etched Oracle enters with 2 +1/+1 counters (black and white) and is a 2/2 on the battlefield. The Etched Oracle in the graveyard and Zombify in hand are untouched."
+        },
+        {
+          "label": "reanimated",
+          "polarity": "does_not_fire",
+          "delta": "A casts Zombify (cost {3}{B}) targeting the Etched Oracle in the graveyard, paying with the Swamp and the three Plains, instead of casting the Etched Oracle from hand.",
+          "expected": "Zombify resolves and Etched Oracle enters the battlefield from the graveyard with no counters, as a 0/0, and is put into the graveyard by the next state-based check. The Etched Oracle in hand stays in hand."
+        }
+      ],
+      "cards": [
+        "Swamp",
+        "Plains",
+        "Etched Oracle",
+        "Zombify"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.44c-1",
+      "rules": [
+        "702.44c"
+      ],
+      "title": "Modular with sunburst sets the number of +1/+1 counters from the colors of mana spent",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Island",
+            "Swamp",
+            "Sol Ring",
+            "Sol Ring",
+            "Sol Ring"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Arcbound Wanderer"
+          ],
+          "B": []
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Arcbound Wanderer is a 0/0 artifact creature costing {6} with Modular-Sunburst. The three Sol Rings are untapped and each can produce {C}{C}."
+      },
+      "decisions": [
+        "A casts Arcbound Wanderer (cost {6}), paying with four Plains, the Island and the Swamp.",
+        "Both players pass; Arcbound Wanderer resolves."
+      ],
+      "variants": [
+        {
+          "label": "three_colors",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Arcbound Wanderer enters with 3 +1/+1 counters (white, blue, black) and is a 3/3 on the battlefield."
+        },
+        {
+          "label": "one_color",
+          "polarity": "fires",
+          "delta": "A pays {6} with all six Plains instead.",
+          "expected": "Arcbound Wanderer enters with 1 +1/+1 counter and is a 1/1 on the battlefield."
+        },
+        {
+          "label": "colorless_only",
+          "polarity": "does_not_fire",
+          "delta": "A pays {6} by tapping all three Sol Rings for {C}{C}{C}{C}{C}{C} instead.",
+          "expected": "Arcbound Wanderer enters with no +1/+1 counters, because no colored mana was spent, and is put into the graveyard as a 0/0 by the next state-based check."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Island",
+        "Swamp",
+        "Arcbound Wanderer",
+        "Sol Ring"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

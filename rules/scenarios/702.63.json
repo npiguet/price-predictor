@@ -1,0 +1,248 @@
+{
+  "unit": "702.63",
+  "verified": true,
+  "review": [
+    "702.63c: the skip reason was false, since Maelstrom Djinn turned face down by Backslide and face up again gains a second vanishing instance; added 702.63c-1 (two instances remove both counters in one upkeep, one instance removes one) and removed the skip."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.63a-1",
+      "rules": [
+        "702.63a"
+      ],
+      "title": "Vanishing N makes the permanent enter with N time counters",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Swamp",
+            "Swamp",
+            "Swamp",
+            "Swamp",
+            "Plains",
+            "Plains"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Waning Wurm",
+            "Calciderm",
+            "Walking Corpse"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Waning Wurm, tapping Swamp, Swamp, Swamp, Swamp.",
+        "Both players pass; Waning Wurm resolves and enters the battlefield."
+      ],
+      "variants": [
+        {
+          "label": "vanishing_2",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Waning Wurm enters with two time counters."
+        },
+        {
+          "label": "vanishing_4",
+          "polarity": "fires",
+          "delta": "A casts Calciderm (Vanishing 4), tapping Plains, Plains, Swamp, Swamp, instead of Waning Wurm.",
+          "expected": "Calciderm enters with four time counters."
+        },
+        {
+          "label": "no_vanishing",
+          "polarity": "does_not_fire",
+          "delta": "A casts Walking Corpse, tapping Swamp and Swamp, instead of Waning Wurm.",
+          "expected": "Walking Corpse enters with no time counters."
+        }
+      ],
+      "cards": [
+        "Swamp",
+        "Plains",
+        "Waning Wurm",
+        "Calciderm",
+        "Walking Corpse"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.63a-2",
+      "rules": [
+        "702.63a"
+      ],
+      "title": "Vanishing removes a time counter each upkeep and sacrifices the permanent at the last",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "upkeep",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "counters": {
+                "time": 1
+              },
+              "summoning_sick": false,
+              "card": "Waning Wurm"
+            }
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "Beginning of A's upkeep: the vanishing trigger goes on the stack and resolves, removing a time counter.",
+        "If the last time counter was removed, the sacrifice trigger goes on the stack and resolves."
+      ],
+      "variants": [
+        {
+          "label": "last_counter",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Both triggers fire. Waning Wurm loses its last time counter and A sacrifices it, so it moves to A's graveyard."
+        },
+        {
+          "label": "two_counters",
+          "polarity": "does_not_fire",
+          "delta": "Waning Wurm has two time counters.",
+          "expected": "The upkeep trigger fires and removes one time counter. Waning Wurm stays on the battlefield with one time counter and no sacrifice trigger fires."
+        },
+        {
+          "label": "opponents_upkeep",
+          "polarity": "does_not_fire",
+          "delta": "It is B's upkeep (B is the active player) instead of A's.",
+          "expected": "The vanishing trigger does not fire. Waning Wurm stays on the battlefield with one time counter."
+        }
+      ],
+      "cards": [
+        "Waning Wurm"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.63b-1",
+      "rules": [
+        "702.63b"
+      ],
+      "title": "Vanishing without a number still removes counters and sacrifices at the last",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "upkeep",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "counters": {
+                "time": 1
+              },
+              "summoning_sick": false,
+              "card": "Maelstrom Djinn"
+            }
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Maelstrom Djinn was turned face up earlier, so it has gained vanishing (without a number) and has time counters."
+      },
+      "decisions": [
+        "Beginning of A's upkeep: the vanishing trigger goes on the stack and resolves, removing a time counter.",
+        "If the last time counter was removed, the sacrifice trigger goes on the stack and resolves."
+      ],
+      "variants": [
+        {
+          "label": "last_counter",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Both triggers fire. Maelstrom Djinn loses its last time counter and A sacrifices it, so it moves to A's graveyard."
+        },
+        {
+          "label": "two_counters",
+          "polarity": "does_not_fire",
+          "delta": "Maelstrom Djinn has two time counters.",
+          "expected": "The upkeep trigger fires and removes one time counter. Maelstrom Djinn stays on the battlefield with one time counter and no sacrifice trigger fires."
+        }
+      ],
+      "cards": [
+        "Maelstrom Djinn"
+      ],
+      "forge_notes": "Vanishing is gained permanently by the Djinn's turned-face-up trigger; a puzzle setup must grant it explicitly. Tidewalker is the printed no-number vanishing creature but its power and toughness equal its time counters, which would confound the sacrifice."
+    },
+    {
+      "id": "702.63c-1",
+      "rules": [
+        "702.63c"
+      ],
+      "title": "Each instance of vanishing removes its own time counter",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "upkeep",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Maelstrom Djinn",
+              "counters": {
+                "time": 2
+              },
+              "summoning_sick": false
+            }
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Maelstrom Djinn has two instances of vanishing without a number: it was turned face up and gained vanishing, then Backslide turned it face down and its morph turned it face up again, so its trigger granted a second instance. It has two time counters."
+      },
+      "decisions": [
+        "Beginning of A's upkeep: both vanishing upkeep triggers go on the stack and resolve one after the other.",
+        "When the last time counter is removed, the sacrifice triggers go on the stack and resolve."
+      ],
+      "variants": [
+        {
+          "label": "two_instances",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Two upkeep triggers fire and each removes a time counter. The last time counter is removed and A sacrifices Maelstrom Djinn, which moves to A's graveyard."
+        },
+        {
+          "label": "one_instance",
+          "polarity": "does_not_fire",
+          "delta": "Maelstrom Djinn has one instance of vanishing.",
+          "expected": "One upkeep trigger fires and removes one time counter. Maelstrom Djinn stays on the battlefield with one time counter."
+        }
+      ],
+      "cards": [
+        "Maelstrom Djinn",
+        "Backslide"
+      ],
+      "forge_notes": "Reached with Backslide turning the Djinn face down and its morph turning it face up again. Whether Forge keeps the first Permanent-duration Pump of Vanishing across the face-down period needs checking; a puzzle setup may have to grant both instances explicitly."
+    }
+  ]
+}

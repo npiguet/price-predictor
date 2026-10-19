@@ -1,0 +1,147 @@
+{
+  "unit": "503",
+  "verified": true,
+  "review": [
+    "503.1a-1: trigger order was left to A ('as they like'); fixed it",
+    "503.2-1: base variant carried a non-empty delta and the timing was left open in decisions; moved the additional-upkeep timing into decisions and emptied the base delta"
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "503.1a-1",
+      "rules": [
+        "503.1a",
+        "502.4"
+      ],
+      "title": "Abilities that triggered in the untap step wait and go on the stack with the upkeep triggers before the active player gets priority",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "untap",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mesmeric Orb",
+            "Juzám Djinn",
+            {
+              "card": "Mountain",
+              "tapped": true
+            }
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island"
+          ]
+        },
+        "exile": {},
+        "notes": "Mesmeric Orb: whenever a permanent becomes untapped, that permanent's controller mills a card. Mountain is tapped at the start of the untap step."
+      },
+      "decisions": [
+        "The untap step begins; A untaps Mountain, which triggers Mesmeric Orb; no player receives priority in the untap step.",
+        "The upkeep step begins; Juzám Djinn's trigger happens.",
+        "Both pending triggers are put on the stack, A putting Mesmeric Orb's trigger on first and Juzám Djinn's on top; then A receives priority and the stack is observed. Both players then pass until the stack is empty."
+      ],
+      "variants": [
+        {
+          "label": "untap_trigger",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "When A first receives priority in the upkeep step the stack holds two triggered abilities, Mesmeric Orb's mill and Juzám Djinn's damage; none has resolved yet (library still 5 cards, A's life 20). After they resolve A's library is 4 cards and A's life is 19."
+        },
+        {
+          "label": "nothing_untaps",
+          "polarity": "does_not_fire",
+          "delta": "Mountain is untapped at the start of the untap step, so nothing untaps.",
+          "expected": "When A first receives priority in the upkeep step the stack holds only Juzám Djinn's trigger; A's library stays at 5 cards and, after it resolves, A's life is 19."
+        }
+      ],
+      "cards": [
+        "Mesmeric Orb",
+        "Juzám Djinn",
+        "Mountain",
+        "Island"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "503.2-1",
+      "rules": [
+        "503.2"
+      ],
+      "title": "A spell castable only after a player's upkeep step becomes castable after the first of several upkeep steps ends",
+      "record_kind": "playability",
+      "setup": {
+        "active": "B",
+        "step": "upkeep",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Island"
+            },
+            {
+              "card": "Island"
+            },
+            {
+              "card": "Island",
+              "tapped": true
+            }
+          ],
+          "B": [
+            {
+              "card": "Paradox Haze",
+              "attached_to": "B"
+            }
+          ]
+        },
+        "hand": {
+          "A": [
+            "Reset"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "It is B's turn. Paradox Haze is an Aura on player B: at the beginning of B's first upkeep each turn, B gets an additional upkeep step after this step. Reset: cast only during an opponent's turn after their upkeep step; untap all lands you control. The Haze trigger resolves in the first upkeep step."
+      },
+      "decisions": [
+        "B's first upkeep begins and Paradox Haze's trigger resolves; B's first upkeep step ends only when both players pass with an empty stack.",
+        "A casts Reset, tapping two untapped Islands, in B's additional upkeep step, after the first upkeep step has ended; both players pass and it resolves."
+      ],
+      "variants": [
+        {
+          "label": "second_upkeep",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Casting Reset is legal (can_play true); it resolves and all three of A's Islands are untapped."
+        },
+        {
+          "label": "first_upkeep",
+          "polarity": "does_not_fire",
+          "delta": "A attempts it in B's first upkeep step, after Paradox Haze's trigger resolved and before that step ends.",
+          "expected": "Casting Reset is not legal (can_play false): B's first upkeep step has not ended."
+        }
+      ],
+      "cards": [
+        "Reset",
+        "Paradox Haze",
+        "Island"
+      ],
+      "forge_notes": "Reset uses CheckSVar$ Count$FinishedUpkeepsThisTurn; check Forge counts the first upkeep as finished once the additional upkeep begins."
+    }
+  ]
+}

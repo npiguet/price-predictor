@@ -1,0 +1,4 @@
+{"id": "702.164", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.164a", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.164b", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.164c", "category": "mechanical", "observability": "direct", "record_kinds": ["combat"], "outcome": "Combat damage to a player from a creature with toxic gives that player poison counters equal to its total toxic value.", "note": ""}

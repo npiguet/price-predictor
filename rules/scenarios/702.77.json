@@ -1,0 +1,206 @@
+{
+  "unit": "702.77",
+  "verified": true,
+  "review": [],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.77a-1",
+      "rules": [
+        "702.77a"
+      ],
+      "title": "Reinforce discards the card from hand and puts counters on the target creature",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Plains",
+            "Grizzly Bears"
+          ],
+          "B": [
+            "Mountain"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Mosquito Guard"
+          ],
+          "B": [
+            "Shock"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A activates reinforce 1 of Mosquito Guard from hand, tapping two Plains for {1}{W}, discarding Mosquito Guard as a cost, targeting Grizzly Bears.",
+        "Both players pass; the ability resolves."
+      ],
+      "variants": [
+        {
+          "label": "target_legal",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Mosquito Guard is in A's graveyard and Grizzly Bears has one +1/+1 counter (3/3)."
+        },
+        {
+          "label": "target_killed_in_response",
+          "polarity": "does_not_fire",
+          "delta": "In response, B casts Shock targeting Grizzly Bears, tapping Mountain.",
+          "expected": "Shock resolves first and Grizzly Bears dies. The reinforce ability fizzles. Mosquito Guard is still in A's graveyard because it was discarded as a cost."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Grizzly Bears",
+        "Mosquito Guard",
+        "Mountain",
+        "Shock"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.77a-2",
+      "rules": [
+        "702.77a"
+      ],
+      "title": "Reinforce can be activated only while the card is in its owner's hand",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Plains",
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Mosquito Guard"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "Evaluate whether A may activate reinforce 1 of Mosquito Guard with two untapped Plains and Grizzly Bears as a target."
+      ],
+      "variants": [
+        {
+          "label": "in_hand",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The activation is legal (can_play true) and Grizzly Bears is a legal target."
+        },
+        {
+          "label": "on_battlefield",
+          "polarity": "does_not_fire",
+          "delta": "Mosquito Guard is on A's battlefield instead of in hand.",
+          "expected": "The activation is not legal (can_play false), because reinforce works only from hand."
+        },
+        {
+          "label": "in_graveyard",
+          "polarity": "does_not_fire",
+          "delta": "Mosquito Guard is in A's graveyard instead of in hand.",
+          "expected": "The activation is not legal (can_play false)."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Grizzly Bears",
+        "Mosquito Guard"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.77b-1",
+      "rules": [
+        "702.77b"
+      ],
+      "title": "A reinforce card has an activated ability in every zone",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Island",
+            "Swamp",
+            "Mountain",
+            "Forest",
+            {
+              "card": "Tazri, Stalwart Survivor",
+              "summoning_sick": false
+            }
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Mosquito Guard",
+            "Grizzly Bears",
+            "Grizzly Bears",
+            "Grizzly Bears",
+            "Grizzly Bears",
+            "Plains"
+          ]
+        },
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A activates Tazri's mill ability, paying {W}{U}{B}{R}{G} with the five lands and tapping Tazri.",
+        "Both players pass; the ability resolves: A mills five cards, then puts every creature card with a non-mana activated ability among them into hand."
+      ],
+      "variants": [
+        {
+          "label": "reinforce_card",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The five milled cards are Mosquito Guard and four Grizzly Bears. Mosquito Guard returns to A's hand because its reinforce ability exists in the graveyard. The four Grizzly Bears stay in A's graveyard."
+        },
+        {
+          "label": "vanilla_card",
+          "polarity": "does_not_fire",
+          "delta": "The top card of the library is Goblin Piker instead of Mosquito Guard.",
+          "expected": "Goblin Piker has no activated ability, so all five milled creature cards stay in A's graveyard and A's hand is empty."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Island",
+        "Swamp",
+        "Mountain",
+        "Forest",
+        "Tazri, Stalwart Survivor",
+        "Mosquito Guard",
+        "Grizzly Bears",
+        "Goblin Piker"
+      ],
+      "forge_notes": "Relies on Forge's hasNonManaActivatedAbility property counting the reinforce keyword's hand-only ability for a card in the graveyard."
+    }
+  ]
+}

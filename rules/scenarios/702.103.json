@@ -1,0 +1,535 @@
+{
+  "unit": "702.103",
+  "verified": true,
+  "review": [
+    "702.103f-2: B's library was empty, so Gods Willing's scry 1 had nothing to look at; gave B a Plains on top and fixed the scry decision."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.103a-1",
+      "rules": [
+        "702.103a",
+        "702.103b"
+      ],
+      "title": "A spell cast bestowed pays the bestow cost and resolves as an Aura",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Grizzly Bears"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Hopeful Eidolon"
+          ],
+          "B": []
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Hopeful Eidolon is a 1/1 white Enchantment Creature with lifelink and bestow {3}{W}; enchanted creature gets +1/+1 and has lifelink."
+      },
+      "decisions": [
+        "A casts Hopeful Eidolon bestowed (paying {3}{W} instead of {W}), targeting Grizzly Bears, tapping all four Plains.",
+        "Both players pass; the Aura spell resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Hopeful Eidolon enters the battlefield as an Aura enchantment attached to Grizzly Bears and is not a creature. Grizzly Bears is 3/3 with lifelink."
+        },
+        {
+          "label": "cast-normally",
+          "polarity": "does_not_fire",
+          "delta": "A casts Hopeful Eidolon for its mana cost {W} instead of bestowing it, tapping one Plains.",
+          "expected": "Hopeful Eidolon enters the battlefield as a 1/1 lifelink Enchantment Creature, attached to nothing. Grizzly Bears is 2/2 without lifelink. Three Plains stay untapped."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Hopeful Eidolon",
+        "Grizzly Bears"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.103b-1",
+      "rules": [
+        "702.103b"
+      ],
+      "title": "A spell cast bestowed needs a legal creature to enchant",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Grizzly Bears"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Hopeful Eidolon"
+          ],
+          "B": []
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A considers casting Hopeful Eidolon bestowed ({3}{W}) with the stack empty in the first main phase."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Casting Hopeful Eidolon bestowed is legal, with Grizzly Bears as its only legal target."
+        },
+        {
+          "label": "no-creature",
+          "polarity": "does_not_fire",
+          "delta": "A controls no Grizzly Bears, so there is no creature on the battlefield.",
+          "expected": "Casting Hopeful Eidolon bestowed is not legal because it has no legal target. Casting it as a creature spell for {W} is legal."
+        },
+        {
+          "label": "opponents-creature",
+          "polarity": "fires",
+          "delta": "The Grizzly Bears is controlled by B instead of A.",
+          "expected": "Casting Hopeful Eidolon bestowed is legal, targeting B's Grizzly Bears."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Hopeful Eidolon",
+        "Grizzly Bears"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.103c-1",
+      "rules": [
+        "702.103c"
+      ],
+      "title": "A copy of a bestowed Aura spell is also a bestowed Aura spell",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Lithoform Engine",
+            "Grizzly Bears"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Triton Wavebreaker"
+          ],
+          "B": []
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Triton Wavebreaker is a 1/1 blue Enchantment Creature with bestow {1}{U}; enchanted creature gets +1/+1 and has prowess. Lithoform Engine's third ability, {4}, {T}: copy target permanent spell you control (the copy becomes a token)."
+      },
+      "decisions": [
+        "A casts Triton Wavebreaker bestowed (paying {1}{U}), targeting Grizzly Bears, tapping two Islands.",
+        "With the spell on the stack, A activates Lithoform Engine's copy-a-permanent-spell ability targeting Triton Wavebreaker, paying {4} with the other four Islands and tapping Lithoform Engine.",
+        "The copy keeps Grizzly Bears as its target.",
+        "Both players pass until the copy and then the original Triton Wavebreaker resolve."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The token copy of Triton Wavebreaker enters as a bestowed Aura attached to Grizzly Bears and is not a creature, and so does the original card. Grizzly Bears is 4/4 with prowess."
+        },
+        {
+          "label": "cast-normally",
+          "polarity": "does_not_fire",
+          "delta": "A casts Triton Wavebreaker for its mana cost {U} instead of bestowing it, tapping one Island, then activates the Engine with four other Islands.",
+          "expected": "The token copy is a 1/1 Enchantment Creature, and so is the original card; neither is an Aura. Grizzly Bears is 2/2."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Lithoform Engine",
+        "Triton Wavebreaker",
+        "Grizzly Bears"
+      ],
+      "forge_notes": "Needs Forge to carry the bestowed state onto a spell copy made by CopySpellAbility. If it does not, the base variant shows a token creature instead of an Aura."
+    },
+    {
+      "id": "702.103d-1",
+      "rules": [
+        "702.103d"
+      ],
+      "title": "Casting a spell bestowed is judged by its bestowed characteristics",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Grizzly Bears"
+          ],
+          "B": [
+            "Aether Storm"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Hopeful Eidolon"
+          ],
+          "B": []
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Aether Storm: creature spells can't be cast."
+      },
+      "decisions": [
+        "A considers casting Hopeful Eidolon bestowed ({3}{W}), targeting Grizzly Bears."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Casting Hopeful Eidolon bestowed is legal: as a bestowed Aura spell it is not a creature spell."
+        },
+        {
+          "label": "as-creature",
+          "polarity": "does_not_fire",
+          "delta": "A considers casting Hopeful Eidolon as a creature spell for {W} instead.",
+          "expected": "Casting Hopeful Eidolon as a creature spell is not legal."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Hopeful Eidolon",
+        "Grizzly Bears",
+        "Aether Storm"
+      ],
+      "forge_notes": "Forge's CantBeCast check must use the characteristics of the bestowed spell, not the card's printed creature type."
+    },
+    {
+      "id": "702.103e-1",
+      "rules": [
+        "702.103e"
+      ],
+      "title": "A bestowed Aura spell with an illegal target resolves as a creature spell",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains"
+          ],
+          "B": [
+            "Mountain",
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Hopeful Eidolon"
+          ],
+          "B": [
+            "Shock"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Hopeful Eidolon bestowed (paying {3}{W}), targeting B's Grizzly Bears, tapping all four Plains.",
+        "A passes priority; B casts Shock targeting Grizzly Bears, tapping Mountain.",
+        "Both players pass; Shock resolves.",
+        "Both players pass; the Aura spell begins resolving."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Shock deals 2 damage to Grizzly Bears (2/2), which goes to B's graveyard. Hopeful Eidolon does not fizzle: it ceases to be bestowed, resolves as a creature spell and enters the battlefield under A's control as a 1/1 lifelink Enchantment Creature."
+        },
+        {
+          "label": "target-survives",
+          "polarity": "does_not_fire",
+          "delta": "B's creature is Centaur Courser (3/3) instead of Grizzly Bears.",
+          "expected": "Shock leaves Centaur Courser on the battlefield with 2 damage. Hopeful Eidolon resolves as a bestowed Aura attached to Centaur Courser, which is 4/4 with lifelink and 2 damage."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Mountain",
+        "Hopeful Eidolon",
+        "Shock",
+        "Grizzly Bears",
+        "Centaur Courser"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.103f-1",
+      "rules": [
+        "702.103f"
+      ],
+      "title": "A bestowed Aura whose creature leaves becomes a creature instead of dying",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Grizzly Bears",
+            {
+              "card": "Hopeful Eidolon",
+              "attached_to": "Grizzly Bears"
+            }
+          ],
+          "B": [
+            "Mountain"
+          ]
+        },
+        "hand": {
+          "B": [
+            "Lightning Bolt"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Hopeful Eidolon was cast bestowed earlier and is a bestowed Aura on Grizzly Bears, which is 3/3 with lifelink."
+      },
+      "decisions": [
+        "A passes priority with an empty stack.",
+        "B casts Lightning Bolt targeting Grizzly Bears, tapping Mountain.",
+        "Both players pass; Lightning Bolt resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears (3/3 with the Aura) takes 3 damage and goes to A's graveyard. Hopeful Eidolon ceases to be bestowed, stays on the battlefield as a 1/1 lifelink Enchantment Creature and does not go to the graveyard."
+        },
+        {
+          "label": "creature-survives",
+          "polarity": "does_not_fire",
+          "delta": "A's creature is Centaur Courser (3/3, 4/4 with the Aura) instead of Grizzly Bears.",
+          "expected": "Centaur Courser survives with 3 damage. Hopeful Eidolon stays attached to it as a bestowed Aura and is not a creature."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Hopeful Eidolon",
+        "Lightning Bolt",
+        "Grizzly Bears",
+        "Centaur Courser"
+      ],
+      "forge_notes": "The bestowed state of the pre-placed Aura is not expressible in the zone list; the harness must set it up as if cast bestowed."
+    },
+    {
+      "id": "702.103f-2",
+      "rules": [
+        "702.103f"
+      ],
+      "title": "A bestowed Aura attached illegally becomes unattached and a creature",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Hopeful Eidolon",
+              "attached_to": "Grizzly Bears"
+            }
+          ],
+          "B": [
+            "Plains",
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "B": [
+            "Gods Willing"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "B": [
+            "Plains"
+          ]
+        },
+        "exile": {},
+        "notes": "Hopeful Eidolon (white) was cast bestowed by A and is a bestowed Aura on B's Grizzly Bears, which is 3/3 with lifelink."
+      },
+      "decisions": [
+        "A passes priority with an empty stack.",
+        "B casts Gods Willing targeting Grizzly Bears, choosing white, tapping Plains.",
+        "Both players pass; Gods Willing resolves and B scries 1, keeping Plains on top of its library."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears has protection from white, so the white Aura is attached illegally. Hopeful Eidolon becomes unattached, ceases to be bestowed and stays on the battlefield under A's control as a 1/1 lifelink Enchantment Creature, not in the graveyard. Grizzly Bears is 2/2."
+        },
+        {
+          "label": "other-color",
+          "polarity": "does_not_fire",
+          "delta": "B chooses red for the protection.",
+          "expected": "Hopeful Eidolon stays attached to Grizzly Bears as a bestowed Aura, which is 3/3 with lifelink and protection from red."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Hopeful Eidolon",
+        "Gods Willing",
+        "Grizzly Bears"
+      ],
+      "forge_notes": "The bestowed state of the pre-placed Aura is not expressible in the zone list; the harness must set it up as if cast bestowed."
+    },
+    {
+      "id": "702.103g-1",
+      "rules": [
+        "702.103g"
+      ],
+      "title": "A bestowed Aura that phases in unattached becomes a creature",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Plains",
+            "Plains",
+            {
+              "card": "Hopeful Eidolon",
+              "attached_to": "Grizzly Bears"
+            }
+          ],
+          "B": [
+            "Mountain",
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Teferi's Protection"
+          ],
+          "B": [
+            "Shock"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Hopeful Eidolon was cast bestowed by A and is a bestowed Aura on B's Grizzly Bears (3/3 with lifelink). Teferi's Protection phases out all permanents A controls until A's next turn."
+      },
+      "decisions": [
+        "A casts Teferi's Protection, tapping three Plains; it resolves, A's permanents including Hopeful Eidolon phase out, and Teferi's Protection is exiled. A passes the turn without further actions.",
+        "On B's turn, B casts Shock targeting B's own Grizzly Bears (2/2 while the Aura is phased out), tapping Mountain; it resolves.",
+        "Play proceeds to A's next untap step, when A's permanents phase in."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears dies to Shock while Hopeful Eidolon is phased out. At A's untap step Hopeful Eidolon phases in unattached, ceases to be bestowed and is a 1/1 lifelink Enchantment Creature on the battlefield, not in the graveyard."
+        },
+        {
+          "label": "creature-stays",
+          "polarity": "does_not_fire",
+          "delta": "B does not cast Shock, so Grizzly Bears stays on the battlefield.",
+          "expected": "At A's untap step Hopeful Eidolon phases in attached to Grizzly Bears and is still a bestowed Aura (not a creature); Grizzly Bears is 3/3 with lifelink."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Mountain",
+        "Hopeful Eidolon",
+        "Teferi's Protection",
+        "Shock",
+        "Grizzly Bears"
+      ],
+      "forge_notes": "Hard to reach: needs Forge to phase an Aura out directly while the creature it enchants stays in play, then to handle phasing in with no host. Forge may phase the Aura in attached to a creature that is gone, or re-attach it."
+    }
+  ]
+}

@@ -1,0 +1,199 @@
+{
+  "unit": "702.28",
+  "verified": true,
+  "review": [],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.28b-1",
+      "rules": [
+        "702.28b"
+      ],
+      "title": "A creature with shadow can be blocked only by creatures with shadow",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "declare_attackers",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Dauthi Marauder",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            "Grizzly Bears",
+            "Dauthi Marauder"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Dauthi Marauder (3/1 shadow) is attacking B."
+      },
+      "decisions": [
+        "A attacks player B with Dauthi Marauder.",
+        "B considers declaring Grizzly Bears as a blocker."
+      ],
+      "variants": [
+        {
+          "label": "nonshadow_blocker",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Declaring Grizzly Bears as a blocker is illegal; Grizzly Bears is not a legal blocker."
+        },
+        {
+          "label": "shadow_blocker",
+          "polarity": "does_not_fire",
+          "delta": "B considers declaring its Dauthi Marauder as the blocker instead.",
+          "expected": "Declaring B's Dauthi Marauder as a blocker is legal."
+        }
+      ],
+      "cards": [
+        "Dauthi Marauder",
+        "Grizzly Bears"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.28b-2",
+      "rules": [
+        "702.28b"
+      ],
+      "title": "A creature with shadow can block only creatures with shadow",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "declare_attackers",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            },
+            {
+              "card": "Dauthi Marauder",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            "Dauthi Marauder",
+            "Hill Giant"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Grizzly Bears is attacking B."
+      },
+      "decisions": [
+        "A attacks player B with Grizzly Bears.",
+        "B considers declaring its Dauthi Marauder as a blocker."
+      ],
+      "variants": [
+        {
+          "label": "shadow_blocks_nonshadow",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Declaring Dauthi Marauder as a blocker of Grizzly Bears is illegal."
+        },
+        {
+          "label": "nonshadow_blocks_nonshadow",
+          "polarity": "does_not_fire",
+          "delta": "B considers declaring Hill Giant as the blocker instead.",
+          "expected": "Declaring Hill Giant as a blocker of Grizzly Bears is legal."
+        },
+        {
+          "label": "shadow_attacker",
+          "polarity": "does_not_fire",
+          "delta": "A attacks with Dauthi Marauder instead of Grizzly Bears.",
+          "expected": "Declaring Dauthi Marauder as a blocker of A's Dauthi Marauder is legal."
+        }
+      ],
+      "cards": [
+        "Dauthi Marauder",
+        "Grizzly Bears",
+        "Hill Giant"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.28c-1",
+      "rules": [
+        "702.28c"
+      ],
+      "title": "Multiple instances of shadow give the same restriction as one",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Dauthi Marauder",
+              "summoning_sick": false
+            },
+            "Dauthi Embrace",
+            "Swamp",
+            "Swamp"
+          ],
+          "B": [
+            "Grizzly Bears",
+            "Dauthi Marauder"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A activates Dauthi Embrace ({B}{B}) targeting Dauthi Marauder, tapping both Swamps; it resolves, so Dauthi Marauder has two instances of shadow.",
+        "A attacks player B with Dauthi Marauder.",
+        "B considers declaring Grizzly Bears as a blocker."
+      ],
+      "variants": [
+        {
+          "label": "two_instances_nonshadow_blocker",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Declaring Grizzly Bears as a blocker is illegal."
+        },
+        {
+          "label": "two_instances_shadow_blocker",
+          "polarity": "does_not_fire",
+          "delta": "B considers declaring its Dauthi Marauder (one instance of shadow) as the blocker.",
+          "expected": "Declaring B's Dauthi Marauder as a blocker is legal; the blocker needs shadow, not two instances."
+        },
+        {
+          "label": "one_instance",
+          "polarity": "fires",
+          "delta": "A does not activate Dauthi Embrace; Dauthi Marauder has one instance of shadow.",
+          "expected": "Declaring Grizzly Bears as a blocker is illegal, as with two instances."
+        }
+      ],
+      "cards": [
+        "Dauthi Marauder",
+        "Dauthi Embrace",
+        "Swamp",
+        "Grizzly Bears"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

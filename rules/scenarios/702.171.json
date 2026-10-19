@@ -1,0 +1,202 @@
+{
+  "unit": "702.171",
+  "verified": true,
+  "review": [
+    "702.171a-2: B controlled no land, so the spell_on_stack variant's Shock was unreachable; gave B an untapped Mountain in the setup and had the delta tap it for Shock.",
+    "702.171b-1: saddled_last_turn kept Grizzly Bears tapped from a saddle activated last turn, which A's untap step would have undone; the delta now states Grizzly Bears is untapped as part of that one fact."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.171a-1",
+      "rules": [
+        "702.171a"
+      ],
+      "title": "Saddle taps other creatures with enough total power and makes the permanent saddled until end of turn",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Quilled Charger",
+              "summoning_sick": false
+            },
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            }
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Quilled Charger is a 4/3 Mount with saddle 2: 'Whenever Quilled Charger attacks while saddled, it gets +1/+2 and gains menace until end of turn.' B controls no creatures."
+      },
+      "decisions": [
+        "A activates the saddle ability of Quilled Charger, tapping Grizzly Bears (power 2).",
+        "Both players pass; the ability resolves.",
+        "A moves to combat and attacks B with Quilled Charger. Its attack trigger resolves. No blockers can be declared."
+      ],
+      "variants": [
+        {
+          "label": "enough_power",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears is tapped as the cost. Quilled Charger becomes saddled, its attack trigger fires and it becomes a 5/5 with menace. B takes 5 damage and is at 15."
+        },
+        {
+          "label": "not_enough_power",
+          "polarity": "does_not_fire",
+          "delta": "Fugitive Wizard (1/1) is on A's battlefield instead of Grizzly Bears.",
+          "expected": "Saddling is not legal: the total power of the other untapped creatures is 1, less than 2. Quilled Charger is not saddled, its attack trigger does not fire, and it deals 4 damage. B is at 16."
+        },
+        {
+          "label": "two_small_creatures",
+          "polarity": "fires",
+          "delta": "Two Fugitive Wizards (1/1 each) are on A's battlefield instead of Grizzly Bears; both are tapped to saddle.",
+          "expected": "Both Fugitive Wizards are tapped, their total power 2 meeting the cost. Quilled Charger becomes saddled, its attack trigger fires and it deals 5 damage. B is at 15."
+        }
+      ],
+      "cards": [
+        "Quilled Charger",
+        "Grizzly Bears",
+        "Fugitive Wizard"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.171a-2",
+      "rules": [
+        "702.171a"
+      ],
+      "title": "Saddle can be activated only as a sorcery",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Quilled Charger",
+              "summoning_sick": false
+            },
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            "Mountain"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Quilled Charger has saddle 2. In the base the stack is empty and A has priority."
+      },
+      "decisions": [
+        "A considers activating the saddle ability of Quilled Charger, tapping Grizzly Bears."
+      ],
+      "variants": [
+        {
+          "label": "main_phase_empty_stack",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Activating saddle is legal."
+        },
+        {
+          "label": "beginning_of_combat",
+          "polarity": "does_not_fire",
+          "delta": "The step is beginning_of_combat instead of main1.",
+          "expected": "Activating saddle is not legal: it is not a main phase."
+        },
+        {
+          "label": "spell_on_stack",
+          "polarity": "does_not_fire",
+          "delta": "B has cast Shock targeting A, tapping B's Mountain; Shock is on the stack and A has priority.",
+          "expected": "Activating saddle is not legal: the stack is not empty."
+        },
+        {
+          "label": "opponents_turn",
+          "polarity": "does_not_fire",
+          "delta": "B is the active player instead of A.",
+          "expected": "Activating saddle is not legal: it is not A's turn."
+        }
+      ],
+      "cards": [
+        "Quilled Charger",
+        "Grizzly Bears",
+        "Shock",
+        "Mountain"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.171b-1",
+      "rules": [
+        "702.171b"
+      ],
+      "title": "A permanent stays saddled until end of turn and not beyond",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "declare_attackers",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Quilled Charger",
+              "summoning_sick": false
+            },
+            {
+              "card": "Grizzly Bears",
+              "tapped": true
+            }
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Quilled Charger has saddle 2 and 'Whenever it attacks while saddled, it gets +1/+2 and gains menace until end of turn.' In the base, earlier this turn A activated saddle in main1 tapping Grizzly Bears, and Quilled Charger became saddled. B controls no creatures."
+      },
+      "decisions": [
+        "A attacks B with Quilled Charger. Its attack trigger, if any, resolves. No blockers can be declared."
+      ],
+      "variants": [
+        {
+          "label": "saddled_this_turn",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Quilled Charger is still saddled, its attack trigger fires and it becomes a 5/5 with menace. B takes 5 damage and is at 15."
+        },
+        {
+          "label": "saddled_last_turn",
+          "polarity": "does_not_fire",
+          "delta": "Quilled Charger became saddled during A's previous turn, not this turn (so Grizzly Bears, tapped for that saddle, untapped in this turn's untap step).",
+          "expected": "Quilled Charger is no longer saddled, its attack trigger does not fire and it deals 4 damage. B is at 16. Grizzly Bears is untapped."
+        }
+      ],
+      "cards": [
+        "Quilled Charger",
+        "Grizzly Bears"
+      ],
+      "forge_notes": "The leave-the-battlefield and not-copiable parts of the rule are not exercised here; a copy of a saddled Mount is summoning sick and cannot attack to show the designation."
+    }
+  ]
+}

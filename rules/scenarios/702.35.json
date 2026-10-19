@@ -1,0 +1,166 @@
+{
+  "unit": "702.35",
+  "verified": true,
+  "review": [
+    "702.35c: the skip claimed no Forge card can refer to the discarded card after the madness trigger resolves, but a 'whenever you discard' trigger such as Containment Construct's triggers alongside the madness trigger and can resolve after it; removed the skip and added 702.35c-1 with fires (uncast, found in graveyard), cast_with_madness and trigger-order does_not_fire variants."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.35a-1",
+      "rules": [
+        "702.35a"
+      ],
+      "title": "A discarded madness card is exiled instead, and may be cast for its madness cost",
+      "record_kind": "rewrite",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Mountain"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Tormenting Voice",
+            "Fiery Temper"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Mountain"
+          ]
+        },
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Tormenting Voice, tapping two Mountains, discarding Fiery Temper as its additional cost.",
+        "The madness trigger goes on the stack above Tormenting Voice. When it resolves A casts Fiery Temper for its madness cost {R} (tapping the third Mountain), targeting player B.",
+        "Both players pass; Fiery Temper resolves, then Tormenting Voice resolves."
+      ],
+      "variants": [
+        {
+          "label": "cast",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Fiery Temper is exiled instead of going to the graveyard when discarded, then cast for {R}: it deals 3 damage to B (life 20 to 17) and is put into A's graveyard after it resolves. Tormenting Voice then draws A two cards."
+        },
+        {
+          "label": "declined",
+          "polarity": "other",
+          "delta": "A chooses not to cast Fiery Temper when the madness trigger resolves.",
+          "expected": "Fiery Temper is exiled when discarded, then put into A's graveyard by the trigger. B's life stays 20. A draws two cards."
+        },
+        {
+          "label": "cost_unpayable",
+          "polarity": "other",
+          "delta": "A controls only two Mountains, both used for Tormenting Voice.",
+          "expected": "Fiery Temper is exiled when discarded; the madness cost {R} cannot be paid, so it is put into A's graveyard. B's life stays 20."
+        },
+        {
+          "label": "no_madness",
+          "polarity": "does_not_fire",
+          "delta": "A's hand holds Shock instead of Fiery Temper and A discards Shock.",
+          "expected": "Shock goes directly to A's graveyard: it is not exiled and no madness trigger exists. B's life stays 20."
+        }
+      ],
+      "cards": [
+        "Tormenting Voice",
+        "Fiery Temper",
+        "Shock",
+        "Mountain"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.35c-1",
+      "rules": [
+        "702.35c"
+      ],
+      "title": "After an uncast madness card reaches the graveyard, an effect referring to the discarded card finds it there",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            {
+              "card": "Containment Construct",
+              "summoning_sick": false
+            }
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Tormenting Voice",
+            "Fiery Temper"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Mountain"
+          ]
+        },
+        "exile": {},
+        "notes": "Containment Construct is a 2/1 colorless artifact creature whose only ability is 'Whenever you discard a card, you may exile that card from your graveyard. If you do, you may play that card this turn.'"
+      },
+      "decisions": [
+        "A casts Tormenting Voice, tapping two Mountains, discarding Fiery Temper as its additional cost; Fiery Temper is exiled by madness.",
+        "The madness trigger and Containment Construct's trigger trigger together. A puts Containment Construct's trigger on the stack first and the madness trigger on top of it.",
+        "The madness trigger resolves: A does not cast Fiery Temper, and it is put into A's graveyard.",
+        "Containment Construct's trigger resolves: A chooses to exile the discarded card from the graveyard.",
+        "Both players pass; Tormenting Voice resolves."
+      ],
+      "variants": [
+        {
+          "label": "uncast_then_found",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Containment Construct's trigger finds Fiery Temper in A's graveyard and exiles it; Fiery Temper is in exile and A may play it this turn. A draws two cards."
+        },
+        {
+          "label": "cast_with_madness",
+          "polarity": "does_not_fire",
+          "delta": "When the madness trigger resolves, A casts Fiery Temper for {R} (tapping the third Mountain) targeting player B; it resolves before Containment Construct's trigger.",
+          "expected": "Fiery Temper deals 3 damage to B (life 20 to 17) and is put into A's graveyard as a new object; Containment Construct's trigger cannot find the discarded card and exiles nothing. Fiery Temper stays in A's graveyard. A draws two cards."
+        },
+        {
+          "label": "construct_trigger_first",
+          "polarity": "does_not_fire",
+          "delta": "A orders the triggers the other way: Containment Construct's trigger is on top and resolves before the madness trigger.",
+          "expected": "When Containment Construct's trigger resolves Fiery Temper is still in exile, not in the graveyard, so nothing is exiled from the graveyard. The madness trigger then resolves, A does not cast Fiery Temper, and it is put into A's graveyard, where it stays. A draws two cards."
+        }
+      ],
+      "cards": [
+        "Containment Construct",
+        "Tormenting Voice",
+        "Fiery Temper",
+        "Mountain"
+      ],
+      "forge_notes": "Forge resolves Containment Construct's trigger through Defined$ TriggeredCard with Origin$ Graveyard; whether that reference follows the card from madness exile to the graveyard (fires variant) and loses it after the card was cast (cast_with_madness) depends on Forge's LKI handling, so either may be a Forge discrepancy."
+    }
+  ]
+}

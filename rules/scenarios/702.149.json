@@ -1,0 +1,209 @@
+{
+  "unit": "702.149",
+  "verified": true,
+  "review": [],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.149a-1",
+      "rules": [
+        "702.149a"
+      ],
+      "title": "Training triggers when another attacker has greater power",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Gryff Rider",
+              "summoning_sick": false
+            },
+            {
+              "card": "Hill Giant",
+              "summoning_sick": false
+            },
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            }
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A declares Gryff Rider and Hill Giant as attackers against B.",
+        "B declares no blockers.",
+        "The training trigger, if any, resolves; combat damage is dealt."
+      ],
+      "variants": [
+        {
+          "label": "greater_power",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Hill Giant (power 3) is greater than Gryff Rider's power 2, so training triggers and Gryff Rider gets one +1/+1 counter (3/2). B takes 6 damage (life 14)."
+        },
+        {
+          "label": "equal_power",
+          "polarity": "does_not_fire",
+          "delta": "A declares Gryff Rider and Grizzly Bears (power 2) as attackers instead of Hill Giant.",
+          "expected": "Grizzly Bears' power is not greater than Gryff Rider's, so training does not trigger. Gryff Rider has no counters. B takes 4 damage (life 16)."
+        },
+        {
+          "label": "attacks_alone",
+          "polarity": "does_not_fire",
+          "delta": "A declares Gryff Rider alone as an attacker.",
+          "expected": "No other creature attacks, so training does not trigger. B takes 2 damage (life 18)."
+        }
+      ],
+      "cards": [
+        "Gryff Rider",
+        "Hill Giant",
+        "Grizzly Bears"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.149b-1",
+      "rules": [
+        "702.149b"
+      ],
+      "title": "Each instance of training triggers separately",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Gryff Rider",
+              "summoning_sick": false
+            },
+            {
+              "card": "Hill Giant",
+              "summoning_sick": false
+            },
+            "Warrior's Resolve"
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Plains"
+          ]
+        },
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A declares Gryff Rider and Hill Giant as attackers against B.",
+        "B declares no blockers.",
+        "Both training triggers of Gryff Rider resolve; combat damage is dealt."
+      ],
+      "variants": [
+        {
+          "label": "two_instances",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Gryff Rider has its own training and one granted by Warrior's Resolve. Two training triggers fire and Gryff Rider gets two +1/+1 counters (4/3). Hill Giant's granted training does not trigger because Gryff Rider's power 2 is lower. B takes 7 damage (life 13)."
+        },
+        {
+          "label": "one_instance",
+          "polarity": "does_not_fire",
+          "delta": "Warrior's Resolve is on B's battlefield instead of A's, so Gryff Rider has only its own training.",
+          "expected": "One training trigger fires and Gryff Rider gets one +1/+1 counter (3/2). B takes 6 damage (life 14)."
+        }
+      ],
+      "cards": [
+        "Gryff Rider",
+        "Hill Giant",
+        "Warrior's Resolve",
+        "Plains"
+      ],
+      "forge_notes": "In the two_instances variant Warrior's Resolve also draws A a card at the beginning of the end step, because a creature with a +1/+1 counter attacked; that is why A's library holds a card. Warrior's Resolve under B's control does not affect A's creatures. Forge must count the granted instance separately from the printed one."
+    },
+    {
+      "id": "702.149c-1",
+      "rules": [
+        "702.149c"
+      ],
+      "title": "A 'when this creature trains' ability triggers when training puts a counter on it",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Savior of Ollenbock",
+              "summoning_sick": false
+            },
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            },
+            {
+              "card": "Fugitive Wizard",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            "Hill Giant"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A declares Savior of Ollenbock and Grizzly Bears as attackers against B.",
+        "B declares no blockers.",
+        "Savior of Ollenbock's training trigger resolves; if Savior of Ollenbock trains, its 'trains' trigger targets Hill Giant.",
+        "Combat damage is dealt."
+      ],
+      "variants": [
+        {
+          "label": "trains",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Training puts a +1/+1 counter on Savior of Ollenbock (2/3), so the 'trains' trigger fires and exiles Hill Giant. B takes 4 damage (life 16)."
+        },
+        {
+          "label": "no_training",
+          "polarity": "does_not_fire",
+          "delta": "A declares Savior of Ollenbock and Fugitive Wizard (power 1) as attackers instead of Grizzly Bears.",
+          "expected": "Fugitive Wizard's power is not greater than Savior of Ollenbock's power 1, so no training trigger and no 'trains' trigger. Hill Giant stays on the battlefield. B takes 2 damage (life 18)."
+        }
+      ],
+      "cards": [
+        "Savior of Ollenbock",
+        "Grizzly Bears",
+        "Fugitive Wizard",
+        "Hill Giant"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

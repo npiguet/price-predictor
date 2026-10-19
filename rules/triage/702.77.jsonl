@@ -1,0 +1,3 @@
+{"id": "702.77", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.77a", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "Activating reinforce from hand discards the card and puts N +1/+1 counters on the target creature.", "note": ""}
+{"id": "702.77b", "category": "mechanical", "observability": "direct", "record_kinds": ["continuous"], "outcome": "A reinforce card keeps the activated ability in all zones, so effects keyed to having activated abilities apply to it.", "note": ""}

@@ -1,0 +1,3 @@
+{"id": "702.86", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.86a", "category": "mechanical", "observability": "direct", "record_kinds": ["trigger"], "outcome": "When an annihilator creature attacks, the defending player sacrifices N permanents.", "note": ""}
+{"id": "702.86b", "category": "mechanical", "observability": "direct", "record_kinds": ["trigger"], "outcome": "Each annihilator instance triggers separately.", "note": ""}

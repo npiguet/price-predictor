@@ -1,0 +1,12 @@
+{"id": "722.1", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "722.2", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "722.2a", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "722.2b", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "722.2c", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "722.3", "category": "legality", "observability": "indirect", "record_kinds": ["playability"], "outcome": "A preparation card cannot be cast as its prepare spell from hand; only the exiled copy is castable.", "note": ""}
+{"id": "722.3a", "category": "mechanical", "observability": "needs_new_fields", "record_kinds": ["resolution"], "outcome": "A permanent with a prepare spell becomes prepared once; one without a prepare spell, or already prepared, does not.", "note": ""}
+{"id": "722.3b", "category": "mechanical", "observability": "needs_new_fields", "record_kinds": ["resolution"], "outcome": "An effect that makes a permanent unprepared removes the prepared designation.", "note": ""}
+{"id": "722.3c", "category": "mechanical", "observability": "needs_new_fields", "record_kinds": ["resolution"], "outcome": "When a permanent becomes prepared a copy with only the prepare spell characteristics is created in exile and is castable while the permanent stays prepared on the battlefield; casting it removes the designation.", "note": ""}
+{"id": "722.3d", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "722.4", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "722.5", "category": "decision", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}

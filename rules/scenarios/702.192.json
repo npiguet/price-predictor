@@ -1,0 +1,143 @@
+{
+  "unit": "702.192",
+  "verified": true,
+  "review": [],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.192a-1",
+      "rules": [
+        "702.192a"
+      ],
+      "title": "The first resolution of a spell with paradigm exiles the spell instead of putting it into the graveyard",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Grizzly Bears"
+          ],
+          "B": [
+            "Island",
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Germination Practicum"
+          ],
+          "B": [
+            "Counterspell"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Germination Practicum, tapping five Forests.",
+        "B passes without responding. Both players pass; Germination Practicum resolves."
+      ],
+      "variants": [
+        {
+          "label": "first_resolution",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Germination Practicum resolves: Grizzly Bears gets two +1/+1 counters (4/4). Germination Practicum is exiled rather than put into the graveyard, and a paradigm effect for A is created that acts at the beginning of each of A's precombat main phases."
+        },
+        {
+          "label": "countered",
+          "polarity": "does_not_fire",
+          "delta": "In response, B casts Counterspell, tapping two Islands, targeting Germination Practicum.",
+          "expected": "Germination Practicum is countered and put into A's graveyard. It never resolves, so Grizzly Bears gets no counters (2/2) and no paradigm effect is created."
+        },
+        {
+          "label": "second_resolution",
+          "polarity": "does_not_fire",
+          "delta": "A spell named Germination Practicum has already resolved earlier this game: another copy is in A's exile zone and its paradigm effect is active.",
+          "expected": "Germination Practicum resolves: Grizzly Bears gets two +1/+1 counters (4/4) and this Germination Practicum is exiled. It does not create a second paradigm effect, so A still gets one free copy per precombat main phase."
+        }
+      ],
+      "cards": [
+        "Germination Practicum",
+        "Forest",
+        "Grizzly Bears",
+        "Counterspell",
+        "Island"
+      ],
+      "forge_notes": "Forge implements paradigm as an exile sub-ability plus a Unique$ effect with a Main1 phase trigger. It may not check explicitly that this is the first resolution."
+    },
+    {
+      "id": "702.192a-2",
+      "rules": [
+        "702.192a"
+      ],
+      "title": "At the beginning of each of its controller's precombat main phases a copy of the paradigm spell may be cast free from exile",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Grizzly Bears"
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {
+          "A": [
+            "Germination Practicum"
+          ]
+        },
+        "notes": "A resolved Germination Practicum earlier in the game; it was exiled and its paradigm effect is active. The step named is the beginning of that phase."
+      },
+      "decisions": [
+        "The precombat main phase of A begins; the paradigm trigger goes on the stack.",
+        "A chooses to cast a copy of Germination Practicum from exile without paying its mana cost.",
+        "Both players pass; the copy resolves."
+      ],
+      "variants": [
+        {
+          "label": "own_precombat_main",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The paradigm trigger fires and a copy is created in exile and cast. Grizzly Bears gets two +1/+1 counters (4/4). The copy ceases to exist and the original Germination Practicum stays in exile."
+        },
+        {
+          "label": "own_postcombat_main",
+          "polarity": "does_not_fire",
+          "delta": "The step is A's postcombat main phase (main2), not the precombat one.",
+          "expected": "No paradigm trigger fires. Grizzly Bears stays a 2/2."
+        },
+        {
+          "label": "opponents_precombat_main",
+          "polarity": "does_not_fire",
+          "delta": "B is the active player at the beginning of B's precombat main phase.",
+          "expected": "No paradigm trigger fires, as the effect acts only in its controller's main phases. Grizzly Bears stays a 2/2."
+        }
+      ],
+      "cards": [
+        "Germination Practicum",
+        "Grizzly Bears"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

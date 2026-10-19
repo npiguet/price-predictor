@@ -1,0 +1,358 @@
+{
+  "unit": "201",
+  "verified": true,
+  "review": [
+    "201.2b-1: the duplicate-name variant was polarity 'other' though the 201.2b count fails exactly as in the face-down variant; set it to does_not_fire.",
+    "201.5-1: decision said A 'holds priority' in response to B's spell, which is not how A gets priority; reworded to a plain response.",
+    "201.5b-1: base expected said the Elemental 'is removed from combat' though no combat takes place; removed that clause.",
+    "201.5a-1: the 'opponents-second' variant flipped Gutter Grime's 'creature you control' trigger condition rather than anything 201.5a decides, and 'second-primed' changed no outcome the rule decides; rebuilt the scenario as an existing Ooze token Shocked while two Gutter Grimes hold 1 and 3 slime counters, the delta being which Gutter Grime created the token (1/1 dies vs 3/3 survives).",
+    "201.2a: triaged definitional, but its second sentence (a nameless object shares no name, even with another nameless object) decides whether Guardian Project's intervening-if trigger fires; reclassified as mechanical and added scenario 201.2a-1 (face-down vs face-up Battering Craghorn entering beside a face-up and a face-down Craghorn)."
+  ],
+  "skipped": [
+    {
+      "id": "201.2c",
+      "reason": "cannot be illustrated in Forge: the only nameless objects are face-down permanents and spells, and every 'different name' / doesNotShareNameWith check in the cardsfolder either runs on library or graveyard cards (always named; Light-Paws, Central Elevator), compares a named candidate against a group (Tibalt's Trickery, whose countered face-down spell is revealed with its name in the graveyard and whose mill count is random), or counts a group, which is the 201.2b case covered by 201.2b-1. No card asks whether a nameless first object has a different name than a group."
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "201.2a-1",
+      "rules": [
+        "201.2a"
+      ],
+      "title": "A face-down creature has no name, so it does not share a name with any creature, face down or face up",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Guardian Project",
+            "Battering Craghorn",
+            {
+              "card": "Battering Craghorn",
+              "face_down": true
+            },
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Battering Craghorn"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Grizzly Bears"
+          ]
+        },
+        "exile": {},
+        "notes": "A controls Guardian Project, a face-up Battering Craghorn, a face-down Battering Craghorn (a nameless 2/2 cast earlier with morph) and four untapped Mountains. A's graveyard is empty."
+      },
+      "decisions": [
+        "A casts the Battering Craghorn in hand face down for {3} using morph, tapping three Mountains.",
+        "Both players pass; the face-down spell resolves and the creature enters the battlefield.",
+        "If Guardian Project triggers, both players pass and its ability resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The entering face-down creature has no name, so it shares a name neither with the face-up Battering Craghorn nor with the other face-down creature; Guardian Project's trigger fires and resolves, and A draws Grizzly Bears."
+        },
+        {
+          "label": "face-up",
+          "polarity": "does_not_fire",
+          "delta": "A casts the Battering Craghorn in hand face up for {2}{R}{R}, tapping all four Mountains, instead of face down.",
+          "expected": "The entering Battering Craghorn has the same name as the face-up Battering Craghorn A controls; Guardian Project's trigger does not fire and A draws no card."
+        }
+      ],
+      "cards": [
+        "Guardian Project",
+        "Battering Craghorn",
+        "Mountain",
+        "Grizzly Bears"
+      ],
+      "forge_notes": "Forge checks doesNotShareNameWith OtherYourBattlefield on the entering card; a face-down card's name is empty in Forge, which should make it share no name. Confirm that two face-down cards do not match each other."
+    },
+    {
+      "id": "201.2b-1",
+      "rules": [
+        "201.2b"
+      ],
+      "title": "A face-down creature has no name, so it does not count as a Demon with a different name",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "upkeep",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Liliana's Contract",
+            "Conspiracy",
+            "Grizzly Bears",
+            "Hill Giant",
+            "Gray Ogre",
+            "Battering Craghorn"
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Grizzly Bears"
+          ]
+        },
+        "exile": {},
+        "notes": "Conspiracy entered earlier with Demon chosen, so every creature A controls is a Demon, face-down ones included. A's four creatures are Grizzly Bears, Hill Giant, Gray Ogre and Battering Craghorn. In the base variant Battering Craghorn is face up; none of A's creatures is summoning sick or relevant to combat. The beginning-of-upkeep trigger of Liliana's Contract is about to be checked."
+      },
+      "decisions": [
+        "A's beginning of upkeep: Liliana's Contract's trigger condition is checked.",
+        "If it triggers, both players pass and its ability resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "A controls four Demons with four different names; Liliana's Contract's upkeep trigger fires and resolves, and A wins the game."
+        },
+        {
+          "label": "face-down",
+          "polarity": "does_not_fire",
+          "delta": "Battering Craghorn is face down on the battlefield instead of face up.",
+          "expected": "The face-down creature is a Demon with no name, so only three Demons with different names are counted; Liliana's Contract's upkeep trigger does not fire and the game continues at 20 life each."
+        },
+        {
+          "label": "duplicate-name",
+          "polarity": "does_not_fire",
+          "delta": "The fourth creature is a second Grizzly Bears (face up) instead of Battering Craghorn.",
+          "expected": "Two Demons share the name Grizzly Bears, so only three different names are counted; Liliana's Contract's upkeep trigger does not fire and the game continues."
+        }
+      ],
+      "cards": [
+        "Liliana's Contract",
+        "Conspiracy",
+        "Grizzly Bears",
+        "Hill Giant",
+        "Gray Ogre",
+        "Battering Craghorn"
+      ],
+      "forge_notes": "Needs Conspiracy's ChooseType already set to Demon and a face-down Battering Craghorn on the battlefield (puzzle state). Forge counts Count$Valid Demon.YouCtrl$DifferentCardNames; whether a face-down card contributes an empty name to that count (and is skipped) should be confirmed."
+    },
+    {
+      "id": "201.5-1",
+      "rules": [
+        "201.5"
+      ],
+      "title": "An ability naming its own source acts only on that object, not on another permanent with the same name",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "B",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Drudge Skeletons",
+            "Drudge Skeletons",
+            "Swamp"
+          ],
+          "B": [
+            "Mountain"
+          ]
+        },
+        "hand": {
+          "B": [
+            "Shock"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "A's two Drudge Skeletons are untapped; the first listed is called 'first' and the second 'second'. Each has 'B: Regenerate Drudge Skeletons.'"
+      },
+      "decisions": [
+        "B casts Shock targeting A's first Drudge Skeletons, tapping Mountain.",
+        "A, in response, activates the regenerate ability of the first Drudge Skeletons, tapping Swamp.",
+        "Both players pass; the regenerate ability resolves and creates a regeneration shield.",
+        "Both players pass; Shock resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The regeneration shield is on the first Drudge Skeletons only. Shock deals 2 damage to it, the destruction is replaced: it becomes tapped, its damage is removed, and it stays on the battlefield. The second Drudge Skeletons is untouched and untapped."
+        },
+        {
+          "label": "other-skeleton",
+          "polarity": "does_not_fire",
+          "delta": "Shock targets the second Drudge Skeletons instead of the first.",
+          "expected": "The regeneration shield stays on the first Drudge Skeletons, which is untapped and undamaged. The second Drudge Skeletons, despite sharing the name, has no shield, is dealt lethal damage and moves to A's graveyard."
+        }
+      ],
+      "cards": [
+        "Drudge Skeletons",
+        "Swamp",
+        "Mountain",
+        "Shock"
+      ],
+      "forge_notes": "Forge scripts say Defined Self for the regenerate ability, so the 'same name' reading is implicit in the implementation."
+    },
+    {
+      "id": "201.5a-1",
+      "rules": [
+        "201.5a"
+      ],
+      "title": "An Ooze token's granted ability counts slime counters only on the Gutter Grime that created it",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "B",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Gutter Grime",
+              "counters": {
+                "SLIME": 1
+              }
+            },
+            {
+              "card": "Gutter Grime",
+              "counters": {
+                "SLIME": 3
+              }
+            },
+            {
+              "card": "Ooze Token",
+              "token": true
+            }
+          ],
+          "B": [
+            "Mountain"
+          ]
+        },
+        "hand": {
+          "B": [
+            "Shock"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "A controls two Gutter Grimes: the first listed has 1 slime counter, the second 3. The Ooze token was created earlier by the first Gutter Grime's trigger (Forge token script g_x_x_ooze_gutter_grime), so its ability reads 'This token's power and toughness are each equal to the number of slime counters on Gutter Grime', referring to that first Gutter Grime. It has no damage."
+      },
+      "decisions": [
+        "B casts Shock targeting the Ooze token, tapping Mountain.",
+        "Both players pass; Shock resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The Ooze token is 1/1, counting only the first Gutter Grime's 1 slime counter. Shock deals 2 damage to it and it moves to A's graveyard in the state-based check, then ceases to exist. Neither Gutter Grime triggers and their counters stay at 1 and 3."
+        },
+        {
+          "label": "made-by-second-grime",
+          "polarity": "does_not_fire",
+          "delta": "The Ooze token was created by the second Gutter Grime (3 slime counters) instead of the first.",
+          "expected": "The Ooze token is 3/3, counting only the second Gutter Grime's 3 slime counters. Shock deals 2 damage to it and it stays on the battlefield with 2 damage marked."
+        }
+      ],
+      "cards": [
+        "Gutter Grime",
+        "Shock",
+        "Mountain"
+      ],
+      "forge_notes": "Puzzle state needs the Ooze token with the creating Gutter Grime as its remembered source; the token's power and toughness read Remembered$CardCounters.SLIME, which is how Forge binds the granted ability to its own Gutter Grime. The token is named 'Ooze Token' in Forge's token script and is not a cardsfolder card, so it is not listed in cards."
+    },
+    {
+      "id": "201.5b-1",
+      "rules": [
+        "201.5b"
+      ],
+      "title": "A gained ability that names its original holder acts on the creature that gained it",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "B",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Quicksilver Elemental",
+            "Drudge Skeletons",
+            "Island",
+            "Island"
+          ],
+          "B": [
+            "Swamp",
+            "Swamp",
+            "Swamp"
+          ]
+        },
+        "hand": {
+          "B": [
+            "Murder"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Quicksilver Elemental is 3/4 and may spend blue mana as though it were any color on its abilities' costs. Drudge Skeletons has 'B: Regenerate Drudge Skeletons.'"
+      },
+      "decisions": [
+        "B casts Murder targeting Quicksilver Elemental, tapping three Swamps.",
+        "A, in response, activates Quicksilver Elemental's U ability targeting Drudge Skeletons, tapping an Island; both players pass and it resolves.",
+        "A activates the regenerate ability Quicksilver Elemental gained, paying with the second Island (blue mana spent as black); both players pass and it resolves.",
+        "Both players pass; Murder resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The regeneration shield is on Quicksilver Elemental. Murder's destruction of it is replaced: Quicksilver Elemental becomes tapped and stays on the battlefield. Drudge Skeletons is untouched."
+        },
+        {
+          "label": "murder-skeletons",
+          "polarity": "does_not_fire",
+          "delta": "Murder targets Drudge Skeletons instead of Quicksilver Elemental.",
+          "expected": "The regeneration shield is on Quicksilver Elemental, not on Drudge Skeletons, so Drudge Skeletons is destroyed and moves to A's graveyard. Quicksilver Elemental stays on the battlefield untouched."
+        }
+      ],
+      "cards": [
+        "Quicksilver Elemental",
+        "Drudge Skeletons",
+        "Murder",
+        "Island",
+        "Swamp"
+      ],
+      "forge_notes": "Forge implements the gain with GainsAbilitiesOfDefined; confirm that the regenerate effect's Defined Self resolves to the Elemental and not to the Drudge Skeletons card."
+    }
+  ]
+}

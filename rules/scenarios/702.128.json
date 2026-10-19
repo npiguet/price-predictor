@@ -1,0 +1,125 @@
+{
+  "unit": "702.128",
+  "verified": true,
+  "review": [],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.128a-1",
+      "rules": [
+        "702.128a"
+      ],
+      "title": "Embalm exiles the card as a cost and creates a white Zombie token copy with no mana cost",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains"
+          ],
+          "B": [
+            "Island"
+          ]
+        },
+        "hand": {
+          "B": [
+            "Stifle"
+          ]
+        },
+        "graveyard": {
+          "A": [
+            "Sacred Cat"
+          ]
+        },
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A activates embalm {W} of Sacred Cat from the graveyard, tapping the Plains and exiling Sacred Cat as part of the cost.",
+        "B has priority with the ability on the stack and passes; A passes.",
+        "The embalm ability resolves."
+      ],
+      "variants": [
+        {
+          "label": "resolves",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Sacred Cat is in exile, not in the graveyard. A token copy of Sacred Cat is created on the battlefield: a white Zombie Cat, 1/1 with lifelink, with no mana cost."
+        },
+        {
+          "label": "ability_countered",
+          "polarity": "does_not_fire",
+          "delta": "B responds by casting Stifle with the Island, targeting the embalm ability.",
+          "expected": "The embalm ability is countered. Sacred Cat stays in exile because exiling was a cost, and no token is created. Stifle is in B's graveyard."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Island",
+        "Sacred Cat",
+        "Stifle"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.128a-2",
+      "rules": [
+        "702.128a"
+      ],
+      "title": "Embalm can be activated only as a sorcery",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains"
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {
+          "A": [
+            "Sacred Cat"
+          ]
+        },
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A tries to activate embalm {W} of Sacred Cat from the graveyard, tapping the Plains.",
+        "Both players pass; if the ability was activated, it resolves."
+      ],
+      "variants": [
+        {
+          "label": "main_phase",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Activation is legal with an empty stack during A's main phase. After resolution a white Zombie Cat token copy of Sacred Cat is on the battlefield and the card is in exile."
+        },
+        {
+          "label": "end_step",
+          "polarity": "does_not_fire",
+          "delta": "It is A's end step instead of the first main phase.",
+          "expected": "Activation is not legal outside a main phase. Sacred Cat stays in A's graveyard and the Plains stays untapped."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Sacred Cat"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

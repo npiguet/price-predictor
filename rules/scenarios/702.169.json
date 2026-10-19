@@ -1,0 +1,173 @@
+{
+  "unit": "702.169",
+  "verified": true,
+  "review": [],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.169b-1",
+      "rules": [
+        "702.169b"
+      ],
+      "title": "A solved static ability applies only while the Case is solved",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Case of the Gateway Express",
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Case of the Gateway Express is solved in the base: 'Solved - Creatures you control get +1/+0.' Its enters trigger has already been resolved on an earlier turn."
+      },
+      "decisions": [
+        "No action is taken; the power and toughness of Grizzly Bears are read on the stable board."
+      ],
+      "variants": [
+        {
+          "label": "solved",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears is a 3/2."
+        },
+        {
+          "label": "unsolved",
+          "polarity": "does_not_fire",
+          "delta": "The Case is not solved.",
+          "expected": "Grizzly Bears is a 2/2."
+        }
+      ],
+      "cards": [
+        "Case of the Gateway Express",
+        "Grizzly Bears"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.169c-1",
+      "rules": [
+        "702.169c"
+      ],
+      "title": "A solved triggered ability triggers only if the Case is solved",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "upkeep",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Case of the Crimson Pulse"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Shock",
+            "Mountain"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Mountain"
+          ]
+        },
+        "exile": {},
+        "notes": "Case of the Crimson Pulse is solved in the base: 'Solved - At the beginning of your upkeep, discard your hand, then draw two cards.' A's library is listed top card first."
+      },
+      "decisions": [
+        "The upkeep of A begins. If the Case's ability triggers, both players pass and it resolves."
+      ],
+      "variants": [
+        {
+          "label": "solved",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The Case's triggered ability triggers. Shock and Mountain are discarded to A's graveyard and A draws two Mountains from the library."
+        },
+        {
+          "label": "unsolved",
+          "polarity": "does_not_fire",
+          "delta": "The Case is not solved.",
+          "expected": "The Case's ability does not trigger. A's hand is still Shock and Mountain, the graveyard is empty and the library is unchanged."
+        }
+      ],
+      "cards": [
+        "Case of the Crimson Pulse",
+        "Shock",
+        "Mountain"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.169d-1",
+      "rules": [
+        "702.169d"
+      ],
+      "title": "A solved activated ability can be activated only if the Case is solved",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Case of the Stashed Skeleton",
+            "Swamp",
+            "Swamp"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Swamp",
+            "Swamp",
+            "Swamp"
+          ]
+        },
+        "exile": {},
+        "notes": "Case of the Stashed Skeleton is solved in the base: 'Solved - {1}{B}, Sacrifice this Case: Search your library for a card, put it into your hand, then shuffle. Activate only as a sorcery.' The stack is empty."
+      },
+      "decisions": [
+        "A considers activating the Case's ability, paying {1}{B} with both Swamps and sacrificing the Case."
+      ],
+      "variants": [
+        {
+          "label": "solved",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Activating the ability is legal."
+        },
+        {
+          "label": "unsolved",
+          "polarity": "does_not_fire",
+          "delta": "The Case is not solved.",
+          "expected": "Activating the ability is not legal."
+        }
+      ],
+      "cards": [
+        "Case of the Stashed Skeleton",
+        "Swamp"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

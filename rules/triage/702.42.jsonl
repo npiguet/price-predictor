@@ -1,0 +1,3 @@
+{"id": "702.42", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.42a", "category": "mechanical", "observability": "direct", "record_kinds": ["playability", "resolution"], "outcome": "Paying the entwine cost lets the spell use all its modes.", "note": ""}
+{"id": "702.42b", "category": "mechanical", "observability": "direct", "record_kinds": ["resolution"], "outcome": "An entwined spell performs its modes in the order written when it resolves.", "note": ""}

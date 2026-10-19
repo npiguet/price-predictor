@@ -1,0 +1,4 @@
+{"id": "702.155", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.155a", "category": "mechanical", "observability": "direct", "record_kinds": ["trigger"], "outcome": "Chapter abilities of a read ahead Saga do not trigger the turn it entered unless it has exactly the lore counter count of the chapter.", "note": ""}
+{"id": "702.155b", "category": "mechanical", "observability": "indirect", "record_kinds": ["rewrite", "resolution"], "outcome": "A Saga with read ahead enters with the chosen number of lore counters.", "note": ""}
+{"id": "702.155c", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}

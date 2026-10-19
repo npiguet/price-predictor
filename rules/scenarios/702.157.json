@@ -1,0 +1,79 @@
+{
+  "unit": "702.157",
+  "verified": true,
+  "review": [],
+  "skipped": [
+    {
+      "id": "702.157b",
+      "reason": "no card in Forge's cardsfolder has more than one instance of squad, so payments for several instances cannot be told apart in a game"
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "702.157a-1",
+      "rules": [
+        "702.157a"
+      ],
+      "title": "A creature with squad creates a token copy for each time the squad cost was paid",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Zephyrim"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Zephyrim is {3}{W} 3/3 flying vigilance with squad {2}. Its miracle ability is inert here."
+      },
+      "decisions": [
+        "A casts Zephyrim and pays its squad cost {2} twice, tapping eight Plains in total. It resolves.",
+        "Its enters trigger goes on the stack if it fired; both players pass and it resolves."
+      ],
+      "variants": [
+        {
+          "label": "paid_twice",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The squad trigger fires. Two tokens that are copies of Zephyrim are created: A controls Zephyrim and two Zephyrim tokens, each 3/3 flying vigilance."
+        },
+        {
+          "label": "paid_once",
+          "polarity": "fires",
+          "delta": "A pays the squad cost {2} once, tapping six Plains.",
+          "expected": "The squad trigger fires and creates one token copy: A controls Zephyrim and one Zephyrim token."
+        },
+        {
+          "label": "not_paid",
+          "polarity": "does_not_fire",
+          "delta": "A does not pay the squad cost, tapping four Plains.",
+          "expected": "The squad trigger does not fire. A controls only Zephyrim, no token."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Zephyrim"
+      ],
+      "forge_notes": "The token copies do not themselves have a squad payment, so they create nothing when they enter."
+    }
+  ]
+}

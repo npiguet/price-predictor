@@ -1,0 +1,90 @@
+{
+  "unit": "702.76",
+  "verified": true,
+  "review": [],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.76a-1",
+      "rules": [
+        "702.76a"
+      ],
+      "title": "A prowl spell may be cast for its prowl cost only after a matching creature dealt combat damage to a player",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            "Island",
+            {
+              "card": "Triton Shorethief",
+              "summoning_sick": false
+            },
+            {
+              "card": "Goblin Piker",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Latchkey Faerie"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Island",
+            "Island"
+          ]
+        },
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A attacks player B with Triton Shorethief.",
+        "B declares no blockers.",
+        "Combat damage is dealt; Triton Shorethief deals 1 damage to B.",
+        "In the second main phase, evaluate whether A may cast Latchkey Faerie for its prowl cost {2}{U}, with three untapped Islands."
+      ],
+      "variants": [
+        {
+          "label": "rogue_connected",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Triton Shorethief, a Rogue under A's control, dealt combat damage to B this turn. Casting Latchkey Faerie for {2}{U} is legal (can_play true); the mana cost {3}{U} cannot be paid with three Islands."
+        },
+        {
+          "label": "rogue_blocked",
+          "polarity": "does_not_fire",
+          "delta": "B blocks Triton Shorethief with Grizzly Bears.",
+          "expected": "No player was dealt combat damage this turn. Casting Latchkey Faerie is not legal (can_play false)."
+        },
+        {
+          "label": "wrong_type",
+          "polarity": "does_not_fire",
+          "delta": "A attacks with Goblin Piker instead of Triton Shorethief and B declares no blockers.",
+          "expected": "B was dealt combat damage (life 18), but Goblin Piker is neither a Faerie nor a Rogue. Casting Latchkey Faerie is not legal (can_play false)."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Triton Shorethief",
+        "Goblin Piker",
+        "Grizzly Bears",
+        "Latchkey Faerie"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

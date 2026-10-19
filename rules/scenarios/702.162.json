@@ -1,0 +1,68 @@
+{
+  "unit": "702.162",
+  "verified": true,
+  "review": [],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.162a-1",
+      "rules": [
+        "702.162a"
+      ],
+      "title": "More Than Meets the Eye allows casting the card converted for its own cost",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Goldbug, Humanity's Ally"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Goldbug, Humanity's Ally costs {1}{W}{U} and has More Than Meets the Eye {W}{U}. Evaluated in A's main phase with an empty stack."
+      },
+      "decisions": [
+        "No action is taken; the engine evaluates whether A can cast Goldbug, Humanity's Ally face up and converted."
+      ],
+      "variants": [
+        {
+          "label": "two_lands",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Casting converted for {W}{U} is legal (can_play true). Casting face up for {1}{W}{U} is not legal. If cast converted, it enters as Goldbug, Scrappy Scout."
+        },
+        {
+          "label": "no_blue",
+          "polarity": "does_not_fire",
+          "delta": "A controls Plains and Plains instead of Plains and Island.",
+          "expected": "Neither casting is legal: the converted cost {W}{U} needs blue mana, and so does the face-up cost."
+        },
+        {
+          "label": "three_lands",
+          "polarity": "other",
+          "delta": "A controls Plains, Island and Plains.",
+          "expected": "Both castings are legal: converted for {W}{U} and face up for {1}{W}{U}."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Island",
+        "Goldbug, Humanity's Ally"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

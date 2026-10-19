@@ -1,0 +1,260 @@
+{
+  "unit": "702.167",
+  "verified": true,
+  "review": [
+    "702.167a-2: B controlled no land, so the spell_on_stack variant's Shock was unreachable; gave B an untapped Mountain in the setup and had the delta tap it for Shock."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.167a-1",
+      "rules": [
+        "702.167a"
+      ],
+      "title": "Craft exiles the permanent and the materials as a cost, then returns the card transformed",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            "Braided Net",
+            "Short Sword"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Braided Net is the front face of a double-faced card; its back face is Braided Quipu. Craft is {1}{U} with one other artifact as material."
+      },
+      "decisions": [
+        "A activates the craft ability of Braided Net, paying {1}{U} with both Islands and choosing Short Sword as the material.",
+        "Both players pass; the ability resolves."
+      ],
+      "variants": [
+        {
+          "label": "materials_present",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Braided Net and Short Sword are exiled as the cost. When the ability resolves, the card returns to the battlefield transformed as Braided Quipu under A's control."
+        },
+        {
+          "label": "no_material",
+          "polarity": "does_not_fire",
+          "delta": "A controls no Short Sword; there is no other artifact on A's battlefield or in A's graveyard.",
+          "expected": "The craft ability cannot be activated because its material cannot be exiled. Braided Net stays on the battlefield untransformed and both Islands stay untapped."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Braided Net",
+        "Short Sword",
+        "Braided Quipu"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.167a-2",
+      "rules": [
+        "702.167a"
+      ],
+      "title": "Craft can be activated only as a sorcery",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            "Braided Net",
+            "Short Sword"
+          ],
+          "B": [
+            "Mountain"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "In the base the stack is empty and A has priority."
+      },
+      "decisions": [
+        "A considers activating the craft ability of Braided Net, paying {1}{U} and exiling Short Sword as the material."
+      ],
+      "variants": [
+        {
+          "label": "main_phase_empty_stack",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Activating craft is legal."
+        },
+        {
+          "label": "beginning_of_combat",
+          "polarity": "does_not_fire",
+          "delta": "The step is beginning_of_combat instead of main1.",
+          "expected": "Activating craft is not legal: it is not a main phase."
+        },
+        {
+          "label": "spell_on_stack",
+          "polarity": "does_not_fire",
+          "delta": "B has cast Shock targeting A, tapping B's Mountain; Shock is on the stack and A has priority.",
+          "expected": "Activating craft is not legal: the stack is not empty."
+        },
+        {
+          "label": "opponents_turn",
+          "polarity": "does_not_fire",
+          "delta": "B is the active player instead of A.",
+          "expected": "Activating craft is not legal: it is not A's turn."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Braided Net",
+        "Short Sword",
+        "Shock",
+        "Mountain"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.167b-1",
+      "rules": [
+        "702.167b"
+      ],
+      "title": "A craft material described by type alone can be a permanent or a graveyard card of that type",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            "Braided Net",
+            "Short Sword"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Braided Net's craft is 'with artifact', without the word 'card'. Short Sword is an artifact."
+      },
+      "decisions": [
+        "A considers activating the craft ability of Braided Net, paying {1}{U} and exiling Short Sword as the material."
+      ],
+      "variants": [
+        {
+          "label": "permanent_you_control",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Activating craft is legal: Short Sword on the battlefield under A's control is a legal material."
+        },
+        {
+          "label": "card_in_your_graveyard",
+          "polarity": "fires",
+          "delta": "Short Sword is in A's graveyard instead of on A's battlefield.",
+          "expected": "Activating craft is legal: the artifact card in A's graveyard is a legal material."
+        },
+        {
+          "label": "card_in_hand",
+          "polarity": "does_not_fire",
+          "delta": "Short Sword is in A's hand instead of on A's battlefield.",
+          "expected": "Activating craft is not legal: a card in hand is neither a permanent nor a card in a graveyard."
+        },
+        {
+          "label": "opponents_permanent",
+          "polarity": "does_not_fire",
+          "delta": "Short Sword is on B's battlefield instead of A's.",
+          "expected": "Activating craft is not legal: the material must be a permanent A controls or a card in A's graveyard."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Braided Net",
+        "Short Sword"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.167c-1",
+      "rules": [
+        "702.167c"
+      ],
+      "title": "An ability of the crafted permanent counts only the cards exiled to pay its craft cost",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Swamp",
+            "Swamp",
+            "Swamp",
+            "Swamp",
+            "Altar of the Wretched",
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Altar of the Wretched is the front face of a double-faced card; its back face is Wretched Bonemass, whose power and toughness equal the total power of the exiled cards used to craft it. Craft is {2}{B}{B} with one or more other creatures. The stack is empty and A has priority."
+      },
+      "decisions": [
+        "A activates the craft ability of Altar of the Wretched with X = 1, paying {2}{B}{B} with the four Swamps and choosing Grizzly Bears as the material.",
+        "Both players pass; the ability resolves."
+      ],
+      "variants": [
+        {
+          "label": "two_power_material",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Altar of the Wretched and Grizzly Bears are exiled as the cost. Wretched Bonemass enters the battlefield under A's control as a 2/2."
+        },
+        {
+          "label": "three_power_material",
+          "polarity": "fires",
+          "delta": "The material is Hill Giant (3/3) instead of Grizzly Bears.",
+          "expected": "Wretched Bonemass enters the battlefield as a 3/3."
+        },
+        {
+          "label": "unrelated_exiled_card",
+          "polarity": "does_not_fire",
+          "delta": "A's exile zone already contains a Hill Giant, exiled earlier by an unrelated effect.",
+          "expected": "Wretched Bonemass enters the battlefield as a 2/2: the Hill Giant already in exile was not exiled to pay the craft cost and is not counted."
+        }
+      ],
+      "cards": [
+        "Swamp",
+        "Altar of the Wretched",
+        "Grizzly Bears",
+        "Wretched Bonemass",
+        "Hill Giant"
+      ],
+      "forge_notes": "The crafted card itself (Altar of the Wretched) should not count among the exiled cards used to craft; verify Forge's ExiledWith on Wretched Bonemass agrees."
+    }
+  ]
+}

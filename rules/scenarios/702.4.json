@@ -1,0 +1,314 @@
+{
+  "unit": "702.4",
+  "verified": true,
+  "review": [],
+  "skipped": [
+    {
+      "id": "702.4e",
+      "reason": "redundancy of multiple instances has no observable outcome: a creature with two double strike abilities deals damage in exactly the same two steps as with one, which 702.4b-1 and 702.4b-3 already show"
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "702.4b-1",
+      "rules": [
+        "702.4b"
+      ],
+      "title": "A double striker deals damage in the first step, before a blocker that has neither first strike nor double strike",
+      "record_kind": "combat",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Fencing Ace",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            {
+              "card": "Mons's Goblin Raiders",
+              "summoning_sick": false
+            }
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A attacks player B with Fencing Ace.",
+        "B blocks Fencing Ace with Mons's Goblin Raiders.",
+        "No spells or abilities are used; both combat damage steps happen."
+      ],
+      "variants": [
+        {
+          "label": "double_strike",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "In the first combat damage step only Fencing Ace deals damage: 1 damage to Mons's Goblin Raiders, which is destroyed. In the second step, with its blocker gone and no trample, Fencing Ace deals no damage. Fencing Ace survives with 0 damage marked. B's life stays 20."
+        },
+        {
+          "label": "plain_attacker",
+          "polarity": "does_not_fire",
+          "delta": "A's attacker is a second Mons's Goblin Raiders (1/1, no abilities) instead of Fencing Ace.",
+          "expected": "There is a single combat damage step. Each Mons's Goblin Raiders deals 1 damage to the other and both are destroyed. B's life stays 20."
+        }
+      ],
+      "cards": [
+        "Fencing Ace",
+        "Mons's Goblin Raiders"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.4b-2",
+      "rules": [
+        "702.4b"
+      ],
+      "title": "A blocker without first strike or double strike deals damage only in the second step, after taking damage in the first",
+      "record_kind": "combat",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Fencing Ace",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            }
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A attacks player B with Fencing Ace.",
+        "B blocks Fencing Ace with Grizzly Bears.",
+        "No spells or abilities are used; both combat damage steps happen."
+      ],
+      "variants": [
+        {
+          "label": "double_strike",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "First combat damage step: Fencing Ace deals 1 damage to Grizzly Bears; Grizzly Bears deals none. Second step: Fencing Ace deals 1 more damage (2 total, lethal) while Grizzly Bears deals 2 damage to Fencing Ace. Both are destroyed."
+        },
+        {
+          "label": "plain_attacker",
+          "polarity": "does_not_fire",
+          "delta": "A's attacker is Mons's Goblin Raiders (1/1, no abilities) instead of Fencing Ace.",
+          "expected": "There is a single combat damage step. The attacker deals 1 damage to Grizzly Bears, which survives with 1 damage marked; Grizzly Bears deals 2 damage and destroys the attacker."
+        }
+      ],
+      "cards": [
+        "Fencing Ace",
+        "Grizzly Bears",
+        "Mons's Goblin Raiders"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.4b-3",
+      "rules": [
+        "702.4b"
+      ],
+      "title": "An unblocked double striker deals combat damage in both steps",
+      "record_kind": "combat",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Fencing Ace",
+              "summoning_sick": false
+            }
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A attacks player B with Fencing Ace.",
+        "B declares no blockers.",
+        "No spells or abilities are used; both combat damage steps happen."
+      ],
+      "variants": [
+        {
+          "label": "double_strike",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Fencing Ace deals 1 damage to B in the first combat damage step and 1 more in the second. B's life is 18."
+        },
+        {
+          "label": "plain_attacker",
+          "polarity": "does_not_fire",
+          "delta": "A's attacker is Mons's Goblin Raiders (1/1, no abilities) instead of Fencing Ace.",
+          "expected": "There is a single combat damage step in which the attacker deals 1 damage to B. B's life is 19."
+        }
+      ],
+      "cards": [
+        "Fencing Ace",
+        "Mons's Goblin Raiders"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.4c-1",
+      "rules": [
+        "702.4c"
+      ],
+      "title": "Removing double strike during the first combat damage step stops damage in the second step",
+      "record_kind": "combat",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Fencing Ace",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            "Island",
+            "Island"
+          ]
+        },
+        "hand": {
+          "B": [
+            "Turn to Frog"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A attacks player B with Fencing Ace.",
+        "B declares no blockers.",
+        "The first combat damage step happens; Fencing Ace deals 1 damage to B.",
+        "After that damage, B receives priority and casts Turn to Frog targeting Fencing Ace, tapping both Islands; both players pass and it resolves.",
+        "The second combat damage step happens."
+      ],
+      "variants": [
+        {
+          "label": "frogged",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Fencing Ace deals 1 damage in the first step (B's life 19). Turn to Frog removes all its abilities, so it deals no damage in the second step. B's life stays 19."
+        },
+        {
+          "label": "not_frogged",
+          "polarity": "does_not_fire",
+          "delta": "B does not cast Turn to Frog.",
+          "expected": "Fencing Ace deals 1 damage in each step. B's life is 18."
+        }
+      ],
+      "cards": [
+        "Fencing Ace",
+        "Turn to Frog",
+        "Island"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.4d-1",
+      "rules": [
+        "702.4d"
+      ],
+      "title": "Giving double strike to a first striker after it dealt first-strike damage lets it deal damage again",
+      "record_kind": "combat",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Youthful Knight",
+              "summoning_sick": false
+            },
+            "Mountain",
+            "Plains"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Boros Charm"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A attacks player B with Youthful Knight.",
+        "B declares no blockers.",
+        "The first combat damage step happens; Youthful Knight (first strike) deals 2 damage to B.",
+        "After that damage, A receives priority and casts Boros Charm choosing 'target creature gains double strike until end of turn', targeting Youthful Knight, tapping Mountain and Plains; both players pass and it resolves.",
+        "The second combat damage step happens."
+      ],
+      "variants": [
+        {
+          "label": "charm_after_first_strike",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Youthful Knight deals 2 damage in the first step (B's life 18) and, having double strike when the second step begins, 2 more in the second. B's life is 16."
+        },
+        {
+          "label": "no_charm",
+          "polarity": "does_not_fire",
+          "delta": "A does not cast Boros Charm.",
+          "expected": "Youthful Knight deals 2 damage in the first step only; it deals none in the second. B's life is 18."
+        }
+      ],
+      "cards": [
+        "Youthful Knight",
+        "Boros Charm",
+        "Mountain",
+        "Plains"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

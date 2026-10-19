@@ -1,0 +1,3 @@
+{"id": "702.46", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.46a", "category": "mechanical", "observability": "direct", "record_kinds": ["trigger", "resolution"], "outcome": "When a permanent with soulshift N dies, a Spirit card with mana value N or less returns from its owner's graveyard to hand.", "note": ""}
+{"id": "702.46b", "category": "mechanical", "observability": "direct", "record_kinds": ["trigger"], "outcome": "Each instance of soulshift triggers separately.", "note": ""}

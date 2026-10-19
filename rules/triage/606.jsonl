@@ -1,0 +1,6 @@
+{"id": "606.1", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "606.2", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "606.3", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "A loyalty ability is legal only at sorcery timing on its controller's turn and only once per permanent per turn.", "note": ""}
+{"id": "606.4", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "Activating a loyalty ability adds or removes the shown number of loyalty counters as its cost, modified by other effects.", "note": ""}
+{"id": "606.5", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "Several loyalty-counter costs combine into a single addition or removal of the net number of counters.", "note": ""}
+{"id": "606.6", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "A loyalty ability with a negative cost is not activatable unless the permanent has at least that many loyalty counters.", "note": ""}

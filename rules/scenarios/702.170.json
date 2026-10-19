@@ -1,0 +1,344 @@
+{
+  "unit": "702.170",
+  "verified": true,
+  "review": [
+    "702.170a-1: B controlled no land, so the spell_on_stack variant's Shock was unreachable; gave B an untapped Mountain in the setup and had the delta tap it for Shock.",
+    "702.170d-1: B controlled no land, so the spell_on_stack variant's Shock was unreachable; gave B an untapped Mountain in the setup and had the delta tap it for Shock."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.170a-1",
+      "rules": [
+        "702.170a"
+      ],
+      "title": "A card with plot can be plotted only during its owner's main phase with an empty stack",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain"
+          ],
+          "B": [
+            "Mountain"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Highway Robbery"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Highway Robbery has plot {1}{R}. In the base the stack is empty and A has priority."
+      },
+      "decisions": [
+        "A considers plotting Highway Robbery from hand, paying {1}{R} with both Mountains."
+      ],
+      "variants": [
+        {
+          "label": "main_phase_empty_stack",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Plotting Highway Robbery is legal."
+        },
+        {
+          "label": "declare_attackers_step",
+          "polarity": "does_not_fire",
+          "delta": "The step is declare_attackers instead of main1.",
+          "expected": "Plotting is not legal: it is not a main phase."
+        },
+        {
+          "label": "spell_on_stack",
+          "polarity": "does_not_fire",
+          "delta": "B has cast Shock targeting A, tapping B's Mountain; Shock is on the stack and A has priority.",
+          "expected": "Plotting is not legal: the stack is not empty."
+        },
+        {
+          "label": "opponents_turn",
+          "polarity": "does_not_fire",
+          "delta": "B is the active player instead of A.",
+          "expected": "Plotting is not legal: it is not A's turn."
+        },
+        {
+          "label": "one_land",
+          "polarity": "does_not_fire",
+          "delta": "A controls one Mountain instead of two.",
+          "expected": "Plotting is not legal: {1}{R} cannot be paid."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Highway Robbery",
+        "Shock"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.170b-1",
+      "rules": [
+        "702.170b"
+      ],
+      "title": "Plotting is a special action that does not use the stack",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain"
+          ],
+          "B": [
+            "Island",
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Highway Robbery"
+          ],
+          "B": [
+            "Counterspell"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Highway Robbery has plot {1}{R}."
+      },
+      "decisions": [
+        "A plots Highway Robbery as a special action, paying {1}{R} with both Mountains."
+      ],
+      "variants": [
+        {
+          "label": "plot",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Highway Robbery moves from A's hand to exile and becomes plotted. Nothing is put on the stack, so B has no spell to counter and keeps Counterspell in hand."
+        },
+        {
+          "label": "cast_instead",
+          "polarity": "other",
+          "delta": "A casts Highway Robbery for {1}{R} instead of plotting it, and B responds with Counterspell, tapping both Islands.",
+          "expected": "Highway Robbery is on the stack, is countered and goes to A's graveyard. It is not exiled and not plotted."
+        },
+        {
+          "label": "one_land",
+          "polarity": "does_not_fire",
+          "delta": "A controls one Mountain instead of two.",
+          "expected": "Plotting does not happen: {1}{R} cannot be paid. Highway Robbery stays in A's hand."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Island",
+        "Highway Robbery",
+        "Counterspell"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.170c-1",
+      "rules": [
+        "702.170c"
+      ],
+      "title": "A spell or ability can make a card in exile plotted",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Forest",
+            "Plains",
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Kellan Joins Up",
+            "Grizzly Bears"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Kellan Joins Up: 'When it enters, you may exile a nonland card with mana value 3 or less from your hand. If you do, it becomes plotted.'"
+      },
+      "decisions": [
+        "A casts Kellan Joins Up, tapping Forest, Plains and Island.",
+        "Both players pass; Kellan Joins Up resolves. Its enters trigger goes on the stack and A chooses to exile Grizzly Bears from hand; both players pass and it resolves."
+      ],
+      "variants": [
+        {
+          "label": "small_card_in_hand",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears (mana value 2) moves from A's hand to exile and becomes plotted."
+        },
+        {
+          "label": "card_too_expensive",
+          "polarity": "does_not_fire",
+          "delta": "Hill Giant (mana value 4) is in A's hand instead of Grizzly Bears.",
+          "expected": "The enters trigger resolves but A has no legal card to exile. Hill Giant stays in A's hand and nothing is plotted."
+        }
+      ],
+      "cards": [
+        "Forest",
+        "Plains",
+        "Island",
+        "Kellan Joins Up",
+        "Grizzly Bears",
+        "Hill Giant"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.170d-1",
+      "rules": [
+        "702.170d"
+      ],
+      "title": "A plotted card can be cast from exile for free during its owner's main phase with an empty stack, only on a later turn",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "B": [
+            "Mountain"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {
+          "A": [
+            "Grizzly Bears"
+          ]
+        },
+        "notes": "Grizzly Bears is in A's exile and plotted since an earlier turn of A's. A controls no lands. In the base the stack is empty and A has priority."
+      },
+      "decisions": [
+        "A considers casting Grizzly Bears from exile without paying its mana cost."
+      ],
+      "variants": [
+        {
+          "label": "later_turn",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Casting Grizzly Bears from exile for free is legal."
+        },
+        {
+          "label": "same_turn",
+          "polarity": "does_not_fire",
+          "delta": "Grizzly Bears became plotted earlier this turn.",
+          "expected": "Casting it is not legal: it did not become plotted on an earlier turn."
+        },
+        {
+          "label": "spell_on_stack",
+          "polarity": "does_not_fire",
+          "delta": "B has cast Shock targeting A, tapping B's Mountain; Shock is on the stack and A has priority.",
+          "expected": "Casting it is not legal: the stack is not empty."
+        },
+        {
+          "label": "opponents_turn",
+          "polarity": "does_not_fire",
+          "delta": "B is the active player instead of A.",
+          "expected": "Casting it is not legal: it is not A's turn."
+        }
+      ],
+      "cards": [
+        "Grizzly Bears",
+        "Shock",
+        "Mountain"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.170f-1",
+      "rules": [
+        "702.170f"
+      ],
+      "title": "If an effect lets plot function from another zone, the card is exiled from that zone",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Forest",
+            "Forest",
+            "Fblthp, Lost on the Range"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Grizzly Bears",
+            "Mountain",
+            "Plains"
+          ]
+        },
+        "exile": {},
+        "notes": "Fblthp, Lost on the Range: 'The top card of your library has plot. The plot cost is equal to its mana cost. You may plot nonland cards from the top of your library.' A's library is listed top card first."
+      },
+      "decisions": [
+        "A plots the top card of the library, Grizzly Bears, as a special action, paying its plot cost {1}{G} with both Forests."
+      ],
+      "variants": [
+        {
+          "label": "nonland_on_top",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears moves from the top of A's library to exile and becomes plotted. Mountain is now the top card."
+        },
+        {
+          "label": "land_on_top",
+          "polarity": "does_not_fire",
+          "delta": "The top card of A's library is Forest instead of Grizzly Bears.",
+          "expected": "Plotting is not legal: Fblthp lets A plot only nonland cards. The library is unchanged."
+        },
+        {
+          "label": "no_fblthp",
+          "polarity": "does_not_fire",
+          "delta": "A controls no Fblthp, Lost on the Range.",
+          "expected": "Plotting is not legal: the top card of the library has no plot ability. The library is unchanged."
+        }
+      ],
+      "cards": [
+        "Forest",
+        "Fblthp, Lost on the Range",
+        "Grizzly Bears",
+        "Mountain",
+        "Plains"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

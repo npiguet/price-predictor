@@ -1,0 +1,6 @@
+{"id": "702.4", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.4a", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": "States that double strike modifies the combat damage step; 702.4b carries the outcome."}
+{"id": "702.4b", "category": "mechanical", "observability": "direct", "record_kinds": ["combat"], "outcome": "With a first or double striker in combat there are two combat damage steps: first and double strikers deal damage in the first, the others and the double strikers in the second.", "note": ""}
+{"id": "702.4c", "category": "mechanical", "observability": "direct", "record_kinds": ["combat"], "outcome": "A creature that loses double strike during the first combat damage step deals no damage in the second.", "note": ""}
+{"id": "702.4d", "category": "mechanical", "observability": "direct", "record_kinds": ["combat"], "outcome": "A first striker given double strike after dealing first-strike damage deals damage again in the second combat damage step.", "note": ""}
+{"id": "702.4e", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": "Redundancy of instances has no separate outcome."}

@@ -1,0 +1,8 @@
+{"id": "716.1", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "716.2", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "716.2a", "category": "legality", "observability": "direct", "record_kinds": ["playability", "continuous"], "outcome": "A level bar's ability is activatable only at sorcery speed when the Class is at level N-1, and once the Class is level N or greater it has the level's abilities.", "note": ""}
+{"id": "716.2b", "category": "mechanical", "observability": "needs_new_fields", "record_kinds": ["continuous"], "outcome": "A permanent keeps its level even if it stops being a Class, and a copy does not copy the level.", "note": ""}
+{"id": "716.2c", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "716.2d", "category": "mechanical", "observability": "needs_new_fields", "record_kinds": ["continuous"], "outcome": "A permanent without a level is treated as level 1 by rules and effects that refer to its level.", "note": ""}
+{"id": "716.3", "category": "mechanical", "observability": "indirect", "record_kinds": ["continuous", "trigger"], "outcome": "A Class's abilities not preceded by a level bar apply from the moment it is on the battlefield, whatever its level.", "note": ""}
+{"id": "716.4", "category": "mechanical", "observability": "needs_new_fields", "record_kinds": ["resolution"], "outcome": "Level counters on a leveler do not affect a Class's level, and class levels do not affect leveler cards.", "note": ""}

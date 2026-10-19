@@ -1,0 +1,152 @@
+{
+  "unit": "702.101",
+  "verified": true,
+  "review": [],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.101a-1",
+      "rules": [
+        "702.101a"
+      ],
+      "title": "Extort drains one life when its controller casts a spell and pays {W/B}",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "upkeep",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Basilica Screecher",
+            "Mountain",
+            "Swamp"
+          ],
+          "B": [
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            },
+            "Mountain"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Shock"
+          ],
+          "B": [
+            "Shock"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Shock targeting Grizzly Bears, tapping Mountain.",
+        "Extort triggers. On resolution A pays {W/B}, tapping Swamp.",
+        "Both players pass; Shock resolves."
+      ],
+      "variants": [
+        {
+          "label": "pays_extort",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The extort trigger resolves: B loses 1 life (19) and A gains 1 life (21). Shock resolves and Grizzly Bears is destroyed."
+        },
+        {
+          "label": "declines_extort",
+          "polarity": "does_not_fire",
+          "delta": "A chooses not to pay {W/B} when the extort trigger resolves.",
+          "expected": "The extort trigger resolves with no payment: life totals stay 20 and 20. Shock resolves and Grizzly Bears is destroyed. Swamp stays untapped."
+        },
+        {
+          "label": "opponent_casts",
+          "polarity": "does_not_fire",
+          "delta": "A casts no spell; B casts its own Shock targeting A, tapping Mountain.",
+          "expected": "Basilica Screecher's extort does not trigger because its controller did not cast the spell. Shock resolves: A's life is 18, B's life is 20."
+        }
+      ],
+      "cards": [
+        "Basilica Screecher",
+        "Mountain",
+        "Swamp",
+        "Grizzly Bears",
+        "Shock"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.101b-1",
+      "rules": [
+        "702.101b"
+      ],
+      "title": "Each instance of extort triggers separately",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "upkeep",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Basilica Screecher",
+            "Pontiff of Blight",
+            "Mountain",
+            "Swamp",
+            "Swamp",
+            "Swamp"
+          ],
+          "B": [
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            }
+          ]
+        },
+        "hand": {
+          "A": [
+            "Shock"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Shock targeting Grizzly Bears, tapping Mountain.",
+        "Every extort trigger goes on the stack. As each resolves A pays {W/B}, tapping one Swamp each time.",
+        "Both players pass; Shock resolves."
+      ],
+      "variants": [
+        {
+          "label": "three_instances",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Three extort triggers resolve separately: two from Basilica Screecher (its own and the one granted by Pontiff of Blight) and one from Pontiff of Blight. A pays three times: B loses 3 life (17) and A gains 3 life (23). Grizzly Bears is destroyed."
+        },
+        {
+          "label": "one_instance",
+          "polarity": "does_not_fire",
+          "delta": "Pontiff of Blight is not on the battlefield, so Basilica Screecher has a single instance of extort.",
+          "expected": "One extort trigger resolves and A pays once: B loses 1 life (19) and A gains 1 life (21). Grizzly Bears is destroyed."
+        }
+      ],
+      "cards": [
+        "Basilica Screecher",
+        "Pontiff of Blight",
+        "Mountain",
+        "Swamp",
+        "Grizzly Bears",
+        "Shock"
+      ],
+      "forge_notes": "Check that Forge keeps Basilica Screecher's printed Extort and the one granted by Pontiff of Blight as two separate triggers."
+    }
+  ]
+}

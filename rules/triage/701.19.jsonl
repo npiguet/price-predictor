@@ -1,0 +1,4 @@
+{"id": "701.19", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "701.19a", "category": "mechanical", "observability": "direct", "record_kinds": ["resolution", "rewrite"], "outcome": "A regeneration shield replaces the next destruction of the permanent this turn: damage is removed, it becomes tapped, and it leaves combat.", "note": ""}
+{"id": "701.19b", "category": "mechanical", "observability": "direct", "record_kinds": ["rewrite"], "outcome": "A static regeneration ability replaces each destruction of the permanent with removing damage, tapping it and removing it from combat.", "note": ""}
+{"id": "701.19c", "category": "mechanical", "observability": "direct", "record_kinds": ["rewrite"], "outcome": "Creating a regeneration shield is allowed under a can't-be-regenerated effect, but the shield does not apply to destruction.", "note": ""}

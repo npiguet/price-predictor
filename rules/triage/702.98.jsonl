@@ -1,0 +1,2 @@
+{"id": "702.98", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.98a", "category": "mechanical", "observability": "direct", "record_kinds": ["rewrite", "continuous", "playability"], "outcome": "An unleashed permanent enters with an additional +1/+1 counter, and a creature with a +1/+1 counter cannot block.", "note": "Entering with a counter is a replacement effect; the block restriction is a legality verdict."}

@@ -1,0 +1,3 @@
+{"id": "702.121", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.121a", "category": "mechanical", "observability": "direct", "record_kinds": ["trigger", "resolution"], "outcome": "When a creature with melee attacks, its trigger fires and it gets +1/+1 until end of turn for each opponent attacked this combat.", "note": ""}
+{"id": "702.121b", "category": "mechanical", "observability": "indirect", "record_kinds": ["trigger"], "outcome": "Each instance of melee triggers separately, so two instances give +2/+2 against one attacked opponent.", "note": ""}

@@ -1,0 +1,9 @@
+{"id": "702.33", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.33a", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "A spell cast with its kicker cost paid is kicked and its kicker-linked effects apply on resolution; unpaid, they do not.", "note": "the payment is a decision; the effect difference is observable"}
+{"id": "702.33b", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.33c", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "A spell with multikicker cast with the cost paid N times resolves with its kicker count N, scaling its effect.", "note": "the number of payments is a decision"}
+{"id": "702.33d", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.33e", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution", "trigger"], "outcome": "Kicker-linked abilities refer only to that object's own kicker costs and apply only when that cost was paid.", "note": ""}
+{"id": "702.33f", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "On a card with two kicker costs, each 'kicked with its' ability applies only if the matching kicker cost was paid.", "note": ""}
+{"id": "702.33g", "category": "legality", "observability": "indirect", "record_kinds": ["playability"], "outcome": "A kicker-conditional part of a spell has targets chosen only if the spell was kicked, so an unkicked spell needs no such target to be cast.", "note": ""}
+{"id": "702.33h", "category": "out_of_scope", "observability": "none", "record_kinds": [], "outcome": "", "note": "sticker mechanics belong to un-sets and are not part of Forge play; no Forge script uses sticker kicker"}

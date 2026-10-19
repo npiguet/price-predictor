@@ -1,0 +1,132 @@
+{
+  "unit": "701.39",
+  "verified": true,
+  "review": [],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "701.39a-1",
+      "rules": [
+        "701.39a"
+      ],
+      "title": "Bolster puts the counters on the creature with the least toughness, not the least power",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Forest",
+            "Forest",
+            "Forest",
+            "Grizzly Bears",
+            "Wall of Wood"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Cached Defenses"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Both libraries are non-empty and irrelevant. Grizzly Bears is 2/2 and Wall of Wood is 0/3."
+      },
+      "decisions": [
+        "A casts Cached Defenses, tapping all three Forests.",
+        "Both players pass; Cached Defenses resolves, and bolster 3 puts its counters on the creature A controls with the least toughness.",
+        "Both players pass with the stack empty."
+      ],
+      "variants": [
+        {
+          "label": "bears_lowest",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears (toughness 2) gets three +1/+1 counters and is a 5/5. Wall of Wood (toughness 3, power 0) gets no counters and stays 0/3. Cached Defenses is in A's graveyard."
+        },
+        {
+          "label": "lions_lowest",
+          "polarity": "other",
+          "delta": "A controls Savannah Lions (2/1) instead of Wall of Wood.",
+          "expected": "Savannah Lions (toughness 1) gets three +1/+1 counters and is a 5/4. Grizzly Bears gets no counters and stays 2/2. Cached Defenses is in A's graveyard."
+        }
+      ],
+      "cards": [
+        "Forest",
+        "Grizzly Bears",
+        "Wall of Wood",
+        "Savannah Lions",
+        "Cached Defenses"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "701.39a-2",
+      "rules": [
+        "701.39a"
+      ],
+      "title": "Bolster only looks at creatures its controller controls",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Forest",
+            "Forest",
+            "Forest",
+            "Grizzly Bears"
+          ],
+          "B": [
+            "Savannah Lions"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Cached Defenses"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Both libraries are non-empty and irrelevant. B's Savannah Lions (2/1) has lower toughness than A's Grizzly Bears (2/2)."
+      },
+      "decisions": [
+        "A casts Cached Defenses, tapping all three Forests.",
+        "Both players pass; Cached Defenses resolves.",
+        "Both players pass with the stack empty."
+      ],
+      "variants": [
+        {
+          "label": "has_creature",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears gets three +1/+1 counters and is a 5/5. Savannah Lions gets no counters and stays 2/1. Cached Defenses is in A's graveyard."
+        },
+        {
+          "label": "no_creature",
+          "polarity": "does_not_fire",
+          "delta": "A controls no creature (Grizzly Bears is not on the battlefield).",
+          "expected": "Cached Defenses resolves and no counters are put on anything: Savannah Lions stays 2/1 with no counters. Cached Defenses is in A's graveyard."
+        }
+      ],
+      "cards": [
+        "Forest",
+        "Grizzly Bears",
+        "Savannah Lions",
+        "Cached Defenses"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

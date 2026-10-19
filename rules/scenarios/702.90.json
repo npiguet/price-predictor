@@ -1,0 +1,205 @@
+{
+  "unit": "702.90",
+  "verified": true,
+  "review": [
+    "702.90b-1: the base variant carried the attacker choice as its delta; fixed Contagious Nim as the attacker in decisions and emptied the base delta.",
+    "702.90c-1: the base variant carried the attacker choice as its delta; fixed Contagious Nim as the attacker in decisions and emptied the base delta."
+  ],
+  "skipped": [
+    {
+      "id": "702.90e",
+      "reason": "cannot be illustrated with cards Forge implements: it needs an infect source dealing damage from a zone other than the battlefield, and no Forge card gives infect to a spell or to a card in a hand, graveyard, library or exile (infect appears only as a creature keyword or is granted to creatures on the battlefield); the infect damage outcome itself is covered by 702.90b-1, 702.90c-1 and 702.90d-1, and the same rule for wither is illustrated by 702.80c-1"
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "702.90b-1",
+      "rules": [
+        "702.90b"
+      ],
+      "title": "Damage from an infect source to a player gives poison counters instead of life loss",
+      "record_kind": "combat",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Contagious Nim",
+              "summoning_sick": false
+            },
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            }
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A attacks player B with Contagious Nim only.",
+        "B declares no blockers; combat damage is dealt."
+      ],
+      "variants": [
+        {
+          "label": "infect_attacker",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "B receives 2 poison counters and B's life stays 20."
+        },
+        {
+          "label": "plain_attacker",
+          "polarity": "does_not_fire",
+          "delta": "A attacks with Grizzly Bears (2/2) instead of Contagious Nim.",
+          "expected": "B loses 2 life, so B's life becomes 18. B has no poison counters."
+        }
+      ],
+      "cards": [
+        "Contagious Nim",
+        "Grizzly Bears"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.90c-1",
+      "rules": [
+        "702.90c"
+      ],
+      "title": "Combat damage from an infect source to a creature is dealt as -1/-1 counters",
+      "record_kind": "combat",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Contagious Nim",
+              "summoning_sick": false
+            },
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            "Hill Giant"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A attacks player B with Contagious Nim only.",
+        "B blocks Contagious Nim with Hill Giant.",
+        "No spells or abilities are used; combat damage is dealt."
+      ],
+      "variants": [
+        {
+          "label": "infect_attacker",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Contagious Nim deals 2 damage to Hill Giant as two -1/-1 counters: Hill Giant is a 1/1 with 0 damage marked and stays on the battlefield. Hill Giant deals 3 damage to Contagious Nim, which is destroyed. B's life stays 20."
+        },
+        {
+          "label": "plain_attacker",
+          "polarity": "does_not_fire",
+          "delta": "A attacks with Grizzly Bears (2/2) instead of Contagious Nim, and Hill Giant blocks it.",
+          "expected": "Grizzly Bears deals 2 damage to Hill Giant, which has 2 damage marked, no counters, and stays a 3/3. Hill Giant deals 3 damage to Grizzly Bears, which is destroyed. B's life stays 20."
+        }
+      ],
+      "cards": [
+        "Contagious Nim",
+        "Grizzly Bears",
+        "Hill Giant"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.90d-1",
+      "rules": [
+        "702.90d"
+      ],
+      "title": "An infect source that left the battlefield still deals its damage as counters",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Swamp",
+            "Mountain",
+            {
+              "card": "Mogg Fanatic",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            "Hill Giant"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Tainted Strike"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Tainted Strike targeting Mogg Fanatic, tapping Swamp; it resolves and Mogg Fanatic gains infect until end of turn (unless the variant says A does not cast it).",
+        "A activates Mogg Fanatic, sacrificing it as a cost, targeting Hill Giant. Mogg Fanatic is in the graveyard before the ability resolves.",
+        "Both players pass; the ability resolves."
+      ],
+      "variants": [
+        {
+          "label": "infect_granted",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The 1 damage comes from a source that had infect as it left the battlefield: Hill Giant gets one -1/-1 counter, a 2/2 with 0 damage marked."
+        },
+        {
+          "label": "not_granted",
+          "polarity": "does_not_fire",
+          "delta": "A does not cast Tainted Strike.",
+          "expected": "Mogg Fanatic had no infect. Hill Giant has 1 damage marked, no counters, and stays a 3/3."
+        },
+        {
+          "label": "player_target",
+          "polarity": "fires",
+          "delta": "Mogg Fanatic's ability targets player B instead of Hill Giant.",
+          "expected": "B receives 1 poison counter and B's life stays 20. Hill Giant is unchanged."
+        }
+      ],
+      "cards": [
+        "Swamp",
+        "Mountain",
+        "Mogg Fanatic",
+        "Tainted Strike",
+        "Hill Giant"
+      ],
+      "forge_notes": "Relies on Forge using the last known information of the sacrificed Mogg Fanatic for infect; the sacrifice cost is paid before the ability resolves."
+    }
+  ]
+}

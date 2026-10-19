@@ -1,0 +1,4 @@
+{"id": "701.57", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "701.57a", "category": "mechanical", "observability": "direct", "record_kinds": ["resolution"], "outcome": "Discover exiles until a nonland card of value N or less, which may be cast free or goes to hand, and the rest go to the bottom.", "note": ""}
+{"id": "701.57b", "category": "mechanical", "observability": "indirect", "record_kinds": ["trigger"], "outcome": "A player has discovered, firing discover triggers, even if some of the actions were impossible.", "note": ""}
+{"id": "701.57c", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "The last exiled card is the discovered card if its value is N or less, whether cast or put in hand.", "note": ""}

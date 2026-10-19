@@ -1,0 +1,2 @@
+{"id": "504.1", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "The active player draws a card at the start of the draw step without using the stack.", "note": ""}
+{"id": "504.2", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": "priority follows the draw"}

@@ -1,0 +1,632 @@
+{
+  "unit": "701.10",
+  "verified": true,
+  "review": [
+    "701.10f-1: the Cube's {3} payment was unfixed and could have spent the {R} from the pool; the decision now pays it with the Forests' {G}{G}{G}.",
+    "701.10g-2: the scenario had no does_not_fire variant; without_furnace (damage not doubled) relabelled from other to does_not_fire."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "701.10a-1",
+      "rules": [
+        "701.10a"
+      ],
+      "title": "Doubling modifies power instead of setting it, so a later base-power effect still shows the bonus",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            },
+            "Mountain",
+            "Mountain",
+            "Plains",
+            "Plains"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Unleash Fury",
+            "Humble"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Unleash Fury targeting Grizzly Bears, tapping both Mountains.",
+        "Both players pass; Unleash Fury resolves.",
+        "A casts Humble targeting Grizzly Bears, tapping both Plains.",
+        "Both players pass; Humble resolves."
+      ],
+      "variants": [
+        {
+          "label": "fury_then_humble",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "After Unleash Fury, Grizzly Bears is 4/2. After Humble sets its base power and toughness to 0/1 and removes its abilities, Grizzly Bears is 2/1: the +2/+0 from the doubling is still applied on top of the new base."
+        },
+        {
+          "label": "humble_then_fury",
+          "polarity": "does_not_fire",
+          "delta": "A casts and resolves Humble first, then Unleash Fury.",
+          "expected": "After Humble, Grizzly Bears is 0/1. Unleash Fury doubles a power of 0, giving +0/+0. Grizzly Bears is 0/1."
+        }
+      ],
+      "cards": [
+        "Grizzly Bears",
+        "Humble",
+        "Mountain",
+        "Plains",
+        "Unleash Fury"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "701.10b-1",
+      "rules": [
+        "701.10b"
+      ],
+      "title": "Doubling a creature's power adds its power as the spell resolves",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            },
+            "Mountain",
+            "Mountain",
+            "Forest"
+          ],
+          "B": [
+            {
+              "card": "Wall of Wood"
+            }
+          ]
+        },
+        "hand": {
+          "A": [
+            "Unleash Fury",
+            "Giant Growth"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Unleash Fury targeting Grizzly Bears, tapping both Mountains.",
+        "Both players pass; Unleash Fury resolves."
+      ],
+      "variants": [
+        {
+          "label": "plain",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears (2/2) gets +2/+0 and is 4/2 until end of turn. Toughness is unchanged."
+        },
+        {
+          "label": "zero_power",
+          "polarity": "does_not_fire",
+          "delta": "Unleash Fury targets B's Wall of Wood (0/3) instead of Grizzly Bears.",
+          "expected": "Wall of Wood gets +0/+0 and stays 0/3."
+        },
+        {
+          "label": "pump_in_response",
+          "polarity": "fires",
+          "delta": "With Unleash Fury on the stack, A casts Giant Growth targeting Grizzly Bears, tapping Forest. Giant Growth resolves first.",
+          "expected": "Grizzly Bears is 5/5 when Unleash Fury resolves, so it gets +5/+0. Grizzly Bears is 10/5 until end of turn."
+        },
+        {
+          "label": "pump_after",
+          "polarity": "other",
+          "delta": "A casts Giant Growth targeting Grizzly Bears, tapping Forest, only after Unleash Fury has resolved.",
+          "expected": "Unleash Fury resolves on a 2/2 and gives +2/+0 (4/2). Giant Growth then gives +3/+3. Grizzly Bears is 7/5 until end of turn."
+        }
+      ],
+      "cards": [
+        "Forest",
+        "Giant Growth",
+        "Grizzly Bears",
+        "Mountain",
+        "Unleash Fury",
+        "Wall of Wood"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "701.10b-2",
+      "rules": [
+        "701.10b"
+      ],
+      "title": "Doubling power and toughness together gives +X/+Y with X the power and Y the toughness",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Hill Giant",
+              "summoning_sick": false
+            },
+            "Forest",
+            "Mountain",
+            "Mountain"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Tifa's Limit Break",
+            "Unleash Fury"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Tifa's Limit Break is a tiered spell: its total cost is {G} plus the chosen tier's cost."
+      },
+      "decisions": [
+        "A casts Tifa's Limit Break choosing the Meteor Strikes tier ({2}), targeting Hill Giant, paying {G}{2} with Forest and both Mountains.",
+        "Both players pass; Tifa's Limit Break resolves."
+      ],
+      "variants": [
+        {
+          "label": "double_both",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Hill Giant (3/3) gets +3/+3 and is 6/6 until end of turn."
+        },
+        {
+          "label": "double_power_only",
+          "polarity": "other",
+          "delta": "A casts Unleash Fury targeting Hill Giant, tapping both Mountains, instead of Tifa's Limit Break.",
+          "expected": "Hill Giant gets +3/+0 and is 6/3 until end of turn. Toughness is unchanged."
+        },
+        {
+          "label": "flat_bonus_tier",
+          "polarity": "does_not_fire",
+          "delta": "A casts Tifa's Limit Break choosing the Somersault tier ({0}) instead of Meteor Strikes, paying only {G} with Forest.",
+          "expected": "Hill Giant gets +2/+2 and is 5/5 until end of turn: nothing is doubled."
+        }
+      ],
+      "cards": [
+        "Forest",
+        "Hill Giant",
+        "Mountain",
+        "Tifa's Limit Break",
+        "Unleash Fury"
+      ],
+      "forge_notes": "Forge implements the tiers as a Charm with ModeCost; the chosen tier's cost is added to {G}."
+    },
+    {
+      "id": "701.10c-1",
+      "rules": [
+        "701.10c"
+      ],
+      "title": "Doubling a negative power gives a further negative modifier",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Wall of Wood"
+            },
+            {
+              "card": "Dead Weight",
+              "attached_to": "Wall of Wood"
+            },
+            "Forest",
+            "Mountain",
+            "Mountain"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Unleash Fury",
+            "Tifa's Limit Break"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Wall of Wood with Dead Weight is -2/1."
+      },
+      "decisions": [
+        "A casts Unleash Fury targeting Wall of Wood, tapping both Mountains.",
+        "Both players pass; Unleash Fury resolves."
+      ],
+      "variants": [
+        {
+          "label": "negative_power",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Wall of Wood (-2/1 with Dead Weight) gets -2/-0 and is -4/1 until end of turn."
+        },
+        {
+          "label": "zero_power",
+          "polarity": "does_not_fire",
+          "delta": "Dead Weight is not on the battlefield, so Wall of Wood is 0/3.",
+          "expected": "Wall of Wood gets +0/+0 and stays 0/3."
+        },
+        {
+          "label": "mixed_signs",
+          "polarity": "other",
+          "delta": "A casts Tifa's Limit Break choosing the Meteor Strikes tier ({2}) instead of Unleash Fury, paying {G}{2} with Forest and both Mountains.",
+          "expected": "Power -2 doubles to -2/-0 and toughness 1 doubles to +0/+1. Wall of Wood is -4/2 until end of turn."
+        }
+      ],
+      "cards": [
+        "Dead Weight",
+        "Forest",
+        "Mountain",
+        "Tifa's Limit Break",
+        "Unleash Fury",
+        "Wall of Wood"
+      ],
+      "forge_notes": "A power below zero is only reachable with an effect that lowers power while leaving toughness positive; the toughness-below-zero branch of 701.10c cannot be reached because the creature dies first."
+    },
+    {
+      "id": "701.10d-1",
+      "rules": [
+        "701.10d"
+      ],
+      "title": "Doubling a player's life total gains life equal to the current total",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 15,
+          "B": 9
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Beacon of Immortality"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "In the cannot_gain_life variant Everlasting Torment is added to B's battlefield."
+      },
+      "decisions": [
+        "A casts Beacon of Immortality targeting A, tapping six Plains.",
+        "Both players pass; Beacon of Immortality resolves."
+      ],
+      "variants": [
+        {
+          "label": "target_self",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "A's life total goes from 15 to 30. Beacon of Immortality is shuffled into A's library."
+        },
+        {
+          "label": "target_opponent",
+          "polarity": "fires",
+          "delta": "Beacon of Immortality targets B instead of A.",
+          "expected": "B's life total goes from 9 to 18. A's life stays 15. Beacon of Immortality is shuffled into A's library."
+        },
+        {
+          "label": "cannot_gain_life",
+          "polarity": "does_not_fire",
+          "delta": "Everlasting Torment is on the battlefield under B's control (players can't gain life).",
+          "expected": "A's life total stays 15. Beacon of Immortality is still shuffled into A's library."
+        }
+      ],
+      "cards": [
+        "Beacon of Immortality",
+        "Everlasting Torment",
+        "Plains"
+      ],
+      "forge_notes": "Forge implements the card as SetLife; whether the can't-gain-life effect blocks the increase is the Forge behaviour to check."
+    },
+    {
+      "id": "701.10e-1",
+      "rules": [
+        "701.10e"
+      ],
+      "title": "Doubling counters gives as many more of each kind as are already there",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Aetheric Amplifier"
+            },
+            {
+              "card": "Grizzly Bears",
+              "counters": {
+                "+1/+1": 2,
+                "charge": 1
+              },
+              "summoning_sick": false
+            },
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest"
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "A has 2 energy counters."
+      },
+      "decisions": [
+        "A activates Aetheric Amplifier's second ability ({4}, {T}), tapping four Forests, choosing the mode that doubles counters on a target permanent, targeting Grizzly Bears.",
+        "Both players pass; the ability resolves."
+      ],
+      "variants": [
+        {
+          "label": "permanent_two_kinds",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears goes from 2 +1/+1 counters and 1 charge counter to 4 +1/+1 counters and 2 charge counters. It is 6/6."
+        },
+        {
+          "label": "no_counters",
+          "polarity": "does_not_fire",
+          "delta": "Grizzly Bears has no counters.",
+          "expected": "Grizzly Bears has no counters and stays 2/2."
+        },
+        {
+          "label": "player_counters",
+          "polarity": "fires",
+          "delta": "A chooses the mode that doubles the counters A has instead of targeting a permanent.",
+          "expected": "A's energy counters go from 2 to 4. Grizzly Bears' counters are unchanged (4/4)."
+        }
+      ],
+      "cards": [
+        "Aetheric Amplifier",
+        "Forest",
+        "Grizzly Bears"
+      ],
+      "forge_notes": "Players' energy counters may have to be set through Forge's puzzle format."
+    },
+    {
+      "id": "701.10f-1",
+      "rules": [
+        "701.10f"
+      ],
+      "title": "Doubling unspent mana adds the amount already in the pool",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Doubling Cube"
+            },
+            "Mountain",
+            "Forest",
+            "Forest",
+            "Forest"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Shock",
+            "Shock"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A taps Mountain for {R}; the mana stays in A's pool.",
+        "A activates Doubling Cube ({3}, {T}), tapping the three Forests and paying {3} with the {G}{G}{G} they produce, so the {R} stays in A's pool.",
+        "A casts Shock targeting B, paying {R} from the pool.",
+        "A casts the second Shock targeting B, paying {R} from the pool.",
+        "Both players pass; both Shocks resolve."
+      ],
+      "variants": [
+        {
+          "label": "mana_in_pool",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The pool holds {R} when Doubling Cube resolves and {R}{R} afterwards, so both Shocks are cast. B takes 4 damage and is at 16. Both Shocks are in A's graveyard."
+        },
+        {
+          "label": "empty_pool",
+          "polarity": "does_not_fire",
+          "delta": "A activates Doubling Cube first, with an empty pool, and only then taps Mountain for {R}.",
+          "expected": "Doubling Cube adds nothing. A has only {R}, so only the first Shock is cast. B takes 2 damage and is at 18. The second Shock stays in A's hand."
+        }
+      ],
+      "cards": [
+        "Doubling Cube",
+        "Forest",
+        "Mountain",
+        "Shock"
+      ],
+      "forge_notes": "Doubling Cube is a mana ability in Forge (it does not use the stack); the pool must be kept within the main phase."
+    },
+    {
+      "id": "701.10g-1",
+      "rules": [
+        "701.10g"
+      ],
+      "title": "A replacement effect that doubles damage applies to a creature source but not to a spell",
+      "record_kind": "rewrite",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Gratuitous Violence",
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            },
+            "Mountain"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Shock"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A moves to combat and attacks B with Grizzly Bears.",
+        "B declares no blockers; combat damage is dealt."
+      ],
+      "variants": [
+        {
+          "label": "creature_source",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears would deal 2 damage to B and deals 4 instead. B is at 16."
+        },
+        {
+          "label": "spell_source",
+          "polarity": "does_not_fire",
+          "delta": "A does not attack; A casts Shock targeting B, tapping Mountain, and Shock resolves.",
+          "expected": "Shock is not a creature, so its damage is not doubled. B takes 2 damage and is at 18."
+        }
+      ],
+      "cards": [
+        "Gratuitous Violence",
+        "Grizzly Bears",
+        "Mountain",
+        "Shock"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "701.10g-2",
+      "rules": [
+        "701.10g"
+      ],
+      "title": "A replacement effect that doubles damage turns non-lethal damage into lethal damage",
+      "record_kind": "rewrite",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Furnace of Rath",
+            "Mountain"
+          ],
+          "B": [
+            "Hill Giant"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Shock"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Shock targeting Hill Giant, tapping Mountain.",
+        "Both players pass; Shock resolves."
+      ],
+      "variants": [
+        {
+          "label": "with_furnace",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Shock would deal 2 damage and deals 4 instead. Hill Giant (3/3) is destroyed and moves to B's graveyard."
+        },
+        {
+          "label": "without_furnace",
+          "polarity": "does_not_fire",
+          "delta": "Furnace of Rath is not on the battlefield.",
+          "expected": "Shock deals 2 damage. Hill Giant stays on the battlefield with 2 damage marked."
+        },
+        {
+          "label": "player_target",
+          "polarity": "fires",
+          "delta": "Shock targets B instead of Hill Giant.",
+          "expected": "Shock deals 4 damage to B, who is at 16. Hill Giant is untouched."
+        }
+      ],
+      "cards": [
+        "Furnace of Rath",
+        "Hill Giant",
+        "Mountain",
+        "Shock"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

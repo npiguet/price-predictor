@@ -1,0 +1,345 @@
+{
+  "unit": "701.17",
+  "verified": true,
+  "review": [],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "701.17a-1",
+      "rules": [
+        "701.17a"
+      ],
+      "title": "Milling moves that many cards from the top of the library to the graveyard",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island"
+          ],
+          "B": [
+            "Island",
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Mind Sculpt"
+          ],
+          "B": [
+            "Counterspell"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "B": [
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Forest",
+            "Forest",
+            "Forest"
+          ]
+        },
+        "exile": {},
+        "notes": "Libraries are listed top card first."
+      },
+      "decisions": [
+        "A casts Mind Sculpt targeting B, tapping both Islands.",
+        "B passes; both players pass and Mind Sculpt resolves."
+      ],
+      "variants": [
+        {
+          "label": "resolves",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "B mills seven cards: the seven Islands move from the top of B's library to B's graveyard, in order. B's library holds the three Forests."
+        },
+        {
+          "label": "countered",
+          "polarity": "does_not_fire",
+          "delta": "B casts Counterspell on Mind Sculpt, tapping both Islands.",
+          "expected": "Mind Sculpt is countered and goes to A's graveyard. B's library keeps all ten cards and B's graveyard stays empty."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Forest",
+        "Mind Sculpt",
+        "Counterspell"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "701.17b-1",
+      "rules": [
+        "701.17b"
+      ],
+      "title": "A player mills as many cards as possible when instructed to mill more than the library holds",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Mind Sculpt"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "B": [
+            "Forest",
+            "Island",
+            "Swamp"
+          ]
+        },
+        "exile": {},
+        "notes": "Libraries are listed top card first."
+      },
+      "decisions": [
+        "A casts Mind Sculpt targeting B, tapping both Islands.",
+        "Both players pass; Mind Sculpt resolves."
+      ],
+      "variants": [
+        {
+          "label": "short_library",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "B mills as many cards as possible: Forest, Island and Swamp move to B's graveyard and B's library is empty. B has not lost the game yet."
+        },
+        {
+          "label": "empty_library",
+          "polarity": "does_not_fire",
+          "delta": "B's library is empty.",
+          "expected": "No card is milled. B's graveyard stays empty."
+        },
+        {
+          "label": "long_library",
+          "polarity": "other",
+          "delta": "B's library holds ten cards (Forest, Island, Swamp, then seven Mountains).",
+          "expected": "B mills exactly seven cards: Forest, Island, Swamp and four Mountains move to B's graveyard and three Mountains remain in B's library."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Mind Sculpt",
+        "Forest",
+        "Swamp",
+        "Mountain"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "701.17b-2",
+      "rules": [
+        "701.17b"
+      ],
+      "title": "A cost that mills more cards than the library holds cannot be paid",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Swamp",
+            "Forest",
+            "Mountain",
+            "Mountain"
+          ]
+        },
+        "hand": {},
+        "graveyard": {
+          "A": [
+            "Rot Farm Skeleton"
+          ]
+        },
+        "library": {
+          "A": [
+            "Island",
+            "Island",
+            "Island",
+            "Island"
+          ]
+        },
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A considers activating Rot Farm Skeleton's graveyard ability ({2}{B}{G}, mill four cards), paying the mana with the four lands."
+      ],
+      "variants": [
+        {
+          "label": "library_of_four",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "A may activate the ability: the mill cost can be paid with four cards in the library. The four Islands move to A's graveyard and Rot Farm Skeleton returns to the battlefield."
+        },
+        {
+          "label": "library_of_three",
+          "polarity": "does_not_fire",
+          "delta": "A's library holds three Islands.",
+          "expected": "A cannot activate the ability, because a cost of milling four cards cannot be paid with three cards in the library. Nothing is milled and Rot Farm Skeleton stays in the graveyard."
+        }
+      ],
+      "cards": [
+        "Swamp",
+        "Forest",
+        "Mountain",
+        "Island",
+        "Rot Farm Skeleton"
+      ],
+      "forge_notes": "The activation is sorcery speed from the graveyard; the step is main1 with an empty stack. Verify that Forge's mill cost checks library size before payment."
+    },
+    {
+      "id": "701.17c-1",
+      "rules": [
+        "701.17c"
+      ],
+      "title": "An effect can refer to the milled card in the graveyard it moved to",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Charmed Pendant"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Cudgel Troll",
+            "Island",
+            "Island",
+            "Island"
+          ]
+        },
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A activates Charmed Pendant, tapping it and milling the top card of A's library as a cost.",
+        "The mana ability resolves immediately."
+      ],
+      "variants": [
+        {
+          "label": "green_card",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Cudgel Troll is milled into A's graveyard. Charmed Pendant adds one mana for each colored mana symbol in the milled card's cost ({2}{G}{G}), so A's mana pool holds {G}{G}."
+        },
+        {
+          "label": "blue_card",
+          "polarity": "fires",
+          "delta": "The top card of A's library is Counterspell instead of Cudgel Troll.",
+          "expected": "Counterspell is milled into A's graveyard. A's mana pool holds {U}{U}."
+        },
+        {
+          "label": "land_card",
+          "polarity": "does_not_fire",
+          "delta": "The top card of A's library is Forest instead of Cudgel Troll.",
+          "expected": "Forest is milled into A's graveyard. The land has no colored mana symbols, so A's mana pool stays empty."
+        }
+      ],
+      "cards": [
+        "Charmed Pendant",
+        "Cudgel Troll",
+        "Counterspell",
+        "Forest",
+        "Island"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "701.17d-1",
+      "rules": [
+        "701.17d"
+      ],
+      "title": "When a replacement effect mills several cards, the effect gets an answer for each milled card",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Charmed Pendant"
+          ],
+          "B": [
+            "Bruvac the Grandiloquent"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Cudgel Troll",
+            "Counterspell",
+            "Island",
+            "Island"
+          ]
+        },
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A activates Charmed Pendant, tapping it and milling a card as a cost.",
+        "B's Bruvac the Grandiloquent replaces the mill; the mana ability resolves immediately."
+      ],
+      "variants": [
+        {
+          "label": "bruvac_doubles",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Bruvac replaces milling one card with milling two: Cudgel Troll and Counterspell move to A's graveyard. Charmed Pendant gets information from each milled card, so A's mana pool holds {G}{G}{U}{U}."
+        },
+        {
+          "label": "no_bruvac",
+          "polarity": "does_not_fire",
+          "delta": "B controls no Bruvac the Grandiloquent.",
+          "expected": "Only Cudgel Troll is milled. A's mana pool holds {G}{G} and Counterspell stays in A's library."
+        }
+      ],
+      "cards": [
+        "Charmed Pendant",
+        "Bruvac the Grandiloquent",
+        "Cudgel Troll",
+        "Counterspell",
+        "Island"
+      ],
+      "forge_notes": "Charmed Pendant's 'Special EachColoredManaSymbol_Milled' may only read one milled card in Forge; if so the doubled variant yields {G}{G} and Forge deviates from 701.17d."
+    }
+  ]
+}

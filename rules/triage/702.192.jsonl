@@ -1,0 +1,2 @@
+{"id": "702.192", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.192a", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution", "trigger"], "outcome": "The first time a spell with this name resolves, it is exiled and at the start of each of its controller's precombat main phases a copy is created in exile that may be cast free.", "note": ""}

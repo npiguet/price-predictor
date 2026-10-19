@@ -1,0 +1,2 @@
+{"id": "702.93", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.93a", "category": "mechanical", "observability": "direct", "record_kinds": ["trigger", "resolution"], "outcome": "When a permanent with undying dies with no +1/+1 counters on it, it returns to the battlefield under its owner's control with a +1/+1 counter; if it had one, the trigger does not fire.", "note": ""}

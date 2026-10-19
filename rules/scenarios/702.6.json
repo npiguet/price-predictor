@@ -1,0 +1,385 @@
+{
+  "unit": "702.6",
+  "verified": true,
+  "review": [
+    "702.6e-1: Jace Beleren had no loyalty counters in the setup, so as an equipped 0/0 creature it would die; it now has 3 loyalty counters and the expected outcome states it is 3/3.",
+    "702.6c-2: added; 702.6c's last sentence (the quality does not restrict what the Equipment may stay attached to) had no scenario. The rule never removes an attachment, so the contrast variant is 'other'."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.6a-1",
+      "rules": [
+        "702.6a"
+      ],
+      "title": "Equip can be activated only as a sorcery and only targeting a creature you control",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Bonesplitter",
+            "Mountain",
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            {
+              "card": "Hill Giant",
+              "summoning_sick": false
+            }
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A activates Bonesplitter's equip ability ({1}, tapping Mountain) targeting Grizzly Bears."
+      ],
+      "variants": [
+        {
+          "label": "own_creature_main",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The activation is legal: it is A's main phase, the stack is empty and the target is a creature A controls."
+        },
+        {
+          "label": "combat_step",
+          "polarity": "does_not_fire",
+          "delta": "The step is beginning_of_combat instead of main1.",
+          "expected": "The activation is not legal: equip can be activated only at sorcery timing."
+        },
+        {
+          "label": "opponents_creature",
+          "polarity": "does_not_fire",
+          "delta": "The target is B's Hill Giant instead of Grizzly Bears.",
+          "expected": "The activation is not legal: Hill Giant is not a creature A controls."
+        }
+      ],
+      "cards": [
+        "Bonesplitter",
+        "Mountain",
+        "Grizzly Bears",
+        "Hill Giant"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.6a-2",
+      "rules": [
+        "702.6a"
+      ],
+      "title": "Equip attaches the Equipment to its target on resolution",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Bonesplitter",
+            "Mountain",
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            "Mountain"
+          ]
+        },
+        "hand": {
+          "B": [
+            "Shock"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A activates Bonesplitter's equip ability ({1}, tapping Mountain) targeting Grizzly Bears.",
+        "Both players pass; the ability resolves."
+      ],
+      "variants": [
+        {
+          "label": "resolves",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Bonesplitter becomes attached to Grizzly Bears, which is 4/2."
+        },
+        {
+          "label": "target_killed",
+          "polarity": "does_not_fire",
+          "delta": "With the ability on the stack, B casts Shock targeting Grizzly Bears (tapping Mountain) before the ability resolves.",
+          "expected": "Shock resolves first and Grizzly Bears moves to A's graveyard. The equip ability fizzles and Bonesplitter stays on the battlefield unattached."
+        }
+      ],
+      "cards": [
+        "Bonesplitter",
+        "Mountain",
+        "Grizzly Bears",
+        "Shock"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.6c-1",
+      "rules": [
+        "702.6c"
+      ],
+      "title": "An Equip [quality] ability can target only a creature with the quality",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Steelclaw Lance",
+            "Swamp",
+            {
+              "card": "Youthful Knight",
+              "summoning_sick": false
+            },
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            }
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A activates the Equip Knight {1} ability of Steelclaw Lance, tapping Swamp, targeting Grizzly Bears."
+      ],
+      "variants": [
+        {
+          "label": "non_knight_target",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The activation is illegal: Grizzly Bears is not a Knight and is not a legal target of Equip Knight."
+        },
+        {
+          "label": "knight_target",
+          "polarity": "does_not_fire",
+          "delta": "The target is Youthful Knight (a Human Knight) instead of Grizzly Bears.",
+          "expected": "The activation is legal. On resolution Steelclaw Lance attaches to Youthful Knight, which is 4/3 with first strike."
+        }
+      ],
+      "cards": [
+        "Steelclaw Lance",
+        "Swamp",
+        "Youthful Knight",
+        "Grizzly Bears"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.6c-2",
+      "rules": [
+        "702.6c"
+      ],
+      "title": "An Equip [quality] restriction does not restrict what the Equipment stays attached to",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Steelclaw Lance",
+              "attached_to": "Youthful Knight"
+            },
+            {
+              "card": "Youthful Knight",
+              "summoning_sick": false
+            },
+            "Island",
+            "Island"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Turn to Frog"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Steelclaw Lance was attached to Youthful Knight by its Equip Knight ability on an earlier turn."
+      },
+      "decisions": [
+        "A casts Turn to Frog targeting Youthful Knight, tapping both Islands.",
+        "Both players pass; Turn to Frog resolves."
+      ],
+      "variants": [
+        {
+          "label": "frogged",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Youthful Knight is a blue Frog with no Knight type and no first strike. Steelclaw Lance stays attached to it and it is 3/3."
+        },
+        {
+          "label": "not_frogged",
+          "polarity": "other",
+          "delta": "A does not cast Turn to Frog.",
+          "expected": "Youthful Knight stays a Human Knight with first strike; Steelclaw Lance stays attached and it is 4/3."
+        }
+      ],
+      "cards": [
+        "Steelclaw Lance",
+        "Youthful Knight",
+        "Island",
+        "Turn to Frog"
+      ],
+      "forge_notes": "Forge's Equip restriction (K:Equip:1:Creature.Knight+YouCtrl) applies to targeting only; the attachment check is the generic state-based one."
+    },
+    {
+      "id": "702.6d-1",
+      "rules": [
+        "702.6d"
+      ],
+      "title": "Any one of a permanent's equip abilities may be activated",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Steelclaw Lance",
+            "Swamp",
+            "Swamp",
+            "Swamp",
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            }
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A activates the Equip {3} ability of Steelclaw Lance, tapping all three Swamps, targeting Grizzly Bears."
+      ],
+      "variants": [
+        {
+          "label": "three_lands",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The activation is legal even though A controls no Knight for the other equip ability. On resolution Steelclaw Lance attaches to Grizzly Bears, which is 4/4."
+        },
+        {
+          "label": "two_lands",
+          "polarity": "does_not_fire",
+          "delta": "A controls two Swamps instead of three.",
+          "expected": "The activation is not legal: Equip {3} cannot be paid, and Equip Knight has no legal target."
+        }
+      ],
+      "cards": [
+        "Steelclaw Lance",
+        "Swamp",
+        "Grizzly Bears"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.6e-1",
+      "rules": [
+        "702.6e"
+      ],
+      "title": "Equip planeswalker targets only a planeswalker you control",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Luxior, Giada's Gift",
+            "Plains",
+            {
+              "card": "Jace Beleren",
+              "counters": {
+                "loyalty": 3
+              }
+            },
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            }
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A activates the Equip planeswalker {1} ability of Luxior, Giada's Gift, tapping Plains, targeting Jace Beleren."
+      ],
+      "variants": [
+        {
+          "label": "target_planeswalker",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The activation is legal. On resolution Luxior attaches to Jace Beleren, which is no longer a planeswalker and is a 3/3 creature (0/0 plus +1/+1 for each of its three loyalty counters)."
+        },
+        {
+          "label": "target_creature",
+          "polarity": "does_not_fire",
+          "delta": "The target is Grizzly Bears instead of Jace Beleren.",
+          "expected": "The activation is illegal: Grizzly Bears is not a planeswalker, and Equip {3} cannot be paid with one Plains."
+        }
+      ],
+      "cards": [
+        "Luxior, Giada's Gift",
+        "Plains",
+        "Jace Beleren",
+        "Grizzly Bears"
+      ],
+      "forge_notes": "Forge implements this as K:Equip:1:Planeswalker.YouCtrl:planeswalker; how Forge sets the equipped planeswalker's power and toughness needs checking when played."
+    }
+  ]
+}

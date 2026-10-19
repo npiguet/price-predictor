@@ -1,0 +1,3 @@
+{"id": "702.110", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.110a", "category": "mechanical", "observability": "direct", "record_kinds": ["trigger", "resolution"], "outcome": "When a creature with exploit enters, the trigger fires and its controller may sacrifice a creature, which moves it to the graveyard.", "note": ""}
+{"id": "702.110b", "category": "mechanical", "observability": "direct", "record_kinds": ["trigger"], "outcome": "A 'when this exploits a creature' trigger fires only when a creature is sacrificed as that creature's exploit ability resolves, not when a creature is sacrificed some other way.", "note": "Defines the event that 'exploits a creature' triggers look for."}

@@ -1,0 +1,83 @@
+{
+  "unit": "702.182",
+  "verified": true,
+  "review": [],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.182a-1",
+      "rules": [
+        "702.182a"
+      ],
+      "title": "Job select creates a Hero token and attaches the Equipment to it",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain"
+          ],
+          "B": [
+            "Mountain",
+            "Mountain",
+            "Island",
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Warrior's Sword"
+          ],
+          "B": [
+            "Shatter",
+            "Counterspell"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Warrior's Sword gives equipped creature +3/+2 and the Warrior type. B's four lands are untapped."
+      },
+      "decisions": [
+        "A casts Warrior's Sword (3R), tapping four Mountains.",
+        "Both players pass; Warrior's Sword resolves and enters the battlefield.",
+        "The job select trigger goes on the stack; both players pass and it resolves."
+      ],
+      "variants": [
+        {
+          "label": "resolves",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Warrior's Sword enters, a 1/1 colorless Hero creature token is created and Warrior's Sword is attached to it. The Hero is a 4/3 Warrior."
+        },
+        {
+          "label": "equipment_destroyed_in_response",
+          "polarity": "other",
+          "delta": "In response to the job select trigger, B casts Shatter targeting Warrior's Sword, tapping both Mountains.",
+          "expected": "Warrior's Sword is destroyed and moves to A's graveyard. The trigger still resolves: a 1/1 colorless Hero token is created and has nothing attached."
+        },
+        {
+          "label": "spell_countered",
+          "polarity": "does_not_fire",
+          "delta": "B casts Counterspell targeting Warrior's Sword while it is on the stack, tapping both Islands.",
+          "expected": "Warrior's Sword is countered and moves to A's graveyard. It never enters the battlefield, so no job select trigger happens and no Hero token is created."
+        }
+      ],
+      "cards": [
+        "Warrior's Sword",
+        "Shatter",
+        "Counterspell",
+        "Mountain",
+        "Island"
+      ]
+    }
+  ]
+}

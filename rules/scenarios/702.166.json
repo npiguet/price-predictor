@@ -1,0 +1,211 @@
+{
+  "unit": "702.166",
+  "verified": true,
+  "review": [],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.166a-1",
+      "rules": [
+        "702.166a"
+      ],
+      "title": "A spell with bargain can be cast bargained only if an artifact, enchantment or token can be sacrificed",
+      "record_kind": "playability",
+      "setup": {
+        "active": "B",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            "Short Sword"
+          ],
+          "B": [
+            "Forest",
+            "Forest"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Ice Out"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "B has cast Grizzly Bears and A has priority with it on the stack. Ice Out costs {1} less to cast if it is bargained. All of A's permanents are untapped.",
+        "stack": [
+          {
+            "card": "Grizzly Bears",
+            "controller": "B",
+            "targets": []
+          }
+        ]
+      },
+      "decisions": [
+        "A considers casting Ice Out targeting Grizzly Bears, tapping both Islands and, as the additional bargain cost, sacrificing Short Sword."
+      ],
+      "variants": [
+        {
+          "label": "sword_to_sacrifice",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Casting Ice Out bargained is legal: it costs {U}{U} after the reduction, Short Sword (an artifact) is a legal sacrifice, and Grizzly Bears on the stack is a legal target."
+        },
+        {
+          "label": "no_permanent_to_sacrifice",
+          "polarity": "does_not_fire",
+          "delta": "A controls no Short Sword; its battlefield is two Islands only.",
+          "expected": "Casting Ice Out is not legal: no artifact, enchantment or token can be sacrificed, so it cannot be bargained and costs {1}{U}{U}, which two Islands cannot pay."
+        },
+        {
+          "label": "only_a_creature",
+          "polarity": "does_not_fire",
+          "delta": "Short Sword is replaced on A's battlefield by Grizzly Bears (a nonartifact, nontoken creature).",
+          "expected": "Casting Ice Out is not legal: Grizzly Bears is not an artifact, enchantment or token, so the spell cannot be bargained and costs {1}{U}{U}, which two Islands cannot pay."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Short Sword",
+        "Forest",
+        "Ice Out",
+        "Grizzly Bears"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.166b-1",
+      "rules": [
+        "702.166b"
+      ],
+      "title": "A spell cast with its bargain cost paid is bargained and uses its bargained effect",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Short Sword"
+          ],
+          "B": [
+            "Hill Giant"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Torch the Tower"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Mountain",
+            "Forest",
+            "Plains"
+          ]
+        },
+        "exile": {},
+        "notes": "A's library is listed top card first."
+      },
+      "decisions": [
+        "A casts Torch the Tower targeting Hill Giant, tapping Mountain and, as the additional bargain cost, sacrificing Short Sword.",
+        "Both players pass; Torch the Tower resolves. For scry 1, A looks at the top card of the library and keeps it on top."
+      ],
+      "variants": [
+        {
+          "label": "bargained",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Short Sword goes to A's graveyard as a cost. Torch the Tower deals 3 damage to Hill Giant (3/3) and A scries 1. Hill Giant would die this turn, so it is exiled instead of going to B's graveyard."
+        },
+        {
+          "label": "not_bargained",
+          "polarity": "does_not_fire",
+          "delta": "A casts Torch the Tower without sacrificing Short Sword.",
+          "expected": "Short Sword stays on the battlefield. Torch the Tower deals 2 damage to Hill Giant, which stays on the battlefield with 2 damage marked. A does not scry."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Short Sword",
+        "Hill Giant",
+        "Torch the Tower",
+        "Forest",
+        "Plains"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.166d-1",
+      "rules": [
+        "702.166d"
+      ],
+      "title": "A bargain-conditional part with a target has that target only if the spell was bargained",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Forest",
+            "Forest",
+            "Short Sword"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Brave the Wilds"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Forest",
+            "Mountain"
+          ]
+        },
+        "exile": {},
+        "notes": "A's library is listed top card first. The only target Brave the Wilds can have is the land of its bargained part."
+      },
+      "decisions": [
+        "A casts Brave the Wilds, tapping one Forest and, as the additional bargain cost, sacrificing Short Sword. A chooses the other Forest as the target land.",
+        "Both players pass; Brave the Wilds resolves and A searches the library for a basic land card, taking the Forest."
+      ],
+      "variants": [
+        {
+          "label": "bargained",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Short Sword goes to A's graveyard as a cost. The untapped Forest becomes a 3/3 Elemental creature with haste that is still a land. A's library Forest moves to A's hand."
+        },
+        {
+          "label": "not_bargained",
+          "polarity": "does_not_fire",
+          "delta": "A casts Brave the Wilds without sacrificing Short Sword; no target is chosen.",
+          "expected": "Brave the Wilds is cast with no target and resolves rather than fizzling. No land becomes a creature. A's library Forest moves to A's hand and Short Sword stays on the battlefield."
+        }
+      ],
+      "cards": [
+        "Forest",
+        "Short Sword",
+        "Brave the Wilds",
+        "Mountain"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

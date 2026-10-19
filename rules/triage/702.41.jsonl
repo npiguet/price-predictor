@@ -1,0 +1,3 @@
+{"id": "702.41", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.41a", "category": "mechanical", "observability": "direct", "record_kinds": ["playability"], "outcome": "A spell with affinity costs {1} less for each matching permanent its controller controls.", "note": ""}
+{"id": "702.41b", "category": "mechanical", "observability": "direct", "record_kinds": ["playability"], "outcome": "Each instance of affinity reduces the cost.", "note": ""}

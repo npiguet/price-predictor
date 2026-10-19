@@ -1,0 +1,5 @@
+{"id": "702.1", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.1a", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "A '[keyword] cost' set by an effect is only the keyword's variable cost, so the full activation cost is that amount plus the keyword's fixed cost.", "note": ""}
+{"id": "702.1b", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "A variable in a granted keyword ability is reevaluated continuously, so the value used is the one current when it is needed, not when the ability triggered.", "note": ""}
+{"id": "702.1c", "category": "mechanical", "observability": "direct", "record_kinds": ["continuous", "resolution"], "outcome": "An effect granting a listed keyword grants each variant and variable of it, such as the specific protection quality.", "note": ""}
+{"id": "702.1d", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": "Wording equivalence with no outcome of its own."}

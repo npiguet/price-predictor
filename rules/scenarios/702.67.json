@@ -1,0 +1,129 @@
+{
+  "unit": "702.67",
+  "verified": true,
+  "review": [],
+  "skipped": [
+    {
+      "id": "702.67c",
+      "reason": "no card in Forge has more than one fortify ability, so the rule cannot be illustrated; activating a fortify ability is covered by 702.67a-1"
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "702.67a-1",
+      "rules": [
+        "702.67a"
+      ],
+      "title": "Fortify attaches the Fortification to the target land when the ability resolves",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Darksteel Garrison",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Evolving Wilds"
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Forest"
+          ]
+        },
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A activates the fortify ability of Darksteel Garrison targeting Evolving Wilds, tapping three Mountains for {3}.",
+        "Both players pass priority; the ability resolves."
+      ],
+      "variants": [
+        {
+          "label": "target_stays_legal",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The fortify ability resolves. Darksteel Garrison is attached to Evolving Wilds, which has indestructible. No cards change zones."
+        },
+        {
+          "label": "target_leaves_in_response",
+          "polarity": "does_not_fire",
+          "delta": "After the fortify ability is on the stack, A taps and sacrifices Evolving Wilds (fetching a Forest from the library) before passing priority.",
+          "expected": "The fortify ability fizzles because its only target is gone. Darksteel Garrison stays on the battlefield unattached. Evolving Wilds is in A's graveyard and A's Forest enters tapped."
+        }
+      ],
+      "cards": [
+        "Darksteel Garrison",
+        "Mountain",
+        "Evolving Wilds",
+        "Forest"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.67a-2",
+      "rules": [
+        "702.67a"
+      ],
+      "title": "Fortify may be activated only as a sorcery and only targets a land its controller controls",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Darksteel Garrison",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain"
+          ],
+          "B": [
+            "Forest"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "Evaluate whether A may activate the fortify ability of Darksteel Garrison, and which lands are legal targets, with the stack empty and four untapped Mountains."
+      ],
+      "variants": [
+        {
+          "label": "main_phase",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The activation is legal (can_play true). The legal targets are A's four Mountains; B's Forest is not a legal target."
+        },
+        {
+          "label": "during_combat",
+          "polarity": "does_not_fire",
+          "delta": "The step is declare_attackers instead of main1.",
+          "expected": "The activation is not legal (can_play false), because fortify may be activated only as a sorcery."
+        }
+      ],
+      "cards": [
+        "Darksteel Garrison",
+        "Mountain",
+        "Forest"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

@@ -1,0 +1,7 @@
+{"id": "401.1", "category": "out_of_scope", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "401.2", "category": "out_of_scope", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "401.3", "category": "out_of_scope", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "401.4", "category": "decision", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "401.5", "category": "mechanical", "observability": "needs_new_fields", "record_kinds": ["playability"], "outcome": "A new top card of a library is not revealed or lookable until the spell, ability or special action in progress completes.", "note": ""}
+{"id": "401.6", "category": "mechanical", "observability": "needs_new_fields", "record_kinds": ["continuous"], "outcome": "A top card that stops being revealed and is revealed again becomes a new object.", "note": ""}
+{"id": "401.7", "category": "mechanical", "observability": "direct", "record_kinds": ["resolution"], "outcome": "A card put Nth from the top of a library with fewer than N cards goes to the bottom.", "note": ""}

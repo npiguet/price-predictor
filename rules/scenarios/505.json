@@ -1,0 +1,398 @@
+{
+  "unit": "505",
+  "verified": true,
+  "review": [
+    "505.5-1: polarities inverted (a roll that misses the lights still performs 505.5's roll, while no Attraction is where the turn-based action does not happen); roll_misses_lights set to other, no_attraction to does_not_fire with a one-fact delta.",
+    "505.6b-3: decisions had A pass with an empty stack before B's verdict, contradicting cast_creature where Grizzly Bears is on the stack; decisions rewritten so B's verdict is recorded at B's first priority in both variants."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "505.4-1",
+      "rules": [
+        "505.4"
+      ],
+      "title": "The active player puts a lore counter on each Saga they control as the precombat main phase begins",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "History of Benalia",
+              "counters": {
+                "lore": 1
+              }
+            }
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "The setup is the moment the precombat main phase begins, before its turn-based actions. History of Benalia (a Saga with chapter abilities) has 1 lore counter, so chapter I has already happened."
+      },
+      "decisions": [
+        "The first main phase begins: the turn-based action adds a lore counter to each Saga its active player controls; this does not use the stack.",
+        "If a chapter ability triggers, A puts it on the stack and both players pass priority so it resolves.",
+        "A passes priority with an empty stack; the main phase ends."
+      ],
+      "variants": [
+        {
+          "label": "own_saga_precombat",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "History of Benalia receives a second lore counter without using the stack; chapter II triggers, and when it resolves A controls one 2/2 white Knight creature token with vigilance."
+        },
+        {
+          "label": "postcombat_main",
+          "polarity": "does_not_fire",
+          "delta": "The step is main2 (the postcombat main phase) instead of main1.",
+          "expected": "History of Benalia keeps 1 lore counter; no chapter ability triggers and A controls no Knight token."
+        },
+        {
+          "label": "opponents_saga",
+          "polarity": "does_not_fire",
+          "delta": "History of Benalia is on B's battlefield instead of A's; A is still the active player.",
+          "expected": "History of Benalia keeps 1 lore counter; no chapter ability triggers and B controls no Knight token."
+        }
+      ],
+      "cards": [
+        "History of Benalia"
+      ],
+      "forge_notes": "Forge adds the lore counter in PhaseHandler on entering MAIN1 with no stack object; the chapter trigger caused by the added counter is what reaches the stack."
+    },
+    {
+      "id": "505.5-1",
+      "rules": [
+        "505.5"
+      ],
+      "title": "The active player rolls to visit their Attractions as the precombat main phase begins",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Balloon Stand"
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "The setup is the moment the precombat main phase begins, before its turn-based actions. Balloon Stand is the variant with lights 2 and 6. The visit roll is fixed to 6 in the base variant."
+      },
+      "decisions": [
+        "The first main phase begins: A rolls one six-sided die to visit their Attractions; this does not use the stack. The roll is 6.",
+        "Balloon Stand's visit ability triggers; A puts it on the stack and chooses the mode that creates a 1/1 Balloon token.",
+        "Both players pass priority; the visit ability resolves."
+      ],
+      "variants": [
+        {
+          "label": "roll_on_a_light",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "A rolls a 6, which matches a light of Balloon Stand, so Balloon Stand is visited; its ability resolves and A controls one 1/1 red Balloon creature token with flying."
+        },
+        {
+          "label": "roll_misses_lights",
+          "polarity": "other",
+          "delta": "The roll is 4 instead of 6.",
+          "expected": "A rolls a 4, which matches no light of Balloon Stand; Balloon Stand is not visited, its ability does not trigger and A controls no Balloon token."
+        },
+        {
+          "label": "no_attraction",
+          "polarity": "does_not_fire",
+          "delta": "Balloon Stand is not on the battlefield, so A controls no Attraction.",
+          "expected": "A does not roll to visit Attractions; no die roll occurs and A controls no token."
+        }
+      ],
+      "cards": [
+        "Balloon Stand"
+      ],
+      "forge_notes": "Forge rolls in PhaseHandler on entering MAIN1 only if the active player controls an Attraction. The die result has to be fixed through a test hook; the lights of Balloon Stand (2 and 6 is Variant A) depend on the variant Forge picks when the card is created."
+    },
+    {
+      "id": "505.6a-1",
+      "rules": [
+        "505.6a"
+      ],
+      "title": "Creature, sorcery and artifact spells can be cast only by the active player in a main phase",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Forest",
+            "Mountain",
+            "Mountain"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Grizzly Bears",
+            "Divination",
+            "Sol Ring",
+            "Lightning Bolt"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "A holds one card of each kind. Each candidate is judged on its own with all four lands untapped. The stack is empty and A has priority."
+      },
+      "decisions": [
+        "A receives priority with an empty stack; the can_play verdict for each card in A's hand is recorded.",
+        "A casts nothing."
+      ],
+      "variants": [
+        {
+          "label": "main_phase",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "can_play is true for Grizzly Bears, Divination, Sol Ring and Lightning Bolt."
+        },
+        {
+          "label": "combat_step",
+          "polarity": "does_not_fire",
+          "delta": "The step is beginning_of_combat instead of main1.",
+          "expected": "can_play is false for Grizzly Bears, Divination and Sol Ring; can_play is true for Lightning Bolt."
+        },
+        {
+          "label": "nonactive_player",
+          "polarity": "does_not_fire",
+          "delta": "The hand and lands belong to B instead of A, and A is still the active player in main1; B receives priority after A passes with an empty stack.",
+          "expected": "can_play is false for Grizzly Bears, Divination and Sol Ring; can_play is true for Lightning Bolt."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Forest",
+        "Mountain",
+        "Grizzly Bears",
+        "Divination",
+        "Sol Ring",
+        "Lightning Bolt"
+      ],
+      "forge_notes": "The nonactive_player variant moves the whole setup to B (B's battlefield and hand hold the lands and spells above)."
+    },
+    {
+      "id": "505.6b-1",
+      "rules": [
+        "505.6b"
+      ],
+      "title": "The active player may play a land from hand in a main phase only with an empty stack, priority, and no land played this turn",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Mountain",
+              "tapped": true
+            }
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Forest"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "A has not played a land this turn. The stack is empty and A has priority."
+      },
+      "decisions": [
+        "A receives priority; the can_play verdict for the Forest in A's hand is recorded.",
+        "A plays nothing."
+      ],
+      "variants": [
+        {
+          "label": "empty_stack_no_land_yet",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Playing Forest is legal (can_play true)."
+        },
+        {
+          "label": "land_already_played",
+          "polarity": "does_not_fire",
+          "delta": "A has already played a land this turn (the Mountain on the battlefield).",
+          "expected": "Playing Forest is not legal (can_play false)."
+        },
+        {
+          "label": "stack_not_empty",
+          "polarity": "does_not_fire",
+          "delta": "A's Lightning Bolt targeting B is on the stack (A tapped the Mountain for it) and A holds priority.",
+          "expected": "Playing Forest is not legal (can_play false)."
+        },
+        {
+          "label": "combat_step",
+          "polarity": "does_not_fire",
+          "delta": "The step is beginning_of_combat instead of main1.",
+          "expected": "Playing Forest is not legal (can_play false)."
+        },
+        {
+          "label": "nonactive_player",
+          "polarity": "does_not_fire",
+          "delta": "The Forest is in B's hand instead of A's; A is the active player in main1 and B receives priority after A passes with an empty stack.",
+          "expected": "Playing Forest is not legal for B (can_play false)."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Forest",
+        "Lightning Bolt"
+      ],
+      "forge_notes": "The tapped Mountain was not played this turn in the base variant, so the played-land counter is 0 there; in land_already_played the counter is 1."
+    },
+    {
+      "id": "505.6b-2",
+      "rules": [
+        "505.6b"
+      ],
+      "title": "An effect allowing additional lands makes a second land play legal",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Mountain",
+              "tapped": true
+            }
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Forest"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "A has already played a land this turn (the Mountain). The stack is empty and A has priority."
+      },
+      "decisions": [
+        "A receives priority; the can_play verdict for the Forest in A's hand is recorded.",
+        "A plays nothing."
+      ],
+      "variants": [
+        {
+          "label": "no_extra_land_effect",
+          "polarity": "does_not_fire",
+          "delta": "",
+          "expected": "Playing Forest is not legal (can_play false)."
+        },
+        {
+          "label": "with_exploration",
+          "polarity": "fires",
+          "delta": "A also controls Exploration on the battlefield.",
+          "expected": "Playing Forest is legal (can_play true)."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Forest",
+        "Exploration"
+      ],
+      "forge_notes": "The played-land counter is 1 in both variants."
+    },
+    {
+      "id": "505.6b-3",
+      "rules": [
+        "505.6b"
+      ],
+      "title": "Playing a land does not use the stack, so it cannot be responded to or countered",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Forest",
+            "Forest"
+          ],
+          "B": [
+            "Island",
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Forest",
+            "Grizzly Bears"
+          ],
+          "B": [
+            "Counterspell"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "A has not played a land this turn. B has two untapped Islands."
+      },
+      "decisions": [
+        "A plays Forest from hand (in cast_creature: casts Grizzly Bears, tapping both Forests); A then passes priority.",
+        "B receives priority; B's can_play and has_legal_target verdicts for Counterspell are recorded, and B passes.",
+        "In cast_creature, Grizzly Bears then resolves; in both variants A then passes with an empty stack, B passes, and the main phase ends."
+      ],
+      "variants": [
+        {
+          "label": "play_land",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The Forest enters A's battlefield at once; no stack object exists, so Counterspell has no legal target (has_legal_target false, can_play false) and B has no response window."
+        },
+        {
+          "label": "cast_creature",
+          "polarity": "does_not_fire",
+          "delta": "A casts Grizzly Bears (tapping both Forests) instead of playing the Forest.",
+          "expected": "Grizzly Bears is on the stack and B receives priority: Counterspell has a legal target (has_legal_target true, can_play true). B passes; Grizzly Bears resolves and enters A's battlefield."
+        }
+      ],
+      "cards": [
+        "Forest",
+        "Island",
+        "Grizzly Bears",
+        "Counterspell"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

@@ -1,0 +1,272 @@
+{
+  "unit": "702.55",
+  "verified": true,
+  "review": [
+    "702.55b-1: dropped the still_creature variant, which changed a fact without changing the outcome (both fire) and duplicates 702.55c-1."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.55a-1",
+      "rules": [
+        "702.55a"
+      ],
+      "title": "A haunt permanent that dies is exiled haunting a target creature",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Blind Hunter"
+          ],
+          "B": [
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Shock"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Blind Hunter is a 2/2 flyer with haunt."
+      },
+      "decisions": [
+        "A casts Shock targeting A's own Blind Hunter, tapping Mountain. Both players pass; Shock resolves.",
+        "If Blind Hunter dies, its haunt trigger targets B's Grizzly Bears. Both players pass; the trigger resolves."
+      ],
+      "variants": [
+        {
+          "label": "dies",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Blind Hunter takes 2 damage and dies. Its haunt trigger fires and resolves: Blind Hunter moves from A's graveyard to exile, haunting Grizzly Bears."
+        },
+        {
+          "label": "survives",
+          "polarity": "does_not_fire",
+          "delta": "Blind Hunter has a +1/+1 counter (3/3).",
+          "expected": "Blind Hunter survives with 2 damage; no haunt trigger fires and nothing is exiled."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Blind Hunter",
+        "Grizzly Bears",
+        "Shock"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.55a-2",
+      "rules": [
+        "702.55a"
+      ],
+      "title": "A haunt spell is exiled haunting a creature only if it goes to the graveyard during resolution",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Swamp"
+          ],
+          "B": [
+            "Island",
+            "Island",
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Cry of Contrition"
+          ],
+          "B": [
+            "Forest",
+            "Counterspell"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Cry of Contrition is a sorcery with haunt: target player discards a card."
+      },
+      "decisions": [
+        "A casts Cry of Contrition targeting player B, tapping Swamp.",
+        "B passes priority; Cry of Contrition resolves and B discards Forest.",
+        "When Cry of Contrition is put into the graveyard during its resolution, its haunt trigger targets Grizzly Bears; both players pass and it resolves."
+      ],
+      "variants": [
+        {
+          "label": "resolves",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "B discards Forest. Cry of Contrition moves to exile, haunting Grizzly Bears."
+        },
+        {
+          "label": "countered",
+          "polarity": "does_not_fire",
+          "delta": "B instead responds by casting Counterspell on Cry of Contrition, tapping two Islands.",
+          "expected": "Cry of Contrition is countered and stays in A's graveyard. No haunt trigger fires, and B discards nothing."
+        }
+      ],
+      "cards": [
+        "Swamp",
+        "Island",
+        "Grizzly Bears",
+        "Cry of Contrition",
+        "Forest",
+        "Counterspell"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.55b-1",
+      "rules": [
+        "702.55b"
+      ],
+      "title": "A card haunts the targeted object even when it is no longer a creature",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Plains",
+            "Swamp"
+          ],
+          "B": [
+            "Grizzly Bears",
+            {
+              "card": "Imprisoned in the Moon",
+              "attached_to": "Grizzly Bears"
+            },
+            "Runeclaw Bear"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Vindicate"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {
+          "A": [
+            "Blind Hunter"
+          ]
+        },
+        "notes": "Blind Hunter in exile haunts B's Grizzly Bears. Imprisoned in the Moon turns Grizzly Bears into a colorless land that is no longer a creature."
+      },
+      "decisions": [
+        "A casts Vindicate targeting the enchanted Grizzly Bears, tapping Plains, Plains and Swamp. Both players pass; Vindicate resolves.",
+        "If Blind Hunter's trigger fires, A targets player B. Both players pass; the trigger resolves."
+      ],
+      "variants": [
+        {
+          "label": "no_longer_creature",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The enchanted permanent is destroyed. Blind Hunter's trigger fires: B loses 2 life (18) and A gains 2 life (22)."
+        },
+        {
+          "label": "other_permanent",
+          "polarity": "does_not_fire",
+          "delta": "Vindicate targets Runeclaw Bear instead.",
+          "expected": "Runeclaw Bear is destroyed. Blind Hunter does not trigger because the haunted permanent did not die; life totals stay 20 and 20."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Swamp",
+        "Grizzly Bears",
+        "Imprisoned in the Moon",
+        "Runeclaw Bear",
+        "Vindicate",
+        "Blind Hunter"
+      ],
+      "forge_notes": "Forge's haunt trigger matches Creature.HauntedBy, so it may not fire when the haunted card is a non-creature land when it dies. The rules text says it does."
+    },
+    {
+      "id": "702.55c-1",
+      "rules": [
+        "702.55c"
+      ],
+      "title": "A haunting card's trigger can fire from exile when the haunted creature dies",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain"
+          ],
+          "B": [
+            "Grizzly Bears",
+            "Runeclaw Bear"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Shock"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {
+          "A": [
+            "Blind Hunter"
+          ]
+        },
+        "notes": "Blind Hunter in exile haunts B's Grizzly Bears. Its text: when the creature it haunts dies, target player loses 2 life and you gain 2 life."
+      },
+      "decisions": [
+        "A casts Shock targeting Grizzly Bears, tapping Mountain. Both players pass; Shock resolves.",
+        "If Blind Hunter's trigger fires, A targets player B. Both players pass; the trigger resolves."
+      ],
+      "variants": [
+        {
+          "label": "haunted_dies",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears dies. Blind Hunter's trigger fires from exile: B loses 2 life (18) and A gains 2 life (22)."
+        },
+        {
+          "label": "other_dies",
+          "polarity": "does_not_fire",
+          "delta": "Shock targets Runeclaw Bear instead.",
+          "expected": "Runeclaw Bear dies. The haunted creature is unaffected and Blind Hunter does not trigger; life totals stay 20 and 20."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Grizzly Bears",
+        "Runeclaw Bear",
+        "Shock",
+        "Blind Hunter"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

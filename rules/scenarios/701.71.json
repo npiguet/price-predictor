@@ -1,0 +1,12 @@
+{
+  "unit": "701.71",
+  "verified": true,
+  "review": [],
+  "skipped": [
+    {
+      "id": "701.71a",
+      "reason": "cannot be illustrated: no card in Forge's cardsfolder uses 'empower Jace' and no Jace planeswalker token script exists, so the action cannot occur in a Forge game"
+    }
+  ],
+  "scenarios": []
+}

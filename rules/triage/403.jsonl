@@ -1,0 +1,5 @@
+{"id": "403.1", "category": "out_of_scope", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "403.2", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "A spell or ability affects and checks only the battlefield unless it names a player or another zone.", "note": ""}
+{"id": "403.3", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "403.4", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution", "trigger"], "outcome": "A permanent entering the battlefield is a new object with no relation to its earlier existence, so earlier counters, damage and effects do not carry over.", "note": ""}
+{"id": "403.5", "category": "out_of_scope", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}

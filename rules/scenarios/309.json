@@ -1,0 +1,495 @@
+{
+  "unit": "309",
+  "verified": true,
+  "review": [
+    "skipped 309.2d: the reason claimed no Forge card could bring a dungeon in from outside the game; wishes such as Mastermind's Acquisition could under the rules. Rewrote the reason: Forge's outside-the-game zone is the sideboard, which never holds dungeons.",
+    "309.2c-1: the commander_only variant had the same Isamaru verdict as the base and showed nothing about the dungeon, so no outcome flipped. Rebuilt as a minimal pair on the one command-zone card: dungeon (not castable) against commander (castable).",
+    "309.5a-1: its bottommost_room variant started with the marker on Temple of Dumathoin and nothing on the stack, a state 309.6 removes before anyone gets priority, so it was unreachable; its other two variants duplicated 309.4c-1's room choice. Dropped the scenario and moved 309.5a into the rebuilt 309.5b-1, whose middle_room variant moves the marker along an arrow.",
+    "309.5b-1: the base started with the marker on Temple of Dumathoin and an empty stack, unreachable because 309.6 removes that dungeon first. Rebuilt so Kick in the Door moves the marker into the bottommost room and Twiddle untaps a tapped Immovable Rod in response to its room ability, venturing from the bottommost room; the middle_room variant (Goblin Lair start) shows 309.5a.",
+    "309.6-1: forge_notes named the creature's power as an observable but no expected mentioned it; added Cloister Gargoyle's 0/4 or 3/4 flying to each variant.",
+    "309.7-1: the base started with the marker on Temple of Dumathoin and an empty stack, unreachable under 309.6. Made the Storeroom start (formerly completed_by_state_check) the base and dropped the unreachable variant; not_completed now differs from the base only in the starting room."
+  ],
+  "skipped": [
+    {
+      "id": "309.2d",
+      "reason": "unreachable in Forge: the only effects that bring a card in from outside the game are wishes (for example Mastermind's Acquisition), and Forge implements outside the game as the sideboard, which never holds dungeon cards, so no effect other than venturing can even offer a dungeon"
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "309.2a-1",
+      "rules": [
+        "309.2",
+        "309.2a",
+        "309.2b",
+        "309.3",
+        "309.4a"
+      ],
+      "title": "Venturing with no dungeon in the command zone brings one in from outside the game; a player never has two",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Plains",
+            "Plains"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Cloister Gargoyle"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest"
+          ],
+          "B": [
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest"
+          ]
+        },
+        "exile": {},
+        "notes": "Dungeon cards and venture markers are not zones the scenario format lists, so they are described here. Lost Mine of Phandelver is a Forge token script (tokenscripts/lost_mine_of_phandelver.txt). A's library holds enough Forests that no draw or scry empties it. A owns all four dungeons (Lost Mine of Phandelver, Tomb of Annihilation, Dungeon of the Mad Mage, Undercity) outside the game, except any listed in the command zone. In the base variant A has no dungeon in the command zone and no dungeon is in A's deck or library. Lost Mine of Phandelver rooms: Cave Entrance (scry 1) leads to Goblin Lair and Mine Tunnels; Goblin Lair (1/1 red Goblin token) leads to Storeroom and Dark Pool; Mine Tunnels (Treasure token) leads to Dark Pool and Fungi Cavern; Storeroom, Dark Pool (each opponent loses 1 life and you gain 1 life) and Fungi Cavern lead to Temple of Dumathoin (draw a card), the bottommost room. "
+      },
+      "decisions": [
+        "A casts Cloister Gargoyle, tapping all three Plains; both players pass and it resolves.",
+        "Cloister Gargoyle's enter trigger goes on the stack; both players pass and it resolves: A ventures into the dungeon. With no dungeon in the command zone A chooses Lost Mine of Phandelver from outside the game; with Lost Mine already in the command zone at Cave Entrance A moves to Goblin Lair.",
+        "If a room ability triggers, both players pass and it resolves; if it scries, A leaves the card on top."
+      ],
+      "variants": [
+        {
+          "label": "no_dungeon",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Lost Mine of Phandelver is put into A's command zone (not onto the battlefield) and A's venture marker is on Cave Entrance, the topmost room. Cave Entrance's room ability triggers and A scries 1."
+        },
+        {
+          "label": "dungeon_in_command_zone",
+          "polarity": "does_not_fire",
+          "delta": "A already has Lost Mine of Phandelver in the command zone with the venture marker on Cave Entrance.",
+          "expected": "No second dungeon is brought into the game: A's command zone holds only that one Lost Mine. The marker moves from Cave Entrance to Goblin Lair, whose room ability creates a 1/1 red Goblin creature token under A's control."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Cloister Gargoyle"
+      ],
+      "forge_notes": "Dungeon state (command zone card, marker room) is not a field of any record today; the room ability and its effects are the observables."
+    },
+    {
+      "id": "309.2c-1",
+      "rules": [
+        "309.2c"
+      ],
+      "title": "A dungeon card in the command zone cannot be cast",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Plains"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest"
+          ],
+          "B": [
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest"
+          ]
+        },
+        "exile": {},
+        "notes": "Commander-format game. A's command zone holds the dungeon Lost Mine of Phandelver (venture marker on Cave Entrance), brought in by an earlier venture. A has priority. Dungeon cards and venture markers are not zones the scenario format lists, so they are described here. Lost Mine of Phandelver is a Forge token script (tokenscripts/lost_mine_of_phandelver.txt). A's library holds enough Forests that no draw or scry empties it."
+      },
+      "decisions": [
+        "A has priority. The engine evaluates whether A may cast the card in A's command zone (paying {W} with a Plains if it has that cost)."
+      ],
+      "variants": [
+        {
+          "label": "dungeon",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Casting Lost Mine of Phandelver is not legal: it is not offered as a castable card."
+        },
+        {
+          "label": "commander",
+          "polarity": "does_not_fire",
+          "delta": "The card in A's command zone is A's commander Isamaru, Hound of Konda instead of Lost Mine of Phandelver.",
+          "expected": "Casting Isamaru, Hound of Konda from the command zone is legal (can_play true)."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Isamaru, Hound of Konda"
+      ],
+      "forge_notes": "Needs a two-player Commander game, since a plain constructed game has no command-zone cast. A dungeon never leaving the command zone except by leaving the game is the other half of the rule and has no card that tests it."
+    },
+    {
+      "id": "309.4c-1",
+      "rules": [
+        "309.4c"
+      ],
+      "title": "Moving the venture marker into a room triggers that room's ability, controlled by the dungeon's owner",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Plains",
+            "Plains"
+          ],
+          "B": [
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Cloister Gargoyle"
+          ],
+          "B": [
+            "Stifle"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest"
+          ],
+          "B": [
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest"
+          ]
+        },
+        "exile": {},
+        "notes": "Dungeon cards and venture markers are not zones the scenario format lists, so they are described here. Lost Mine of Phandelver is a Forge token script (tokenscripts/lost_mine_of_phandelver.txt). A's library holds enough Forests that no draw or scry empties it. A's command zone holds Lost Mine of Phandelver with the venture marker on Cave Entrance. Lost Mine of Phandelver rooms: Cave Entrance (scry 1) leads to Goblin Lair and Mine Tunnels; Goblin Lair (1/1 red Goblin token) leads to Storeroom and Dark Pool; Mine Tunnels (Treasure token) leads to Dark Pool and Fungi Cavern; Storeroom, Dark Pool (each opponent loses 1 life and you gain 1 life) and Fungi Cavern lead to Temple of Dumathoin (draw a card), the bottommost room. "
+      },
+      "decisions": [
+        "A casts Cloister Gargoyle, tapping all three Plains; both players pass and it resolves.",
+        "Cloister Gargoyle's enter trigger goes on the stack. B passes priority with Stifle in hand; both players pass and the trigger resolves: A ventures, moving the marker to Goblin Lair.",
+        "If a room ability triggers it goes on the stack; both players pass and it resolves."
+      ],
+      "variants": [
+        {
+          "label": "goblin_lair",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The marker moves into Goblin Lair and its room ability triggers, controlled by A: A creates a 1/1 red Goblin creature token."
+        },
+        {
+          "label": "mine_tunnels",
+          "polarity": "other",
+          "delta": "A moves the marker to Mine Tunnels instead of Goblin Lair.",
+          "expected": "The marker moves into Mine Tunnels and its room ability triggers, controlled by A: A creates a Treasure token. No Goblin token is created."
+        },
+        {
+          "label": "venture_stifled",
+          "polarity": "does_not_fire",
+          "delta": "B casts Stifle targeting Cloister Gargoyle's enter trigger, tapping Island, instead of passing.",
+          "expected": "Stifle resolves and counters the enter trigger. A does not venture, the marker stays on Cave Entrance, no room ability triggers and no token is created."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Island",
+        "Cloister Gargoyle",
+        "Stifle"
+      ],
+      "forge_notes": "Dungeon state is not a field of any record today. The trigger record's fired flag and the room ability's effect are the observables."
+    },
+    {
+      "id": "309.5b-1",
+      "rules": [
+        "309.5a",
+        "309.5b"
+      ],
+      "title": "Venturing while the marker is on the bottommost room removes the dungeon and starts a new one; from any other room the marker follows an arrow",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Island",
+            "Grizzly Bears",
+            {
+              "card": "Immovable Rod",
+              "tapped": true
+            }
+          ]
+        },
+        "hand": {
+          "A": [
+            "Kick in the Door",
+            "Twiddle"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest"
+          ],
+          "B": [
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest"
+          ]
+        },
+        "exile": {},
+        "notes": "Dungeon cards and venture markers are not zones the scenario format lists, so they are described here. Lost Mine of Phandelver and Tomb of Annihilation are Forge token scripts (tokenscripts/). A's library holds enough Forests that no draw empties it. A owns Lost Mine of Phandelver, Tomb of Annihilation and Dungeon of the Mad Mage outside the game, except any in the command zone. A's command zone holds Lost Mine of Phandelver with the venture marker on Storeroom. Immovable Rod stayed tapped through A's untap step by A's choice; it ventures whenever it becomes untapped. A marker can sit on the bottommost room only while that room's ability is on the stack, since 309.6 otherwise removes the dungeon, so the second venture is made in response to that ability. Tomb of Annihilation: Trapped Entry (each player loses 1 life) is its topmost room. Lost Mine of Phandelver rooms: Cave Entrance (scry 1) leads to Goblin Lair and Mine Tunnels; Goblin Lair (1/1 red Goblin token) leads to Storeroom and Dark Pool; Mine Tunnels (Treasure token) leads to Dark Pool and Fungi Cavern; Storeroom (+1/+1 counter on target creature), Dark Pool (each opponent loses 1 life and you gain 1 life) and Fungi Cavern lead to Temple of Dumathoin (draw a card), the bottommost room."
+      },
+      "decisions": [
+        "A casts Kick in the Door targeting Grizzly Bears, tapping Mountain; both players pass and it resolves: Grizzly Bears gets a +1/+1 counter and haste, then A ventures from Storeroom to Temple of Dumathoin (from Goblin Lair, A chooses Dark Pool).",
+        "The room ability of the room entered goes on the stack. A holds priority and casts Twiddle targeting Immovable Rod, choosing untap, tapping Island; both players pass and Twiddle resolves.",
+        "Immovable Rod's untap trigger goes on the stack above the room ability; both players pass and it resolves: A ventures. If Lost Mine of Phandelver is removed, A chooses Tomb of Annihilation as the new dungeon.",
+        "Each room ability that triggers goes on the stack; players pass until the stack is empty."
+      ],
+      "variants": [
+        {
+          "label": "bottommost_room",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Rod's venture removes Lost Mine of Phandelver from the game and puts Tomb of Annihilation into A's command zone with the marker on Trapped Entry. Trapped Entry's room ability resolves first: each player loses 1 life (A 19, B 19). Then Temple of Dumathoin's room ability resolves: A draws a card."
+        },
+        {
+          "label": "middle_room",
+          "polarity": "does_not_fire",
+          "delta": "The venture marker starts on Goblin Lair instead of Storeroom.",
+          "expected": "Kick in the Door moves the marker to Dark Pool. Rod's venture moves it along the arrow from Dark Pool to Temple of Dumathoin; no dungeon is removed or brought in by it. Temple's room ability resolves first (A draws a card), then Dark Pool's (B 19, A 21). With the stack empty, Lost Mine of Phandelver is removed in the state-based check and no Tomb of Annihilation enters; no player loses life to Trapped Entry."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Island",
+        "Grizzly Bears",
+        "Immovable Rod",
+        "Kick in the Door",
+        "Twiddle"
+      ],
+      "forge_notes": "Dungeon state is not a field of any record today; the room abilities' effects and the life totals are the observables."
+    },
+    {
+      "id": "309.6-1",
+      "rules": [
+        "309.6"
+      ],
+      "title": "A dungeon whose marker is on its bottommost room is removed once its room ability has left the stack",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Plains",
+            "Plains"
+          ],
+          "B": [
+            "Mountain"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Cloister Gargoyle"
+          ],
+          "B": [
+            "Lightning Bolt"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest"
+          ],
+          "B": [
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest"
+          ]
+        },
+        "exile": {},
+        "notes": "Dungeon cards and venture markers are not zones the scenario format lists, so they are described here. Lost Mine of Phandelver is a Forge token script (tokenscripts/lost_mine_of_phandelver.txt). A's library holds enough Forests that no draw or scry empties it. A's command zone holds Lost Mine of Phandelver with the venture marker on Storeroom. Lost Mine of Phandelver rooms: Cave Entrance (scry 1) leads to Goblin Lair and Mine Tunnels; Goblin Lair (1/1 red Goblin token) leads to Storeroom and Dark Pool; Mine Tunnels (Treasure token) leads to Dark Pool and Fungi Cavern; Storeroom (+1/+1 counter on target creature), Dark Pool (each opponent loses 1 life and you gain 1 life) and Fungi Cavern lead to Temple of Dumathoin (draw a card), the bottommost room. "
+      },
+      "decisions": [
+        "A casts Cloister Gargoyle, tapping all three Plains; both players pass and it resolves.",
+        "Cloister Gargoyle's enter trigger goes on the stack; both players pass and it resolves: A ventures. From Storeroom the marker moves to Temple of Dumathoin; from a room with two exits A moves to Dark Pool.",
+        "The room ability of the room entered goes on the stack. In the bolt_in_response variant B casts Lightning Bolt targeting A, tapping Mountain, and A passes; otherwise B passes. Players pass until the stack is empty."
+      ],
+      "variants": [
+        {
+          "label": "bottommost_room",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The marker moves to Temple of Dumathoin. When its room ability resolves, A draws a card; with the ability off the stack, Lost Mine of Phandelver is removed from the game in the state-based check and Cloister Gargoyle becomes a 3/4 with flying."
+        },
+        {
+          "label": "middle_room",
+          "polarity": "does_not_fire",
+          "delta": "The venture marker starts on Goblin Lair instead of Storeroom.",
+          "expected": "The marker moves to Dark Pool: B loses 1 life (19) and A gains 1 life (21). Lost Mine of Phandelver stays in the command zone and Cloister Gargoyle stays a 0/4 without flying."
+        },
+        {
+          "label": "bolt_in_response",
+          "polarity": "does_not_fire",
+          "delta": "B casts Lightning Bolt targeting A in response to Temple of Dumathoin's room ability.",
+          "expected": "Lightning Bolt resolves first (A 17) and the state-based check that follows leaves Lost Mine of Phandelver in the command zone, because its room ability is still on the stack; Cloister Gargoyle is still a 0/4. After that ability resolves and A draws a card, the dungeon is removed from the game and Cloister Gargoyle becomes a 3/4 with flying."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Mountain",
+        "Cloister Gargoyle",
+        "Lightning Bolt"
+      ],
+      "forge_notes": "Dungeon removal is not a field of any record today; the card draw and Cloister Gargoyle's power and flying (it gets +3/+0 and flying once A has completed a dungeon) are the observables."
+    },
+    {
+      "id": "309.7-1",
+      "rules": [
+        "309.7"
+      ],
+      "title": "A dungeon removed from the game counts as completed",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Cloister Gargoyle",
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Kick in the Door"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest"
+          ],
+          "B": [
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest"
+          ]
+        },
+        "exile": {},
+        "notes": "Dungeon cards and venture markers are not zones the scenario format lists, so they are described here. Lost Mine of Phandelver is a Forge token script (tokenscripts/lost_mine_of_phandelver.txt). A's library holds enough Forests that no draw empties it. A's command zone holds Lost Mine of Phandelver with the venture marker on Storeroom. Cloister Gargoyle (0/4, artifact creature) has been on the battlefield since before this turn; it gets +3/+0 and flying as long as A has completed a dungeon. Lost Mine of Phandelver rooms: Cave Entrance (scry 1) leads to Goblin Lair and Mine Tunnels; Goblin Lair (1/1 red Goblin token) leads to Storeroom and Dark Pool; Mine Tunnels (Treasure token) leads to Dark Pool and Fungi Cavern; Storeroom (+1/+1 counter on target creature), Dark Pool (each opponent loses 1 life and you gain 1 life) and Fungi Cavern lead to Temple of Dumathoin (draw a card), the bottommost room."
+      },
+      "decisions": [
+        "A casts Kick in the Door targeting Grizzly Bears, tapping Mountain; both players pass and it resolves: Grizzly Bears gets a +1/+1 counter, then A ventures. From Storeroom the marker moves to Temple of Dumathoin; from Goblin Lair A moves to Dark Pool.",
+        "The room ability of the room entered goes on the stack; both players pass and it resolves."
+      ],
+      "variants": [
+        {
+          "label": "completed",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The marker moves to Temple of Dumathoin and Cloister Gargoyle stays a 0/4 while that room ability is on the stack. Once A has drawn a card and Lost Mine of Phandelver is removed from the game in the state-based check, Cloister Gargoyle is a 3/4 with flying."
+        },
+        {
+          "label": "not_completed",
+          "polarity": "does_not_fire",
+          "delta": "The venture marker starts on Goblin Lair instead of Storeroom.",
+          "expected": "The marker moves to Dark Pool (B 19, A 21) and no dungeon is removed. Cloister Gargoyle stays a 0/4 without flying."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Cloister Gargoyle",
+        "Grizzly Bears",
+        "Kick in the Door"
+      ],
+      "forge_notes": "Dungeon completion is not a field of any record today; Cloister Gargoyle's continuous record (power, keywords) is the observable."
+    }
+  ]
+}

@@ -1,0 +1,425 @@
+{
+  "unit": "702.145",
+  "verified": true,
+  "review": [
+    "702.145b-4: 702.145b's third ability (can't transform except through daybound) was not exercised; added a Moonmist scenario contrasting Hound Tamer with the non-daybound Gatstaf Shepherd."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.145b-1",
+      "rules": [
+        "702.145b",
+        "702.145c"
+      ],
+      "title": "A front-face-up daybound permanent transforms the moment it becomes night",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Hound Tamer",
+              "summoning_sick": false
+            },
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Into the Night"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Mountain",
+            "Mountain"
+          ]
+        },
+        "exile": {},
+        "notes": "It is day."
+      },
+      "decisions": [
+        "A casts Into the Night, tapping four Mountains.",
+        "Both players pass; Into the Night resolves: it becomes night, A discards no cards and draws one card."
+      ],
+      "variants": [
+        {
+          "label": "becomes_night",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "It is night. Hound Tamer transforms to its back face Untamed Pup (4/4 Werewolf with trample and nightbound) as Into the Night resolves, not through a state-based check."
+        },
+        {
+          "label": "stays_day",
+          "polarity": "does_not_fire",
+          "delta": "A does not cast Into the Night and passes priority.",
+          "expected": "It stays day during this turn. Hound Tamer stays front face up as a 3/3 Human Werewolf with trample and daybound."
+        }
+      ],
+      "cards": [
+        "Hound Tamer",
+        "Into the Night",
+        "Mountain"
+      ],
+      "forge_notes": "The day/night state and the face of a transformed permanent are not fields of any record today; the harness reads them from the game state."
+    },
+    {
+      "id": "702.145b-2",
+      "rules": [
+        "702.145b"
+      ],
+      "title": "A daybound permanent enters transformed while it is night",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Forest",
+            "Forest",
+            "Forest"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Hound Tamer"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "It is night."
+      },
+      "decisions": [
+        "A casts Hound Tamer, tapping three Forests.",
+        "Both players pass; Hound Tamer resolves."
+      ],
+      "variants": [
+        {
+          "label": "night",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Hound Tamer enters the battlefield transformed: it is Untamed Pup, a 4/4 Werewolf with trample. It is still night."
+        },
+        {
+          "label": "day",
+          "polarity": "does_not_fire",
+          "delta": "It is day instead of night.",
+          "expected": "Hound Tamer enters front face up as a 3/3 Human Werewolf with trample. It is still day."
+        }
+      ],
+      "cards": [
+        "Hound Tamer",
+        "Forest"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.145b-3",
+      "rules": [
+        "702.145b"
+      ],
+      "title": "Day becomes night when the active player casts no spells during their own turn",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Hound Tamer",
+              "summoning_sick": false
+            },
+            "Mountain"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Shock"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "It is day."
+      },
+      "decisions": [
+        "A casts no spell and passes priority through every step of A's turn.",
+        "B's turn begins; the untap step checks the spells A cast during A's turn."
+      ],
+      "variants": [
+        {
+          "label": "no_spell_cast",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "As B's turn begins it becomes night. Hound Tamer transforms to Untamed Pup (4/4 Werewolf with trample)."
+        },
+        {
+          "label": "spell_cast",
+          "polarity": "does_not_fire",
+          "delta": "In main phase 1 A casts Shock targeting B, tapping the Mountain, and it resolves.",
+          "expected": "B takes 2 damage (life 18). As B's turn begins it stays day. Hound Tamer stays front face up as a 3/3."
+        }
+      ],
+      "cards": [
+        "Hound Tamer",
+        "Shock",
+        "Mountain"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.145d-1",
+      "rules": [
+        "702.145d"
+      ],
+      "title": "When it is neither day nor night, controlling a daybound permanent makes it day",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Forest",
+            "Forest",
+            "Forest"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Hound Tamer"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "It is neither day nor night: nothing has set the time yet."
+      },
+      "decisions": [
+        "A casts Hound Tamer, tapping three Forests.",
+        "Both players pass; Hound Tamer resolves."
+      ],
+      "variants": [
+        {
+          "label": "neither",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Hound Tamer enters front face up as a 3/3 and it becomes day."
+        },
+        {
+          "label": "night",
+          "polarity": "does_not_fire",
+          "delta": "It is already night instead of neither day nor night.",
+          "expected": "It does not become day: it stays night and Hound Tamer enters transformed as Untamed Pup, a 4/4 Werewolf with trample."
+        }
+      ],
+      "cards": [
+        "Hound Tamer",
+        "Forest"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.145e-1",
+      "rules": [
+        "702.145e",
+        "702.145f"
+      ],
+      "title": "A back-face-up nightbound permanent transforms the moment it becomes day",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Hound Tamer",
+              "summoning_sick": false
+            },
+            "Mountain",
+            "Mountain"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Shock",
+            "Shock"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "It is night. Hound Tamer on A's battlefield is back face up (Untamed Pup, 4/4)."
+      },
+      "decisions": [
+        "A casts Shock targeting B, tapping a Mountain; it resolves.",
+        "A casts a second Shock targeting B, tapping the other Mountain; it resolves.",
+        "A passes the turn. B's turn begins; the untap step checks the spells A cast during A's turn."
+      ],
+      "variants": [
+        {
+          "label": "two_spells",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "B takes 4 damage (life 16). As B's turn begins it becomes day. Untamed Pup transforms to Hound Tamer (3/3 Human Werewolf with trample), immediately and not through a state-based check."
+        },
+        {
+          "label": "one_spell",
+          "polarity": "does_not_fire",
+          "delta": "A casts only one Shock; the second Shock stays in hand.",
+          "expected": "B takes 2 damage (life 18). As B's turn begins it stays night. The permanent stays Untamed Pup, a 4/4 Werewolf with trample."
+        }
+      ],
+      "cards": [
+        "Hound Tamer",
+        "Shock",
+        "Mountain"
+      ],
+      "forge_notes": "The puzzle state needs a transformed permanent on the battlefield, which a harness can set up directly."
+    },
+    {
+      "id": "702.145g-1",
+      "rules": [
+        "702.145g"
+      ],
+      "title": "With neither day nor night, a nightbound permanent and no daybound permanents makes it night",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "upkeep",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Hound Tamer",
+              "summoning_sick": false
+            }
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "It is neither day nor night. Hound Tamer on A's battlefield is back face up (Untamed Pup, 4/4); no permanent with daybound is on the battlefield."
+      },
+      "decisions": [
+        "Both players pass priority; the game checks day and night."
+      ],
+      "variants": [
+        {
+          "label": "nightbound_present",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "It becomes night. Untamed Pup stays back face up as a 4/4 Werewolf with trample."
+        },
+        {
+          "label": "no_nightbound",
+          "polarity": "does_not_fire",
+          "delta": "A's permanent is Grizzly Bears instead of Hound Tamer.",
+          "expected": "It stays neither day nor night. Grizzly Bears is a 2/2."
+        }
+      ],
+      "cards": [
+        "Hound Tamer",
+        "Grizzly Bears"
+      ],
+      "forge_notes": "A back-face-up nightbound permanent while it is neither day nor night is reachable only through effects that put a double-faced card onto the battlefield transformed before day or night has begun; the harness sets the state directly."
+    },
+    {
+      "id": "702.145b-4",
+      "rules": [
+        "702.145b"
+      ],
+      "title": "A daybound permanent can't transform except through its daybound ability",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Hound Tamer",
+              "summoning_sick": false
+            },
+            "Forest",
+            "Forest"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Moonmist"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "It is day."
+      },
+      "decisions": [
+        "A casts Moonmist, tapping two Forests.",
+        "Both players pass; Moonmist resolves."
+      ],
+      "variants": [
+        {
+          "label": "daybound",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Moonmist resolves. Hound Tamer does not transform: it stays front face up as a 3/3 Human Werewolf with trample. It is still day."
+        },
+        {
+          "label": "no_daybound",
+          "polarity": "does_not_fire",
+          "delta": "A's creature is Gatstaf Shepherd (a Human Werewolf double-faced card without daybound) instead of Hound Tamer.",
+          "expected": "Moonmist resolves and Gatstaf Shepherd transforms into Gatstaf Howler, a 3/3 Werewolf with intimidate."
+        }
+      ],
+      "cards": [
+        "Hound Tamer",
+        "Moonmist",
+        "Forest",
+        "Gatstaf Shepherd"
+      ],
+      "forge_notes": "Forge implements the third daybound ability as a CantTransform static excepting the daybound cause. In the no_daybound variant nothing sets day or night, which does not affect the outcome."
+    }
+  ]
+}

@@ -1,0 +1,2 @@
+{"id": "701.48", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "701.48a", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "Learn lets the player discard a card to draw a card, or else fetch a Lesson from outside the game.", "note": "The outside-the-game branch is reachable in Forge through the sideboard zone."}

@@ -1,0 +1,234 @@
+{
+  "unit": "701.35",
+  "verified": true,
+  "review": [
+    "701.35a-2: the base variant carried a non-empty delta, its two variants changed both the turn and the action checked (attack, then block), and no library fed the draw steps; rebuilt it on Prodigal Pyromancer so only the turn of the check changes, B's turn (can't attack or activate) against A's next upkeep (can activate), and gave both players libraries"
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "701.35a-1",
+      "rules": [
+        "701.35a"
+      ],
+      "title": "A detained creature can't block",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Plains",
+            {
+              "card": "Hill Giant",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            },
+            {
+              "card": "Elite Vanguard",
+              "summoning_sick": false
+            }
+          ]
+        },
+        "hand": {
+          "A": [
+            "Azorius Arrester"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Azorius Arrester, tapping both Plains.",
+        "Both players pass; Arrester enters and its trigger targets Grizzly Bears.",
+        "Both players pass; the trigger resolves and detains Grizzly Bears.",
+        "A moves to combat and attacks B with Hill Giant. In the declare blockers step B can declare blockers."
+      ],
+      "variants": [
+        {
+          "label": "detained",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears is not a legal blocker. Elite Vanguard is a legal blocker."
+        },
+        {
+          "label": "other_detained",
+          "polarity": "does_not_fire",
+          "delta": "Arrester's trigger targets Elite Vanguard instead of Grizzly Bears.",
+          "expected": "Elite Vanguard is not a legal blocker. Grizzly Bears is a legal blocker."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Hill Giant",
+        "Azorius Arrester",
+        "Grizzly Bears",
+        "Elite Vanguard"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "701.35a-2",
+      "rules": [
+        "701.35a"
+      ],
+      "title": "Detain lasts through the opponent's turn and ends when the detaining player's next turn begins",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Plains"
+          ],
+          "B": [
+            {
+              "card": "Prodigal Pyromancer",
+              "summoning_sick": false
+            },
+            {
+              "card": "Elite Vanguard",
+              "summoning_sick": false
+            }
+          ]
+        },
+        "hand": {
+          "A": [
+            "Azorius Arrester"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Plains",
+            "Plains"
+          ],
+          "B": [
+            "Forest",
+            "Forest"
+          ]
+        },
+        "exile": {},
+        "notes": "Library lists are ordered top first; they exist so that both draw steps have a card to draw."
+      },
+      "decisions": [
+        "A casts Azorius Arrester, tapping both Plains.",
+        "Both players pass; Arrester enters and its trigger targets Prodigal Pyromancer.",
+        "Both players pass; the trigger resolves and detains Prodigal Pyromancer.",
+        "A makes no attack and passes the turn.",
+        "In B's main phase 1 B has priority, then B moves to combat and declares attackers; the check is made there."
+      ],
+      "variants": [
+        {
+          "label": "opponent_turn",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "B can't activate Prodigal Pyromancer's {T} ability (can_play false), and Prodigal Pyromancer is not a legal attacker. Elite Vanguard is a legal attacker."
+        },
+        {
+          "label": "detainer_next_turn",
+          "polarity": "does_not_fire",
+          "delta": "B makes no attack and passes the turn; the check is made in A's next upkeep, with B holding priority.",
+          "expected": "B can activate Prodigal Pyromancer's {T} ability (can_play true)."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Azorius Arrester",
+        "Prodigal Pyromancer",
+        "Elite Vanguard",
+        "Forest"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "701.35a-3",
+      "rules": [
+        "701.35a"
+      ],
+      "title": "A detained permanent's activated abilities can't be activated",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Plains",
+            {
+              "card": "Hill Giant",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            {
+              "card": "Prodigal Pyromancer",
+              "summoning_sick": false
+            },
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            }
+          ]
+        },
+        "hand": {
+          "A": [
+            "Azorius Arrester"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Azorius Arrester, tapping both Plains.",
+        "Both players pass; Arrester enters and its trigger targets Prodigal Pyromancer.",
+        "Both players pass; the trigger resolves and detains Prodigal Pyromancer. B receives priority."
+      ],
+      "variants": [
+        {
+          "label": "pyromancer_detained",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "B can't activate Prodigal Pyromancer's {T} ability (can_play false)."
+        },
+        {
+          "label": "bears_detained",
+          "polarity": "does_not_fire",
+          "delta": "Arrester's trigger targets Grizzly Bears instead of Prodigal Pyromancer.",
+          "expected": "B can activate Prodigal Pyromancer's {T} ability (can_play true)."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Hill Giant",
+        "Azorius Arrester",
+        "Prodigal Pyromancer",
+        "Grizzly Bears"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

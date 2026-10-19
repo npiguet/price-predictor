@@ -1,0 +1,162 @@
+{
+  "unit": "702.49",
+  "verified": true,
+  "review": [
+    "702.49c-1: the blocked variant tested whether ninjutsu can be activated (702.49a, already in 702.49a-1), not which defender the ninja attacks; dropped it."
+  ],
+  "skipped": [
+    {
+      "id": "702.49d",
+      "reason": "commander ninjutsu works from the command zone, which does not occur in the two-player games collected here; the ninjutsu behavior it shares is covered by 702.49a-1 and 702.49c-1"
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "702.49a-1",
+      "rules": [
+        "702.49a"
+      ],
+      "title": "Ninjutsu swaps an unblocked attacker for the ninja, which enters tapped and attacking",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "declare_attackers",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            },
+            "Island",
+            "Island"
+          ],
+          "B": [
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Ninja of the Deep Hours"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Forest"
+          ]
+        },
+        "exile": {},
+        "notes": "Ninja of the Deep Hours is a 2/2 with ninjutsu {1}{U} and draws a card when it deals combat damage to a player."
+      },
+      "decisions": [
+        "A declares their Grizzly Bears as an attacker against B.",
+        "B declares no blockers.",
+        "In the declare blockers step A activates ninjutsu of Ninja of the Deep Hours, paying {1}{U} with both Islands, revealing the card and returning their attacking Grizzly Bears to hand.",
+        "Both players pass; the ability resolves.",
+        "Combat damage is dealt and A chooses to draw with the Ninja of the Deep Hours trigger."
+      ],
+      "variants": [
+        {
+          "label": "unblocked",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "A's Grizzly Bears is in A's hand. Ninja of the Deep Hours is on the battlefield tapped and attacking B and deals 2 combat damage to B, whose life total is 18. A draws Forest."
+        },
+        {
+          "label": "blocked",
+          "polarity": "does_not_fire",
+          "delta": "B declares their Grizzly Bears as a blocker of A's Grizzly Bears.",
+          "expected": "Ninjutsu cannot be activated because the attacking Grizzly Bears is blocked. Ninja of the Deep Hours stays in A's hand and the two Grizzly Bears deal 2 damage to each other and both move to their owners' graveyards."
+        }
+      ],
+      "cards": [
+        "Grizzly Bears",
+        "Island",
+        "Ninja of the Deep Hours",
+        "Forest"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.49c-1",
+      "rules": [
+        "702.49c"
+      ],
+      "title": "The ninjutsu creature enters attacking the same planeswalker or player as the creature it replaced",
+      "record_kind": "combat",
+      "setup": {
+        "active": "A",
+        "step": "declare_attackers",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            },
+            "Island",
+            "Island"
+          ],
+          "B": [
+            {
+              "card": "Jace Beleren",
+              "counters": {
+                "loyalty": 3
+              }
+            },
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Ninja of the Deep Hours"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Forest"
+          ]
+        },
+        "exile": {},
+        "notes": "B controls one untapped Grizzly Bears, which does not block."
+      },
+      "decisions": [
+        "A declares Grizzly Bears as an attacker against Jace Beleren.",
+        "B declares no blockers.",
+        "In the declare blockers step A activates ninjutsu of Ninja of the Deep Hours, paying {1}{U} with both Islands and returning Grizzly Bears to hand.",
+        "Both players pass; the ability resolves.",
+        "Combat damage is dealt."
+      ],
+      "variants": [
+        {
+          "label": "attacking_planeswalker",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Ninja of the Deep Hours enters tapped and attacking Jace Beleren and deals 2 combat damage to it, so Jace Beleren has 1 loyalty counter left. B's life total is 20 and A draws no card."
+        },
+        {
+          "label": "attacking_player",
+          "polarity": "other",
+          "delta": "A declares Grizzly Bears as an attacker against B instead of Jace Beleren.",
+          "expected": "Ninja of the Deep Hours enters tapped and attacking B and deals 2 combat damage to B, whose life total is 18. Jace Beleren keeps 3 loyalty counters and A draws Forest."
+        }
+      ],
+      "cards": [
+        "Grizzly Bears",
+        "Island",
+        "Jace Beleren",
+        "Ninja of the Deep Hours",
+        "Forest"
+      ],
+      "forge_notes": "702.49c always applies when ninjutsu resolves, so the scenario has no does_not_fire variant; the blocked case belongs to 702.49a and is in 702.49a-1."
+    }
+  ]
+}

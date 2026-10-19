@@ -1,0 +1,2 @@
+{"id": "702.84", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.84a", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution", "trigger"], "outcome": "Activating unearth at sorcery speed returns the card hasty to the battlefield, exiles it at the next end step, and exiles it instead if it would leave.", "note": ""}

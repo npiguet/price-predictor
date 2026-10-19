@@ -1,0 +1,260 @@
+{
+  "unit": "702.168",
+  "verified": true,
+  "review": [
+    "702.168e-1: x_equals_one expected carried a reasoning sentence; removed it so expected states only the outcome."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.168a-1",
+      "rules": [
+        "702.168a"
+      ],
+      "title": "A disguise card can be cast face down for {3}",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Swamp",
+            "Swamp",
+            "Swamp"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Basilica Stalker"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Basilica Stalker has mana cost {5}{B} and disguise {4}{B}. The stack is empty."
+      },
+      "decisions": [
+        "A considers casting Basilica Stalker from hand, tapping Swamps."
+      ],
+      "variants": [
+        {
+          "label": "three_lands",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Casting Basilica Stalker face down for {3} is legal. Casting it face up for {5}{B} is not legal."
+        },
+        {
+          "label": "two_lands",
+          "polarity": "does_not_fire",
+          "delta": "A controls two Swamps instead of three.",
+          "expected": "Casting Basilica Stalker is not legal either face down ({3}) or face up ({5}{B})."
+        },
+        {
+          "label": "six_lands",
+          "polarity": "other",
+          "delta": "A controls six Swamps instead of three.",
+          "expected": "Casting Basilica Stalker is legal both face down for {3} and face up for {5}{B}."
+        }
+      ],
+      "cards": [
+        "Swamp",
+        "Basilica Stalker"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.168b-1",
+      "rules": [
+        "702.168b"
+      ],
+      "title": "A card cast with disguise is a face-down 2/2 creature with ward {2} that has no name or subtypes",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Swamp",
+            "Swamp",
+            "Swamp",
+            "Swamp",
+            "Swamp",
+            "Swamp"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Basilica Stalker"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Basilica Stalker is a 3/4 Vampire Detective with flying, mana cost {5}{B} and disguise {4}{B}."
+      },
+      "decisions": [
+        "A casts Basilica Stalker face down using its disguise ability, paying {3} with three Swamps.",
+        "Both players pass; the spell resolves."
+      ],
+      "variants": [
+        {
+          "label": "face_down",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The permanent that enters under A's control is a face-down 2/2 creature with ward {2}, no name, no creature types, no mana cost and no flying."
+        },
+        {
+          "label": "face_up",
+          "polarity": "does_not_fire",
+          "delta": "A casts Basilica Stalker face up for {5}{B}, tapping all six Swamps.",
+          "expected": "The permanent is Basilica Stalker, a 3/4 Vampire Detective with flying, with no ward."
+        }
+      ],
+      "cards": [
+        "Swamp",
+        "Basilica Stalker"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.168d-1",
+      "rules": [
+        "702.168d"
+      ],
+      "title": "Turning a disguised permanent face up pays its disguise cost without the stack and triggers no enters-the-battlefield abilities",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Swamp",
+            "Swamp",
+            "Swamp",
+            {
+              "card": "Hunted Bonebrute",
+              "face_down": true,
+              "summoning_sick": false
+            }
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Hunted Bonebrute is a 6/2 Skeleton Beast with menace, disguise {1}{B}, and 'When Hunted Bonebrute enters, target opponent creates two 1/1 white Dog creature tokens.' It is on the battlefield face down, a 2/2 with ward {2}."
+      },
+      "decisions": [
+        "A has priority and turns Hunted Bonebrute face up as a special action, paying {1}{B} with two Swamps."
+      ],
+      "variants": [
+        {
+          "label": "turn_face_up",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Nothing is put on the stack. Hunted Bonebrute becomes a face-up 6/2 with menace and its name and types. B creates no Dog tokens; B's battlefield stays empty."
+        },
+        {
+          "label": "not_enough_mana",
+          "polarity": "does_not_fire",
+          "delta": "A controls one Swamp instead of three.",
+          "expected": "Turning it face up is not legal: {1}{B} cannot be paid. Hunted Bonebrute stays a face-down 2/2 with ward {2}."
+        },
+        {
+          "label": "cast_face_up_instead",
+          "polarity": "other",
+          "delta": "Hunted Bonebrute is in A's hand instead of face down on the battlefield, and A casts it face up for {2}{B}.",
+          "expected": "Hunted Bonebrute resolves as a 6/2 and its enters trigger fires: B creates two 1/1 white Dog tokens."
+        }
+      ],
+      "cards": [
+        "Swamp",
+        "Hunted Bonebrute"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.168e-1",
+      "rules": [
+        "702.168e"
+      ],
+      "title": "X in a disguise cost is the value of X in the permanent's other abilities when it is turned face up",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            {
+              "card": "Aurelia's Vindicator",
+              "face_down": true,
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            "Grizzly Bears",
+            "Hill Giant"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Aurelia's Vindicator is a 4/2 flying, lifelink Angel with ward 2 and disguise {X}{3}{W}. 'When it is turned face up, exile up to X other target creatures from the battlefield and/or creature cards from graveyards.' It is on the battlefield face down."
+      },
+      "decisions": [
+        "A has priority and turns Aurelia's Vindicator face up as a special action with X = 2, paying {2}{3}{W} with all six Plains.",
+        "The turned-face-up trigger goes on the stack with Grizzly Bears and Hill Giant as its two targets; both players pass and it resolves."
+      ],
+      "variants": [
+        {
+          "label": "x_equals_two",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears and Hill Giant are exiled. Aurelia's Vindicator is a face-up 4/2 with flying and lifelink."
+        },
+        {
+          "label": "x_equals_one",
+          "polarity": "other",
+          "delta": "A chooses X = 1, paying {1}{3}{W} with five of the Plains, and targets Hill Giant only.",
+          "expected": "Hill Giant is exiled; Grizzly Bears stays on B's battlefield."
+        },
+        {
+          "label": "x_equals_zero",
+          "polarity": "does_not_fire",
+          "delta": "A chooses X = 0, paying {3}{W}, and the trigger has no targets.",
+          "expected": "Nothing is exiled; Grizzly Bears and Hill Giant stay on B's battlefield."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Aurelia's Vindicator",
+        "Grizzly Bears",
+        "Hill Giant"
+      ],
+      "forge_notes": "Forge must carry the X paid for the special action into the turned-face-up trigger (SVar X is Count$xPaid)."
+    }
+  ]
+}

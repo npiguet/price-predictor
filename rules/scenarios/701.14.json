@@ -1,0 +1,305 @@
+{
+  "unit": "701.14",
+  "verified": true,
+  "review": [
+    "701.14c: the skip claimed no Forge card can make a creature fight itself, but Nightfall Predator ('fights target creature', any creature) can target itself; removed the skip and added 701.14c-1 (Nightfall Predator with Holy Strength so that only twice its power is lethal)."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "701.14a-1",
+      "rules": [
+        "701.14a"
+      ],
+      "title": "Each fighting creature deals damage equal to its power to the other",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Centaur Courser",
+              "summoning_sick": false
+            },
+            "Forest"
+          ],
+          "B": [
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            }
+          ]
+        },
+        "hand": {
+          "A": [
+            "Prey Upon"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Prey Upon targeting Centaur Courser (creature A controls) and Grizzly Bears (creature A does not control), tapping Forest.",
+        "Both players pass; Prey Upon resolves."
+      ],
+      "variants": [
+        {
+          "label": "courser_vs_bears",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Centaur Courser (3/3) deals 3 damage to Grizzly Bears (2/2) and Grizzly Bears deals 2 damage to Centaur Courser. Grizzly Bears is destroyed and moves to B's graveyard. Centaur Courser stays on the battlefield with 2 damage marked. No player's life total changes."
+        },
+        {
+          "label": "craw_wurm",
+          "polarity": "other",
+          "delta": "B's creature is Craw Wurm (6/4) instead of Grizzly Bears.",
+          "expected": "Centaur Courser deals 3 damage to Craw Wurm and Craw Wurm deals 6 damage to Centaur Courser. Centaur Courser is destroyed and moves to A's graveyard. Craw Wurm stays on the battlefield with 3 damage marked."
+        },
+        {
+          "label": "zero_power",
+          "polarity": "does_not_fire",
+          "delta": "A's creature is Wall of Wood (0/3) instead of Centaur Courser.",
+          "expected": "Wall of Wood deals 0 damage to Grizzly Bears, which stays on the battlefield undamaged. Grizzly Bears deals 2 damage to Wall of Wood, which stays on the battlefield with 2 damage marked."
+        }
+      ],
+      "cards": [
+        "Forest",
+        "Prey Upon",
+        "Centaur Courser",
+        "Grizzly Bears",
+        "Craw Wurm",
+        "Wall of Wood"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "701.14b-1",
+      "rules": [
+        "701.14b"
+      ],
+      "title": "If either fighting creature is an illegal target on resolution, neither deals damage",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Centaur Courser",
+              "summoning_sick": false
+            },
+            "Forest"
+          ],
+          "B": [
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            },
+            "Mountain"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Prey Upon"
+          ],
+          "B": [
+            "Lightning Bolt",
+            "Shock"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Prey Upon targeting Centaur Courser and Grizzly Bears, tapping Forest.",
+        "A passes priority; B casts Lightning Bolt targeting Centaur Courser, tapping Mountain.",
+        "Both players pass; Lightning Bolt resolves.",
+        "Both players pass; Prey Upon resolves."
+      ],
+      "variants": [
+        {
+          "label": "own_creature_bolted",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Lightning Bolt deals 3 damage to Centaur Courser, which is destroyed and moves to A's graveyard before Prey Upon resolves. Prey Upon resolves with one illegal target: Grizzly Bears fights nothing, takes no damage and stays on the battlefield undamaged."
+        },
+        {
+          "label": "no_response",
+          "polarity": "does_not_fire",
+          "delta": "B does not cast Lightning Bolt; both players pass with Prey Upon on the stack.",
+          "expected": "Both targets are legal on resolution. Centaur Courser deals 3 damage to Grizzly Bears, which is destroyed. Grizzly Bears deals 2 damage to Centaur Courser, which stays on the battlefield with 2 damage marked."
+        },
+        {
+          "label": "shock_response",
+          "polarity": "does_not_fire",
+          "delta": "B casts Shock instead of Lightning Bolt targeting Centaur Courser.",
+          "expected": "Shock deals 2 damage to Centaur Courser, which survives with 2 damage and stays a legal target. Prey Upon resolves normally: Centaur Courser deals 3 damage to Grizzly Bears, which is destroyed, and Grizzly Bears deals 2 more damage to Centaur Courser (4 total), which is destroyed. Both creatures are in their owners' graveyards."
+        },
+        {
+          "label": "opposing_creature_bolted",
+          "polarity": "fires",
+          "delta": "B casts Lightning Bolt targeting B's own Grizzly Bears instead of Centaur Courser.",
+          "expected": "Grizzly Bears is destroyed and moves to B's graveyard before Prey Upon resolves. Prey Upon resolves with one illegal target: Centaur Courser fights nothing, takes no damage and stays on the battlefield undamaged."
+        }
+      ],
+      "cards": [
+        "Forest",
+        "Mountain",
+        "Prey Upon",
+        "Lightning Bolt",
+        "Shock",
+        "Centaur Courser",
+        "Grizzly Bears"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "701.14d-1",
+      "rules": [
+        "701.14d"
+      ],
+      "title": "Fight damage is not combat damage and is not prevented by a combat-damage prevention effect",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Centaur Courser",
+              "summoning_sick": false
+            },
+            "Forest",
+            "Forest"
+          ],
+          "B": [
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            }
+          ]
+        },
+        "hand": {
+          "A": [
+            "Fog",
+            "Prey Upon"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Fog is cast and resolved first, so the prevention effect applies for the rest of the turn."
+      },
+      "decisions": [
+        "A casts Fog, tapping Forest; both players pass; Fog resolves.",
+        "A casts Prey Upon targeting Centaur Courser and Grizzly Bears, tapping the second Forest.",
+        "Both players pass; Prey Upon resolves."
+      ],
+      "variants": [
+        {
+          "label": "fight_after_fog",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Fog's prevention applies only to combat damage, so the fight damage is dealt: Centaur Courser deals 3 damage to Grizzly Bears, which is destroyed, and Grizzly Bears deals 2 damage to Centaur Courser, which stays with 2 damage marked."
+        },
+        {
+          "label": "combat_after_fog",
+          "polarity": "does_not_fire",
+          "delta": "A does not cast Prey Upon; A attacks with Centaur Courser and B blocks with Grizzly Bears.",
+          "expected": "The combat damage that would be dealt between Centaur Courser and Grizzly Bears is prevented. Both creatures stay on the battlefield with no damage marked."
+        }
+      ],
+      "cards": [
+        "Forest",
+        "Fog",
+        "Prey Upon",
+        "Centaur Courser",
+        "Grizzly Bears"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "701.14c-1",
+      "rules": [
+        "701.14c"
+      ],
+      "title": "A creature that fights itself deals damage to itself equal to twice its power",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Nightfall Predator",
+              "summoning_sick": false
+            },
+            {
+              "card": "Holy Strength",
+              "attached_to": "Nightfall Predator"
+            },
+            "Mountain"
+          ],
+          "B": [
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            }
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Nightfall Predator is the transformed back face of Daybreak Ranger (4/4, '{R}, {T}: Nightfall Predator fights target creature.'). Holy Strength makes it 5/6, so damage equal to its power once (5) would not be lethal but twice its power (10) is."
+      },
+      "decisions": [
+        "A activates Nightfall Predator's ability, tapping Mountain and Nightfall Predator, targeting Nightfall Predator itself.",
+        "Both players pass; the ability resolves."
+      ],
+      "variants": [
+        {
+          "label": "fights_itself",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Nightfall Predator (5/6) deals 10 damage to itself and is destroyed in the next state-based check; it moves to A's graveyard and Holy Strength moves to A's graveyard. Grizzly Bears is undamaged."
+        },
+        {
+          "label": "fights_bears",
+          "polarity": "does_not_fire",
+          "delta": "A targets Grizzly Bears instead of Nightfall Predator.",
+          "expected": "Nightfall Predator deals 5 damage to Grizzly Bears, which is destroyed and moves to B's graveyard. Grizzly Bears deals 2 damage to Nightfall Predator, which stays on the battlefield with 2 damage marked."
+        }
+      ],
+      "cards": [
+        "Nightfall Predator",
+        "Daybreak Ranger",
+        "Holy Strength",
+        "Mountain",
+        "Grizzly Bears"
+      ],
+      "forge_notes": "FightEffect.dealDamage deals twice the power when both fighters are the same card. The setup needs Daybreak Ranger already transformed."
+    }
+  ]
+}

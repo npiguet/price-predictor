@@ -1,0 +1,224 @@
+{
+  "unit": "702.12",
+  "verified": true,
+  "review": [
+    "skipped: removed 702.12a, 702.12c, which the triage classifies definitional (static-ability marker and redundancy), so they need neither a scenario nor a skip.",
+    "702.12b-1: the base carried a non-empty delta and the scenario had no does_not_fire variant; fixed the response in the decisions and relabelled no_response does_not_fire.",
+    "702.12b-2: the base carried a non-empty delta and no does_not_fire variant; fixed the response in the decisions and relabelled no_response does_not_fire.",
+    "702.12b-3: the base carried a non-empty delta, so the Doom Blade variant differed from the base in spell, lands and target at once, and there was no does_not_fire variant; fixed Shock at Darksteel Myr in the decisions, made each variant one swap, and relabelled shock_ordinary does_not_fire.",
+    "triage/702.12.jsonl: was missing; wrote it (702.12b mechanical, the rest definitional)."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.12b-1",
+      "rules": [
+        "702.12b"
+      ],
+      "title": "An indestructible creature is not destroyed by lethal damage",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain"
+          ],
+          "B": [
+            "Grizzly Bears",
+            "Hill Giant",
+            "Plains"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Shock"
+          ],
+          "B": [
+            "Sheltering Light"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Shock targeting Grizzly Bears, tapping Mountain, and passes priority.",
+        "B casts Sheltering Light targeting Grizzly Bears, tapping Plains.",
+        "Both players pass priority; Sheltering Light resolves and B leaves the scry card on top.",
+        "Both players pass priority; Shock resolves."
+      ],
+      "variants": [
+        {
+          "label": "indestructible_in_response",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Shock deals 2 damage to Grizzly Bears (2/2), which stays on the battlefield with 2 damage marked, because the state-based action for lethal damage ignores it."
+        },
+        {
+          "label": "no_response",
+          "polarity": "does_not_fire",
+          "delta": "B passes without casting Sheltering Light.",
+          "expected": "Shock deals 2 damage to Grizzly Bears, which dies in the state-based check and moves to B's graveyard."
+        },
+        {
+          "label": "other_creature_protected",
+          "polarity": "other",
+          "delta": "Sheltering Light targets Hill Giant instead of Grizzly Bears.",
+          "expected": "Grizzly Bears takes 2 damage and dies; Hill Giant gains indestructible and stays untouched."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Plains",
+        "Grizzly Bears",
+        "Hill Giant",
+        "Shock",
+        "Sheltering Light"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.12b-2",
+      "rules": [
+        "702.12b"
+      ],
+      "title": "An indestructible permanent is not destroyed by a destroy effect",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Swamp",
+            "Swamp"
+          ],
+          "B": [
+            "Grizzly Bears",
+            "Plains"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Doom Blade"
+          ],
+          "B": [
+            "Sheltering Light"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Doom Blade targeting Grizzly Bears, tapping both Swamps, and passes priority.",
+        "B casts Sheltering Light targeting Grizzly Bears, tapping Plains.",
+        "Both players pass priority; Sheltering Light resolves and B leaves the scry card on top.",
+        "Both players pass priority; Doom Blade resolves."
+      ],
+      "variants": [
+        {
+          "label": "indestructible_in_response",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Doom Blade resolves (it is not countered and does not fizzle) but Grizzly Bears is not destroyed and stays on the battlefield."
+        },
+        {
+          "label": "no_response",
+          "polarity": "does_not_fire",
+          "delta": "B passes without casting Sheltering Light.",
+          "expected": "Doom Blade resolves and Grizzly Bears is destroyed and moves to B's graveyard."
+        }
+      ],
+      "cards": [
+        "Swamp",
+        "Plains",
+        "Grizzly Bears",
+        "Doom Blade",
+        "Sheltering Light"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.12b-3",
+      "rules": [
+        "702.12b"
+      ],
+      "title": "A creature with printed indestructible survives lethal damage and destroy effects",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Swamp",
+            "Swamp"
+          ],
+          "B": [
+            "Darksteel Myr",
+            "Myr Servitor"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Shock",
+            "Doom Blade"
+          ],
+          "B": []
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Shock targeting Darksteel Myr, tapping Mountain, and passes priority.",
+        "Both players pass priority; Shock resolves."
+      ],
+      "variants": [
+        {
+          "label": "shock_indestructible",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Shock deals 2 damage to Darksteel Myr, which stays on the battlefield with 2 damage marked."
+        },
+        {
+          "label": "shock_ordinary",
+          "polarity": "does_not_fire",
+          "delta": "Shock targets Myr Servitor (1/1) instead of Darksteel Myr.",
+          "expected": "Shock deals 2 damage to Myr Servitor, which dies and moves to B's graveyard."
+        },
+        {
+          "label": "doom_blade_indestructible",
+          "polarity": "fires",
+          "delta": "A casts Doom Blade, tapping both Swamps, instead of Shock.",
+          "expected": "Doom Blade resolves and Darksteel Myr stays on the battlefield."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Swamp",
+        "Darksteel Myr",
+        "Myr Servitor",
+        "Shock",
+        "Doom Blade"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

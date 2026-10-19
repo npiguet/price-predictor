@@ -1,0 +1,5 @@
+{"id": "701.49", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "701.49a", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "Venturing with no dungeon in the command zone puts a dungeon there with the venture marker on its topmost room.", "note": ""}
+{"id": "701.49b", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "Venturing from a non-bottom room moves the venture marker to an adjacent room and fires that room's ability.", "note": ""}
+{"id": "701.49c", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "Venturing from the bottommost room completes the dungeon, removes it, and starts a new dungeon at its topmost room.", "note": ""}
+{"id": "701.49d", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "Venture into a quality chooses a dungeon with that quality when none is in the command zone, else ventures normally.", "note": ""}

@@ -1,0 +1,11 @@
+{"id": "701.23", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "701.23a", "category": "decision", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "701.23b", "category": "decision", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "701.23c", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "A search for cards matching an undefined quality finds nothing, so no card is moved by the effect.", "note": ""}
+{"id": "701.23d", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "A search for a quantity of cards moves exactly that many cards, or all the zone holds if fewer.", "note": ""}
+{"id": "701.23e", "category": "mechanical", "observability": "needs_new_fields", "record_kinds": ["resolution"], "outcome": "Cards found by a search that has no reveal instruction are not revealed, so no reveal event or reveal trigger occurs.", "note": "No record field marks a reveal."}
+{"id": "701.23f", "category": "mechanical", "observability": "indirect", "record_kinds": ["rewrite", "trigger"], "outcome": "When a search is replaced by a search of part of a zone, abilities that trigger on the library being searched still fire.", "note": ""}
+{"id": "701.23g", "category": "decision", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "701.23h", "category": "decision", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "701.23i", "category": "decision", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "701.23j", "category": "out_of_scope", "observability": "none", "record_kinds": [], "outcome": "", "note": "Searching outside the game needs a sideboard or wish pool, which collection games do not have."}

@@ -1,0 +1,68 @@
+{
+  "unit": "701.52",
+  "verified": true,
+  "review": [
+    "701.52a-1: two Kiddie Coasters are illegal in a constructed Attraction deck (717.2a); noted that the board is reachable in limited play (717.2b)."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "701.52a-1",
+      "rules": [
+        "701.52a"
+      ],
+      "title": "Rolling to visit your Attractions visits each Attraction whose lit number equals the roll",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Kiddie Coaster",
+            "Kiddie Coaster",
+            "Grizzly Bears"
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "The first Kiddie Coaster is variant A (lit 2, 3 and 6), the second is variant D (lit 3, 4 and 6). It is the beginning of A's precombat main phase, when A rolls to visit their Attractions. Kiddie Coaster's visit ability: creatures you control get +1/+0 until end of turn. Two Attractions with the same English name are legal in a limited Attraction deck (717.2b)."
+      },
+      "decisions": [
+        "At the beginning of A's precombat main phase, A rolls a six-sided die to visit their Attractions; the result is 2.",
+        "Both players pass; any triggered abilities resolve."
+      ],
+      "variants": [
+        {
+          "label": "roll_lit_on_one",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "2 is lit only on the variant A Kiddie Coaster, so only it is visited and its visit ability triggers and resolves: Grizzly Bears gets +1/+0 until end of turn and is a 3/2."
+        },
+        {
+          "label": "roll_not_lit",
+          "polarity": "does_not_fire",
+          "delta": "The die result is 5.",
+          "expected": "5 is lit on neither Kiddie Coaster, so neither is visited and nothing triggers. Grizzly Bears stays a 2/2."
+        },
+        {
+          "label": "roll_lit_on_both",
+          "polarity": "other",
+          "delta": "The die result is 3.",
+          "expected": "3 is lit on both Kiddie Coasters, so both are visited and both visit abilities trigger and resolve: Grizzly Bears gets +1/+0 twice and is a 4/2."
+        }
+      ],
+      "cards": [
+        "Kiddie Coaster",
+        "Grizzly Bears"
+      ],
+      "forge_notes": "Forge rolls to visit automatically at the precombat main phase (PhaseHandler) only when the active player controls an Attraction; the die result must be forced."
+    }
+  ]
+}

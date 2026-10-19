@@ -1,0 +1,73 @@
+{
+  "unit": "702.164",
+  "verified": true,
+  "review": [],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.164c-1",
+      "rules": [
+        "702.164c"
+      ],
+      "title": "Combat damage to a player from a creature with toxic gives poison counters",
+      "record_kind": "combat",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Nettling Host"
+          ],
+          "B": [
+            "Grizzly Bears",
+            "Plains"
+          ]
+        },
+        "hand": {
+          "B": [
+            "Holy Day"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Nettling Host is a 3/3 with toxic 2. It has been under A's control since earlier turns. B holds Holy Day {W} and has one Plains. Players start with 0 poison counters."
+      },
+      "decisions": [
+        "A moves to combat and declares Nettling Host as an attacker.",
+        "B declares no blockers and casts nothing. Combat damage is dealt."
+      ],
+      "variants": [
+        {
+          "label": "unblocked",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Nettling Host deals 3 combat damage to B: B is at 17 and gets 2 poison counters."
+        },
+        {
+          "label": "blocked",
+          "polarity": "does_not_fire",
+          "delta": "B declares Grizzly Bears as a blocker of Nettling Host.",
+          "expected": "Nettling Host deals its damage to Grizzly Bears, which dies; Host takes 2 damage and survives. B is at 20 with 0 poison counters."
+        },
+        {
+          "label": "prevented",
+          "polarity": "does_not_fire",
+          "delta": "B casts Holy Day after attackers are declared, tapping Plains.",
+          "expected": "All combat damage is prevented. B is at 20 with 0 poison counters."
+        }
+      ],
+      "cards": [
+        "Nettling Host",
+        "Grizzly Bears",
+        "Plains",
+        "Holy Day"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

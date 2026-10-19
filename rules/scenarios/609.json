@@ -1,0 +1,652 @@
+{
+  "unit": "609",
+  "verified": true,
+  "review": [
+    "609.3-1: expected text carried reasoning ('B holds one card, so...', 'the full instruction is possible'); rewrote as outcome only.",
+    "609.4-1: expected text explained the rules (flash, main-phase land timing); reduced to the can_play verdicts.",
+    "609.4a-1: expected text explained why each cast is legal or not; reduced to the legality verdict and the life totals.",
+    "609.4b-1: expected text carried reasoning; reduced to the verdict, keeping that the cost stays {1}{U} and {R}{R} is spent.",
+    "609.4b-2: 'mountain' variant is the contrast where the as-though payment is not used, so it is does_not_fire, not other; scenario had no does_not_fire variant. Relabelled and trimmed reasoning from both expecteds.",
+    "609.7c-1: expected text carried reasoning; reduced to damage and life totals."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "609.2-1",
+      "rules": [
+        "609.2"
+      ],
+      "title": "An effect without zone-specific text applies only to permanents",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains"
+          ],
+          "B": [
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Day of Judgment"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "B has no other cards. Day of Judgment has no zone-specific text, so it affects only creatures on the battlefield."
+      },
+      "decisions": [
+        "A casts Day of Judgment, tapping four Plains.",
+        "Both players pass; Day of Judgment resolves."
+      ],
+      "variants": [
+        {
+          "label": "battlefield",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears (on the battlefield) is destroyed and moves to B's graveyard."
+        },
+        {
+          "label": "graveyard",
+          "polarity": "does_not_fire",
+          "delta": "B's Grizzly Bears is in B's graveyard instead of on the battlefield.",
+          "expected": "Day of Judgment resolves and destroys nothing; Grizzly Bears stays in B's graveyard."
+        },
+        {
+          "label": "hand",
+          "polarity": "does_not_fire",
+          "delta": "B's Grizzly Bears is in B's hand instead of on the battlefield.",
+          "expected": "Day of Judgment resolves and destroys nothing; Grizzly Bears stays in B's hand."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Grizzly Bears",
+        "Day of Judgment"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "609.3-1",
+      "rules": [
+        "609.3"
+      ],
+      "title": "An effect asking for more than is possible does as much as it can",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Swamp",
+            "Swamp",
+            "Swamp"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Mind Rot"
+          ],
+          "B": [
+            "Grizzly Bears"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Mind Rot targeting B, tapping three Swamps.",
+        "Both players pass; Mind Rot resolves."
+      ],
+      "variants": [
+        {
+          "label": "one-card",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Mind Rot resolves; B discards Grizzly Bears, the only card in B's hand, and B's hand is empty."
+        },
+        {
+          "label": "two-cards",
+          "polarity": "other",
+          "delta": "B's hand is Grizzly Bears and Hill Giant.",
+          "expected": "Mind Rot resolves; B discards Grizzly Bears and Hill Giant, and both are in B's graveyard."
+        },
+        {
+          "label": "empty-hand",
+          "polarity": "does_not_fire",
+          "delta": "B's hand is empty.",
+          "expected": "Mind Rot resolves and B discards nothing; nothing else happens."
+        }
+      ],
+      "cards": [
+        "Swamp",
+        "Mind Rot",
+        "Grizzly Bears",
+        "Hill Giant"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "609.4-1",
+      "rules": [
+        "609.4"
+      ],
+      "title": "An as-though effect applies only to the stated action",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Vedalken Orrery",
+            "Island",
+            "Island",
+            "Island"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Divination",
+            "Island"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "Query: at A's beginning of combat with an empty stack, with A holding Divination and Island, can A cast Divination, tapping three Islands?",
+        "A has not played a land this turn."
+      ],
+      "variants": [
+        {
+          "label": "sorcery-cast",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "can_play is true for casting Divination at A's beginning of combat."
+        },
+        {
+          "label": "no-orrery",
+          "polarity": "does_not_fire",
+          "delta": "Vedalken Orrery is not on the battlefield.",
+          "expected": "can_play is false for Divination."
+        },
+        {
+          "label": "land",
+          "polarity": "does_not_fire",
+          "delta": "The card asked about is Island, played from hand, instead of casting Divination.",
+          "expected": "can_play is false for playing Island at A's beginning of combat, with Vedalken Orrery on the battlefield."
+        }
+      ],
+      "cards": [
+        "Vedalken Orrery",
+        "Island",
+        "Divination"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "609.4a-1",
+      "rules": [
+        "609.4a"
+      ],
+      "title": "Two as-though effects both apply to the same action",
+      "record_kind": "playability",
+      "setup": {
+        "active": "B",
+        "step": "upkeep",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Vedalken Orrery",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Shaman's Trance"
+          ]
+        },
+        "graveyard": {
+          "B": [
+            "Firebolt"
+          ]
+        },
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "It is B's upkeep. A casts Shaman's Trance, tapping three Mountains, and it resolves.",
+        "A casts Firebolt from B's graveyard for its flashback cost {4}{R}, tapping five Mountains, targeting B.",
+        "Both players pass; Firebolt resolves."
+      ],
+      "variants": [
+        {
+          "label": "both",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Casting Firebolt from B's graveyard for its flashback cost at B's upkeep is legal. Firebolt deals 2 damage to B (life 18) and is exiled."
+        },
+        {
+          "label": "no-orrery",
+          "polarity": "does_not_fire",
+          "delta": "Vedalken Orrery is not on the battlefield.",
+          "expected": "Casting Firebolt from B's graveyard at B's upkeep is illegal. B's life stays 20."
+        },
+        {
+          "label": "no-trance",
+          "polarity": "does_not_fire",
+          "delta": "A does not cast Shaman's Trance first.",
+          "expected": "Casting Firebolt from B's graveyard is illegal. B's life stays 20."
+        }
+      ],
+      "cards": [
+        "Vedalken Orrery",
+        "Mountain",
+        "Shaman's Trance",
+        "Firebolt"
+      ],
+      "forge_notes": "Shaman's Trance is implemented as a keyword granted to its controller. Firebolt is cast with its flashback cost from the opponent's graveyard."
+    },
+    {
+      "id": "609.4b-1",
+      "rules": [
+        "609.4b"
+      ],
+      "title": "Spending mana as though it were any color changes how a cost is paid, not the cost",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Chromatic Orrery",
+            "Mountain",
+            "Mountain"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Coral Merfolk"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "Query: can A cast Coral Merfolk ({1}{U}) with its two untapped Mountains?"
+      ],
+      "variants": [
+        {
+          "label": "orrery",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "can_play is true for Coral Merfolk paid with {R}{R} from the two Mountains; its cost stays {1}{U}."
+        },
+        {
+          "label": "no-orrery",
+          "polarity": "does_not_fire",
+          "delta": "Chromatic Orrery is not on the battlefield.",
+          "expected": "can_play is false for Coral Merfolk."
+        }
+      ],
+      "cards": [
+        "Chromatic Orrery",
+        "Mountain",
+        "Coral Merfolk"
+      ],
+      "forge_notes": "Chromatic Orrery can also tap for {C}{C}{C}{C}{C}; that mana is not used here."
+    },
+    {
+      "id": "609.4b-2",
+      "rules": [
+        "609.4b"
+      ],
+      "title": "Mana spent as though it were another color is still the mana actually spent",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Chromatic Orrery",
+            "Island",
+            "Island",
+            "Island",
+            "Mountain"
+          ],
+          "B": [
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Firespout"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Firespout ({2}{R/G}), paying {R/G} with an Island (blue mana spent as though it were red) and {2} with two more Islands. The Mountain stays untapped.",
+        "Both players pass; Firespout resolves."
+      ],
+      "variants": [
+        {
+          "label": "islands",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Firespout resolves and deals no damage; Grizzly Bears is undamaged and stays on the battlefield."
+        },
+        {
+          "label": "mountain",
+          "polarity": "does_not_fire",
+          "delta": "A pays {R/G} with the Mountain instead of an Island, and the two generic with Islands.",
+          "expected": "Firespout deals 3 damage to each creature without flying; Grizzly Bears is destroyed and moves to B's graveyard."
+        }
+      ],
+      "cards": [
+        "Chromatic Orrery",
+        "Island",
+        "Mountain",
+        "Grizzly Bears",
+        "Firespout"
+      ],
+      "forge_notes": "Firespout's cost is a hybrid {R/G}; whether Forge lets blue mana pay it through Chromatic Orrery's ManaConvert depends on the payment prompt."
+    },
+    {
+      "id": "609.7a-1",
+      "rules": [
+        "609.7a"
+      ],
+      "title": "A damage-source shield applies to the next damage from the chosen source, whatever its kind",
+      "record_kind": "rewrite",
+      "setup": {
+        "active": "B",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Circle of Protection: Red",
+            "Plains"
+          ],
+          "B": [
+            "Prodigal Pyromancer",
+            "Raging Goblin"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Neither red creature is summoning sick. A has no cards in hand."
+      },
+      "decisions": [
+        "B activates Prodigal Pyromancer's ability ({T}) targeting A.",
+        "B passes priority; A activates Circle of Protection: Red, paying {1} by tapping Plains.",
+        "Both players pass; Circle of Protection's ability resolves and A chooses Prodigal Pyromancer as the red source.",
+        "Both players pass; Prodigal Pyromancer's ability resolves."
+      ],
+      "variants": [
+        {
+          "label": "chosen",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The 1 damage from Prodigal Pyromancer (an ability, not combat damage) is prevented; A's life stays 20."
+        },
+        {
+          "label": "other-source",
+          "polarity": "does_not_fire",
+          "delta": "A chooses Raging Goblin as the red source instead.",
+          "expected": "The 1 damage from Prodigal Pyromancer is dealt; A's life is 19. The shield for Raging Goblin is not used."
+        }
+      ],
+      "cards": [
+        "Circle of Protection: Red",
+        "Plains",
+        "Prodigal Pyromancer",
+        "Raging Goblin"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "609.7a-2",
+      "rules": [
+        "609.7a"
+      ],
+      "title": "A shield on a permanent spell applies to the permanent it becomes",
+      "record_kind": "rewrite",
+      "setup": {
+        "active": "B",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Circle of Protection: Red",
+            "Plains"
+          ],
+          "B": [
+            "Mountain",
+            "Prodigal Pyromancer"
+          ]
+        },
+        "hand": {
+          "B": [
+            "Raging Goblin"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Prodigal Pyromancer is a red source on the battlefield and is not used by B this turn."
+      },
+      "decisions": [
+        "B casts Raging Goblin, tapping Mountain.",
+        "B passes priority; A activates Circle of Protection: Red, paying {1} by tapping Plains.",
+        "Both players pass; Circle of Protection's ability resolves and A chooses the Raging Goblin spell as the red source.",
+        "Both players pass; Raging Goblin resolves.",
+        "B moves to combat and attacks A with Raging Goblin (haste). A declares no blockers."
+      ],
+      "variants": [
+        {
+          "label": "spell-chosen",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The 1 combat damage dealt by the Raging Goblin permanent is prevented; A's life stays 20."
+        },
+        {
+          "label": "other-source",
+          "polarity": "does_not_fire",
+          "delta": "A chooses Prodigal Pyromancer as the red source instead of the Raging Goblin spell.",
+          "expected": "Raging Goblin deals 1 combat damage to A; A's life is 19."
+        }
+      ],
+      "cards": [
+        "Circle of Protection: Red",
+        "Plains",
+        "Mountain",
+        "Prodigal Pyromancer",
+        "Raging Goblin"
+      ],
+      "forge_notes": "The shield tracks the chosen card by identity; whether Forge keeps it across the spell becoming a permanent should be checked."
+    },
+    {
+      "id": "609.7b-1",
+      "rules": [
+        "609.7b"
+      ],
+      "title": "A source-property shield rechecks the source when the damage would be dealt",
+      "record_kind": "rewrite",
+      "setup": {
+        "active": "B",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Circle of Protection: Red",
+            "Plains"
+          ],
+          "B": [
+            "Prodigal Pyromancer",
+            "Alchor's Tomb",
+            "Mountain",
+            "Mountain"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Prodigal Pyromancer is not summoning sick. Alchor's Tomb is untapped."
+      },
+      "decisions": [
+        "B activates Prodigal Pyromancer's ability ({T}) targeting A.",
+        "B passes priority; A activates Circle of Protection: Red, paying {1} by tapping Plains.",
+        "Both players pass; Circle of Protection's ability resolves and A chooses Prodigal Pyromancer as the red source.",
+        "B, who has priority, activates Alchor's Tomb ({2},{T}) targeting Prodigal Pyromancer and chooses blue.",
+        "Both players pass; Alchor's Tomb's ability resolves.",
+        "Both players pass; Prodigal Pyromancer's ability resolves."
+      ],
+      "variants": [
+        {
+          "label": "recoloured",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Prodigal Pyromancer is blue when it would deal damage, so the shield does not apply: A takes 1 damage (life 19). The shield is not used up."
+        },
+        {
+          "label": "still-red",
+          "polarity": "does_not_fire",
+          "delta": "B does not activate Alchor's Tomb.",
+          "expected": "Prodigal Pyromancer is still red; its 1 damage is prevented and A's life stays 20. The shield is used up."
+        }
+      ],
+      "cards": [
+        "Circle of Protection: Red",
+        "Plains",
+        "Prodigal Pyromancer",
+        "Alchor's Tomb",
+        "Mountain"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "609.7c-1",
+      "rules": [
+        "609.7c"
+      ],
+      "title": "A static damage replacement keyed to a source property also applies to sources outside the battlefield",
+      "record_kind": "rewrite",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Torbran, Thane of Red Fell",
+            "Mountain",
+            "Forest"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Lightning Bolt",
+            "Hornet Sting"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Lightning Bolt targeting B, tapping Mountain.",
+        "Both players pass; Lightning Bolt resolves."
+      ],
+      "variants": [
+        {
+          "label": "red-spell",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Lightning Bolt deals 5 damage to B (3 plus 2 from Torbran, Thane of Red Fell); B's life is 15."
+        },
+        {
+          "label": "green-spell",
+          "polarity": "does_not_fire",
+          "delta": "A casts Hornet Sting (green) targeting B, tapping Forest, instead of Lightning Bolt.",
+          "expected": "Hornet Sting deals 1 damage to B; B's life is 19."
+        }
+      ],
+      "cards": [
+        "Torbran, Thane of Red Fell",
+        "Mountain",
+        "Forest",
+        "Lightning Bolt",
+        "Hornet Sting"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

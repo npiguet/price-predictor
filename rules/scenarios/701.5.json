@@ -1,0 +1,125 @@
+{
+  "unit": "701.5",
+  "verified": true,
+  "review": [],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "701.5a-1",
+      "rules": [
+        "701.5a"
+      ],
+      "title": "A cast spell moves to the stack and resolves unless something stops it",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Forest",
+            "Forest"
+          ],
+          "B": [
+            "Island",
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Grizzly Bears"
+          ],
+          "B": [
+            "Counterspell"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Both libraries are non-empty and irrelevant."
+      },
+      "decisions": [
+        "A casts Grizzly Bears, tapping both Forests; Grizzly Bears moves from A's hand to the stack.",
+        "B passes priority.",
+        "Both players pass; Grizzly Bears resolves."
+      ],
+      "variants": [
+        {
+          "label": "resolves",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears goes from A's hand to the stack and then resolves onto A's battlefield. A's Forests are tapped. B's Counterspell is still in B's hand."
+        },
+        {
+          "label": "countered",
+          "polarity": "does_not_fire",
+          "delta": "Instead of passing, B responds by casting Counterspell targeting Grizzly Bears, tapping both Islands.",
+          "expected": "Grizzly Bears is on the stack when Counterspell resolves and is countered: it moves to A's graveyard without reaching the battlefield. A's Forests stay tapped."
+        }
+      ],
+      "cards": [
+        "Forest",
+        "Island",
+        "Grizzly Bears",
+        "Counterspell"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "701.5a-2",
+      "rules": [
+        "701.5a"
+      ],
+      "title": "A spell can be cast only if its costs can be paid",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Forest",
+            "Forest"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Grizzly Bears"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Both libraries are non-empty and irrelevant."
+      },
+      "decisions": [
+        "The engine is asked whether A, holding priority in main1 with an empty stack, can cast Grizzly Bears from hand."
+      ],
+      "variants": [
+        {
+          "label": "payable",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Legal: can_play is true, because {1}{G} can be paid with the two untapped Forests."
+        },
+        {
+          "label": "unpayable",
+          "polarity": "does_not_fire",
+          "delta": "One of A's Forests is tapped.",
+          "expected": "Not legal: can_play is false, because {1}{G} cannot be paid with one untapped Forest."
+        }
+      ],
+      "cards": [
+        "Forest",
+        "Grizzly Bears"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

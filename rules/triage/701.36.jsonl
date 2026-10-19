@@ -1,0 +1,3 @@
+{"id": "701.36", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "701.36a", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "Populate creates a token copy of a creature token the controller controls.", "note": ""}
+{"id": "701.36b", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "Populate with no creature token controlled creates no token.", "note": ""}

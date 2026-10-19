@@ -1,0 +1,15 @@
+{"id": "116.1", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "116.2", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "116.2a", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "A land can be played only with priority, an empty stack, in own main phase, and once per turn by default.", "note": ""}
+{"id": "116.2b", "category": "mechanical", "observability": "needs_new_fields", "record_kinds": ["playability"], "outcome": "A face-down creature turns face up at any time its controller has priority, without using the stack.", "note": ""}
+{"id": "116.2c", "category": "mechanical", "observability": "needs_new_fields", "record_kinds": [], "outcome": "A player ends a continuous effect or stops a delayed trigger by a special action whenever they have priority, without the stack.", "note": ""}
+{"id": "116.2d", "category": "mechanical", "observability": "needs_new_fields", "record_kinds": [], "outcome": "A player may ignore a static ability's effect for a duration by a special action, without the stack.", "note": ""}
+{"id": "116.2e", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "Circling Vultures can be discarded whenever its owner could cast an instant.", "note": ""}
+{"id": "116.2f", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "A card with suspend can be exiled with suspend counters only when it could begin to be cast.", "note": ""}
+{"id": "116.2g", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "A companion can be moved to hand for {3} only in own main phase with empty stack and once per game.", "note": ""}
+{"id": "116.2h", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "A card with foretell can be exiled face down for {2} only during its controller's turn with priority.", "note": ""}
+{"id": "116.2i", "category": "out_of_scope", "observability": "none", "record_kinds": [], "outcome": "", "note": "Planechase is a casual variant; collection plays standard two-player games."}
+{"id": "116.2j", "category": "out_of_scope", "observability": "none", "record_kinds": [], "outcome": "", "note": "Conspiracy Draft is a draft variant; not a standard game."}
+{"id": "116.2k", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "A card with plot can be exiled only during its owner's turn with priority and an empty stack.", "note": ""}
+{"id": "116.2m", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "A locked half can be unlocked by paying its unlock cost only in a main phase of own turn with empty stack.", "note": ""}
+{"id": "116.3", "category": "mechanical", "observability": "needs_new_fields", "record_kinds": [], "outcome": "After a special action its taker receives priority again.", "note": ""}

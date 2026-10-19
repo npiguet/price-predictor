@@ -1,0 +1,192 @@
+{
+  "unit": "702.178",
+  "verified": true,
+  "review": [
+    "702.178a-2: setup did not fix that the once-per-turn speed trigger was still available; added to notes.",
+    "702.178b-1: speed_4_on_battlefield expected carried reasoning; reduced to the observable verdict."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.178a-1",
+      "rules": [
+        "702.178a"
+      ],
+      "title": "A max speed ability applies only while its controller's speed is 4",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Gastal Raider",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "A's speed is 4 (max speed). B has no speed. Gastal Raider (2/1) has 'Max speed - This creature gets +1/+1 and has menace.' Nothing is cast or activated; the board is read after state-based actions."
+      },
+      "decisions": [
+        "No spells or abilities are used; the continuous effects on A's battlefield are read."
+      ],
+      "variants": [
+        {
+          "label": "speed_4",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Gastal Raider is a 3/2 with menace."
+        },
+        {
+          "label": "speed_3",
+          "polarity": "does_not_fire",
+          "delta": "A's speed is 3 instead of 4.",
+          "expected": "Gastal Raider is a 2/1 without menace."
+        }
+      ],
+      "cards": [
+        "Gastal Raider",
+        "Grizzly Bears"
+      ]
+    },
+    {
+      "id": "702.178a-2",
+      "rules": [
+        "702.178a"
+      ],
+      "title": "Reaching speed 4 turns the max speed ability on",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Gastal Raider",
+              "summoning_sick": false
+            },
+            "Mountain"
+          ],
+          "B": [
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Shock"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "A's speed is 3. B has no speed. Gastal Raider (2/1) has 'Max speed - This creature gets +1/+1 and has menace.' A's speed has not increased yet this turn."
+      },
+      "decisions": [
+        "A casts Shock targeting player B, tapping Mountain.",
+        "Both players pass; Shock resolves, and the speed trigger resolves if it triggered."
+      ],
+      "variants": [
+        {
+          "label": "opponent_loses_life",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "B loses 2 life (life 18). A's speed becomes 4 and Gastal Raider is a 3/2 with menace."
+        },
+        {
+          "label": "creature_target",
+          "polarity": "does_not_fire",
+          "delta": "Shock targets B's Grizzly Bears instead of player B.",
+          "expected": "Grizzly Bears is dealt 2 damage and moves to B's graveyard. B's life stays 20. A's speed stays 3 and Gastal Raider is a 2/1 without menace."
+        }
+      ],
+      "cards": [
+        "Gastal Raider",
+        "Grizzly Bears",
+        "Shock",
+        "Mountain"
+      ]
+    },
+    {
+      "id": "702.178b-1",
+      "rules": [
+        "702.178b"
+      ],
+      "title": "A granted ability that names the graveyard works only from the graveyard",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Mountain"
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {
+          "A": [
+            "Goblin Surveyor"
+          ]
+        },
+        "library": {
+          "A": [
+            "Forest"
+          ]
+        },
+        "exile": {},
+        "notes": "A's speed is 4. Goblin Surveyor has 'Max speed - {3}, Exile this card from your graveyard: Draw a card.', an ability granted by its max speed ability that functions from the graveyard."
+      },
+      "decisions": [
+        "A activates the graveyard ability of Goblin Surveyor, paying {3} with three Mountains and exiling Goblin Surveyor from the graveyard.",
+        "Both players pass; the ability resolves."
+      ],
+      "variants": [
+        {
+          "label": "speed_4_in_graveyard",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The activation is legal. Goblin Surveyor moves from A's graveyard to exile as a cost. The ability resolves and A draws Forest."
+        },
+        {
+          "label": "speed_3_in_graveyard",
+          "polarity": "does_not_fire",
+          "delta": "A's speed is 3 instead of 4.",
+          "expected": "The activation is not legal: Goblin Surveyor has no such ability. It stays in A's graveyard and A's hand stays empty."
+        },
+        {
+          "label": "speed_4_on_battlefield",
+          "polarity": "does_not_fire",
+          "delta": "Goblin Surveyor is on A's battlefield instead of in A's graveyard.",
+          "expected": "The activation is not legal. Goblin Surveyor stays on the battlefield and A's hand stays empty."
+        }
+      ],
+      "cards": [
+        "Goblin Surveyor",
+        "Mountain",
+        "Forest"
+      ],
+      "forge_notes": "Variant speed_4_on_battlefield moves the card from the graveyard to the battlefield, so A's graveyard is empty in that variant."
+    }
+  ]
+}

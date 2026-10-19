@@ -1,0 +1,184 @@
+{
+  "unit": "702.109",
+  "verified": true,
+  "review": [],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.109a-1",
+      "rules": [
+        "702.109a"
+      ],
+      "title": "A permanent whose dash cost was paid has haste",
+      "record_kind": "combat",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Mardu Scout"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Mardu Scout is a 3/1 with mana cost {R}{R} and dash {1}{R}."
+      },
+      "decisions": [
+        "A casts Mardu Scout for its dash cost {1}{R}, tapping both Mountains; the spell resolves.",
+        "A moves to combat and declares Mardu Scout as an attacker against B.",
+        "B declares no blockers; combat damage is dealt."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Mardu Scout has haste, attacks and deals 3 damage. B is at 17."
+        },
+        {
+          "label": "cast-normally",
+          "polarity": "does_not_fire",
+          "delta": "A casts Mardu Scout for its mana cost {R}{R} instead.",
+          "expected": "Mardu Scout is summoning sick and cannot attack. B stays at 20."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Mardu Scout"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.109a-2",
+      "rules": [
+        "702.109a"
+      ],
+      "title": "A dashed permanent returns to its owner's hand at the beginning of the next end step",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain"
+          ],
+          "B": [
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Mardu Scout"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Mardu Scout is a 3/1 with mana cost {R}{R} and dash {1}{R}. In the base variant B's Grizzly Bears does not block."
+      },
+      "decisions": [
+        "A casts Mardu Scout for its dash cost {1}{R}, tapping both Mountains; the spell resolves.",
+        "A attacks B with Mardu Scout; B declares no blockers and combat damage is dealt.",
+        "Play proceeds to the beginning of the end step."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "At the beginning of the end step Mardu Scout returns to A's hand. B took 3 damage and is at 17."
+        },
+        {
+          "label": "cast-normally",
+          "polarity": "does_not_fire",
+          "delta": "A casts Mardu Scout for its mana cost {R}{R}, and does not attack with it.",
+          "expected": "No delayed trigger exists. Mardu Scout is still on the battlefield at the end step."
+        },
+        {
+          "label": "dies-first",
+          "polarity": "other",
+          "delta": "B blocks Mardu Scout with Grizzly Bears, so Mardu Scout dies in combat damage before the end step.",
+          "expected": "Mardu Scout deals 3 damage to Grizzly Bears (dies) and takes 2, so it goes to A's graveyard. At the end step it is not returned: it is in the graveyard, not in A's hand."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Mardu Scout",
+        "Grizzly Bears"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.109a-3",
+      "rules": [
+        "702.109a"
+      ],
+      "title": "A card with dash can be cast for its dash cost instead of its mana cost",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Plains"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Mardu Scout"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Mardu Scout has mana cost {R}{R} and dash {1}{R}."
+      },
+      "decisions": [
+        "A considers casting Mardu Scout for its dash cost {1}{R}, and for its mana cost {R}{R}."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Casting for the dash cost {1}{R} is legal. Casting for the mana cost {R}{R} is not legal, because A has only one red source."
+        },
+        {
+          "label": "one-land",
+          "polarity": "does_not_fire",
+          "delta": "A controls only the Mountain.",
+          "expected": "Casting for the dash cost is not legal because {1}{R} needs two mana. Casting for the mana cost is not legal."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Plains",
+        "Mardu Scout"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

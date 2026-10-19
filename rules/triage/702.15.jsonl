@@ -1,0 +1,7 @@
+{"id": "702.15", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.15a", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.15b", "category": "mechanical", "observability": "direct", "record_kinds": ["combat", "resolution"], "outcome": "Damage dealt by a lifelink source makes its controller gain that much life in addition to the damage's other results.", "note": ""}
+{"id": "702.15c", "category": "mechanical", "observability": "direct", "record_kinds": ["resolution"], "outcome": "A lifelink source that has left its zone before dealing damage is checked for lifelink by last known information, so its controller still gains life.", "note": ""}
+{"id": "702.15d", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "A lifelink source deals damage and causes life gain from any zone, such as a lifelink creature card dealing damage from the graveyard or exile.", "note": ""}
+{"id": "702.15e", "category": "mechanical", "observability": "indirect", "record_kinds": ["combat", "trigger"], "outcome": "Several lifelink sources dealing damage simultaneously cause separate life gain events, so each triggers life-gain abilities separately.", "note": ""}
+{"id": "702.15f", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": "Redundancy has no separate outcome."}

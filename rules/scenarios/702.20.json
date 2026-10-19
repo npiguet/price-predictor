@@ -1,0 +1,64 @@
+{
+  "unit": "702.20",
+  "verified": true,
+  "review": [],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.20b-1",
+      "rules": [
+        "702.20b"
+      ],
+      "title": "Attacking does not cause a creature with vigilance to tap",
+      "record_kind": "combat",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Alpine Watchdog",
+              "summoning_sick": false
+            },
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            }
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A attacks player B with Alpine Watchdog.",
+        "B declares no blockers."
+      ],
+      "variants": [
+        {
+          "label": "vigilance_attacker",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Alpine Watchdog is attacking and untapped. Its combat damage puts B at 18."
+        },
+        {
+          "label": "plain_attacker",
+          "polarity": "does_not_fire",
+          "delta": "A attacks with Grizzly Bears instead of Alpine Watchdog.",
+          "expected": "Grizzly Bears is attacking and tapped. Its combat damage puts B at 18."
+        }
+      ],
+      "cards": [
+        "Alpine Watchdog",
+        "Grizzly Bears"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

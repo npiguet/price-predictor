@@ -1,0 +1,106 @@
+{
+  "unit": "702.153",
+  "verified": true,
+  "review": [
+    "702.153a-1: power_too_low delta named two facts (Memnite swap and declining the cost); delta now names only the creature swap, the unpayable cost moved to expected."
+  ],
+  "skipped": [
+    {
+      "id": "702.153b",
+      "reason": "no card in Forge's cardsfolder has more than one instance of casualty, so independent payment of several instances cannot be reached in a game"
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "702.153a-1",
+      "rules": [
+        "702.153a"
+      ],
+      "title": "Paying the casualty cost copies the spell",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Cut Your Losses"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "B": [
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island"
+          ]
+        },
+        "exile": {},
+        "notes": "Cut Your Losses has casualty 2. B's library holds 20 cards. Grizzly Bears has power 2; Memnite has power 1."
+      },
+      "decisions": [
+        "A casts Cut Your Losses, tapping six Islands, targeting player B, and pays its casualty cost by sacrificing Grizzly Bears.",
+        "The casualty trigger goes on the stack above the spell; A keeps B as the target of the copy.",
+        "Both players pass; the copy resolves, then Cut Your Losses resolves."
+      ],
+      "variants": [
+        {
+          "label": "sacrifice_bears",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears moves to A's graveyard as a cost. The casualty trigger fires and creates a copy. The copy makes B mill 10 (half of 20) and the original then makes B mill 5 (half of 10): B's library holds 5 cards."
+        },
+        {
+          "label": "casualty_declined",
+          "polarity": "does_not_fire",
+          "delta": "A does not pay the casualty cost and sacrifices nothing.",
+          "expected": "No casualty trigger fires and no copy is created. Grizzly Bears stays on the battlefield. Cut Your Losses makes B mill 10: B's library holds 10 cards."
+        },
+        {
+          "label": "power_too_low",
+          "polarity": "does_not_fire",
+          "delta": "A controls Memnite (power 1) instead of Grizzly Bears (power 2).",
+          "expected": "Memnite is not a legal sacrifice for casualty 2, so the casualty cost cannot be paid and A casts Cut Your Losses without it. No casualty trigger fires and no copy is created. Memnite stays on the battlefield. Cut Your Losses makes B mill 10: B's library holds 10 cards."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Grizzly Bears",
+        "Memnite",
+        "Cut Your Losses"
+      ],
+      "forge_notes": "The scenario fixes the copy's target as B. Forge's casualty is an optional additional cost."
+    }
+  ]
+}

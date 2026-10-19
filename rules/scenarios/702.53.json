@@ -1,0 +1,208 @@
+{
+  "unit": "702.53",
+  "verified": true,
+  "review": [
+    "702.53b-1: setup claimed step upkeep with the untap step still to come, which is not a reachable order; moved to B's cleanup step so A's next untap step is the one observed."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.53a-1",
+      "rules": [
+        "702.53a"
+      ],
+      "title": "Transmute discards the card and tutors a card of the same mana value",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Swamp",
+            "Forest"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Dimir Infiltrator"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Forest",
+            "Shock",
+            "Grizzly Bears",
+            "Island"
+          ]
+        },
+        "exile": {},
+        "notes": "Dimir Infiltrator has mana value 2. Library is ordered top first."
+      },
+      "decisions": [
+        "A activates transmute of Dimir Infiltrator from hand, paying {1}{U}{B} with Island, Swamp and Forest and discarding it.",
+        "Both players pass; the ability resolves and A searches the library for a card with mana value 2."
+      ],
+      "variants": [
+        {
+          "label": "match_in_library",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Dimir Infiltrator is in A's graveyard. Grizzly Bears (mana value 2) is revealed and moves from the library to A's hand. The library is shuffled."
+        },
+        {
+          "label": "no_match",
+          "polarity": "does_not_fire",
+          "delta": "The library holds Centaur Courser (mana value 3) instead of Grizzly Bears.",
+          "expected": "Dimir Infiltrator is in A's graveyard. No card has mana value 2, so nothing moves to A's hand. The library is shuffled."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Swamp",
+        "Forest",
+        "Dimir Infiltrator",
+        "Shock",
+        "Grizzly Bears",
+        "Centaur Courser"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.53a-2",
+      "rules": [
+        "702.53a"
+      ],
+      "title": "Transmute can be activated only as a sorcery and only from hand",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Swamp",
+            "Forest"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Dimir Infiltrator"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Grizzly Bears",
+            "Forest"
+          ]
+        },
+        "exile": {},
+        "notes": "Transmute costs {1}{U}{B}."
+      },
+      "decisions": [
+        "A checks whether transmute of Dimir Infiltrator can be activated, with Island, Swamp and Forest available."
+      ],
+      "variants": [
+        {
+          "label": "main_phase_empty_stack",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Activating transmute is legal: it is A's main phase, the stack is empty and Dimir Infiltrator is in A's hand."
+        },
+        {
+          "label": "combat",
+          "polarity": "does_not_fire",
+          "delta": "The step is beginning_of_combat instead of main1.",
+          "expected": "Activating transmute is not legal: it is not a main phase."
+        },
+        {
+          "label": "stack_not_empty",
+          "polarity": "does_not_fire",
+          "delta": "B's Shock targeting A is on the stack.",
+          "expected": "Activating transmute is not legal: the stack is not empty."
+        },
+        {
+          "label": "on_battlefield",
+          "polarity": "does_not_fire",
+          "delta": "Dimir Infiltrator is on A's battlefield instead of in A's hand.",
+          "expected": "Activating transmute is not legal: the card is not in a hand."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Swamp",
+        "Forest",
+        "Dimir Infiltrator",
+        "Grizzly Bears",
+        "Shock"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.53b-1",
+      "rules": [
+        "702.53b"
+      ],
+      "title": "A transmute land counts as having a non-mana activated ability on the battlefield",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "B",
+        "step": "cleanup",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Tolaria West",
+              "tapped": true
+            }
+          ],
+          "B": [
+            "Tsabo's Web"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "It is B's cleanup step; A's turn comes next. A's land is tapped. Tsabo's Web says each land with an activated ability that isn't a mana ability doesn't untap during its controller's untap step. Tolaria West has a mana ability and transmute."
+      },
+      "decisions": [
+        "B's turn ends and A's turn begins; A's untap step happens. Nobody makes a decision."
+      ],
+      "variants": [
+        {
+          "label": "transmute_land",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Tolaria West stays tapped: its transmute ability counts as a non-mana activated ability even though it works only in hand."
+        },
+        {
+          "label": "plain_land",
+          "polarity": "does_not_fire",
+          "delta": "A's land is a tapped Island instead of Tolaria West.",
+          "expected": "Island untaps: it has only a mana ability."
+        }
+      ],
+      "cards": [
+        "Tolaria West",
+        "Tsabo's Web",
+        "Island"
+      ],
+      "forge_notes": "Forge implements transmute as an ability that is activatable only from hand. Check that hasNonManaActivatedAbility counts it on the battlefield."
+    }
+  ]
+}

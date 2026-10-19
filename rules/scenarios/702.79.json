@@ -1,0 +1,66 @@
+{
+  "unit": "702.79",
+  "verified": true,
+  "review": [],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.79a-1",
+      "rules": [
+        "702.79a"
+      ],
+      "title": "A persist creature that dies without a -1/-1 counter returns with one",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain"
+          ],
+          "B": [
+            "Safehold Elite"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Shock"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Shock targeting Safehold Elite, tapping Mountain.",
+        "Both players pass; Shock resolves and Safehold Elite dies.",
+        "The persist trigger goes on the stack and resolves."
+      ],
+      "variants": [
+        {
+          "label": "no_counter",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Safehold Elite goes to B's graveyard and the persist trigger fires. It returns to the battlefield under B's control with a -1/-1 counter, as a 1/1."
+        },
+        {
+          "label": "has_counter",
+          "polarity": "does_not_fire",
+          "delta": "Safehold Elite starts with a -1/-1 counter (it is a 1/1).",
+          "expected": "Safehold Elite dies and goes to B's graveyard. Persist does not trigger and it stays in the graveyard."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Shock",
+        "Safehold Elite"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

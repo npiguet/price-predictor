@@ -1,0 +1,10 @@
+{"id": "505.1", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": "defines the two main phases"}
+{"id": "505.1a", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": "defines which main phase is precombat"}
+{"id": "505.1b", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": "defines how ordinal main phase phrases count"}
+{"id": "505.2", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": "a main phase has no steps and ends via 500.2"}
+{"id": "505.3", "category": "out_of_scope", "observability": "none", "record_kinds": [], "outcome": "", "note": "Archenemy scheme deck is a casual multiplayer variant"}
+{"id": "505.4", "category": "mechanical", "observability": "indirect", "record_kinds": ["trigger", "resolution"], "outcome": "In the precombat main phase the active player puts a lore counter on each Saga they control that has chapter abilities, without using the stack.", "note": ""}
+{"id": "505.5", "category": "mechanical", "observability": "needs_new_fields", "record_kinds": ["resolution"], "outcome": "In the precombat main phase the active player rolls to visit their Attractions, without using the stack.", "note": ""}
+{"id": "505.6", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": "priority follows the turn-based actions"}
+{"id": "505.6a", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "Artifact, creature, enchantment, planeswalker and sorcery spells are castable only by the active player in a main phase.", "note": ""}
+{"id": "505.6b", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "The active player may play a land from hand in a main phase with an empty stack and priority only if they have not played a land this turn; the play does not use the stack.", "note": ""}

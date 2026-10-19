@@ -1,0 +1,173 @@
+{
+  "unit": "701.30",
+  "verified": true,
+  "review": [
+    "triage 701.30b: reclassified from decision to mechanical (clashing with an opponent makes that opponent clash too, observable as B's reveal and library move); added it to 701.30a-1, whose b_bottom variant shows it"
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "701.30a-1",
+      "rules": [
+        "701.30a",
+        "701.30b"
+      ],
+      "title": "A clashing player reveals the top card of their library and may put it on the bottom",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Forest",
+            "Forest",
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            }
+          ]
+        },
+        "hand": {
+          "A": [
+            "Fistful of Force"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Hill Giant",
+            "Plains",
+            "Forest"
+          ],
+          "B": [
+            "Island",
+            "Mountain",
+            "Swamp"
+          ]
+        },
+        "exile": {},
+        "notes": "Library lists are ordered top first."
+      },
+      "decisions": [
+        "A casts Fistful of Force targeting Grizzly Bears, tapping both Forests.",
+        "Both players pass; Fistful of Force resolves and A clashes with B.",
+        "Both players reveal their top card (A reveals Hill Giant, B reveals Island). A decides first: A puts Hill Giant on the bottom. B leaves Island on top."
+      ],
+      "variants": [
+        {
+          "label": "a_bottom",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "A's library from the top is Plains, Forest, Hill Giant. B's library from the top is Island, Mountain, Swamp."
+        },
+        {
+          "label": "a_top",
+          "polarity": "does_not_fire",
+          "delta": "A leaves Hill Giant on top.",
+          "expected": "A's library from the top is Hill Giant, Plains, Forest. B's library from the top is Island, Mountain, Swamp."
+        },
+        {
+          "label": "b_bottom",
+          "polarity": "other",
+          "delta": "B also puts Island on the bottom.",
+          "expected": "A's library from the top is Plains, Forest, Hill Giant. B's library from the top is Mountain, Swamp, Island."
+        }
+      ],
+      "cards": [
+        "Forest",
+        "Grizzly Bears",
+        "Fistful of Force",
+        "Hill Giant",
+        "Plains",
+        "Island",
+        "Mountain",
+        "Swamp"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "701.30d-1",
+      "rules": [
+        "701.30d"
+      ],
+      "title": "The clash is won only by the strictly highest revealed mana value",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Forest",
+            "Forest",
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            }
+          ]
+        },
+        "hand": {
+          "A": [
+            "Fistful of Force"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Hill Giant",
+            "Plains"
+          ],
+          "B": [
+            "Island",
+            "Mountain"
+          ]
+        },
+        "exile": {},
+        "notes": "Library lists are ordered top first. Hill Giant has mana value 4 and Island has mana value 0."
+      },
+      "decisions": [
+        "A casts Fistful of Force targeting Grizzly Bears, tapping both Forests.",
+        "Both players pass; Fistful of Force resolves and A clashes with B.",
+        "Both players reveal their top card; each puts it back on top."
+      ],
+      "variants": [
+        {
+          "label": "higher",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "A reveals Hill Giant (4) and B reveals Island (0): A wins. Grizzly Bears gets +2/+2 and then another +2/+2 and trample until end of turn: a 6/6 with trample."
+        },
+        {
+          "label": "tie",
+          "polarity": "does_not_fire",
+          "delta": "B's top card is Hill Giant too (mana value 4).",
+          "expected": "Both reveal mana value 4: nobody wins. Grizzly Bears gets only +2/+2 until end of turn: a 4/4 without trample."
+        },
+        {
+          "label": "lower",
+          "polarity": "does_not_fire",
+          "delta": "B's top card is Craw Wurm (mana value 6).",
+          "expected": "A reveals mana value 4 and B reveals mana value 6: A does not win. Grizzly Bears is a 4/4 without trample until end of turn."
+        }
+      ],
+      "cards": [
+        "Forest",
+        "Grizzly Bears",
+        "Fistful of Force",
+        "Hill Giant",
+        "Plains",
+        "Island",
+        "Mountain",
+        "Craw Wurm"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

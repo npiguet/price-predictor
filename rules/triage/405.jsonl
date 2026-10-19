@@ -1,0 +1,14 @@
+{"id": "405.1", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "A cast spell's card goes to the stack, while an activated or triggered ability goes on the stack without a card.", "note": ""}
+{"id": "405.2", "category": "mechanical", "observability": "direct", "record_kinds": ["resolution"], "outcome": "Each object put on the stack goes on top of the existing objects, so the last added resolves first.", "note": ""}
+{"id": "405.3", "category": "mechanical", "observability": "indirect", "record_kinds": ["trigger", "resolution"], "outcome": "Objects put on the stack simultaneously go in APNAP order, the active player's lowest, so the non-active player's resolve first.", "note": ""}
+{"id": "405.4", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "A spell has its card's characteristics, an ability on the stack has only its text, and each has the controller the rule names.", "note": ""}
+{"id": "405.5", "category": "mechanical", "observability": "direct", "record_kinds": ["resolution"], "outcome": "When all players pass in succession the top stack object resolves, or the step or phase ends if the stack is empty.", "note": ""}
+{"id": "405.6", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "405.6a", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "Effects do not go on the stack; only delayed triggered abilities they create can, when they trigger.", "note": ""}
+{"id": "405.6b", "category": "mechanical", "observability": "indirect", "record_kinds": ["continuous"], "outcome": "Static abilities, including characteristic-defining ones, apply continuously without using the stack.", "note": ""}
+{"id": "405.6c", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "A mana ability resolves immediately without the stack, producing mana and any other effect at once.", "note": ""}
+{"id": "405.6d", "category": "mechanical", "observability": "indirect", "record_kinds": ["playability"], "outcome": "Special actions happen immediately without using the stack.", "note": ""}
+{"id": "405.6e", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "Turn-based actions happen automatically at the start or end of steps without the stack and before priority.", "note": ""}
+{"id": "405.6f", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "State-based actions happen automatically without the stack before a player would receive priority.", "note": ""}
+{"id": "405.6g", "category": "out_of_scope", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "405.6h", "category": "out_of_scope", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}

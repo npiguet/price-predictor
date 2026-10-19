@@ -1,0 +1,3 @@
+{"id": "702.136", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.136a", "category": "mechanical", "observability": "direct", "record_kinds": ["rewrite", "continuous"], "outcome": "A permanent with riot enters with an additional +1/+1 counter, or without it and with haste.", "note": "The choice is a decision; each branch has an observable consequence."}
+{"id": "702.136b", "category": "mechanical", "observability": "indirect", "record_kinds": ["rewrite"], "outcome": "Each instance of riot works separately, so two instances can give two counters, two haste grants or one of each.", "note": ""}

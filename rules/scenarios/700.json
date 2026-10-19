@@ -1,0 +1,1139 @@
+{
+  "unit": "700",
+  "verified": true,
+  "review": [
+    "700.2d-1: the only contrast still repeated the creature mode (twice), so no variant showed the mode not repeated; added a does_not_fire variant choosing the creature mode once and the opponent mode twice, and relabelled the twice-variant as other.",
+    "700.3c-1: no variant made the rule observable (every pile choice and the countered variant ended the same whichever zone the piles sat in); replaced Shock with Gaea's Blessing so the graveyard pile's library origin fires its trigger, contrasted with the pile taken into hand; dropped the countered and empty-pile variants and Counterspell.",
+    "700.12a-1: the Caught in the Crossfire scenario only contrasted outlaw with non-outlaw creatures (the definition in 700.12) and never tested that only outlaw permanents count; rebuilt it with Take the Fall resolving above A's own outlaw creature spell, contrasted with the outlaw already on the battlefield."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "700.2b-1",
+      "rules": [
+        "700.2b"
+      ],
+      "title": "A modal triggered ability with no legal mode is removed from the stack",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Swamp",
+            "Swamp",
+            "Swamp",
+            "Swamp"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Downwind Ambusher"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Downwind Ambusher, tapping four Swamps.",
+        "Both players pass; Downwind Ambusher resolves and enters the battlefield, which triggers its modal enters ability.",
+        "When putting the trigger on the stack, A must choose one of its two modes, both of which target a creature an opponent controls. If B controls a creature, A chooses the first mode (-1/-1) targeting it.",
+        "Both players pass; the stack empties."
+      ],
+      "variants": [
+        {
+          "label": "no_legal_mode",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Neither mode has a legal target, so no mode is chosen and the trigger is removed from the stack without resolving. Downwind Ambusher (4/2) stays on A's battlefield and no creature is affected."
+        },
+        {
+          "label": "legal_mode",
+          "polarity": "does_not_fire",
+          "delta": "B controls a Grizzly Bears on the battlefield.",
+          "expected": "A chooses the -1/-1 mode targeting Grizzly Bears, the trigger stays on the stack and resolves. Grizzly Bears is 1/1 until end of turn and stays on the battlefield."
+        }
+      ],
+      "cards": [
+        "Swamp",
+        "Downwind Ambusher",
+        "Grizzly Bears"
+      ],
+      "forge_notes": "Forge may never put the trigger on the stack at all when no mode is choosable; either way the ability does not resolve."
+    },
+    {
+      "id": "700.2d-1",
+      "rules": [
+        "700.2d"
+      ],
+      "title": "A mode chosen several times is carried out that many times in sequence",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain"
+          ],
+          "B": [
+            "Grizzly Bears",
+            "Hill Giant",
+            "Craw Wurm"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Fiery Confluence"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Fiery Confluence, tapping four Mountains, choosing the 1-damage-to-each-creature mode three times.",
+        "Both players pass; Fiery Confluence resolves."
+      ],
+      "variants": [
+        {
+          "label": "same_mode_three_times",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The mode is carried out three times in sequence: each creature is dealt 1 damage three times. Grizzly Bears (2/2) and Hill Giant (3/3) die and are in B's graveyard. Craw Wurm (6/4) stays on the battlefield with 3 damage marked. B's life stays 20."
+        },
+        {
+          "label": "creature_mode_once",
+          "polarity": "does_not_fire",
+          "delta": "A chooses the 1-damage-to-each-creature mode once and the 2-damage-to-each-opponent mode twice instead of the first mode three times.",
+          "expected": "Each creature is dealt 1 damage once. Grizzly Bears, Hill Giant and Craw Wurm all stay on the battlefield with 1 damage marked. B's life is 16."
+        },
+        {
+          "label": "same_mode_twice",
+          "polarity": "other",
+          "delta": "A chooses the 1-damage-to-each-creature mode twice and the 2-damage-to-each-opponent mode once instead of the first mode three times.",
+          "expected": "Each creature is dealt 1 damage twice. Grizzly Bears dies and is in B's graveyard. Hill Giant stays with 2 damage marked and Craw Wurm stays with 2 damage marked. B's life is 18."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Fiery Confluence",
+        "Grizzly Bears",
+        "Hill Giant",
+        "Craw Wurm"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "700.2f-1",
+      "rules": [
+        "700.2f"
+      ],
+      "title": "Changing the target of a modal spell leaves its chosen mode unchanged",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Mountain",
+            "Runeclaw Bear"
+          ],
+          "B": [
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Izzet Charm"
+          ],
+          "B": [
+            "Deflection"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Izzet Charm choosing the mode that deals 2 damage to target creature, targeting B's Grizzly Bears, tapping Island and Mountain.",
+        "A passes priority. B responds by casting Deflection, tapping four Islands, targeting Izzet Charm.",
+        "Deflection resolves; B changes Izzet Charm's target to A's Runeclaw Bear. (In the no_redirect variant B does not cast Deflection and passes.)",
+        "Both players pass; Izzet Charm resolves."
+      ],
+      "variants": [
+        {
+          "label": "redirected",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Izzet Charm still resolves its 2-damage mode (it does not counter a spell and does not loot) and deals 2 damage to Runeclaw Bear, which dies and is in A's graveyard. Grizzly Bears is undamaged. Izzet Charm is in A's graveyard."
+        },
+        {
+          "label": "no_redirect",
+          "polarity": "does_not_fire",
+          "delta": "B does not cast Deflection.",
+          "expected": "Izzet Charm deals 2 damage to Grizzly Bears, which dies and is in B's graveyard. Runeclaw Bear is undamaged."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Mountain",
+        "Runeclaw Bear",
+        "Grizzly Bears",
+        "Izzet Charm",
+        "Deflection"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "700.2g-1",
+      "rules": [
+        "700.2g"
+      ],
+      "title": "A copy of a modal spell copies the mode chosen for the original",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Mountain",
+            "Mountain",
+            "Mountain"
+          ],
+          "B": [
+            "Grizzly Bears",
+            "Runeclaw Bear"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Izzet Charm",
+            "Reverberate"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Izzet Charm choosing the mode that deals 2 damage to target creature, targeting B's Grizzly Bears, tapping Island and one Mountain.",
+        "With Izzet Charm on the stack, A casts Reverberate, tapping two Mountains, targeting Izzet Charm.",
+        "Reverberate resolves; A creates a copy of Izzet Charm and chooses B's Runeclaw Bear as the copy's target. (In the no_copy variant A does not cast Reverberate and passes.)",
+        "Both players pass until the stack is empty."
+      ],
+      "variants": [
+        {
+          "label": "copied",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The copy resolves first with the same 2-damage mode (it does not counter a spell and does not loot) and deals 2 damage to Runeclaw Bear, which dies. The original then deals 2 damage to Grizzly Bears, which dies. Both are in B's graveyard. Izzet Charm and Reverberate are in A's graveyard."
+        },
+        {
+          "label": "no_copy",
+          "polarity": "does_not_fire",
+          "delta": "A does not cast Reverberate.",
+          "expected": "Only the original resolves: Grizzly Bears takes 2 damage and dies. Runeclaw Bear is undamaged and stays on the battlefield."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Mountain",
+        "Izzet Charm",
+        "Reverberate",
+        "Grizzly Bears",
+        "Runeclaw Bear"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "700.2h-1",
+      "rules": [
+        "700.2h"
+      ],
+      "title": "Every chosen costed mode adds its cost to the spell",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Swamp",
+            "Swamp",
+            "Swamp",
+            "Swamp",
+            "Swamp"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Insatiable Avarice"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Swamp",
+            "Swamp",
+            "Swamp",
+            "Swamp",
+            "Swamp"
+          ]
+        },
+        "exile": {},
+        "notes": "Insatiable Avarice has Spree: base cost {B}; mode 1 adds {2} (search the library, put the card on top); mode 2 adds {B}{B} (target player draws three cards and loses 3 life)."
+      },
+      "decisions": [
+        "A, with priority in main phase 1 and an empty stack, considers casting Insatiable Avarice choosing both modes, targeting A with the draw mode."
+      ],
+      "variants": [
+        {
+          "label": "both_modes_five_lands",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Casting is legal (can_play true). The cost after adjustment is {2}{B}{B}{B}, the base cost plus the cost of both chosen modes, 5 mana, and A can pay it with five Swamps."
+        },
+        {
+          "label": "one_mode_only",
+          "polarity": "does_not_fire",
+          "delta": "A chooses only the draw mode.",
+          "expected": "Casting is legal. The cost after adjustment is {B}{B}{B}: the unchosen mode's {2} is not added."
+        },
+        {
+          "label": "both_modes_four_lands",
+          "polarity": "other",
+          "delta": "A controls four Swamps instead of five and chooses both modes.",
+          "expected": "The cost after adjustment is still {2}{B}{B}{B} (5 mana); A cannot pay it with four Swamps, so casting with both modes is not legal (can_play false)."
+        }
+      ],
+      "cards": [
+        "Swamp",
+        "Insatiable Avarice"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "700.3c-1",
+      "rules": [
+        "700.3c"
+      ],
+      "title": "Cards separated into piles stay in the library, so the pile put into the graveyard arrives from the library",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            "Island",
+            "Island"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Fact or Fiction"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Forest",
+            "Forest",
+            "Mountain",
+            "Grizzly Bears",
+            "Gaea's Blessing",
+            "Plains"
+          ]
+        },
+        "exile": {},
+        "notes": "A's library is listed top first. Gaea's Blessing triggers when it is put into its owner's graveyard from the library."
+      },
+      "decisions": [
+        "A casts Fact or Fiction, tapping four Islands.",
+        "Both players pass; Fact or Fiction resolves and the top five cards of A's library are revealed.",
+        "B separates the five cards into a pile of Forest, Forest, Mountain and a pile of Grizzly Bears, Gaea's Blessing.",
+        "A chooses the pile of Forest, Forest, Mountain to put into hand; the other pile goes to the graveyard.",
+        "Both players pass until the stack is empty."
+      ],
+      "variants": [
+        {
+          "label": "blessing_to_graveyard",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Forest, Forest and Mountain are in A's hand. Grizzly Bears and Gaea's Blessing are put into A's graveyard from A's library, so Gaea's Blessing's trigger fires; it resolves and shuffles A's graveyard (Grizzly Bears, Gaea's Blessing, Fact or Fiction) into A's library, which then holds those three cards and Plains. A's graveyard is empty."
+        },
+        {
+          "label": "blessing_to_hand",
+          "polarity": "does_not_fire",
+          "delta": "A chooses the pile of Grizzly Bears and Gaea's Blessing for its hand.",
+          "expected": "Grizzly Bears and Gaea's Blessing are in A's hand. Forest, Forest and Mountain are in A's graveyard with Fact or Fiction. Gaea's Blessing's trigger does not fire. Plains is the only card left in A's library."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Fact or Fiction",
+        "Forest",
+        "Mountain",
+        "Grizzly Bears",
+        "Gaea's Blessing",
+        "Plains"
+      ],
+      "forge_notes": "Forge's Fact or Fiction moves the piles with Origin$ Library, so Gaea's Blessing's library-to-graveyard trigger should see the move."
+    },
+    {
+      "id": "700.5-1",
+      "rules": [
+        "700.5"
+      ],
+      "title": "Devotion counts the mana symbols of a colour among the mana costs of a player's permanents",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Purphoros, God of the Forge",
+            "Furnace Whelp",
+            "Raging Goblin",
+            "Raging Goblin"
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Mana costs: Purphoros {3}{R} (1 red symbol), Furnace Whelp {2}{R}{R} (2), Raging Goblin {R} (1)."
+      },
+      "decisions": [
+        "No spells or abilities are used; the board is stable and static abilities are evaluated."
+      ],
+      "variants": [
+        {
+          "label": "devotion_five",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "A's devotion to red is 5 (1 + 2 + 1 + 1). Purphoros is a 6/5 indestructible legendary enchantment creature."
+        },
+        {
+          "label": "devotion_four",
+          "polarity": "does_not_fire",
+          "delta": "The second Raging Goblin is a Grizzly Bears instead, which has no red symbol.",
+          "expected": "A's devotion to red is 4 (1 + 2 + 1). Purphoros is not a creature, only a legendary enchantment."
+        }
+      ],
+      "cards": [
+        "Purphoros, God of the Forge",
+        "Furnace Whelp",
+        "Raging Goblin",
+        "Grizzly Bears"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "700.5a-1",
+      "rules": [
+        "700.5a"
+      ],
+      "title": "An effect that modifies devotion counts, and a god's own type change does not feed back into the count",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Purphoros, God of the Forge",
+            "Furnace Whelp",
+            "Raging Goblin",
+            "Altar of the Pantheon"
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Altar of the Pantheon has no coloured mana symbol and increases devotion to each colour by one. Mana costs: Purphoros {3}{R}, Furnace Whelp {2}{R}{R}, Raging Goblin {R}."
+      },
+      "decisions": [
+        "No spells or abilities are used; the board is stable and static abilities are evaluated."
+      ],
+      "variants": [
+        {
+          "label": "with_altar",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "A's devotion to red is 5 (1 + 2 + 1 from the costs, plus 1 from Altar of the Pantheon). Purphoros is a 6/5 indestructible creature, and becoming a creature does not change the devotion, which stays 5."
+        },
+        {
+          "label": "without_altar",
+          "polarity": "does_not_fire",
+          "delta": "Altar of the Pantheon is replaced by a Mountain.",
+          "expected": "A's devotion to red is 4 (1 + 2 + 1). Purphoros is not a creature."
+        }
+      ],
+      "cards": [
+        "Purphoros, God of the Forge",
+        "Furnace Whelp",
+        "Raging Goblin",
+        "Altar of the Pantheon",
+        "Mountain"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "700.7-1",
+      "rules": [
+        "700.7"
+      ],
+      "title": "A delayed effect on this creature still acts on the object after it stops being a creature",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Sneak Attack",
+            "Mountain",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Grizzly Bears",
+            "Song of the Dryads",
+            "Unsummon"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A activates Sneak Attack, tapping Mountain, and puts Grizzly Bears from hand onto the battlefield; it gains haste and is set to be sacrificed at the beginning of the next end step.",
+        "A casts Song of the Dryads, tapping three Forests, enchanting Grizzly Bears. (In the bounced variant A instead casts Unsummon, tapping Island, targeting Grizzly Bears.)",
+        "Both players pass until the stack is empty; no attack is made; the turn moves to the end step."
+      ],
+      "variants": [
+        {
+          "label": "enchanted_into_land",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears is a colorless Forest land, not a creature, when the end step begins. It is still sacrificed at the beginning of the end step: Grizzly Bears and Song of the Dryads are in A's graveyard."
+        },
+        {
+          "label": "bounced",
+          "polarity": "does_not_fire",
+          "delta": "A casts Unsummon on Grizzly Bears instead of Song of the Dryads.",
+          "expected": "Grizzly Bears returns to A's hand before the end step. At the end step nothing is sacrificed: Grizzly Bears is in A's hand and Unsummon is in A's graveyard."
+        }
+      ],
+      "cards": [
+        "Sneak Attack",
+        "Mountain",
+        "Forest",
+        "Island",
+        "Grizzly Bears",
+        "Song of the Dryads",
+        "Unsummon"
+      ],
+      "forge_notes": "Forge implements Sneak Attack as an Animate with AtEOT Sacrifice on the remembered card; the card is expected to be sacrificed even when it is no longer a creature."
+    },
+    {
+      "id": "700.8a-1",
+      "rules": [
+        "700.8a"
+      ],
+      "title": "A party-size count takes at most one creature per party type",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Archpriest of Iona",
+            "Dromoka Warrior",
+            "Krovikan Scoundrel",
+            "Cabal Evangel"
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Archpriest of Iona is a Cleric with power equal to the number of creatures in its controller's party. Dromoka Warrior is a Warrior, Krovikan Scoundrel a Rogue, Cabal Evangel a Cleric, Fugitive Wizard a Wizard."
+      },
+      "decisions": [
+        "No spells or abilities are used; the board is stable and static abilities are evaluated."
+      ],
+      "variants": [
+        {
+          "label": "second_cleric",
+          "polarity": "does_not_fire",
+          "delta": "",
+          "expected": "A's party has 3 creatures (a Cleric, the Warrior and the Rogue); the second Cleric adds nothing. Archpriest of Iona is a 3/2."
+        },
+        {
+          "label": "wizard_joins",
+          "polarity": "fires",
+          "delta": "Cabal Evangel is a Fugitive Wizard instead.",
+          "expected": "A's party has 4 creatures (Cleric, Warrior, Rogue, Wizard), a full party. Archpriest of Iona is a 4/2."
+        }
+      ],
+      "cards": [
+        "Archpriest of Iona",
+        "Dromoka Warrior",
+        "Krovikan Scoundrel",
+        "Cabal Evangel",
+        "Fugitive Wizard"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "700.8b-1",
+      "rules": [
+        "700.8b"
+      ],
+      "title": "A creature with two party types is counted once, in the way that gives the largest party",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Archpriest of Iona",
+            "Shieldmage Elder",
+            "Dromoka Warrior",
+            "Krovikan Scoundrel"
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Shieldmage Elder is a Cleric Wizard. Archpriest of Iona is a Cleric with power equal to the size of its controller's party."
+      },
+      "decisions": [
+        "No spells or abilities are used; the board is stable and static abilities are evaluated."
+      ],
+      "variants": [
+        {
+          "label": "two_types_maximised",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Shieldmage Elder counts as the Wizard because Archpriest of Iona already fills the Cleric slot. A's party has 4 creatures. Archpriest of Iona is a 4/2."
+        },
+        {
+          "label": "single_type_cleric",
+          "polarity": "does_not_fire",
+          "delta": "Shieldmage Elder is a Cabal Evangel instead, which is only a Cleric.",
+          "expected": "A's party has 3 creatures (Cleric, Warrior, Rogue) and no Wizard. Archpriest of Iona is a 3/2."
+        }
+      ],
+      "cards": [
+        "Archpriest of Iona",
+        "Shieldmage Elder",
+        "Dromoka Warrior",
+        "Krovikan Scoundrel",
+        "Cabal Evangel"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "700.10-1",
+      "rules": [
+        "700.10"
+      ],
+      "title": "A planeswalker that was the source of an activated ability this turn can be targeted as activated",
+      "record_kind": "playability",
+      "setup": {
+        "active": "B",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Plains",
+            "Plains"
+          ],
+          "B": [
+            {
+              "card": "Jace Beleren",
+              "counters": {
+                "loyalty": 3
+              }
+            }
+          ]
+        },
+        "hand": {
+          "A": [
+            "Cut Short"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Plains"
+          ],
+          "B": [
+            "Island"
+          ]
+        },
+        "exile": {},
+        "notes": "B controls no tapped creature and A controls no creature, so Jace Beleren is the only possible target of Cut Short."
+      },
+      "decisions": [
+        "B activates Jace Beleren's +2 loyalty ability (each player draws a card); the ability is on the stack.",
+        "B passes priority; A has priority and considers casting Cut Short targeting Jace Beleren. (In the not_activated variant B passes priority with an empty stack without activating anything.)"
+      ],
+      "variants": [
+        {
+          "label": "activated_this_turn",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Jace Beleren is a legal target of Cut Short (can_play true, has_legal_target true). If A casts it, it resolves and Jace Beleren is destroyed and is in B's graveyard."
+        },
+        {
+          "label": "not_activated",
+          "polarity": "does_not_fire",
+          "delta": "B does not activate Jace Beleren's loyalty ability.",
+          "expected": "Jace Beleren is not a legal target: Cut Short has no legal target (has_legal_target false) and cannot be cast."
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Cut Short",
+        "Jace Beleren",
+        "Island"
+      ],
+      "forge_notes": "Cut Short also has convoke; A controls no creature so convoke is not involved."
+    },
+    {
+      "id": "700.11-1",
+      "rules": [
+        "700.11"
+      ],
+      "title": "A player descended if a permanent card was put into their graveyard this turn",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Ruin-Lurker Bat",
+            "Mountain",
+            "Grizzly Bears"
+          ],
+          "B": [
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Shock"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Forest",
+            "Plains"
+          ]
+        },
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Shock targeting A's own Grizzly Bears, tapping Mountain.",
+        "Both players pass; Shock resolves. (In the other variants the target is as stated in the delta.)",
+        "The turn moves to A's end step."
+      ],
+      "variants": [
+        {
+          "label": "own_permanent_dies",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "A's Grizzly Bears, a permanent card, is put into A's graveyard, so A descended. At the beginning of A's end step Ruin-Lurker Bat's trigger fires and A scries 1."
+        },
+        {
+          "label": "only_instant_in_graveyard",
+          "polarity": "does_not_fire",
+          "delta": "Shock targets B's Grizzly Bears instead.",
+          "expected": "B's Grizzly Bears goes to B's graveyard. A's graveyard holds only Shock, an instant, so A has not descended. Ruin-Lurker Bat's end step trigger does not fire."
+        },
+        {
+          "label": "token_dies",
+          "polarity": "does_not_fire",
+          "delta": "A's Grizzly Bears is a creature token and Shock targets it.",
+          "expected": "The token dies, but a token is not a card, so no permanent card is put into A's graveyard; A has not descended. Ruin-Lurker Bat's trigger does not fire."
+        }
+      ],
+      "cards": [
+        "Ruin-Lurker Bat",
+        "Mountain",
+        "Grizzly Bears",
+        "Shock",
+        "Forest",
+        "Plains"
+      ],
+      "forge_notes": "The token variant is set up by making A's Grizzly Bears a token in the battlefield list."
+    },
+    {
+      "id": "700.12a-1",
+      "rules": [
+        "700.12a"
+      ],
+      "title": "An outlaw spell its controller has on the stack is not an outlaw they control",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Swamp",
+            "Swamp"
+          ],
+          "B": [
+            "Hill Giant"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Krovikan Scoundrel",
+            "Take the Fall"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Plains"
+          ]
+        },
+        "exile": {},
+        "notes": "Krovikan Scoundrel is a 2/1 Human Rogue, an outlaw. Take the Fall gives -1/-0, or -4/-0 if its controller controls an outlaw, and draws a card."
+      },
+      "decisions": [
+        "A casts Krovikan Scoundrel, tapping two Swamps, and holds priority.",
+        "A casts Take the Fall targeting Hill Giant, tapping Island.",
+        "Both players pass; Take the Fall resolves while Krovikan Scoundrel is still on the stack.",
+        "Both players pass; Krovikan Scoundrel resolves."
+      ],
+      "variants": [
+        {
+          "label": "outlaw_on_stack",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Krovikan Scoundrel is a spell, not a permanent, when Take the Fall resolves, so A controls no outlaw: Hill Giant gets -1/-0 and is 2/3 until end of turn. A draws Plains. Krovikan Scoundrel then enters A's battlefield."
+        },
+        {
+          "label": "outlaw_on_battlefield",
+          "polarity": "does_not_fire",
+          "delta": "Krovikan Scoundrel is already on A's battlefield instead of in A's hand, and A casts only Take the Fall.",
+          "expected": "A controls an outlaw permanent: Hill Giant gets -4/-0 and is -1/3 until end of turn. A draws Plains."
+        }
+      ],
+      "cards": [
+        "Island",
+        "Swamp",
+        "Hill Giant",
+        "Krovikan Scoundrel",
+        "Take the Fall",
+        "Plains"
+      ],
+      "forge_notes": "Take the Fall counts Permanent.Outlaw+YouCtrl, which should exclude a creature spell on the stack."
+    },
+    {
+      "id": "700.13-1",
+      "rules": [
+        "700.13"
+      ],
+      "title": "Targeting an opponent or something an opponent controls commits a crime",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Vadmir, New Blood",
+              "summoning_sick": false
+            },
+            "Mountain",
+            "Grizzly Bears"
+          ],
+          "B": [
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Shock"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Shock targeting B's Grizzly Bears, tapping Mountain.",
+        "Both players pass; Shock resolves."
+      ],
+      "variants": [
+        {
+          "label": "targets_opponents_permanent",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Casting Shock with a target an opponent controls commits a crime. Vadmir, New Blood's trigger fires and Vadmir gets a +1/+1 counter, becoming 3/3. B's Grizzly Bears dies."
+        },
+        {
+          "label": "targets_own_permanent",
+          "polarity": "does_not_fire",
+          "delta": "Shock targets A's own Grizzly Bears.",
+          "expected": "No opponent, opponent's permanent, spell or ability, or card in an opponent's graveyard is targeted, so no crime is committed. Vadmir's trigger does not fire and Vadmir stays 2/2 with no counters."
+        },
+        {
+          "label": "targets_opponent_player",
+          "polarity": "fires",
+          "delta": "Shock targets player B.",
+          "expected": "Targeting an opponent commits a crime. Vadmir's trigger fires and Vadmir gets a +1/+1 counter, becoming 3/3. B's life is 18."
+        }
+      ],
+      "cards": [
+        "Vadmir, New Blood",
+        "Mountain",
+        "Grizzly Bears",
+        "Shock"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "700.14-1",
+      "rules": [
+        "700.14"
+      ],
+      "title": "Expend N triggers when the mana spent on spells this turn first reaches N",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Bark-Knuckle Boxer",
+              "summoning_sick": false
+            },
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Grizzly Bears",
+            "Centaur Courser",
+            "Llanowar Elves"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Grizzly Bears, tapping two Forests; it resolves.",
+        "A casts Centaur Courser, tapping three Forests; it resolves. (In the small_second_spell variant A instead casts Llanowar Elves, tapping one Forest.)"
+      ],
+      "variants": [
+        {
+          "label": "crosses_four",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Before paying for Centaur Courser A had spent 2 mana on spells this turn, and after paying A has spent 5, so A expends 4. Bark-Knuckle Boxer's trigger fires and Boxer has indestructible until end of turn. Grizzly Bears and Centaur Courser are on the battlefield."
+        },
+        {
+          "label": "small_second_spell",
+          "polarity": "does_not_fire",
+          "delta": "A casts Llanowar Elves for the second spell instead of Centaur Courser.",
+          "expected": "A has spent 3 mana on spells this turn, short of 4, so A does not expend 4. Boxer's trigger does not fire and Boxer does not have indestructible."
+        }
+      ],
+      "cards": [
+        "Bark-Knuckle Boxer",
+        "Forest",
+        "Grizzly Bears",
+        "Centaur Courser",
+        "Llanowar Elves"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "700.16-1",
+      "rules": [
+        "700.16"
+      ],
+      "title": "A creature is worthy only if it is legendary, not a Villain, and red and/or white",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Mjölnir, Hammer of Thor"
+            },
+            "Mountain",
+            {
+              "card": "Tyrox, Saurid Tyrant",
+              "summoning_sick": false
+            }
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Mjölnir is on the battlefield, not attached. Its Equip worthy {1} can target only a worthy creature its controller controls."
+      },
+      "decisions": [
+        "A, with priority in main phase 1 and an empty stack, considers activating Mjölnir's equip ability ({1}, tapping Mountain) targeting the creature in the variant."
+      ],
+      "variants": [
+        {
+          "label": "legendary_red",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Tyrox, Saurid Tyrant (legendary, red, not a Villain) is a legal equip target: the activation is legal (can_play true)."
+        },
+        {
+          "label": "legendary_white_blue",
+          "polarity": "fires",
+          "delta": "A's creature is Kasimir the Lone Wolf (legendary, white and blue) instead of Tyrox.",
+          "expected": "Kasimir is legendary, not a Villain and white, so it is worthy: the activation is legal."
+        },
+        {
+          "label": "villain",
+          "polarity": "does_not_fire",
+          "delta": "A's creature is Living Laser (legendary, red, a Villain) instead of Tyrox.",
+          "expected": "Living Laser is a Villain, so it is not worthy and is not a legal equip target: no legal target (has_legal_target false)."
+        },
+        {
+          "label": "not_legendary",
+          "polarity": "does_not_fire",
+          "delta": "A's creature is Goblin Assailant (red, not legendary) instead of Tyrox.",
+          "expected": "Goblin Assailant is not legendary, so it is not worthy and is not a legal equip target (has_legal_target false)."
+        },
+        {
+          "label": "wrong_colour",
+          "polarity": "does_not_fire",
+          "delta": "A's creature is Terrian, World Tyrant (legendary, green) instead of Tyrox.",
+          "expected": "Terrian is neither red nor white, so it is not worthy and is not a legal equip target (has_legal_target false)."
+        }
+      ],
+      "cards": [
+        "Mjölnir, Hammer of Thor",
+        "Mountain",
+        "Tyrox, Saurid Tyrant",
+        "Kasimir the Lone Wolf",
+        "Living Laser",
+        "Goblin Assailant",
+        "Terrian, World Tyrant"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

@@ -1,0 +1,4 @@
+{"id": "702.23", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.23a", "category": "mechanical", "observability": "direct", "record_kinds": ["trigger", "resolution"], "outcome": "When a creature with rampage N becomes blocked, a trigger fires and on resolution gives it +N/+N until end of turn for each blocker beyond the first.", "note": ""}
+{"id": "702.23b", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution", "continuous"], "outcome": "The rampage bonus is fixed when the trigger resolves; blockers added or removed later do not change it.", "note": ""}
+{"id": "702.23c", "category": "mechanical", "observability": "direct", "record_kinds": ["trigger"], "outcome": "A creature with several instances of rampage triggers once per instance.", "note": ""}

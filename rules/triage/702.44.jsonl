@@ -1,0 +1,5 @@
+{"id": "702.44", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.44a", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "A permanent with sunburst enters with a +1/+1 counter (creature) or charge counter (otherwise) for each color of mana spent to cast it.", "note": ""}
+{"id": "702.44b", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "Sunburst adds counters only when the object enters from the stack as a spell and colored mana was spent.", "note": ""}
+{"id": "702.44c", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "Sunburst can set a variable number for another ability, such as modular, regardless of spell type.", "note": ""}
+{"id": "702.44d", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution"], "outcome": "Each instance of sunburst works separately.", "note": ""}

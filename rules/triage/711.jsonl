@@ -1,0 +1,9 @@
+{"id": "711.1", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "711.2", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "711.2a", "category": "mechanical", "observability": "direct", "record_kinds": ["continuous"], "outcome": "A leveler with level counters in the N1-N2 range has the base power and toughness and abilities of that striation.", "note": ""}
+{"id": "711.2b", "category": "mechanical", "observability": "direct", "record_kinds": ["continuous"], "outcome": "A leveler with N3 or more level counters has the base power and toughness and abilities of the N3+ striation.", "note": ""}
+{"id": "711.3", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "711.4", "category": "mechanical", "observability": "direct", "record_kinds": ["playability"], "outcome": "A leveler can activate its level up ability regardless of how many level counters it has.", "note": ""}
+{"id": "711.5", "category": "mechanical", "observability": "direct", "record_kinds": ["continuous"], "outcome": "A leveler with fewer level counters than N1 has the power and toughness of its uppermost box.", "note": ""}
+{"id": "711.6", "category": "mechanical", "observability": "indirect", "record_kinds": ["continuous"], "outcome": "A leveler card outside the battlefield has the power and toughness of its uppermost box.", "note": ""}
+{"id": "711.7", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}

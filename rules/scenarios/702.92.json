@@ -1,0 +1,71 @@
+{
+  "unit": "702.92",
+  "verified": true,
+  "review": [],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.92a-1",
+      "rules": [
+        "702.92a"
+      ],
+      "title": "Living weapon creates a Germ and attaches the Equipment to it",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain"
+          ],
+          "B": [
+            "Plains",
+            "Plains"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Flayer Husk"
+          ],
+          "B": [
+            "Disenchant"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Flayer Husk, tapping Mountain; B passes and it resolves.",
+        "Flayer Husk enters the battlefield and its living weapon trigger goes on the stack.",
+        "B passes priority without responding; the trigger resolves."
+      ],
+      "variants": [
+        {
+          "label": "husk_stays",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "A 0/0 black Phyrexian Germ creature token is created and Flayer Husk is attached to it. Flayer Husk gives +1/+1, so the Germ is 1/1 and stays on the battlefield."
+        },
+        {
+          "label": "husk_destroyed_in_response",
+          "polarity": "does_not_fire",
+          "delta": "With the living weapon trigger on the stack, B casts Disenchant targeting Flayer Husk, tapping both Plains; Disenchant resolves first.",
+          "expected": "Flayer Husk is destroyed and goes to A's graveyard. The living weapon trigger still resolves and creates the Germ token, but there is no Equipment to attach. The Germ is 0/0 and is put into the graveyard by the state-based check, then ceases to exist."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Plains",
+        "Flayer Husk",
+        "Disenchant"
+      ],
+      "forge_notes": "Check that Forge still creates the Germ when the Equipment has left the battlefield before the trigger resolves."
+    }
+  ]
+}

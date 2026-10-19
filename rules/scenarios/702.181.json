@@ -1,0 +1,121 @@
+{
+  "unit": "702.181",
+  "verified": true,
+  "review": [
+    "702.181a-2: empty_graveyard expected left the trigger's firing implicit; Mobilize X still triggers with X = 0, now stated."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.181a-1",
+      "rules": [
+        "702.181a"
+      ],
+      "title": "Mobilize creates attacking tokens that are sacrificed at the end step",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Shock Brigade",
+              "summoning_sick": false
+            }
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A attacks player B with Shock Brigade.",
+        "Both players pass; the mobilize trigger resolves.",
+        "Both players pass through combat damage and on to the end step; the sacrifice trigger resolves."
+      ],
+      "variants": [
+        {
+          "label": "attacks",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The mobilize trigger fires and creates one 1/1 red Warrior token, tapped and attacking B. Combat damage is 2 in total (Shock Brigade 1, Warrior 1): B's life is 18. At the beginning of the end step the Warrior token is sacrificed and A controls only Shock Brigade."
+        },
+        {
+          "label": "no_attack",
+          "polarity": "does_not_fire",
+          "delta": "A declares no attackers.",
+          "expected": "The mobilize trigger does not fire and no token is created. B's life stays 20."
+        }
+      ],
+      "cards": [
+        "Shock Brigade"
+      ]
+    },
+    {
+      "id": "702.181a-2",
+      "rules": [
+        "702.181a"
+      ],
+      "title": "Mobilize N creates N tokens",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Avenger of the Fallen",
+              "summoning_sick": false
+            }
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {
+          "A": [
+            "Grizzly Bears",
+            "Hill Giant"
+          ]
+        },
+        "library": {},
+        "exile": {},
+        "notes": "Avenger of the Fallen has Mobilize X, where X is the number of creature cards in A's graveyard."
+      },
+      "decisions": [
+        "A attacks player B with Avenger of the Fallen.",
+        "Both players pass; the mobilize trigger resolves.",
+        "Both players pass through combat damage and on to the end step; the sacrifice trigger resolves."
+      ],
+      "variants": [
+        {
+          "label": "two_creature_cards",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Two 1/1 red Warrior tokens are created, tapped and attacking B. Combat damage is 4 in total (Avenger 2, Warriors 1 + 1): B's life is 16. At the beginning of the end step both tokens are sacrificed."
+        },
+        {
+          "label": "empty_graveyard",
+          "polarity": "does_not_fire",
+          "delta": "A's graveyard is empty instead of holding two creature cards.",
+          "expected": "The mobilize trigger fires and resolves with X = 0: no Warrior tokens are created. Avenger of the Fallen deals 2 combat damage: B's life is 18."
+        }
+      ],
+      "cards": [
+        "Avenger of the Fallen",
+        "Grizzly Bears",
+        "Hill Giant"
+      ]
+    }
+  ]
+}

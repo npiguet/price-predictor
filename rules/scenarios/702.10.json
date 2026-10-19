@@ -1,0 +1,135 @@
+{
+  "unit": "702.10",
+  "verified": true,
+  "review": [
+    "skipped: removed 702.10d, which the triage classifies definitional (redundancy), so they need neither a scenario nor a skip.",
+    "702.10b-1: both creatures sat on the board in every variant and the variants differed only in which one was 'checked', and haste_expired_sickness changed two facts from the base (the creature and its sickness) to illustrate 302.6 rather than haste; put one creature on the board, made the swap the one fact, and dropped that variant.",
+    "triage/702.10.jsonl: was missing; wrote it (702.10b and 702.10c legality/playability, the rest definitional)."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.10b-1",
+      "rules": [
+        "702.10b"
+      ],
+      "title": "A creature with haste can attack the turn it comes under its controller's control",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Raging Goblin",
+              "summoning_sick": true
+            }
+          ],
+          "B": [
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "A": [],
+          "B": []
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "A's creature came under A's control this turn."
+      },
+      "decisions": [
+        "A checks whether its creature can be declared as an attacker."
+      ],
+      "variants": [
+        {
+          "label": "haste_creature",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Raging Goblin (haste) is a legal attacker even though it has not been under A's control since the turn began."
+        },
+        {
+          "label": "no_haste_creature",
+          "polarity": "does_not_fire",
+          "delta": "A's creature is Mons's Goblin Raiders (no haste) instead of Raging Goblin, also summoning sick.",
+          "expected": "Mons's Goblin Raiders is not a legal attacker."
+        }
+      ],
+      "cards": [
+        "Raging Goblin",
+        "Mons's Goblin Raiders",
+        "Grizzly Bears"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.10c-1",
+      "rules": [
+        "702.10c"
+      ],
+      "title": "A creature with haste can use its tap-symbol ability the turn it comes under its controller's control",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Prodigal Sorcerer",
+              "summoning_sick": true
+            },
+            "Fervor"
+          ],
+          "B": [
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "A": [],
+          "B": []
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Prodigal Sorcerer came under A's control this turn. Fervor gives creatures its controller controls haste. The no_haste and opponent_controls_fervor variants remove Fervor from A's side or move it to B's."
+      },
+      "decisions": [
+        "A checks whether Prodigal Sorcerer's {T} ability can be activated, targeting player B."
+      ],
+      "variants": [
+        {
+          "label": "haste_from_fervor",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Activating Prodigal Sorcerer's ability is legal for A although the creature is summoning sick, because it has haste from Fervor."
+        },
+        {
+          "label": "no_haste",
+          "polarity": "does_not_fire",
+          "delta": "Fervor is not on the battlefield.",
+          "expected": "Activating Prodigal Sorcerer's ability is illegal: the creature is summoning sick and its cost includes {T}."
+        },
+        {
+          "label": "opponent_controls_fervor",
+          "polarity": "does_not_fire",
+          "delta": "Fervor is on B's side of the battlefield instead of A's.",
+          "expected": "Activating Prodigal Sorcerer's ability is illegal: Fervor gives haste only to creatures B controls."
+        }
+      ],
+      "cards": [
+        "Prodigal Sorcerer",
+        "Fervor",
+        "Grizzly Bears"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

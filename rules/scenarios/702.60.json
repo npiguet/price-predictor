@@ -1,0 +1,152 @@
+{
+  "unit": "702.60",
+  "verified": true,
+  "review": [],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.60a-1",
+      "rules": [
+        "702.60a"
+      ],
+      "title": "Ripple reveals the top N cards and casts same-name cards for free",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Surging Flame"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Surging Flame",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain"
+          ]
+        },
+        "exile": {},
+        "notes": "The library list is ordered top card first."
+      },
+      "decisions": [
+        "A casts Surging Flame targeting player B, tapping Mountain and Mountain.",
+        "Ripple 4 triggers on cast; A reveals the top four cards of the library.",
+        "A casts the revealed Surging Flame without paying its mana cost, targeting player B, and puts the three revealed Mountains on the bottom of the library.",
+        "The free Surging Flame's own ripple trigger resolves; A chooses not to reveal.",
+        "Both players pass until everything on the stack has resolved."
+      ],
+      "variants": [
+        {
+          "label": "flame_in_top_four",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The ripple trigger fires. The second Surging Flame is cast from the library without mana. Both Surging Flames resolve and B's life is 16."
+        },
+        {
+          "label": "flame_fifth",
+          "polarity": "does_not_fire",
+          "delta": "The library is Mountain, Mountain, Mountain, Mountain, Surging Flame, Mountain, Mountain, Mountain, so Surging Flame is the fifth card.",
+          "expected": "The ripple trigger fires and reveals four Mountains. Nothing is cast, the four Mountains go to the bottom of the library, and B's life is 18."
+        },
+        {
+          "label": "different_name",
+          "polarity": "does_not_fire",
+          "delta": "The fourth card of the library is Surging Might instead of Surging Flame.",
+          "expected": "The ripple trigger fires and reveals Mountain, Mountain, Mountain, Surging Might. Nothing is cast because the name differs, the four cards go to the bottom of the library, and B's life is 18."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Surging Flame",
+        "Surging Might"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.60b-1",
+      "rules": [
+        "702.60b"
+      ],
+      "title": "Each instance of ripple triggers separately",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Thrumming Stone"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Surging Flame"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain"
+          ]
+        },
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Surging Flame targeting player B, tapping Mountain and Mountain.",
+        "Surging Flame has ripple 4 printed on it and a second ripple 4 from Thrumming Stone; both ripple triggers go on the stack.",
+        "A reveals the top four Mountains for the first trigger and the next four Mountains for the second; nothing is cast.",
+        "Both players pass; Surging Flame resolves."
+      ],
+      "variants": [
+        {
+          "label": "two_instances",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Two ripple triggers fire for the one cast. Eight Mountains are revealed in total and put on the bottom of the library. B's life is 18."
+        },
+        {
+          "label": "one_instance",
+          "polarity": "does_not_fire",
+          "delta": "Thrumming Stone is not on the battlefield.",
+          "expected": "One ripple trigger fires. Four Mountains are revealed and put on the bottom of the library. B's life is 18."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Thrumming Stone",
+        "Surging Flame"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

@@ -1,0 +1,806 @@
+{
+  "unit": "116",
+  "verified": true,
+  "review": [
+    "116.2b-1: opponent-tries left the Shock outcome unstated; added that the face-down 2/2 dies.",
+    "116.2d-1: not-paid delta also changed which lands paid for Rampant Growth; reduced it to the single fact that A does not pay {2}.",
+    "116.3-1: illegal-land variant took no special action, so it did not exercise 116.3 (its expected was that nothing changes); dropped it and noted that the rule has no does_not_fire branch."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "116.2a-1",
+      "rules": [
+        "116.2a"
+      ],
+      "title": "A land can be played only with priority, an empty stack, in a main phase of the player's own turn, and once per turn",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain"
+          ],
+          "B": [
+            "Mountain"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Mountain",
+            "Shock"
+          ],
+          "B": []
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "A has not played a land this turn. The stack is empty and A has priority."
+      },
+      "decisions": [
+        "A has priority and tries to play the Mountain from hand as a special action."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Playing the Mountain is legal: it moves from A's hand to the battlefield without using the stack, and A has played a land this turn."
+        },
+        {
+          "label": "second-land",
+          "polarity": "does_not_fire",
+          "delta": "A has already played the battlefield Mountain as its land for this turn.",
+          "expected": "Playing the Mountain from hand is not legal: A has already used the one land play of the turn."
+        },
+        {
+          "label": "stack-not-empty",
+          "polarity": "does_not_fire",
+          "delta": "A has first cast Shock targeting B, tapping the battlefield Mountain, and still holds priority with Shock on the stack.",
+          "expected": "Playing the Mountain is not legal while Shock is on the stack."
+        },
+        {
+          "label": "combat-step",
+          "polarity": "does_not_fire",
+          "delta": "The step is beginning_of_combat instead of main1.",
+          "expected": "Playing the Mountain is not legal outside a main phase."
+        },
+        {
+          "label": "opponents-turn",
+          "polarity": "does_not_fire",
+          "delta": "B is the active player and the step is main1; the stack is empty and A holds priority.",
+          "expected": "Playing the Mountain is not legal: it is not A's turn."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Shock"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "116.2b-1",
+      "rules": [
+        "116.2b"
+      ],
+      "title": "A face-down creature can be turned face up whenever its controller has priority, without using the stack",
+      "record_kind": "playability",
+      "setup": {
+        "active": "B",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            {
+              "card": "Ainok Tracker",
+              "face_down": true,
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            "Mountain"
+          ]
+        },
+        "hand": {
+          "A": [],
+          "B": [
+            "Shock"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "The face-down Ainok Tracker is a 2/2 colorless creature with no name or abilities. A has all five Mountains untapped; B's Mountain is untapped."
+      },
+      "decisions": [
+        "B casts Shock targeting A's face-down creature, tapping Mountain, and passes priority.",
+        "A receives priority and turns the face-down creature face up by paying its morph cost {4}{R}, tapping five Mountains.",
+        "A passes priority, then B passes priority; Shock resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Turning the creature face up is legal while Shock is on the stack and does not use the stack: Shock is still the only stack object, the creature is Ainok Tracker 3/3 with first strike, and Shock deals 2 damage to it. It stays on the battlefield with 2 damage marked."
+        },
+        {
+          "label": "not-turned",
+          "polarity": "does_not_fire",
+          "delta": "A does not turn the creature face up and passes priority with Shock on the stack.",
+          "expected": "Shock deals 2 damage to the face-down 2/2 creature, which moves to A's graveyard."
+        },
+        {
+          "label": "cannot-pay",
+          "polarity": "does_not_fire",
+          "delta": "A controls only four Mountains, so the morph cost {4}{R} cannot be paid.",
+          "expected": "Turning the creature face up is not legal; the creature stays face down and dies to Shock."
+        },
+        {
+          "label": "opponent-tries",
+          "polarity": "does_not_fire",
+          "delta": "B (not the controller) tries to turn A's face-down creature face up instead.",
+          "expected": "Turning the creature face up is not legal for B; only its controller may take the action. The creature stays face down, and Shock's 2 damage moves the 2/2 to A's graveyard."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Ainok Tracker",
+        "Shock"
+      ],
+      "forge_notes": "Requires a face-down permanent in the initial state; a puzzle file can mark it face down with a morph cost."
+    },
+    {
+      "id": "116.2c-1",
+      "rules": [
+        "116.2c"
+      ],
+      "title": "A player ends a continuous effect by paying its cost as a special action whenever they have priority",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            {
+              "card": "Hill Giant",
+              "summoning_sick": false
+            },
+            {
+              "card": "Convulsing Licid",
+              "attached_to": "Grizzly Bears",
+              "tapped": true
+            }
+          ],
+          "B": [
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "A": [],
+          "B": []
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Convulsing Licid has already used its ability: it is a tapped Aura enchantment attached to B's Grizzly Bears, which therefore can't block. A controls an untapped Mountain."
+      },
+      "decisions": [
+        "A, with priority and an empty stack, ends the Licid effect by paying {R}, tapping Mountain.",
+        "A moves to combat and attacks B with Hill Giant.",
+        "B tries to declare Grizzly Bears as a blocker of Hill Giant."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Paying {R} is legal and uses no stack: Convulsing Licid stops being an Aura and is a tapped 2/2 Licid creature again, no longer attached. Blocking with Grizzly Bears is legal."
+        },
+        {
+          "label": "not-paid",
+          "polarity": "does_not_fire",
+          "delta": "A does not pay {R}.",
+          "expected": "Convulsing Licid stays attached to Grizzly Bears, and blocking Hill Giant with Grizzly Bears is not legal."
+        },
+        {
+          "label": "no-mana",
+          "polarity": "does_not_fire",
+          "delta": "A's only Mountain is tapped, so {R} cannot be paid.",
+          "expected": "Ending the effect is not legal; Convulsing Licid stays attached, and blocking with Grizzly Bears is not legal."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Hill Giant",
+        "Convulsing Licid",
+        "Grizzly Bears"
+      ],
+      "forge_notes": "Forge may implement the Licid's {R} revert as a stack-using ability or only at certain timings (RevertCost$ on Animate); check whether it is a no-stack action before using this as a ground-truth case. The other branch of 116.2c, stopping a delayed triggered ability from triggering, has no simple Forge card."
+    },
+    {
+      "id": "116.2d-1",
+      "rules": [
+        "116.2d"
+      ],
+      "title": "A player ignores a static ability's effect for a duration by paying its cost as a special action",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Leonin Arbiter",
+            "Forest",
+            "Forest",
+            "Mountain",
+            "Mountain"
+          ],
+          "B": [
+            "Plains",
+            "Plains"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Rampant Growth"
+          ],
+          "B": []
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Forest",
+            "Swamp"
+          ]
+        },
+        "exile": {},
+        "notes": "Leonin Arbiter: players can't search libraries; any player may pay {2} for that player to ignore this effect until end of turn."
+      },
+      "decisions": [
+        "A pays {2} to ignore Leonin Arbiter's effect until end of turn, tapping two Mountains (special action; nothing goes on the stack).",
+        "A casts Rampant Growth tapping two Forests, and passes priority; B passes priority; Rampant Growth resolves.",
+        "A searches for a basic land card and chooses the Forest."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Rampant Growth resolves: the Forest moves from A's library to the battlefield tapped, and A's library is shuffled."
+        },
+        {
+          "label": "not-paid",
+          "polarity": "does_not_fire",
+          "delta": "A does not pay {2}.",
+          "expected": "Rampant Growth resolves but A can't search: no land leaves A's library, and A controls no extra land."
+        },
+        {
+          "label": "opponent-pays",
+          "polarity": "does_not_fire",
+          "delta": "B pays {2} (tapping two Plains) to ignore the effect for B, and A does not.",
+          "expected": "A still can't search: Rampant Growth resolves and nothing leaves A's library. The ignore applies only to the player who paid."
+        }
+      ],
+      "cards": [
+        "Leonin Arbiter",
+        "Rampant Growth",
+        "Forest",
+        "Mountain",
+        "Plains",
+        "Swamp"
+      ],
+      "forge_notes": "The Forge script has a TODO about the AI not using the ignore action; the engine parameter IgnoreEffectCost$ 2 exists for a human-controlled player."
+    },
+    {
+      "id": "116.2e-1",
+      "rules": [
+        "116.2e"
+      ],
+      "title": "Circling Vultures can be discarded any time its owner could cast an instant",
+      "record_kind": "playability",
+      "setup": {
+        "active": "B",
+        "step": "upkeep",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Swamp"
+          ],
+          "B": [
+            "Mountain"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Circling Vultures"
+          ],
+          "B": [
+            "Shock"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "A holds priority in B's upkeep with an empty stack."
+      },
+      "decisions": [
+        "A, with priority, discards Circling Vultures from hand (cost {0}) as a special action."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Discarding is legal on the opponent's turn and does not use the stack: Circling Vultures moves from A's hand to A's graveyard and B gets no chance to respond."
+        },
+        {
+          "label": "spell-on-stack",
+          "polarity": "fires",
+          "delta": "B has cast Shock targeting A, and A has priority with Shock on the stack.",
+          "expected": "Discarding is legal with a spell on the stack: Circling Vultures moves to A's graveyard, and Shock stays on the stack unchanged."
+        },
+        {
+          "label": "no-priority-step",
+          "polarity": "does_not_fire",
+          "delta": "The step is cleanup, in which no player receives priority.",
+          "expected": "Discarding is not legal; Circling Vultures stays in A's hand."
+        }
+      ],
+      "cards": [
+        "Circling Vultures",
+        "Swamp",
+        "Mountain",
+        "Shock"
+      ],
+      "forge_notes": "Forge implements it as an ability with ActivationZone$ Hand and InstantSpeed$ True, which uses the stack in the engine; cleanup priority is only reachable in a puzzle state."
+    },
+    {
+      "id": "116.2f-1",
+      "rules": [
+        "116.2f"
+      ],
+      "title": "A card with suspend can be exiled only when it could begin to be cast",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain"
+          ],
+          "B": [
+            "Mountain"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Rift Bolt"
+          ],
+          "B": [
+            "Shock"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "A has priority with an empty stack. Rift Bolt is a sorcery with Suspend 1-{R}."
+      },
+      "decisions": [
+        "A, with priority, suspends Rift Bolt by paying {R}, tapping a Mountain, and exiling it."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Suspending is legal and uses no stack: Rift Bolt moves from A's hand to exile with one time counter."
+        },
+        {
+          "label": "upkeep",
+          "polarity": "does_not_fire",
+          "delta": "The step is upkeep instead of main1.",
+          "expected": "Suspending is not legal: a sorcery can't be cast in the upkeep. Rift Bolt stays in hand."
+        },
+        {
+          "label": "stack-not-empty",
+          "polarity": "does_not_fire",
+          "delta": "B has cast Shock targeting A, tapping Mountain, and A has priority with Shock on the stack.",
+          "expected": "Suspending is not legal while the stack is not empty; Rift Bolt stays in hand."
+        },
+        {
+          "label": "opponents-turn",
+          "polarity": "does_not_fire",
+          "delta": "B is the active player and the step is main1.",
+          "expected": "Suspending is not legal on B's turn; Rift Bolt stays in hand."
+        }
+      ],
+      "cards": [
+        "Rift Bolt",
+        "Mountain",
+        "Shock"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "116.2g-1",
+      "rules": [
+        "116.2g"
+      ],
+      "title": "A companion can be put into its owner's hand for {3} only in their main phase with an empty stack",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Plains",
+            "Plains"
+          ],
+          "B": [
+            "Mountain"
+          ]
+        },
+        "hand": {
+          "A": [],
+          "B": [
+            "Shock"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Lurrus of the Dream-Den is A's chosen companion, outside the game. A has not moved a companion to hand this game. The stack is empty and A has priority."
+      },
+      "decisions": [
+        "A, with priority, pays {3} tapping three Plains to put Lurrus of the Dream-Den from outside the game into hand."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The action is legal and uses no stack: Lurrus moves from outside the game to A's hand, and the three Plains are tapped."
+        },
+        {
+          "label": "combat-step",
+          "polarity": "does_not_fire",
+          "delta": "The step is beginning_of_combat instead of main1.",
+          "expected": "The action is not legal outside a main phase; Lurrus stays outside the game."
+        },
+        {
+          "label": "stack-not-empty",
+          "polarity": "does_not_fire",
+          "delta": "B has cast Shock targeting A and A has priority with Shock on the stack.",
+          "expected": "The action is not legal with a spell on the stack; Lurrus stays outside the game."
+        },
+        {
+          "label": "opponents-turn",
+          "polarity": "does_not_fire",
+          "delta": "B is the active player and the step is main1.",
+          "expected": "The action is not legal on B's turn; Lurrus stays outside the game."
+        },
+        {
+          "label": "cannot-pay",
+          "polarity": "does_not_fire",
+          "delta": "A controls only two Plains.",
+          "expected": "The action is not legal: {3} can't be paid; Lurrus stays outside the game."
+        }
+      ],
+      "cards": [
+        "Lurrus of the Dream-Den",
+        "Plains",
+        "Mountain",
+        "Shock"
+      ],
+      "forge_notes": "Companion setup needs the companion in the player's outside-the-game zone (sideboard); Forge supports it in constructed games with a companion declared."
+    },
+    {
+      "id": "116.2h-1",
+      "rules": [
+        "116.2h"
+      ],
+      "title": "A card with foretell can be exiled face down for {2} during its controller's turn whenever they have priority",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            "Mountain"
+          ],
+          "B": [
+            "Mountain"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Behold the Multiverse",
+            "Shock"
+          ],
+          "B": []
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "A has priority with an empty stack."
+      },
+      "decisions": [
+        "A, with priority, pays {2} tapping two Islands to foretell Behold the Multiverse (exile it face down)."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Foretelling is legal and uses no stack: Behold the Multiverse moves from A's hand to exile face down, and two Islands are tapped."
+        },
+        {
+          "label": "stack-not-empty",
+          "polarity": "fires",
+          "delta": "A has first cast Shock targeting B, tapping Mountain, and still holds priority with Shock on the stack.",
+          "expected": "Foretelling is legal with Shock on the stack; Behold the Multiverse moves to exile face down and Shock is unchanged on the stack."
+        },
+        {
+          "label": "opponents-turn",
+          "polarity": "does_not_fire",
+          "delta": "B is the active player and the step is main1; A holds priority with an empty stack.",
+          "expected": "Foretelling is not legal on B's turn; Behold the Multiverse stays in hand."
+        },
+        {
+          "label": "cannot-pay",
+          "polarity": "does_not_fire",
+          "delta": "A controls only one land, an Island.",
+          "expected": "Foretelling is not legal: {2} can't be paid; Behold the Multiverse stays in hand."
+        }
+      ],
+      "cards": [
+        "Behold the Multiverse",
+        "Island",
+        "Mountain",
+        "Shock"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "116.2k-1",
+      "rules": [
+        "116.2k"
+      ],
+      "title": "A card with plot can be exiled only in the owner's own turn with priority and an empty stack",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain"
+          ],
+          "B": [
+            "Mountain"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Slickshot Show-Off"
+          ],
+          "B": [
+            "Shock"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "A has priority with an empty stack."
+      },
+      "decisions": [
+        "A, with priority, pays the plot cost {1}{R} tapping two Mountains to plot Slickshot Show-Off (exile it from hand)."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Plotting is legal and uses no stack: Slickshot Show-Off moves from A's hand to exile as a plotted card."
+        },
+        {
+          "label": "stack-not-empty",
+          "polarity": "does_not_fire",
+          "delta": "B has cast Shock targeting A, tapping Mountain, and A has priority with Shock on the stack.",
+          "expected": "Plotting is not legal while the stack is not empty; Slickshot Show-Off stays in hand."
+        },
+        {
+          "label": "opponents-turn",
+          "polarity": "does_not_fire",
+          "delta": "B is the active player and the step is main1.",
+          "expected": "Plotting is not legal on B's turn; Slickshot Show-Off stays in hand."
+        }
+      ],
+      "cards": [
+        "Slickshot Show-Off",
+        "Mountain",
+        "Shock"
+      ],
+      "forge_notes": "Rule 702.170a limits plotting to the owner's main phase with an empty stack, stricter than 116.2k's 'during their own turn'; no variant here relies on the difference (an upkeep plot is left out)."
+    },
+    {
+      "id": "116.2m-1",
+      "rules": [
+        "116.2m"
+      ],
+      "title": "A locked half of a Room can be unlocked by paying its unlock cost only in a main phase of own turn with an empty stack",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Bottomless Pool"
+          ],
+          "B": [
+            "Mountain"
+          ]
+        },
+        "hand": {
+          "A": [],
+          "B": [
+            "Shock"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Bottomless Pool // Locker Room is on the battlefield with the Bottomless Pool door unlocked and the Locker Room door locked. A has five untapped Islands and priority with an empty stack."
+      },
+      "decisions": [
+        "A, with priority, pays the unlock cost {4}{U} of Locker Room tapping five Islands to unlock it."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Unlocking is legal and uses no stack: the Locker Room door becomes unlocked and all five Islands are tapped."
+        },
+        {
+          "label": "combat-step",
+          "polarity": "does_not_fire",
+          "delta": "The step is beginning_of_combat instead of main1.",
+          "expected": "Unlocking is not legal outside a main phase; the Locker Room door stays locked."
+        },
+        {
+          "label": "stack-not-empty",
+          "polarity": "does_not_fire",
+          "delta": "B has cast Shock targeting A and A has priority with Shock on the stack.",
+          "expected": "Unlocking is not legal while the stack is not empty; the door stays locked."
+        },
+        {
+          "label": "opponents-turn",
+          "polarity": "does_not_fire",
+          "delta": "B is the active player and the step is main1.",
+          "expected": "Unlocking is not legal on B's turn; the door stays locked."
+        }
+      ],
+      "cards": [
+        "Bottomless Pool",
+        "Island",
+        "Mountain",
+        "Shock"
+      ],
+      "forge_notes": "Room cards are listed by their first-door Name line; the second door is named Locker Room. The Room-unlocked state must be settable in the initial state."
+    },
+    {
+      "id": "116.3-1",
+      "rules": [
+        "116.3"
+      ],
+      "title": "A player who takes a special action receives priority afterward",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [],
+          "B": [
+            "Mountain"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Mountain",
+            "Shock"
+          ],
+          "B": [
+            "Shock"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "A has priority with an empty stack and has not played a land this turn."
+      },
+      "decisions": [
+        "A plays Mountain from hand as a special action.",
+        "A then casts Shock targeting B, tapping the Mountain just played."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "A holds priority after playing the Mountain: the step is still main1, B received no priority, and A's Shock is cast (on the stack) with no pass in between."
+        },
+        {
+          "label": "passes",
+          "polarity": "other",
+          "delta": "After playing the Mountain, A passes priority instead of casting Shock.",
+          "expected": "B receives priority with an empty stack; when B also passes, the game moves to beginning_of_combat. A did not keep priority once A passed."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Shock"
+      ],
+      "forge_notes": "116.3 applies after every special action without condition, so it has no does_not_fire variant; the contrast is the 'passes' variant, where priority leaves A only once A passes."
+    }
+  ]
+}

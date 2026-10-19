@@ -1,0 +1,4 @@
+{"id": "702.36", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.36a", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.36b", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "A creature with fear can be blocked only by artifact creatures and/or black creatures.", "note": ""}
+{"id": "702.36c", "category": "legality", "observability": "indirect", "record_kinds": ["playability"], "outcome": "Multiple instances of fear give the same blocking restriction as one.", "note": ""}

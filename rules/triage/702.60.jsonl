@@ -1,0 +1,3 @@
+{"id": "702.60", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.60a", "category": "mechanical", "observability": "indirect", "record_kinds": ["resolution", "trigger"], "outcome": "Casting a ripple spell triggers a reveal of the top N cards, and revealed same-name cards may be cast free, the rest going to the library bottom.", "note": ""}
+{"id": "702.60b", "category": "mechanical", "observability": "indirect", "record_kinds": ["trigger"], "outcome": "Each ripple instance triggers separately when the spell is cast.", "note": ""}

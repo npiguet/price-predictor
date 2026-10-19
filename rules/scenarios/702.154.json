@@ -1,0 +1,70 @@
+{
+  "unit": "702.154",
+  "verified": true,
+  "review": [],
+  "skipped": [
+    {
+      "id": "702.154d",
+      "reason": "no card in Forge's cardsfolder has more than one instance of enlist, so independent triggering of several instances cannot be reached in a game"
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "702.154a-1",
+      "rules": [
+        "702.154a"
+      ],
+      "title": "An attacking creature enlists an eligible creature and gets its power",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Barkweave Crusher",
+            "Hill Giant"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Barkweave Crusher (2/5, enlist) and Hill Giant (3/3) have both been under A's control since earlier turns. B controls no creatures."
+      },
+      "decisions": [
+        "A moves to combat and declares only Barkweave Crusher as an attacker.",
+        "As it attacks, A pays the enlist cost by tapping Hill Giant, if Hill Giant is eligible.",
+        "The enlist trigger resolves, if it fired. B declares no blockers. Combat damage is dealt."
+      ],
+      "variants": [
+        {
+          "label": "giant_enlisted",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Hill Giant becomes tapped (it does not attack). The enlist trigger fires and Barkweave Crusher gets +3/+0 until end of turn, becoming 5/5. It deals 5 combat damage: B is at 15."
+        },
+        {
+          "label": "giant_summoning_sick",
+          "polarity": "does_not_fire",
+          "delta": "Hill Giant entered the battlefield this turn (summoning sick, no haste).",
+          "expected": "Hill Giant is not eligible to be tapped for enlist. No enlist trigger fires. Barkweave Crusher stays 2/5, deals 2 combat damage: B is at 18. Hill Giant stays untapped."
+        },
+        {
+          "label": "giant_already_tapped",
+          "polarity": "does_not_fire",
+          "delta": "Hill Giant is already tapped.",
+          "expected": "Hill Giant is not an untapped creature, so it cannot be tapped for enlist. No enlist trigger fires. Barkweave Crusher stays 2/5, deals 2 combat damage: B is at 18."
+        }
+      ],
+      "cards": [
+        "Barkweave Crusher",
+        "Hill Giant"
+      ],
+      "forge_notes": "Variants change the state of Hill Giant in the setup: use summoning_sick true or tapped true on its entry."
+    }
+  ]
+}

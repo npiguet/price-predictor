@@ -1,0 +1,193 @@
+{
+  "unit": "702.88",
+  "verified": true,
+  "review": [
+    "702.88a-3: added; no scenario exercised rebound's 'if this spell was cast from your hand' condition. A Staggershock cast from exile through cascade goes to the graveyard, one cast from hand is exiled."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.88a-1",
+      "rules": [
+        "702.88a"
+      ],
+      "title": "A rebound spell cast from hand is exiled as it resolves",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Mountain"
+          ],
+          "B": [
+            "Island",
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Staggershock"
+          ],
+          "B": [
+            "Counterspell"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Staggershock from hand targeting player B, tapping three Mountains.",
+        "B does not respond unless the variant says so; both players pass."
+      ],
+      "variants": [
+        {
+          "label": "resolves",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Staggershock resolves: B's life becomes 18. Instead of going to A's graveyard it is exiled, and A's graveyard is empty."
+        },
+        {
+          "label": "countered",
+          "polarity": "does_not_fire",
+          "delta": "In response, B casts Counterspell targeting Staggershock, tapping both Islands.",
+          "expected": "Staggershock is countered and goes to A's graveyard, not exile. B's life stays 20."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Island",
+        "Staggershock",
+        "Counterspell"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.88a-2",
+      "rules": [
+        "702.88a"
+      ],
+      "title": "A rebound card in exile may be cast for free at the next upkeep",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "upkeep",
+        "life": {
+          "A": 20,
+          "B": 18
+        },
+        "battlefield": {
+          "A": [],
+          "B": [
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {
+          "A": [
+            "Staggershock"
+          ]
+        },
+        "notes": "Staggershock was exiled as it resolved from A's hand last turn, so its delayed rebound trigger waits for this upkeep."
+      },
+      "decisions": [
+        "The rebound delayed trigger goes on the stack at the beginning of A's upkeep and resolves.",
+        "A casts Staggershock from exile without paying its mana cost, targeting player B, unless the variant says otherwise.",
+        "Both players pass; Staggershock resolves."
+      ],
+      "variants": [
+        {
+          "label": "cast",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Staggershock resolves: B's life becomes 16. Because it was cast from exile, it goes to A's graveyard and is not exiled again."
+        },
+        {
+          "label": "declined",
+          "polarity": "does_not_fire",
+          "delta": "A chooses not to cast Staggershock.",
+          "expected": "Staggershock stays in exile and is never cast. B's life stays 18."
+        }
+      ],
+      "cards": [
+        "Staggershock",
+        "Grizzly Bears"
+      ],
+      "forge_notes": "Needs the rebound delayed trigger to exist; reach the state by playing the previous turn's cast (702.88a-1) or by creating the delayed trigger explicitly."
+    },
+    {
+      "id": "702.88a-3",
+      "rules": [
+        "702.88a"
+      ],
+      "title": "Rebound applies only to a spell cast from its controller's hand",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Forest"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Bloodbraid Elf"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Staggershock"
+          ]
+        },
+        "exile": {},
+        "notes": "Staggershock is the only card in A's library."
+      },
+      "decisions": [
+        "A casts Bloodbraid Elf, tapping three Mountains and Forest.",
+        "The cascade trigger resolves: Staggershock (mana value 3) is exiled, and A casts it from exile without paying its mana cost, targeting player B.",
+        "Both players pass until the stack is empty."
+      ],
+      "variants": [
+        {
+          "label": "cast_from_exile",
+          "polarity": "does_not_fire",
+          "delta": "",
+          "expected": "Staggershock resolves: B's life becomes 18. It was not cast from hand, so it goes to A's graveyard and is not exiled; no rebound trigger is created. Bloodbraid Elf is on the battlefield."
+        },
+        {
+          "label": "cast_from_hand",
+          "polarity": "fires",
+          "delta": "Staggershock starts in A's hand instead of A's library, and A casts it from hand targeting player B, tapping three Mountains, instead of casting Bloodbraid Elf.",
+          "expected": "Staggershock resolves: B's life becomes 18. It is exiled instead of going to A's graveyard, and A's graveyard is empty."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Forest",
+        "Bloodbraid Elf",
+        "Staggershock"
+      ],
+      "forge_notes": "The top of A's library must be pinned to Staggershock."
+    }
+  ]
+}

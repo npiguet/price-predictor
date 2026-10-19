@@ -1,0 +1,268 @@
+{
+  "unit": "701.8",
+  "verified": true,
+  "review": [],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "701.8a-1",
+      "rules": [
+        "701.8a"
+      ],
+      "title": "A destroyed permanent moves from the battlefield to its owner's graveyard",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Swamp",
+            "Swamp",
+            "Swamp"
+          ],
+          "B": [
+            "Grizzly Bears",
+            "Darksteel Myr"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Murder"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Both libraries are non-empty and irrelevant."
+      },
+      "decisions": [
+        "A casts Murder targeting Grizzly Bears, tapping three Swamps.",
+        "Both players pass; Murder resolves."
+      ],
+      "variants": [
+        {
+          "label": "destroyed",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears is destroyed and moves from the battlefield to B's graveyard."
+        },
+        {
+          "label": "indestructible",
+          "polarity": "does_not_fire",
+          "delta": "Murder targets Darksteel Myr instead of Grizzly Bears.",
+          "expected": "Darksteel Myr is not destroyed and stays on the battlefield; Murder resolved and is in A's graveyard."
+        }
+      ],
+      "cards": [
+        "Swamp",
+        "Grizzly Bears",
+        "Darksteel Myr",
+        "Murder"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "701.8b-1",
+      "rules": [
+        "701.8b"
+      ],
+      "title": "Only a destroy effect or lethal or deathtouch damage destroys a permanent",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Swamp"
+          ],
+          "B": [
+            "Drudge Skeletons",
+            "Swamp"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Shock",
+            "Disfigure",
+            "Diabolic Edict"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Drudge Skeletons is a 1/1 with '{B}: Regenerate'. B's single Swamp pays for one regeneration. Both libraries are non-empty and irrelevant."
+      },
+      "decisions": [
+        "A casts Shock targeting Drudge Skeletons, tapping Mountain.",
+        "In response, B activates Drudge Skeletons' regeneration ability, tapping Swamp; both players pass and it resolves, creating a regeneration shield.",
+        "Both players pass; Shock resolves and the state-based check follows."
+      ],
+      "variants": [
+        {
+          "label": "lethal_damage",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Shock deals 2 damage to the 1/1. The lethal-damage state-based action destroys it, so the regeneration shield replaces the destruction: Drudge Skeletons stays on the battlefield, tapped, with its damage removed."
+        },
+        {
+          "label": "toughness_zero",
+          "polarity": "does_not_fire",
+          "delta": "A casts Disfigure targeting Drudge Skeletons, tapping Swamp, instead of Shock.",
+          "expected": "Drudge Skeletons becomes -1/-1 and is put into B's graveyard by the toughness-0 state-based action. It was not destroyed, so the regeneration shield does not apply."
+        },
+        {
+          "label": "sacrificed",
+          "polarity": "does_not_fire",
+          "delta": "A casts Diabolic Edict targeting B, tapping Mountain and Swamp, instead of Shock.",
+          "expected": "B sacrifices Drudge Skeletons, their only creature, and it moves to B's graveyard. A sacrifice is not a destruction, so the regeneration shield does not apply."
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Swamp",
+        "Drudge Skeletons",
+        "Shock",
+        "Disfigure",
+        "Diabolic Edict"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "701.8c-1",
+      "rules": [
+        "701.8c"
+      ],
+      "title": "A regeneration shield replaces a destroy effect",
+      "record_kind": "rewrite",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Swamp",
+            "Swamp",
+            "Swamp",
+            "Plains",
+            "Plains"
+          ],
+          "B": [
+            "Drudge Skeletons",
+            "Swamp"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Murder",
+            "Wrath of God"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Drudge Skeletons is a 1/1 with '{B}: Regenerate'. Both libraries are non-empty and irrelevant."
+      },
+      "decisions": [
+        "A casts Murder targeting Drudge Skeletons, tapping three Swamps.",
+        "In response, B activates Drudge Skeletons' regeneration ability, tapping Swamp; both players pass and it resolves.",
+        "Both players pass; Murder resolves."
+      ],
+      "variants": [
+        {
+          "label": "regenerated",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The destruction is replaced: Drudge Skeletons is tapped, has its damage removed, and stays on the battlefield. Murder is in A's graveyard."
+        },
+        {
+          "label": "no_shield",
+          "polarity": "does_not_fire",
+          "delta": "B does not activate the regeneration ability.",
+          "expected": "Drudge Skeletons is destroyed and moves to B's graveyard."
+        },
+        {
+          "label": "cannot_regenerate",
+          "polarity": "does_not_fire",
+          "delta": "A casts Wrath of God instead of Murder, tapping two Plains and two Swamps; B still activates the regeneration ability in response.",
+          "expected": "Wrath of God destroys Drudge Skeletons and it can't be regenerated, so the shield is not used: Drudge Skeletons moves to B's graveyard."
+        }
+      ],
+      "cards": [
+        "Swamp",
+        "Plains",
+        "Drudge Skeletons",
+        "Murder",
+        "Wrath of God"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "701.8c-2",
+      "rules": [
+        "701.8c"
+      ],
+      "title": "A regenerated creature is removed from combat",
+      "record_kind": "combat",
+      "setup": {
+        "active": "A",
+        "step": "declare_attackers",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Hill Giant"
+          ],
+          "B": [
+            "Drudge Skeletons",
+            "Swamp"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Hill Giant is not summoning sick. Drudge Skeletons is a 1/1 with '{B}: Regenerate'. B's single Swamp pays for one regeneration. Both libraries are non-empty and irrelevant."
+      },
+      "decisions": [
+        "A attacks B with Hill Giant.",
+        "B declares Drudge Skeletons as a blocker of Hill Giant.",
+        "B activates Drudge Skeletons' regeneration ability, tapping Swamp; both players pass and it resolves.",
+        "Both players pass; combat damage is dealt."
+      ],
+      "variants": [
+        {
+          "label": "regenerated",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Hill Giant deals 3 damage to Drudge Skeletons and Drudge Skeletons deals 1 damage to Hill Giant. The destruction of Drudge Skeletons is replaced: it is tapped, removed from combat and has its damage removed, and stays on the battlefield. Hill Giant has 1 damage marked."
+        },
+        {
+          "label": "no_shield",
+          "polarity": "does_not_fire",
+          "delta": "B does not activate the regeneration ability.",
+          "expected": "Drudge Skeletons is destroyed by the 3 damage and moves to B's graveyard. Hill Giant has 1 damage marked."
+        }
+      ],
+      "cards": [
+        "Hill Giant",
+        "Drudge Skeletons",
+        "Swamp"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

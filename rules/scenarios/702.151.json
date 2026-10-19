@@ -1,0 +1,195 @@
+{
+  "unit": "702.151",
+  "verified": true,
+  "review": [],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "702.151a-1",
+      "rules": [
+        "702.151a"
+      ],
+      "title": "Reconfigure attaches the permanent to another creature you control, at sorcery timing",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Lizard Blades",
+              "summoning_sick": false
+            },
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            },
+            "Mountain",
+            "Mountain"
+          ],
+          "B": [
+            "Hill Giant"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A activates Lizard Blades' reconfigure ({2}) targeting Grizzly Bears, tapping two Mountains.",
+        "Both players pass; the ability resolves."
+      ],
+      "variants": [
+        {
+          "label": "main_phase",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The ability resolves: Lizard Blades is attached to Grizzly Bears, which has double strike. Lizard Blades stops being a creature."
+        },
+        {
+          "label": "opponents_creature",
+          "polarity": "does_not_fire",
+          "delta": "A targets B's Hill Giant instead of Grizzly Bears.",
+          "expected": "The target is not legal (it must be another creature A controls). The ability is not activated and Lizard Blades stays unattached."
+        },
+        {
+          "label": "combat_timing",
+          "polarity": "does_not_fire",
+          "delta": "A tries to activate the reconfigure ability in the beginning of combat step instead of main phase 1.",
+          "expected": "The activation is not legal (sorcery timing only). Lizard Blades stays unattached and the Mountains stay untapped."
+        }
+      ],
+      "cards": [
+        "Lizard Blades",
+        "Grizzly Bears",
+        "Hill Giant",
+        "Mountain"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.151a-2",
+      "rules": [
+        "702.151a"
+      ],
+      "title": "Reconfigure unattaches the permanent only while it is attached",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Lizard Blades",
+              "summoning_sick": false,
+              "attached_to": "Grizzly Bears"
+            },
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            },
+            "Mountain",
+            "Mountain"
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A activates Lizard Blades' second reconfigure ability ({2}, unattach), tapping two Mountains.",
+        "Both players pass; the ability resolves."
+      ],
+      "variants": [
+        {
+          "label": "attached",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Lizard Blades becomes unattached and is a creature again, a 1/1 with double strike. Grizzly Bears loses double strike."
+        },
+        {
+          "label": "not_attached",
+          "polarity": "does_not_fire",
+          "delta": "Lizard Blades is not attached to any creature.",
+          "expected": "The unattach ability cannot be activated (it is attached to nothing). Lizard Blades stays a 1/1 creature and the Mountains stay untapped."
+        }
+      ],
+      "cards": [
+        "Lizard Blades",
+        "Grizzly Bears",
+        "Mountain"
+      ],
+      "forge_notes": ""
+    },
+    {
+      "id": "702.151b-1",
+      "rules": [
+        "702.151b"
+      ],
+      "title": "An Equipment with reconfigure is not a creature while attached to a creature",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Lizard Blades",
+              "summoning_sick": false,
+              "attached_to": "Grizzly Bears"
+            },
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            }
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A tries to declare Lizard Blades and Grizzly Bears as attackers against B."
+      ],
+      "variants": [
+        {
+          "label": "attached",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Lizard Blades is only an Artifact Equipment, not a creature, so it cannot be declared as an attacker. Grizzly Bears (2/2 with double strike) attacks alone."
+        },
+        {
+          "label": "unattached",
+          "polarity": "does_not_fire",
+          "delta": "Lizard Blades is not attached to Grizzly Bears.",
+          "expected": "Lizard Blades is an Artifact Creature Equipment Lizard 1/1 with double strike and can attack alongside Grizzly Bears (2/2 without double strike)."
+        }
+      ],
+      "cards": [
+        "Lizard Blades",
+        "Grizzly Bears"
+      ],
+      "forge_notes": ""
+    }
+  ]
+}

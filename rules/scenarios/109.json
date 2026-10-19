@@ -1,0 +1,104 @@
+{
+  "unit": "109",
+  "verified": true,
+  "review": [
+    "109.4b-1: variant shock-face only toggled whether the dies trigger fires at all (rule 603), not who controls it, so it did not test 109.4b; dropped it and made controlled-by-owner the does_not_fire contrast (the trigger's controller is the owner, so the non-owning controller gets no life); noted that A owns Control Magic.",
+    "109.5-2: the stolen Fountain of Youth only repeated 109.5-1's point ('you' = controller), its controlled-by-owner variant changed controller, activator, lands and timing at once, and fountain-tapped tested cost payment rather than 109.5; rebuilt the scenario on Excavation ('any player may activate') so the activator differs from the controller, with the activator as the single changed fact.",
+    "triage 109.5: added continuous to record_kinds, since 109.5-1 is a continuous scenario."
+  ],
+  "skipped": [],
+  "scenarios": [
+    {
+      "id": "109.4b-1",
+      "rules": ["109.4b"],
+      "title": "A triggered ability is controlled by whoever controlled its source when it triggered",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {"A": 20, "B": 20},
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Highland Game",
+            {"card": "Control Magic", "attached_to": "Highland Game"}
+          ],
+          "B": ["Hill Giant"]
+        },
+        "hand": {"A": ["Shock"]},
+        "graveyard": {}, "library": {}, "exile": {},
+        "notes": "Highland Game (2/1, 'When Highland Game dies, you gain 2 life.') is owned by B and is controlled by A through Control Magic, which A owns. Hill Giant is inert."
+      },
+      "decisions": [
+        "A casts Shock targeting Highland Game, tapping Mountain.",
+        "Both players pass; Shock resolves and deals 2 damage to Highland Game.",
+        "The state-based check destroys Highland Game; its dies trigger goes on the stack under the control of the player who controlled it as it died.",
+        "Both players pass; the trigger resolves."
+      ],
+      "variants": [
+        {"label": "base", "polarity": "fires", "delta": "", "expected": "Highland Game dies and is put into B's graveyard (its owner's). The dies trigger fires and is controlled by A, the controller when it triggered. A gains 2 life (A at 22, B at 20). Control Magic goes to A's graveyard."},
+        {"label": "controlled-by-owner", "polarity": "does_not_fire", "delta": "Control Magic is not on the battlefield; Highland Game is on B's battlefield, controlled by B.", "expected": "Highland Game dies and is put into B's graveyard. The dies trigger fires and is controlled by B. B gains 2 life (B at 22, A at 20)."}
+      ],
+      "cards": ["Mountain", "Highland Game", "Control Magic", "Hill Giant", "Shock"],
+      "forge_notes": "Highland Game uses Defined$ TriggeredCardController, so Forge gives the life to the trigger's controller. Control Magic is a base-state aura that leaves the battlefield with the creature."
+    },
+    {
+      "id": "109.5-1",
+      "rules": ["109.5"],
+      "title": "'You' in a static ability is the current controller of its source",
+      "record_kind": "continuous",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {"A": 20, "B": 20},
+        "battlefield": {
+          "A": [
+            "Benalish Marshal",
+            {"card": "Control Magic", "attached_to": "Benalish Marshal"},
+            "Grizzly Bears"
+          ],
+          "B": ["Grizzly Bears"]
+        },
+        "hand": {}, "graveyard": {}, "library": {}, "exile": {},
+        "notes": "Benalish Marshal (3/3, 'Other creatures you control get +1/+1.') is owned by B and controlled by A through Control Magic. Each player controls one Grizzly Bears (2/2)."
+      },
+      "decisions": ["No action is taken; the board is stable and the continuous effects are read."],
+      "variants": [
+        {"label": "base", "polarity": "fires", "delta": "", "expected": "A's Grizzly Bears is 3/3 and B's Grizzly Bears is 2/2. Benalish Marshal stays 3/3 because it says other creatures."},
+        {"label": "marshal-controlled-by-owner", "polarity": "does_not_fire", "delta": "Control Magic is not on the battlefield; Benalish Marshal is on B's battlefield, controlled by B.", "expected": "A's Grizzly Bears is 2/2 and B's Grizzly Bears is 3/3. Benalish Marshal stays 3/3."}
+      ],
+      "cards": ["Benalish Marshal", "Control Magic", "Grizzly Bears"],
+      "forge_notes": "Both variants are board states; the continuous record reads power and toughness of each permanent."
+    },
+    {
+      "id": "109.5-2",
+      "rules": ["109.5"],
+      "title": "'You' in an activated ability is the player who activated it, not the source's controller",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {"A": 20, "B": 20},
+        "battlefield": {
+          "A": ["Excavation", "Island", "Island"],
+          "B": ["Island", "Island"]
+        },
+        "hand": {}, "graveyard": {},
+        "library": {"A": ["Grizzly Bears"], "B": ["Hill Giant"]},
+        "exile": {},
+        "notes": "Excavation ('{1}, Sacrifice a land: Draw a card. Any player may activate this ability.') is owned and controlled by A. Libraries are listed top first; both hands are empty."
+      },
+      "decisions": [
+        "A passes priority with an empty stack.",
+        "B activates A's Excavation, paying {1} by tapping one of B's Islands and sacrificing B's other Island.",
+        "Both players pass; the ability resolves."
+      ],
+      "variants": [
+        {"label": "base", "polarity": "fires", "delta": "", "expected": "The ability resolves and B, the activator, draws Hill Giant. A's library and hand are unchanged. Excavation stays on the battlefield under A's control. One of B's Islands is in B's graveyard."},
+        {"label": "controller-activates", "polarity": "does_not_fire", "delta": "A activates Excavation instead of passing, tapping one of A's Islands and sacrificing A's other Island; B does not activate it.", "expected": "The ability resolves and A draws Grizzly Bears. B's library and hand are unchanged. One of A's Islands is in A's graveyard."}
+      ],
+      "cards": ["Excavation", "Island", "Grizzly Bears", "Hill Giant"],
+      "forge_notes": "Excavation's ability uses Activator$ Player and Draw's default Defined$ You, so Forge gives the card to the activating player."
+    }
+  ]
+}

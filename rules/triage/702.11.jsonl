@@ -1,0 +1,9 @@
+{"id": "702.11", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.11a", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "702.11b", "category": "legality", "observability": "direct", "record_kinds": ["playability", "resolution"], "outcome": "A permanent with hexproof is not a legal target for spells and abilities its controller's opponents control, both when targets are chosen and when they are rechecked on resolution.", "note": ""}
+{"id": "702.11c", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "A player with hexproof is not a legal target for spells and abilities their opponents control.", "note": ""}
+{"id": "702.11d", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "A permanent with hexproof from a quality is not a legal target for opposing spells with that quality or opposing abilities from sources with it, and stays targetable by everything else.", "note": ""}
+{"id": "702.11e", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "Effects that remove hexproof or let a player ignore it apply to hexproof from a quality too, so the permanent becomes a legal target.", "note": ""}
+{"id": "702.11f", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "Hexproof from two qualities blocks opposing spells and sources of either quality.", "note": ""}
+{"id": "702.11g", "category": "legality", "observability": "direct", "record_kinds": ["playability"], "outcome": "Hexproof from each color blocks every opposing colored spell or source and leaves colorless ones able to target.", "note": ""}
+{"id": "702.11h", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": "Redundancy of instances has no separate outcome."}

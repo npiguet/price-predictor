@@ -1,0 +1,6 @@
+{"id": "701.20", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "701.20a", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": "Concerns information shown to players; no game state changes."}
+{"id": "701.20b", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": "Revealing changes no zone or state."}
+{"id": "701.20c", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
+{"id": "701.20d", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": "Hidden-information bookkeeping; not visible in a record."}
+{"id": "701.20e", "category": "definitional", "observability": "none", "record_kinds": [], "outcome": "", "note": ""}
