@@ -40,6 +40,7 @@ sweeps = run.sibling("sweeps")
 compare = run.sibling("compare")
 board = run.sibling("board")
 common = run.sibling("common")
+combat_grid = run.sibling("combat_grid")
 
 
 @pytest.fixture(scope="module")
@@ -974,3 +975,107 @@ class TestRung3ReadsTheRightOutput:
                                    bootstrap=0)
         assert "3" not in result["rungs"] and result["share"] is None
         assert result["rung3_unavailable"] == ladder.UNTRAINED_VERDICT_NOTE
+
+
+# ── the combat grid ─────────────────────────────────────────────────────
+
+
+def _one_on_one(records):
+    """A fixture combat turned into one attacker blocked by one blocker."""
+    from dataclasses import replace
+
+    from effects.domain.records import RecordKind
+
+    record = next(r for r in records if r.kind is RecordKind.COMBAT
+                  and any(len(b) == 2 for b in r.payload.blocks.values()))
+    attacker, (blocker, dropped) = next(
+        (a, b) for a, b in record.payload.blocks.items() if len(b) == 2)
+    entities = []
+    for entity in record.state.entities:
+        if entity.id == dropped:
+            continue
+        if entity.id == attacker:
+            entity = replace(entity, combat=replace(entity.combat, blocked_by=(blocker,)))
+        entities.append(entity)
+    record = replace(
+        record, fork=False, interventional=False, mirror_of=None,
+        payload=replace(record.payload, blocks={attacker: (blocker,)}, probed_keyword=None),
+        state=replace(record.state, entities=tuple(entities)))
+    return record, attacker, blocker
+
+
+def _keywords(entity):
+    return set(entity.granted_temporary.keywords)
+
+
+class TestCombatGrid:
+    @pytest.mark.parametrize("attacker, blocker, keywords, expected", [
+        ((3, 3, 0), (2, 2, 0), ({}, {}), (False, True)),
+        ((2, 2, 0), (2, 3, 0), ({}, {}), (True, False)),
+        ((2, 2, 0), (1, 3, 1), ({}, {}), (False, True)),
+        ((1, 5, 0), (1, 5, 0), ({"deathtouch"}, {}), (False, True)),
+        ((5, 5, 0), (5, 5, 0), ({}, {"indestructible"}), (True, False)),
+        ((3, 3, 0), (5, 3, 0), ({"first_strike"}, {}), (False, True)),
+        ((2, 3, 0), (5, 3, 0), ({"first_strike"}, {}), (True, False)),
+        ((5, 3, 0), (3, 3, 0), ({}, {"first_strike"}), (True, False)),
+        ((2, 2, 0), (1, 4, 0), ({"double_strike"}, {}), (False, True)),
+    ])
+    def test_the_rule(self, attacker, blocker, keywords, expected):
+        assert combat_grid.combat_deaths(
+            attacker, blocker, frozenset(keywords[0]), frozenset(keywords[1])) == expected
+
+    def test_power_edits_one_entity_only(self, records):
+        record, attacker, _ = _one_on_one(records)
+        edited = combat_grid.set_power(record, attacker, 7)
+        assert edited.state.entity(attacker).pt.total[0] == 7
+        assert (edited.state.entity(attacker).pt.total[1]
+                == record.state.entity(attacker).pt.total[1])
+        assert _differences(record, edited) == {"entities"}
+
+    def test_a_granted_keyword_is_added_once(self, records):
+        record, attacker, _ = _one_on_one(records)
+        once = combat_grid.grant_keyword(record, attacker, "deathtouch")
+        twice = combat_grid.grant_keyword(once, attacker, "deathtouch")
+        assert twice.state.entity(attacker).granted_temporary.keywords.count("deathtouch") == 1
+
+    def test_a_one_on_one_block_qualifies_when_its_outcome_obeys_the_rule(
+        self, records, monkeypatch,
+    ):
+        import effects.domain.effect_targets as effect_targets
+        from effects.domain.effect_model import ZONE_OUTCOMES
+
+        record, attacker, blocker = _one_on_one(records)
+        a, _ = combat_grid.side_of(record, attacker)
+        b, _ = combat_grid.side_of(record, blocker)
+        attacker_dies, blocker_dies = combat_grid.combat_deaths(a, b)
+        died = ZONE_OUTCOMES.index("died")
+        outcome = {e: SimpleNamespace(fields={"zone_outcome": died} if dies else {})
+                   for e, dies in ((attacker, attacker_dies), (blocker, blocker_dies))}
+        monkeypatch.setattr(effect_targets, "derive_targets", lambda r: outcome)
+        assert combat_grid.single_block(record, _keywords) == (attacker, blocker)
+        outcome[blocker] = SimpleNamespace(
+            fields={} if blocker_dies else {"zone_outcome": died})
+        assert combat_grid.single_block(record, _keywords) is None
+
+    def test_a_probe_fork_or_two_blockers_never_qualify(self, records):
+        from effects.domain.records import RecordKind
+
+        for record in records:
+            if record.kind is RecordKind.COMBAT and (
+                    record.fork or any(len(b) > 1 for b in record.payload.blocks.values())):
+                assert combat_grid.single_block(record, _keywords) is None
+
+    def test_grid_rules_follow_the_keyword(self, records):
+        record, attacker, blocker = _one_on_one(records)
+        rows, rule = combat_grid.grid_records(record, attacker, blocker, "blocker", "none")
+        assert len(rows) == 8 and all(len(row) == 8 for row in rows)
+        assert np.array_equal(rule, np.array([[float(p >= t) for t in range(1, 9)]
+                                              for p in range(1, 9)]))
+        assert rows[2][5].state.entity(attacker).pt.total[0] == 3
+        assert rows[2][5].state.entity(blocker).pt.total[1] == 6
+        _, rule = combat_grid.grid_records(
+            record, attacker, blocker, "blocker", "attacker-deathtouch")
+        assert rule.min() == 1.0
+        _, rule = combat_grid.grid_records(
+            record, attacker, blocker, "blocker", "blocker-indestructible")
+        assert rule.max() == 0.0
