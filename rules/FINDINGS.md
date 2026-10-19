@@ -107,9 +107,11 @@ when a draw step lies between the setup and the outcome, mana available for each
 
 ## 5. Limits of the scenarios as written
 
-- **Decisions are prose.** `decisions` and `delta` are English sentences, so playing a scenario in
-  Forge needs them turned into structured actions first: cast, activate, target, pay, attack,
-  block, assign, pass.
+- **Deltas and decisions are prose.** A directed fork needs each `delta` classified into a fork
+  operation: change power or toughness, add or remove a keyword, change a colour or type, add or
+  remove counters, tap or untap, change life, replace a card. Only a puzzle-style setup, the last
+  resort, needs the `decisions` turned into structured actions (cast, activate, target, pay,
+  attack, block, assign, pass), since mined and forked records take their decisions from the game.
 - **Part of the setup lives in `notes`.** Counters, damage and attachments have fields; designations,
   history and anything unusual are in free text.
 - **Tokens are not in `cards`.** The validator checks names against `cardsfolder` only, so a token

@@ -50,9 +50,16 @@ hold a third of all rules. Rule ids follow the document: `704.5f`, `702.2b`, `10
    against the Forge scripts of the cards it uses. It fixes what is wrong, then logs its changes and
    sets `verified`.
 
-Later phases, not yet started: playing the scenarios in Forge (as puzzle states or interventional
-forks), per-rule detectors that count coverage in the self-play corpus, and splitting the scenarios
-into a training set and a frozen evaluation set.
+Later phases, not yet started, in order of preference for finding each rule's situations:
+
+1. per-rule detectors that find each scenario's pattern, and its near miss, in the self-play corpus
+   and count them;
+2. directed forks that wait for a live board meeting a scenario's base setup and apply one
+   variant's one-fact change, which needs each variant's `delta` classified into a fork operation;
+3. puzzle-style starting states, only for rules neither reaches, which needs the `decisions` turned
+   into structured actions.
+
+Rule tests are then drawn from games kept out of training.
 
 ## Triage schema (`triage/<unit>.jsonl`)
 

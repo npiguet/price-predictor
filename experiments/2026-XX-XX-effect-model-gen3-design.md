@@ -236,21 +236,27 @@ to impossible.**
 A detector is also a coverage counter, so the same code would put per-rule counts in the corpus
 manifest.
 
-**Illustrating a rule needs situations built on purpose, not found in self-play.** Coverage rounds
-target cards, and a rare interaction between rules may never occur in a sealed game. Two sources
-could build them:
+**Illustrating a rule draws on three sources, in order of preference.** A situation found in a
+real game comes with real decks and real decisions around it. A situation built on purpose comes
+with whatever the builder chose.
 
-- **Interventional forks.** They already force an ability onto the stack in a copied game. A
-  rule-driven fork would set up the board the rule needs first.
-- **Forge's puzzle files.** Forge ships 372 puzzles under `forge-gui/res/puzzle/`, each a starting
-  game state: life totals, the active player and phase, and every zone's cards with their links.
-  Written for a rule, such a state is a unit test the collector could play. Whether a collecting
-  worker can load one has not been checked.
+1. **The collected corpus.** The detector that counts a rule also finds the records that
+   illustrate it, with the rule's effect happening and with a close case in which it does not.
+2. **Directed forks of live games.** Coverage rounds target cards, and a rare interaction between
+   rules may never occur in a sealed game by itself. Gen-2's forks already change a live game: an
+   interventional resolution forces an ability onto the stack, and a damage-step probe strips one
+   keyword from one creature. Directed by rule, a fork would wait for a board that meets the rule's
+   precondition and change the one fact that flips its outcome. The real record and the forked one
+   are then a minimal pair.
+3. **Puzzle-style starting states, as a last resort.** Forge ships 372 puzzles under
+   `forge-gui/res/puzzle/`, each a starting game state: life totals, the active player and phase,
+   and every zone's cards with their links. Written for a rule, such a state is a unit test the
+   collector could play. It serves only a rule that neither the corpus nor a directed fork reaches.
 
 **The rule tests that judge the model must stay out of its training.** If the same situations both
-balance the corpus and measure the model, they stop measuring generalization. A frozen,
-hand-checked set of rule scenarios would join the knowledge probes as an evaluation. Collection
-targeted at a rule would feed training separately.
+balance the corpus and measure the model, they stop measuring generalization. A frozen set of
+rule tests, drawn from games kept out of training, would join the knowledge probes as an
+evaluation. Collection targeted at a rule would feed training separately.
 
 **Rules could also be the pools of the adaptive sampling above.** A per-rule detector gives each
 record the rules it exercises, which is the same index that sampling by field needs. The two items
@@ -482,7 +488,7 @@ The combat grid measures the result on blocks from the validation strata, which 
 
 ## Part 2: the steps taken
 
-### Step 1, the rules catalogue: every rule is triaged, and every mechanical rule has a scenario that Forge has not yet played
+### Step 1, the rules catalogue: every rule is triaged, and every mechanical rule has a scenario not yet checked against Forge
 
 **The rules catalogue is the part of the rules index built so far.** It covers the first and third
 items of the plan in part 1: whether a record can show each rule, and which game situations
@@ -598,10 +604,11 @@ it does not.** Resolution and playability records carry more than half of the sc
 rampage on one creature and mana produced as a Phyrexian symbol are examples. The rest need a
 command zone or a sideboard, or have no observable difference between their cases.
 
-#### No scenario has run in Forge yet, and about 75 point at a suspected Forge departure from the rules
+#### No scenario has been checked against Forge yet, and about 75 point at a suspected Forge departure from the rules
 
 **Every expected outcome is a reading of the rules text and of the cards' Forge scripts.** Until
-Forge plays the scenarios, some of those outcomes are wrong at a rate not yet measured.
+they are compared with what Forge does in the same situation, some of them are wrong at a rate not
+yet measured.
 
 **Many scenarios depend on how Forge implements the situation.** 762 scenarios carry a note about
 it. Most of these notes flag engine behaviour that reading the scripts could not settle, or
@@ -612,37 +619,63 @@ first.
 
 ### Steps still to take, as the catalogue sets them
 
-#### The scenarios become labels and tests only once Forge plays them
+#### Each scenario specifies its rule's detector, and the detectors run over gen-2's corpus first
 
-**Every scenario has to run in Forge before it labels training data or judges a model.** Playing
-each variant checks the scenario's construction and its expected outcome at once, which no
-reading of the rules text and scripts can do.
+**A scenario already states what its rule's detector looks for.** It gives the record kind and the
+observable outcome. Its contrasting variant gives the near miss the detector must reject. The 729
+indirect rules each need a detector, and the 708 direct rules need little more than a field filter.
 
-**The decisions have to become structured actions first.** A scenario's decisions and each
-variant's change are English sentences. A conversion pass would write each one as an action list:
-cast, activate, target, pay, attack, block, assign damage, pass. It would also move the setup state
-now kept in free-text notes into fields. A language model can do the conversion, with a validator
-checking each list against the board.
+**Running the detectors over gen-2's corpus comes before any gen-3 collection.** The counts show
+which rules self-play already illustrates, with a record in which the rule's effect happens and one
+in which it does not. They also show which rules self-play reaches only on one side, and which it
+never reaches. Directed forks have to fill the last two groups. The order in which to fill them can
+follow how often each rule's mechanic appears in the sets collection draws from.
 
-**Forge's puzzle files are the first candidate for the starting state.** Part 1 names them; whether
-a collecting worker can load one is still unchecked. A spike on a dozen scenarios from 704, 608 and
-510 would settle it. It would also show which of the unusual setups the format cannot express,
-before the whole catalogue is converted.
+**Rules could also be the pools of the adaptive sampling in part 1.** A per-rule detector gives
+each record the rules it exercises, which is the same index that sampling by field needs. The two
+items would share the decision between pools, an index and a database.
 
-**A scenario whose Forge outcome differs from its expected outcome is either wrong or has found a
-Forge departure from the rules.** A
-confirmed Forge departure is recorded on the scenario. That scenario then stays out of the rule
-tests until Forge is patched on the hooks branch or the departure is accepted. Where Forge plays
-a scenario as expected, Forge's outcome and the rule's outcome are the same. The question the
-combat-copies section leaves open, rule or Forge outcome as the label, therefore matters only for
-the scenarios that disagree.
+#### The scenarios become search patterns and fork instructions, and puzzles are kept for what neither reaches
 
-**The scenarios Forge confirms become the frozen, hand-checked rule tests, and stay out of
-training.** They join the control score, split into a selection half and a reporting half as the
-stopping section describes. Collection aimed at a rule builds its own boards from the scenario's
-pattern with other cards, through interventional forks that set up the board first. The scenarios
-lean on a few vanilla cards, with Grizzly Bears in about half of them. Training boards with other
-cards also keep the model from learning a rule only for Grizzly Bears.
+**Each scenario says what to look for in a game and which single fact to change.** The base variant
+is the situation a detector searches for, in the corpus or on a live board during collection. Each
+other variant's change is the perturbation a directed fork applies to that board. The real record
+and the forked one then form a minimal pair taken from a real game, with real decks around it. The
+decisions are the ones the game made, so they need no conversion.
+
+**The variants' changes have to become fork operations.** Each change is an English sentence. A
+pass would classify every change into a small set of operations: change a creature's power or
+toughness, add or remove a keyword, change a colour or type, add or remove counters, tap or untap a
+permanent, change a life total, or replace one card with another. The counts per operation show
+which few operations reach the most rules, and so which to build first. Gen-2's damage-step probe
+is already one of them: it strips one keyword from one creature through the layer system.
+
+**A directed fork needs a trigger on the live board as well as an operation.** The collector runs
+the rule's detector on the board at each phase boundary, the moment interventional forks already
+use. When the board meets the rule's precondition, it forks, applies the operation and plays the
+fork on. The budgets gen-2 puts on forks still apply: a score check against the live game before
+any change, and a cap on forks per real resolution.
+
+**Puzzle-style starting states are the last resort.** They serve only the rules whose preconditions
+never arise in a sealed game, even under directed forks. Forge ships 372 puzzles under
+`forge-gui/res/puzzle/`, and whether a collecting worker can load one is still unchecked. A puzzle
+needs the scenario's decisions written as an action list as well: cast, activate, target, pay,
+attack, block, assign damage, pass. Converting scenarios to puzzles waits until the detectors and
+directed forks show how many rules are left.
+
+**A record whose outcome differs from its scenario's expected outcome is either a wrong scenario or
+a Forge departure from the rules.** A confirmed Forge departure is recorded on the scenario. The
+rule's records then stay out of the rule tests until Forge is patched on the hooks branch or the
+departure is accepted. Where Forge plays a situation as expected, Forge's outcome and the rule's
+outcome are the same. The question the combat-copies section leaves open, rule or Forge outcome as
+the label, therefore matters only for the rules that disagree.
+
+**The rule tests that judge the model come from games outside training.** If the same situations
+both balance the corpus and measure the model, they stop measuring generalization. A rule's test
+records are taken from games placed in the validation strata, as the knowledge probes are, and
+split into a selection half and a reporting half as the stopping section describes. Records found
+in real games carry the cards those games used. The catalogue's scenarios lean on Grizzly Bears in
+about half of them, so a test built from them would test the rule for Grizzly Bears only.
 
 #### A global designation block and a few per-card fields would record more than half of the rules gen-2 cannot see
 
@@ -666,21 +699,6 @@ The `continuous` record already shows the result of every layer, and the 613 sce
 rather than order. A model that predicts those results has learned what the order decides, so rule
 613 needs no new field and no detector. Subgames, the Karn Liberated restart and control of another
 player are rare enough to leave out.
-
-#### Each scenario specifies its rule's detector, and the detectors run over gen-2's corpus first
-
-**A scenario already states what its rule's detector looks for.** It gives the record kind and the
-observable outcome. Its contrasting variant gives the near miss the detector must reject. The 729
-indirect rules each need a detector, and the 708 direct rules need little more than a field filter.
-
-**Running the detectors over gen-2's corpus comes before any gen-3 collection.** The counts show
-which rules self-play already covers and which it never reaches. Targeted collection for per-rule
-rebalancing has to fill the rules it never reaches. The order in which to fill them can follow how
-often each rule's mechanic appears in the sets collection draws from.
-
-**Rules could also be the pools of the adaptive sampling in part 1.** A per-rule detector gives
-each record the rules it exercises, which is the same index that sampling by field needs. The two
-items would share the decision between pools, an index and a database.
 
 ## Part 3: outcome
 
