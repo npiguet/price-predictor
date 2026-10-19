@@ -356,7 +356,7 @@ The acting-player bits stay. Every row but the owner rows is an input-layout cha
 
 ## A combat record's snapshot should be taken before the damage step deals any damage
 
-**A combat record's snapshot already shows the damage of the first creature or player hit.** `BusBracketCollector.openCombatBracket` takes the snapshot when the step's first damage event arrives, from `onCardDamaged` or `onPlayerDamaged`. By then Forge has marked that first damage, so the creature it hit shows it as marked damage, and a player hit first shows the lower life total. In 21 of 40 one-on-one blocks drawn from gen-2's validation strata, the blocker's marked damage equals the attacker's power. The attacker never shows damage in those records.
+**A combat record's snapshot already shows the damage of the first creature or player hit.** `BusBracketCollector.openCombatBracket` takes the snapshot when the step's first damage event arrives, from `onCardDamaged` or `onPlayerDamaged`. By then Forge has marked that first damage, so the creature it hit shows it as marked damage, and a player hit first shows the lower life total. In 26 of the 40 one-on-one blocks gen-2's combat grid reads from the validation strata, the blocker's marked damage equals the attacker's power. The attacker never shows damage in those records.
 
 **The model can read part of the answer off the board.** Gen-2's input gives each card a thermometer of toughness minus marked damage, so a blocker the attacker already damaged shows whether that damage is lethal. A combat record then asks about a board on which half the step has happened, and how much of the outcome leaks depends on which damage Forge dealt first.
 

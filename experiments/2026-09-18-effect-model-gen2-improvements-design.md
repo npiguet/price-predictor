@@ -2376,3 +2376,86 @@ The two pairs disagree on the loss. Run B's card-disjoint loss was lowest at its
 | run B, best | 3.506 | 3.634 |
 | run A, last epoch's probe-set grid error | 0.234 | 0.210 |
 | run B, last epoch's probe-set grid error | 0.165 | 0.157 |
+
+##### Combat grids (2026-10-19): a block's deaths follow power against toughness as softly as a spell's, deathtouch and indestructible change them, and first strike does not
+
+The combat grid is the damage grid's counterpart for a block. It asks whether the model applies the same rule to combat damage that it applies to a damage spell, and whether the damage-step keywords change the outcome the way the rules say. Every gen-2 checkpoint gives the same answer in direction. A creature dealt damage at least its toughness is predicted to die more often than one dealt less, with a boundary as soft as the damage grid's. Indestructible removes the death on every checkpoint, and deathtouch adds most of it on most checkpoints. A first striker is predicted to die as often as a creature without the keyword.
+
+Each grid edits two numbers on 40 real blocks and reads one creature's predicted death. The blocker's grid sets the attacker's power and the blocker's toughness from 1 to 8; the attacker's grid sets the blocker's power and the attacker's toughness. A block qualifies when it is the only block in its combat and a single creature makes it, neither creature has a damage-step keyword, and the real outcome obeys the rule. The 40 blocks come from the card-disjoint and game-disjoint strata, one per game, the same blocks for every checkpoint. The grid reads only single blocks because a card slot says that a creature is blocking, but not which attacker it blocks. The gen-3 draft gives the model that pairing. The script is `scripts/effect_knowledge_probes/combat_grid.py`.
+
+A combat record's snapshot already shows part of the damage it is meant to predict. The collector takes the snapshot at the step's first damage event, so the creature damaged first is recorded with that damage marked on it. In 26 of the 40 blocks, the blocker is marked with exactly the attacker's power, and the attacker is never marked. The grid clears both creatures' marked damage before editing, and a block carrying any other marked damage does not qualify. The gen-3 draft moves the snapshot to the start of the damage step.
+
+A combat record covers one damage step, and the model predicts that step alone. A first striker is therefore read in the first-strike step: the grid sets the record's step marker to that step. There the first striker deals its damage, and the creature it fights deals none. A double striker's second hit is read in the regular step, with the blocker already marked with the first hit. Keywords are granted through the until-end-of-turn channel.
+
+The plain grids place the boundary at the rule's position, but blurred across two to three points of toughness. The gap between a hit lethal by one point and one short by a point is about three tenths in the arms and about four tenths on most continuation checkpoints. The attacker's death sits further from the rule than the blocker's on every checkpoint, by a thousandth on one. The snapshot is the likely reason. In training, a blocker's lethal damage is often already marked on the board, and an attacker's never is, and a creature whose marked damage reaches its toughness is predicted to die nine times in ten or more, as the double-strike grid below shows. No checkpoint approaches the rule.
+
+| checkpoint | blocker's death: error against the rule | blocker's death: lethal by 1 minus short by 1 | attacker's death: error against the rule | attacker's death: lethal by 1 minus short by 1 |
+|---|---:|---:|---:|---:|
+| arm `e64`, earlier inputs, epoch 15 | 0.264 | 0.23 | 0.302 | 0.22 |
+| arm `e64`, epoch 25 | 0.249 | 0.30 | 0.286 | 0.33 |
+| arm `e128`, epoch 22 | 0.215 | 0.32 | 0.270 | 0.34 |
+| arm `e64-lethality`, epoch 28 | 0.252 | 0.30 | 0.319 | 0.27 |
+| arm `e128-lethality`, epoch 22 | 0.221 | 0.34 | 0.261 | 0.32 |
+| run A, best, epoch 42 | 0.187 | 0.41 | 0.256 | 0.39 |
+| run A, last, epoch 53 | 0.186 | 0.40 | 0.261 | 0.35 |
+| run B, best, epoch 43 | 0.202 | 0.39 | 0.258 | 0.41 |
+| run B, last, epoch 62 | 0.204 | 0.39 | 0.237 | 0.44 |
+| run A128, best, epoch 30 | 0.278 | 0.29 | 0.279 | 0.36 |
+| run A128, last, epoch 47 | 0.225 | 0.37 | 0.237 | 0.41 |
+| run B128, best, epoch 37 | 0.222 | 0.37 | 0.266 | 0.38 |
+| run B128, last, epoch 50 | 0.232 | 0.39 | 0.264 | 0.41 |
+
+Run B's last epoch shows the shape every checkpoint shares, here for the blocker's death:
+
+| attacker power \ blocker toughness | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| 1 | 0.83 | 0.45 | 0.16 | 0.07 | 0.05 | 0.02 | 0.01 | 0.00 |
+| 2 | 0.86 | 0.73 | 0.34 | 0.13 | 0.07 | 0.04 | 0.01 | 0.00 |
+| 3 | 0.89 | 0.81 | 0.63 | 0.26 | 0.10 | 0.06 | 0.01 | 0.00 |
+| 4 | 0.90 | 0.87 | 0.79 | 0.46 | 0.20 | 0.10 | 0.04 | 0.01 |
+| 5 | 0.90 | 0.88 | 0.86 | 0.67 | 0.36 | 0.16 | 0.07 | 0.02 |
+| 6 | 0.90 | 0.89 | 0.88 | 0.78 | 0.52 | 0.26 | 0.11 | 0.04 |
+| 7 | 0.89 | 0.88 | 0.87 | 0.83 | 0.67 | 0.42 | 0.19 | 0.07 |
+| 8 | 0.88 | 0.87 | 0.86 | 0.84 | 0.76 | 0.55 | 0.28 | 0.12 |
+
+Indestructible, deathtouch and damage already marked change the blocker's death in the rule's direction on every checkpoint. The table averages the blocker's predicted death over the cells each change affects. Lethal cells are those where the attacker's power reaches the blocker's toughness; the rule says an indestructible blocker survives them all. Non-lethal cells are the rest; the rule says a deathtouch attacker kills on all of them. The cells a second hit makes lethal are those the attacker's power falls short on and twice its power reaches; marked with the first hit, the blocker dies on all of them.
+
+- Indestructible is learned outright: no checkpoint predicts an indestructible blocker's death more than 7% of the time on lethal cells.
+- Deathtouch moves the non-lethal cells most of the way towards a death, by different amounts on different checkpoints. On every checkpoint the deathtouch death fades at the blocker's highest toughness.
+- The second hit is read from the damage marked on the blocker. The last epochs of runs A and B read it best, predicting the death on most of the cells it reaches. Where the marked damage alone already reaches the toughness, every checkpoint predicts the death 90% of the time or more.
+
+| checkpoint | lethal cells, plain | lethal cells, blocker indestructible | non-lethal cells, plain | non-lethal cells, attacker deathtouch | cells a second hit makes lethal, plain | the same cells, second hit |
+|---|---:|---:|---:|---:|---:|---:|
+| arm `e64`, earlier inputs, epoch 15 | 0.66 | 0.04 | 0.16 | 0.78 | 0.23 | 0.50 |
+| arm `e64`, epoch 25 | 0.64 | 0.00 | 0.10 | 0.78 | 0.15 | 0.24 |
+| arm `e128`, epoch 22 | 0.73 | 0.02 | 0.14 | 0.90 | 0.20 | 0.49 |
+| arm `e64-lethality`, epoch 28 | 0.60 | 0.01 | 0.07 | 0.53 | 0.09 | 0.37 |
+| arm `e128-lethality`, epoch 22 | 0.68 | 0.02 | 0.09 | 0.68 | 0.13 | 0.30 |
+| run A, best, epoch 42 | 0.78 | 0.01 | 0.14 | 0.73 | 0.21 | 0.46 |
+| run A, last, epoch 53 | 0.77 | 0.01 | 0.13 | 0.95 | 0.17 | 0.86 |
+| run B, best, epoch 43 | 0.73 | 0.00 | 0.11 | 0.80 | 0.17 | 0.56 |
+| run B, last, epoch 62 | 0.71 | 0.00 | 0.09 | 0.80 | 0.14 | 0.72 |
+| run A128, best, epoch 30 | 0.61 | 0.07 | 0.13 | 0.82 | 0.18 | 0.70 |
+| run A128, last, epoch 47 | 0.66 | 0.00 | 0.07 | 0.62 | 0.11 | 0.55 |
+| run B128, best, epoch 37 | 0.67 | 0.00 | 0.09 | 0.76 | 0.13 | 0.49 |
+| run B128, last, epoch 50 | 0.66 | 0.01 | 0.09 | 0.79 | 0.13 | 0.58 |
+
+First strike leaves the predicted death of the creature that carries it where it was without the keyword. In the first-strike step the rule says a first striker cannot die, since the creature it fights deals no damage there. Every checkpoint on the corrected inputs predicts its death on lethal cells at most a tenth below the plain grid's value, for the attacker and for the blocker alike. Double strike reads the same in that step. The first run of arm `e64`, on the earlier inputs, lowers both creatures' deaths in the first-strike step, the one the rule kills included. It reads the step as fewer deaths overall rather than as one creature striking alone.
+
+| checkpoint | attacker's death, plain | attacker's death, attacker first strike | blocker's death, plain | blocker's death, blocker first strike |
+|---|---:|---:|---:|---:|
+| arm `e64`, earlier inputs, epoch 15 | 0.52 | 0.27 | 0.66 | 0.30 |
+| arm `e64`, epoch 25 | 0.51 | 0.50 | 0.64 | 0.62 |
+| arm `e128`, epoch 22 | 0.54 | 0.55 | 0.73 | 0.72 |
+| arm `e64-lethality`, epoch 28 | 0.45 | 0.39 | 0.60 | 0.56 |
+| arm `e128-lethality`, epoch 22 | 0.56 | 0.52 | 0.68 | 0.66 |
+| run A, best, epoch 42 | 0.60 | 0.50 | 0.78 | 0.74 |
+| run A, last, epoch 53 | 0.55 | 0.51 | 0.77 | 0.73 |
+| run B, best, epoch 43 | 0.57 | 0.51 | 0.73 | 0.73 |
+| run B, last, epoch 62 | 0.60 | 0.55 | 0.71 | 0.72 |
+| run A128, best, epoch 30 | 0.54 | 0.51 | 0.61 | 0.63 |
+| run A128, last, epoch 47 | 0.59 | 0.53 | 0.66 | 0.67 |
+| run B128, best, epoch 37 | 0.55 | 0.50 | 0.67 | 0.68 |
+| run B128, last, epoch 50 | 0.55 | 0.52 | 0.66 | 0.66 |
+
+The training corpus has no real first-strike step in which a blocked first striker fights. The first-strike repair dropped every such record, because the collector had lost their creature damage and deaths. The probe forks are the only blocked first-strike fights left, and the grids show they do not teach the step. Gen-3 collects the first-strike step whole.
