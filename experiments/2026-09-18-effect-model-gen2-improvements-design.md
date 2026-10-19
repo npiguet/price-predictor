@@ -2262,3 +2262,117 @@ Gate 3 passes at both checkpoints, with the lowest mean pairwise cosine of any c
 | arm `e128-lethality`, epoch 22 | 0.356 | 22.1% | 9.26 of 128 |
 | run A128, epoch 30 | 0.287 | 20.7% | 9.92 of 128 |
 | run A128, epoch 47 | 0.300 | 18.0% | 11.09 of 128 |
+
+##### Run B128 (2026-10-19): a tenth of the learning rate pulls a misplaced boundary back in one epoch and then holds and sharpens it
+
+Run B128 continues run A128 from its best epoch, 30, at a tenth of the learning rate for twenty epochs, as run B did for run A. Epoch 30 is the checkpoint whose boundary sat furthest toward a death. Every log, both probe reports and the 20 checkpoints are in `models/effects/runs/2026-10-gen2-e128-lethality-lr0.1/`, and the last epoch's probe reports in `models/effects/runs/2026-10-gen2-e128-lethality-lr0.1-last/`.
+
+The card-disjoint loss improves for seven epochs and then stays level, at about two tenths below run A128's over the same epochs. Epoch 37's is the lowest of any 128-wide checkpoint. Run B was lowest at its first epoch and drifted up after it; run B128 does not drift. The 64-wide line keeps the lowest loss of the sweep.
+
+| epochs, averaged | run A128, card-disjoint | run B128, card-disjoint | run A128, game-disjoint | run B128, game-disjoint | run A128, training | run B128, training |
+|---|---:|---:|---:|---:|---:|---:|
+| 31–35 | 3.909 | 3.713 | 3.021 | 2.885 | 3.466 | 3.290 |
+| 36–40 | 3.827 | 3.671 | 2.925 | 2.857 | 3.322 | 3.150 |
+| 41–45 | 3.906 | 3.695 | 2.942 | 2.858 | 3.231 | 3.111 |
+| 46–50 | | 3.702 | | 2.851 | | 3.061 |
+
+| arm | best epoch | card-disjoint loss |
+|---|---:|---:|
+| run A128 | 30 | 3.708 |
+| run B128 | 37 | 3.634 |
+| run B | 43 | 3.506 |
+
+On the training records, the first epoch at the lower rate moves the boundary most of the way back from where epoch 30 left it, and the epochs after it hold the position and sharpen it. At epoch 30 a hit short by one point was predicted to kill three times in four. One epoch later it is half the time, and by the last epochs about one time in three. The gap across the boundary widens from under half to above six tenths, and the error against the rule falls across the run, below every epoch of run A128 from epoch 37 on. The position moves within a much narrower band than run A128's.
+
+| run B128, training records | error against the rule | lethal by 1 | exactly lethal | short by 1 | lethal by 1 minus short by 1 |
+|---|---:|---:|---:|---:|---:|
+| epoch 31 | 0.124 | 0.95 | 0.81 | 0.49 | 0.46 |
+| epoch 32 | 0.123 | 0.95 | 0.81 | 0.50 | 0.45 |
+| epoch 33 | 0.124 | 0.94 | 0.79 | 0.47 | 0.47 |
+| epoch 34 | 0.125 | 0.96 | 0.85 | 0.55 | 0.42 |
+| epoch 35 | 0.124 | 0.96 | 0.83 | 0.52 | 0.44 |
+| epoch 36 | 0.116 | 0.94 | 0.77 | 0.44 | 0.50 |
+| epoch 37 | 0.110 | 0.95 | 0.81 | 0.46 | 0.49 |
+| epoch 38 | 0.104 | 0.95 | 0.79 | 0.42 | 0.53 |
+| epoch 39 | 0.108 | 0.94 | 0.77 | 0.42 | 0.53 |
+| epoch 40 | 0.105 | 0.95 | 0.77 | 0.41 | 0.54 |
+| epoch 41 | 0.103 | 0.95 | 0.77 | 0.40 | 0.54 |
+| epoch 42 | 0.109 | 0.97 | 0.85 | 0.50 | 0.48 |
+| epoch 43 | 0.102 | 0.95 | 0.76 | 0.38 | 0.57 |
+| epoch 44 | 0.102 | 0.96 | 0.80 | 0.43 | 0.53 |
+| epoch 45 | 0.103 | 0.90 | 0.65 | 0.28 | 0.62 |
+| epoch 46 | 0.096 | 0.95 | 0.76 | 0.35 | 0.60 |
+| epoch 47 | 0.096 | 0.94 | 0.74 | 0.34 | 0.60 |
+| epoch 48 | 0.097 | 0.96 | 0.80 | 0.39 | 0.56 |
+| epoch 49 | 0.094 | 0.93 | 0.71 | 0.30 | 0.63 |
+| epoch 50 | 0.096 | 0.93 | 0.73 | 0.33 | 0.61 |
+
+| training records, across a run's epochs | error against the rule | exactly lethal | short by 1 |
+|---|---:|---:|---:|
+| run A128, epochs 28–47 | 0.113–0.178 | 0.43–0.93 | 0.17–0.74 |
+| run B128, epochs 31–50 | 0.094–0.125 | 0.65–0.85 | 0.28–0.55 |
+
+The probe set's grids agree. Both of run B128's checkpoints land near the rule, and its last epoch has the lowest error against the rule of any grid, just below run B's last.
+
+| probe-set grid | error against the rule | lethal by 1 | exactly lethal | short by 1 | lethal by 1 minus short by 1 |
+|---|---:|---:|---:|---:|---:|
+| run A128, epoch 30 | 0.245 | 0.85 | 0.84 | 0.75 | 0.10 |
+| run A128, epoch 47 | 0.210 | 0.63 | 0.40 | 0.13 | 0.50 |
+| run B128, epoch 37 | 0.165 | 0.82 | 0.75 | 0.40 | 0.42 |
+| run B128, epoch 50 | 0.157 | 0.82 | 0.68 | 0.28 | 0.54 |
+| run B, epoch 62 | 0.165 | 0.78 | 0.67 | 0.31 | 0.47 |
+
+Run B128, epoch 50:
+
+| damage \ toughness | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| 1 | 0.80 | 0.36 | 0.07 | 0.05 | 0.03 | 0.01 | 0.00 | 0.00 |
+| 2 | 0.79 | 0.71 | 0.26 | 0.11 | 0.04 | 0.01 | 0.00 | 0.00 |
+| 3 | 0.74 | 0.75 | 0.59 | 0.20 | 0.06 | 0.01 | 0.00 | 0.00 |
+| 4 | 0.76 | 0.78 | 0.80 | 0.57 | 0.20 | 0.05 | 0.01 | 0.00 |
+| 5 | 0.78 | 0.80 | 0.83 | 0.83 | 0.59 | 0.24 | 0.05 | 0.01 |
+| 6 | 0.81 | 0.82 | 0.83 | 0.85 | 0.83 | 0.62 | 0.30 | 0.08 |
+| 7 | 0.82 | 0.83 | 0.84 | 0.86 | 0.87 | 0.87 | 0.73 | 0.42 |
+| 8 | 0.83 | 0.83 | 0.84 | 0.86 | 0.87 | 0.88 | 0.90 | 0.83 |
+
+The zone outcome, keywords gained and `pt_duration` improve over run A128's best, and three small fields fall back. Poison falls to no better than a constant prediction by the last epoch, types gained falls below arm `e128-lethality`'s level, and blocking legality loses part of it.
+
+| field, card-disjoint, share of the floor removed | run A128, epoch 30 | run B128, epoch 37 | run B128, epoch 50 |
+|---|---:|---:|---:|
+| zone outcome | 82% | 86% | 85% |
+| keywords gained | 73% | 77% | 79% |
+| `pt_duration` | 81% | 84% | 84% |
+| toughness change | 76% | 77% | 76% |
+| blocking legality | 64% | 53% | 61% |
+| types gained | 83% | 56% | 59% |
+| poison | 41% | 15% | −2% |
+
+Gate 3 passes at both checkpoints. Gate 2 routes double strike to a stage-three probe at both, below half at the last epoch.
+
+| gate 2 keyword | run A128, epoch 30 | run B128, epoch 37 | run B128, epoch 50 |
+|---|---:|---:|---:|
+| first strike | 75.0% | 84.1% | 76.9% |
+| double strike | 79.6% | 57.5% | 48.3% |
+| deathtouch | 84.5% | 79.5% | 79.1% |
+| infect | 76.7% | 77.4% | 78.9% |
+| trample | 90.5% | 91.0% | 91.5% |
+
+| cache | mean pairwise cosine | top component share | participation ratio |
+|---|---:|---:|---:|
+| run A128, epoch 30 | 0.287 | 20.7% | 9.92 of 128 |
+| run B128, epoch 37 | 0.366 | 20.9% | 9.79 of 128 |
+| run B128, epoch 50 | 0.376 | 22.4% | 9.06 of 128 |
+
+##### Across both widths, a tenth of the learning rate is what places the boundary, and further training at the full rate is not
+
+The two pairs of continuations agree on the boundary. At the full rate, twenty more epochs sharpen it on most epochs but move its position from one epoch to the next by as much as a point of damage, and the checkpoint with the lowest card-disjoint loss can sit anywhere in that range, the extremes included. At a tenth of the rate, the position settles within a narrow band near the rule and the gap across it keeps widening, from whichever checkpoint the run started. The lowest error against the rule on both the training records and the probe set comes from the last epochs of runs B and B128.
+
+The two pairs disagree on the loss. Run B's card-disjoint loss was lowest at its first epoch and drifted up after it, while run B128's improved for seven epochs and stayed level. The 64-wide line keeps the lowest loss of the sweep at every stage.
+
+| | width 64 | width 128 |
+|---|---:|---:|
+| original arm, best card-disjoint loss | 3.699 | 3.835 |
+| run A, best | 3.519 | 3.708 |
+| run B, best | 3.506 | 3.634 |
+| run A, last epoch's probe-set grid error | 0.234 | 0.210 |
+| run B, last epoch's probe-set grid error | 0.165 | 0.157 |

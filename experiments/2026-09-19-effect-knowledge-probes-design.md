@@ -771,3 +771,48 @@ Attack legality restricted by a non-keyword static stays far harder than no rest
 | block legality, epoch 47 | 0.744 | 0.489 | 0.514 | | | |
 | zone outcome, epoch 30 | | | | 0.115 | 0.107 | 0.070 |
 | zone outcome, epoch 47 | | | | 0.091 | 0.078 | 0.037 |
+
+#### Run B128, run A128 continued from epoch 30 at a tenth of the learning rate (2026-10-19)
+
+Run B128 continues run A128 from its epoch 30 at a tenth of the learning rate for twenty epochs and is probed at two checkpoints: epoch 37, its best card-disjoint loss, and epoch 50, its last. Both are probed on the same frozen set (digest `ab6452679131`). The scorecards are `models/effects/runs/2026-10-gen2-e128-lethality-lr0.1/reports/knowledge-probes-2026-10-gen2-e128-lethality-lr0.1-20261019/scorecard.json` and `models/effects/runs/2026-10-gen2-e128-lethality-lr0.1-last/reports/knowledge-probes-2026-10-gen2-e128-lethality-lr0.1-last-20261019/scorecard.json`.
+
+##### Both checkpoints put the damage sweep's step where the rule does
+
+Both checkpoints cross one half between 3 and 4 damage against a toughness-4 target, for a spell and a triggered ability alike, which is where the rule puts the step. Run A128's epoch 30, where run B128 started, crossed a point early. Read record by record at epoch 37, the activated pings for 1 damage kill a toughness-1 creature at 0.64 or more and a toughness-2 one at 0.28 or less.
+
+| sweep | 1 | 2 | 3 | 4 | 5 | 8 |
+|---|---:|---:|---:|---:|---:|---:|
+| toughness of the target, its death, run A128 epoch 30 | 0.826 | 0.717 | 0.466 | 0.356 | 0.219 | 0.024 |
+| toughness of the target, its death, run B128 epoch 37 | 0.859 | 0.546 | 0.365 | 0.228 | 0.086 | 0.003 |
+| toughness of the target, its death, run B128 epoch 50 | 0.830 | 0.493 | 0.336 | 0.177 | 0.093 | 0.001 |
+| `NumDmg$` on a spell, toughness-4 target's death, run A128 epoch 30 | 0.156 | 0.263 | 0.659 | 0.821 | 0.843 | 0.873 |
+| `NumDmg$` on a spell, same, run B128 epoch 37 | 0.056 | 0.136 | 0.319 | 0.683 | 0.823 | 0.854 |
+| `NumDmg$` on a spell, same, run B128 epoch 50 | 0.050 | 0.112 | 0.199 | 0.574 | 0.827 | 0.855 |
+| `NumDmg$` on a triggered ability, same, run A128 epoch 30 | 0.313 | 0.342 | 0.598 | 0.779 | 0.843 | 0.927 |
+| `NumDmg$` on a triggered ability, same, run B128 epoch 37 | 0.165 | 0.237 | 0.349 | 0.622 | 0.811 | 0.952 |
+| `NumDmg$` on a triggered ability, same, run B128 epoch 50 | 0.129 | 0.190 | 0.303 | 0.635 | 0.864 | 0.965 |
+
+##### The model's own damage read-out is the best of any checkpoint
+
+The model's damage-taken prediction explains about a third of the variance at both checkpoints, more than any earlier checkpoint. Death and protected-target legality rise by about a hundredth over run A128's epoch 30, and the rest stay within a hundredth.
+
+| target, card-disjoint | rung 2, A128 epoch 30 | rung 2, B128 epoch 37 | rung 2, B128 epoch 50 | model, A128 epoch 30 | model, B128 epoch 37 | model, B128 epoch 50 |
+|---|---:|---:|---:|---:|---:|---:|
+| dies | 0.932 | 0.944 | 0.942 | 0.933 | 0.942 | 0.944 |
+| damage taken (R²) | 0.655 | 0.673 | 0.674 | 0.210 | 0.339 | 0.358 |
+| may block | 0.900 | 0.899 | 0.899 | 0.844 | 0.837 | 0.848 |
+| legal target, carrying protection | 0.942 | 0.955 | 0.958 | 0.925 | 0.931 | 0.939 |
+| trigger fires | 0.897 | 0.903 | 0.901 | 0.914 | 0.916 | 0.914 |
+
+##### The board-abilities subsets keep run A128's pattern
+
+Attack legality restricted by a non-keyword static stays far harder than no restriction. A replacement on another permanent still raises the zone loss over the control.
+
+| field loss | legality-static | legality-keyword | legality-none | resolution-replacement | resolution-static | resolution-none |
+|---|---:|---:|---:|---:|---:|---:|
+| attack legality, epoch 37 | 0.944 | 0.025 | 0.425 | | | |
+| attack legality, epoch 50 | 0.941 | 0.026 | 0.523 | | | |
+| block legality, epoch 37 | 0.716 | 0.531 | 0.706 | | | |
+| block legality, epoch 50 | 0.709 | 0.534 | 0.512 | | | |
+| zone outcome, epoch 37 | | | | 0.098 | 0.092 | 0.054 |
+| zone outcome, epoch 50 | | | | 0.076 | 0.064 | 0.035 |
