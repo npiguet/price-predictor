@@ -8,7 +8,13 @@ called the gen-2 record below.
 
 Gen-3 collects its corpus from scratch and keeps no gen-1 or gen-2 record. Its record schema is
 therefore a new version: a field can change meaning or go away, and no gen-3 reader needs to read a
-gen-2 shard. Beyond that, nothing here is decided yet.
+gen-2 shard.
+
+One goal is set: gen-3 rebalances its training examples rule by rule, so that no keyword or
+ability counts as rare in what the model trains on. Three sections below are its means. The rules
+index counts how many records show each rule of the game. Adaptive sampling draws more of the
+records a weak output field needs. The turn-rule section balances each condition between met and
+unmet. Beyond the schema and that goal, nothing here is decided yet.
 
 A few terms recur. A record is one observed game event: an ability resolving, a combat, a trigger, a
 legality decision. A resolution record comes in two halves joined by a link, the cost half and the
@@ -300,6 +306,91 @@ deciding:
 
 The same per-field scores are what adaptive sampling would read on the training side, so the two
 items would share their bookkeeping.
+
+## The summed validation loss disagrees with the probes over training, and gen-3 judges checkpoints by probes and rule scenarios
+
+**After the card-disjoint loss reaches its lowest, the probes keep improving.** Each of gen-2's
+four continuation runs kept its best epoch by card-disjoint loss and also probed its last epoch.
+The model-level probes ask the model's own outputs targeted questions, such as whether a card is
+affected, whether it dies, or whether a target is legal. They are scored mostly as AUC, the chance
+that a true case ranks above a false one. In every run the last epoch has the higher card-disjoint
+loss, by how the best epoch is chosen. On the same card-disjoint records, the probes rate the last
+epoch as good or better in three runs of four, and on the game-disjoint records in all four. The
+game-disjoint loss points the same way as the probes in the two 128-wide runs only.
+
+| gen-2 run, best epoch → last epoch | card-disjoint loss | game-disjoint loss | probe mean, card-disjoint records | probe mean, game-disjoint records | "affected" probe, card-disjoint records |
+|---|---|---|---|---|---|
+| run A | 3.519 → 3.759 | 2.906 → 2.913 | 0.953 → 0.951 | 0.958 → 0.960 | 0.979 → 0.981 |
+| run B | 3.506 → 3.643 | 2.880 → 2.942 | 0.956 → 0.956 | 0.963 → 0.963 | 0.978 → 0.980 |
+| run A128 | 3.708 → 3.802 | 2.908 → 2.864 | 0.944 → 0.949 | 0.944 → 0.957 | 0.980 → 0.976 |
+| run B128 | 3.634 → 3.689 | 2.860 → 2.846 | 0.945 → 0.948 | 0.952 → 0.955 | 0.981 → 0.982 |
+
+**The loss rises because the model grows more confident, not because it ranks worse.** The rise sits
+mostly in the gate field, whether a card was affected, and in poison, with power and toughness
+changes next. In three runs of four, the probe asking the model whether a card is affected scores higher on
+the same records. Log-loss charges heavily for a confident miss, and a text the model never saw
+produces a few of those. The summed loss therefore mixes how well the model ranks outcomes with how well its
+confidence matches its accuracy, and the second can move it the wrong way.
+
+**Gen-3's control score is built from probes and rule scenarios.** The control score is what
+stopping reads and what picks the checkpoint the run keeps. Gen-3 builds it from the model-level
+knowledge probes, the damage-by-toughness and combat grids, and the frozen rule scenarios of the
+rules index. Every input is a forward pass, so nothing is trained to compute it. Built per rule, the
+score follows the balance training aims for rather than how often a situation happens in
+self-play. The smoothing of the section above applies to it as well.
+
+**The probe sets grow, and a selection half picks while a reporting half measures.** Choosing the
+best of many epochs on a score favours the epoch whose noise happened to help, so the chosen
+epoch's score overstates it by an amount that grows with the noise. More probe records shrink that
+noise. Selecting and reporting on the same records would still flatter the chosen epoch, so each
+probe set and the rule scenarios are split in two. One half picks the checkpoint, and the other
+half reports it. With the sets enlarged, each half can be as large as gen-2's whole set.
+
+**Each validation stratum judges the part it represents.** The in-game head predicts outcomes for
+cards that already exist, so its score reads the game-disjoint stratum. The embedding `e` serves
+deckbuilding on new sets and hypothetical cards, so its score reads the card-disjoint stratum,
+where gate 1 also lives. A run keeping one checkpoint for both weighs the two scores explicitly.
+
+**Two other designs are not taken:**
+
+- **Stopping on discrimination with calibration fitted afterwards.** It would score each field by
+  AUC or rank correlation and fit one temperature per field after training. It changes the measure
+  without measuring the questions that matter more directly than the probes do. Calibration stays
+  a reported number, because the in-game head's probabilities are used as probabilities.
+- **A fixed schedule that keeps the last epoch.** It would end every run with a tenth of the
+  learning rate and keep the last epoch, as gen-2's runs B and B128 suggest works. It avoids a
+  poor measure instead of replacing it with a better one.
+
+## The training loss puts every output field on one scale, with amount distributions that fit
+
+**Each field's loss is divided by the loss of its constant prediction.** The training loss sums the
+46 output fields, and the gate, damage taken and life carry most of it. After the division, a field
+counts by the share of its constant prediction's loss that remains, 1 when it has learned
+nothing. This is the training-side twin of the explained deviance the stopping section scores. A
+field with almost nothing to learn, such as poison, needs a floor on its constant-prediction loss, or
+its noise is amplified. Per-rule rebalancing does not make the division unnecessary: with every
+rule equally represented, a yes-or-no field on every card and a life-change amount still sit on
+different scales.
+
+**Amounts get a distribution wider than Poisson.** Life, damage and card counts are scored by a
+Poisson likelihood, which assumes the variance equals the mean. Life and damage swings vary more
+than that, so a rare large swing is penalized as if it were nearly impossible. A negative binomial,
+or a distribution over bins of the amount, fits them better. The constant prediction the division
+uses is then computed with the same distribution, so the two changes combine.
+
+**Rule-labelled copies fill the gaps the real data leaves.** Gen-2's lethality copies redraw the
+amount and the toughness of a qualifying damage spell and label the death by the rule. Where the
+rules index finds a rule with too few qualifying or varied real records, copies of the same kind
+supply them. The combat copies proposed below are one case.
+
+**Two designs are not taken:**
+
+- **Learned field weights**, such as the uncertainty weighting named in the adaptive-sampling
+  section. Each field's weight is trained along with the model, and a field the model finds hard
+  ends up weighted down, which works against the per-rule rebalancing.
+- **Label smoothing on the gate.** It would cap the gate's confidence, the main cause of the loss
+  rise above. Once checkpoints are judged by probes, that confidence no longer misleads the
+  choice.
 
 ## The model has to learn every rule that depends on whose turn or which step it is, and collection records which check decided each one
 
