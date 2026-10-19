@@ -354,6 +354,14 @@ The acting-player bits stay. Every row but the owner rows is an input-layout cha
 
 **A knowledge probe measures each kind.** It takes records whose acting line, candidate or board carries a turn or step condition and edits whose turn it is and the phase, then reads the prediction the condition governs: the matching verdict column for a restriction, the predicted outcome or branch for a resolution, and the affected creature's keywords or legality for a conditional static. Further subsets cover casting speed under the same edits and a split-second spell on the stack. Gen-2 has no such columns, so its baseline is `can_play` and its outcome predictions under the same edits.
 
+## A combat record's snapshot should be taken before the damage step deals any damage
+
+**A combat record's snapshot already shows the damage of the first creature or player hit.** `BusBracketCollector.openCombatBracket` takes the snapshot when the step's first damage event arrives, from `onCardDamaged` or `onPlayerDamaged`. By then Forge has marked that first damage, so the creature it hit shows it as marked damage, and a player hit first shows the lower life total. In 21 of 40 one-on-one blocks drawn from gen-2's validation strata, the blocker's marked damage equals the attacker's power. The attacker never shows damage in those records.
+
+**The model can read part of the answer off the board.** Gen-2's input gives each card a thermometer of toughness minus marked damage, so a blocker the attacker already damaged shows whether that damage is lethal. A combat record then asks about a board on which half the step has happened, and how much of the outcome leaks depends on which damage Forge dealt first.
+
+**The fix is to take the snapshot at the start of the damage step.** The damage-step probe forks already copy the game at the phase event, before any damage, so the observed record can take its snapshot at the same moment. The assignment and the combat shape are read at the first damage event, as now, because Forge has assigned the damage by then.
+
 ## The board input should say which attacker each blocker blocks
 
 **A card slot says that a creature is blocking, not which attacker it blocks.** The snapshot records the pairing in each creature's combat status, `blocking` and `blocked_by`, but the card features keep only a blocking bit and a count of blockers. With two blocked attackers on the board, the model cannot tell which blocker deals damage to which attacker, so a combat's deaths depend on a pairing it has to guess. Gen-2's combat grid reads only combats with one blocked attacker for this reason.
