@@ -5,8 +5,9 @@
 
 The combat counterpart of ``damage_grid.py``. A record qualifies when exactly one
 attacker is blocked, by exactly one blocker that blocks nothing else, neither creature
-has a damage-step keyword or a damage history this step, and the real outcome obeys the
-rule. Each grid edits two numbers on the board and reads one creature's predicted death:
+has a damage-step keyword or damage from earlier in the turn, and the real outcome obeys
+the rule. Each grid edits two numbers on the board and reads one creature's predicted
+death:
 
 - ``blocker``: the attacker's power against the blocker's toughness, reading the blocker;
 - ``attacker``: the blocker's power against the attacker's toughness, reading the attacker.
@@ -19,6 +20,12 @@ record, so the score is right whatever the other creature's real power and tough
 
 The block pairing is unambiguous only with one blocked attacker: a card slot says that a
 creature is blocking, not which attacker it blocks.
+
+A combat record's snapshot is taken at the step's first damage event, so the creature
+damaged first already shows that damage as marked. A creature may therefore show marked
+damage equal to the other creature's power, which is this step's own damage; any other
+marked damage disqualifies the record. Every edited record clears both creatures' marked
+damage, so the grid asks about the board before the damage step.
 
 ``--source validation`` (the default) reads the card-disjoint and game-disjoint strata,
 ``--source training`` the training shards.
@@ -135,6 +142,14 @@ def grant_keyword(record, entity_id: str, keyword: str):
     return _edit_entity(record, entity_id, edit)
 
 
+def clear_damage(record, *entity_ids: str):
+    """``record`` with the named entities' marked damage cleared."""
+    out = record
+    for entity_id in entity_ids:
+        out = _edit_entity(out, entity_id, lambda entity: replace(entity, damage=0))
+    return out
+
+
 def side_of(record, entity_id: str):
     """``(power, toughness, marked damage)`` of one entity, and its granted keywords."""
     entity = record.state.entity(entity_id)
@@ -178,11 +193,20 @@ def single_block(record, keywords_of) -> tuple[str, str] | None:
         return None
     if attacker.pt.total[0] <= 0 or blocker.pt.total[0] < 0:
         return None
-    # The real outcome must obey the rule, so prevention, regeneration or a
-    # replacement the board does not show cannot be what the grid reads.
+    # Marked damage is either none or this step's own, which the snapshot taken at
+    # the first damage event already shows; damage from earlier in the turn would
+    # make the cleared board in the grid a different board.
+    if attacker.damage not in (0, blocker.pt.total[0]):
+        return None
+    if blocker.damage not in (0, attacker.pt.total[0]):
+        return None
+    # The real outcome must obey the rule on the board before the step, so
+    # prevention, regeneration or a replacement the board does not show cannot
+    # be what the grid reads.
     targets = derive_targets(record)
     died = ZONE_OUTCOMES.index("died")
-    expected = combat_deaths(side_of(record, attacker_id)[0], side_of(record, blocker_id)[0])
+    before = clear_damage(record, attacker_id, blocker_id)
+    expected = combat_deaths(side_of(before, attacker_id)[0], side_of(before, blocker_id)[0])
     for entity_id, should_die in zip((attacker_id, blocker_id), expected):
         entry = targets.get(entity_id)
         observed = entry is not None and entry.fields.get("zone_outcome") == died
@@ -220,6 +244,7 @@ def qualifying_records(directories, count: int, shards: int, keywords_of):
 
 def grid_records(record, attacker: str, blocker: str, which: str, variant: str):
     """The 8 x 8 edited records of one grid, row by row, and the rule's answer for each."""
+    record = clear_damage(record, attacker, blocker)
     granted = VARIANTS[variant]
     if granted is not None:
         record = grant_keyword(record, attacker if granted[0] == "attacker" else blocker,

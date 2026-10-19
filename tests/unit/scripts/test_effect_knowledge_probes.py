@@ -1079,3 +1079,31 @@ class TestCombatGrid:
         _, rule = combat_grid.grid_records(
             record, attacker, blocker, "blocker", "blocker-indestructible")
         assert rule.max() == 0.0
+
+    def test_damage_the_step_already_marked_is_cleared_and_other_damage_disqualifies(
+        self, records, monkeypatch,
+    ):
+        from dataclasses import replace
+
+        import effects.domain.effect_targets as effect_targets
+        from effects.domain.effect_model import ZONE_OUTCOMES
+
+        record, attacker, blocker = _one_on_one(records)
+        power = record.state.entity(attacker).pt.total[0]
+        marked = combat_grid._edit_entity(
+            record, blocker, lambda e: replace(e, damage=power))
+        a, _ = combat_grid.side_of(record, attacker)
+        b, _ = combat_grid.side_of(record, blocker)
+        attacker_dies, blocker_dies = combat_grid.combat_deaths(a, b)
+        died = ZONE_OUTCOMES.index("died")
+        outcome = {e: SimpleNamespace(fields={"zone_outcome": died} if dies else {})
+                   for e, dies in ((attacker, attacker_dies), (blocker, blocker_dies))}
+        monkeypatch.setattr(effect_targets, "derive_targets", lambda r: outcome)
+        assert combat_grid.single_block(marked, _keywords) == (attacker, blocker)
+        earlier = combat_grid._edit_entity(
+            record, blocker, lambda e: replace(e, damage=power + 1))
+        assert combat_grid.single_block(earlier, _keywords) is None
+        rows, rule = combat_grid.grid_records(marked, attacker, blocker, "attacker", "none")
+        assert all(cell.state.entity(blocker).damage == 0 for row in rows for cell in row)
+        assert np.array_equal(rule, np.array([[float(p >= t) for t in range(1, 9)]
+                                              for p in range(1, 9)]))
