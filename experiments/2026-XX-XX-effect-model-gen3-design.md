@@ -25,7 +25,14 @@ legal choice at a share of its decisions instead of the Forge AI's. A probe fork
 game, taken at the combat damage step, in which one keyword is stripped from one creature to see
 what changes.
 
-## Collection can lose or misplace events without leaving a trace
+The record has three parts. Part 1 lists what gen-2 leaves open, why each gap matters, and how
+gen-3 plans to close it. Part 2 records, step by step, what was done to close the gaps and the
+steps still to take. Part 3, the outcome, records whether gen-3 worked, what still needs changing,
+and the improvements its results suggest.
+
+## Part 1: what gen-2 leaves open, and how gen-3 plans to fix it
+
+### Collection can lose or misplace events without leaving a trace
 
 **Events dropped by the collectors are never counted.** An engine event that arrives while no
 record is open is discarded, and nothing records that it happened. A state-based death was lost
@@ -77,7 +84,7 @@ correctly. The source can be recovered from the payload's `assignment_choices`. 
 is missing, several attackers' identical hits produce byte-identical events, which inflates the
 validator's "repeats an event" check. Gen-1 and gen-2 shards both carry the gap.
 
-## Some records cannot be joined to the text of the ability that acted
+### Some records cannot be joined to the text of the ability that acted
 
 **A charm cast through Flashback is keyed to no line.** The collector keys the chosen mode as the
 Flashback keyword trait plus the mode's `option`, as in `wreck_and_rebuild.txt keyword[0]
@@ -98,7 +105,7 @@ run name files like `cardsfolder/a/a_cosmos_charger_variant_5001.txt` instead of
 path, so the key resolves to no text, and the record is dropped or kept without text rather than
 failing the build. The cause has not been looked into.
 
-## The random seat can repeat a free activation that changes nothing
+### The random seat can repeat a free activation that changes nothing
 
 **The random seat never passes while an ability is still activatable.** In one gen-2 coverage game,
 the random seat activated the Gigantoplasm's granted ability about 2,190 times in a single turn, at
@@ -114,7 +121,7 @@ random seat to stop looping on a free, repeatable ability.
 printed base and fold set-base effects into the boosts, so a creature that survives only because of
 a boost looks like an ordinary 2/2. This needs checking in general, not only on this card.
 
-## Two sampling rules over-represent some questions
+### Two sampling rules over-represent some questions
 
 **What-if legality queries are sampled before they are de-duplicated.** A what-if query is the AI
 asking whether an attack or block would be legal without committing to it. `--legality-rate` draws
@@ -125,7 +132,7 @@ probability 1 − (1 − r)^K. Blocker what-ifs outnumber real block decisions a
 --only-cards` targets every text carried only by held-out cards. That set is larger than the
 held-out texts themselves.
 
-## The observed-mana probe counts every mana event as one mana
+### The observed-mana probe counts every mana event as one mana
 
 **The knowledge probes' observed-mana target reads a field the collector never writes.**
 `labels.mana_observed` sums each `mana_produced` event's `params.amount`. The collector writes
@@ -139,7 +146,7 @@ both of the land's colours. Thousands of gen-2's events carry an empty map. The 
 mana correctly only once both are understood, and either may turn out to be a collector defect
 rather than a probe one.
 
-## Training could draw more of the records a weak output field needs, from the whole corpus
+### Training could draw more of the records a weak output field needs, from the whole corpus
 
 **Some output fields stay weak while the others improve.** The model predicts 46 output fields per
 entity, such as life change, damage taken or keywords gained. Each is scored by its explained
@@ -195,193 +202,61 @@ instead, with methods such as GradNorm and uncertainty weighting.
 - **Validation stays out of the loop.** The controller reads training loss. If the card-disjoint
   validation steered training, it would stop being an unbiased measure.
 
-## The rules catalogue triages every rule and gives each mechanical one a verified scenario, which Forge has not yet played
+### The Comprehensive Rules could index what the corpus covers, rule by rule
 
-**The rules catalogue is the part of the rules index built so far.** It splits the 2026-09-25
-edition of the Comprehensive Rules into 410 units. A unit is one section, except in sections 701
-and 702, where each keyword is its own unit. Each of the 3,166 rules has a triage line. Each
-mechanical or legality rule has a scenario: a board, every player decision already taken, and
-variants that differ by one fact so that the rule's outcome flips. Decisions are out of scope by
-design, because the model predicts what the engine does once they are made. The catalogue lives in
-`rules/`. `rules/README.md` gives its formats, `rules/STATUS.md` the per-unit checklist, and
-`rules/FINDINGS.md` the detail behind this section.
+**Gen-2 measures coverage by card text and by rule family, not by the rules of the game.** A rule
+family is the script-level class `build-corpus` balances on, such as an ability's API type or a
+trigger's mode. Whether the corpus shows the legend rule, a creature dying at toughness 0, or two
+continuous effects applied in layer order is never counted. Gen-3 could go through the
+Comprehensive Rules and record three things for each rule:
 
-**The index is needed because gen-2 counts coverage by card text and by rule family, not by the
-rules of the game.** A rule family is the script-level class `build-corpus` balances on, such as an
-ability's API type or a trigger's mode. Whether the corpus shows the legend rule, a creature dying
-at toughness 0, or two continuous effects applied in layer order is never counted. A rare
-interaction between rules may also never occur in a sealed game, so illustrating it needs a
-situation built on purpose.
+1. whether the records the collectors write can show it at all;
+2. how many records in the corpus do show it;
+3. which game situations would illustrate it, as a unit test illustrates one behaviour of code.
 
-**Language-model agents built it, and a second model checked the first.** Sonnet agents triaged the
-rules and wrote the scenarios. An Opus agent then reviewed each unit against the rules text and the
-Forge scripts of every card used, and fixed what it found. Chapters 8 and 9, multiplayer rules and
-casual variants, were marked out of scope by script, because collection plays two-player games.
+The counts would then feed corpus balancing and collection, and the illustrations would become a
+test set.
 
-| build | value |
-|---|---:|
-| agents | 261 |
-| subagent tokens | 27.2M |
-| wall-clock | about 5.3 hours |
+**A triage pass comes first, because many rules can never appear in a record.** The rules run to
+thousands of numbered subrules. Deck construction, mulligans, multiplayer variants and most
+priority bookkeeping have no counterpart in an effect record. Sorting every rule into observable in
+a record, observable only indirectly, or out of scope decides how large the rest of the work is. A
+language model can make the first pass over the document, with a person checking the borderline
+rules.
 
-**Half of the rules have an observable outcome.** A mechanical rule decides an outcome
-once the decisions are made: a zone change, damage, a resolution or fizzle, a trigger firing. A
-legality rule decides whether an action is allowed when it is taken. Chapter 7, the keyword
-sections, holds more than half of the mechanical rules.
-
-| category | rules |
-|---|---:|
-| mechanical | 1,422 |
-| legality | 226 |
-| definitional | 775 |
-| out of scope | 608 |
-| decision | 135 |
-
-Out of scope covers the 302 rules of chapters 8 and 9 and 306 others: game start and mulligans,
-deck construction, stickers, the casual-variant card types of chapter 3, ante, and physical
-card handling.
-
-**Most mechanical and legality rules are visible in gen-2's record fields, and one in eight needs a
-new field.** A direct rule shows in a field such as a resolution's outcome or a playability verdict.
-An indirect rule needs a detector over a record's events, such as a state-based death after a
-resolution.
-
-| observability, mechanical and legality rules | rules |
-|---|---:|
-| direct | 708 |
-| indirect | 729 |
-| needs new fields | 210 |
-| none | 1 |
-
-The rules that need new fields fall into a few families. Game-level designations are the largest
-one: day and night, the monarch, the initiative, dungeon progress, speed and the city's blessing.
-The others are designations on a permanent, such as renowned, a soulbond pair or a Room's unlocked
-halves; characteristics the snapshot does not carry, such as mana value, the X chosen and an
-Adventure's face on the stack; which layer applied which effect; what a linked ability remembers;
-and what happened earlier in the turn. `rules/FINDINGS.md` maps each family to its rules.
-
-**The scenarios cover all but 95 of the rules that need one.** Each scenario has at least two
-variants, and nearly every scenario pairs a variant in which the rule's effect happens with a close
-one in which it does not. Resolution and playability records carry more than half of them.
-
-| scenarios by record kind | count |
-|---|---:|
-| resolution | 636 |
-| playability | 414 |
-| trigger | 312 |
-| continuous | 216 |
-| rewrite | 93 |
-| combat | 92 |
-| all scenarios | 1,763 |
-
-| variants by polarity | count |
-|---|---:|
-| fires | 1,984 |
-| does not fire | 1,960 |
-| other, a third branch | 307 |
-
-Most of the 95 skipped rules describe a situation no Forge card produces, such as two instances of
-rampage on one creature or mana produced as a Phyrexian symbol. The rest need a command zone or a
-sideboard, or have no observable difference between their cases.
-
-**The verifier changed about one thing for every three scenarios, and few changes touched the
-rules.** It made about 570 changes. About 35 of them corrected a rules-level outcome, such as a
-spell written as resolving that fizzles on the recheck of 608.2b. The rest corrected the scenario
-itself. The commonest were a base variant that already carried a change, a setup in which a player
-draws from an empty library before the outcome, a variant that tested a different rule, and a
-decision left open. A scenario written by one model is therefore not usable unchecked. The verified
-ones still hold errors of both kinds at a rate nobody has measured, because neither agent ran the
-engine.
-
-**Many scenarios depend on how Forge implements the situation.** 762 scenarios carry a note
-about it. Most of these notes are behaviour the writer could not confirm, or a description of how
-the card is scripted. About 90 need setup state that a starting-state file may not express, such as a
-designation or a turn's history. About 75 name a suspected Forge departure from the rules, and
-`rules/FINDINGS.md` lists ten to test first.
-
-## The scenarios become labels and tests only once Forge plays them
-
-**Every scenario has to run in Forge before it labels training data or judges a model.** Playing
-each variant checks the scenario's construction and its expected outcome at once, which is the
-check the two agents could not make.
-
-**The decisions have to become structured actions first.** A scenario's decisions and each
-variant's change are English sentences. A conversion pass would write each one as an action list:
-cast, activate, target, pay, attack, block, assign damage, pass. It would also move the setup state
-now kept in free-text notes into fields. A language model can do the conversion, with a validator
-checking each list against the board.
-
-**Forge's puzzle files are the first candidate for the starting state.** Forge ships 372 puzzles
-under `forge-gui/res/puzzle/`. Each sets life totals, the active player and phase, and every zone's
-cards with their links. Whether a collecting worker can load one has not been checked. A spike on
-a dozen scenarios from 704, 608 and 510 would settle it, and would show which of the unusual
-setups the format cannot express, before the whole catalogue is converted.
-
-**A scenario whose Forge outcome differs from its expected outcome is either wrong or has found a
-Forge departure from the rules.** The verifier's fixes show what a wrong scenario looks like. A
-confirmed Forge departure is recorded on the scenario. That scenario then stays out of the rule
-tests until Forge is patched on the hooks branch or the departure is accepted. Where Forge plays
-a scenario as expected, Forge's outcome and the rule's outcome are the same. The question the
-combat-copies section leaves open, rule or Forge outcome as the label, therefore matters only for
-the scenarios that disagree.
-
-**The rule tests that judge the model stay out of its training.** If the same situations both
-balance the corpus and measure the model, they stop measuring generalization. The scenarios
-Forge confirms become the frozen, hand-checked rule tests in the control score, split into a
-selection half and a reporting half as the stopping section describes. Collection aimed at a rule
-builds its own boards from the scenario's pattern with other cards, through interventional forks
-that set up the board first. The scenarios lean on a few vanilla cards, with Grizzly Bears in about
-half of them, so training boards with other cards also keep the model from learning a rule only
-for Grizzly Bears.
-
-## A global designation block and a few per-card fields would record more than half of the rules gen-2 cannot see
-
-**More than half of the 210 rules that need new fields would be recorded by one global block and a
-handful of per-card fields.** Several of the designations come from sets that sealed pools can draw
-from: day and night from Innistrad: Midnight Hunt, dungeons from Adventures in the Forgotten Realms,
-the city's blessing from Rivals of Ixalan.
-
-- **The global block** holds day or night, the monarch, the initiative holder, each player's dungeon
-  and room, speed, the city's blessing and enduring stories. It also holds per-turn counts the
-  "this turn" conditions read: spells cast, permanents put into a graveyard, and abilities each
-  permanent activated.
-- **Each permanent** gains its designations as a set (renowned, solved, prepared, and so
-  on), the creature it is paired with, a battle's protector, a Class's level, a Room's unlocked
-  halves, loyalty, and the objects exiled with it.
-- **Each card on the stack and battlefield** gains its mana value, the X chosen, the face or
-  alternative characteristics in force, and base power and toughness beside current.
-
-**Layer attribution, subgames, restarts and control of another player are not worth collecting.**
-The `continuous` record already shows the result of every layer, and the 613 scenarios test results
-rather than order. A model that predicts those results has learned what the order decides.
-Subgames, the Karn Liberated restart and control of another player are rare enough to leave out.
-
-## Counting each rule in the corpus needs a detector per indirect rule, and the scenarios specify them
-
-**A detector recognizes a rule in a record, and detectors range from trivial to impossible.** It
-is also a coverage counter, so the same code puts per-rule counts in the corpus manifest.
+**Counting a rule needs a detector that recognizes it in a record, and detectors range from trivial
+to impossible.**
 
 | rule | how a record shows it | detector |
 |---|---|---|
 | 702.2, deathtouch | a combat with a deathtouch creature, and the probe forks that strip it | exists: the combat family and the probe keyword |
 | 704.5f, a creature with toughness 0 dies | a zone change during the state-based check after a resolution | derivable from the effect half's events |
-| 613, the order of continuous-effect layers | no field records which layer applied what; the `continuous` record shows the result | none planned: the scenarios test what the order decides |
+| 613, the order of continuous-effect layers | no field records which layer applied what | needs new collected fields |
 
-**Each scenario already states what its rule's detector looks for.** A scenario gives the record
-kind and the observable outcome. Its contrasting variant gives the near miss the detector must
-reject. The 729 indirect rules each need one, and the 708 direct rules need little more than a
-field filter.
+A detector is also a coverage counter, so the same code would put per-rule counts in the corpus
+manifest.
 
-**Running the detectors over gen-2's corpus comes before any gen-3 collection.** The counts show
-which rules self-play already covers and which it never reaches. Targeted collection for per-rule
-rebalancing has to fill the rules it never reaches. The order in which to fill them can follow how
-often each rule's mechanic appears in the sets collection draws from.
+**Illustrating a rule needs situations built on purpose, not found in self-play.** Coverage rounds
+target cards, and a rare interaction between rules may never occur in a sealed game. Two sources
+could build them:
+
+- **Interventional forks.** They already force an ability onto the stack in a copied game. A
+  rule-driven fork would set up the board the rule needs first.
+- **Forge's puzzle files.** Forge ships 372 puzzles under `forge-gui/res/puzzle/`, each a starting
+  game state: life totals, the active player and phase, and every zone's cards with their links.
+  Written for a rule, such a state is a unit test the collector could play. Whether a collecting
+  worker can load one has not been checked.
+
+**The rule tests that judge the model must stay out of its training.** If the same situations both
+balance the corpus and measure the model, they stop measuring generalization. A frozen,
+hand-checked set of rule scenarios would join the knowledge probes as an evaluation. Collection
+targeted at a rule would feed training separately.
 
 **Rules could also be the pools of the adaptive sampling above.** A per-rule detector gives each
 record the rules it exercises, which is the same index that sampling by field needs. The two items
 would share the decision between pools, an index and a database.
 
-## The snapshot should list every line of a permanent, not only its spell and activated abilities
+### The snapshot should list every line of a permanent, not only its spell and activated abilities
 
 **The model never reads a permanent's statics, triggers or replacements.** `SnapshotBuilder.printedKeys` fills a permanent's card-slot lines from Forge's `getSpellAbilities()`, which holds the cast spell and the activated abilities. Attachment-granted lines come from the same call on each attachment. About a quarter of the permanents on the battlefield carry a line this leaves out, and the knowledge-probes record gives the counts. Keyword lines are unaffected, because the keyword flags carry them.
 
@@ -391,7 +266,7 @@ would share the decision between pools, an index and a database.
 
 **Gen-2's board-abilities ablation is the baseline.** It scores each gen-2 arm on legality restricted by a non-keyword static and on resolutions with a replacement on another permanent, beside controls of the same kinds. A gen-3 model that reads the new lines should close those subsets' loss toward their controls, and noise in its card slots should start to cost something there.
 
-## Early stopping could read a smoothed loss in which every output field counts
+### Early stopping could read a smoothed loss in which every output field counts
 
 **The card-disjoint loss moves between epochs by about as much as it improves, so stopping on its
 raw value can fire on noise.** Gen-2 training keeps the epoch with the lowest card-disjoint
@@ -439,7 +314,7 @@ deciding:
 The same per-field scores are what adaptive sampling would read on the training side, so the two
 items would share their bookkeeping.
 
-## The summed validation loss disagrees with the probes over training, and gen-3 judges checkpoints by probes and rule scenarios
+### The summed validation loss disagrees with the probes over training, and gen-3 judges checkpoints by probes and rule scenarios
 
 **After the card-disjoint loss reaches its lowest, the probes keep improving.** Each of gen-2's
 four continuation runs kept its best epoch by card-disjoint loss and also probed its last epoch.
@@ -493,7 +368,7 @@ where gate 1 also lives. A run keeping one checkpoint for both weighs the two sc
   learning rate and keep the last epoch, as gen-2's runs B and B128 suggest works. It avoids a
   poor measure instead of replacing it with a better one.
 
-## The training loss puts every output field on one scale, with amount distributions that fit
+### The training loss puts every output field on one scale, with amount distributions that fit
 
 **Each field's loss is divided by the loss of its constant prediction.** The training loss sums the
 46 output fields, and the gate, damage taken and life carry most of it. After the division, a field
@@ -524,7 +399,7 @@ supply them. The combat copies proposed below are one case.
   rise above. Once checkpoints are judged by probes, that confidence no longer misleads the
   choice.
 
-## The model has to learn every rule that depends on whose turn or which step it is, and collection records which check decided each one
+### The model has to learn every rule that depends on whose turn or which step it is, and collection records which check decided each one
 
 **The `can_play` label leaves out the casting-timing rule, so the corpus labels a sorcery playable on the opponent's turn.** A `decision` record's three verdict bits are `can_play`, `affordable` and `has_legal_target`, and `can_play` is Forge's `SpellAbility.canPlay()`. That call covers split second and a script's own restrictions: the phases it names, whose turn it requires, activation limits and zones. The default timing rule lives in a separate call, `canCastTiming`, which no hook records. Under that rule a spell is cast at sorcery speed unless it is an instant or has flash, and an activated ability with `SorcerySpeed$` or a loyalty cost needs sorcery timing too. The hook in `AiController.canPlayAndPayForFace` fires after the AI's own timing check whatever that check answered, so a sorcery the AI weighs during the opponent's turn is written as playable. The random seat records `canPlay` as well, though it applies timing to its own choice of play.
 
@@ -577,7 +452,7 @@ The acting-player bits stay. Every row but the owner rows is an input-layout cha
 
 **A knowledge probe measures each kind.** It takes records whose acting line, candidate or board carries a turn or step condition and edits whose turn it is and the phase, then reads the prediction the condition governs: the matching verdict column for a restriction, the predicted outcome or branch for a resolution, and the affected creature's keywords or legality for a conditional static. Further subsets cover casting speed under the same edits and a split-second spell on the stack. Gen-2 has no such columns, so its baseline is `can_play` and its outcome predictions under the same edits.
 
-## A combat record's snapshot should be taken before the damage step deals any damage
+### A combat record's snapshot should be taken before the damage step deals any damage
 
 **A combat record's snapshot already shows the damage of the first creature or player hit.** `BusBracketCollector.openCombatBracket` takes the snapshot when the step's first damage event arrives, from `onCardDamaged` or `onPlayerDamaged`. By then Forge has marked that first damage, so the creature it hit shows it as marked damage, and a player hit first shows the lower life total. In 26 of the 40 one-on-one blocks gen-2's combat grid reads from the validation strata, the blocker's marked damage equals the attacker's power. The attacker never shows damage in those records.
 
@@ -585,13 +460,13 @@ The acting-player bits stay. Every row but the owner rows is an input-layout cha
 
 **The fix is to take the snapshot at the start of the damage step.** The damage-step probe forks already copy the game at the phase event, before any damage, so the observed record can take its snapshot at the same moment. The assignment and the combat shape are read at the first damage event, as now, because Forge has assigned the damage by then.
 
-## The board input should say which attacker each blocker blocks
+### The board input should say which attacker each blocker blocks
 
 **A card slot says that a creature is blocking, not which attacker it blocks.** The snapshot records the pairing in each creature's combat status, `blocking` and `blocked_by`, but the card features keep only a blocking bit and a count of blockers. With two blocked attackers on the board, the model cannot tell which blocker deals damage to which attacker, so a combat's deaths depend on a pairing it has to guess. Gen-2's combat grid reads only combats with one blocked attacker for this reason.
 
 **The pairing belongs in the trunk's input.** Two forms would carry it: each card slot gains the board position of the attacker it blocks, or the trunk's attention gains a bias between a blocker and its attacker, as it could between an aura and the permanent it enchants. Either needs no new collection, since the snapshot already holds the pairing.
 
-## Combat could get lethality copies of its own, as damage spells have in gen-2
+### Combat could get lethality copies of its own, as damage spells have in gen-2
 
 **Gen-2's lethality copies cover damage spells only, and combat is now the weaker of the two.** A copy redraws a qualifying record's damage amount and the hit creature's toughness, and labels the death by the rule rather than by what Forge did. The gen-2 record's combat grids show where combat stands without them. Before the copies, the model separated a lethal block from a non-lethal one better than a lethal spell from a non-lethal one. With the copies and a tenth of the learning rate, the spell grid's error falls below every combat grid's. The combat boundary stays soft on every checkpoint, the attacker's death sits further from the rule than the blocker's, and a first striker is predicted to die as often as a creature without the keyword.
 
@@ -605,6 +480,218 @@ The acting-player bits stay. Every row but the owner rows is an input-layout cha
 
 The combat grid measures the result on blocks from the validation strata, which copies never touch.
 
-## Outcome
+## Part 2: the steps taken
 
-To be filled in once gen-3 is designed and run.
+### Step 1, the rules catalogue: every rule triaged, and every mechanical rule given a verified scenario that Forge has not yet played
+
+**The rules catalogue is the part of the rules index built so far.** It covers the first and third
+items of the plan in part 1: whether a record can show each rule, and which game situations
+illustrate it. It splits the 2026-09-25 edition of the Comprehensive Rules into 410 units. A unit is
+one section, except in sections 701 and 702, where each keyword is its own unit. Each of the 3,166
+rules has a triage line. Each mechanical or legality rule has a scenario: a board, every player
+decision already taken, and variants that differ by one fact so that the rule's outcome flips.
+Decisions are out of scope by design, because the model predicts what the engine does once they
+are made. The catalogue lives in `rules/`. `rules/README.md` gives its formats, `rules/STATUS.md`
+the per-unit checklist, and `rules/FINDINGS.md` the detail behind this step.
+
+#### The catalogue was built in four passes, with Sonnet writing and Opus checking
+
+**A script split the rules, and language-model agents did the rest.**
+`scripts/rules_catalogue.py` and the workflow script `scripts/rules_catalogue_workflow.js` ran the
+passes in this order:
+
+1. **Split.** The script parsed the rules text into one line per rule in `rules/rules.jsonl` and one
+   readable file per unit under `rules/cr/`. It grouped the units into work packets of at most
+   16,000 characters of rule text, none crossing a chapter. It marked chapters 8 and 9,
+   multiplayer rules and casual variants, out of scope without an agent, because collection plays
+   two-player games.
+2. **Triage.** A Sonnet agent per packet gave every rule a category, an observability level, the
+   record kinds that could show it, and a one-line outcome.
+3. **Scenarios.** A Sonnet agent per chunk of at most 20 rules wrote the scenarios. It used real
+   card names, checked against Forge's `cardsfolder`, and preferred vanilla cards so that no other
+   ability interferes. A rule it could not illustrate went on the unit's skip list, with the reason.
+4. **Verification.** An Opus agent per chunk checked each scenario against the rules text and the
+   Forge script of every card used. It fixed what was wrong, logged each change in the file's
+   `review` list, and marked the file verified.
+
+**A pilot on five units came first, and it kept the verifier on Opus.** The pilot ran units 704
+(state-based actions), 608 (resolution), 701.6 (counter), 702.2 (deathtouch) and 702.19 (trample).
+Its Opus verifier made 20 changes across 64 scenarios, so the verifier stayed on the stronger
+model for the full run.
+
+**The full run was a pipeline per packet, capped at four agents at once.** A packet's scenarios
+started as soon as its triage finished, without waiting for other packets. At most three of the
+four running agents were Opus verifiers. A pass rerun on a unit keeps every file that exists and is
+verified, so a unit that an agent missed reran alone; one triage agent skipped 701.61 and it was
+rerun by itself.
+
+**A validator checks every file mechanically.** `rules_catalogue.py validate` checks that every
+rule has a triage line with valid values, and that every mechanical or legality rule is in a
+scenario or on a skip list. It also checks that each scenario has at least two variants with valid
+polarities, and that every card name exists in Forge. It warns when a scenario lacks a variant in
+which the rule's effect happens or one in which it does not. `rules/RUN-NOTES.md` keeps what each
+writer flagged and what each verifier fixed, chunk by chunk.
+
+| build | value |
+|---|---:|
+| agents | 261 |
+| subagent tokens | 27.2M |
+| wall-clock | about 5.3 hours |
+
+#### Half of the rules have an observable outcome
+
+**A mechanical rule decides an outcome once the decisions are made, and a legality rule decides
+whether an action is allowed.** A mechanical outcome is a zone change, damage, a resolution or
+fizzle, or a trigger firing. Mechanical and legality rules together are about half the document.
+Chapter 7, the keyword sections, holds more than half of the mechanical rules.
+
+| category | rules |
+|---|---:|
+| mechanical | 1,422 |
+| legality | 226 |
+| definitional | 775 |
+| out of scope | 608 |
+| decision | 135 |
+
+Out of scope covers the 302 rules of chapters 8 and 9 and 306 others: game start and mulligans,
+deck construction, stickers, the casual-variant card types of chapter 3, ante, and physical
+card handling.
+
+**Most mechanical and legality rules are visible in gen-2's record fields, and one in eight needs a
+new field.** A direct rule shows in a field such as a resolution's outcome or a playability verdict.
+An indirect rule needs a detector over a record's events, such as a state-based death after a
+resolution.
+
+| observability, mechanical and legality rules | rules |
+|---|---:|
+| direct | 708 |
+| indirect | 729 |
+| needs new fields | 210 |
+| none | 1 |
+
+**The rules that need new fields fall into a few families, and game-level designations are the
+largest.** Those designations are day and night, the monarch, the initiative, dungeon progress,
+speed and the city's blessing. The other families are designations on a permanent, such as renowned,
+a soulbond pair or a Room's unlocked halves; characteristics the snapshot does not carry, such as
+mana value, the X chosen and an Adventure's face on the stack; which layer applied which effect;
+what a linked ability remembers; and what happened earlier in the turn. `rules/FINDINGS.md` maps
+each family to its rules.
+
+#### The scenarios cover all but 95 of the rules that need one
+
+**Nearly every scenario pairs a variant in which the rule's effect happens with a close one in which
+it does not.** Each scenario has at least two variants. Resolution and playability records carry
+more than half of the scenarios.
+
+| scenarios by record kind | count |
+|---|---:|
+| resolution | 636 |
+| playability | 414 |
+| trigger | 312 |
+| continuous | 216 |
+| rewrite | 93 |
+| combat | 92 |
+| all scenarios | 1,763 |
+
+| variants by polarity | count |
+|---|---:|
+| fires | 1,984 |
+| does not fire | 1,960 |
+| other, a third branch | 307 |
+
+**Most of the 95 skipped rules describe a situation no Forge card produces.** Two instances of
+rampage on one creature and mana produced as a Phyrexian symbol are examples. The rest need a
+command zone or a sideboard, or have no observable difference between their cases.
+
+#### The verifier changed about one thing for every three scenarios, and few changes touched the rules
+
+**About 35 of the verifier's 570 or so changes corrected a rules-level outcome.** A spell written
+as resolving that fizzles on the recheck of 608.2b is an example. The rest corrected how the
+scenario was built. The commonest were a base variant that already carried a change, a setup in
+which a player draws from an empty library before the outcome, a variant that tested a different
+rule, and a decision left open. A scenario written by one model is therefore not usable unchecked.
+The verified ones still hold errors of both kinds at a rate nobody has measured, because neither
+agent ran the engine.
+
+**Many scenarios depend on how Forge implements the situation.** 762 scenarios carry a note about
+it. Most of these notes are behaviour the writer could not confirm, or a description of how the card
+is scripted. About 90 need setup state that a starting-state file may not express, such as a
+designation or a turn's history. About 75 name a suspected Forge departure from the rules, and
+`rules/FINDINGS.md` lists ten to test first.
+
+### Steps still to take, as the catalogue sets them
+
+#### The scenarios become labels and tests only once Forge plays them
+
+**Every scenario has to run in Forge before it labels training data or judges a model.** Playing
+each variant checks the scenario's construction and its expected outcome at once, which is the
+check the two agents could not make.
+
+**The decisions have to become structured actions first.** A scenario's decisions and each
+variant's change are English sentences. A conversion pass would write each one as an action list:
+cast, activate, target, pay, attack, block, assign damage, pass. It would also move the setup state
+now kept in free-text notes into fields. A language model can do the conversion, with a validator
+checking each list against the board.
+
+**Forge's puzzle files are the first candidate for the starting state.** Part 1 names them; whether
+a collecting worker can load one is still unchecked. A spike on a dozen scenarios from 704, 608 and
+510 would settle it. It would also show which of the unusual setups the format cannot express,
+before the whole catalogue is converted.
+
+**A scenario whose Forge outcome differs from its expected outcome is either wrong or has found a
+Forge departure from the rules.** The verifier's fixes show what a wrong scenario looks like. A
+confirmed Forge departure is recorded on the scenario. That scenario then stays out of the rule
+tests until Forge is patched on the hooks branch or the departure is accepted. Where Forge plays
+a scenario as expected, Forge's outcome and the rule's outcome are the same. The question the
+combat-copies section leaves open, rule or Forge outcome as the label, therefore matters only for
+the scenarios that disagree.
+
+**The scenarios Forge confirms become the frozen, hand-checked rule tests, and stay out of
+training.** They join the control score, split into a selection half and a reporting half as the
+stopping section describes. Collection aimed at a rule builds its own boards from the scenario's
+pattern with other cards, through interventional forks that set up the board first. The scenarios
+lean on a few vanilla cards, with Grizzly Bears in about half of them. Training boards with other
+cards also keep the model from learning a rule only for Grizzly Bears.
+
+#### A global designation block and a few per-card fields would record more than half of the rules gen-2 cannot see
+
+**More than half of the 210 rules that need new fields would be recorded by one global block and a
+handful of per-card fields.** Several of the designations come from sets that sealed pools can draw
+from: day and night from Innistrad: Midnight Hunt, dungeons from Adventures in the Forgotten Realms,
+the city's blessing from Rivals of Ixalan.
+
+- **The global block** holds day or night, the monarch, the initiative holder, each player's dungeon
+  and room, speed, the city's blessing and enduring stories. It also holds per-turn counts the
+  "this turn" conditions read: spells cast, permanents put into a graveyard, and abilities each
+  permanent activated.
+- **Each permanent** gains its designations as a set (renowned, solved, prepared, and so
+  on), the creature it is paired with, a battle's protector, a Class's level, a Room's unlocked
+  halves, loyalty, and the objects exiled with it.
+- **Each card on the stack and battlefield** gains its mana value, the X chosen, the face or
+  alternative characteristics in force, and base power and toughness beside current.
+
+**Layer attribution, subgames, restarts and control of another player are not worth collecting.**
+The `continuous` record already shows the result of every layer, and the 613 scenarios test results
+rather than order. A model that predicts those results has learned what the order decides, so rule
+613 needs no new field and no detector. Subgames, the Karn Liberated restart and control of another
+player are rare enough to leave out.
+
+#### Each scenario specifies its rule's detector, and the detectors run over gen-2's corpus first
+
+**A scenario already states what its rule's detector looks for.** It gives the record kind and the
+observable outcome. Its contrasting variant gives the near miss the detector must reject. The 729
+indirect rules each need a detector, and the 708 direct rules need little more than a field filter.
+
+**Running the detectors over gen-2's corpus comes before any gen-3 collection.** The counts show
+which rules self-play already covers and which it never reaches. Targeted collection for per-rule
+rebalancing has to fill the rules it never reaches. The order in which to fill them can follow how
+often each rule's mechanic appears in the sets collection draws from.
+
+**Rules could also be the pools of the adaptive sampling in part 1.** A per-rule detector gives
+each record the rules it exercises, which is the same index that sampling by field needs. The two
+items would share the decision between pools, an index and a database.
+
+## Part 3: outcome
+
+To be filled in once gen-3 is collected, trained and evaluated: whether it closed the gaps part 1
+lists, what still needs changing for it to work, and the improvements its results suggest.

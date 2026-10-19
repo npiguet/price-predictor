@@ -2,8 +2,9 @@
 
 This folder holds the Magic: The Gathering Comprehensive Rules, split into small files, and a sidecar
 per rule unit. The sidecars record what the effect model would need to learn each rule. It serves the
-gen-3 effect model (`experiments/2026-XX-XX-effect-model-gen3-design.md`, section "The
-Comprehensive Rules could index what the corpus covers, rule by rule").
+gen-3 effect model (`experiments/2026-XX-XX-effect-model-gen3-design.md`: the plan is part 1's
+section "The Comprehensive Rules could index what the corpus covers, rule by rule", and the
+catalogue's build, findings and next steps are part 2, step 1).
 
 The goal is to cover the **observable mechanical outcome** of every rule. **Player decisions are out
 of scope**: a scenario takes every choice as already made (what is cast, targets, modes, attackers,
