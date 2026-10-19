@@ -311,6 +311,8 @@ before this phase is complete.
 - [X] T150 Continue from T149's best epoch at `--lr-scale 0.1` for 20 epochs in `runs/2026-10-gen2-e64-lethality-lr0.1/`; compare its boundary and losses with T149's
 - [X] T151 Continue `e128-lethality` from its last epoch for 20 more epochs, `--patience 0 --save-every-epoch`, in `runs/2026-10-gen2-e128-lethality-ext20/`; probe its best and last epochs and read the training-records boundary at every epoch
 - [ ] T152 Continue from T151's best epoch at `--lr-scale 0.1` for 20 epochs in `runs/2026-10-gen2-e128-lethality-lr0.1/`; compare its boundary and losses with T151's
+- [X] T153 Combat-damage grid probe `scripts/effect_knowledge_probes/combat_grid.py`: one-on-one blocks, attacker power × blocker toughness and blocker power × attacker toughness, plain and with deathtouch, indestructible, first strike and double strike granted, scored against the damage-step rules; tests in `tests/unit/scripts/test_effect_knowledge_probes.py`
+- [ ] T154 Run the combat grid on every gen-2 arm and continuation checkpoint, `combat-grid.txt` in each run directory, and record it beside the damage-by-toughness grids
 - [ ] T140 Retrain arm `e64` with `--freeze-probe-set` on the corrected inputs and the repaired corpus, then continue the sweep (T131)
 
 ---
