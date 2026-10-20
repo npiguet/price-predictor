@@ -316,11 +316,14 @@ def toughness_sweep_records() -> None:
               ("1 activated", 1, "#8e5bb5", "1 damage, activated ping"),
               ("2", 2, "#4a9a62", "2 damage"), ("3", 3, "#e08f3c", "3 damage"),
               ("5", 5, "#c05555", "5 damage")]
-    chosen = present(["e64", "e64-lethality", "B64 last", "B128 last", "B256 last"],
-                     sr.checkpoint)
-    fig, axes = plt.subplots(1, len(chosen), figsize=(3.7 * len(chosen), 3.6), sharey=True,
+    chosen = present(["e64", "e64-lethality", "B64 best", "B64 last", "B128 best", "B128 last",
+                      "B256 best", "B256 last"], sr.checkpoint)
+    cols = 4
+    rows = int(np.ceil(len(chosen) / cols))
+    fig, axes = plt.subplots(rows, cols, figsize=(3.7 * cols, 3.5 * rows), sharey=True,
                              squeeze=False)
-    for ax, name in zip(axes[0], chosen):
+    flat = list(axes.flat)
+    for i, (ax, name) in enumerate(zip(flat, chosen)):
         d = sr[(sr.checkpoint == name) & (sr.sweep == "toughness")]
         d = d.join(meta[["group"]], on="record")
         ax.axhline(0.5, color="black", lw=0.8)
@@ -332,14 +335,26 @@ def toughness_sweep_records() -> None:
                     label=f"{label} ({n})")
             ax.axvline(damage + 0.5, color=colour, lw=0.9, ls=":")
         ax.set_title(short(name))
-        ax.set_xlabel("target's toughness")
         ax.set_xticks(range(1, 9))
         ax.set_ylim(0, 1)
-    axes[0][0].set_ylabel("predicted death")
-    axes[0][-1].legend(fontsize=8, loc="upper left", bbox_to_anchor=(1.02, 1),
-                       title="ability (records)", title_fontsize=8)
+        if i % cols == 0:
+            ax.set_ylabel("predicted death")
+        if i >= len(chosen) - cols:
+            ax.set_xlabel("target's toughness")
+    handles, labels = flat[0].get_legend_handles_labels()
+    spare = flat[len(chosen):]
+    for ax in spare:
+        ax.axis("off")
+    if spare:
+        spare[0].legend(handles, labels, fontsize=8.5, loc="center", title="ability (records)",
+                        title_fontsize=8.5)
+    else:
+        flat[cols - 1].legend(handles, labels, fontsize=8, loc="upper left",
+                              bbox_to_anchor=(1.02, 1), title="ability (records)",
+                              title_fontsize=8)
+    fig.subplots_adjust(hspace=0.35)
     fig.suptitle("Toughness sweep: band from lowest to highest record at each toughness, line at"
-                 " the median; the rule says each group stops dying at its dotted line", y=1.03)
+                 " the median; the rule says each group stops dying at its dotted line", y=1.0)
     save(fig, "toughness-sweep-records")
 
 
