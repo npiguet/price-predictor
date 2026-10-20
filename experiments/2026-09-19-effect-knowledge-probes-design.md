@@ -28,6 +28,10 @@ A probe is scored by AUC for a yes/no question, the chance that a true case scor
 
 **A restriction the board snapshot does not list costs the model the most on attack legality, on every checkpoint.** The snapshot gives each permanent only its spell and activated abilities, so a Pacifism reaches the model as an enchantment with no text. Where such a static keeps a creature from attacking, the attack-legality loss is between one and a half and four and a half times its loss with no restriction ([board abilities](#a-restriction-the-board-snapshot-does-not-list-costs-the-model-the-most-on-attack-legality)).
 
+**The model knows an evasive attacker is hard to block, but pairs it with the blocker that answers it only for horsemanship and fear.** Intimidate is read as fear, reach barely answers flying, and shadow and "can't be blocked" change nothing ([evasion](#evasion-the-model-knows-an-evasive-attacker-is-hard-to-block-and-which-blocker-answers-it-only-for-horsemanship-and-fear)).
+
+**The model follows who controls a target, and barely checks the card type a restriction names.** A creature that loses its creature type stays a legal target of "target creature" ([targeting](#targeting-the-model-follows-who-controls-a-target-and-barely-checks-the-card-type-a-restriction-names)).
+
 **A sweeper is predicted to kill about one creature in five, on every gen-2 checkpoint.** The board-size sweep adds opposing creatures one at a time, and the predicted deaths rise by about a fifth of a death per creature, where a sweeper kills one per creature ([sweeps](#the-sweeps-show-the-death-rule-arrive-with-the-lethality-copies-and-two-behaviours-training-never-changed)).
 
 ## Results
@@ -121,6 +125,70 @@ The snapshot gives each permanent its spell and activated abilities as card-slot
 - **On resolutions, a replacement or a static on another permanent nearly doubles the zone-outcome loss.** That is the case where a destroy turns into an exile, or does nothing.
 
 Noise in the card slots costs nothing on any subset, because the lines that would matter are not in the card slots to begin with. The subsets differ in more than the unlisted line, since a board with Pacifism is a different game state from one without, so the gaps bound the cost of the missing text rather than measure it exactly. Gen-3 lists every line of a permanent in its snapshot, and these losses are the baseline it is measured against.
+
+### Evasion: the model knows an evasive attacker is hard to block, and which blocker answers it only for horsemanship and fear
+
+Every gen-2 checkpoint lowers the predicted chance of a block when the attacker gains flying, horsemanship, fear or intimidate. Only horsemanship and fear are also tied to the blockers that answer them. The evasion grid takes 40 real block-legality records from the validation games, one per game, in which the blocker was legal and neither creature has an evasion keyword. It grants the attacker one keyword and gives the blocker one trait, then reads the model's predicted chance that this blocker may block this attacker. The rule's answer is computed for every edited record. The script is `scripts/effect_knowledge_probes/evasion_grid.py`.
+
+![Predicted block legality by attacker keyword and blocker trait for three checkpoints, rule-allowed cells outlined](2026-09-18-effect-model-gen2/charts/evasion-grid.png)
+
+*Each cell averages the predicted chance of a legal block over the same 40 records; red outlines mark the cells the rule allows. Data: `evasion_grid.csv`.*
+
+The absolute level of the prediction is not a probability to read at face value. Even with no keyword and no trait, where every block is legal, arm `e64-lethality` predicts about one in ten and run B64's last epoch about one in three. The `blocker_legal` output ranks blockers better than it calibrates them, so the comparisons below are within each checkpoint: how much a blocker trait lifts the prediction against an attacker with the keyword, against how much it lifts it against an attacker without one.
+
+| attacker keyword, blocker trait | the trait's lift against that keyword | its lift against no keyword | checkpoints where the first is larger | the rule |
+|---|---:|---:|---:|---|
+| horsemanship, horsemanship | ×10.6 | ×1.9 | 14 of 14 | allows |
+| fear, artifact | ×2.4 | ×1.2 | 14 of 14 | allows |
+| fear, black | ×1.8 | ×1.1 | 14 of 14 | allows |
+| intimidate, artifact | ×2.4 | ×1.2 | 14 of 14 | allows |
+| intimidate, black | ×1.8 | ×1.1 | 13 of 14 | forbids, unless the attacker is also black |
+| intimidate, shares a colour | ×1.09 | ×1.05 | 10 of 14 | allows |
+| flying, flying | ×1.8 | ×1.4 | 13 of 14 | allows |
+| flying, reach | ×1.13 | ×1.09 | 12 of 14 | allows |
+
+*Lifts are the median over checkpoints of the predicted chance with the trait divided by the chance without it, in the same row. Data: `evasion_grid.csv`.*
+
+- **Horsemanship and fear are paired with their answers.** A horsemanship blocker lifts the prediction several times more against a horsemanship attacker than against a plain one, and an artifact or black blocker does the same against fear, on every checkpoint.
+- **Intimidate is read as fear.** An artifact blocker answers it, as the rule says, but so does a black one, which the rule allows only when the attacker is black too, and sharing a colour, the answer the rule names, barely registers.
+- **Flying is only half paired.** A flying blocker answers a flying attacker somewhat more than a plain one. Reach, which the rule treats exactly like flying here, lifts the prediction hardly more than no trait at all.
+- **Some traits read as "a good blocker" whatever the attacker.** A horsemanship or flying blocker lifts the prediction against every attacker, a plain one included, though neither trait matters against a plain attacker.
+- **Shadow and "can't be blocked" change nothing.** Granting either leaves the row nearly identical to the plain one. A shadow blocker is predicted to block a little less against every attacker, and not more against a shadow one, which is why the shadow row ranks below chance.
+- **The two protection rows are identical by construction.** The keyword flags carry protection without its colour, so protection from the blocker's colour and protection from another colour give the model the same input. The gen-3 draft gives the flags the quality.
+
+The ranking within each attacker row, allowed blocks against forbidden ones, puts the same picture on one scale. Horsemanship ranks near perfectly on every checkpoint, fear well above chance, flying and intimidate near chance, and shadow below it. No width and no stage of training moves the pooled ranking off about 0.6, so what the model knows about evasion was settled early and did not change with the continuation runs.
+
+![Ranking AUC per attacker keyword, one dot per checkpoint](2026-09-18-effect-model-gen2/charts/evasion-ranking.png)
+
+*AUC of the predictions on the blocks a row allows against the ones it forbids, over the grid's cells and records. "Can't be blocked" and protection from the blocker's colour allow no block and have no ranking. Data: `evasion_ranking.csv`.*
+
+### Targeting: the model follows who controls a target, and barely checks the card type a restriction names
+
+On real targeting decisions the model separates legal targets from illegal ones almost perfectly, whatever the restriction, and the flips show that much of this rests on what a target looks like rather than on the restriction's own condition. The probe takes 1,500 real targeting decisions from the validation games, at most three per game. Each battlefield permanent on the board is an item, labelled legal or not by Forge's own list of legal targets. The model's answer is the affected gate at that permanent's slot. Items are grouped by the acting ability's `ValidTgts$` restriction and by the kind of condition it states. The script is `scripts/effect_knowledge_probes/target_restrictions.py`.
+
+| kind of restriction | items | legal | AUC, median over 14 checkpoints | range |
+|---|---:|---:|---:|---|
+| a card type only, such as `Creature` or `Any` | 10,859 | 2,410 | 0.999 | 0.997–0.999 |
+| who controls it, such as `Creature.YouCtrl` | 1,414 | 242 | 0.996 | 0.984–0.999 |
+| other, such as `Permanent.nonLand` | 1,225 | 224 | 0.982 | 0.959–0.989 |
+| attacking, blocking or tapped | 451 | 36 | 0.988 | 0.977–0.995 |
+| a colour, such as `Creature.nonBlack` | 420 | 77 | 0.966 | 0.958–0.989 |
+| a number, such as `Creature.powerLE2` | 267 | 57 | 0.974 | 0.966–0.985 |
+| a keyword, such as `Creature.withFlying` | 60 | 11 | 0.977 | 0.935–0.985 |
+
+*Data: `target_families.csv`, and per restriction `target_restrictions.csv`. A supertype family holds 79 items with 2 legal ones, too few to score.*
+
+The illegal targets on a real board are mostly easy: a land when the restriction asks for a creature, or the acting player's own creature when it asks for an opponent's. The flips ask the harder question. Each takes a legal target of a restriction with a single condition and breaks exactly that condition, which by the rule makes it illegal.
+
+![Predicted legality before and after each flip, one dot per checkpoint](2026-09-18-effect-model-gen2/charts/target-flips.png)
+
+*Data: `target_flips.csv`.*
+
+- **Control is learned.** A target of "target creature you control" handed to the opponent falls from near certain to about one in five, on every checkpoint on the corrected inputs.
+- **A creature that loses its creature type stays a legal target of "target creature".** The prediction barely moves on 1,380 targets. The edit leaves the permanent its power, toughness and combat status, so the model may read creature-ness from those rather than from the type line, but either way the restriction's own condition is not what it checks. Lands that lose the land type barely move either.
+- **The other flips are too few to weigh.** Artifacts that lose the artifact type fall by about a third, on 8 targets; enchantments and the opponent's creatures handed to the acting player rest on 7 and 14 targets, and the model already doubted the latter before the flip.
+
+No restriction in the sample states `nonLegendary` alone, so the legendary flip did not run.
 
 ## Design of the suite
 

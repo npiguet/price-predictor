@@ -249,6 +249,64 @@ def embedding_probes(ck: Checkpoint) -> list[list]:
     return rows
 
 
+def _number(cell: str) -> float | None:
+    cell = cell.strip()
+    try:
+        return float(cell)
+    except ValueError:
+        return None  # "n/a", or the unreadable dash an early run printed
+
+
+def _table(text: str, after: str) -> list[list[str]]:
+    """The data rows of the first markdown table following the line ``after``."""
+    lines = text.splitlines()
+    start = next((i for i, line in enumerate(lines) if line.startswith(after)), None)
+    if start is None:
+        return []
+    rows, seen_header = [], False
+    for line in lines[start + 1:]:
+        if not line.startswith("|"):
+            if seen_header:
+                break
+            continue
+        cells = [c.strip() for c in line.strip().strip("|").split("|")]
+        if not seen_header:
+            seen_header = True
+            header = cells
+            continue
+        if set(line) <= set("|-: "):
+            continue
+        rows.append(cells)
+    return [header, *rows] if seen_header else []
+
+
+def evasion(ck: Checkpoint) -> tuple[list[list], list[list]]:
+    """``(grid cells, per-row ranking)`` from a checkpoint's ``evasion-grid.txt``."""
+    text = read(ck.path / "evasion-grid.txt")
+    predicted, rule = _table(text, "predicted may block"), _table(text, "rule may block")
+    cells = []
+    if predicted and rule:
+        traits = predicted[0][1:]
+        for p_row, r_row in zip(predicted[1:], rule[1:]):
+            for trait, p, r in zip(traits, p_row[1:], r_row[1:]):
+                cells.append([ck.id, p_row[0], trait, _number(p), _number(r)])
+    ranking = [[ck.id, row[0], _number(row[1]), _number(row[2]), _number(row[3])]
+               for row in _table(text, "ranking within each attacker row")[1:]]
+    return cells, ranking
+
+
+def targeting(ck: Checkpoint) -> tuple[list[list], list[list], list[list]]:
+    """``(by family, by restriction, flips)`` from a checkpoint's ``target-restrictions.txt``."""
+    text = read(ck.path / "target-restrictions.txt")
+    families = [[ck.id, row[0], int(row[1]), int(row[2]), _number(row[3])]
+                for row in _table(text, "by family")[1:]]
+    restrictions = [[ck.id, row[0].strip("`"), row[1], int(row[2]), int(row[3]),
+                     _number(row[4])] for row in _table(text, "by restriction")[1:]]
+    flips = [[ck.id, row[0], int(row[1]), _number(row[2]), _number(row[3])]
+             for row in _table(text, "counterfactual flips")[1:]]
+    return families, restrictions, flips
+
+
 # ── main ───────────────────────────────────────────────────────────────────
 
 
@@ -344,6 +402,22 @@ def main() -> None:
     write("combat_grids.csv", ["checkpoint", "variant", "reads", "striker_power",
                                "struck_toughness", "predicted_death"],
           [r for ck, _ in cks for r in combat(ck)])
+
+    ev = [evasion(ck) for ck, _ in cks]
+    write("evasion_grid.csv", ["checkpoint", "attacker_keyword", "blocker_trait",
+                               "predicted_may_block", "rule_may_block"],
+          [r for cells, _ in ev for r in cells])
+    write("evasion_ranking.csv", ["checkpoint", "attacker_keyword", "allowed_mean",
+                                  "forbidden_mean", "auc"],
+          [r for _, ranking in ev for r in ranking])
+    tg = [targeting(ck) for ck, _ in cks]
+    write("target_families.csv", ["checkpoint", "family", "items", "legal", "auc"],
+          [r for families, _, _ in tg for r in families])
+    write("target_restrictions.csv",
+          ["checkpoint", "restriction", "family", "items", "legal", "auc"],
+          [r for _, restrictions, _ in tg for r in restrictions])
+    write("target_flips.csv", ["checkpoint", "flip", "targets", "predicted_legal_before",
+                               "predicted_legal_after"], [r for _, _, flips in tg for r in flips])
 
     bnd = [r for run in RUN_LIST for r in boundary(run)]
     seen = {(r[0], r[1]) for r in bnd}

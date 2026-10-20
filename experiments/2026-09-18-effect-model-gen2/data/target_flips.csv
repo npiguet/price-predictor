@@ -1,0 +1,85 @@
+checkpoint,flip,targets,predicted_legal_before,predicted_legal_after
+e64 (earlier inputs),loses creature,1380,0.973,0.92
+e64 (earlier inputs),to the opponent,183,0.857,0.408
+e64 (earlier inputs),loses land,143,0.964,0.946
+e64 (earlier inputs),to the acting player,14,0.296,0.479
+e64 (earlier inputs),loses artifact,8,0.641,0.588
+e64 (earlier inputs),loses enchantment,7,0.539,0.628
+e64,loses creature,1380,0.971,0.931
+e64,to the opponent,183,0.911,0.202
+e64,loses land,143,0.906,0.602
+e64,to the acting player,14,0.265,0.438
+e64,loses artifact,8,0.63,0.578
+e64,loses enchantment,7,0.802,0.766
+e128,loses creature,1380,0.967,0.948
+e128,to the opponent,183,0.85,0.183
+e128,loses land,143,0.872,0.858
+e128,to the acting player,14,0.286,0.257
+e128,loses artifact,8,0.636,0.559
+e128,loses enchantment,7,0.539,0.544
+e64-lethality,loses creature,1380,0.984,0.943
+e64-lethality,to the opponent,183,0.927,0.197
+e64-lethality,loses land,143,0.786,0.831
+e64-lethality,to the acting player,14,0.422,0.406
+e64-lethality,loses artifact,8,0.899,0.656
+e64-lethality,loses enchantment,7,0.769,0.798
+e128-lethality,loses creature,1380,0.944,0.925
+e128-lethality,to the opponent,183,0.791,0.094
+e128-lethality,loses land,143,0.707,0.739
+e128-lethality,to the acting player,14,0.127,0.242
+e128-lethality,loses artifact,8,0.566,0.493
+e128-lethality,loses enchantment,7,0.228,0.227
+e256-lethality,loses creature,1380,0.977,0.962
+e256-lethality,to the opponent,183,0.926,0.17
+e256-lethality,loses land,143,0.713,0.763
+e256-lethality,to the acting player,14,0.206,0.193
+e256-lethality,loses artifact,8,0.895,0.705
+e256-lethality,loses enchantment,7,0.516,0.391
+A64 best,loses creature,1380,0.982,0.963
+A64 best,to the opponent,183,0.946,0.196
+A64 best,loses land,143,0.901,0.864
+A64 best,to the acting player,14,0.43,0.32
+A64 best,loses artifact,8,0.937,0.57
+A64 best,loses enchantment,7,0.762,0.682
+A64 last,loses creature,1380,0.99,0.953
+A64 last,to the opponent,183,0.954,0.165
+A64 last,loses land,143,0.838,0.798
+A64 last,to the acting player,14,0.532,0.169
+A64 last,loses artifact,8,0.989,0.644
+A64 last,loses enchantment,7,0.795,0.618
+B64 best,loses creature,1380,0.981,0.919
+B64 best,to the opponent,183,0.945,0.171
+B64 best,loses land,143,0.916,0.915
+B64 best,to the acting player,14,0.425,0.291
+B64 best,loses artifact,8,0.891,0.426
+B64 best,loses enchantment,7,0.605,0.386
+B64 last,loses creature,1380,0.987,0.915
+B64 last,to the opponent,183,0.965,0.174
+B64 last,loses land,143,0.935,0.934
+B64 last,to the acting player,14,0.498,0.31
+B64 last,loses artifact,8,0.942,0.392
+B64 last,loses enchantment,7,0.711,0.356
+A128 best,loses creature,1380,0.974,0.955
+A128 best,to the opponent,183,0.946,0.261
+A128 best,loses land,143,0.865,0.86
+A128 best,to the acting player,14,0.403,0.376
+A128 best,loses artifact,8,0.835,0.546
+A128 best,loses enchantment,7,0.553,0.505
+A128 last,loses creature,1380,0.981,0.963
+A128 last,to the opponent,183,0.97,0.15
+A128 last,loses land,143,0.911,0.909
+A128 last,to the acting player,14,0.521,0.374
+A128 last,loses artifact,8,0.986,0.65
+A128 last,loses enchantment,7,0.644,0.264
+B128 best,loses creature,1380,0.981,0.97
+B128 best,to the opponent,183,0.947,0.194
+B128 best,loses land,143,0.873,0.862
+B128 best,to the acting player,14,0.412,0.348
+B128 best,loses artifact,8,0.897,0.617
+B128 best,loses enchantment,7,0.473,0.411
+B128 last,loses creature,1380,0.983,0.969
+B128 last,to the opponent,183,0.957,0.185
+B128 last,loses land,143,0.892,0.881
+B128 last,to the acting player,14,0.437,0.334
+B128 last,loses artifact,8,0.923,0.608
+B128 last,loses enchantment,7,0.43,0.369

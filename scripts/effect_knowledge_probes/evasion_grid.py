@@ -229,7 +229,7 @@ def label(name: str | None) -> str:
 
 
 def _mean(values: np.ndarray) -> str:
-    return f"{values.mean():.2f}" if len(values) else "—"
+    return f"{values.mean():.2f}" if len(values) else "n/a"
 
 
 def main() -> None:

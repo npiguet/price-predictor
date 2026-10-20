@@ -38,6 +38,10 @@ A **run** is one training run: an arm (`e64`, `e128`, `e64-lethality`, ...) or a
 | `damage_grids.csv` | checkpoint, record set, damage and toughness: predicted death | `grid-*.txt` beside each run; the arms' grids transcribed |
 | `boundary_by_epoch.csv` | run and epoch: error against the rule, predicted death lethal by 1, exactly lethal and short by 1, and the gap | `boundary-by-epoch.txt`; the arms' epochs transcribed |
 | `combat_grids.csv` | checkpoint, keyword variant, creature read, striker's power and struck creature's toughness: predicted death | `combat-grid.txt` and `combat-grid-steps.txt` |
+| `evasion_grid.csv` | checkpoint, keyword granted to the attacker and trait given to the blocker: predicted chance of a legal block, and the rule's answer | `evasion-grid.txt` beside each checkpoint |
+| `evasion_ranking.csv` | checkpoint and attacker keyword: mean prediction on allowed and forbidden blocks, and their ranking AUC | `evasion-grid.txt` |
+| `target_families.csv`, `target_restrictions.csv` | checkpoint and kind of target restriction, or each `ValidTgts$` restriction: items, legal items, AUC | `target-restrictions.txt` beside each checkpoint |
+| `target_flips.csv` | checkpoint and flip: targets, mean predicted legality before and after | `target-restrictions.txt` |
 | `noise_pilot.csv`, `pilot_collections.csv`, `first_strike_repair.csv`, `lethal_hits_in_corpus.csv`, `gen1_vs_e64_field_terms.csv` | the smaller tables of the gen-2 record's details | transcribed |
 
 Rung names in `probe_ladder.csv` follow the probes record: `0` the board alone, `1` the board plus `e`, `1w` a random vector of the same width, `1o` the true script values, `2` the trunk's output, `3` the model's own prediction (probe `model`).
@@ -61,4 +65,7 @@ Rung names in `probe_ladder.csv` follow the probes record: `0` the board alone, 
 | `line-properties.png` | line properties read from `e` alone | `probe_ladder.csv` |
 | `board-abilities.png` | losses where an unlisted static or replacement decides the answer | `board_abilities.csv` |
 | `ablation.png` | loss increase when `e` is replaced with noise, by scope | `ablation.csv` |
+| `evasion-grid.png` | predicted block legality by attacker keyword and blocker trait, rule cells outlined | `evasion_grid.csv` |
+| `evasion-ranking.png` | ranking AUC per attacker keyword across checkpoints | `evasion_ranking.csv` |
+| `target-flips.png` | predicted target legality before and after breaking a restriction's condition | `target_flips.csv` |
 | `width.png` | losses, probes and participation ratio by width | `checkpoints.csv`, `probe_ladder.csv`, `gate3.csv` |

@@ -736,11 +736,103 @@ def other_sweeps() -> None:
     save(fig, "other-sweeps")
 
 
+EVASION_ROWS = ["none", "flying", "horsemanship", "fear", "intimidate", "shadow",
+                "unblockable", "protection-blocker", "protection-other"]
+EVASION_COLUMNS = ["none", "flying", "reach", "horsemanship", "shadow", "artifact", "black",
+                   "shares-colour"]
+
+
+def evasion_grid() -> None:
+    """Predicted block legality per attacker keyword and blocker trait, rule cells outlined."""
+    g = csv("evasion_grid.csv")
+    chosen = present(["e64-lethality", "B64 last", "B128 last"], g.checkpoint)
+    fig, axes = plt.subplots(1, len(chosen), figsize=(5.4 * len(chosen), 5.4), squeeze=False)
+    for ax, name in zip(axes[0], chosen):
+        d = g[g.checkpoint == name]
+        pred = d.pivot(index="attacker_keyword", columns="blocker_trait",
+                       values="predicted_may_block").loc[EVASION_ROWS, EVASION_COLUMNS]
+        rule = d.pivot(index="attacker_keyword", columns="blocker_trait",
+                       values="rule_may_block").loc[EVASION_ROWS, EVASION_COLUMNS]
+        ax.imshow(pred.values, cmap="viridis", vmin=0, vmax=0.8, aspect="auto")
+        for i in range(len(EVASION_ROWS)):
+            for j in range(len(EVASION_COLUMNS)):
+                value = pred.values[i, j]
+                ax.text(j, i, f"{value:.2f}", ha="center", va="center", fontsize=7.5,
+                        color="black" if value > 0.45 else "white")
+                if rule.values[i, j] >= 0.5:
+                    ax.add_patch(plt.Rectangle((j - 0.5, i - 0.5), 1, 1, fill=False,
+                                               edgecolor="#ff4d4d", lw=2.2))
+        ax.set_xticks(range(len(EVASION_COLUMNS)), EVASION_COLUMNS, rotation=40, ha="right")
+        ax.set_yticks(range(len(EVASION_ROWS)), EVASION_ROWS)
+        ax.set_xlabel("trait given to the blocker")
+        ax.set_title(short(name))
+        ax.grid(False)
+    axes[0][0].set_ylabel("keyword granted to the attacker")
+    for ax in axes[0][1:]:
+        ax.set_yticklabels([])
+    fig.subplots_adjust(wspace=0.06)
+    fig.suptitle("Predicted chance the blocker may block, 40 real blocks per cell; red outlines "
+                 "mark the cells where the rule allows the block", y=1.0)
+    save(fig, "evasion-grid")
+
+
+def evasion_ranking() -> None:
+    """Per attacker keyword: AUC of allowed over forbidden blocks, one dot per checkpoint."""
+    r = csv("evasion_ranking.csv")
+    rows = [k for k in ["none", "flying", "horsemanship", "fear", "intimidate", "shadow",
+                        "protection-other", "all rows"] if k in set(r.attacker_keyword)]
+    fig, ax = plt.subplots(figsize=(8.2, 4.2))
+    for i, keyword in enumerate(rows):
+        y = len(rows) - 1 - i
+        d = r[r.attacker_keyword == keyword].dropna(subset=["auc"])
+        for _, row in d.iterrows():
+            run = row.checkpoint.split(" ")[0]
+            colour = run_colour(run) if run in WIDTH_OF else GRAY
+            ax.plot(row.auc, y + np.random.default_rng(hash(row.checkpoint) % 1000)
+                    .uniform(-0.15, 0.15), "o", color=colour, ms=5)
+    ax.axvline(0.5, color="black", lw=0.8)
+    ax.set_yticks(range(len(rows)), rows[::-1])
+    ax.set_xlim(0.15, 1.0)
+    ax.set_xlabel("AUC: allowed blocks ranked above forbidden ones (0.5 = chance), one dot per "
+                  "checkpoint\n(blue 64-wide, orange 128-wide, green 256-wide; darker = later "
+                  "in training)")
+    ax.set_title("Does the model rank the blocks each evasion keyword allows above the ones "
+                 "it forbids?")
+    save(fig, "evasion-ranking")
+
+
+def target_flips() -> None:
+    """Predicted legality of a legal target before and after breaking its one condition."""
+    f = csv("target_flips.csv")
+    flips = (f.groupby("flip").targets.max().sort_values(ascending=False))
+    fig, ax = plt.subplots(figsize=(8.6, 3.8))
+    for i, flip in enumerate(flips.index):
+        y = len(flips) - 1 - i
+        d = f[f.flip == flip]
+        for _, row in d.iterrows():
+            ax.plot([row.predicted_legal_before, row.predicted_legal_after],
+                    [y + 0.12, y - 0.12], color=GRAY, lw=0.5, alpha=0.6)
+        ax.plot(d.predicted_legal_before, np.full(len(d), y + 0.12), "o", color="#8fb3e0",
+                ms=5, label="before the flip" if i == 0 else None)
+        ax.plot(d.predicted_legal_after, np.full(len(d), y - 0.12), "o", color="#c05555",
+                ms=5, label="after the flip" if i == 0 else None)
+    ax.axvline(0, color="black", lw=2.2, ymax=0.02)
+    ax.set_yticks(range(len(flips)),
+                  [f"{flip} ({n} targets)" for flip, n in flips.items()][::-1])
+    ax.set_xlim(-0.03, 1.03)
+    ax.set_xlabel("mean predicted legality of the target, one dot per checkpoint "
+                  "(the rule: legal before, illegal after)")
+    ax.legend(fontsize=8, loc="upper center", bbox_to_anchor=(0.5, -0.2), ncol=2)
+    ax.set_title("Breaking the one condition a target restriction states")
+    save(fig, "target-flips")
+
+
 def main() -> None:
     for chart in (training_losses, loss_noise, probes_vs_loss, field_explained, damage_grids,
                   toughness_sweep_records, boundary_by_epoch, damage_sweep, combat_grids,
                   combat_keywords, gate2_heatmap, ladder, line_properties, board_abilities,
-                  ablation, width_summary, other_sweeps):
+                  ablation, width_summary, other_sweeps, evasion_grid, evasion_ranking,
+                  target_flips):
         chart()
 
 

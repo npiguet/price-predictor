@@ -1,0 +1,113 @@
+checkpoint,family,items,legal,auc
+e64 (earlier inputs),card type only,10859,2410,0.998
+e64 (earlier inputs),controller,1414,242,0.984
+e64 (earlier inputs),other,1225,224,0.964
+e64 (earlier inputs),combat or tapped,451,36,0.977
+e64 (earlier inputs),colour,420,77,0.964
+e64 (earlier inputs),number,267,57,0.967
+e64 (earlier inputs),supertype,79,2,0.987
+e64 (earlier inputs),keyword,60,11,0.935
+e64,card type only,10859,2410,0.998
+e64,controller,1414,242,0.994
+e64,other,1225,224,0.973
+e64,combat or tapped,451,36,0.985
+e64,colour,420,77,0.961
+e64,number,267,57,0.971
+e64,supertype,79,2,0.994
+e64,keyword,60,11,0.965
+e128,card type only,10859,2410,0.998
+e128,controller,1414,242,0.991
+e128,other,1225,224,0.959
+e128,combat or tapped,451,36,0.992
+e128,colour,420,77,0.971
+e128,number,267,57,0.974
+e128,supertype,79,2,1
+e128,keyword,60,11,0.976
+e64-lethality,card type only,10859,2410,0.998
+e64-lethality,controller,1414,242,0.996
+e64-lethality,other,1225,224,0.973
+e64-lethality,combat or tapped,451,36,0.98
+e64-lethality,colour,420,77,0.961
+e64-lethality,number,267,57,0.976
+e64-lethality,supertype,79,2,0.987
+e64-lethality,keyword,60,11,0.981
+e128-lethality,card type only,10859,2410,0.998
+e128-lethality,controller,1414,242,0.991
+e128-lethality,other,1225,224,0.979
+e128-lethality,combat or tapped,451,36,0.993
+e128-lethality,colour,420,77,0.969
+e128-lethality,number,267,57,0.968
+e128-lethality,supertype,79,2,0.994
+e128-lethality,keyword,60,11,0.955
+e256-lethality,card type only,10859,2410,0.997
+e256-lethality,controller,1414,242,0.996
+e256-lethality,other,1225,224,0.977
+e256-lethality,combat or tapped,451,36,0.98
+e256-lethality,colour,420,77,0.958
+e256-lethality,number,267,57,0.966
+e256-lethality,supertype,79,2,1
+e256-lethality,keyword,60,11,0.985
+A64 best,card type only,10859,2410,0.999
+A64 best,controller,1414,242,0.998
+A64 best,other,1225,224,0.983
+A64 best,combat or tapped,451,36,0.994
+A64 best,colour,420,77,0.969
+A64 best,number,267,57,0.98
+A64 best,supertype,79,2,1
+A64 best,keyword,60,11,0.978
+A64 last,card type only,10859,2410,0.999
+A64 last,controller,1414,242,0.998
+A64 last,other,1225,224,0.981
+A64 last,combat or tapped,451,36,0.995
+A64 last,colour,420,77,0.967
+A64 last,number,267,57,0.974
+A64 last,supertype,79,2,1
+A64 last,keyword,60,11,0.985
+B64 best,card type only,10859,2410,0.999
+B64 best,controller,1414,242,0.998
+B64 best,other,1225,224,0.982
+B64 best,combat or tapped,451,36,0.993
+B64 best,colour,420,77,0.962
+B64 best,number,267,57,0.979
+B64 best,supertype,79,2,0.994
+B64 best,keyword,60,11,0.981
+B64 last,card type only,10859,2410,0.999
+B64 last,controller,1414,242,0.999
+B64 last,other,1225,224,0.984
+B64 last,combat or tapped,451,36,0.993
+B64 last,colour,420,77,0.966
+B64 last,number,267,57,0.985
+B64 last,supertype,79,2,0.994
+B64 last,keyword,60,11,0.98
+A128 best,card type only,10859,2410,0.999
+A128 best,controller,1414,242,0.996
+A128 best,other,1225,224,0.982
+A128 best,combat or tapped,451,36,0.988
+A128 best,colour,420,77,0.961
+A128 best,number,267,57,0.973
+A128 best,supertype,79,2,1
+A128 best,keyword,60,11,0.961
+A128 last,card type only,10859,2410,0.999
+A128 last,controller,1414,242,0.998
+A128 last,other,1225,224,0.983
+A128 last,combat or tapped,451,36,0.983
+A128 last,colour,420,77,0.989
+A128 last,number,267,57,0.977
+A128 last,supertype,79,2,0.994
+A128 last,keyword,60,11,0.98
+B128 best,card type only,10859,2410,0.999
+B128 best,controller,1414,242,0.996
+B128 best,other,1225,224,0.989
+B128 best,combat or tapped,451,36,0.988
+B128 best,colour,420,77,0.968
+B128 best,number,267,57,0.971
+B128 best,supertype,79,2,1
+B128 best,keyword,60,11,0.959
+B128 last,card type only,10859,2410,0.999
+B128 last,controller,1414,242,0.998
+B128 last,other,1225,224,0.988
+B128 last,combat or tapped,451,36,0.989
+B128 last,colour,420,77,0.979
+B128 last,number,267,57,0.973
+B128 last,supertype,79,2,1
+B128 last,keyword,60,11,0.963
