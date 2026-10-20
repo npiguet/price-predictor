@@ -34,16 +34,23 @@ A probe is scored by AUC for a yes/no question, the chance that a true case scor
 
 ### `e` carries what an ability is and what it costs, and the trunk works out what happens on the board
 
-The ladder reads one question from inputs of increasing depth, and each input is a rung:
+The ladder asks one question, such as "does this creature die?", of four inputs taken from progressively deeper in the model, and each input is a rung. A question is about one card on the board, the target, or about the acting ability itself.
 
-- **Rung 0:** the board alone, with every `e` zeroed.
-- **Rung 1:** the board plus the acting ability's `e` and, for a question about one card, that card's own ability vectors, with no trunk.
-- **Rung 2:** a probe on the trunk's internal vector at the relevant slot, which shows what the trunk holds, whether or not the model uses it.
-- **Rung 3:** the model's own answer, read from its trained output head, with no probe.
+- **Rung 0, the board alone.** The structured features the trunk receives as input, with no ability vector anywhere, concatenated into one vector:
+  - the game: turn, phase and step, whose turn it is and who holds priority, the kind of record;
+  - the acting ability's slot without its `e`: the announced X, the number of modes, targets and choices;
+  - the acting player and one opponent: life, cards in hand, library and graveyard, poison, mana available by colour;
+  - each player's permanents, as the average of their card features;
+  - the target card's own features: card types, supertypes and colours, mana value, power and toughness with their boosts and counters, marked damage, counters, zone, tapped and summoning sick, combat status, keyword flags, whose it is, whether it is targeted.
+- **Rung 1, the board plus `e`.** Rung 0's vector with three `e` vectors appended: the acting ability's, the average of the target card's own abilities, and, for a question with two sides, the other side's (the attacker a blocker would block, or the cause of a trigger). The vectors are only concatenated; no transformer combines them with the board.
+- **Rung 2, the trunk's vector.** The trained trunk's output at the target card's slot, or at the acting ability's slot for a question about the ability: one vector the transformer computed after attending over the whole board, every card's ability vectors included.
+- **Rung 3, the model's own answer.** The trained model's output head applied to that same trunk vector, with no probe. It is the answer the model gives.
 
-Rungs 2 and 3 read the same trunk in two ways. The probe at rung 2 is fitted to this one question alone. The output head at rung 3 was trained with every other output field at once, and is what the model actually answers. A gap between them is knowledge the trunk holds and the model's own answer does not use.
+Rungs 0 to 2 are not read by the model's output heads. Each is read by a probe, a small network fitted afresh for that one question on that one input: a two-layer MLP with the same size and settings for every checkpoint, and beside it a linear model, whose scores are in the data. Every probe is fitted on four fifths of the items and scored on the fifth it never saw, in turn, never with one ability text, or one card, on both sides of a split, so it cannot look an answer up. A probe's score therefore says how much of the answer its input holds in a form a small network can read.
 
-Rungs 0 to 2 are read by the same small two-layer network, an MLP, fixed across every checkpoint. The share is (rung 1 − rung 0) / (rung 3 − rung 0): the fraction of the distance from the board alone to the model's prediction that `e` closes without any trunk. The chart at the top of this record shows the rungs per question, and the shares sort the questions into the groups below.
+Rungs 2 and 3 read the same trunk vector in two ways. The probe at rung 2 is fitted to this one question alone. The output head at rung 3 was trained with every other output field at once, and is what the model actually answers. A gap between them is knowledge the trunk holds and the model's own answer does not use.
+
+The share is (rung 1 − rung 0) / (rung 3 − rung 0): the fraction of the distance from the board alone to the model's own answer that `e` closes without any trunk. The chart at the top of this record shows the rungs per question, and the shares sort the questions into the groups below.
 
 | question, card-disjoint records | share carried by `e`, median over 11 checkpoints | range |
 |---|---:|---|
