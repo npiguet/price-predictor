@@ -399,7 +399,11 @@ def _readout(target: str, outputs, verdict, slot: int, row: int, *,
     elif target == "dies":
         value = gate * torch.softmax(field("zone_outcome"), -1)[ZONE_OUTCOMES.index("died")]
     elif target == "damage_taken":
-        value = gate * torch.exp(field("damage_taken")[0])
+        # The amount alone, not gate × amount: every damage item took damage, so
+        # the question is how much given the creature was hit, and the gate's
+        # doubt about whether it was hit would scale the answer by noise the probe
+        # on the trunk is never asked to carry.
+        value = torch.exp(field("damage_taken")[0])
     elif target == "pt_until_end_of_turn":
         value = torch.softmax(field("pt_duration"), -1)[DURATIONS.index("end_of_turn")]
     elif target == "may_block":

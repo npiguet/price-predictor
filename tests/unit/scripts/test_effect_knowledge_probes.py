@@ -940,6 +940,17 @@ class TestRung3ReadsTheRightOutput:
         value = ladder._readout("legal_target", outputs, None, 0, 0)
         assert value == pytest.approx(float(torch.sigmoid(torch.tensor(-3.0))))
 
+    def test_damage_taken_reads_the_amount_without_the_gate(self):
+        """Every damage item took damage, so the gate's doubt about whether the
+        creature was hit must not scale the amount."""
+        import math
+
+        from effects.domain.effect_model import FIELD_SLICES
+
+        outputs = self._outputs(gate_logit=-3.0, legal_logit=0.0)
+        outputs[0, 0, FIELD_SLICES["damage_taken"][0]] = math.log(3.0)
+        assert ladder._readout("damage_taken", outputs, None, 0, 0) == pytest.approx(3.0)
+
     def test_an_untrained_verdict_head_gives_no_rung_3(self):
         assert np.isnan(ladder._readout("affordable", None, None, 0, 0,
                                         verdict_trained=False))
