@@ -46,13 +46,13 @@ Both validation losses fall quickly for about ten epochs and slowly after that. 
 
 ![Card-disjoint, game-disjoint and training loss by epoch for every run, by width of e](2026-09-18-effect-model-gen2/charts/training-losses.png)
 
-*Grey: the arm without lethality copies. Light to dark: the arm with copies, its continuation at the same learning rate (run A), and the continuation of run A's kept epoch at a tenth of the learning rate (run B). The bottom row is the training loss, averaged over each epoch's 5,000 steps; it runs about a tenth higher with lethality copies, which add records the corpus rarely shows. Data: `epochs.csv`.*
+*Grey: the arm without lethality copies. Light to dark: the arm with copies, its continuation at the same learning rate (runs A64, A128 and A256), and the continuation of that run's kept epoch at a tenth of the learning rate (runs B64, B128 and B256). The bottom row is the training loss, averaged over each epoch's 5,000 steps; it runs about a tenth higher with lethality copies, which add records the corpus rarely shows. Data: `epochs.csv`.*
 
 The card-disjoint loss swings more than the game-disjoint loss in almost every run. The card-disjoint stratum holds 500 texts the model never saw, and how well the model generalizes to each of them changes from epoch to epoch. The training loss moves by two to three hundredths in every run.
 
-The training loss also shows why the validation losses swing. After a short warmup the learning rate stays at its peak for the whole run, so the weights never settle: each epoch ends at a different point near the bottom of the loss surface. The training loss is averaged over the 5,000 steps of an epoch and smooths that movement out, while a validation loss scores the single set of weights the epoch ended on. When runs B and B128 drop to a tenth of the rate, their training loss falls by about a tenth in the first epoch and by about two tenths within two, against run A and run A128 on the same shards. The weights move closer to the bottom once their steps are smaller.
+The training loss also shows why the validation losses swing. After a short warmup the learning rate stays at its peak for the whole run, so the weights never settle: each epoch ends at a different point near the bottom of the loss surface. The training loss is averaged over the 5,000 steps of an epoch and smooths that movement out, while a validation loss scores the single set of weights the epoch ended on. When runs B64 and B128 drop to a tenth of the rate, their training loss falls by about a tenth in the first epoch and by about two tenths within two, against run A64 and run A128 on the same shards. The weights move closer to the bottom once their steps are smaller.
 
-At a tenth of the learning rate the swing shrinks between two and six times on card-disjoint loss and about three times on game-disjoint loss, while the training loss keeps the same small movement. Runs B and B128 are the only runs whose single epochs can be compared with each other at face value.
+At a tenth of the learning rate the swing shrinks between two and six times on card-disjoint loss and about three times on game-disjoint loss, while the training loss keeps the same small movement. Runs B64 and B128 are the only runs whose single epochs can be compared with each other at face value.
 
 ![Standard deviation of each loss around its five-epoch moving mean, per run](2026-09-18-effect-model-gen2/charts/loss-noise.png)
 
@@ -77,12 +77,12 @@ Across checkpoints of different runs, both losses track the probes. Lower-loss c
 | all 14 checkpoints | +0.71 | +0.68 |
 | the 11 checkpoints with lethality copies | +0.53 | +0.37 |
 
-The two runs at a tenth of the learning rate show the same mechanism over time, and in opposite directions. Run B's card-disjoint loss is lowest at its first epoch and creeps up across the run, while run B128's falls for a few epochs and then holds level. Both runs read the same shards at matching epochs, and both training losses keep falling. Two effects separate them:
+The two runs at a tenth of the learning rate show the same mechanism over time, and in opposite directions. Run B64's card-disjoint loss is lowest at its first epoch and creeps up across the run, while run B128's falls for a few epochs and then holds level. Both runs read the same shards at matching epochs, and both training losses keep falling. Two effects separate them:
 
-- **Run B started from a luckier checkpoint.** Each continuation starts from its parent run's kept epoch, the lowest point of a noisy series, so the starting loss is partly a favourable swing. Run A's epoch 42 sat further below run A's own trend than run A128's epoch 30 sat below run A128's. At a tenth of the rate the weights move away from that starting point toward the level the line trains to, and for run B that level is a little above the dip it started from.
-- **Run B's rise is confidence on unseen texts.** Nearly all of it is in the gate field, whether a card was affected at all, while the zone outcome improves slightly and damage and life stay level. Run B's last epoch scores as well as its first on the probes, and its error against the death rule keeps falling. Run B128's gate loss falls slightly instead. It started from the checkpoint whose boundary leaned furthest toward a death, and its first epochs pull that boundary back, which is where its early gain comes from.
+- **Run B64 started from a luckier checkpoint.** Each continuation starts from its parent run's kept epoch, the lowest point of a noisy series, so the starting loss is partly a favourable swing. Run A64's epoch 42 sat further below run A64's own trend than run A128's epoch 30 sat below run A128's. At a tenth of the rate the weights move away from that starting point toward the level the line trains to, and for run B64 that level is a little above the dip it started from.
+- **Run B64's rise is confidence on unseen texts.** Nearly all of it is in the gate field, whether a card was affected at all, while the zone outcome improves slightly and damage and life stay level. Run B64's last epoch scores as well as its first on the probes, and its error against the death rule keeps falling. Run B128's gate loss falls slightly instead. It started from the checkpoint whose boundary leaned furthest toward a death, and its first epochs pull that boundary back, which is where its early gain comes from.
 
-| at a tenth of the learning rate | run B (64-wide) | run B128 (128-wide) |
+| at a tenth of the learning rate | run B64 | run B128 |
 |---|---:|---:|
 | starting checkpoint's card-disjoint loss, below its parent run's five-epoch mean | 0.16 | 0.10 |
 | card-disjoint trend after the first three epochs, per ten epochs | +0.04 | 0.00 |
@@ -92,7 +92,7 @@ The two runs at a tenth of the learning rate show the same mechanism over time, 
 
 *Data: `epochs.csv`, `fields_by_epoch.csv`.*
 
-Run B's rise over the run, about a tenth of a point, is several times its epoch-to-epoch swing, so it is a trend rather than noise. It is not the extra epochs alone: over epochs 43 to 50, which both runs trained, run B still rises and run B128 barely moves. Whether the width or the seed separates the two runs cannot be told with one seed per width. The 256-wide continuation at a tenth of the rate starts from a third checkpoint at a third width.
+Run B64's rise over the run, about a tenth of a point, is several times its epoch-to-epoch swing, so it is a trend rather than noise. It is not the extra epochs alone: over epochs 43 to 50, which both runs trained, run B64 still rises and run B128 barely moves. Whether the width or the seed separates the two runs cannot be told with one seed per width. The 256-wide continuation at a tenth of the rate starts from a third checkpoint at a third width.
 
 Gen-3 therefore picks its checkpoints by a score built from the probes and from rule scenarios, rather than by the summed loss; the gen-3 draft records the design.
 
@@ -133,11 +133,11 @@ At the full learning rate the boundary sharpens over twenty more epochs, but its
 
 ![Predicted death for hits lethal by one, exactly lethal and short by one, epoch by epoch, for both widths](2026-09-18-effect-model-gen2/charts/boundary-by-epoch.png)
 
-*Dotted: the arm's own checkpoints. Thin: run A, twenty more epochs at the full rate. Thick: run B, from run A's kept epoch at a tenth of the rate (grey band). Dashed verticals: the epoch each run keeps by card-disjoint loss. Data: `boundary_by_epoch.csv`.*
+*Dotted: the arm's own checkpoints. Thin: the A run (A64, A128), twenty more epochs at the full rate. Thick: the B run (B64, B128), from the A run's kept epoch at a tenth of the rate (grey band). Dashed verticals: the epoch each run keeps by card-disjoint loss. Data: `boundary_by_epoch.csv`.*
 
-In run A128 a hit short by one point is predicted to kill anywhere from one time in six to three times in four, depending on the epoch. Run A's range is narrower but of the same kind. The epoch a run keeps can land anywhere in that range: run A128's kept epoch has the boundary moved furthest toward a death of any checkpoint, while run A's happened to land near the rule. Arm `e256-lethality`'s kept epoch also leans toward a death: its damage sweep crosses one half before 3 damage, where arm `e128-lethality`'s crossed after 5 and arm `e64-lethality`'s near the rule.
+In run A128 a hit short by one point is predicted to kill anywhere from one time in six to three times in four, depending on the epoch. Run A64's range is narrower but of the same kind. The epoch a run keeps can land anywhere in that range: run A128's kept epoch has the boundary moved furthest toward a death of any checkpoint, while run A64's happened to land near the rule. Arm `e256-lethality`'s kept epoch also leans toward a death: its damage sweep crosses one half before 3 damage, where arm `e128-lethality`'s crossed after 5 and arm `e64-lethality`'s near the rule.
 
-At a tenth of the learning rate the position settles. Run B128 started from run A128's misplaced epoch 30, pulled the boundary back within a few epochs, and then held it. In both run B and run B128 the gap between "lethal by one" and "short by one" holds near six tenths, and the error against the rule falls slowly. On the probe set's grids, the last epochs of runs B and B128 have the lowest error against the rule of any checkpoint; the training-records chart and the probe-set grids agree.
+At a tenth of the learning rate the position settles. Run B128 started from run A128's misplaced epoch 30, pulled the boundary back within a few epochs, and then held it. In both run B64 and run B128 the gap between "lethal by one" and "short by one" holds near six tenths, and the error against the rule falls slowly. On the probe set's grids, the last epochs of runs B64 and B128 have the lowest error against the rule of any checkpoint; the training-records chart and the probe-set grids agree.
 
 Dropping to a tenth of the rate is therefore what places the boundary. More epochs at the full rate do not.
 
@@ -145,9 +145,9 @@ Dropping to a tenth of the rate is therefore what places the boundary. More epoc
 
 The combat grid asks the same question of a block that the damage grid asks of a spell. It takes 40 real one-on-one blocks from the validation strata, edits the attacker's power and the blocker's toughness, or the blocker's power and the attacker's toughness, from 1 to 8, and reads the predicted death. A keyword variant grants one creature a keyword and compares the prediction with the rule. The script is `scripts/effect_knowledge_probes/combat_grid.py`.
 
-![Combat grids of run B's last epoch: plain blocker and attacker deaths, deathtouch, and first strike](2026-09-18-effect-model-gen2/charts/combat-grids.png)
+![Combat grids of run B64's last epoch: plain blocker and attacker deaths, deathtouch, and first strike](2026-09-18-effect-model-gen2/charts/combat-grids.png)
 
-*Run B's last epoch, coloured as the damage grids: orange above an even chance of death, blue below. Rule: without keywords, the creature read dies on and below the staircase; with deathtouch every cell dies; in the first-strike step a first-striking attacker cannot die. Data: `combat_grids.csv`.*
+*Run B64's last epoch, coloured as the damage grids: orange above an even chance of death, blue below. Rule: without keywords, the creature read dies on and below the staircase; with deathtouch every cell dies; in the first-strike step a first-striking attacker cannot die. Data: `combat_grids.csv`.*
 
 Every checkpoint gets the direction of the plain rule right, with a boundary blurred over two to three points of toughness, as soft as the damage grid's. The attacker's death sits further from the rule than the blocker's on every checkpoint. The likely reason is in the data: a combat record's snapshot is taken at the step's first damage event, so the creature damaged first already shows that damage. In 26 of the 40 blocks the blocker is marked with exactly the attacker's power, and the attacker is never marked. When the lethal damage is already on the board, every checkpoint predicts the death nine times in ten or more; when the model must add the opposing power itself, it is far less sure. The grid clears both creatures' marked damage before editing, and gen-3 moves the snapshot to the start of the damage step.
 
@@ -160,7 +160,7 @@ A combat record covers one damage step, and the model predicts that step alone. 
 The keywords sort into three groups:
 
 - **Learned outright: indestructible.** No checkpoint predicts an indestructible blocker's death more than one time in fourteen on cells where the damage is lethal.
-- **Learned mostly: deathtouch and damage already marked.** Deathtouch moves the non-lethal cells most of the way to a death, by different amounts on different checkpoints, and fades at the blocker's highest toughness on every checkpoint. A double striker's second hit is read from the damage the first one marked, and the last epochs of runs A and B read it best.
+- **Learned mostly: deathtouch and damage already marked.** Deathtouch moves the non-lethal cells most of the way to a death, by different amounts on different checkpoints, and fades at the blocker's highest toughness on every checkpoint. A double striker's second hit is read from the damage the first one marked, and the last epochs of runs A64 and B64 read it best.
 - **Not learned: first strike.** In the first-strike step a first striker cannot die, yet every checkpoint on the corrected inputs predicts its death within a tenth of its death without the keyword, for an attacker and a blocker alike.
 
 The corpus explains the last group. A collector bug lost the creature damage and deaths of every first-strike damage step, and the repair dropped the blocked first-strike fights it could not recover. The probe forks are the only blocked first-strike fights the model sees, and they do not teach the step. Gen-3 collects the first-strike step whole, and the gen-3 draft adds combat copies labelled by the rule as an option.
@@ -179,7 +179,7 @@ The other four move far more than sampling allows, so their variation is the mod
 
 - First strike ranges over about fifteen points on 2,503 records, whose sampling half-width is two.
 - Deathtouch and infect each range over twelve to fourteen points.
-- Double strike ranges from 44% to 85% on 294 records, eight times its sampling half-width. Within run B it fails at the kept epoch and passes at the last.
+- Double strike ranges from 44% to 85% on 294 records, eight times its sampling half-width. Within run B64 it fails at the kept epoch and passes at the last.
 
 Nearly every qualifying first-strike and double-strike case is an unblocked attacker, read through the defending player's life, for the reason given in the combat section above. Neither the lethality copies nor the width moves any row consistently.
 
@@ -201,7 +201,7 @@ The 64-wide line has the lowest card-disjoint loss and the best probes at every 
 
 ![Card-disjoint loss, game-disjoint loss, probe mean and participation ratio by width of e](2026-09-18-effect-model-gen2/charts/width.png)
 
-*Light: the arm; mid: run A; dark: run B. Circles: a run's kept epoch; triangles: its last. The 256-wide continuations join as they complete. Data: `checkpoints.csv`, `probe_ladder.csv`, `gate3.csv`.*
+*Light: the arm; mid: the A runs; dark: the B runs. Circles: a run's kept epoch; triangles: its last. The 256-wide continuations join as they complete. Data: `checkpoints.csv`, `probe_ladder.csv`, `gate3.csv`.*
 
 The card-disjoint gap between the 64-wide and 128-wide lines, about a tenth to two tenths of a point, is at the edge of the epoch-to-epoch swing at the full rate. The two lines keep it through both continuation runs, which makes it more than one lucky epoch. It could still be the two seeds' levels rather than the width.
 
@@ -211,7 +211,7 @@ A wider `e` does not spread its variance over more effective directions. Every c
 
 The participation ratio counts the equally weighted directions that would give `e`'s spread of variance: 3.9 for gen-1 and between 7.5 and 11.1 for every gen-2 checkpoint. A linear probe reads a line's API type, its mana cost and each of its stated amounts far better from gen-2's `e`. The wider `e` reads the amounts better still, though a linear probe with more inputs fits more of any label, so the table bounds what width adds rather than measuring it. Gen-2 trains two heads that read `e` alone, one predicting the API type and one the stated amounts, so part of the gain is by construction; the probes record tests whether the trunk uses it.
 
-| linear probe on `e`, all texts | gen-1 | `e64`, epoch 25 | run B, epoch 62 | run B128, epoch 50 | `e256-lethality`, epoch 28 |
+| linear probe on `e`, all texts | gen-1 | `e64`, epoch 25 | run B64, epoch 62 | run B128, epoch 50 | `e256-lethality`, epoch 28 |
 |---|---:|---:|---:|---:|---:|
 | API type, accuracy | 0.64 | 0.89 | 0.91 | 0.91 | 0.91 |
 | mana cost, R² | 0.06 | 0.53 | 0.58 | 0.63 | 0.61 |
@@ -1488,8 +1488,8 @@ Every gen-2 run trains on the stage-4 corpus (digest `b3adb69a2950`) with an enc
 | `e128` | `e64` at twice the width | 128 | — | full | 1–27 | 22 | `2026-10-gen2-e128/` |
 | `e64-lethality` | `e64` with lethality copies | 64 | 8 | full | 1–33 | 28 | `2026-10-gen2-e64-lethality/` |
 | `e128-lethality` | `e128` with lethality copies | 128 | 8 | full | 1–27 | 22 | `2026-10-gen2-e128-lethality/` |
-| run A | `e64-lethality` continued | 64 | 8 | full | 34–53 | 42 | `2026-10-gen2-e64-lethality-ext20/` |
-| run B | run A's epoch 42 continued | 64 | 8 | a tenth | 43–62 | 43 | `2026-10-gen2-e64-lethality-lr0.1/` |
+| run A64 | `e64-lethality` continued | 64 | 8 | full | 34–53 | 42 | `2026-10-gen2-e64-lethality-ext20/` |
+| run B64 | run A64's epoch 42 continued | 64 | 8 | a tenth | 43–62 | 43 | `2026-10-gen2-e64-lethality-lr0.1/` |
 | run A128 | `e128-lethality` continued | 128 | 8 | full | 28–47 | 30 | `2026-10-gen2-e128-lethality-ext20/` |
 | run B128 | run A128's epoch 30 continued | 128 | 8 | a tenth | 31–50 | 37 | `2026-10-gen2-e128-lethality-lr0.1/` |
 | `e256-lethality` | `e128-lethality` at width 256 | 256 | 8 | full | 1–33 | 28 | `2026-10-gen2-e256-lethality/` |

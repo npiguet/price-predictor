@@ -6,7 +6,8 @@ e128,2026-10-gen2-e128,128,0,1,,1,27
 e64-lethality,2026-10-gen2-e64-lethality,64,8,1,,1,33
 e128-lethality,2026-10-gen2-e128-lethality,128,8,1,,1,27
 e256-lethality,2026-10-gen2-e256-lethality,256,8,1,,1,33
-A,2026-10-gen2-e64-lethality-ext20,64,8,1,e64-lethality,34,53
-B,2026-10-gen2-e64-lethality-lr0.1,64,8,0.1,A,43,62
+A64,2026-10-gen2-e64-lethality-ext20,64,8,1,e64-lethality,34,53
+B64,2026-10-gen2-e64-lethality-lr0.1,64,8,0.1,A64,43,62
 A128,2026-10-gen2-e128-lethality-ext20,128,8,1,e128-lethality,28,47
 B128,2026-10-gen2-e128-lethality-lr0.1,128,8,0.1,A128,31,50
+A256,2026-10-gen2-e256-lethality-ext20,256,8,1,e256-lethality,34,35

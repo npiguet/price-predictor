@@ -33,17 +33,17 @@ GRAY = "#8a8a8a"
 WIDTH_COLOUR = {64: "#3b6fb6", 128: "#e08f3c", 256: "#4a9a62"}
 # A run's phase in its width's line: the arm, run A (full rate), run B (a tenth).
 PHASE_SHADE = {"arm": 0.45, "A": 0.75, "B": 1.0}
-LINES = {64: ("e64-lethality", "A", "B"), 128: ("e128-lethality", "A128", "B128"),
+LINES = {64: ("e64-lethality", "A64", "B64"), 128: ("e128-lethality", "A128", "B128"),
          256: ("e256-lethality", "A256", "B256")}
 NO_COPIES = {64: "e64", 128: "e128"}
 CHECKPOINTS = ["e64 (earlier inputs)", "e64", "e128", "e64-lethality", "e128-lethality",
-               "e256-lethality", "A best", "A last", "B best", "B last", "A128 best",
+               "e256-lethality", "A64 best", "A64 last", "B64 best", "B64 last", "A128 best",
                "A128 last", "B128 best", "B128 last", "A256 best", "A256 last", "B256 best",
                "B256 last"]
 SHORT = {"e64 (earlier inputs)": "e64 early", "e64-lethality": "e64-L",
          "e128-lethality": "e128-L", "e256-lethality": "e256-L"}
 WIDTH_OF = {"e64 (earlier inputs)": 64, "e64": 64, "e128": 128, "e64-lethality": 64,
-            "e128-lethality": 128, "e256-lethality": 256, "A": 64, "B": 64, "A128": 128,
+            "e128-lethality": 128, "e256-lethality": 256, "A64": 64, "B64": 64, "A128": 128,
             "B128": 128, "A256": 256, "B256": 256}
 
 
@@ -203,7 +203,7 @@ def loss_noise() -> None:
             rows.append(dict(run=run, metric=metric, sd=resid.std(), step=step.median()))
     df = pd.DataFrame(rows)
     order = [r for r in ["e64 (earlier inputs)", "e64", "e128", "e64-lethality",
-                         "e128-lethality", "e256-lethality", "A", "A128", "A256", "B",
+                         "e128-lethality", "e256-lethality", "A64", "A128", "A256", "B64",
                          "B128", "B256"] if r in set(df.run)]
     fig, ax = plt.subplots(figsize=(8.2, 3.6))
     x = np.arange(len(order))
@@ -216,7 +216,7 @@ def loss_noise() -> None:
     ax.set_xticks(x, [short(r) for r in order], rotation=30, ha="right")
     ax.set_ylabel("standard deviation around\nthe 5-epoch moving mean")
     ax.set_title("Epoch-to-epoch noise in each loss, from epoch 10 on; "
-                 "B and B128 train at a tenth of the learning rate")
+                 "B64 and B128 train at a tenth of the learning rate")
     ax.legend()
     save(fig, "loss-noise")
 
@@ -238,7 +238,7 @@ def probes_vs_loss() -> None:
                     mfc="white" if not r.lethality_copies else colour, mew=1.4)
             ax.annotate(short(name), (r[loss], r["probe_game-disjoint"]), fontsize=7,
                         xytext=(4, 3), textcoords="offset points", color="#333")
-        for run in ("A", "B", "A128", "B128", "A256", "B256"):
+        for run in ("A64", "B64", "A128", "B128", "A256", "B256"):
             if f"{run} best" in ck.index and f"{run} last" in ck.index:
                 b, la = ck.loc[f"{run} best"], ck.loc[f"{run} last"]
                 ax.annotate("", (la[loss], la["probe_game-disjoint"]),
@@ -282,8 +282,8 @@ def field_explained() -> None:
 def damage_grids() -> None:
     g = csv("damage_grids.csv")
     g = g[g.record_set == "probe set"]
-    chosen = present(["e64", "e64-lethality", "e128-lethality", "e256-lethality", "A best",
-                      "A last", "B last", "A128 best", "B128 last", "A256 best", "A256 last",
+    chosen = present(["e64", "e64-lethality", "e128-lethality", "e256-lethality", "A64 best",
+                      "A64 last", "B64 last", "A128 best", "B128 last", "A256 best", "A256 last",
                       "B256 last"], g.checkpoint)
     cols = 4
     rows = int(np.ceil(len(chosen) / cols))
@@ -305,7 +305,7 @@ def damage_grids() -> None:
 def toughness_sweep_records() -> None:
     sr = csv("sweep_records.csv")
     meta = csv("toughness_sweep_records.csv").set_index("record")
-    chosen = present(["e64", "e64-lethality", "B last"], sr.checkpoint)
+    chosen = present(["e64", "e64-lethality", "B64 last"], sr.checkpoint)
     cmap = {1: "#3b6fb6", 2: "#4a9a62", 3: "#e08f3c", 5: "#c05555"}
     fig, axes = plt.subplots(1, len(chosen), figsize=(4.0 * len(chosen), 3.4), sharey=True)
     for ax, name in zip(np.atleast_1d(axes), chosen):
@@ -354,21 +354,21 @@ def boundary_by_epoch() -> None:
         ax.set_ylim(0, 1)
     axes[0][0].set_ylabel("predicted death given affected,\n40 training records")
     axes[0][0].legend(fontsize=8, loc="lower left")
-    fig.suptitle("Where the lethal boundary sits, epoch by epoch (dotted: the arm; thin: run A;"
-                 " thick: run B); dashed lines mark the epochs each run keeps", y=1.02)
+    fig.suptitle("Where the lethal boundary sits, epoch by epoch (dotted: the arm; thin: the A run;"
+                 " thick: the B run); dashed lines mark the epochs each run keeps", y=1.02)
     save(fig, "boundary-by-epoch")
 
 
 def damage_sweep() -> None:
     s = csv("sweeps.csv")
     s = s[s.sweep == "damage_spell"]
-    chosen = present(["e64", "e64-lethality", "A best", "A last", "B best", "B last",
+    chosen = present(["e64", "e64-lethality", "A64 best", "A64 last", "B64 best", "B64 last",
                       "e128-lethality", "A128 best", "A128 last", "B128 best", "B128 last",
                       "e256-lethality", "A256 best", "A256 last", "B256 best", "B256 last"],
                      s.checkpoint)
     fig, (ax, ax2) = plt.subplots(1, 2, figsize=(10.5, 3.9),
                                   gridspec_kw={"width_ratios": [1.2, 1]})
-    for name in present(["e64", "e64-lethality", "A last", "B last", "A128 best",
+    for name in present(["e64", "e64-lethality", "A64 last", "B64 last", "A128 best",
                          "B128 last", "e256-lethality", "B256 last"], s.checkpoint):
         d = s[s.checkpoint == name]
         base = name.split(" ")[0]
@@ -406,7 +406,7 @@ def damage_sweep() -> None:
 
 def combat_grids() -> None:
     c = csv("combat_grids.csv")
-    name = present(["B256 last", "B128 last", "B last"], c.checkpoint)[-1]
+    name = present(["B256 last", "B128 last", "B64 last"], c.checkpoint)[-1]
     panels = [("none", "blocker", "blocker's death, no keyword", "attacker power"),
               ("none", "attacker", "attacker's death, no keyword", "blocker power"),
               ("attacker-deathtouch", "blocker", "blocker's death, attacker deathtouch",
@@ -544,7 +544,7 @@ def line_properties() -> None:
                ("toughness_change", "toughness change (R²)")]
     targets = [t for t in targets if t[0] in set(d.target)]
     groups = [("gen-1", "gen-1"), ("e64", "e64"),
-              ("B last", "B last"), ("B128 last", "B128 last"), ("B256 last", "B256 last")]
+              ("B64 last", "B64 last"), ("B128 last", "B128 last"), ("B256 last", "B256 last")]
     groups = [g for g in groups if g[0] in set(d.checkpoint)]
     fig, axes = plt.subplots(1, 2, figsize=(11, 4.0), sharey=True)
     for ax, stratum in zip(axes, ("trained", "held-out")):
@@ -636,15 +636,16 @@ def width_summary() -> None:
         ax.set_xticks(range(3), ["64", "128", "256"])
         ax.set_xlabel("width of e")
         ax.set_title(title)
-    fig.suptitle("Every checkpoint trained with lethality copies, by width "
-                 "(light: arm, mid: run A, dark: run B; triangles: a run's last epoch)", y=1.03)
+    fig.suptitle("Every checkpoint trained with lethality copies, by width (light: arm, "
+                 "mid: the A run, dark: the B run; triangles: a run's last epoch)", y=1.03)
     save(fig, "width")
 
 
 def other_sweeps() -> None:
     s = csv("sweeps.csv")
     fig, (ax, ax2) = plt.subplots(1, 2, figsize=(10.5, 3.8))
-    for name in present(["e64", "e64-lethality", "B last", "B128 last", "B256 last"], s.checkpoint):
+    for name in present(["e64", "e64-lethality", "B64 last", "B128 last", "B256 last"],
+                        s.checkpoint):
         d = s[(s.checkpoint == name) & (s.sweep == "affordability") & (s.value <= 8)]
         base = name.split(" ")[0]
         ax.plot(d.value, d.prediction, marker="o", ms=3, lw=1.2, label=short(name),

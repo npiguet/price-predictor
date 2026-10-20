@@ -320,8 +320,8 @@ game-disjoint loss points the same way as the probes in the two 128-wide runs on
 
 | gen-2 run, best epoch → last epoch | card-disjoint loss | game-disjoint loss | probe mean, card-disjoint records | probe mean, game-disjoint records | "affected" probe, card-disjoint records |
 |---|---|---|---|---|---|
-| run A | 3.519 → 3.759 | 2.906 → 2.913 | 0.953 → 0.951 | 0.958 → 0.960 | 0.979 → 0.981 |
-| run B | 3.506 → 3.643 | 2.880 → 2.942 | 0.956 → 0.956 | 0.963 → 0.963 | 0.978 → 0.980 |
+| run A64 | 3.519 → 3.759 | 2.906 → 2.913 | 0.953 → 0.951 | 0.958 → 0.960 | 0.979 → 0.981 |
+| run B64 | 3.506 → 3.643 | 2.880 → 2.942 | 0.956 → 0.956 | 0.963 → 0.963 | 0.978 → 0.980 |
 | run A128 | 3.708 → 3.802 | 2.908 → 2.864 | 0.944 → 0.949 | 0.944 → 0.957 | 0.980 → 0.976 |
 | run B128 | 3.634 → 3.689 | 2.860 → 2.846 | 0.945 → 0.948 | 0.952 → 0.955 | 0.981 → 0.982 |
 
@@ -358,7 +358,7 @@ where gate 1 also lives. A run keeping one checkpoint for both weighs the two sc
   without measuring the questions that matter more directly than the probes do. Calibration stays
   a reported number, because the in-game head's probabilities are used as probabilities.
 - **A fixed schedule that keeps the last epoch.** It would end every run with a tenth of the
-  learning rate and keep the last epoch, as gen-2's runs B and B128 suggest works. It avoids a
+  learning rate and keep the last epoch, as gen-2's runs B64 and B128 suggest works. It avoids a
   poor measure instead of replacing it with a better one.
 
 ## The training loss puts every output field on one scale, with amount distributions that fit

@@ -16,7 +16,7 @@ python scripts/effect_gen2_report/make_charts.py  # charts/ from data/ alone
 
 ## Names
 
-A **run** is one training run: an arm (`e64`, `e128`, `e64-lethality`, ...) or a continuation (A, B, A128, B128, ...). A **checkpoint** is the run's kept epoch, the one with the lowest card-disjoint loss, named after the run (`e64-lethality`, `A best`). A continuation run's last epoch is also probed and is named `A last`. `e64 (earlier inputs)` is arm `e64`'s first run, before the input corrections. `gen-1` is the gen-1 checkpoint.
+A **run** is one training run: an arm (`e64`, `e128`, `e64-lethality`, ...) or a continuation (A64, B64, A128, B128, ...). A **checkpoint** is the run's kept epoch, the one with the lowest card-disjoint loss, named after the run (`e64-lethality`, `A64 best`). A continuation run's last epoch is also probed and is named `A64 last`. `e64 (earlier inputs)` is arm `e64`'s first run, before the input corrections. `gen-1` is the gen-1 checkpoint.
 
 ## Data
 
@@ -54,7 +54,7 @@ Rung names in `probe_ladder.csv` follow the probes record: `0` the board alone, 
 | `toughness-sweep-records.png` | toughness sweep per record, coloured by damage | `sweep_records.csv`, `toughness_sweep_records.csv` |
 | `boundary-by-epoch.png` | the lethal boundary per epoch along each width's line | `boundary_by_epoch.csv` |
 | `damage-sweep.png` | the damage sweep, and where each checkpoint crosses one half | `sweeps.csv` |
-| `combat-grids.png` | combat grids of the latest run B checkpoint | `combat_grids.csv` |
+| `combat-grids.png` | combat grids of the latest run B64 checkpoint | `combat_grids.csv` |
 | `combat-keywords.png` | each combat keyword's effect against the rule | `combat_grids.csv` |
 | `gate2-keywords.png` | gate 2 agreement by keyword and checkpoint | `gate2.csv` |
 | `probe-ladder.png` | the read-out ladder per board target | `probe_ladder.csv` |

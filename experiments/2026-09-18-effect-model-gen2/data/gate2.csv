@@ -47,38 +47,38 @@ e256-lethality,trample,2331,91.9,pass
 e256-lethality,indestructible,342,100,pass
 e256-lethality,wither,142,,too few records
 e256-lethality,infect,1453,76.5,pass
-A best,first_strike,2503,87,pass
-A best,double_strike,294,62.9,probe
-A best,deathtouch,899,85.9,pass
-A best,lifelink,2169,98.1,pass
-A best,trample,2331,88.2,pass
-A best,indestructible,342,96.8,pass
-A best,wither,142,,too few records
-A best,infect,1453,82,pass
-A last,first_strike,2503,92,pass
-A last,double_strike,294,82,pass
-A last,deathtouch,899,87.5,pass
-A last,lifelink,2169,97.7,pass
-A last,trample,2331,87,pass
-A last,indestructible,342,99.1,pass
-A last,wither,142,,too few records
-A last,infect,1453,73.5,pass
-B best,first_strike,2503,83.8,pass
-B best,double_strike,294,44.2,probe
-B best,deathtouch,899,83.1,pass
-B best,lifelink,2169,98.1,pass
-B best,trample,2331,89.2,pass
-B best,indestructible,342,98,pass
-B best,wither,142,,too few records
-B best,infect,1453,77.6,pass
-B last,first_strike,2503,86.2,pass
-B last,double_strike,294,81,pass
-B last,deathtouch,899,80.8,pass
-B last,lifelink,2169,98.1,pass
-B last,trample,2331,92.7,pass
-B last,indestructible,342,97.7,pass
-B last,wither,142,,too few records
-B last,infect,1453,78,pass
+A64 best,first_strike,2503,87,pass
+A64 best,double_strike,294,62.9,probe
+A64 best,deathtouch,899,85.9,pass
+A64 best,lifelink,2169,98.1,pass
+A64 best,trample,2331,88.2,pass
+A64 best,indestructible,342,96.8,pass
+A64 best,wither,142,,too few records
+A64 best,infect,1453,82,pass
+A64 last,first_strike,2503,92,pass
+A64 last,double_strike,294,82,pass
+A64 last,deathtouch,899,87.5,pass
+A64 last,lifelink,2169,97.7,pass
+A64 last,trample,2331,87,pass
+A64 last,indestructible,342,99.1,pass
+A64 last,wither,142,,too few records
+A64 last,infect,1453,73.5,pass
+B64 best,first_strike,2503,83.8,pass
+B64 best,double_strike,294,44.2,probe
+B64 best,deathtouch,899,83.1,pass
+B64 best,lifelink,2169,98.1,pass
+B64 best,trample,2331,89.2,pass
+B64 best,indestructible,342,98,pass
+B64 best,wither,142,,too few records
+B64 best,infect,1453,77.6,pass
+B64 last,first_strike,2503,86.2,pass
+B64 last,double_strike,294,81,pass
+B64 last,deathtouch,899,80.8,pass
+B64 last,lifelink,2169,98.1,pass
+B64 last,trample,2331,92.7,pass
+B64 last,indestructible,342,97.7,pass
+B64 last,wither,142,,too few records
+B64 last,infect,1453,78,pass
 A128 best,first_strike,2503,75,pass
 A128 best,double_strike,294,79.6,pass
 A128 best,deathtouch,899,84.5,pass
