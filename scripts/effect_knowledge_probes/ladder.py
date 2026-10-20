@@ -429,6 +429,8 @@ class ExtractedItem:
     features: dict[str, np.ndarray]
     rung3: float
     layers: list[np.ndarray] = field(default_factory=list)
+    #: The record the item came from, so a check can group items by record or game.
+    record_id: str = ""
 
 
 def _value_vector(text: str | None) -> np.ndarray:
@@ -591,6 +593,7 @@ def extract_features(probe_model, records: list, items_by_record: dict, *,
                             rung3=_readout(item.target, outputs, verdict, slot, b,
                                            verdict_trained=verdict_trained),
                             layers=[layer[b, slot] for layer in layer_np],
+                            record_id=item.record_id,
                         ))
     finally:
         for hook in hooks:
