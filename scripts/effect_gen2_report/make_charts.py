@@ -392,6 +392,7 @@ def boundary_by_epoch() -> None:
         ax.set_title(f"e width {width}: {arm}, then {a}, then {bb}")
         ax.set_xlabel("epoch")
         ax.set_ylim(0, 1)
+        ax.axhline(0.5, color="black", lw=0.9, zorder=1)
     axes[0][0].set_ylabel("predicted death given affected,\n40 training records")
     axes[0][0].legend(fontsize=8, loc="lower left")
     fig.suptitle("Where the lethal boundary sits, epoch by epoch (dotted: the arm; thin: the A run;"

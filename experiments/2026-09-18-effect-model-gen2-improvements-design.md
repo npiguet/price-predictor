@@ -133,7 +133,7 @@ At the full learning rate the boundary sharpens over twenty more epochs, but its
 
 ![Predicted death for hits lethal by one, exactly lethal and short by one, epoch by epoch, for both widths](2026-09-18-effect-model-gen2/charts/boundary-by-epoch.png)
 
-*Dotted: the arm's own checkpoints. Thin: the A run (A64, A128), twenty more epochs at the full rate. Thick: the B run (B64, B128), from the A run's kept epoch at a tenth of the rate (grey band). Dashed verticals: the epoch each run keeps by card-disjoint loss. Data: `boundary_by_epoch.csv`.*
+*Dotted: the arm's own checkpoints. Thin: the A run (A64, A128), twenty more epochs at the full rate. Thick: the B run (B64, B128), from the A run's kept epoch at a tenth of the rate (grey band). Dashed verticals: the epoch each run keeps by card-disjoint loss. The black line marks an even chance: in the B runs a hit short by one point stays below it, after run B128's first few epochs, and an exactly lethal hit above it, while in the A runs both cross it. Data: `boundary_by_epoch.csv`.*
 
 In run A128 a hit short by one point is predicted to kill anywhere from one time in six to three times in four, depending on the epoch. Run A64's range is narrower but of the same kind. The epoch a run keeps can land anywhere in that range: run A128's kept epoch has the boundary moved furthest toward a death of any checkpoint, while run A64's happened to land near the rule. Arm `e256-lethality`'s kept epoch also leans toward a death: its damage sweep crosses one half before 3 damage, where arm `e128-lethality`'s crossed after 5 and arm `e64-lethality`'s near the rule.
 
