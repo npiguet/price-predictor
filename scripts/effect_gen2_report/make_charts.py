@@ -396,9 +396,10 @@ def damage_sweep() -> None:
     ax.text(0.7, 0.96, "wrong: predicted to die", fontsize=8, color=wrong, va="top")
     ax.text(8.3, 0.03, "wrong: predicted to survive", fontsize=8, color=wrong, ha="right")
     style = {"arm": ":", "A": "--", "B": "-"}
-    for name in present(["e64", "e64-lethality", "A64 last", "B64 last", "e128-lethality",
-                         "A128 best", "B128 last", "e256-lethality", "A256 last",
-                         "B256 last"], s.checkpoint):
+    for name in present(["e64", "e64-lethality", "A64 last", "B64 best", "B64 last",
+                         "e128-lethality", "A128 best", "B128 best", "B128 last",
+                         "e256-lethality", "A256 last", "B256 best", "B256 last"],
+                        s.checkpoint):
         d = s[s.checkpoint == name]
         run = name.split(" ")[0]
         if name == "e64":
@@ -406,8 +407,13 @@ def damage_sweep() -> None:
         else:
             phase = "B" if run.startswith("B") else "A" if run.startswith("A") else "arm"
             colour, ls = WIDTH_COLOUR[WIDTH_OF[run]], style[phase]
-        ax.plot(d.value, d.prediction, marker="o", ms=3, lw=1.4, ls=ls, color=colour,
-                label=short(name) + (", no copies" if name == "e64" else ""))
+        on_rule = bool(((d.value < 4) == (d.prediction < 0.5)).all())
+        marker = "s" if name.endswith(" best") else "o"
+        ax.plot(d.value, d.prediction, marker=marker, ms=4 if on_rule else 2.5,
+                lw=2.0 if on_rule else 1.0, ls=ls, color=colour, alpha=1.0 if on_rule else 0.3,
+                zorder=3 if on_rule else 2,
+                label=("✓ " if on_rule else "") + short(name)
+                + (", no copies" if name == "e64" else ""))
     ax.axvline(3.5, color="black", lw=0.8)
     ax.axhline(0.5, color="black", lw=0.8)
     ax.set_xlim(0.5, 8.5)
@@ -415,8 +421,9 @@ def damage_sweep() -> None:
     ax.set_xticks(range(1, 9))
     ax.set_xlabel("NumDmg$ of the spell")
     ax.set_ylabel("predicted death, toughness-4 target")
-    ax.set_title("Damage sweep: the rule kills from 4 damage up (dotted: arm, dashed: A run, "
-                 "solid: B run)", fontsize=9.5)
+    ax.set_title("Damage sweep: the rule kills from 4 damage up. Bold, ✓: every point on the "
+                 "rule's side\n(dotted: arm, dashed: A run, solid: B run; squares: a run's kept "
+                 "epoch)", fontsize=9.5)
     ax.legend(fontsize=7.5, loc="center left", bbox_to_anchor=(1.02, 0.5))
     save(fig, "damage-sweep")
 

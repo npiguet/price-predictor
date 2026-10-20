@@ -125,7 +125,7 @@ The damage sweep reads the same rule from the other side: it fixes a toughness-4
 
 ![Damage sweep curves over quadrants marking where a prediction is on the rule's side](2026-09-18-effect-model-gen2/charts/damage-sweep.png)
 
-*The damage sweep for the arms and continuation runs. Green quadrants are where a prediction falls on the rule's side of an even chance, a survival below 4 damage and a death from 4 up, however soft; red quadrants are where it falls on the wrong side. Colour gives the width of `e`, and the line style the run: dotted the arm, dashed the A run, solid the B run. Data: `sweeps.csv` (sweep `damage_spell`).*
+*The damage sweep for the arms and continuation runs. Green quadrants are where a prediction falls on the rule's side of an even chance, a survival below 4 damage and a death from 4 up, however soft; red quadrants are where it falls on the wrong side. Colour gives the width of `e`, and the line style the run: dotted the arm, dashed the A run, solid the B run; squares mark a run's kept epoch. A checkpoint with every point on the rule's side is drawn bold and ticked in the legend, the others faint. Data: `sweeps.csv` (sweep `damage_spell`).*
 
 ### Where the boundary sits wanders between epochs at the full learning rate, and settles near the rule at a tenth of it
 
@@ -139,7 +139,7 @@ In run A128 a hit short by one point is predicted to kill anywhere from one time
 
 At a tenth of the learning rate the position settles. Run B128 started from run A128's misplaced epoch 30, pulled the boundary back within a few epochs, and then held it. In both run B64 and run B128 the gap between "lethal by one" and "short by one" holds near six tenths, and the error against the rule falls slowly. On the probe set's grids, the last epochs of runs B64 and B128 have the lowest error against the rule of any checkpoint; the training-records chart and the probe-set grids agree.
 
-Dropping to a tenth of the rate is therefore what places the boundary. More epochs at the full rate do not.
+Dropping to a tenth of the rate is therefore what places the boundary. More epochs at the full rate do not. On the damage sweep, all four checkpoints of runs B64 and B128, kept and last, keep every point on the rule's side of an even chance. Of the full-rate checkpoints trained with lethality copies, only arm `e64-lethality` does, by a hundredth at 4 damage.
 
 ### In combat the model applies power against toughness softly, learns indestructible and deathtouch, and not first strike
 
