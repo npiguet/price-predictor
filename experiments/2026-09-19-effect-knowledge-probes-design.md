@@ -184,8 +184,8 @@ The illegal targets on a real board are mostly easy: a land when the restriction
 
 *Data: `target_flips.csv`.*
 
-- **Control is learned.** A target of "target creature you control" handed to the opponent falls from near certain to about one in five, on every checkpoint on the corrected inputs.
-- **A creature that loses its creature type stays a legal target of "target creature".** The prediction barely moves on 1,380 targets. The edit leaves the permanent its power, toughness and combat status, so the model may read creature-ness from those rather than from the type line, but either way the restriction's own condition is not what it checks. Lands that lose the land type barely move either.
+- **Control is learned.** A target of "target creature you control" handed to the opponent falls from near certain to about one in five on every checkpoint. `e64 (earlier inputs)` stops at about two in five.
+- **A creature that loses its creature type stays a legal target of "target creature".** The prediction barely moves on 1,380 targets. The edit leaves the permanent its power, toughness and combat status, so the model may read creature-ness from those rather than from the type line. Either way, the model does not check the condition the restriction states. Lands that lose the land type barely move either, except on `e64`, where they fall by a third.
 - **The other flips are too few to weigh.** Artifacts that lose the artifact type fall by about a third, on 8 targets; enchantments and the opponent's creatures handed to the acting player rest on 7 and 14 targets, and the model already doubted the latter before the flip.
 
 No restriction in the sample states `nonLegendary` alone, so the legendary flip did not run.
