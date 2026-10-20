@@ -42,6 +42,13 @@ A **run** is one training run: an arm (`e64`, `e128`, `e64-lethality`, ...) or a
 | `evasion_ranking.csv` | checkpoint and attacker keyword: mean prediction on allowed and forbidden blocks, and their ranking AUC | `evasion-grid.txt` |
 | `target_families.csv`, `target_restrictions.csv` | checkpoint and kind of target restriction, or each `ValidTgts$` restriction: items, legal items, AUC | `target-restrictions.txt` beside each checkpoint |
 | `target_flips.csv` | checkpoint and flip: targets, mean predicted legality before and after | `target-restrictions.txt` |
+| `colour_pips.csv` | checkpoint and land configuration: decisions, the rule's answer, mean predicted affordable verdict, its mean change from the exact board and the share of decisions below it | `colour-pips.txt` beside each checkpoint |
+| `colour_pips_ranking.csv` | checkpoint and set of configurations: ranking AUC of affordable over unaffordable boards | `colour-pips.txt` |
+| `colour_pips_by_cost.csv` | checkpoint and kind of cost: mean drop below the exact board for each unaffordable configuration | `colour-pips.txt` |
+| `zone_counts.csv` | checkpoint and card-count field: player items, affected players, AUC, share predicting more for the affected player, actual and predicted counts | `zone-effects.txt` beside each checkpoint |
+| `zone_moves.csv`, `zone_outcomes.csv` | checkpoint and starting zone, or starting zone and outcome: cards, moved cards, AUC; mean probability of the right outcome, share whose top destination is right, the outcome most often predicted instead | `zone-effects.txt` |
+| `zone_amounts.csv` | checkpoint and API: predicted count at the affected player for `NumCards$` 1 to 6 | `zone-effects.txt` |
+| `zone_who.csv` | checkpoint and API: predicted count at the targeted and the other player, before and after the target is handed over | `zone-effects.txt` |
 | `noise_pilot.csv`, `pilot_collections.csv`, `first_strike_repair.csv`, `lethal_hits_in_corpus.csv`, `gen1_vs_e64_field_terms.csv` | the smaller tables of the gen-2 record's details | transcribed |
 
 Rung names in `probe_ladder.csv` follow the probes record: `0` the board alone, `1` the board plus `e`, `1w` a random vector of the same width, `1o` the true script values, `2` the trunk's output, `3` the model's own prediction (probe `model`).
@@ -68,4 +75,8 @@ Rung names in `probe_ladder.csv` follow the probes record: `0` the board alone, 
 | `evasion-grid.png` | predicted block legality by attacker keyword and blocker trait, rule cells outlined | `evasion_grid.csv` |
 | `evasion-ranking.png` | ranking AUC per attacker keyword across checkpoints | `evasion_ranking.csv` |
 | `target-flips.png` | predicted target legality before and after breaking a restriction's condition | `target_flips.csv` |
+| `colour-pips.png` | change in the affordable verdict from the exact board per land configuration, and the ranking AUCs | `colour_pips.csv`, `colour_pips_ranking.csv` |
+| `zone-outcomes.png` | share of moved cards whose most probable destination is right, by starting zone and destination | `zone_outcomes.csv` |
+| `zone-amounts.png` | predicted cards at the affected player as `NumCards$` runs from 1 to 6 | `zone_amounts.csv` |
+| `zone-who.png` | share of the predicted cards at the targeted player before and after retargeting | `zone_who.csv` |
 | `width.png` | losses, probes and participation ratio by width | `checkpoints.csv`, `probe_ladder.csv`, `gate3.csv` |

@@ -307,6 +307,36 @@ def targeting(ck: Checkpoint) -> tuple[list[list], list[list], list[list]]:
     return families, restrictions, flips
 
 
+def colour_pips(ck: Checkpoint) -> tuple[list[list], list[list], list[list]]:
+    """``(by configuration, ranking, by cost)`` from a checkpoint's ``colour-pips.txt``."""
+    text = read(ck.path / "colour-pips.txt")
+    configurations = [[ck.id, row[0], int(row[1]), _number(row[2]), _number(row[3]),
+                       _number(row[4]), _number(row[5])]
+                      for row in _table(text, "by configuration")[1:]]
+    ranking = [[ck.id, row[0], _number(row[1])]
+               for row in _table(text, "ranking: rule-affordable")[1:]]
+    by_cost = [[ck.id, row[0], int(row[1]), *(_number(c) for c in row[2:6])]
+               for row in _table(text, "pip missing against one short")[1:]]
+    return configurations, ranking, by_cost
+
+
+def zone_effects(ck: Checkpoint) -> dict[str, list[list]]:
+    """Each table of a checkpoint's ``zone-effects.txt``, rows prefixed by the checkpoint."""
+    text = read(ck.path / "zone-effects.txt")
+    out = {}
+    for name, after in (("counts", "card counts at each player"),
+                        ("moves", "whether a card moves"),
+                        ("outcomes", "where a moved card goes"),
+                        ("amounts", "the amount: NumCards$"),
+                        ("who", "who: the player target")):
+        rows = []
+        for row in _table(text, after)[1:]:
+            cells = [c if _number(c) is None else _number(c) for c in row]
+            rows.append([ck.id, *cells])
+        out[name] = rows
+    return out
+
+
 # ── main ───────────────────────────────────────────────────────────────────
 
 
@@ -418,6 +448,32 @@ def main() -> None:
           [r for _, restrictions, _ in tg for r in restrictions])
     write("target_flips.csv", ["checkpoint", "flip", "targets", "predicted_legal_before",
                                "predicted_legal_after"], [r for _, _, flips in tg for r in flips])
+
+    cp = [colour_pips(ck) for ck, _ in cks]
+    write("colour_pips.csv", ["checkpoint", "configuration", "records", "rule_affordable",
+                              "predicted_affordable", "below_exact_mean",
+                              "below_exact_share"], [r for rows, _, _ in cp for r in rows])
+    write("colour_pips_ranking.csv", ["checkpoint", "items", "auc"],
+          [r for _, rows, _ in cp for r in rows])
+    write("colour_pips_by_cost.csv", ["checkpoint", "cost", "records", "pip_missing",
+                                      "one_short", "pip_missing_plus_2", "all_off_colour"],
+          [r for _, _, rows in cp for r in rows])
+    ze = [zone_effects(ck) for ck, _ in cks]
+    write("zone_counts.csv", ["checkpoint", "field", "player_items", "affected", "auc",
+                              "records_naming_api", "one_player_affected",
+                              "more_for_that_player", "actual_mean", "predicted_mean"],
+          [r for z in ze for r in z["counts"]])
+    write("zone_moves.csv", ["checkpoint", "zone_before", "cards", "moved", "auc"],
+          [r for z in ze for r in z["moves"]])
+    write("zone_outcomes.csv", ["checkpoint", "zone_before", "outcome", "cards",
+                                "p_outcome_mean", "top_right", "predicted_instead"],
+          [r for z in ze for r in z["outcomes"]])
+    write("zone_amounts.csv", ["checkpoint", "api", "records",
+                               *(f"amount_{a}" for a in range(1, 7))],
+          [r for z in ze for r in z["amounts"]])
+    write("zone_who.csv", ["checkpoint", "api", "records", "targeted_before",
+                           "targeted_after", "other_before", "other_after"],
+          [r for z in ze for r in z["who"]])
 
     bnd = [r for run in RUN_LIST for r in boundary(run)]
     seen = {(r[0], r[1]) for r in bnd}

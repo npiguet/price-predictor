@@ -11,6 +11,7 @@ how the 256-wide runs join the charts as they land.
 
 from __future__ import annotations
 
+import zlib
 from pathlib import Path
 
 import matplotlib
@@ -827,12 +828,156 @@ def target_flips() -> None:
     save(fig, "target-flips")
 
 
+def _checkpoint_colour(checkpoint: str) -> tuple | str:
+    run = checkpoint.split(" ")[0]
+    return run_colour(run) if run in WIDTH_OF else GRAY
+
+
+def _jitter(checkpoint: str, spread: float = 0.15) -> float:
+    seed = zlib.crc32(checkpoint.encode("utf-8"))
+    return float(np.random.default_rng(seed).uniform(-spread, spread))
+
+
+WIDTH_KEY = "blue 64-wide, orange 128-wide, green 256-wide; darker = later in training"
+PIP_CONFIGURATIONS = ["exact", "surplus", "one short", "pip missing", "pip missing, +2",
+                      "all off colour"]
+PIP_LABELS = {
+    "exact": "exact: the cost's colours,\noff-colour lands for generic",
+    "surplus": "exact + 2 off-colour lands",
+    "one short": "exact less one land",
+    "pip missing": "same count, one coloured\npip's land off-colour",
+    "pip missing, +2": "pip missing + 2 off-colour\nlands",
+    "all off colour": "same count, every land\noff-colour",
+}
+RULE_COLOUR = {True: "#3f8f4f", False: "#c05555"}
+
+
+def colour_pips() -> None:
+    """Change in the affordable verdict from the exact lands, and the two rankings."""
+    c = csv("colour_pips.csv")
+    r = csv("colour_pips_ranking.csv")
+    fig, (left, right) = plt.subplots(1, 2, figsize=(11.5, 4.4),
+                                      gridspec_kw={"width_ratios": [1.5, 1]})
+    for i, name in enumerate(PIP_CONFIGURATIONS):
+        y = len(PIP_CONFIGURATIONS) - 1 - i
+        d = c[c.configuration == name]
+        if d.empty:
+            continue
+        affordable = bool(d.rule_affordable.iloc[0] >= 0.5)
+        left.axhspan(y - 0.4, y + 0.4, color=RULE_COLOUR[affordable], alpha=0.07, lw=0)
+        for _, row in d.iterrows():
+            left.plot(-row.below_exact_mean, y + _jitter(row.checkpoint),
+                      "o", color=_checkpoint_colour(row.checkpoint), ms=5)
+    left.axvline(0, color="black", lw=0.8)
+    left.set_yticks(range(len(PIP_CONFIGURATIONS)),
+                    [PIP_LABELS[n] for n in PIP_CONFIGURATIONS][::-1], fontsize=8.5)
+    left.set_xlabel("predicted affordable, minus the exact lands' prediction,\nmean over "
+                    "300 decisions; one dot per checkpoint")
+    left.set_title("Green rows the rule calls affordable, red rows not")
+    groups = [("amount only", "exact against\none short"),
+              ("colours only", "exact, surplus against\nthe three off-colour rows"),
+              ("every configuration", "every\nconfiguration")]
+    for i, (prefix, label) in enumerate(groups):
+        d = r[r["items"].str.startswith(prefix)]
+        for _, row in d.iterrows():
+            right.plot(row.auc, i + _jitter(row.checkpoint),
+                       "o", color=_checkpoint_colour(row.checkpoint), ms=5)
+    right.axvline(0.5, color="black", lw=0.8)
+    right.set_yticks(range(len(groups)), [g[1] for g in groups], fontsize=8.5)
+    right.set_xlim(0.4, 1.0)
+    right.set_xlabel("AUC: affordable ranked above unaffordable\n(0.5 = chance)")
+    right.set_title("Ranking by amount and by colour")
+    fig.suptitle("Does the model check the colour of the mana, or only the amount?\n"
+                 f"({WIDTH_KEY})", fontsize=10.5, y=1.06)
+    save(fig, "colour-pips")
+
+
+ZONE_NAMES = {"died": "graveyard", "exiled": "exile", "to_hand": "hand",
+              "library_top": "library", "blinked": "battlefield", "countered": "countered"}
+
+
+def zone_outcomes() -> None:
+    """How often the most probable destination of a moved card is the right one."""
+    z = csv("zone_outcomes.csv")
+    sizes = z.groupby(["zone_before", "outcome"]).cards.max()
+    sizes = sizes[sizes >= 9]
+    order = {"battlefield": 0, "graveyard": 1, "hand": 2}
+    rows = sorted(sizes.index, key=lambda k: (order.get(k[0], 9), -sizes[k]))
+    fig, ax = plt.subplots(figsize=(8.6, 5.0))
+    for i, (zone, outcome) in enumerate(rows):
+        y = len(rows) - 1 - i
+        d = z[(z.zone_before == zone) & (z.outcome == outcome)]
+        for _, row in d.iterrows():
+            ax.plot(row.top_right, y + _jitter(row.checkpoint),
+                    "o", color=_checkpoint_colour(row.checkpoint), ms=5)
+    labels = [f"{zone} → {ZONE_NAMES.get(outcome, outcome)} ({sizes[(zone, outcome)]} cards)"
+              for zone, outcome in rows]
+    ax.set_yticks(range(len(rows)), labels[::-1])
+    for boundary in range(1, len(rows)):
+        if rows[boundary][0] != rows[boundary - 1][0]:
+            ax.axhline(len(rows) - boundary - 0.5, color=GRAY, lw=0.6)
+    ax.set_xlim(0, 1.03)
+    ax.set_xlabel("share of moved cards whose most probable destination is the right one\n"
+                  f"(staying put excluded); one dot per checkpoint ({WIDTH_KEY})")
+    ax.set_title("Where does the model send a card the resolution moved?")
+    save(fig, "zone-outcomes")
+
+
+def zone_amounts() -> None:
+    """Predicted cards at the affected player as the script's NumCards$ is set 1 to 6."""
+    a = csv("zone_amounts.csv")
+    amounts = list(range(1, 7))
+    fig, axes = plt.subplots(1, 3, figsize=(11.5, 3.6), sharey=True)
+    for ax, api, field in zip(axes, ("Draw", "Discard", "Mill"),
+                              ("drawn", "discarded", "milled")):
+        d = a[a.api == api]
+        for _, row in d.iterrows():
+            ax.plot(amounts, [row[f"amount_{k}"] for k in amounts],
+                    color=_checkpoint_colour(row.checkpoint), lw=1.2, alpha=0.85)
+        ax.plot(amounts, amounts, "--", color="black", lw=0.9, label="the script's number")
+        n = int(d.records.max()) if not d.empty else 0
+        ax.set_title(f"{api}, {n} records")
+        ax.set_xlabel("NumCards$ written into the script")
+        ax.set_xticks(amounts)
+    axes[0].set_ylabel("predicted cards at the affected player")
+    axes[0].legend(fontsize=8, loc="upper left")
+    fig.suptitle("Does the predicted count follow the number in the script?\n"
+                 f"(one line per checkpoint; {WIDTH_KEY})", fontsize=10.5, y=1.08)
+    save(fig, "zone-amounts")
+
+
+def zone_who() -> None:
+    """Share of the predicted cards at the targeted player, before and after retargeting."""
+    w = csv("zone_who.csv")
+    apis = [api for api in ("Draw", "Discard", "Mill") if api in set(w.api)]
+    fig, ax = plt.subplots(figsize=(8.6, 3.0))
+    for i, api in enumerate(apis):
+        y = len(apis) - 1 - i
+        d = w[w.api == api]
+        before = d.targeted_before / (d.targeted_before + d.other_before)
+        after = d.targeted_after / (d.targeted_after + d.other_after)
+        for b, f in zip(before, after):
+            ax.plot([b, f], [y + 0.12, y - 0.12], color=GRAY, lw=0.5, alpha=0.6)
+        ax.plot(before, np.full(len(d), y + 0.12), "o", color="#8fb3e0", ms=5,
+                label="targeting the player it affected" if i == 0 else None)
+        ax.plot(after, np.full(len(d), y - 0.12), "o", color="#c05555", ms=5,
+                label="target handed to the other player" if i == 0 else None)
+    n = w.groupby("api").records.max()
+    ax.set_yticks(range(len(apis)), [f"{api} ({n[api]} records)" for api in apis][::-1])
+    ax.set_xlim(-0.03, 1.03)
+    ax.set_xlabel("share of the predicted cards that land on the originally targeted player,\n"
+                  "one dot per checkpoint (the rule: all of them before, none after)")
+    ax.legend(fontsize=8, loc="upper center", bbox_to_anchor=(0.5, -0.3), ncol=2)
+    ax.set_title("Does the effect follow the player target?")
+    save(fig, "zone-who")
+
+
 def main() -> None:
     for chart in (training_losses, loss_noise, probes_vs_loss, field_explained, damage_grids,
                   toughness_sweep_records, boundary_by_epoch, damage_sweep, combat_grids,
                   combat_keywords, gate2_heatmap, ladder, line_properties, board_abilities,
                   ablation, width_summary, other_sweeps, evasion_grid, evasion_ranking,
-                  target_flips):
+                  target_flips, colour_pips, zone_outcomes, zone_amounts, zone_who):
         chart()
 
 

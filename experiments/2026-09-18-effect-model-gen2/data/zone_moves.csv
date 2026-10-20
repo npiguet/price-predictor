@@ -1,0 +1,71 @@
+checkpoint,zone_before,cards,moved,auc
+e64 (earlier inputs),battlefield,29146,767,0.992
+e64 (earlier inputs),graveyard,5805,187,0.995
+e64 (earlier inputs),hand,14408,226,0.977
+e64 (earlier inputs),exile,4,2,1
+e64 (earlier inputs),stack,875,7,0.826
+e64,battlefield,29146,767,0.994
+e64,graveyard,5805,187,0.995
+e64,hand,14408,226,0.987
+e64,exile,4,2,1
+e64,stack,875,7,1
+e128,battlefield,29146,767,0.991
+e128,graveyard,5805,187,0.995
+e128,hand,14408,226,0.979
+e128,exile,4,2,0.5
+e128,stack,875,7,1
+e64-lethality,battlefield,29146,767,0.993
+e64-lethality,graveyard,5805,187,0.992
+e64-lethality,hand,14408,226,0.985
+e64-lethality,exile,4,2,1
+e64-lethality,stack,875,7,0.993
+e128-lethality,battlefield,29146,767,0.991
+e128-lethality,graveyard,5805,187,0.996
+e128-lethality,hand,14408,226,0.981
+e128-lethality,exile,4,2,0.5
+e128-lethality,stack,875,7,0.998
+e256-lethality,battlefield,29146,767,0.992
+e256-lethality,graveyard,5805,187,0.996
+e256-lethality,hand,14408,226,0.983
+e256-lethality,exile,4,2,1
+e256-lethality,stack,875,7,0.989
+A64 best,battlefield,29146,767,0.993
+A64 best,graveyard,5805,187,0.994
+A64 best,hand,14408,226,0.986
+A64 best,exile,4,2,0.75
+A64 best,stack,875,7,1
+A64 last,battlefield,29146,767,0.995
+A64 last,graveyard,5805,187,0.996
+A64 last,hand,14408,226,0.988
+A64 last,exile,4,2,0.75
+A64 last,stack,875,7,0.998
+B64 best,battlefield,29146,767,0.994
+B64 best,graveyard,5805,187,0.996
+B64 best,hand,14408,226,0.989
+B64 best,exile,4,2,0.75
+B64 best,stack,875,7,0.999
+B64 last,battlefield,29146,767,0.995
+B64 last,graveyard,5805,187,0.997
+B64 last,hand,14408,226,0.99
+B64 last,exile,4,2,0.75
+B64 last,stack,875,7,1
+A128 best,battlefield,29146,767,0.991
+A128 best,graveyard,5805,187,0.993
+A128 best,hand,14408,226,0.98
+A128 best,exile,4,2,1
+A128 best,stack,875,7,0.99
+A128 last,battlefield,29146,767,0.994
+A128 last,graveyard,5805,187,0.997
+A128 last,hand,14408,226,0.988
+A128 last,exile,4,2,1
+A128 last,stack,875,7,1
+B128 best,battlefield,29146,767,0.993
+B128 best,graveyard,5805,187,0.997
+B128 best,hand,14408,226,0.987
+B128 best,exile,4,2,1
+B128 best,stack,875,7,0.999
+B128 last,battlefield,29146,767,0.994
+B128 last,graveyard,5805,187,0.996
+B128 last,hand,14408,226,0.988
+B128 last,exile,4,2,1
+B128 last,stack,875,7,1

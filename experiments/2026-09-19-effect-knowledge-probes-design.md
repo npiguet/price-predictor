@@ -32,6 +32,10 @@ A probe is scored by AUC for a yes/no question, the chance that a true case scor
 
 **The model follows who controls a target, and barely checks the card type a restriction names.** A creature that loses its creature type stays a legal target of "target creature" ([targeting](#targeting-the-model-follows-who-controls-a-target-and-barely-checks-the-card-type-a-restriction-names)).
 
+**The model counts the mana a player has and barely checks its colour.** One land fewer lowers the predicted affordable verdict four to ten times as much as one land of the wrong colour, and two extra lands of the wrong colour make an uncastable spell look more affordable than a castable one ([colour](#colour-the-model-counts-the-mana-a-player-has-and-barely-checks-its-colour)).
+
+**The model knows which player draws, discards or mills and where a moved card goes, and barely uses the number of cards the script states.** Six cards drawn are predicted as about two. Retargeting a draw, discard or mill moves only part of the predicted effect to the new player ([zones](#zones-the-model-knows-which-player-draws-discards-or-mills-and-where-a-moved-card-goes-and-barely-uses-the-number-of-cards)).
+
 **A sweeper is predicted to kill about one creature in five, on every gen-2 checkpoint.** The board-size sweep adds opposing creatures one at a time, and the predicted deaths rise by about a fifth of a death per creature, where a sweeper kills one per creature ([sweeps](#the-sweeps-show-the-death-rule-arrive-with-the-lethality-copies-and-two-behaviours-training-never-changed)).
 
 ## Results
@@ -189,6 +193,92 @@ The illegal targets on a real board are mostly easy: a land when the restriction
 - **The other flips are too few to weigh.** Artifacts that lose the artifact type fall by about a third, on 8 targets; enchantments and the opponent's creatures handed to the acting player rest on 7 and 14 targets, and the model already doubted the latter before the flip.
 
 No restriction in the sample states `nonLegendary` alone, so the legendary flip did not run.
+
+### Colour: the model counts the mana a player has and barely checks its colour
+
+On every gen-2 checkpoint, taking one land away lowers the predicted affordable verdict four to ten times as much as turning one land to a colour the cost cannot use. Two extra lands of the wrong colour raise the verdict above the exact board that casts the spell, even when a pip is left unpaid. The probe takes 300 real playability decisions from the validation games, at most two per game, whose candidate has a mana cost basic lands pay one pip each. It replaces the acting player's lands with untapped basics in six configurations. The off colour is the first of white, blue, black, red and green the cost does not name. The rule's answer is computed for every configuration by matching pips to lands. The script is `scripts/effect_knowledge_probes/colour_pips.py`.
+
+| configuration | the acting player's untapped basics | the rule |
+|---|---|---|
+| exact | one land of each coloured pip's colour, one off-colour land per point of generic mana | affordable |
+| surplus | exact, plus two off-colour lands | affordable |
+| one short | exact, less one land | not affordable |
+| pip missing | exact, with one coloured pip's land turned off-colour | not affordable |
+| pip missing, +2 | pip missing, plus two off-colour lands | not affordable |
+| all off colour | as many lands as the cost, all off-colour | not affordable |
+
+The verdict's absolute level is low on every checkpoint: the exact board, which always casts the spell, is predicted affordable at about one in five. The comparisons are therefore made within each decision, as the change from the exact board.
+
+![Change in the affordable verdict from the exact board for each configuration, and the ranking AUCs, one dot per checkpoint](2026-09-18-effect-model-gen2/charts/colour-pips.png)
+
+*Data: `colour_pips.csv` and `colour_pips_ranking.csv`.*
+
+| configuration | change from exact, median over 14 checkpoints | range | decisions below exact, median |
+|---|---:|---|---:|
+| surplus | +0.108 | +0.064 to +0.134 | 0% |
+| one short | −0.105 | −0.069 to −0.136 | 100% |
+| pip missing | −0.016 | −0.009 to −0.027 | 75% |
+| pip missing, +2 | +0.090 | +0.056 to +0.119 | 1% |
+| all off colour | −0.018 | −0.011 to −0.033 | 79% |
+
+*Data: `colour_pips.csv`; per kind of cost, `colour_pips_by_cost.csv`.*
+
+- **The amount of mana is read.** One land fewer lowers the verdict on every decision and every checkpoint, and two lands more raise it.
+- **The colour is barely read.** A missing pip lowers the verdict on three decisions in four, by a sixth as much as a missing land at the median and between a quarter and a tenth across checkpoints. Lands that are all off-colour lower it barely more than one wrong land does.
+- **More mana of the wrong colour outweighs the missing colour.** A board one pip short with two extra off-colour lands is predicted more affordable than the exact board on nearly every decision, on every checkpoint.
+- **The pips of one colour are not counted.** On the 52 costs with a repeated pip, such as `{1}{U}{U}` given a single Island, the missing pip leaves the verdict where it was.
+- **Ranking by colour is close to chance.** Ranked against the unaffordable boards that only differ in colour, the affordable ones score an AUC of 0.52 to 0.56. Ranked against one land short, the exact board scores 0.63 to 0.73.
+
+The training corpus holds the lesson. In a sample of 21 training shards, 204 of the 894 land-payable candidates Forge judged unaffordable had enough mana in the wrong colours. The ladder above finds that `e` alone carries nearly all of what the model knows about affordability. That fits a model that judges affordability from the cost and the amount of mana, and never matches the cost's pips against the colours the lands make.
+
+### Zones: the model knows which player draws, discards or mills and where a moved card goes, and barely uses the number of cards
+
+Draws, discards, mills and moves between hand, library, graveyard, exile and the battlefield are predicted well on every gen-2 checkpoint. The weak points are two. The number of cards a script states moves the prediction far less than it should. Handing a player target to the other player moves only part of the predicted effect with it. The probe takes 2,000 real resolutions from the validation games, at most three per game, whose acting chain names an API that moves cards: `Draw`, `Discard`, `Mill`, `ChangeZone`, `ChangeZoneAll`, `Dig`, and the destroy and sacrifice APIs so that exile has something to be told apart from. The script is `scripts/effect_knowledge_probes/zone_effects.py`.
+
+The model knows whether a player draws, discards or mills, and which player, and predicts fewer cards than the player gets. Card counts are read at the player slots. The model's answer for a player is the affected gate times the field's predicted count.
+
+| cards a player | player slots | affected | AUC, median over 14 checkpoints | range | more predicted for the affected player, median | actual cards, mean | predicted cards, median |
+|---|---:|---:|---:|---|---:|---:|---:|
+| draws | 4,000 | 616 | 0.989 | 0.981–0.992 | 97.5% | 1.35 | 1.13 |
+| discards | 4,000 | 148 | 0.997 | 0.995–0.998 | 98.5% | 1.21 | 0.91 |
+| mills | 4,000 | 120 | 0.994 | 0.981–0.997 | 98% | 2.76 | 2.16 |
+
+*The fourth-from-last column covers the records where exactly one player was affected: 419 for draws, 124 for discards, 84 for mills. Data: `zone_counts.csv`.*
+
+- **Whether a player is affected, and which one, is known.** The model separates affected players from the rest at an AUC near 0.99, and predicts more cards for the affected player than for the other on at least nine records in ten, on every checkpoint.
+- **The count is predicted below the real one.** Every field's median prediction is short of the mean actual count, by a sixth for draws, a quarter for discards and a fifth for mills.
+
+Where a moved card goes is right on most moves, and two pairs of destinations get confused. Card moves are read at the moved card's slot, grouped by the zone the card was in. Whether a card moves at all is ranked at an AUC of 0.991 to 0.995 for permanents, 0.992 to 0.997 for cards in a graveyard and 0.977 to 0.990 for cards in hand. For the cards that did move, the chart shows how often the model's most probable destination other than staying put is the right one. The head names an outcome by its event, so a card put into a graveyard from anywhere is `died` and a card put onto the battlefield is `blinked`; the chart names the destination zone.
+
+![Share of moved cards whose most probable destination is right, by starting zone and destination, one dot per checkpoint](2026-09-18-effect-model-gen2/charts/zone-outcomes.png)
+
+*Rows with fewer than nine cards are left out of the chart; `zone_outcomes.csv` holds them all, with the outcome predicted most often in place of the right one.*
+
+- **From the battlefield, all four common destinations are right on more than nine moves in ten** at the median: graveyard, exile, hand and library. The usual mistake is between graveyard and exile, a destroy read as an exile or the reverse.
+- **From the graveyard, exile and library are near perfect.** Returning a card to its owner's hand and returning it to the battlefield are confused with each other, and some checkpoints get only three in five of either right.
+- **Discards are mostly right.** A card discarded from hand goes to the graveyard in the model's answer on six moves in seven at the median, and to exile on most of the rest.
+- **Blinks are the weakest common move.** A permanent exiled and returned to the battlefield is right on seven of its 10 moves at the median and on three on the worst checkpoint.
+
+The predicted count rises with the number of cards the script states, but covers a fraction of the range. The amount sweep sets the literal `NumCards$` of 40 draw, 40 discard and 40 mill scripts to each value from 1 to 6, re-encodes the text with the checkpoint's own encoder, and reads the predicted count at the affected player, as the damage sweep does for damage.
+
+![Predicted cards at the affected player as the script's number of cards rises, one line per checkpoint, against the script's number](2026-09-18-effect-model-gen2/charts/zone-amounts.png)
+
+*Data: `zone_amounts.csv`.*
+
+- **Draws and mills rise far less than the rule.** From one card to six, the predicted draw rises from about 1.2 to 1.9 at the median, where the rule rises from 1 to 6. Mills about double, from 1.8 to 3.8.
+- **Discard barely moves**, from 0.8 to 1.2 at the median, and the earliest checkpoint does not move at all.
+- **The continuation runs follow the number more closely than the arms do.** At six cards milled the arms predict 1.9 to 3.5, and the continuation runs 3.6 to 4.8.
+
+The shortfall is the one [the ladder](#e-carries-what-an-ability-is-and-what-it-costs-and-the-trunk-works-out-what-happens-on-the-board) finds for damage, where the model's own damage field uses a fraction of what a probe reads from the trunk. This probe reads the head only, so it cannot say whether the trunk holds the number.
+
+The predicted effect follows a player target only partly. The target flip takes the draw, discard and mill records with exactly one player target, where the targeted player is the one affected, and hands the target to the other player. The rule moves the whole effect with it.
+
+![Share of the predicted cards at the originally targeted player, before and after the target is handed over, one dot per checkpoint](2026-09-18-effect-model-gen2/charts/zone-who.png)
+
+*Data: `zone_who.csv`, which also holds each player's predicted count before and after.*
+
+- **Most of the predicted cards move, and about a third stay.** Before the flip the targeted player holds nineteen twentieths of the predicted cards at the median. After it, the originally targeted player still holds about a third.
+- **How much moves varies widely between checkpoints.** The 64-wide continuation runs move nearly all of a discard to the new target, while arm `e128-lethality` leaves two thirds of a discard and a mill where the target was. No order by width or by stage of training holds across the three effects.
 
 ## Design of the suite
 

@@ -1,0 +1,43 @@
+checkpoint,items,auc
+e64 (earlier inputs),every configuration,0.62
+e64 (earlier inputs),"colours only (exact, surplus against pip missing, +2 and all off colour)",0.553
+e64 (earlier inputs),amount only (exact against one short),0.673
+e64,every configuration,0.613
+e64,"colours only (exact, surplus against pip missing, +2 and all off colour)",0.554
+e64,amount only (exact against one short),0.657
+e128,every configuration,0.594
+e128,"colours only (exact, surplus against pip missing, +2 and all off colour)",0.543
+e128,amount only (exact against one short),0.625
+e64-lethality,every configuration,0.599
+e64-lethality,"colours only (exact, surplus against pip missing, +2 and all off colour)",0.521
+e64-lethality,amount only (exact against one short),0.674
+e128-lethality,every configuration,0.602
+e128-lethality,"colours only (exact, surplus against pip missing, +2 and all off colour)",0.542
+e128-lethality,amount only (exact against one short),0.65
+e256-lethality,every configuration,0.598
+e256-lethality,"colours only (exact, surplus against pip missing, +2 and all off colour)",0.544
+e256-lethality,amount only (exact against one short),0.638
+A64 best,every configuration,0.608
+A64 best,"colours only (exact, surplus against pip missing, +2 and all off colour)",0.531
+A64 best,amount only (exact against one short),0.697
+A64 last,every configuration,0.618
+A64 last,"colours only (exact, surplus against pip missing, +2 and all off colour)",0.544
+A64 last,amount only (exact against one short),0.703
+B64 best,every configuration,0.617
+B64 best,"colours only (exact, surplus against pip missing, +2 and all off colour)",0.536
+B64 best,amount only (exact against one short),0.706
+B64 last,every configuration,0.624
+B64 last,"colours only (exact, surplus against pip missing, +2 and all off colour)",0.537
+B64 last,amount only (exact against one short),0.725
+A128 best,every configuration,0.606
+A128 best,"colours only (exact, surplus against pip missing, +2 and all off colour)",0.541
+A128 best,amount only (exact against one short),0.653
+A128 last,every configuration,0.628
+A128 last,"colours only (exact, surplus against pip missing, +2 and all off colour)",0.553
+A128 last,amount only (exact against one short),0.684
+B128 best,every configuration,0.625
+B128 best,"colours only (exact, surplus against pip missing, +2 and all off colour)",0.561
+B128 best,amount only (exact against one short),0.663
+B128 last,every configuration,0.628
+B128 last,"colours only (exact, surplus against pip missing, +2 and all off colour)",0.55
+B128 last,amount only (exact against one short),0.691

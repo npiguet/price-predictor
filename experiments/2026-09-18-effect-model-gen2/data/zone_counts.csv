@@ -1,0 +1,43 @@
+checkpoint,field,player_items,affected,auc,records_naming_api,one_player_affected,more_for_that_player,actual_mean,predicted_mean
+e64 (earlier inputs),cards_drawn,4000,616,0.988,487,419,0.97,1.35,1.07
+e64 (earlier inputs),cards_discarded,4000,148,0.997,159,124,0.98,1.21,1.17
+e64 (earlier inputs),cards_milled,4000,120,0.981,100,84,0.94,2.76,1.81
+e64,cards_drawn,4000,616,0.987,487,419,0.98,1.35,1.09
+e64,cards_discarded,4000,148,0.996,159,124,1,1.21,1.1
+e64,cards_milled,4000,120,0.996,100,84,0.98,2.76,2.28
+e128,cards_drawn,4000,616,0.981,487,419,0.96,1.35,1.04
+e128,cards_discarded,4000,148,0.995,159,124,0.92,1.21,0.82
+e128,cards_milled,4000,120,0.994,100,84,0.89,2.76,1.93
+e64-lethality,cards_drawn,4000,616,0.988,487,419,0.97,1.35,1.02
+e64-lethality,cards_discarded,4000,148,0.996,159,124,0.99,1.21,0.9
+e64-lethality,cards_milled,4000,120,0.995,100,84,0.96,2.76,1.67
+e128-lethality,cards_drawn,4000,616,0.984,487,419,0.97,1.35,1.18
+e128-lethality,cards_discarded,4000,148,0.997,159,124,0.99,1.21,0.97
+e128-lethality,cards_milled,4000,120,0.992,100,84,1,2.76,2.2
+e256-lethality,cards_drawn,4000,616,0.99,487,419,0.97,1.35,0.99
+e256-lethality,cards_discarded,4000,148,0.996,159,124,0.99,1.21,0.95
+e256-lethality,cards_milled,4000,120,0.992,100,84,0.95,2.76,1.41
+A64 best,cards_drawn,4000,616,0.991,487,419,0.98,1.35,1.15
+A64 best,cards_discarded,4000,148,0.997,159,124,0.97,1.21,0.54
+A64 best,cards_milled,4000,120,0.996,100,84,0.96,2.76,2.17
+A64 last,cards_drawn,4000,616,0.99,487,419,0.98,1.35,1.03
+A64 last,cards_discarded,4000,148,0.998,159,124,0.99,1.21,0.77
+A64 last,cards_milled,4000,120,0.997,100,84,0.98,2.76,1.95
+B64 best,cards_drawn,4000,616,0.992,487,419,0.98,1.35,1.12
+B64 best,cards_discarded,4000,148,0.997,159,124,0.98,1.21,0.79
+B64 best,cards_milled,4000,120,0.997,100,84,0.98,2.76,2.1
+B64 last,cards_drawn,4000,616,0.991,487,419,0.97,1.35,1.17
+B64 last,cards_discarded,4000,148,0.997,159,124,0.96,1.21,0.85
+B64 last,cards_milled,4000,120,0.997,100,84,0.98,2.76,2.46
+A128 best,cards_drawn,4000,616,0.989,487,419,0.97,1.35,1.21
+A128 best,cards_discarded,4000,148,0.995,159,124,0.9,1.21,0.94
+A128 best,cards_milled,4000,120,0.988,100,84,0.98,2.76,2.15
+A128 last,cards_drawn,4000,616,0.99,487,419,0.98,1.35,1.17
+A128 last,cards_discarded,4000,148,0.995,159,124,0.95,1.21,0.91
+A128 last,cards_milled,4000,120,0.995,100,84,1,2.76,2.42
+B128 best,cards_drawn,4000,616,0.989,487,419,0.98,1.35,1.15
+B128 best,cards_discarded,4000,148,0.998,159,124,0.99,1.21,0.9
+B128 best,cards_milled,4000,120,0.993,100,84,0.99,2.76,2.64
+B128 last,cards_drawn,4000,616,0.989,487,419,0.98,1.35,1.14
+B128 last,cards_discarded,4000,148,0.997,159,124,0.99,1.21,0.99
+B128 last,cards_milled,4000,120,0.993,100,84,0.99,2.76,2.33
