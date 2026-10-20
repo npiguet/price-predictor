@@ -123,9 +123,9 @@ Three faults remain, and the grids show all of them:
 
 The damage sweep reads the same rule from the other side: it fixes a toughness-4 target and re-encodes one spell's script with `NumDmg$` from 1 to 8. The rule puts the step between 3 and 4. Arm `e64` barely rises with the damage. With copies, every checkpoint rises steeply, and where it crosses one half moves from checkpoint to checkpoint, which the next section explains.
 
-![Damage sweep curves, and where each checkpoint crosses one half](2026-09-18-effect-model-gen2/charts/damage-sweep.png)
+![Damage sweep curves over quadrants marking where a prediction is on the rule's side](2026-09-18-effect-model-gen2/charts/damage-sweep.png)
 
-*Left: the damage sweep for six checkpoints. Right: the interpolated damage at which each checkpoint's prediction crosses one half; the green band is the rule's step. Data: `sweeps.csv` (sweep `damage_spell`).*
+*The damage sweep for the arms and continuation runs. Green quadrants are where a prediction falls on the rule's side of an even chance, a survival below 4 damage and a death from 4 up, however soft; red quadrants are where it falls on the wrong side. Colour gives the width of `e`, and the line style the run: dotted the arm, dashed the A run, solid the B run. Data: `sweeps.csv` (sweep `damage_spell`).*
 
 ### Where the boundary sits wanders between epochs at the full learning rate, and settles near the rule at a tenth of it
 

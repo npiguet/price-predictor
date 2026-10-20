@@ -377,44 +377,47 @@ def boundary_by_epoch() -> None:
 
 
 def damage_sweep() -> None:
+    """The damage sweep, over quadrants that say whether a prediction is on the rule's side.
+
+    The rule kills a toughness-4 target from 4 damage up, so a curve is on the right
+    side below one half left of the step and above one half right of it, however soft.
+    """
     s = csv("sweeps.csv")
     s = s[s.sweep == "damage_spell"]
-    chosen = present(["e64", "e64-lethality", "A64 best", "A64 last", "B64 best", "B64 last",
-                      "e128-lethality", "A128 best", "A128 last", "B128 best", "B128 last",
-                      "e256-lethality", "A256 best", "A256 last", "B256 best", "B256 last"],
-                     s.checkpoint)
-    fig, (ax, ax2) = plt.subplots(1, 2, figsize=(10.5, 3.9),
-                                  gridspec_kw={"width_ratios": [1.2, 1]})
-    for name in present(["e64", "e64-lethality", "A64 last", "B64 last", "A128 best",
-                         "B128 last", "e256-lethality", "B256 last"], s.checkpoint):
+    fig, ax = plt.subplots(figsize=(7.2, 4.4))
+    right, wrong = "#4a9a62", "#c05555"
+    for (x0, x1), (y0, y1), colour in (((0.5, 3.5), (0, 0.5), right),
+                                       ((3.5, 8.5), (0.5, 1), right),
+                                       ((0.5, 3.5), (0.5, 1), wrong),
+                                       ((3.5, 8.5), (0, 0.5), wrong)):
+        ax.fill_between([x0, x1], y0, y1, color=colour, alpha=0.10, lw=0)
+    ax.text(3.4, 0.02, "right: survives", fontsize=8, color=right, ha="right")
+    ax.text(8.3, 0.96, "right: dies", fontsize=8, color=right, ha="right", va="top")
+    ax.text(0.7, 0.96, "wrong: predicted to die", fontsize=8, color=wrong, va="top")
+    ax.text(8.3, 0.03, "wrong: predicted to survive", fontsize=8, color=wrong, ha="right")
+    style = {"arm": ":", "A": "--", "B": "-"}
+    for name in present(["e64", "e64-lethality", "A64 last", "B64 last", "e128-lethality",
+                         "A128 best", "B128 last", "e256-lethality", "A256 last",
+                         "B256 last"], s.checkpoint):
         d = s[s.checkpoint == name]
-        base = name.split(" ")[0]
-        ax.plot(d.value, d.prediction, marker="o", ms=3, lw=1.2, label=short(name),
-                color=run_colour(base) if base in WIDTH_OF else GRAY,
-                ls="--" if name == "e64" else "-")
+        run = name.split(" ")[0]
+        if name == "e64":
+            colour, ls = GRAY, "-"
+        else:
+            phase = "B" if run.startswith("B") else "A" if run.startswith("A") else "arm"
+            colour, ls = WIDTH_COLOUR[WIDTH_OF[run]], style[phase]
+        ax.plot(d.value, d.prediction, marker="o", ms=3, lw=1.4, ls=ls, color=colour,
+                label=short(name) + (", no copies" if name == "e64" else ""))
     ax.axvline(3.5, color="black", lw=0.8)
-    ax.axhline(0.5, color=GRAY, lw=0.6)
+    ax.axhline(0.5, color="black", lw=0.8)
+    ax.set_xlim(0.5, 8.5)
+    ax.set_ylim(0, 1)
+    ax.set_xticks(range(1, 9))
     ax.set_xlabel("NumDmg$ of the spell")
     ax.set_ylabel("predicted death, toughness-4 target")
-    ax.set_title("Damage sweep: the rule steps between 3 and 4")
-    ax.legend(fontsize=7.5)
-    crossings = []
-    for name in chosen:
-        d = s[s.checkpoint == name].sort_values("value")
-        x, y = d.value.values, d.prediction.values
-        idx = np.where((y[:-1] < 0.5) & (y[1:] >= 0.5))[0]
-        crossings.append(x[idx[0]] + (0.5 - y[idx[0]]) / (y[idx[0] + 1] - y[idx[0]])
-                         if len(idx) else np.nan)
-    ypos = np.arange(len(chosen))[::-1]
-    ax2.axvspan(3, 4, color="#4a9a62", alpha=0.15)
-    ax2.axvline(3.5, color="black", lw=0.8)
-    for yv, name, c in zip(ypos, chosen, crossings):
-        base = name.split(" ")[0]
-        ax2.plot(c, yv, "o", color=run_colour(base) if base in WIDTH_OF else GRAY, ms=6)
-    ax2.set_yticks(ypos, [short(n) for n in chosen])
-    ax2.set_xlabel("damage where the prediction crosses one half")
-    ax2.set_title("Where each checkpoint steps (green: on the rule)")
-    ax2.set_xlim(1, 8)
+    ax.set_title("Damage sweep: the rule kills from 4 damage up (dotted: arm, dashed: A run, "
+                 "solid: B run)", fontsize=9.5)
+    ax.legend(fontsize=7.5, loc="center left", bbox_to_anchor=(1.02, 0.5))
     save(fig, "damage-sweep")
 
 
