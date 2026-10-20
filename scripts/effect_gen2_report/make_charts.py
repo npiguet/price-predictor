@@ -316,45 +316,53 @@ def toughness_sweep_records() -> None:
               ("1 activated", 1, "#8e5bb5", "1 damage, activated ping"),
               ("2", 2, "#4a9a62", "2 damage"), ("3", 3, "#e08f3c", "3 damage"),
               ("5", 5, "#c05555", "5 damage")]
-    chosen = present(["e64", "e64-lethality", "B64 best", "B64 last", "B128 best", "B128 last",
-                      "B256 best", "B256 last"], sr.checkpoint)
-    cols = 4
-    rows = int(np.ceil(len(chosen) / cols))
-    fig, axes = plt.subplots(rows, cols, figsize=(3.7 * cols, 3.5 * rows), sharey=True,
+    grid = [["e64", "e64-lethality", "A64 best", "A64 last", "B64 best", "B64 last"],
+            ["e128", "e128-lethality", "A128 best", "A128 last", "B128 best", "B128 last"],
+            [None, "e256-lethality", "A256 best", "A256 last", "B256 best", "B256 last"]]
+    columns = ["no copies", "arm with copies", "A run, kept epoch", "A run, last epoch",
+               "B run, kept epoch", "B run, last epoch"]
+    available = set(sr.checkpoint)
+    fig, axes = plt.subplots(len(grid), len(columns),
+                             figsize=(2.9 * len(columns), 2.8 * len(grid)), sharey=True,
                              squeeze=False)
-    flat = list(axes.flat)
-    for i, (ax, name) in enumerate(zip(flat, chosen)):
-        d = sr[(sr.checkpoint == name) & (sr.sweep == "toughness")]
-        d = d.join(meta[["group"]], on="record")
-        ax.axhline(0.5, color="black", lw=0.8)
-        for group, damage, colour, label in groups:
-            g = d[d.group == group].groupby("value").prediction
-            n = d[d.group == group].record.nunique()
-            ax.fill_between(g.min().index, g.min(), g.max(), color=colour, alpha=0.16, lw=0)
-            ax.plot(g.median().index, g.median(), color=colour, lw=1.8,
-                    label=f"{label} ({n})")
-            ax.axvline(damage + 0.5, color=colour, lw=0.9, ls=":")
-        ax.set_title(short(name))
-        ax.set_xticks(range(1, 9))
-        ax.set_ylim(0, 1)
-        if i % cols == 0:
-            ax.set_ylabel("predicted death")
-        if i >= len(chosen) - cols:
-            ax.set_xlabel("target's toughness")
-    handles, labels = flat[0].get_legend_handles_labels()
-    spare = flat[len(chosen):]
-    for ax in spare:
-        ax.axis("off")
-    if spare:
-        spare[0].legend(handles, labels, fontsize=8.5, loc="center", title="ability (records)",
-                        title_fontsize=8.5)
-    else:
-        flat[cols - 1].legend(handles, labels, fontsize=8, loc="upper left",
-                              bbox_to_anchor=(1.02, 1), title="ability (records)",
-                              title_fontsize=8)
-    fig.subplots_adjust(hspace=0.35)
+    empty = []
+    for r, row in enumerate(grid):
+        for c, name in enumerate(row):
+            ax = axes[r][c]
+            if name not in available:
+                ax.axis("off")
+                empty.append(ax)
+                continue
+            d = sr[(sr.checkpoint == name) & (sr.sweep == "toughness")]
+            d = d.join(meta[["group"]], on="record")
+            ax.axhline(0.5, color="black", lw=0.8)
+            for group, damage, colour, label in groups:
+                g = d[d.group == group].groupby("value").prediction
+                n = d[d.group == group].record.nunique()
+                ax.fill_between(g.min().index, g.min(), g.max(), color=colour, alpha=0.16, lw=0)
+                ax.plot(g.median().index, g.median(), color=colour, lw=1.6,
+                        label=f"{label} ({n})")
+                ax.axvline(damage + 0.5, color=colour, lw=0.8, ls=":")
+            ax.set_title(short(name), fontsize=9.5)
+            ax.set_xticks(range(1, 9))
+            ax.tick_params(labelsize=8)
+            ax.set_ylim(0, 1)
+            if r == len(grid) - 1 or grid[r + 1][c] not in available:
+                ax.set_xlabel("target's toughness", fontsize=8.5)
+        first = next((c for c, name in enumerate(row) if name in available), None)
+        if first is not None:
+            axes[r][first].set_ylabel(f"e width {64 * 2 ** r}\npredicted death", fontsize=9)
+            axes[r][first].yaxis.set_tick_params(labelleft=True)
+    for c, label in enumerate(columns):
+        axes[0][c].annotate(label, (0.5, 1.22), xycoords="axes fraction", ha="center",
+                            fontsize=9.5, fontweight="bold")
+    handles, labels = axes[0][0].get_legend_handles_labels()
+    # The last empty slot is the bottom-right one, away from every row's axis label.
+    (empty[-1] if empty else axes[0][-1]).legend(handles, labels, fontsize=8, loc="center",
+                                                 title="ability (records)", title_fontsize=8)
+    fig.subplots_adjust(hspace=0.45, wspace=0.12)
     fig.suptitle("Toughness sweep: band from lowest to highest record at each toughness, line at"
-                 " the median; the rule says each group stops dying at its dotted line", y=1.0)
+                 " the median; the rule says each group stops dying at its dotted line", y=0.99)
     save(fig, "toughness-sweep-records")
 
 
