@@ -280,6 +280,23 @@ def _table(text: str, after: str) -> list[list[str]]:
     return [header, *rows] if seen_header else []
 
 
+def damage_amount_alone(ck: Checkpoint) -> dict[str, float]:
+    """``stratum -> rung 3 of damage_taken``, read as the amount alone.
+
+    The scorecards read the model's damage as the affected gate times the amount.
+    Every damage item took damage, so the gate's doubt scaled the answer by noise;
+    ``ladder_check.py --amount-alone`` rescored rung 3 on the same items without it.
+    """
+    text = read(ck.path / "ladder-check-amount-alone.txt")
+    out = {}
+    for stratum in ("card-disjoint", "game-disjoint"):
+        rows = _table(text, f"damage_taken, {stratum}")
+        for row in rows[1:]:
+            if row[0].startswith("rung 3, the head"):
+                out[stratum] = _number(row[1])
+    return out
+
+
 def evasion(ck: Checkpoint) -> tuple[list[list], list[list]]:
     """``(grid cells, per-row ranking)`` from a checkpoint's ``evasion-grid.txt``."""
     text = read(ck.path / "evasion-grid.txt")
@@ -381,11 +398,15 @@ def main() -> None:
         probed.insert(0, ("gen-1", None, json.loads(read(gen1_card))))
     for cid, ck, card in probed:
         if card:
+            amount_alone = damage_amount_alone(ck) if ck else {}
             for family, body in card["families"].items():
                 for target, entry in body.get("targets", {}).items():
                     for stratum, r in entry.get("strata", {}).items():
                         for rung, scores in r.get("rungs", {}).items():
                             for probe, v in scores.items():
+                                if (target == "damage_taken" and rung == "3"
+                                        and stratum in amount_alone):
+                                    v = amount_alone[stratum]
                                 ladder.append([cid, family, target, entry.get("kind"),
                                                stratum, r.get("n"), rung, probe, v])
             for sweep, body in card.get("sweeps", {}).items():

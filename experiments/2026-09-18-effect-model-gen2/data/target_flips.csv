@@ -83,3 +83,15 @@ B128 last,loses land,143,0.892,0.881
 B128 last,to the acting player,14,0.437,0.334
 B128 last,loses artifact,8,0.923,0.608
 B128 last,loses enchantment,7,0.43,0.369
+A256 best,loses creature,1380,0.987,0.98
+A256 best,to the opponent,183,0.965,0.109
+A256 best,loses land,143,0.907,0.769
+A256 best,to the acting player,14,0.574,0.454
+A256 best,loses artifact,8,0.986,0.434
+A256 best,loses enchantment,7,0.948,0.779
+A256 last,loses creature,1380,0.987,0.98
+A256 last,to the opponent,183,0.965,0.109
+A256 last,loses land,143,0.907,0.769
+A256 last,to the acting player,14,0.574,0.454
+A256 last,loses artifact,8,0.986,0.434
+A256 last,loses enchantment,7,0.948,0.779

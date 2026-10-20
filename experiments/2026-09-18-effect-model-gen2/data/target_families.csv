@@ -111,3 +111,19 @@ B128 last,colour,420,77,0.979
 B128 last,number,267,57,0.973
 B128 last,supertype,79,2,1
 B128 last,keyword,60,11,0.963
+A256 best,card type only,10859,2410,0.999
+A256 best,controller,1414,242,0.999
+A256 best,other,1225,224,0.986
+A256 best,combat or tapped,451,36,0.992
+A256 best,colour,420,77,0.964
+A256 best,number,267,57,0.976
+A256 best,supertype,79,2,0.994
+A256 best,keyword,60,11,0.985
+A256 last,card type only,10859,2410,0.999
+A256 last,controller,1414,242,0.999
+A256 last,other,1225,224,0.986
+A256 last,combat or tapped,451,36,0.992
+A256 last,colour,420,77,0.964
+A256 last,number,267,57,0.976
+A256 last,supertype,79,2,0.994
+A256 last,keyword,60,11,0.985

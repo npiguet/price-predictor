@@ -20,8 +20,6 @@ A probe is scored by AUC for a yes/no question, the chance that a true case scor
 
 *For each question, the score of a probe on the board alone (grey), on the board plus `e` without the trunk (blue), on the trunk's internal vector for that card or ability (orange), and the model's own answer, read from its trained output head with no probe (red). Points are the median over the gen-2 checkpoints trained with lethality copies; bars span their range. Data: `probe_ladder.csv`.*
 
-**The model's damage prediction uses a fraction of what its trunk knows.** A probe reads about two thirds of the variance in each creature's damage taken from the trunk's internal vector, while the model's own damage field explains a fifth of it at the median and a third at best.
-
 **Gen-2's `e` holds a line's costs and timing almost perfectly and most of its amounts, where gen-1's held little of either.** Costs and timing transfer to lines the model never trained on. Power and toughness changes do not ([line properties](#gen-2s-e-holds-a-lines-costs-and-timing-almost-perfectly-and-most-of-its-amounts)).
 
 **The trunk reads the acting ability's `e` and ignores the `e` of the abilities already on the board.** Replacing `e` with noise at the `[ACT]` slot alone costs as much as replacing it everywhere, and replacing it in the card slots costs nothing measurable, on every checkpoint ([ablation](#the-trunk-reads-the-acting-abilitys-e-and-ignores-the-e-of-the-abilities-on-the-board)).
@@ -56,28 +54,29 @@ The ladder asks one question, such as "does this creature die?", of four inputs 
 
 Rungs 0 to 2 are not read by the model's output heads. Each is read by a probe, a small network fitted afresh for that one question on that one input: a two-layer MLP with the same size and settings for every checkpoint, and beside it a linear model, whose scores are in the data. Every probe is fitted on four fifths of the items and scored on the fifth it never saw, in turn, never with one ability text, or one card, on both sides of a split, so it cannot look an answer up. A probe's score therefore says how much of the answer its input holds in a form a small network can read.
 
-Rungs 2 and 3 read the same trunk vector in two ways. The probe at rung 2 is fitted to this one question alone. The output head at rung 3 was trained with every other output field at once, and is what the model actually answers. A gap between them is knowledge the trunk holds and the model's own answer does not use.
+Rungs 2 and 3 read the same trunk vector in two ways. The probe at rung 2 is fitted to this one question alone. The output head at rung 3 was trained with every other output field at once, and is what the model actually answers. A gap between them can be knowledge the trunk holds and the model's own answer does not use. It can also come from where the probe is fitted: on the same stratum it is scored on, so on card-disjoint records it learns from labelled examples of texts the head never trained on.
 
 The share is (rung 1 − rung 0) / (rung 3 − rung 0): the fraction of the distance from the board alone to the model's own answer that `e` closes without any trunk. The chart at the top of this record shows the rungs per question, and the shares sort the questions into the groups below.
 
-| question, card-disjoint records | share carried by `e`, median over 11 checkpoints | range |
+| question, card-disjoint records | share carried by `e`, median over 12 checkpoints | range |
 |---|---:|---|
-| how long a pump lasts | 1.02 | 0.90–1.06 |
+| how long a pump lasts | 1.01 | 0.90–1.06 |
 | affordable | 0.93 | 0.85–0.97 |
-| legal target | 0.46 | 0.19–0.58 |
-| legal target, carrying protection | 0.31 | 0.26–0.41 |
+| legal target | 0.49 | 0.19–0.58 |
+| damage taken | 0.55 | 0.46–0.75 |
+| legal target, carrying protection | 0.29 | 0.19–0.41 |
 | trigger fires | 0.30 | 0.22–0.36 |
-| dies | 0.23 | 0.12–0.30 |
-| card affected | 0.22 | 0.16–0.30 |
+| dies | 0.22 | 0.07–0.30 |
+| card affected | 0.22 | 0.16–0.34 |
 
 *Data: `probe_ladder.csv`.*
 
 - **What the line states, `e` carries.** Whether an ability is affordable turns on its cost, and how long a pump lasts turns on its script. `e` alone closes nine tenths or more of the gap on both.
 - **What the board decides, the trunk works out.** Whether a creature dies, whether a trigger fires and which cards an ability affects depend on the board as much as on the line. `e` closes a fifth to a third of the gap, and a probe on the trunk's vector reads as much as the model's own answer gives.
-- **Blocking is known from the board alone.** On whether a creature may block, a probe on the board alone already scores about as well as anything deeper, and on card-disjoint records the model's own prediction scores below it. The share is not defined there, because the model gains nothing over the board.
-- **The trunk knows more about damage than the model says.** A probe reads about two thirds of the variance in damage taken from the trunk's vector at a creature's slot. The model's own damage field explains a fifth of it at the median and a third at best. The information reaches the trunk and is not used by the head that should read it.
+- **Blocking is known from the board alone.** On whether a creature may block, a probe on the board alone already scores about as well as anything deeper, and on card-disjoint records the model's own prediction scores below it. The share is not defined there, because the model gains nothing over the board. The model's prediction trails the probe on the trunk's vector only on card-disjoint records: on game-disjoint ones the two score the same, which points to the probe learning the held-out cards' restrictions from its own fitting data.
+- **Damage taken sits between the two groups, and the model's damage field uses most of what the trunk knows.** `e` closes about half the gap on damage taken. A probe reads about two thirds of its variance from the trunk's vector at a creature's slot, and the model's own damage field about half at the median and up to two thirds. The ladder reads the model's damage as the predicted amount alone: every damage item took damage, so the question is how much given the creature was hit.
 
-The groups are robust: the lowest share among the first two questions is about twice the highest among the last four, across all eleven checkpoints. The 256-wide arm sorts its questions the same way as the narrower ones, so four times the width of `e` does not move deaths or trigger firing into the vector. The game-disjoint records sort the questions about the same way. A protected target's legality drops to no share there, because `e` adds nothing over the board on those records.
+The groups are robust: the lowest share among the first two questions is about twice the highest among the last four, across all twelve checkpoints. The 256-wide arm sorts its questions the same way as the narrower ones, so four times the width of `e` does not move deaths or trigger firing into the vector. The game-disjoint records sort the questions about the same way. A protected target's legality drops to no share there, because `e` adds nothing over the board on those records.
 
 Gen-1 and gen-2 were probed on different corpora, so they compare by direction only. Gen-1's `e` carried affordability as gen-2's does, and gen-1 could not be asked about deaths at all, because its corpus never recorded a death caused by a resolution.
 
@@ -269,7 +268,7 @@ The predicted count rises with the number of cards the script states, but covers
 - **Discard barely moves**, from 0.8 to 1.2 at the median, and the earliest checkpoint does not move at all.
 - **The continuation runs follow the number more closely than the arms do.** At six cards milled the arms predict 1.9 to 3.5, and the continuation runs 3.6 to 4.8.
 
-The shortfall is the one [the ladder](#e-carries-what-an-ability-is-and-what-it-costs-and-the-trunk-works-out-what-happens-on-the-board) finds for damage, where the model's own damage field uses a fraction of what a probe reads from the trunk. This probe reads the head only, so it cannot say whether the trunk holds the number.
+This probe reads the head only, so it cannot say whether the trunk holds the number and the head fails to use it.
 
 The predicted effect follows a player target only partly. The target flip takes the draw, discard and mill records with exactly one player target, where the targeted player is the one affected, and hands the target to the other player. The rule moves the whole effect with it.
 

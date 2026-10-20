@@ -28,7 +28,7 @@ A **run** is one training run: an arm (`e64`, `e128`, `e64-lethality`, ...) or a
 | `checkpoints.csv` | probed checkpoint: its run, role (best or last), epoch and validation losses | `train.log`, and the `-last` directories |
 | `gate2.csv` | checkpoint and keyword: qualifying records, direction agreement, verdict | `evaluate.log` |
 | `gate3.csv` | checkpoint: mean pairwise cosine, top component share, participation ratio | `evaluate.log`, the embedding probes' `pca_full_variance.md`; gen-1 and the noise pilots transcribed |
-| `probe_ladder.csv` | checkpoint, target, stratum, rung and probe: score (AUC, or R² for amounts) | the knowledge probes' `scorecard.json` |
+| `probe_ladder.csv` | checkpoint, target, stratum, rung and probe: score (AUC, or R² for amounts) | the knowledge probes' `scorecard.json`; for gen-2, rung 3 of `damage_taken` from `ladder-check-amount-alone.txt` beside each checkpoint, which reads the predicted amount without the affected gate |
 | `sweeps.csv` | checkpoint, sweep and edited value: mean prediction over the sweep's records | `scorecard.json` |
 | `sweep_records.csv` | checkpoint, sweep, record and edited value: that record's prediction | `scorecard.json` |
 | `toughness_sweep_records.csv` | toughness-sweep record: the ability's damage and kind (spell, activated, triggered) | the frozen probe set, transcribed |

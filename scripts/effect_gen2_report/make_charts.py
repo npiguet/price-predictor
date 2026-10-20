@@ -222,6 +222,32 @@ def loss_noise() -> None:
     save(fig, "loss-noise")
 
 
+def merged_last_epochs(ck: pd.DataFrame) -> pd.DataFrame:
+    """``ck`` without each "X last" row whose epoch is its "X best" row's.
+
+    A run whose last epoch is also its lowest-loss one keeps a single checkpoint, so
+    its two rows are one point; the kept row is relabelled "X best = last".
+    """
+    ck = ck.copy()
+    for name in list(ck.index):
+        if not name.endswith(" last"):
+            continue
+        best = name.replace(" last", " best")
+        if best in ck.index and ck.loc[best, "epoch"] == ck.loc[name, "epoch"]:
+            ck = ck.drop(index=name).rename(index={best: f"{best} = last"})
+    return ck
+
+
+#: Labels moved off the crowded corner of the game-disjoint panel, in points.
+PROBE_LABEL_OFFSETS = {
+    ("game_disjoint", "A256 best = last"): (-62, 6),
+    ("game_disjoint", "A128 last"): (-6, -11),
+    ("game_disjoint", "B128 last"): (-50, -4),
+    ("game_disjoint", "A64 best"): (8, -5),
+    ("game_disjoint", "A64 last"): (6, 3),
+}
+
+
 def probes_vs_loss() -> None:
     ck = csv("checkpoints.csv")
     lad = csv("probe_ladder.csv")
@@ -229,6 +255,7 @@ def probes_vs_loss() -> None:
     ck = ck.set_index("checkpoint")
     for stratum in ("card-disjoint", "game-disjoint"):
         ck[f"probe_{stratum}"] = m[m.stratum == stratum].groupby("checkpoint").score.mean()
+    ck = merged_last_epochs(ck)
     fig, axes = plt.subplots(1, 2, figsize=(10, 4.2), sharey=True)
     for ax, (loss, label) in zip(axes, (("card_disjoint", "card-disjoint loss"),
                                         ("game_disjoint", "game-disjoint loss"))):
@@ -238,7 +265,8 @@ def probes_vs_loss() -> None:
             ax.plot(r[loss], r["probe_game-disjoint"], marker, color=colour, ms=7,
                     mfc="white" if not r.lethality_copies else colour, mew=1.4)
             ax.annotate(short(name), (r[loss], r["probe_game-disjoint"]), fontsize=7,
-                        xytext=(4, 3), textcoords="offset points", color="#333")
+                        xytext=PROBE_LABEL_OFFSETS.get((loss, name), (4, 3)),
+                        textcoords="offset points", color="#333")
         for run in ("A64", "B64", "A128", "B128", "A256", "B256"):
             if f"{run} best" in ck.index and f"{run} last" in ck.index:
                 b, la = ck.loc[f"{run} best"], ck.loc[f"{run} last"]
@@ -571,7 +599,10 @@ def ladder() -> None:
                ("legal_target_protected", "legal target, protected"),
                ("fires", "trigger fires"), ("affected", "card affected"), ("dies", "dies"),
                ("may_block", "may block"), ("damage_taken", "damage taken (R²)")]
-    gen2 = present(CHECKPOINTS[3:], lad.checkpoint)
+    # A run whose last epoch is its kept one counts once in the medians.
+    merged = merged_last_epochs(csv("checkpoints.csv").set_index("checkpoint")).index
+    gen2 = [c for c in present(CHECKPOINTS[3:], lad.checkpoint)
+            if c in merged or f"{c} = last" in merged]
     fig, ax = plt.subplots(figsize=(8.4, 4.6))
     styles = {"0": ("board alone", "#bbbbbb", "s"), "1": ("board + e, no trunk", "#3b6fb6", "o"),
               "2": ("probe on the trunk's vector", "#e08f3c", "D"),
@@ -682,6 +713,9 @@ def width_summary() -> None:
     m = lad[(lad.rung == "3") & (lad.probe == "model") & (lad.target != "damage_taken")]
     probe = m.groupby(["checkpoint", "stratum"]).score.mean().unstack()
     ck = ck[ck.lethality_copies > 0].set_index("checkpoint")
+    # A run whose last epoch is its kept one is a single checkpoint: one circle.
+    ck = ck.loc[[n for n in ck.index if n in merged_last_epochs(ck).index
+                 or f"{n} = last" in merged_last_epochs(ck).index]]
     fig, axes = plt.subplots(1, 4, figsize=(13, 3.3))
     metrics = [(ck.card_disjoint, "card-disjoint loss"), (ck.game_disjoint, "game-disjoint loss"),
                (probe.loc[ck.index, "game-disjoint"], "probe mean, game-disjoint"),

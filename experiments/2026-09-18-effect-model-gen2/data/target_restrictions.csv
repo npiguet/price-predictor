@@ -237,3 +237,37 @@ B128 last,Creature.nonMount,other,58,22,0.87
 B128 last,"Permanent.inZoneBattlefield+YouCtrl,Card.suspended+YouOwn",controller,39,23,1
 B128 last,"Creature,Vehicle",card type only,37,15,1
 B128 last,Permanent.YouCtrl,controller,32,17,1
+A256 best,Creature,card type only,5752,1380,0.999
+A256 best,Any,card type only,1643,389,1
+A256 best,Creature.YouCtrl,controller,992,161,1
+A256 best,"Creature,Planeswalker",card type only,477,137,1
+A256 best,Permanent.nonLand,other,435,133,1
+A256 best,"Artifact,Enchantment",card type only,250,27,0.984
+A256 best,"Creature.attacking,Creature.blocking",combat or tapped,249,20,0.993
+A256 best,Creature.nonBlack,colour,206,32,0.962
+A256 best,Land,card type only,196,143,0.981
+A256 best,Creature.nonArtifact,other,128,22,0.986
+A256 best,Creature.nonBlack+nonArtifact,colour,115,27,0.976
+A256 best,Creature.Other,other,111,24,0.982
+A256 best,Creature.powerLE#,number,96,23,0.968
+A256 best,Creature.nonMount,other,58,22,0.932
+A256 best,"Permanent.inZoneBattlefield+YouCtrl,Card.suspended+YouOwn",controller,39,23,1
+A256 best,"Creature,Vehicle",card type only,37,15,1
+A256 best,Permanent.YouCtrl,controller,32,17,1
+A256 last,Creature,card type only,5752,1380,0.999
+A256 last,Any,card type only,1643,389,1
+A256 last,Creature.YouCtrl,controller,992,161,1
+A256 last,"Creature,Planeswalker",card type only,477,137,1
+A256 last,Permanent.nonLand,other,435,133,1
+A256 last,"Artifact,Enchantment",card type only,250,27,0.984
+A256 last,"Creature.attacking,Creature.blocking",combat or tapped,249,20,0.993
+A256 last,Creature.nonBlack,colour,206,32,0.962
+A256 last,Land,card type only,196,143,0.981
+A256 last,Creature.nonArtifact,other,128,22,0.986
+A256 last,Creature.nonBlack+nonArtifact,colour,115,27,0.976
+A256 last,Creature.Other,other,111,24,0.982
+A256 last,Creature.powerLE#,number,96,23,0.968
+A256 last,Creature.nonMount,other,58,22,0.932
+A256 last,"Permanent.inZoneBattlefield+YouCtrl,Card.suspended+YouOwn",controller,39,23,1
+A256 last,"Creature,Vehicle",card type only,37,15,1
+A256 last,Permanent.YouCtrl,controller,32,17,1

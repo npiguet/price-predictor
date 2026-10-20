@@ -69,3 +69,13 @@ B128 last,graveyard,5805,187,0.996
 B128 last,hand,14408,226,0.988
 B128 last,exile,4,2,1
 B128 last,stack,875,7,1
+A256 best,battlefield,29146,767,0.994
+A256 best,graveyard,5805,187,0.996
+A256 best,hand,14408,226,0.99
+A256 best,exile,4,2,1
+A256 best,stack,875,7,0.996
+A256 last,battlefield,29146,767,0.994
+A256 last,graveyard,5805,187,0.996
+A256 last,hand,14408,226,0.99
+A256 last,exile,4,2,1
+A256 last,stack,875,7,0.996

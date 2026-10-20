@@ -111,3 +111,19 @@ B128 last,trample,2331,91.5,pass
 B128 last,indestructible,342,99.4,pass
 B128 last,wither,142,,too few records
 B128 last,infect,1453,78.9,pass
+A256 best,first_strike,2503,70.5,pass
+A256 best,double_strike,294,72.8,pass
+A256 best,deathtouch,899,81.1,pass
+A256 best,lifelink,2169,98.3,pass
+A256 best,trample,2331,87.5,pass
+A256 best,indestructible,342,99.7,pass
+A256 best,wither,142,,too few records
+A256 best,infect,1453,79.1,pass
+A256 last,first_strike,2503,70.5,pass
+A256 last,double_strike,294,72.8,pass
+A256 last,deathtouch,899,81.1,pass
+A256 last,lifelink,2169,98.3,pass
+A256 last,trample,2331,87.5,pass
+A256 last,indestructible,342,99.7,pass
+A256 last,wither,142,,too few records
+A256 last,infect,1453,79.1,pass

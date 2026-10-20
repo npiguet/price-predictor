@@ -69,3 +69,13 @@ B128 last,repeated pip,52,0.001,0.05,-0.098,0.014
 B128 last,several colours,13,0.004,0.074,-0.081,0.024
 B128 last,missing colour still among the lands,52,0.001,0.05,-0.098,0.014
 B128 last,missing colour gone from the lands,248,0.026,0.133,-0.107,0.028
+A256 best,one pip,235,0.027,0.11,-0.065,0.027
+A256 best,repeated pip,52,0.001,0.056,-0.07,0.022
+A256 best,several colours,13,0.008,0.051,-0.042,0.023
+A256 best,missing colour still among the lands,52,0.001,0.056,-0.07,0.022
+A256 best,missing colour gone from the lands,248,0.026,0.107,-0.064,0.026
+A256 last,one pip,235,0.027,0.11,-0.065,0.027
+A256 last,repeated pip,52,0.001,0.056,-0.07,0.022
+A256 last,several colours,13,0.008,0.051,-0.042,0.023
+A256 last,missing colour still among the lands,52,0.001,0.056,-0.07,0.022
+A256 last,missing colour gone from the lands,248,0.026,0.107,-0.064,0.026

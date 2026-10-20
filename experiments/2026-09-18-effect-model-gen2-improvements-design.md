@@ -34,7 +34,7 @@ All the data behind the tables and charts is in [`2026-09-18-effect-model-gen2/`
 
 **Validation losses swing between epochs by about as much as a run improves, and a tenth of the learning rate cuts the swing several times over.** A difference of a tenth of a loss point between two checkpoints is within that swing ([training](#validation-losses-swing-between-epochs-by-about-as-much-as-a-run-improves)).
 
-**No width of `e` beyond 64 has improved what the probes measure.** The 64-wide line has the lowest loss on unseen texts and the best probes. The wider lines have the lower loss on known texts in new games at most checkpoints, and the 128-wide and 256-wide arms' probes tie each other below the 64-wide arm's. Each line is one seed, so the gaps between them are not established, and the 256-wide continuation runs are still training ([width](#the-widths-trade-places-by-measure-and-one-seed-each-cannot-separate-them)).
+**No width of `e` beyond 64 has improved what the probes measure.** The 64-wide line has the lowest loss on unseen texts and the best probes, and run A256, the 256-wide line's continuation at the full rate, comes closest to it on both. The wider lines have the lower loss on known texts in new games at most checkpoints. Each line is one seed, so the gaps between them are not established, and run B256 is still training ([width](#the-widths-trade-places-by-measure-and-one-seed-each-cannot-separate-them)).
 
 **Gen-2's `e` holds a line's costs, timing and amounts far better than gen-1's, and the trunk still supplies deaths, damage and trigger firing.** The probes record measures where each kind of knowledge lives.
 
@@ -62,20 +62,20 @@ Two consequences carry through the rest of the record. A difference of a tenth o
 
 ### The probes keep improving after the card-disjoint loss has bottomed out
 
-In each continuation run, the last epoch has a higher card-disjoint loss than the kept epoch, yet the probes rate it as good or better. The chart plots each checkpoint's mean probe score against each validation loss, and an arrow joins each run's kept epoch to its last. Every arrow points right on the card-disjoint panel, toward a worse loss, and level or up, toward better probes. The probe mean is the model's own prediction on eight knowledge-probe questions, scored as AUC: the chance that a true case is ranked above a false one.
+In each continuation run whose last epoch was not also its lowest, the last epoch has a higher card-disjoint loss than the kept epoch, yet the probes rate it as good or better. Run A256 reached its lowest card-disjoint loss at its last epoch, so it has a single checkpoint and no arrow. The chart plots each checkpoint's mean probe score against each validation loss, and an arrow joins each run's kept epoch to its last. Every arrow points right on the card-disjoint panel, toward a worse loss, and level or up, toward better probes. The probe mean is the model's own prediction on eight knowledge-probe questions, scored as AUC: the chance that a true case is ranked above a false one.
 
 ![Mean probe score against each validation loss, with arrows from each run's kept epoch to its last](2026-09-18-effect-model-gen2/charts/probes-vs-loss.png)
 
-*Blue: 64-wide; orange: 128-wide; open squares: trained without lethality copies. Data: `checkpoints.csv`, `probe_ladder.csv` (rung 3, the model's own prediction, game-disjoint records).*
+*Blue: 64-wide; orange: 128-wide; green: 256-wide; open squares: trained without lethality copies. Data: `checkpoints.csv`, `probe_ladder.csv` (rung 3, the model's own prediction, game-disjoint records).*
 
 The card-disjoint loss rises because the model grows more confident, not because it ranks outcomes worse. Most of the rise is in the gate field, whether a card was affected at all, and in poison. On the same card-disjoint records, the probe asking whether a card is affected scores higher at the last epoch in three runs of four. Log-loss charges heavily for a confident miss, and a text the model never saw produces a few.
 
-Across checkpoints of different runs, both losses track the probes. Lower-loss checkpoints have better probes, on either loss. Among the eleven checkpoints trained with lethality copies the card-disjoint loss tracks them better, because the 64-wide line wins on both the card-disjoint loss and the probes while the game-disjoint loss favours the wider lines. With eleven checkpoints, a rank correlation below about 0.6 cannot be told from none.
+Across checkpoints of different runs, both losses track the probes. Lower-loss checkpoints have better probes, on either loss. Among the twelve checkpoints trained with lethality copies the card-disjoint loss tracks them better, because the 64-wide line wins on both the card-disjoint loss and the probes while the game-disjoint loss favours the wider lines. With twelve checkpoints, a rank correlation below about 0.6 cannot be told from none.
 
 | rank correlation with the probe mean, sign set so that positive means agreement | card-disjoint loss | game-disjoint loss |
 |---|---:|---:|
-| all 14 checkpoints | +0.71 | +0.68 |
-| the 11 checkpoints with lethality copies | +0.53 | +0.37 |
+| all 15 checkpoints | +0.71 | +0.64 |
+| the 12 checkpoints with lethality copies | +0.55 | +0.32 |
 
 The two runs at a tenth of the learning rate show the same mechanism over time, and in opposite directions. Run B64's card-disjoint loss is lowest at its first epoch and creeps up across the run, while run B128's falls for a few epochs and then holds level. Both runs read the same shards at matching epochs, and both training losses keep falling. Two effects separate them:
 
@@ -119,7 +119,7 @@ Three faults remain, and the grids show all of them:
 
 - **The boundary is soft.** Where the damage exactly equals the toughness, the prediction sits between two fifths and four fifths rather than near one.
 - **The lethal side tops out near 0.8.** That ceiling comes from the gate rather than from the death: on clearly lethal hits the predicted death given that the creature was affected is 0.99, and in a quarter of the records the model doubts that the targeted creature is affected at all.
-- **Activated pings for 1 damage**, abilities like Prodigal Sorcerer's that a permanent uses by paying a cost, are predicted to spare a toughness-1 creature by the 64-wide and 256-wide checkpoints; the 128-wide ones get them right, as the last panel of the toughness chart shows. Width does not order this fault, so it is likely a property of each run rather than of the width.
+- **Activated pings for 1 damage**, abilities like Prodigal Sorcerer's that a permanent uses by paying a cost, are predicted to spare a toughness-1 creature by the 64-wide checkpoints and arm `e256-lethality`; the 128-wide checkpoints and run A256 get them right, as the toughness chart shows. The 256-wide line loses the fault between its arm and its continuation, so it is a property of each checkpoint rather than of the width.
 
 The damage sweep reads the same rule from the other side: it fixes a toughness-4 target and re-encodes one spell's script with `NumDmg$` from 1 to 8. The rule puts the step between 3 and 4. Arm `e64` barely rises with the damage. With copies, every checkpoint rises steeply, and where it crosses one half moves from checkpoint to checkpoint, which the next section explains.
 
@@ -133,13 +133,13 @@ At the full learning rate the boundary sharpens over twenty more epochs, but its
 
 ![Predicted death for hits lethal by one, exactly lethal and short by one, epoch by epoch, for both widths](2026-09-18-effect-model-gen2/charts/boundary-by-epoch.png)
 
-*Dotted: the arm's own checkpoints. Thin: the A run (A64, A128), twenty more epochs at the full rate. Thick: the B run (B64, B128), from the A run's kept epoch at a tenth of the rate (grey band). Dashed verticals: the epoch each run keeps by card-disjoint loss. The black line marks an even chance: in the B runs a hit short by one point stays below it, after run B128's first few epochs, and an exactly lethal hit above it, while in the A runs both cross it. Data: `boundary_by_epoch.csv`.*
+*Dotted: the arm's own checkpoints. Thin: the A run (A64, A128, A256), twenty more epochs at the full rate. Thick: the B run (B64, B128, B256), from the A run's kept epoch at a tenth of the rate (grey band). Dashed verticals: the epoch each run keeps by card-disjoint loss. The black line marks an even chance: in the B runs a hit short by one point stays below it, after run B128's first few epochs, and an exactly lethal hit above it, while in the A runs both cross it. Data: `boundary_by_epoch.csv`.*
 
-In run A128 a hit short by one point is predicted to kill anywhere from one time in six to three times in four, depending on the epoch. Run A64's range is narrower but of the same kind. The epoch a run keeps can land anywhere in that range: run A128's kept epoch has the boundary moved furthest toward a death of any checkpoint, while run A64's happened to land near the rule. Arm `e256-lethality`'s kept epoch also leans toward a death: its damage sweep crosses one half before 3 damage, where arm `e128-lethality`'s crossed after 5 and arm `e64-lethality`'s near the rule.
+In run A128 a hit short by one point is predicted to kill anywhere from one time in six to three times in four, depending on the epoch. Run A256's range is as wide, and run A64's narrower but of the same kind. The epoch a run keeps can land anywhere in that range: run A128's kept epoch has the boundary moved furthest toward a death of any checkpoint, while run A64's happened to land near the rule. Arm `e256-lethality`'s kept epoch also leans toward a death: its damage sweep crosses one half before 3 damage, where arm `e128-lethality`'s crossed after 5 and arm `e64-lethality`'s near the rule.
 
 At a tenth of the learning rate the position settles. Run B128 started from run A128's misplaced epoch 30, pulled the boundary back within a few epochs, and then held it. In both run B64 and run B128 the gap between "lethal by one" and "short by one" holds near six tenths, and the error against the rule falls slowly. On the probe set's grids, the last epochs of runs B64 and B128 have the lowest error against the rule of any checkpoint; the training-records chart and the probe-set grids agree.
 
-Dropping to a tenth of the rate is therefore what places the boundary. More epochs at the full rate do not. On the damage sweep, all four checkpoints of runs B64 and B128, kept and last, keep every point on the rule's side of an even chance. Of the full-rate checkpoints trained with lethality copies, only arm `e64-lethality` does, by a hundredth at 4 damage.
+Dropping to a tenth of the rate is therefore what places the boundary. More epochs at the full rate do not. On the damage sweep, all four checkpoints of runs B64 and B128, kept and last, keep every point on the rule's side of an even chance. Of the full-rate checkpoints trained with lethality copies, only arm `e64-lethality`, by a hundredth at 4 damage, and run A256's single checkpoint do. Run A256's boundary moved between epochs as much as run A128's, and its last epoch is the one where it happened to sit near the rule.
 
 ### In combat the model applies power against toughness softly, learns indestructible and deathtouch, and not first strike
 
@@ -177,7 +177,7 @@ Lifelink and indestructible agree 97% of the time or more on every checkpoint, a
 
 The other four move far more than sampling allows, so their variation is the model's:
 
-- First strike ranges over about fifteen points on 2,503 records, whose sampling half-width is two.
+- First strike ranges over about twenty points on 2,503 records, whose sampling half-width is two. Run A256's checkpoint scores lowest, just above the gate's 70%.
 - Deathtouch and infect each range over twelve to fourteen points.
 - Double strike ranges from 44% to 85% on 294 records, eight times its sampling half-width. Within run B64 it fails at the kept epoch and passes at the last.
 
@@ -193,23 +193,23 @@ The fields with many records, such as whether a card was affected, its zone outc
 
 *Card-disjoint explained deviance per epoch along the lethality-copy lines. Data: `fields_by_epoch.csv`.*
 
-Poison is the clearest case. It moves between a fifth and seven tenths of its loss on the 64-wide line from epoch to epoch, and the 256-wide arm stays in the same band. On the 128-wide line it rarely rises above two fifths and often falls below zero, worse than a constant prediction. Since the widest and the narrowest `e` agree, the 128-wide line's poison is more likely its seed's level than an effect of width. Types gained and blocking legality swing by about thirty points. A comparison of two checkpoints on any of these fields is mostly a comparison of two draws. Gen-3's field-normalized loss and its adaptive sampling address these fields directly.
+Poison is the clearest case. It moves between a fifth and seven tenths of its loss on the 64-wide line from epoch to epoch, and the 256-wide line stays in the same band. On the 128-wide line it rarely rises above two fifths and often falls below zero, worse than a constant prediction. Since the widest and the narrowest `e` agree, the 128-wide line's poison is more likely its seed's level than an effect of width. Types gained and blocking legality swing by about thirty points. A comparison of two checkpoints on any of these fields is mostly a comparison of two draws. Gen-3's field-normalized loss and its adaptive sampling address these fields directly.
 
 ### The widths trade places by measure, and one seed each cannot separate them
 
-The 64-wide line has the lowest card-disjoint loss and the best probes at every stage it shares with the others, and the wider lines have the lower game-disjoint loss at most checkpoints. Each point in the chart is a checkpoint trained with lethality copies. Among the arms, the 256-wide arm's card-disjoint loss falls between the other two, its game-disjoint loss is the lowest of any arm, and its probes tie the 128-wide arm's.
+The 64-wide line has the lowest card-disjoint loss at every stage it shares with the others, and the best probes at every stage but the full-rate continuation, where run A256 ties run A64. The wider lines have the lower game-disjoint loss at most checkpoints. Each point in the chart is a checkpoint trained with lethality copies. Among the arms, the 256-wide arm's card-disjoint loss falls between the other two, its game-disjoint loss is the lowest of any arm, and its probes tie the 128-wide arm's. Run A256 then lowers its arm's card-disjoint loss as much as run A64 lowers its own, and more than run A128 does: its kept epoch ends below run A128's and above run A64's, and its game-disjoint loss is level with run A128's last epoch.
 
 ![Card-disjoint loss, game-disjoint loss, probe mean and participation ratio by width of e](2026-09-18-effect-model-gen2/charts/width.png)
 
-*Light: the arm; mid: the A runs; dark: the B runs. Circles: a run's kept epoch; triangles: its last. The 256-wide continuations join as they complete. Data: `checkpoints.csv`, `probe_ladder.csv`, `gate3.csv`.*
+*Light: the arm; mid: the A runs; dark: the B runs. Circles: a run's kept epoch; triangles: its last, where it differs. Run B256 joins when it completes. Data: `checkpoints.csv`, `probe_ladder.csv`, `gate3.csv`.*
 
 The card-disjoint gap between the 64-wide and 128-wide lines, about a tenth to two tenths of a point, is at the edge of the epoch-to-epoch swing at the full rate. The two lines keep it through both continuation runs, which makes it more than one lucky epoch. It could still be the two seeds' levels rather than the width.
 
-A wider `e` does not spread its variance over more effective directions. Every checkpoint sits between 9 and 11 effective dimensions, the 256-wide arm at about 9.4, so the vector's extra width goes unused. A linear probe reads the stated amounts better from a wider `e`, which it would from any wider vector. An MLP probe reads damage, cost and counters on unseen lines slightly worse from the 256-wide `e` than from the narrower arms, and power change slightly better. On the death rule, combat, gate 2 and the board-abilities subsets, the 256-wide arm lands inside or at the edge of the range of the other checkpoints.
+A wider `e` spreads its variance over few more effective directions. Every checkpoint sits between 9 and 12. The 256-wide arm has about 9.4, and run A256 about 11.9, the most of any checkpoint but less than one direction above the best narrower ones, so the vector's extra width goes almost unused. A linear probe reads the stated amounts better from a wider `e`, which it would from any wider vector. An MLP probe reads damage, cost and counters on unseen lines slightly worse from the 256-wide `e` than from the narrower arms, and power change slightly better. On the death rule, combat, gate 2 and the board-abilities subsets, the 256-wide arm lands inside or at the edge of the range of the other checkpoints.
 
 ### Gen-2's `e` spreads over two to three times gen-1's dimensions, and reads a line's kind and amounts far better
 
-The participation ratio counts the equally weighted directions that would give `e`'s spread of variance: 3.9 for gen-1 and between 7.5 and 11.1 for every gen-2 checkpoint. A linear probe reads a line's API type, its mana cost and each of its stated amounts far better from gen-2's `e`. The wider `e` reads the amounts better still, though a linear probe with more inputs fits more of any label, so the table bounds what width adds rather than measuring it. Gen-2 trains two heads that read `e` alone, one predicting the API type and one the stated amounts, so part of the gain is by construction; the probes record tests whether the trunk uses it.
+The participation ratio counts the equally weighted directions that would give `e`'s spread of variance: 3.9 for gen-1 and between 7.5 and 11.9 for every gen-2 checkpoint. A linear probe reads a line's API type, its mana cost and each of its stated amounts far better from gen-2's `e`. The wider `e` reads the amounts better still, though a linear probe with more inputs fits more of any label, so the table bounds what width adds rather than measuring it. Gen-2 trains two heads that read `e` alone, one predicting the API type and one the stated amounts, so part of the gain is by construction; the probes record tests whether the trunk uses it.
 
 | linear probe on `e`, all texts | gen-1 | `e64`, epoch 25 | run B64, epoch 62 | run B128, epoch 50 | `e256-lethality`, epoch 28 |
 |---|---:|---:|---:|---:|---:|
@@ -1493,7 +1493,8 @@ Every gen-2 run trains on the stage-4 corpus (digest `b3adb69a2950`) with an enc
 | run A128 | `e128-lethality` continued | 128 | 8 | full | 28–47 | 30 | `2026-10-gen2-e128-lethality-ext20/` |
 | run B128 | run A128's epoch 30 continued | 128 | 8 | a tenth | 31–50 | 37 | `2026-10-gen2-e128-lethality-lr0.1/` |
 | `e256-lethality` | `e128-lethality` at width 256 | 256 | 8 | full | 1–33 | 28 | `2026-10-gen2-e256-lethality/` |
-| runs A256 and B256 | the 256-wide continuations | 256 | 8 | | in progress | | `2026-10-gen2-e256-lethality-ext20/`, `-lr0.1/` |
+| run A256 | `e256-lethality` continued | 256 | 8 | full | 34–53 | 53 | `2026-10-gen2-e256-lethality-ext20/` |
+| run B256 | run A256's epoch 53 continued | 256 | 8 | a tenth | 54–73, in progress | | `2026-10-gen2-e256-lethality-lr0.1/` |
 
 Each run reads the same shards in the same order as the run it continues would have, since every draw is seeded by the step's place in the run. Data: `runs.csv`, `checkpoints.csv`.
 
