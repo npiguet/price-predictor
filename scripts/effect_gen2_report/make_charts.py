@@ -108,10 +108,12 @@ def heatmap(ax, grid: np.ndarray, title: str, xlabel: str, ylabel: str) -> None:
 def training_losses() -> None:
     ep = csv("epochs.csv")
     widths = [w for w in (64, 128, 256) if LINES[w][0] in set(ep.run)]
-    fig, axes = plt.subplots(2, len(widths), figsize=(4.3 * len(widths), 6.4), sharey="row",
-                             squeeze=False)
+    metrics = ("card_disjoint", "game_disjoint", "train")
+    fig, axes = plt.subplots(len(metrics), len(widths), figsize=(4.3 * len(widths), 9.4),
+                             sharey="row", squeeze=False)
+    limits = {"card_disjoint": (3.4, 4.6), "game_disjoint": (2.75, 3.7), "train": (2.7, 4.7)}
     for col, width in enumerate(widths):
-        for row, metric in enumerate(("card_disjoint", "game_disjoint")):
+        for row, metric in enumerate(metrics):
             ax = axes[row][col]
             no_copies = NO_COPIES.get(width)
             if no_copies in set(ep.run):
@@ -127,18 +129,19 @@ def training_losses() -> None:
                 best = d.loc[d.card_disjoint.idxmin()]
                 ax.plot(best.epoch, best[metric], "*", ms=11, color=run_colour(run),
                         mec="black", mew=0.6)
-            ax.set_ylim(*((3.4, 4.6) if metric == "card_disjoint" else (2.75, 3.7)))
+            ax.set_ylim(*limits[metric])
             ax.set_xlim(left=5)
             if row == 0:
                 done = LINES[width][0] in set(csv("checkpoints.csv").run)
                 ax.set_title(f"e width {width}" + ("" if done else " (still training)"))
                 ax.legend(fontsize=8, loc="upper right")
             if col == 0:
-                ax.set_ylabel(metric.replace("_", "-") + " loss")
-            if row == 1:
+                ax.set_ylabel({"train": "training loss"}.get(
+                    metric, metric.replace("_", "-") + " loss"))
+            if row == len(metrics) - 1:
                 ax.set_xlabel("epoch")
-    fig.suptitle("Validation losses by epoch; a star marks each run's lowest card-disjoint "
-                 "epoch, the one it keeps", y=1.0)
+    fig.suptitle("Validation and training losses by epoch; a star marks each run's lowest "
+                 "card-disjoint epoch, the one it keeps", y=1.0)
     save(fig, "training-losses")
 
 

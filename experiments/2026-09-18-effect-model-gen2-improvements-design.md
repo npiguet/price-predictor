@@ -44,11 +44,13 @@ All the data behind the tables and charts is in [`2026-09-18-effect-model-gen2/`
 
 Both validation losses fall quickly for about ten epochs and slowly after that. From then on, single epochs land a tenth of a point or more above or below the trend, about as far as the trend falls in five to ten epochs. The validation samples are fixed, the same 2,048 records per stratum every epoch, so the swing is the model changing between epochs and not a different sample. Each run keeps its epoch with the lowest card-disjoint loss, marked with a star, so the kept epoch is partly the luckiest one.
 
-![Card-disjoint and game-disjoint loss by epoch for every run, by width of e](2026-09-18-effect-model-gen2/charts/training-losses.png)
+![Card-disjoint, game-disjoint and training loss by epoch for every run, by width of e](2026-09-18-effect-model-gen2/charts/training-losses.png)
 
-*Grey: the arm without lethality copies. Light to dark: the arm with copies, its continuation at the same learning rate (run A), and the continuation of run A's kept epoch at a tenth of the learning rate (run B). Data: `epochs.csv`.*
+*Grey: the arm without lethality copies. Light to dark: the arm with copies, its continuation at the same learning rate (run A), and the continuation of run A's kept epoch at a tenth of the learning rate (run B). The bottom row is the training loss, averaged over each epoch's 5,000 steps; it runs about a tenth higher with lethality copies, which add records the corpus rarely shows. Data: `epochs.csv`.*
 
 The card-disjoint loss swings more than the game-disjoint loss in almost every run. The card-disjoint stratum holds 500 texts the model never saw, and how well the model generalizes to each of them changes from epoch to epoch. The training loss moves by two to three hundredths in every run.
+
+The training loss also shows why the validation losses swing. After a short warmup the learning rate stays at its peak for the whole run, so the weights never settle: each epoch ends at a different point near the bottom of the loss surface. The training loss is averaged over the 5,000 steps of an epoch and smooths that movement out, while a validation loss scores the single set of weights the epoch ended on. When runs B and B128 drop to a tenth of the rate, their training loss falls by about a tenth in the first epoch and by about two tenths within two, against run A and run A128 on the same shards. The weights move closer to the bottom once their steps are smaller.
 
 At a tenth of the learning rate the swing shrinks between two and six times on card-disjoint loss and about three times on game-disjoint loss, while the training loss keeps the same small movement. Runs B and B128 are the only runs whose single epochs can be compared with each other at face value.
 
