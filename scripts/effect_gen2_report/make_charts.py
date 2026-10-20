@@ -457,25 +457,30 @@ def damage_sweep() -> None:
 
 def combat_grids() -> None:
     c = csv("combat_grids.csv")
-    name = present(["B256 last", "B128 last", "B64 last"], c.checkpoint)[-1]
-    panels = [("none", "blocker", "blocker's death, no keyword", "attacker power"),
-              ("none", "attacker", "attacker's death, no keyword", "blocker power"),
-              ("attacker-deathtouch", "blocker", "blocker's death, attacker deathtouch",
-               "attacker power"),
+    name = "B64 last"  # the checkpoint the gen-2 record's combat section describes
+    panels = [("none", "blocker", "Blocker's death, no keyword\n(rule: dies below the line)",
+               "attacker's power", "blocker's toughness", True),
+              ("none", "attacker", "Attacker's death, no keyword\n(rule: dies below the line)",
+               "blocker's power", "attacker's toughness", True),
+              ("attacker-deathtouch", "blocker",
+               "Blocker's death, attacker has deathtouch\n(rule: dies on every cell)",
+               "attacker's power", "blocker's toughness", False),
               ("attacker-first-strike", "attacker",
-               "attacker's death, attacker first strike,\nfirst-strike step", "blocker power")]
-    fig, axes = plt.subplots(1, 4, figsize=(12.4, 3.5))
-    for ax, (variant, reads, title, ylabel) in zip(axes, panels):
+               "Attacker's death in the first-strike step,\nattacker has first strike "
+               "(rule: never dies)", "blocker's power", "attacker's toughness", False)]
+    fig, axes = plt.subplots(2, 2, figsize=(9.2, 9.0))
+    for ax, (variant, reads, title, ylabel, xlabel, staircase) in zip(axes.flat, panels):
         d = c[(c.checkpoint == name) & (c.variant == variant) & (c.reads == reads)]
         grid = d.pivot(index="striker_power", columns="struck_toughness",
                        values="predicted_death").values
-        heatmap(ax, grid, title, "toughness of the creature read", ylabel)
-        if variant == "none":
+        heatmap(ax, grid, title, xlabel, ylabel)
+        ax.title.set_fontsize(10)
+        if staircase:
             rule_staircase(ax)
+    fig.subplots_adjust(hspace=0.42, wspace=0.3)
     colourbar(fig, axes)
-    fig.suptitle(f"Combat grids of {short(name)}, 40 real one-on-one blocks per cell. "
-                 "Rule: dies below the line; deathtouch kills everywhere; a first striker "
-                 "cannot die in its step", y=1.04)
+    fig.suptitle(f"Combat grids of {short(name)}: predicted death over 40 real one-on-one "
+                 "blocks per cell", y=0.97)
     save(fig, "combat-grids")
 
 
