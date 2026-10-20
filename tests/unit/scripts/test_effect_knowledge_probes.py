@@ -1283,3 +1283,79 @@ class TestTargetRestrictions:
         assert target_restrictions.auc([1, 1, 0, 0], [0.9, 0.8, 0.2, 0.1]) == 1.0
         assert target_restrictions.auc([1, 1, 0, 0], [0.1, 0.2, 0.8, 0.9]) == 0.0
         assert np.isnan(target_restrictions.auc([1, 1], [0.5, 0.6]))
+
+
+colour_pips = run.sibling("colour_pips")
+zone_effects = run.sibling("zone_effects")
+
+
+class TestColourPips:
+    def test_the_cost_parses_into_coloured_pips_and_generic(self):
+        assert colour_pips.parse_cost("{2}{R}{W/U}") == ([("R",), ("W", "U")], 2)
+        assert colour_pips.shape([("U",)]) == "one pip"
+        assert colour_pips.shape([("U",), ("U",)]) == "repeated pip"
+        assert colour_pips.shape([("W",), ("U",)]) == "several colours"
+        assert colour_pips.shape([("W", "U")]) == "hybrid"
+
+    @pytest.mark.parametrize("cost, lands, expected", [
+        ("{2}{R}", ["R", "G", "G"], True),
+        ("{2}{R}", ["G", "G", "G"], False),
+        ("{2}{R}", ["R", "G"], False),
+        ("{U}{U}", ["U", "G"], False),
+        ("{1}{U}", ["U", "U"], True),
+        ("{W/U}{W/U}", ["W", "U"], True),
+        ("{W/U}{W/U}", ["W", "G"], False),
+    ])
+    def test_the_rule_matches_pips_to_lands(self, cost, lands, expected):
+        assert colour_pips.payable(*colour_pips.parse_cost(cost), lands) is expected
+
+    @pytest.mark.parametrize("cost", ["{2}{R}", "{U}{U}", "{1}{U}{U}", "{W}{U}", "{W/U}",
+                                      "{G}"])
+    def test_configurations_keep_their_rule_answers(self, cost):
+        configs = colour_pips.configurations(cost)
+        coloured, generic = colour_pips.parse_cost(cost)
+        total = len(coloured) + generic
+        assert configs["exact"] == (configs["exact"][0], True)
+        assert configs["surplus"][1] is True
+        for name in ("one short", "pip missing", "pip missing, +2", "all off colour"):
+            assert configs[name][1] is False, name
+        assert len(configs["exact"][0]) == total
+        assert len(configs["one short"][0]) == total - 1
+        assert len(configs["pip missing"][0]) == total
+        assert len(configs["pip missing, +2"][0]) == total + 2
+
+    def test_the_missing_colour_is_still_present_only_for_a_repeated_pip(self):
+        assert colour_pips.missing_colour_present("{1}{U}{U}")
+        assert not colour_pips.missing_colour_present("{1}{U}")
+        assert not colour_pips.missing_colour_present("{W}{U}")
+
+    def test_a_configuration_edits_the_lands_to_its_colours(self, records):
+        record = _decision(records, "{2}{U}")
+        actor = record.actor_player
+        lands, _ = colour_pips.configurations("{2}{U}")["pip missing"]
+        edited = sweeps.set_untapped_lands(record, actor, list(lands), len(lands))
+        production = edited.state.player(actor).untapped_production
+        assert {c: n for c, n in production.items() if n} == {"W": 3}
+
+
+class TestZoneEffects:
+    def test_chain_apis_read_every_segment(self):
+        text = "SP$ Destroy | ValidTgts$ Creature [SEG] SV1 | DB$ Draw | NumCards$ 2"
+        assert zone_effects.chain_apis(text) == {"Destroy", "Draw"}
+        assert zone_effects.chain_apis(None) == set()
+
+    def test_set_amount(self):
+        text = "SP$ Draw | NumCards$ 2 | ValidTgts$ Player"
+        assert zone_effects.set_amount(text, 5) == "SP$ Draw | NumCards$ 5 | ValidTgts$ Player"
+
+    def test_retargeting_moves_only_the_player_target(self, records):
+        from dataclasses import replace
+
+        record = next(r for r in records if len(r.state.players) == 2)
+        one, two = (p.id for p in record.state.players)
+        aimed = replace(record, state=replace(record.state, refs=replace(
+            record.state.refs, targets=(one, "card-1"))))
+        assert zone_effects.player_targets(aimed) == [one]
+        moved = zone_effects.retargeted(aimed, one, two)
+        assert moved.state.refs.targets == (two, "card-1")
+        assert zone_effects.player_targets(moved) == [two]
