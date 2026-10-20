@@ -459,6 +459,35 @@ The acting-player bits stay. Every row but the owner rows is an input-layout cha
 
 **The pairing belongs in the trunk's input.** Two forms would carry it: each card slot gains the board position of the attacker it blocks, or the trunk's attention gains a bias between a blocker and its attacker, as it could between an aura and the permanent it enchants. Either needs no new collection, since the snapshot already holds the pairing.
 
+## The keyword flags should say what a creature has protection from
+
+**Gen-2's keyword flags collapse every protection into one flag.** The overlay maps `protection_from_red`, `protection_from_blue` and every other protection onto a single `protection` slot. A printed protection line still reaches the model through its text in `e`. A granted one, such as Gods Willing's "gains protection from the color of your choice", reaches it only through the flag, and the flag cannot say which colour. Gen-2's evasion grid shows the cost directly: its two protection rows, protection from the blocker's colour and protection from another colour, give the model identical inputs and so identical predictions, where the rule forbids the first block and allows the second.
+
+**Protection is not always from a colour.** Forge's card scripts print protection on 196 cards. Colours are most of it, and the rest is a long tail, several of its qualities on a single card.
+
+| protection from | printed protection lines |
+|---|---:|
+| a colour | 153 |
+| a creature type, such as Goblins, Dragons or Vampires | 23 |
+| a card type, such as artifacts, creatures or instants | 21 |
+| multicolored, monocolored, or each colour | 9 |
+| a condition, such as mana value 3 or less or a counter | 4 |
+| a creature subset, such as legendary creatures or Gods | 3 |
+| everything | 1 |
+
+**Gen-3 gives each granted protection its quality.** Two forms would carry it:
+
+- **Fixed flags for the common qualities and one open slot.** One flag per colour, per card type, for multicolored and monocolored, and for everything, plus an "other" flag for a creature type or a condition. Cheap, but the open slot cannot say which creature type.
+- **Every granted keyword encoded as a line.** The overlay's granted keywords pass through the encoder as their expanded definition, "protection from Goblins", the way a printed keyword line already does. Any quality then reaches the trunk as text, including ones no flag anticipates, at the cost of an encoder pass per granted keyword.
+
+**The rare qualities need built examples, or the flags carry nothing the model learned.** A creature with protection from everything appears on one card, and protection from most creature types on two or three. Self-play shows them in a handful of games at best. Rule 702.16 says what protection does: damage from a source with the quality is prevented, and the creature cannot be enchanted or equipped, blocked or targeted by such a source. Three sources could supply the examples, and per-rule rebalancing decides how many each quality gets:
+
+- **Rule-labelled copies.** A copy of a real record grants a creature a protection quality and relabels the four outcomes by the rule, as the lethality copies relabel a death: the damage prevented, the block or target made illegal, the Aura put into the graveyard.
+- **Variant scripts.** `collect-variants` already swaps selectors from a whitelist. A protection keyword's quality is such a selector, so variants of real cards with another quality are played for real.
+- **Interventional forks.** A fork grants protection mid-game and plays the turn out, so the outcomes come from Forge rather than from a rule written beside it.
+
+Gen-2's evasion grid becomes the measure: its protection rows extend to the other qualities, from a creature type to everything.
+
 ## Combat could get lethality copies of its own, as damage spells have in gen-2
 
 **Gen-2's lethality copies cover damage spells only, and combat is now the weaker of the two.** A copy redraws a qualifying record's damage amount and the hit creature's toughness, and labels the death by the rule rather than by what Forge did. The gen-2 record's combat grids show where combat stands without them. Before the copies, the model separated a lethal block from a non-lethal one better than a lethal spell from a non-lethal one. With the copies and a tenth of the learning rate, the spell grid's error falls below every combat grid's. The combat boundary stays soft on every checkpoint, the attacker's death sits further from the rule than the blocker's, and a first striker is predicted to die as often as a creature without the keyword.
