@@ -87,19 +87,42 @@ def rule_staircase(ax, offset: float = 0.0) -> None:
     ax.plot(xs, ys, color="black", lw=1.2)
 
 
+def _oklch_to_srgb(lightness: float, chroma: float, hue_deg: float):
+    """One OKLCh colour as sRGB in 0..1, or None when no screen can show it."""
+    a = chroma * np.cos(np.radians(hue_deg))
+    b = chroma * np.sin(np.radians(hue_deg))
+    l_ = (lightness + 0.3963377774 * a + 0.2158037573 * b) ** 3
+    m_ = (lightness - 0.1055613458 * a - 0.0638541728 * b) ** 3
+    s_ = (lightness - 0.0894841775 * a - 1.2914855480 * b) ** 3
+    linear = np.array([
+        4.0767416621 * l_ - 3.3077115913 * m_ + 0.2309699292 * s_,
+        -1.2684380046 * l_ + 2.6097574011 * m_ - 0.3413193965 * s_,
+        -0.0041960863 * l_ - 0.7034186147 * m_ + 1.7076381450 * s_,
+    ])
+    if linear.min() < -1e-4 or linear.max() > 1 + 1e-4:
+        return None
+    linear = np.clip(linear, 0, 1)
+    return np.where(linear <= 0.0031308, 12.92 * linear,
+                    1.055 * linear ** (1 / 2.4) - 0.055)
+
+
 def _death_colourmap() -> matplotlib.colors.ListedColormap:
-    """Brightness rises steadily from 0 to 1; the hue flips from blue to orange at 0.5.
+    """Perceived lightness rises evenly from 0 to 1; the hue flips from blue to orange at 0.5.
 
-    The hue break marks the even-odds line at a glance, and the continuous brightness
-    keeps the order of the values readable on either side of it.
+    Built in OKLCh, a perceptually uniform colour space, so the two hues meet at the
+    same perceived brightness and the break marks the even-odds line without a jump in
+    brightness. Chroma is lowered only where a colour falls outside the sRGB gamut.
     """
-    import colorsys
-
     colours = []
     for v in np.linspace(0, 1, 256):
-        lightness = 0.10 + 0.80 * v
-        hue = 215 / 360 if v < 0.5 else 32 / 360
-        colours.append(colorsys.hls_to_rgb(hue, lightness, 0.85))
+        lightness = 0.22 + 0.75 * v
+        hue = 255.0 if v < 0.5 else 62.0
+        chroma = 0.16
+        rgb = _oklch_to_srgb(lightness, chroma, hue)
+        while rgb is None:
+            chroma -= 0.002
+            rgb = _oklch_to_srgb(lightness, chroma, hue)
+        colours.append(tuple(rgb))
     return matplotlib.colors.ListedColormap(colours, name="death")
 
 
