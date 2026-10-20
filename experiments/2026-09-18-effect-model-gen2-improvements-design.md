@@ -22,7 +22,7 @@ All the data behind the tables and charts is in [`2026-09-18-effect-model-gen2/`
 
 ![Predicted death of a damage spell's target, by damage and toughness, across the arms and continuation runs](2026-09-18-effect-model-gen2/charts/damage-grids.png)
 
-*Each cell is the predicted death of a damage spell's target, averaged over 20 real records with the spell's damage and the target's toughness edited. The rule says the target dies on and below the black staircase. Arm `e64` trained without copies; every other panel trained with them. Data: `damage_grids.csv`.*
+*Each cell is the predicted death of a damage spell's target, averaged over 20 real records with the spell's damage and the target's toughness edited. Orange cells predict a death more likely than not and blue cells less likely, brighter meaning more likely on both sides. The rule says the target dies on and below the black staircase. Arm `e64` trained without copies; every other panel trained with them. Data: `damage_grids.csv`.*
 
 **Where the lethal boundary sits wanders from epoch to epoch at the full learning rate, and settles near the rule at a tenth of it.** Twenty more epochs at the same rate sharpen the boundary but move its position by up to a point of damage between consecutive epochs. A tenth of the rate holds it in a narrow band near the rule, from whichever checkpoint the run starts ([the boundary](#where-the-boundary-sits-wanders-between-epochs-at-the-full-learning-rate-and-settles-near-the-rule-at-a-tenth-of-it)).
 
@@ -147,7 +147,7 @@ The combat grid asks the same question of a block that the damage grid asks of a
 
 ![Combat grids of run B's last epoch: plain blocker and attacker deaths, deathtouch, and first strike](2026-09-18-effect-model-gen2/charts/combat-grids.png)
 
-*Run B's last epoch. Rule: without keywords, the creature read dies on and below the staircase; with deathtouch every cell dies; in the first-strike step a first-striking attacker cannot die. Data: `combat_grids.csv`.*
+*Run B's last epoch, coloured as the damage grids: orange above an even chance of death, blue below. Rule: without keywords, the creature read dies on and below the staircase; with deathtouch every cell dies; in the first-strike step a first-striking attacker cannot die. Data: `combat_grids.csv`.*
 
 Every checkpoint gets the direction of the plain rule right, with a boundary blurred over two to three points of toughness, as soft as the damage grid's. The attacker's death sits further from the rule than the blocker's on every checkpoint. The likely reason is in the data: a combat record's snapshot is taken at the step's first damage event, so the creature damaged first already shows that damage. In 26 of the 40 blocks the blocker is marked with exactly the attacker's power, and the attacker is never marked. When the lethal damage is already on the board, every checkpoint predicts the death nine times in ten or more; when the model must add the opposing power itself, it is far less sure. The grid clears both creatures' marked damage before editing, and gen-3 moves the snapshot to the start of the damage step.
 

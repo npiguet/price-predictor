@@ -87,13 +87,32 @@ def rule_staircase(ax, offset: float = 0.0) -> None:
     ax.plot(xs, ys, color="black", lw=1.2)
 
 
+def _death_colourmap() -> matplotlib.colors.ListedColormap:
+    """Brightness rises steadily from 0 to 1; the hue flips from blue to orange at 0.5.
+
+    The hue break marks the even-odds line at a glance, and the continuous brightness
+    keeps the order of the values readable on either side of it.
+    """
+    import colorsys
+
+    colours = []
+    for v in np.linspace(0, 1, 256):
+        lightness = 0.10 + 0.80 * v
+        hue = 215 / 360 if v < 0.5 else 32 / 360
+        colours.append(colorsys.hls_to_rgb(hue, lightness, 0.85))
+    return matplotlib.colors.ListedColormap(colours, name="death")
+
+
+DEATH_CMAP = _death_colourmap()
+
+
 def colourbar(fig, axes) -> None:
-    sm = matplotlib.cm.ScalarMappable(cmap="magma", norm=matplotlib.colors.Normalize(0, 1))
+    sm = matplotlib.cm.ScalarMappable(cmap=DEATH_CMAP, norm=matplotlib.colors.Normalize(0, 1))
     fig.colorbar(sm, ax=axes, shrink=0.7, label="predicted death")
 
 
 def heatmap(ax, grid: np.ndarray, title: str, xlabel: str, ylabel: str) -> None:
-    ax.imshow(grid, cmap="magma", vmin=0, vmax=1, origin="upper")
+    ax.imshow(grid, cmap=DEATH_CMAP, vmin=0, vmax=1, origin="upper")
     ax.set_xticks(range(8), range(1, 9))
     ax.set_yticks(range(8), range(1, 9))
     ax.set_xlabel(xlabel)
