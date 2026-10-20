@@ -573,7 +573,8 @@ def ladder() -> None:
     gen2 = present(CHECKPOINTS[3:], lad.checkpoint)
     fig, ax = plt.subplots(figsize=(8.4, 4.6))
     styles = {"0": ("board alone", "#bbbbbb", "s"), "1": ("board + e, no trunk", "#3b6fb6", "o"),
-              "2": ("trunk output", "#e08f3c", "D"), "3": ("model's prediction", "#c05555", "*")}
+              "2": ("probe on the trunk's vector", "#e08f3c", "D"),
+              "3": ("model's own answer (output head)", "#c05555", "*")}
     for i, (target, label) in enumerate(targets):
         y = len(targets) - 1 - i
         for k, (rung, (name, colour, marker)) in enumerate(styles.items()):
@@ -589,9 +590,9 @@ def ladder() -> None:
     ax.set_xlim(-0.2, 1.0)
     ax.set_xlabel("probe score on card-disjoint records (AUC; R² for damage taken): median "
                   "over gen-2 checkpoints with copies, bar = range")
-    ax.legend(fontsize=8, loc="lower left")
-    ax.set_title("Where the knowledge lives: what the board alone, e, the trunk and the model "
-                 "each predict")
+    ax.legend(fontsize=8, loc="upper left")
+    ax.set_title("Where the knowledge lives: probes on the board alone, on e, on the trunk's "
+                 "vector, and the model's own answer")
     save(fig, "probe-ladder")
 
 

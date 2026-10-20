@@ -6,7 +6,7 @@ Where knowledge lives matters because `e` is the part that gets reused. A future
 
 The suite has three kinds of measurement:
 
-- **The read-out ladder** fits small probes to inputs taken from progressively deeper in the model, from the board alone up to the model's own prediction, and measures how much of the model's knowledge `e` alone carries.
+- **The read-out ladder** fits small probes to inputs taken from progressively deeper in the model, from the board alone through the trunk's internal vectors, and sets them beside the answer the model itself gives. It measures how much of the model's knowledge `e` alone carries.
 - **Ablations** replace `e` in the trained model and measure how much each output field's loss rises.
 - **Board sweeps** edit one input of a real record, such as a target's toughness or the mana available, and read where the model's prediction steps.
 
@@ -18,9 +18,9 @@ A probe is scored by AUC for a yes/no question, the chance that a true case scor
 
 ![The read-out ladder for nine board targets](2026-09-18-effect-model-gen2/charts/probe-ladder.png)
 
-*For each question, the score of a probe on the board alone (grey), on the board plus `e` without the trunk (blue), on the trunk's output (orange), and of the model's own prediction (red). Points are the median over the gen-2 checkpoints trained with lethality copies; bars span their range. Data: `probe_ladder.csv`.*
+*For each question, the score of a probe on the board alone (grey), on the board plus `e` without the trunk (blue), on the trunk's internal vector for that card or ability (orange), and the model's own answer, read from its trained output head with no probe (red). Points are the median over the gen-2 checkpoints trained with lethality copies; bars span their range. Data: `probe_ladder.csv`.*
 
-**The model's damage prediction uses a fraction of what its trunk knows.** A probe reads about two thirds of the variance in each creature's damage taken from the trunk's output, while the model's own damage field explains a fifth of it at the median and a third at best.
+**The model's damage prediction uses a fraction of what its trunk knows.** A probe reads about two thirds of the variance in each creature's damage taken from the trunk's internal vector, while the model's own damage field explains a fifth of it at the median and a third at best.
 
 **Gen-2's `e` holds a line's costs and timing almost perfectly and most of its amounts, where gen-1's held little of either.** Costs and timing transfer to lines the model never trained on. Power and toughness changes do not ([line properties](#gen-2s-e-holds-a-lines-costs-and-timing-almost-perfectly-and-most-of-its-amounts)).
 
@@ -38,8 +38,10 @@ The ladder reads one question from inputs of increasing depth, and each input is
 
 - **Rung 0:** the board alone, with every `e` zeroed.
 - **Rung 1:** the board plus the acting ability's `e` and, for a question about one card, that card's own ability vectors, with no trunk.
-- **Rung 2:** the trunk's output at the relevant slot.
-- **Rung 3:** the model's own prediction.
+- **Rung 2:** a probe on the trunk's internal vector at the relevant slot, which shows what the trunk holds, whether or not the model uses it.
+- **Rung 3:** the model's own answer, read from its trained output head, with no probe.
+
+Rungs 2 and 3 read the same trunk in two ways. The probe at rung 2 is fitted to this one question alone. The output head at rung 3 was trained with every other output field at once, and is what the model actually answers. A gap between them is knowledge the trunk holds and the model's own answer does not use.
 
 Rungs 0 to 2 are read by the same small two-layer network, an MLP, fixed across every checkpoint. The share is (rung 1 − rung 0) / (rung 3 − rung 0): the fraction of the distance from the board alone to the model's prediction that `e` closes without any trunk. The chart at the top of this record shows the rungs per question, and the shares sort the questions into the groups below.
 
@@ -56,9 +58,9 @@ Rungs 0 to 2 are read by the same small two-layer network, an MLP, fixed across 
 *Data: `probe_ladder.csv`.*
 
 - **What the line states, `e` carries.** Whether an ability is affordable turns on its cost, and how long a pump lasts turns on its script. `e` alone closes nine tenths or more of the gap on both.
-- **What the board decides, the trunk works out.** Whether a creature dies, whether a trigger fires and which cards an ability affects depend on the board as much as on the line. `e` closes a fifth to a third of the gap, and the trunk's output carries the model's whole prediction.
+- **What the board decides, the trunk works out.** Whether a creature dies, whether a trigger fires and which cards an ability affects depend on the board as much as on the line. `e` closes a fifth to a third of the gap, and a probe on the trunk's vector reads as much as the model's own answer gives.
 - **Blocking is known from the board alone.** On whether a creature may block, a probe on the board alone already scores about as well as anything deeper, and on card-disjoint records the model's own prediction scores below it. The share is not defined there, because the model gains nothing over the board.
-- **The trunk knows more about damage than the model says.** A probe reads about two thirds of the variance in damage taken from the trunk's output at a creature's slot. The model's own damage field explains a fifth of it at the median and a third at best. The information reaches the trunk and is not used by the head that should read it.
+- **The trunk knows more about damage than the model says.** A probe reads about two thirds of the variance in damage taken from the trunk's vector at a creature's slot. The model's own damage field explains a fifth of it at the median and a third at best. The information reaches the trunk and is not used by the head that should read it.
 
 The groups are robust: the lowest share among the first two questions is about twice the highest among the last four, across all eleven checkpoints. The 256-wide arm sorts its questions the same way as the narrower ones, so four times the width of `e` does not move deaths or trigger firing into the vector. The game-disjoint records sort the questions about the same way. A protected target's legality drops to no share there, because `e` adds nothing over the board on those records.
 
