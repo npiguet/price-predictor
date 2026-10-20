@@ -77,6 +77,23 @@ Across checkpoints of different runs, both losses track the probes. Lower-loss c
 | all 14 checkpoints | +0.71 | +0.68 |
 | the 11 checkpoints with lethality copies | +0.53 | +0.37 |
 
+The two runs at a tenth of the learning rate show the same mechanism over time, and in opposite directions. Run B's card-disjoint loss is lowest at its first epoch and creeps up across the run, while run B128's falls for a few epochs and then holds level. Both runs read the same shards at matching epochs, and both training losses keep falling. Two effects separate them:
+
+- **Run B started from a luckier checkpoint.** Each continuation starts from its parent run's kept epoch, the lowest point of a noisy series, so the starting loss is partly a favourable swing. Run A's epoch 42 sat further below run A's own trend than run A128's epoch 30 sat below run A128's. At a tenth of the rate the weights move away from that starting point toward the level the line trains to, and for run B that level is a little above the dip it started from.
+- **Run B's rise is confidence on unseen texts.** Nearly all of it is in the gate field, whether a card was affected at all, while the zone outcome improves slightly and damage and life stay level. Run B's last epoch scores as well as its first on the probes, and its error against the death rule keeps falling. Run B128's gate loss falls slightly instead. It started from the checkpoint whose boundary leaned furthest toward a death, and its first epochs pull that boundary back, which is where its early gain comes from.
+
+| at a tenth of the learning rate | run B (64-wide) | run B128 (128-wide) |
+|---|---:|---:|
+| starting checkpoint's card-disjoint loss, below its parent run's five-epoch mean | 0.16 | 0.10 |
+| card-disjoint trend after the first three epochs, per ten epochs | +0.04 | 0.00 |
+| game-disjoint trend, per ten epochs | +0.03 | −0.02 |
+| training-loss trend, per ten epochs | −0.08 | −0.12 |
+| affected gate's card-disjoint loss, first epoch → last | 1.06 → 1.15 | 1.16 → 1.13 |
+
+*Data: `epochs.csv`, `fields_by_epoch.csv`.*
+
+Run B's rise over the run, about a tenth of a point, is several times its epoch-to-epoch swing, so it is a trend rather than noise. It is not the extra epochs alone: over epochs 43 to 50, which both runs trained, run B still rises and run B128 barely moves. Whether the width or the seed separates the two runs cannot be told with one seed per width. The 256-wide continuation at a tenth of the rate starts from a third checkpoint at a third width.
+
 Gen-3 therefore picks its checkpoints by a score built from the probes and from rule scenarios, rather than by the summed loss; the gen-3 draft records the design.
 
 ### The model compares damage with toughness only after training shows it the rule directly
