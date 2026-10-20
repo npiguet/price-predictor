@@ -1152,3 +1152,134 @@ class TestCombatGrid:
         assert all(cell.state.entity(blocker).damage == 0 for row in rows for cell in row)
         assert np.array_equal(rule, np.array([[float(p >= t) for t in range(1, 9)]
                                               for p in range(1, 9)]))
+
+
+# ── the evasion grid ────────────────────────────────────────────────────
+
+evasion_grid = run.sibling("evasion_grid")
+target_restrictions = run.sibling("target_restrictions")
+
+
+def _block_pair(records):
+    """A fixture block-legality record made to qualify: a red attacker, a green blocker."""
+    from dataclasses import replace
+
+    from effects.domain.records import PlayabilityBlockersPayload
+
+    record = next(r for r in records if isinstance(r.payload, PlayabilityBlockersPayload)
+                  and r.payload.legal_blockers)
+    attacker, blocker = record.payload.anchor_attacker, record.payload.legal_blockers[0]
+    record = evasion_grid.set_colours(record, attacker, ("R",))
+    record = evasion_grid.set_colours(record, blocker, ("G",))
+    record = evasion_grid._edit_entity(record, blocker, lambda e: replace(e, types=("creature",)))
+    for entity in (attacker, blocker):
+        record = evasion_grid._edit_entity(record, entity, lambda e: replace(
+            e, granted_temporary=replace(e.granted_temporary, keywords=())))
+    return record, attacker, blocker
+
+
+def _no_keywords(entity):
+    return set(entity.granted_temporary.keywords)
+
+
+class TestEvasionGrid:
+    @pytest.mark.parametrize("attacker, blocker, colours, types, expected", [
+        ((), (), ("G",), ("creature",), True),
+        (("flying",), (), ("G",), ("creature",), False),
+        (("flying",), ("reach",), ("G",), ("creature",), True),
+        (("horsemanship",), ("flying",), ("G",), ("creature",), False),
+        (("fear",), (), ("B",), ("creature",), True),
+        (("fear",), (), ("G",), ("artifact", "creature"), True),
+        (("fear",), (), ("G",), ("creature",), False),
+        (("intimidate",), (), ("R",), ("creature",), True),
+        (("intimidate",), (), ("G",), ("creature",), False),
+        (("shadow",), (), ("G",), ("creature",), False),
+        ((), ("shadow",), ("G",), ("creature",), False),
+        (("unblockable",), ("reach",), ("G",), ("creature",), False),
+        (("protection_from_green",), (), ("G",), ("creature",), False),
+        (("protection_from_blue",), (), ("G",), ("creature",), True),
+    ])
+    def test_the_rule(self, attacker, blocker, colours, types, expected):
+        assert evasion_grid.may_block(attacker, ("R",), blocker, colours, types) is expected
+
+    def test_a_cell_grants_the_keyword_and_the_trait_and_scores_them(self, records):
+        record, attacker, blocker = _block_pair(records)
+        cell, rule = evasion_grid.edited(record, attacker, blocker, "flying", None)
+        assert "flying" in cell.state.entity(attacker).granted_temporary.keywords
+        assert rule is False
+        cell, rule = evasion_grid.edited(record, attacker, blocker, "flying", "reach")
+        assert "reach" in cell.state.entity(blocker).granted_temporary.keywords
+        assert rule is True
+        _, rule = evasion_grid.edited(record, attacker, blocker, "intimidate", "shares-colour")
+        assert rule is True
+        _, rule = evasion_grid.edited(record, attacker, blocker, "fear", "artifact")
+        assert rule is True
+
+    def test_protection_resolves_against_the_blockers_colour(self, records):
+        record, attacker, blocker = _block_pair(records)
+        cell, rule = evasion_grid.edited(record, attacker, blocker, "protection-blocker", None)
+        assert "protection_from_green" in cell.state.entity(attacker).granted_temporary.keywords
+        assert rule is False
+        cell, rule = evasion_grid.edited(record, attacker, blocker, "protection-other", None)
+        granted = cell.state.entity(attacker).granted_temporary.keywords
+        assert any(k.startswith("protection_from_") and k != "protection_from_green"
+                   and k != "protection_from_red" for k in granted)
+        assert rule is True
+
+    def test_qualification(self, records):
+        from dataclasses import replace
+
+        record, attacker, blocker = _block_pair(records)
+        assert evasion_grid.qualifying_pair(record, _no_keywords) == (attacker, blocker)
+        assert evasion_grid.qualifying_pair(replace(record, fork=True), _no_keywords) is None
+        flying = evasion_grid.grant_keyword(record, attacker, "flying")
+        assert evasion_grid.qualifying_pair(flying, _no_keywords) is None
+        black = evasion_grid.set_colours(record, blocker, ("B",))
+        assert evasion_grid.qualifying_pair(black, _no_keywords) is None
+
+
+class TestTargetRestrictions:
+    def test_the_restriction_is_read_from_the_first_segment(self):
+        text = "SP$ Destroy | ValidTgts$ Creature.nonLegendary | TgtPrompt$ x [SEG] SV1 | " \
+               "ValidTgts$ Player"
+        assert target_restrictions.restriction_of(text) == "Creature.nonLegendary"
+        assert target_restrictions.restriction_of("SP$ Draw | NumCards$ 2") is None
+        assert target_restrictions.masked("Creature.powerLE2") == "Creature.powerLE#"
+
+    @pytest.mark.parametrize("restriction, expected", [
+        ("Creature", "card type only"),
+        ("Artifact,Enchantment", "card type only"),
+        ("Creature.OppCtrl", "controller"),
+        ("Creature.nonLegendary", "supertype"),
+        ("Creature.nonBlack", "colour"),
+        ("Creature.withFlying", "keyword"),
+        ("Creature.powerLE2", "number"),
+        ("Creature.attacking", "combat or tapped"),
+        ("Card.Creature+namedSomething", "other"),
+    ])
+    def test_family(self, restriction, expected):
+        assert target_restrictions.family(restriction) == expected
+
+    def test_flips_break_exactly_the_stated_condition(self, records):
+        from effects.domain.records import PlayabilityDecisionPayload
+
+        assert target_restrictions.flip_for("Creature.OppCtrl") == "to the acting player"
+        assert target_restrictions.flip_for("Artifact") == "loses artifact"
+        assert target_restrictions.flip_for("Artifact,Creature") is None
+        assert target_restrictions.flip_for("Creature.OppCtrl+nonLegendary") is None
+        record = next(r for r in records if isinstance(r.payload, PlayabilityDecisionPayload)
+                      and r.payload.candidates and r.payload.candidates[0].legal_targets)
+        entity = next(e for e in record.state.entities if e.zone == "battlefield")
+        mine = target_restrictions.flipped(record, entity.id, "to the acting player")
+        assert mine.state.entity(entity.id).controller == record.actor_player
+        theirs = target_restrictions.flipped(record, entity.id, "to the opponent")
+        assert theirs.state.entity(entity.id).controller != record.actor_player
+        legendary = target_restrictions.flipped(record, entity.id, "made legendary")
+        assert "legendary" in legendary.state.entity(entity.id).supertypes
+        lost = target_restrictions.flipped(record, entity.id, "loses creature")
+        assert "creature" not in lost.state.entity(entity.id).types
+
+    def test_auc(self):
+        assert target_restrictions.auc([1, 1, 0, 0], [0.9, 0.8, 0.2, 0.1]) == 1.0
+        assert target_restrictions.auc([1, 1, 0, 0], [0.1, 0.2, 0.8, 0.9]) == 0.0
+        assert np.isnan(target_restrictions.auc([1, 1], [0.5, 0.6]))
