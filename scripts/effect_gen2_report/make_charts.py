@@ -489,16 +489,21 @@ def combat_keywords() -> None:
     pw, tg = c.striker_power, c.struck_toughness
     lethal, short_ = pw >= tg, pw < tg
     second = (pw < tg) & (tg <= 2 * pw)
+    # Each label names the creature whose death is read, the creature holding the keyword,
+    # and the cells averaged: the ones where the keyword changes the rule's answer.
     checks = [
-        ("indestructible blocker", "blocker-indestructible", "blocker", lethal, 1, 0),
-        ("deathtouch attacker", "attacker-deathtouch", "blocker", short_, 0, 1),
-        ("double strike, second hit", "attacker-double-strike-second-hit", "blocker", second,
-         0, 1),
-        ("first strike, attacker's own death", "attacker-first-strike", "attacker", lethal, 1,
-         0),
-        ("first strike, blocker's own death", "blocker-first-strike", "blocker", lethal, 1, 0),
+        ("Blocker's death\nblocker has indestructible · lethal hits",
+         "blocker-indestructible", "blocker", lethal, 1, 0),
+        ("Blocker's death\nattacker has deathtouch · hits short of lethal",
+         "attacker-deathtouch", "blocker", short_, 0, 1),
+        ("Blocker's death\nattacker's double strike, second hit · lethal only as two",
+         "attacker-double-strike-second-hit", "blocker", second, 0, 1),
+        ("Attacker's death, first-strike step\nattacker has first strike · blocker's lethal hits",
+         "attacker-first-strike", "attacker", lethal, 1, 0),
+        ("Blocker's death, first-strike step\nblocker has first strike · attacker's lethal hits",
+         "blocker-first-strike", "blocker", lethal, 1, 0),
     ]
-    fig, ax = plt.subplots(figsize=(8.6, 3.8))
+    fig, ax = plt.subplots(figsize=(9.2, 5.0))
     for i, (label, variant, reads, cells, rule_before, rule_after) in enumerate(checks):
         y = len(checks) - 1 - i
         plain = c[(c.variant == "none") & (c.reads == reads) & cells]
@@ -509,12 +514,12 @@ def combat_keywords() -> None:
         for ck in common:
             ax.plot([p[ck], k[ck]], [y + 0.12, y - 0.12], color=GRAY, lw=0.5, alpha=0.6)
         ax.plot(p[common], np.full(len(common), y + 0.12), "o", color="#8fb3e0", ms=5,
-                label="no keyword" if i == 0 else None)
+                label="without the keyword" if i == 0 else None)
         ax.plot(k[common], np.full(len(common), y - 0.12), "o", color="#c05555", ms=5,
-                label="keyword granted" if i == 0 else None)
+                label="with the keyword" if i == 0 else None)
         ax.plot(rule_after, y - 0.12, "|", color="black", ms=16, mew=2.2,
                 label="the rule, with the keyword" if i == 0 else None)
-    ax.set_yticks(range(len(checks)), [x[0] for x in checks][::-1])
+    ax.set_yticks(range(len(checks)), [x[0] for x in checks][::-1], fontsize=8.5)
     ax.set_xlim(-0.03, 1.03)
     ax.set_xlabel("mean predicted death over the cells the keyword changes, "
                   "one dot per checkpoint")
