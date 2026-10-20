@@ -303,26 +303,43 @@ def damage_grids() -> None:
 
 
 def toughness_sweep_records() -> None:
+    """One band per damage group: lowest to highest record at each toughness, median line.
+
+    Activated pings, a permanent's paid ability dealing 1 damage (Prodigal Sorcerer's
+    {T}), form their own group, apart from 1-damage spells and triggers.
+    """
     sr = csv("sweep_records.csv")
     meta = csv("toughness_sweep_records.csv").set_index("record")
-    chosen = present(["e64", "e64-lethality", "B64 last"], sr.checkpoint)
-    cmap = {1: "#3b6fb6", 2: "#4a9a62", 3: "#e08f3c", 5: "#c05555"}
-    fig, axes = plt.subplots(1, len(chosen), figsize=(4.0 * len(chosen), 3.4), sharey=True)
-    for ax, name in zip(np.atleast_1d(axes), chosen):
+    meta["group"] = [("1 activated" if k == "activated" and d == 1 else str(d))
+                     for d, k in zip(meta.damage, meta.kind)]
+    groups = [("1", 1, "#3b6fb6", "1 damage, spell or trigger"),
+              ("1 activated", 1, "#8e5bb5", "1 damage, activated ping"),
+              ("2", 2, "#4a9a62", "2 damage"), ("3", 3, "#e08f3c", "3 damage"),
+              ("5", 5, "#c05555", "5 damage")]
+    chosen = present(["e64", "e64-lethality", "B64 last", "B128 last", "B256 last"],
+                     sr.checkpoint)
+    fig, axes = plt.subplots(1, len(chosen), figsize=(3.7 * len(chosen), 3.6), sharey=True,
+                             squeeze=False)
+    for ax, name in zip(axes[0], chosen):
         d = sr[(sr.checkpoint == name) & (sr.sweep == "toughness")]
-        for rec, curve in d.groupby("record"):
-            dmg = int(meta.loc[rec, "damage"])
-            ls = ":" if meta.loc[rec, "kind"] == "activated" else "-"
-            ax.plot(curve.value, curve.prediction, ls, color=cmap[dmg], lw=1.1, alpha=0.85)
-        for dmg, colour in cmap.items():
-            ax.plot([], [], color=colour, label=f"{dmg} damage")
-        ax.plot([], [], ":", color=GRAY, label="activated ping")
+        d = d.join(meta[["group"]], on="record")
+        ax.axhline(0.5, color="black", lw=0.8)
+        for group, damage, colour, label in groups:
+            g = d[d.group == group].groupby("value").prediction
+            n = d[d.group == group].record.nunique()
+            ax.fill_between(g.min().index, g.min(), g.max(), color=colour, alpha=0.16, lw=0)
+            ax.plot(g.median().index, g.median(), color=colour, lw=1.8,
+                    label=f"{label} ({n})")
+            ax.axvline(damage + 0.5, color=colour, lw=0.9, ls=":")
         ax.set_title(short(name))
         ax.set_xlabel("target's toughness")
-    np.atleast_1d(axes)[0].set_ylabel("predicted death")
-    np.atleast_1d(axes)[-1].legend(fontsize=8, loc="upper left", bbox_to_anchor=(1.02, 1))
-    fig.suptitle("Toughness sweep, one line per probe record, coloured by the ability's damage;"
-                 " each line should drop just after its own damage", y=1.02)
+        ax.set_xticks(range(1, 9))
+        ax.set_ylim(0, 1)
+    axes[0][0].set_ylabel("predicted death")
+    axes[0][-1].legend(fontsize=8, loc="upper left", bbox_to_anchor=(1.02, 1),
+                       title="ability (records)", title_fontsize=8)
+    fig.suptitle("Toughness sweep: band from lowest to highest record at each toughness, line at"
+                 " the median; the rule says each group stops dying at its dotted line", y=1.03)
     save(fig, "toughness-sweep-records")
 
 

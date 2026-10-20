@@ -51,7 +51,7 @@ Rung names in `probe_ladder.csv` follow the probes record: `0` the board alone, 
 | `probes-vs-loss.png` | probe mean against each validation loss, best-to-last arrows | `checkpoints.csv`, `probe_ladder.csv` |
 | `fields-explained.png` | explained deviance by epoch for six fields | `fields_by_epoch.csv` |
 | `damage-grids.png` | damage-by-toughness grids | `damage_grids.csv` |
-| `toughness-sweep-records.png` | toughness sweep per record, coloured by damage | `sweep_records.csv`, `toughness_sweep_records.csv` |
+| `toughness-sweep-records.png` | toughness sweep by damage group: range of records as a band, median as a line | `sweep_records.csv`, `toughness_sweep_records.csv` |
 | `boundary-by-epoch.png` | the lethal boundary per epoch along each width's line | `boundary_by_epoch.csv` |
 | `damage-sweep.png` | the damage sweep, and where each checkpoint crosses one half | `sweeps.csv` |
 | `combat-grids.png` | combat grids of the latest run B64 checkpoint | `combat_grids.csv` |

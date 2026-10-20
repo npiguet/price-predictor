@@ -98,11 +98,11 @@ Gen-3 therefore picks its checkpoints by a score built from the probes and from 
 
 ### The model compares damage with toughness only after training shows it the rule directly
 
-Without help, the model predicts a creature's death from its toughness alone. The toughness sweep edits one hit creature's toughness from 1 to 8 on 20 real damage records and reads the predicted death. In arm `e64`, a 1-damage ping and a 3-damage spell give the same curve, falling between toughness 4 and 6. Each line should instead fall just after its own spell's damage.
+Without help, the model predicts a creature's death from its toughness alone. The toughness sweep edits one hit creature's toughness from 1 to 8 on 20 real damage records and reads the predicted death. In arm `e64`, a 1-damage spell and a 3-damage spell give the same curve, falling between toughness 4 and 6. Each curve should instead fall just after its own ability's damage, at the dotted line of its colour.
 
-![Toughness sweep curves per probe record for three checkpoints, coloured by the ability's damage](2026-09-18-effect-model-gen2/charts/toughness-sweep-records.png)
+![Toughness sweep by damage group for four checkpoints: the range of records as a band, the median as a line](2026-09-18-effect-model-gen2/charts/toughness-sweep-records.png)
 
-*One line per probe record. Dotted lines are activated pings for 1 damage. Data: `sweep_records.csv`, `toughness_sweep_records.csv`.*
+*Each band spans the lowest to the highest record of one damage group at each toughness, and the solid line is the group's median; the count of records is in the legend. The rule says a group stops dying at its dotted line, and the black line marks an even chance. An activated ping is a permanent's paid ability that deals 1 damage, such as Prodigal Sorcerer's "{T}: deal 1 damage to any target"; the 1-damage spells and triggered abilities form their own group. Data: `sweep_records.csv`, `toughness_sweep_records.csv`.*
 
 The corpus rarely shows a damage spell falling short of its target's toughness. Forge's AI aims its removal at creatures it can kill, so a model fitting the corpus learns that "a small creature hit by removal dies" and has no reason to compare the amount with the toughness. Combat shows many more short hits, but there both numbers are on the board; a spell's amount reaches the trunk only through `e`.
 
@@ -119,7 +119,7 @@ Three faults remain, and the grids show all of them:
 
 - **The boundary is soft.** Where the damage exactly equals the toughness, the prediction sits between two fifths and four fifths rather than near one.
 - **The lethal side tops out near 0.8.** That ceiling comes from the gate rather than from the death: on clearly lethal hits the predicted death given that the creature was affected is 0.99, and in a quarter of the records the model doubts that the targeted creature is affected at all.
-- **Activated pings for 1 damage** are predicted to spare a toughness-1 creature by the 64-wide and 256-wide checkpoints; the 128-wide ones get them right. Width does not order this fault, so it is likely a property of each run rather than of the width.
+- **Activated pings for 1 damage**, abilities like Prodigal Sorcerer's that a permanent uses by paying a cost, are predicted to spare a toughness-1 creature by the 64-wide and 256-wide checkpoints; the 128-wide ones get them right, as the last panel of the toughness chart shows. Width does not order this fault, so it is likely a property of each run rather than of the width.
 
 The damage sweep reads the same rule from the other side: it fixes a toughness-4 target and re-encodes one spell's script with `NumDmg$` from 1 to 8. The rule puts the step between 3 and 4. Arm `e64` barely rises with the damage. With copies, every checkpoint rises steeply, and where it crosses one half moves from checkpoint to checkpoint, which the next section explains.
 
