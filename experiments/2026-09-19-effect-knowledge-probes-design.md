@@ -18,7 +18,7 @@ A probe is scored by AUC for a yes/no question, the chance that a true case scor
 
 ![The read-out ladder for nine board targets](2026-09-18-effect-model-gen2/charts/probe-ladder.png)
 
-*For each question, the score of a probe on the board alone (grey), on the board plus `e` without the trunk (blue), on the trunk's output (orange), and of the model's own prediction (red). Points are the median over the ten gen-2 checkpoints trained with lethality copies; bars span their range. Data: `probe_ladder.csv`.*
+*For each question, the score of a probe on the board alone (grey), on the board plus `e` without the trunk (blue), on the trunk's output (orange), and of the model's own prediction (red). Points are the median over the gen-2 checkpoints trained with lethality copies; bars span their range. Data: `probe_ladder.csv`.*
 
 **The model's damage prediction uses a fraction of what its trunk knows.** A probe reads about two thirds of the variance in each creature's damage taken from the trunk's output, while the model's own damage field explains a fifth of it at the median and a third at best.
 
@@ -43,14 +43,14 @@ The ladder reads one question from inputs of increasing depth, and each input is
 
 Rungs 0 to 2 are read by the same small two-layer network, an MLP, fixed across every checkpoint. The share is (rung 1 − rung 0) / (rung 3 − rung 0): the fraction of the distance from the board alone to the model's prediction that `e` closes without any trunk. The chart at the top of this record shows the rungs per question, and the shares sort the questions into the groups below.
 
-| question, card-disjoint records | share carried by `e`, median over 10 checkpoints | range |
+| question, card-disjoint records | share carried by `e`, median over 11 checkpoints | range |
 |---|---:|---|
-| how long a pump lasts | 0.99 | 0.90–1.04 |
-| affordable | 0.92 | 0.85–0.95 |
-| legal target | 0.44 | 0.19–0.56 |
-| legal target, carrying protection | 0.29 | 0.26–0.41 |
-| trigger fires | 0.28 | 0.22–0.36 |
-| dies | 0.23 | 0.13–0.30 |
+| how long a pump lasts | 1.02 | 0.90–1.06 |
+| affordable | 0.93 | 0.85–0.97 |
+| legal target | 0.46 | 0.19–0.58 |
+| legal target, carrying protection | 0.31 | 0.26–0.41 |
+| trigger fires | 0.30 | 0.22–0.36 |
+| dies | 0.23 | 0.12–0.30 |
 | card affected | 0.22 | 0.16–0.30 |
 
 *Data: `probe_ladder.csv`.*
@@ -60,7 +60,7 @@ Rungs 0 to 2 are read by the same small two-layer network, an MLP, fixed across 
 - **Blocking is known from the board alone.** On whether a creature may block, a probe on the board alone already scores about as well as anything deeper, and on card-disjoint records the model's own prediction scores below it. The share is not defined there, because the model gains nothing over the board.
 - **The trunk knows more about damage than the model says.** A probe reads about two thirds of the variance in damage taken from the trunk's output at a creature's slot. The model's own damage field explains a fifth of it at the median and a third at best. The information reaches the trunk and is not used by the head that should read it.
 
-The groups are robust: the lowest share among the first two questions is about twice the highest among the last four, across all ten checkpoints. The game-disjoint records sort the questions about the same way. A protected target's legality drops to no share there, because `e` adds nothing over the board on those records.
+The groups are robust: the lowest share among the first two questions is about twice the highest among the last four, across all eleven checkpoints. The 256-wide arm sorts its questions the same way as the narrower ones, so four times the width of `e` does not move deaths or trigger firing into the vector. The game-disjoint records sort the questions about the same way. A protected target's legality drops to no share there, because `e` adds nothing over the board on those records.
 
 Gen-1 and gen-2 were probed on different corpora, so they compare by direction only. Gen-1's `e` carried affordability as gen-2's does, and gen-1 could not be asked about deaths at all, because its corpus never recorded a death caused by a resolution.
 
@@ -72,7 +72,7 @@ A probe reading `e` alone, with no board and no trunk, recovers whether a line t
 
 *Trained lines are texts the model trained on; held-out lines are texts it never saw. Data: `probe_ladder.csv` (rung 1, MLP, strata `trained` and `held-out`).*
 
-Amounts transfer less well than costs. The damage amount and the total mana cost read nearly as well on held-out lines as on trained ones. Power and toughness changes read well on trained lines and poorly on held-out ones, with toughness change below a quarter of its variance. Gen-2 changed two things at once, what the encoder reads, an ability's whole chain of script lines, and what trains it, two heads that read `e` alone. The probes cannot separate the two.
+Amounts transfer less well than costs, and a wider `e` does not change that: the 256-wide arm reads damage, cost and counters on unseen lines slightly worse than the 64-wide and 128-wide arms, and power change slightly better. The damage amount and the total mana cost read nearly as well on held-out lines as on trained ones. Power and toughness changes read well on trained lines and poorly on held-out ones, with toughness change below a quarter of its variance. Gen-2 changed two things at once, what the encoder reads, an ability's whole chain of script lines, and what trains it, two heads that read `e` alone. The probes cannot separate the two.
 
 How much a text's outcome varies from board to board is the one property `e` barely holds. A probe reads a sixth of that spread from `e` on trained lines and none on held-out lines, on every gen-2 checkpoint. Gen-1's `e` read a quarter of it on its 155 held-out lines. Training against the board was meant to leave this trace in `e`, and the probes do not find it.
 
@@ -105,7 +105,7 @@ The snapshot gives each permanent its spell and activated abilities as card-slot
 
 ![Field losses on records where a static, a keyword or nothing restricts the creature, and where a replacement or static sits on another permanent](2026-09-18-effect-model-gen2/charts/board-abilities.png)
 
-*Bars: median loss over twelve gen-2 checkpoints; dots: one per checkpoint. Data: `board_abilities.csv`.*
+*Bars: median loss over the gen-2 checkpoints; dots: one per checkpoint. Data: `board_abilities.csv`.*
 
 - **Attack legality is the clearest case.** Where a static that is not a keyword keeps a creature from attacking, as Pacifism does, the loss is between one and a half and four and a half times the unrestricted loss. Every checkpoint's restricted loss sits above every checkpoint's unrestricted one. A keyword restriction, which the card's keyword flags carry, is the easiest case of the three.
 - **Block legality follows the same order with smaller gaps.** The unrestricted case varies most between checkpoints.

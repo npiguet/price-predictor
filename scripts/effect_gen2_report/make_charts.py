@@ -237,8 +237,9 @@ def field_explained() -> None:
 def damage_grids() -> None:
     g = csv("damage_grids.csv")
     g = g[g.record_set == "probe set"]
-    chosen = present(["e64", "e64-lethality", "A best", "A last", "B last", "A128 best",
-                      "B128 last", "B256 last"], g.checkpoint)
+    chosen = present(["e64", "e64-lethality", "e128-lethality", "e256-lethality", "A best",
+                      "A last", "B last", "A128 best", "B128 last", "A256 best", "A256 last",
+                      "B256 last"], g.checkpoint)
     cols = 4
     rows = int(np.ceil(len(chosen) / cols))
     fig, axes = plt.subplots(rows, cols, figsize=(3.0 * cols, 3.1 * rows), squeeze=False)
@@ -323,7 +324,7 @@ def damage_sweep() -> None:
     fig, (ax, ax2) = plt.subplots(1, 2, figsize=(10.5, 3.9),
                                   gridspec_kw={"width_ratios": [1.2, 1]})
     for name in present(["e64", "e64-lethality", "A last", "B last", "A128 best",
-                         "B128 last"], s.checkpoint):
+                         "B128 last", "e256-lethality", "B256 last"], s.checkpoint):
         d = s[s.checkpoint == name]
         base = name.split(" ")[0]
         ax.plot(d.value, d.prediction, marker="o", ms=3, lw=1.2, label=short(name),

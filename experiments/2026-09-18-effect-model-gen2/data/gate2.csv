@@ -39,6 +39,14 @@ e128-lethality,trample,2331,96.1,pass
 e128-lethality,indestructible,342,99.1,pass
 e128-lethality,wither,142,,too few records
 e128-lethality,infect,1453,71,pass
+e256-lethality,first_strike,2503,87.4,pass
+e256-lethality,double_strike,294,80.6,pass
+e256-lethality,deathtouch,899,84.6,pass
+e256-lethality,lifelink,2169,98.6,pass
+e256-lethality,trample,2331,91.9,pass
+e256-lethality,indestructible,342,100,pass
+e256-lethality,wither,142,,too few records
+e256-lethality,infect,1453,76.5,pass
 A best,first_strike,2503,87,pass
 A best,double_strike,294,62.9,probe
 A best,deathtouch,899,85.9,pass
