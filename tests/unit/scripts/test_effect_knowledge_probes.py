@@ -847,10 +847,22 @@ class TestExtraction:
         checkpoint = common.load_checkpoint(_GEN1)
         if not Path(checkpoint.provenance.vocab_path).exists():
             pytest.skip("the gen-1 vocabulary is not on this machine")
-        return common.load_probe_model(_GEN1, [
-            _FIXTURES / "gen1-sidecars" / "cardsfolder",
-            _FIXTURES / "gen1-sidecars" / "tokenscripts",
-        ], records, checkpoint=checkpoint)
+        from effects.infrastructure.effect_model_store import SplitProvenance
+
+        # The probes hash-check their inference files like every inference
+        # command, and both files gen-1 recorded have since been rewritten in
+        # place: its vocabulary survives as an archived copy, its keyword
+        # table nowhere. This pass checks the extraction's shapes, not the
+        # hash check (which has tests of its own), so the archived vocabulary
+        # is read where it exists and the check is waived for this load.
+        vocab = _ROOT / "models" / "effects" / "gen1-vocab-script.txt"
+        with pytest.MonkeyPatch.context() as patch:
+            patch.setattr(SplitProvenance, "verify_hashes", lambda *a, **k: None)
+            return common.load_probe_model(_GEN1, [
+                _FIXTURES / "gen1-sidecars" / "cardsfolder",
+                _FIXTURES / "gen1-sidecars" / "tokenscripts",
+            ], records, checkpoint=checkpoint,
+                vocab_path=vocab if vocab.exists() else None)
 
     def test_every_rung_has_one_width_per_target(self, probe_model, records, sidecars):
         acting = run._acting_text_function(sidecars, "script")

@@ -602,20 +602,15 @@ def run(config: EvaluateEffectModelConfig) -> EvaluationReport:
     any number is produced that would look comparable and not be.
     """
     from effects.infrastructure.effect_model_store import (
-        EffectModelStore,
+        load_effect_checkpoint,
+        load_for_inference,
         require_same_split,
-        resolve_inference_paths,
     )
 
     main_path = Path(config.checkpoint)
-    main = EffectModelStore(main_path.parent).load(main_path)
-    vocab_path, keyword_path = resolve_inference_paths(
-        main.provenance,
-        vocab_path=config.vocab_path,
-        keyword_path=config.keyword_definitions,
-    )
-    main.provenance.verify_hashes(
-        vocab_path=vocab_path, keyword_path=keyword_path,
+    main, vocab_path, keyword_path = load_for_inference(
+        main_path,
+        vocab_path=config.vocab_path, keyword_path=config.keyword_definitions,
     )
     corpus_path = resolve_corpus_path(
         main.provenance, corpus=config.corpus, checkpoint=main_path,
@@ -635,7 +630,7 @@ def run(config: EvaluateEffectModelConfig) -> EvaluationReport:
 
     variants = {}
     for name, path in config.variant_checkpoints.items():
-        loaded = EffectModelStore(Path(path).parent).load(Path(path))
+        loaded = load_effect_checkpoint(path)
         require_same_split(
             main, loaded, main_path=main_path, variant_path=Path(path),
         )

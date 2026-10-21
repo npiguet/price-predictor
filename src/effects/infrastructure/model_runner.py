@@ -101,6 +101,30 @@ def feature_widths(records, layout: str | None) -> dict[SlotKind, int]:
     return widths
 
 
+def tokenizer_for(checkpoint, vocab_path: Path, keyword_path: Path) -> AbilityTokenizer:
+    """The tokenizer ``checkpoint`` trained with, over its verified files.
+
+    A missing keyword table tokenizes with no definitions rather than failing:
+    a checkpoint trained before the table existed recorded none.
+    """
+    from effects.application.extract_keyword_definitions import (
+        load_keyword_definitions,
+    )
+
+    definitions = (
+        load_keyword_definitions(keyword_path) if Path(keyword_path).exists()
+        else {}
+    )
+    # The grammar the checkpoint trained under, which for gen-1 is the prose
+    # grammar even on its script vocabulary.
+    return AbilityTokenizer(
+        load_vocabulary(Path(vocab_path)), definitions,
+        surface=tokenizer_surface(
+            surface_of(vocab_path), checkpoint.training_settings,
+        ),
+    )
+
+
 def load_runnable(
     config, checkpoint, *, vocab_path: Path, keyword_path: Path, records,
 ):
@@ -110,23 +134,8 @@ def load_runnable(
     carry, read at a step past every curriculum threshold — the evaluator scores
     a finished model, not one partway through its schedule.
     """
-    from effects.application.extract_keyword_definitions import (
-        load_keyword_definitions,
-    )
-
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    definitions = (
-        load_keyword_definitions(keyword_path) if Path(keyword_path).exists()
-        else {}
-    )
-    # The grammar the checkpoint trained under, which for gen-1 is the prose
-    # grammar even on its script vocabulary.
-    tokenizer = AbilityTokenizer(
-        load_vocabulary(Path(vocab_path)), definitions,
-        surface=tokenizer_surface(
-            surface_of(vocab_path), checkpoint.training_settings,
-        ),
-    )
+    tokenizer = tokenizer_for(checkpoint, vocab_path, keyword_path)
 
     # Built at the size the checkpoint recorded (FR-061): a non-default arm
     # loads without its flags restated.
