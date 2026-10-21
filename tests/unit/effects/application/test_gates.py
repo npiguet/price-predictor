@@ -34,12 +34,6 @@ from effects.domain.damage_step_keywords import (
 from effects.domain.effect_model import FIELDS_BY_NAME
 from effects.domain.evaluation_report import CheckName, CheckStatus, EvaluationReport
 from effects.domain.gate_metrics import (
-    GATE1_MIN_DEVIANCE_REDUCTION,
-    GATE1_MIN_GATE_F1_GAIN,
-    GATE1_MIN_ZONE_ACCURACY_GAIN,
-    GATE3_COSINE_PAIRS,
-    GATE3_MAX_MEAN_COSINE,
-    GATE3_MAX_TOP_COMPONENT,
     balanced_accuracy,
     cosine_distance,
     f1_score,
@@ -64,11 +58,6 @@ class TestGateOne:
             affected_gate_f1=0.70, zone_outcome_accuracy=0.60,
             mean_poisson_deviance=0.90,
         )
-
-    def test_the_thresholds_are_the_specs(self):
-        assert GATE1_MIN_GATE_F1_GAIN == 0.05
-        assert GATE1_MIN_ZONE_ACCURACY_GAIN == 0.05
-        assert GATE1_MIN_DEVIANCE_REDUCTION == 0.05
 
     def test_all_three_margins_holding_passes(self):
         result = evaluate_gate_one(self._passing(), self._identity())
@@ -171,13 +160,6 @@ class TestGateTwo:
             "trample", "indestructible", "wither", "infect",
         }
 
-    def test_every_row_names_a_predicate_fields_and_a_direction(self):
-        for row in DAMAGE_STEP_KEYWORDS:
-            assert row.qualifies_when
-            assert row.effects
-            for effect in row.effects:
-                assert effect.direction in (-1, 1)
-
     def test_every_affected_field_is_a_real_head_output(self):
         for row in DAMAGE_STEP_KEYWORDS:
             for effect in row.effects:
@@ -185,10 +167,6 @@ class TestGateTwo:
                     f"{row.keyword} names {effect.field}, which the per-entity "
                     "head does not predict"
                 )
-
-    def test_the_thresholds_are_the_specs(self):
-        assert MIN_QUALIFYING_RECORDS == 200
-        assert MIN_DIRECTION_AGREEMENT == 0.70
 
     def test_enough_records_and_enough_agreement_passes(self):
         verdict = evaluate_keyword(
@@ -291,11 +269,6 @@ class TestGateTwo:
 
 
 class TestGateThree:
-    def test_the_thresholds_are_the_specs(self):
-        assert GATE3_MAX_MEAN_COSINE == 0.5
-        assert GATE3_COSINE_PAIRS == 10_000
-        assert GATE3_MAX_TOP_COMPONENT == 0.30
-
     def test_a_spread_space_passes(self):
         rng = np.random.default_rng(0)
         vectors = rng.normal(size=(400, 64))

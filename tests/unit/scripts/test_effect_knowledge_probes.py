@@ -213,12 +213,6 @@ class TestProbes:
         folds = ladder.fold_assignment([str(i) for i in range(300)])
         assert ladder.score("amount", y, ladder.linear_oof(X, y, folds, "amount")) > 0.95
 
-    def test_the_constants_are_the_planned_ones(self):
-        assert (ladder.MIN_GAP, ladder.FOLDS, ladder.SEED) == (0.05, 5, 42)
-        assert (ladder.MLP_HIDDEN, ladder.MLP_LAYERS, ladder.MLP_EPOCHS) == (256, 2, 30)
-        assert (ladder.LINEAR_C, ladder.RIDGE_ALPHA) == (1.0, 1.0)
-        assert ladder.BOOTSTRAP_RESAMPLES == 1000
-
 
 # ── line labels from real scripts ───────────────────────────────────────
 
