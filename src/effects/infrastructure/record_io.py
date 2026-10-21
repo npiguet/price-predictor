@@ -1,7 +1,9 @@
 """JSONL shard IO for the effect-record corpus.
 
-One ``{run_id}.{worker}-{lifetime}.jsonl`` shard per worker JVM, all read as a
-directory. One shard per worker rather than one shared file because records are
+One ``{run_id}.{worker}-{lifetime}.jsonl.gz`` shard per worker JVM, all read as a
+directory. The Java collector writes raw shards; Python only reads them, and
+writes the curated shards ``build-corpus`` produces (:func:`write_shard`).
+One shard per worker rather than one shared file because records are
 far larger than a match-outcome row, so cross-process appends would interleave
 mid-record; and line-oriented rather than columnar because the writers are Forge
 JVMs that are expected to crash mid-write, which is exactly what a line format
@@ -48,6 +50,7 @@ from typing import IO, Any
 
 import orjson
 
+from effects.domain.corpus_curation import record_hash
 from effects.domain.event_schema import Event
 from effects.domain.keyword_names import normalize_keyword
 from effects.domain.provenance import ProvenanceKey
@@ -656,8 +659,12 @@ def record_to_dict(record: EffectRecord) -> dict:
         "interventional": record.interventional,
         "fork": record.fork,
         "synthetic": record.synthetic,
-        "random_seat": record.random_seat,
     }
+    # Written only where the source carried it: its presence is what makes a
+    # shard gen-2 (``shard_generation``), so a curated shard rewritten from
+    # gen-1 records has to stay gen-1 for the mixed-generation guard to fire.
+    if record.random_seat is not None:
+        out["random_seat"] = record.random_seat
     if record.what_if is not None:
         out["what_if"] = record.what_if
     out |= {
@@ -699,9 +706,9 @@ def record_from_dict(data: dict) -> EffectRecord:
         interventional=data.get("interventional", False),
         fork=data.get("fork", False),
         synthetic=data.get("synthetic", False),
-        # Absent on a gen-1 shard (FR-033): off-policy is something a record
-        # has to claim, and an unclassed legality record is never real.
-        random_seat=data.get("random_seat", False),
+        # Absent on a gen-1 shard (FR-033): None, which reads as on-policy and
+        # writes back absent, so the record keeps its generation.
+        random_seat=data.get("random_seat"),
         what_if=data.get("what_if"),
         ability=_keys_from_json(ability) if ability is not None else None,
         ability_unresolved=data.get("ability_unresolved"),
@@ -716,62 +723,9 @@ def format_record_line(record: EffectRecord) -> str:
     return json.dumps(record_to_dict(record), separators=_JSON_SEPARATORS)
 
 
-def append_record(out: IO[str], record: EffectRecord) -> None:
-    """Append one record to an open text handle and flush.
-
-    The caller owns the handle (opened in append mode) so a long collection run
-    keeps one open per worker across many games.
-    """
-    _write_line(out, record)
-    out.flush()
-
-
 def _write_line(handle: IO[str], record: EffectRecord) -> None:
     handle.write(format_record_line(record))
     handle.write("\n")
-
-
-def shard_path(directory: Path, run_id: str, worker: int, lifetime: str) -> Path:
-    """``{run_id}.{worker}-{lifetime}.jsonl`` under ``directory``.
-
-    ``lifetime`` is required rather than defaulted: a caller that does not say
-    which JVM lifetime it is writing would reopen a previous one's shard and
-    reissue ids it already used, which is the defect the segment exists to
-    prevent.
-    """
-    return Path(directory) / f"{run_id}.{worker}-{lifetime}.jsonl"
-
-
-class ShardWriter:
-    """Append-only writer for one worker's shard.
-
-    Used as a context manager so the handle closes on a clean shutdown; a crash
-    leaves at most a trailing partial line, which every reader here skips.
-    """
-
-    def __init__(
-        self, directory: Path, run_id: str, worker: int, lifetime: str,
-    ) -> None:
-        self.path = shard_path(directory, run_id, worker, lifetime)
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        self._handle: IO[str] | None = None
-
-    def __enter__(self) -> ShardWriter:
-        self._handle = self.path.open("a", encoding="utf-8")
-        return self
-
-    def __exit__(self, *exc_info) -> None:
-        self.close()
-
-    def write(self, record: EffectRecord) -> None:
-        if self._handle is None:
-            self._handle = self.path.open("a", encoding="utf-8")
-        append_record(self._handle, record)
-
-    def close(self) -> None:
-        if self._handle is not None:
-            self._handle.close()
-            self._handle = None
 
 
 def write_shard(path: Path, records: Iterable[EffectRecord]) -> int:
@@ -794,21 +748,43 @@ def write_shard(path: Path, records: Iterable[EffectRecord]) -> int:
     return written
 
 
+#: How many bucket files one pass over the parts holds open. A stratum with
+#: more output shards than this is dealt over several passes.
+_OPEN_BUCKETS = 256
+
+
 def repack_shards(
     parts: Sequence[Path], out_dir: Path, *, shard_records: int,
-    prefix: str = "shard",
+    seed: int = 0, records: int | None = None, prefix: str = "shard",
 ) -> list[Path]:
-    """Stream ``parts`` into shards of about ``shard_records`` records each.
+    """Deal ``parts``' games into shards of about ``shard_records`` records each.
 
-    A shard closes once it holds at least ``shard_records`` records *and* the
-    next record belongs to a different game, so a game never spans two shards:
-    the evaluator resolves a probe's ``mirror_of`` within its stratum, and the
-    trainer's per-game text sharing wants a game's records together.
+    Whole games are dealt by a seeded hash of ``game_id`` modulo the shard
+    count, so a game never spans two shards -- the split is by game, and the
+    trainer filters a shard by game -- and each shard holds games from across
+    the whole stratum rather
+    than a run of consecutive parts. A part is one source shard, one JVM
+    lifetime of one collection run, so cutting the parts in order filled
+    each shard with a handful of lifetimes of one run; the trainer draws
+    whole shards and shuffles only inside the one it holds, so every batch
+    drawn from such a shard is correlated by run. Each shard's records are
+    then shuffled under ``seed``, which also spreads a record's copies, dealt
+    with their game to one shard, through it.
 
-    ``shard_records <= 0`` writes one shard per part, which is what the write
-    pass did before repacking existed. Parts are not deleted here.
+    Streamed, since a training stratum does not fit in memory: one pass deals
+    the lines into compressed bucket files beside ``out_dir`` (several
+    passes when there are more buckets than :data:`_OPEN_BUCKETS`), then each
+    bucket, which is one shard, is read, shuffled and written. Empty buckets
+    write nothing. ``records`` is the parts' record count when the caller
+    already knows it; otherwise the parts are counted first.
+
+    ``shard_records <= 0`` writes one shard per part, unshuffled, which is
+    what the write pass did before repacking existed. Parts are not deleted.
     """
     import gzip
+    import math
+    import random
+    import shutil
 
     parts = [Path(p) for p in parts]
     if not parts:
@@ -817,37 +793,64 @@ def repack_shards(
     out_dir.mkdir(parents=True, exist_ok=True)
     written: list[Path] = []
 
-    def open_next():
+    def next_path() -> Path:
         path = out_dir / f"{prefix}-{len(written) + 1:05d}.jsonl.gz"
         written.append(path)
-        return gzip.open(path, "wt", encoding="utf-8")
+        return path
 
     if shard_records <= 0:
         for part in parts:
-            with open_next() as handle:
-                for record in read_shard(part):
-                    _write_line(handle, record)
+            with gzip.open(next_path(), "wt", encoding="utf-8") as handle:
+                for line in iter_shard_lines(part):
+                    handle.write(line)
         return written
 
-    handle = open_next()
-    count = 0
-    last_game: str | None = None
+    if records is None:
+        records = sum(1 for part in parts for _ in iter_shard_lines(part))
+    count = max(1, math.ceil(records / shard_records))
+    scratch = out_dir.with_name(f".{out_dir.name}.buckets")
+    shutil.rmtree(scratch, ignore_errors=True)
+    scratch.mkdir(parents=True)
     try:
-        for part in parts:
-            for record in read_shard(part):
-                if count >= shard_records and record.game_id != last_game:
+        for low in range(0, count, _OPEN_BUCKETS):
+            high = min(count, low + _OPEN_BUCKETS)
+            handles = {
+                index: gzip.open(
+                    scratch / f"{index:05d}.gz", "wt", encoding="utf-8", compresslevel=1,
+                )
+                for index in range(low, high)
+            }
+            try:
+                for part in parts:
+                    for line in iter_shard_lines(part):
+                        if not line.strip():
+                            continue
+                        index = record_hash(_game_of_line(line), seed=seed) % count
+                        handle = handles.get(index)
+                        if handle is not None:
+                            handle.write(line)
+            finally:
+                for handle in handles.values():
                     handle.close()
-                    handle = open_next()
-                    count = 0
-                _write_line(handle, record)
-                count += 1
-                last_game = record.game_id
+        for index in range(count):
+            with gzip.open(scratch / f"{index:05d}.gz", "rt", encoding="utf-8") as handle:
+                lines = handle.readlines()
+            if not lines:
+                continue
+            random.Random(f"{seed}:{index}").shuffle(lines)
+            with gzip.open(next_path(), "wt", encoding="utf-8") as handle:
+                handle.writelines(lines)
     finally:
-        handle.close()
-    if count == 0:
-        # Only possible when every part was empty: drop the empty file.
-        written.pop().unlink()
+        shutil.rmtree(scratch, ignore_errors=True)
     return written
+
+
+def _game_of_line(line: str) -> str:
+    """A shard line's ``game_id``, read off the envelope head without a parse."""
+    head = _ENVELOPE_HEAD.search(line, 0, _ENVELOPE_HEAD_SPAN)
+    if head is not None:
+        return head.group(1)
+    return parse_record_line(line.strip())["game_id"]
 
 
 def parse_record_line(text: str) -> dict:
@@ -886,20 +889,14 @@ def iter_shard_lines(path: Path) -> Iterator[str]:
     import gzip
     import zlib
 
-    pending = ""
     try:
         with gzip.open(path, "rt", encoding="utf-8") as handle:
             for line in handle:
+                # The reader runs on across member boundaries, so a line
+                # without its newline can only be the stream's last: a member
+                # cut short. Dropped, because half a record parses as nothing.
                 if line.endswith("\n"):
-                    if pending:
-                        line = pending + line
-                        pending = ""
                     yield line
-                else:
-                    # No newline: either the file ends here or the member was
-                    # cut short. Held back rather than yielded, because half a
-                    # record parses as nothing.
-                    pending = line
     except (EOFError, gzip.BadGzipFile, zlib.error):
         # The final member was truncated by a killed worker. Everything before
         # it has already been yielded.
@@ -938,9 +935,8 @@ def iter_shards(directory: Path) -> list[Path]:
     target the corpus had already met.
 
     Path order rather than name order, so two shards of the same name in
-    different subdirectories keep a stable relative position — the epoch walk
-    and the split's shard-by-shard accumulation both depend on the order not
-    moving between runs.
+    different subdirectories keep a stable relative position, and every
+    reader that walks a corpus walks it in the same order on every run.
     """
     directory = Path(directory)
     if not directory.is_dir():

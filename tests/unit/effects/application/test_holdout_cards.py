@@ -255,3 +255,21 @@ def test_a_real_gen1_checkpoint_split_reads_as_the_text_unit():
         **recorded,
         **{k: tuple(v) for k, v in recorded.items() if isinstance(v, list)},
     }
+
+
+def test_token_carriers_move_the_list_as_they_move_the_split() -> None:
+    """FR-041: holdout-cards, build-corpus and the trainer share one rule,
+    token carriers included, or the list depletes cards the split trains on."""
+    from effects.domain.split import text_keyed_holdout
+
+    card_files = {"Searing Spear": "cardsfolder/s/searing_spear.txt"}
+    texts_by_card = {"Searing Spear": ["SP$ DealDamage | NumDmg$ 3 | ValidTgts$ Any"]}
+    token_texts = {"tokenscripts/goblin.txt": ["SP$ DealDamage | NumDmg$ 3 | ValidTgts$ Any"]}
+
+    listed = depletion_list(
+        card_files, texts_by_card, permille=1000, max_carriers=1, token_texts=token_texts,
+    )
+    held = text_keyed_holdout(
+        card_files, texts_by_card, permille=1000, max_carriers=1, token_texts=token_texts,
+    )
+    assert set(listed) == held.names == set()

@@ -461,9 +461,11 @@ class EffectRecord:
     interventional: bool = False
     fork: bool = False
     synthetic: bool = False
-    #: ``actor_player`` is the random seat (FR-030). A gen-1 shard never wrote
-    #: it, and its records read as on-policy. Collection metadata.
-    random_seat: bool = False
+    #: ``actor_player`` is the random seat (FR-030). None on a record read
+    #: from a gen-1 shard, which never wrote it: falsy, so the record reads as
+    #: on-policy, and kept apart from False so a rewritten record stays the
+    #: generation it was collected in (FR-033). Collection metadata.
+    random_seat: bool | None = False
     #: On ``attackers`` and ``blockers`` records only: False for the declaration
     #: a player actually made, True for a query the AI asked about a
     #: hypothetical (FR-027, FR-031). None is unknown — a gen-1 record — and
@@ -593,34 +595,6 @@ class EffectRecord:
         """The worker slot this record's ids were counted by."""
         return self.record_id.split(".")[-2].split("-")[0]
 
-    @property
-    def lifetime(self) -> str:
-        """The worker JVM lifetime the ids were counted in.
-
-        Empty on a shard written before ids carried one. The counters restart
-        at zero in every worker JVM and a collection run is hundreds of JVMs
-        per slot, so this is the segment that makes ``record_id`` and
-        ``game_id`` unique rather than merely per-worker.
-        """
-        return self.record_id.split(".")[-2].partition("-")[2]
-
-    def model_input_fields(self) -> dict:
-        """The envelope fields the model may see.
-
-        Collection metadata is excluded here rather than filtered downstream, so
-        a new consumer cannot reach it by accident. What remains describes the
-        game situation; what is dropped describes how we came to observe it.
-        """
-        return {
-            "kind": self.kind,
-            "moment": self.moment,
-            "subkind": self.subkind,
-            "actor_player": self.actor_player,
-            "ability": self.ability,
-            "state": self.state,
-            "payload": self.payload,
-        }
-
 
 def events_of(record: EffectRecord) -> tuple[Event, ...]:
     """Every event a record's payload carries, whatever its kind.
@@ -641,23 +615,6 @@ def events_of(record: EffectRecord) -> tuple[Event, ...]:
     if isinstance(payload, TriggerPayload):
         return (payload.event,) if payload.fired else ()
     return ()
-
-
-def pair_forks(records: list[EffectRecord]) -> list[tuple[EffectRecord, EffectRecord]]:
-    """Join each fork record to the real record it mirrors, as ``(real, fork)``.
-
-    The pairing lives in ``mirror_of`` rather than being reconstructed from
-    board state, because two combats on one turn can look identical and the
-    pairing has to be exact for the difference to mean anything.
-    """
-    by_id = {record.record_id: record for record in records}
-    pairs = []
-    for record in records:
-        if record.fork and record.mirror_of:
-            real = by_id.get(record.mirror_of)
-            if real is not None:
-                pairs.append((real, record))
-    return pairs
 
 
 def key_sites(record: EffectRecord) -> Iterator[ProvenanceKey]:

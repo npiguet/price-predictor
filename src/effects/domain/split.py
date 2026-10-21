@@ -14,7 +14,7 @@ from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 
 from effects.domain.card_names import fold_card_name
-from effects.domain.records import EffectRecord
+from effects.domain.records import EffectRecord, key_sites
 
 #: An eligible ability text is held out when crc32(text) % 1000 falls below
 #: this. Keyed on the text rather than the card because the model never reads a
@@ -30,7 +30,11 @@ class HeldOutCards:
     """The card-disjoint holdout, addressable both ways a record names a card.
 
     A record names a card by the entity names in its snapshot and by the script
-    files its provenance keys point at; matching on either catches both.
+    files its provenance keys point at; matching on either catches both. A
+    token script carrying a held-out text is in ``script_files`` too, though
+    not in ``names``: a token is never dealt into a deck, so it has no name the
+    depletion list could remove, and its printed name is shared by scripts
+    that hold nothing back.
 
     ``names`` is folded on construction (:func:`fold_card_name`), because the
     two sides of this comparison spell a card differently and a caller that
@@ -43,6 +47,11 @@ class HeldOutCards:
     #: carries one, so this is also gate 1's unique-text slice — sizing the
     #: stratum needs no scan of the training corpus.
     texts: frozenset[str] = frozenset()
+    #: The held-out units the texts were chosen by (masked templates under
+    #: ``template``, the texts again under ``text``), and that unit: what
+    #: :meth:`holds_text` tests a text no carrier prints against.
+    keys: frozenset[str] = frozenset()
+    unit: str = "text"
 
     def __post_init__(self) -> None:
         folded = frozenset(fold_card_name(name) for name in self.names)
@@ -51,6 +60,17 @@ class HeldOutCards:
 
     def __len__(self) -> int:
         return len(self.script_files or self.names)
+
+    def holds_text(self, script_text: str) -> bool:
+        """Whether a script text is held out, carried by a card or not.
+
+        By its unit rather than by membership in ``texts``: a variant script
+        or a token can print a text no card carries, and under ``template``
+        it is held out whenever its masked template is.
+        """
+        from effects.domain.text_holdout import holdout_key
+
+        return holdout_key(script_text, self.unit) in self.keys
 
 
 @dataclass(frozen=True, slots=True)
@@ -71,9 +91,6 @@ class CorpusSplit:
     def validation_games(self) -> frozenset[str]:
         return self.card_disjoint_games | self.game_disjoint_games
 
-    def is_training_game(self, game_id: str) -> bool:
-        return game_id not in self.validation_games
-
 
 def text_keyed_holdout(
     card_files: dict[str, str],
@@ -82,6 +99,7 @@ def text_keyed_holdout(
     permille: int = HOLDOUT_PERMILLE,
     max_carriers: int = HOLDOUT_MAX_CARRIERS,
     unit: str = "text",
+    token_texts: Mapping[str, Iterable[str]] | None = None,
 ) -> HeldOutCards:
     """Hold out ability texts, and with them every card carrying one (FR-088).
 
@@ -93,10 +111,16 @@ def text_keyed_holdout(
 
     Args:
         card_files: ``card name -> script file``, one entry per converted card
-            under ``output/cardsfolder/``. Token scripts and variant scripts are
-            not in this denominator.
+            under ``output/cardsfolder/``. Variant scripts are not in this
+            denominator: one exists only because a card was perturbed.
         texts_by_card: ``card name -> its sidecar's script texts``, from
             ``load_card_texts``.
+        token_texts: ``token script file -> its sidecar's script texts``, from
+            ``load_tree_texts``. A token carries a text exactly as a card
+            does: it counts toward the carrier ceiling, a text only tokens
+            print can be held out, and a token carrying a held-out text puts
+            its script file in ``script_files``. Left out, a token printing a
+            held-out text trained on it, and every game it sat in did too.
 
     The text rather than the card, because the model never reads a card's name
     and functional reprints compile to the same script: a name-keyed holdout
@@ -105,30 +129,33 @@ def text_keyed_holdout(
     """
     from effects.domain.text_holdout import select_holdout
 
+    tokens = dict(token_texts or {})
     chosen = select_holdout(
-        texts_by_card, permille=permille, max_carriers=max_carriers, unit=unit,
+        {**texts_by_card, **tokens}, permille=permille, max_carriers=max_carriers,
+        unit=unit,
     )
     names = frozenset(chosen.cards & card_files.keys())
     return HeldOutCards(
         names=names,
-        script_files=frozenset(card_files[name] for name in names),
+        script_files=frozenset(card_files[name] for name in names)
+        | (chosen.cards & tokens.keys()),
         texts=chosen.texts,
+        keys=chosen.keys,
+        unit=unit,
     )
 
 
 def record_names_held_out_card(
     record: EffectRecord, held_out: HeldOutCards,
 ) -> bool:
-    """Whether this record names a held-out card, acting or in context."""
+    """Whether this record names a held-out card or token, acting or in context.
+
+    By entity name, and by every key the record carries (``key_sites``): the
+    acting line, each entity's printed and granted lines, and the payload's
+    keys -- a decision's candidates, a static keeping a creature out of
+    combat, a rewrite's replacement.
+    """
     for entity in record.state.entities:
         if fold_card_name(entity.name) in held_out.names:
             return True
-    for key in record.ability or ():
-        if key.script_file in held_out.script_files:
-            return True
-    for entity in record.state.entities:
-        for key in (*entity.printed, *entity.granted_attached,
-                    *entity.granted_temporary.abilities):
-            if key.script_file in held_out.script_files:
-                return True
-    return False
+    return any(key.script_file in held_out.script_files for key in key_sites(record))

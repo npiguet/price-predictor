@@ -105,3 +105,58 @@ def make_record(kind: RecordKind = RecordKind.RESOLUTION, **overrides) -> Effect
         defaults["payload"] = _default_payload(kind, moment, subkind)
     defaults.update(overrides)
     return EffectRecord(**defaults)
+
+
+#: Records per gzip member, as the Java collector blocks them.
+RAW_BLOCK_RECORDS = 256
+
+
+class RawShardWriter:
+    """One worker lifetime's raw shard, laid out as the Java collector writes it.
+
+    ``{run_id}.{worker}-{lifetime}.jsonl.gz``, a concatenation of gzip members
+    of :data:`RAW_BLOCK_RECORDS` records each, appended a block at a time.
+    ``compressed=False`` writes the plain ``.jsonl`` shards collected before
+    compression, which every reader still loads. Python never writes a raw
+    shard outside the tests, so the writer lives here rather than beside the
+    readers.
+    """
+
+    def __init__(
+        self, directory, run_id: str, worker: int, lifetime: str, *,
+        compressed: bool = True,
+    ) -> None:
+        from pathlib import Path
+
+        suffix = ".jsonl.gz" if compressed else ".jsonl"
+        self.path = Path(directory) / f"{run_id}.{worker}-{lifetime}{suffix}"
+        self.compressed = compressed
+        self._block: list[str] = []
+
+    def __enter__(self) -> RawShardWriter:
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        return self
+
+    def __exit__(self, *exc_info) -> None:
+        self.close()
+
+    def write(self, record: EffectRecord) -> None:
+        from effects.infrastructure.record_io import format_record_line
+
+        self._block.append(format_record_line(record) + "\n")
+        if len(self._block) >= RAW_BLOCK_RECORDS:
+            self._flush()
+
+    def _flush(self) -> None:
+        import gzip
+
+        if not self._block:
+            return
+        data = "".join(self._block).encode("utf-8")
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        with self.path.open("ab") as handle:
+            handle.write(gzip.compress(data) if self.compressed else data)
+        self._block = []
+
+    def close(self) -> None:
+        self._flush()

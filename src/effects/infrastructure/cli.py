@@ -880,7 +880,7 @@ def run_holdout_cards(args: argparse.Namespace) -> int:
         load_card_texts,
         load_first_printings,
     )
-    from effects.infrastructure.sidecar_io import SidecarCache
+    from effects.infrastructure.sidecar_io import SidecarCache, load_tree_texts
 
     cards_folder = Path(args.cards_folder)
     if not cards_folder.is_dir():
@@ -908,6 +908,8 @@ def run_holdout_cards(args: argparse.Namespace) -> int:
         max_carriers=args.holdout_max_carriers,
         unit=args.holdout_unit,
         canonical_names=canonical,
+        # The converted token tree beside the card tree, as build-corpus reads it.
+        token_texts=load_tree_texts(cards_folder.parent / "tokenscripts"),
     )
     written = write_depletion_list(report.names, Path(args.out))
     if report.unit == "template":

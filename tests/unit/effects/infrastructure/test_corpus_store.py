@@ -36,3 +36,26 @@ def test_current_sources_lists_shards_relative_to_the_corpus_root(tmp_path):
     assert current_sources(tmp_path) == (
         SourceShard(name="depleted/run.0-a.jsonl.gz", size=7),
     )
+
+
+def test_clearing_the_outputs_moves_the_manifest_aside(tmp_path, a_manifest):
+    """A build that fails after clearing must not leave a manifest over empty strata.
+
+    Its digest would still match every checkpoint trained on the old dataset,
+    so the evaluator would score them against whatever the failed build left.
+    """
+    store = CorpusStore(tmp_path)
+    store.save(a_manifest)
+    store.clear_outputs()
+    with pytest.raises(FileNotFoundError):
+        store.load()
+    assert store.previous_manifest_path.exists()
+
+
+def test_saving_a_manifest_removes_the_one_set_aside(tmp_path, a_manifest):
+    store = CorpusStore(tmp_path)
+    store.save(a_manifest)
+    store.clear_outputs()
+    store.save(a_manifest)
+    assert store.load() == a_manifest
+    assert not store.previous_manifest_path.exists()

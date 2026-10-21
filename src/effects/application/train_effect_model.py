@@ -543,7 +543,7 @@ def check_manifest_holdout(manifest, config: TrainEffectModelConfig) -> None:
     so it is refused before any step rather than discovered at evaluation.
     """
     from effects.domain.text_holdout import normalize_script_text
-    from effects.infrastructure.sidecar_io import SidecarCache, sidecar_roots
+    from effects.infrastructure.sidecar_io import SidecarCache, load_tree_texts, sidecar_roots
 
     unit = manifest.holdout_unit
     if config.holdout_unit is not None and config.holdout_unit != unit:
@@ -573,6 +573,7 @@ def check_manifest_holdout(manifest, config: TrainEffectModelConfig) -> None:
         permille=manifest.holdout_permille,
         max_carriers=manifest.holdout_max_carriers,
         unit=unit,
+        token_texts=load_tree_texts(roots.get("tokenscripts")),
     )
     logger.info(
         "Holdout recomputed in %.0fs: %d held-out text(s).",

@@ -35,7 +35,7 @@ class VariantSidecarConnector:
 
         Raises:
             FileNotFoundError: If the connector JAR is missing (the error names
-                the ``mvn package`` command) or java is not on PATH.
+                the build command) or java is not on PATH.
         """
         # Reaches GuiBase / FModel in forge-gui through
         # ForgeEnvironmentInitializer, so the full runtime is required — the

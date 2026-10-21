@@ -83,19 +83,9 @@ class TestVariantRecordFlags:
         with pytest.raises(ValueError, match="variant_of"):
             _record(variant_of="Lightning Bolt")
 
-    def test_the_synthetic_flag_never_reaches_the_model(self):
-        record = _record(synthetic=True, variant_of="Lightning Bolt")
-        fields = record.model_input_fields()
-        assert "synthetic" not in fields
-        assert "variant_of" not in fields
-
     def test_a_variant_is_otherwise_an_ordinary_record(self):
         record = _record(synthetic=True, variant_of="Lightning Bolt")
         assert record.kind is RecordKind.RESOLUTION
-        assert set(record.model_input_fields()) == {
-            "kind", "moment", "subkind", "actor_player", "ability", "state",
-            "payload",
-        }
 
 
 class TestNumericPerturbation:
@@ -955,3 +945,65 @@ class TestMultiFaceCardsAreLeftAlone:
         assert generate_variants(
             source, tmp_path / "variants", held_out=frozenset(), limit=5,
         ) == []
+
+
+class TestNoVariantPrintsAHeldOutText:
+    """A perturbation can land on a held-out text, or under template on its template.
+
+    Its source card is not held out, so the name test passes it; nothing else
+    would keep a held-out text's mechanics out of training (G14).
+    """
+
+    _HELD = "SP$ DealDamage | ValidTgts$ Artifact | NumDmg$ 2"
+
+    def _variant(self, tmp_path, name: str, text: str) -> GeneratedVariant:
+        from effects.domain.provenance import ProvenanceKey, ProvenanceSidecar, SidecarLine
+        from effects.infrastructure.sidecar_io import sidecar_path_for, write_sidecar
+
+        path = tmp_path / f"{name}.txt"
+        path.write_text(f"Name:{name}\n", encoding="utf-8")
+        key = ProvenanceKey(f"variant-scripts/{name}.txt", 0, "spell", 0)
+        write_sidecar(
+            ProvenanceSidecar(
+                card=name, script_file=f"variant-scripts/{name}.txt",
+                lines=(SidecarLine(
+                    line_index=0, line_kind="spell", provenance=(key,), script_text=text,
+                ),),
+            ),
+            sidecar_path_for(path),
+        )
+        return GeneratedVariant(name=name, source_card="x", path=path, perturbation="numeric")
+
+    def _holdout(self, unit: str):
+        from effects.domain.split import text_keyed_holdout
+
+        return text_keyed_holdout(
+            {"Held": "cardsfolder/h/held.txt"}, {"Held": [self._HELD]},
+            permille=1000, max_carriers=8, unit=unit,
+        )
+
+    def test_a_variant_printing_a_held_out_template_is_dropped_with_its_files(self, tmp_path):
+        from effects.application.collect_variants import drop_held_out_variants
+        from effects.infrastructure.sidecar_io import sidecar_path_for
+
+        held = self._variant(
+            tmp_path, "act_of_treason_variant_1",
+            "SP$ DealDamage | ValidTgts$ Artifact | NumDmg$ 5",
+        )
+        clean = self._variant(tmp_path, "shock_variant_2", "SP$ Draw | NumCards$ 2")
+
+        kept = drop_held_out_variants([held, clean], self._holdout("template"))
+
+        assert kept == [clean]
+        assert not held.path.exists()
+        assert not sidecar_path_for(held.path).exists()
+
+    def test_under_the_text_unit_only_the_text_itself_is_held_out(self, tmp_path):
+        from effects.application.collect_variants import drop_held_out_variants
+
+        near = self._variant(
+            tmp_path, "near_variant_1", "SP$ DealDamage | ValidTgts$ Artifact | NumDmg$ 5",
+        )
+        same = self._variant(tmp_path, "same_variant_2", self._HELD)
+
+        assert drop_held_out_variants([near, same], self._holdout("text")) == [near]

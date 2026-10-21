@@ -256,6 +256,25 @@ def write_sidecar(sidecar: ProvenanceSidecar, path: Path) -> None:
     )
 
 
+def load_tree_texts(root: Path | None) -> dict[str, list[str]]:
+    """``script file -> its sidecar's script texts`` over one converted tree.
+
+    The holdout's token carriers (``text_keyed_holdout(token_texts=...)``):
+    every converted token script, keyed by the script file its sidecar names,
+    which is what a record's provenance key and ``HeldOutCards.script_files``
+    both spell. An absent or missing root is an empty tree.
+    """
+    if root is None or not Path(root).is_dir():
+        return {}
+    out: dict[str, list[str]] = {}
+    for path in sorted(Path(root).rglob(f"*{SIDECAR_SUFFIX}")):
+        sidecar = read_sidecar(path)
+        texts = [line.script_text for line in sidecar.lines if line.script_text]
+        if texts:
+            out[sidecar.script_file] = texts
+    return out
+
+
 def converted_text_path(sidecar_path: Path) -> Path:
     """The converted ``.txt`` beside a sidecar."""
     sidecar_path = Path(sidecar_path)
@@ -326,6 +345,8 @@ class SidecarCache:
         """
         self._roots = {name: Path(root) for name, root in roots.items()}
         self._cache: dict[str, ProvenanceSidecar] = {}
+        #: Script files found to have no sidecar, so a miss stats the disk once.
+        self._missing: set[str] = set()
         self._prose: dict[str, list[str]] = {}
         #: ``script_file -> times asked`` for keys naming an unconverted script.
         #: Counted rather than only swallowed: today this is 0.07% of records,
@@ -344,17 +365,16 @@ class SidecarCache:
 
     def get(self, script_file: str) -> ProvenanceSidecar:
         cached = self._cache.get(script_file)
-        if cached is None:
-            path = self.path_for(script_file)
-            if not path.exists():
-                self.unresolved[script_file] = (
-                    self.unresolved.get(script_file, 0) + 1
-                )
-                raise UnconvertedScript(
-                    f"{script_file} was never converted: no sidecar at {path}"
-                )
-            cached = read_sidecar(path)
-            self._cache[script_file] = cached
+        if cached is not None:
+            return cached
+        path = self.path_for(script_file)
+        if script_file in self._missing or not path.exists():
+            self._missing.add(script_file)
+            self.unresolved[script_file] = self.unresolved.get(script_file, 0) + 1
+            raise UnconvertedScript(
+                f"{script_file} was never converted: no sidecar at {path}"
+            )
+        cached = self._cache[script_file] = read_sidecar(path)
         return cached
 
     def line_for(self, key: ProvenanceKey) -> SidecarLine | None:

@@ -195,3 +195,23 @@ def test_the_unjoinable_rule_reaches_every_kind_with_an_acting_ability(
         make_record(kind=RecordKind.COMBAT, payload=CombatPayload(), ability=None),
         _unjoinable,
     ) is None
+
+
+def test_a_decision_candidate_acting_through_an_unjoinable_key_is_refused(
+    make_record, ability_key,
+):
+    """A decision's ``[ACT]`` reads its candidate, so the candidate's key joins."""
+    from effects.domain.records import (
+        Candidate,
+        PlayabilityDecisionPayload,
+        PlayabilitySubkind,
+    )
+
+    decision = make_record(
+        kind=RecordKind.PLAYABILITY, subkind=PlayabilitySubkind.DECISION, ability=None,
+        payload=PlayabilityDecisionPayload(candidates=(Candidate(
+            ability=(ability_key,), can_play=True, affordable=True,
+            has_legal_target=True,
+        ),)),
+    )
+    assert unjoinable_key_defect(decision, _unjoinable) == UNJOINABLE_KEY
