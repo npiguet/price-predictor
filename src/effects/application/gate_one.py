@@ -1,9 +1,9 @@
-"""Gate 1's three numbers, measured by running a checkpoint over the split.
+"""Gate 1: the identity baseline, measured by running both checkpoints over the split.
 
 Gate 1 asks whether the encoder is reading text at all, and it answers by
 comparing the shipping model against an ``identity`` baseline that can memorize
-which ability a line is but cannot read a word of it. That comparison lives in
-``evaluate_effect_model``; producing each side's numbers is this module's job.
+which ability a line is but cannot read a word of it. This module produces each
+side's numbers, compares them and renders the verdict (FR-118).
 
 Two choices here are the whole point of the gate.
 
@@ -22,7 +22,11 @@ they must describe the same records: the gate F1 says whether the model knows
 from __future__ import annotations
 
 import logging
+import math
+from collections.abc import Iterator
 from dataclasses import dataclass
+from functools import partial
+from typing import TYPE_CHECKING
 
 import numpy as np
 import torch
@@ -38,7 +42,21 @@ from effects.domain.effect_model import (
     per_entity_loss,
 )
 from effects.domain.effect_targets import derive_targets
-from effects.domain.gate_metrics import balanced_accuracy, f1_score, poisson_deviance
+from effects.domain.evaluation_report import (
+    CheckName,
+    CheckResult,
+    CheckStatus,
+    breaches,
+    margin,
+)
+from effects.domain.gate_metrics import (
+    GATE1_MIN_DEVIANCE_REDUCTION,
+    GATE1_MIN_GATE_F1_GAIN,
+    GATE1_MIN_ZONE_ACCURACY_GAIN,
+    balanced_accuracy,
+    f1_score,
+    poisson_deviance,
+)
 from effects.domain.head_decoding import (
     MAGNITUDE_TYPES,
     expected_magnitude,
@@ -47,6 +65,9 @@ from effects.domain.head_decoding import (
 from effects.domain.keyword_names import normalize_keyword
 from effects.domain.records import RecordKind, acting_keys
 from effects.domain.rule_families import rule_family
+
+if TYPE_CHECKING:
+    from effects.application.evaluation_context import EvaluationContext
 
 logger = logging.getLogger(__name__)
 
@@ -57,17 +78,11 @@ ZONE_OUTCOME = "zone_outcome"
 
 @dataclass(frozen=True, slots=True)
 class GateOneMetrics:
-    """One model's scores on the card-disjoint split's unique-text stratum.
-
-    ``records`` holds every scored record's own losses beside the pooled
-    margins, for the evaluator's per-text, per-family and per-policy
-    breakdowns (``application.breakdowns``). The margins never read it.
-    """
+    """One model's scores on the card-disjoint split's unique-text stratum."""
 
     affected_gate_f1: float
     zone_outcome_accuracy: float
     mean_poisson_deviance: float
-    records: tuple[RecordResult, ...] = ()
 
 
 def acting_text(record, batcher: SurfaceBatcher) -> str | None:
@@ -112,38 +127,60 @@ def unique_text_records(records, batcher: SurfaceBatcher, *, seen) -> list:
     return stratum
 
 
-def measure(
-    records, encoder, model, batcher: SurfaceBatcher, *, fields,
-    legality_mode_counts=None,
-) -> GateOneMetrics:
-    """Run the model over ``records`` and score the three margins.
+# ── scoring: one forward pass, two readers ──────────────────────────────
 
-    ``fields`` is the active-field tuple the run trains with, so the gate reads
-    the same heads the loss shaped. ``legality_mode_counts`` is the dataset
-    manifest's, so each record's family is the one the build placed it in.
+
+def _forward_chunks(
+    records, encoder, model, batcher: SurfaceBatcher, fields,
+) -> Iterator[tuple[list, tuple]]:
+    """``(chunk, (gathered, gate, field_targets, mask))`` per chunk of ``records``.
+
+    The one forward pass both readers share: the margins pool it, the
+    per-record scorer splits it by row.
     """
-    margins = MarginAccumulator(fields)
-    results: list[RecordResult] = []
-    # One resolver for the whole pass: it memoizes each provenance key's
-    # keyword, and the stratum repeats the same few hundred cards.
-    resolver = KeywordResolver(batcher.sidecars)
-
     encoder.eval()
     model.eval()
     with torch.inference_mode():
         for start in range(0, len(records), BATCH_RECORDS):
             chunk = records[start : start + BATCH_RECORDS]
-            gathered, gate, field_targets, mask = _forward(
-                chunk, encoder, model, batcher, fields,
-            )
-            for row, record in enumerate(chunk):
-                results.append(_record_result(
-                    record, batcher, resolver,
-                    _record_losses(row, gathered, gate, field_targets, mask, fields),
-                    legality_mode_counts,
-                ))
-            margins.add(gathered, gate, field_targets, mask)
-    return margins.metrics(records=tuple(results))
+            yield chunk, _forward(chunk, encoder, model, batcher, fields)
+
+
+def measure(records, encoder, model, batcher: SurfaceBatcher, *, fields) -> GateOneMetrics:
+    """Run the model over ``records`` and score the three margins.
+
+    ``fields`` is the active-field tuple the run trains with, so the gate reads
+    the same heads the loss shaped.
+    """
+    margins = MarginAccumulator(fields)
+    for _chunk, forward in _forward_chunks(records, encoder, model, batcher, fields):
+        margins.add(*forward)
+    return margins.metrics()
+
+
+def score_records(
+    records, encoder, model, batcher: SurfaceBatcher, *, fields,
+    legality_mode_counts=None,
+) -> list[RecordResult]:
+    """Every record's own losses and grouping keys, for the breakdowns.
+
+    ``legality_mode_counts`` is the dataset manifest's, so each record's family
+    is the one the build placed it in.
+    """
+    # One resolver for the whole pass: it memoizes each provenance key's
+    # keyword, and the strata repeat the same few hundred cards.
+    resolver = KeywordResolver(batcher.sidecars)
+    results: list[RecordResult] = []
+    for chunk, (gathered, gate, field_targets, mask) in _forward_chunks(
+        records, encoder, model, batcher, fields,
+    ):
+        for row, record in enumerate(chunk):
+            results.append(_record_result(
+                record, batcher, resolver,
+                _record_losses(row, gathered, gate, field_targets, mask, fields),
+                legality_mode_counts,
+            ))
+    return results
 
 
 def _forward(chunk, encoder, model, batcher: SurfaceBatcher, fields):
@@ -212,7 +249,7 @@ class MarginAccumulator:
             self._count_pred.append(expected_magnitude(spec, slice_).numpy())
             self._count_true.append(np.abs(target[affected].numpy()))
 
-    def metrics(self, *, records: tuple[RecordResult, ...] = ()) -> GateOneMetrics:
+    def metrics(self) -> GateOneMetrics:
         """The three margins over everything added; NaN where nothing was."""
         return GateOneMetrics(
             affected_gate_f1=_f1(self._gate_pred, self._gate_true),
@@ -220,7 +257,6 @@ class MarginAccumulator:
                 _cat(self._zone_pred), _cat(self._zone_true),
             ),
             mean_poisson_deviance=_deviance(self._count_pred, self._count_true),
-            records=records,
         )
 
 
@@ -311,3 +347,113 @@ def _f1(pred: list[np.ndarray], true: list[np.ndarray]) -> float:
 def _deviance(pred: list[np.ndarray], true: list[np.ndarray]) -> float:
     predicted, observed = _cat(pred), _cat(true)
     return poisson_deviance(predicted, observed) if predicted.size else float("nan")
+
+
+# ── the gate ────────────────────────────────────────────────────────────
+
+
+def run_gate_one(context: EvaluationContext, identity) -> CheckResult:
+    """Score both models on the split's unique-text stratum and compare.
+
+    Loading a second model and running the corpus twice is the expensive part
+    of an evaluation, so it happens only when the baseline is actually
+    supplied. The baseline is loaded for this gate alone and released after it.
+    """
+    from effects.infrastructure.model_runner import stratum_records
+
+    records, training_acting, message = stratum_records(
+        context.config, context.main,
+    )
+    if not records:
+        return CheckResult(CheckName.GATE_1, CheckStatus.SKIPPED, message)
+
+    # Both checkpoints read one vocabulary (require_same_split), so one
+    # surface's texts decide the stratum for both.
+    stratum = None
+    scores = {}
+    loaders = {
+        "model": context.main_runnable,
+        "identity": partial(context.runnable_of, identity),
+    }
+    for name, load in loaders.items():
+        runnable = load(records)
+        batcher = runnable.batcher
+        if stratum is None:
+            stratum = unique_text_records(
+                records, batcher, seen=training_texts(training_acting, batcher),
+            )
+        if not stratum:
+            return CheckResult(
+                CheckName.GATE_1, CheckStatus.SKIPPED,
+                "no resolution record in the card-disjoint split has an "
+                "ability text absent from training; the identity baseline "
+                "could recall every text in it, so the comparison would "
+                "measure memorization on both sides rather than reading",
+            )
+        scores[name] = measure(
+            stratum, runnable.encoder, runnable.model, batcher,
+            fields=runnable.fields,
+        )
+
+    return evaluate_gate_one(scores["model"], scores["identity"])
+
+
+def _relative_reduction(baseline: float, value: float) -> float:
+    """How far ``value`` falls below ``baseline``, as a share of it.
+
+    An unmeasured baseline leaves the reduction unmeasured; a zero one leaves
+    nothing to reduce.
+    """
+    if math.isnan(baseline):
+        return baseline
+    return (baseline - value) / baseline if baseline > 0 else 0.0
+
+
+def evaluate_gate_one(
+    model: GateOneMetrics, identity: GateOneMetrics,
+) -> CheckResult:
+    """All three margins must hold (FR-118). Blocks shipping.
+
+    Three margins rather than one because they fail differently: the gate F1
+    says whether the model knows *that* something happens, the zone accuracy
+    whether it knows *what*, and the deviance whether it knows *how much*. A
+    model can beat the baseline on one and tie on the others by learning the
+    corpus's priors.
+    """
+    gate_gain = model.affected_gate_f1 - identity.affected_gate_f1
+    zone_gain = model.zone_outcome_accuracy - identity.zone_outcome_accuracy
+    deviance_reduction = _relative_reduction(
+        identity.mean_poisson_deviance, model.mean_poisson_deviance,
+    )
+    values = {
+        "affected_gate_f1_gain": gate_gain,
+        "zone_outcome_accuracy_gain": zone_gain,
+        "poisson_deviance_reduction": deviance_reduction,
+    }
+    failures = breaches(
+        margin(
+            "affected-gate F1 gain", gate_gain,
+            gate_gain < GATE1_MIN_GATE_F1_GAIN,
+            f"{gate_gain:+.3f} < {GATE1_MIN_GATE_F1_GAIN}",
+        ),
+        margin(
+            "zone-outcome accuracy gain", zone_gain,
+            zone_gain < GATE1_MIN_ZONE_ACCURACY_GAIN,
+            f"{zone_gain:+.3f} < {GATE1_MIN_ZONE_ACCURACY_GAIN}",
+        ),
+        margin(
+            "Poisson deviance reduction", deviance_reduction,
+            deviance_reduction < GATE1_MIN_DEVIANCE_REDUCTION,
+            f"{deviance_reduction:+.1%} < {GATE1_MIN_DEVIANCE_REDUCTION:.0%}",
+        ),
+    )
+    if failures:
+        return CheckResult(
+            CheckName.GATE_1, CheckStatus.FAIL,
+            "the encoder is not reading text: " + "; ".join(failures),
+            values,
+        )
+    return CheckResult(
+        CheckName.GATE_1, CheckStatus.PASS,
+        "beats the identity baseline on all three margins", values,
+    )

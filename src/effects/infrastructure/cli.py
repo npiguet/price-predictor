@@ -1569,12 +1569,12 @@ def _evaluate_effect_model_parser(subparsers) -> None:
 
 
 def run_evaluate_effect_model(args: argparse.Namespace) -> int:
-    from effects.application.evaluate_effect_model import (
+    from effects.application.evaluate_effect_model import run as evaluate
+    from effects.application.evaluation_context import (
         CorpusMismatchError,
         EvaluateEffectModelConfig,
         parse_variant_checkpoint,
     )
-    from effects.application.evaluate_effect_model import run as evaluate
     from effects.infrastructure.effect_model_store import (
         HashMismatchError,
         SplitMismatchError,

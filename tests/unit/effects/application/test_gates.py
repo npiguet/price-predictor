@@ -14,16 +14,14 @@ import pytest
 
 from effects.application.evaluate_effect_model import (
     STAGE_GATED_CHECKS,
-    CheckStatus,
-    EvaluationReport,
-    GateOneMetrics,
-    evaluate_gate_one,
-    evaluate_gate_three,
-    evaluate_gate_two,
-    evaluate_keyword,
-    evaluate_ward_canary,
-    parse_variant_checkpoint,
     skip_unavailable,
+)
+from effects.application.evaluation_context import parse_variant_checkpoint
+from effects.application.gate_one import GateOneMetrics, evaluate_gate_one
+from effects.application.gate_two import evaluate_gate_two, evaluate_keyword
+from effects.application.geometry_checks import (
+    evaluate_gate_three,
+    evaluate_ward_canary,
 )
 from effects.domain.damage_step_keywords import (
     DAMAGE_STEP_KEYWORDS,
@@ -34,6 +32,7 @@ from effects.domain.damage_step_keywords import (
     Subject,
 )
 from effects.domain.effect_model import FIELDS_BY_NAME
+from effects.domain.evaluation_report import CheckStatus, EvaluationReport
 from effects.domain.gate_metrics import (
     GATE1_MIN_DEVIANCE_REDUCTION,
     GATE1_MIN_GATE_F1_GAIN,

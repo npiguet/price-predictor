@@ -13,13 +13,9 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from effects.application.evaluate_effect_model import (
-    NEIGHBOUR_QUERIES,
-    CheckStatus,
-    EvaluateEffectModelConfig,
-    load_shipping_cache,
-)
+from effects.application.evaluation_context import EvaluateEffectModelConfig
 from effects.application.geometry_checks import (
+    NEIGHBOUR_QUERIES,
     CachedVectors,
     check_decodability,
     check_nearest_neighbours,
@@ -31,6 +27,7 @@ from effects.application.geometry_checks import (
     write_scorer_smoke_cache,
 )
 from effects.domain.ability_cache_layout import ARRAY_KEY
+from effects.domain.evaluation_report import CheckStatus
 from effects.domain.line_query import LineQuery, normalize_prose
 from effects.domain.provenance import ProvenanceKey, ProvenanceSidecar, SidecarLine
 from effects.domain.ward_twins import BARE_KEYWORDS, WARD, WARD_TWINS
@@ -247,17 +244,23 @@ class TestTheShippingCache:
             abilities_root=abilities,
         )
 
+    def _load(self, tmp_path):
+        config = self._config(tmp_path)
+        return load_cache(
+            config.abilities_root, config.cards_folders, surface="script",
+        )
+
     def test_it_spans_the_card_and_token_trees(self, tmp_path):
-        loaded = load_shipping_cache(self._config(tmp_path), surface="script")
+        loaded = self._load(tmp_path)
         assert set(loaded.texts()) == {"Flying", "Sacrifice | GainLife$ 3"}
 
     def test_synthetic_variant_scripts_are_not_in_it(self, tmp_path):
         """A perturbed script is collection input, not a line the cache serves."""
-        loaded = load_shipping_cache(self._config(tmp_path), surface="script")
+        loaded = self._load(tmp_path)
         assert "DealDamage | NumDmg$ 5" not in loaded.texts()
 
     def test_a_token_is_not_a_card_for_the_pooled_vectors(self, tmp_path):
-        loaded = load_shipping_cache(self._config(tmp_path), surface="script")
+        loaded = self._load(tmp_path)
         assert set(loaded.by_card) == {"Serra Angel"}
 
 

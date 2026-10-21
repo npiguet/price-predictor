@@ -813,99 +813,36 @@ class TestEvaluatorWiring:
     that always sings the same note.
     """
 
-    def _provenance(self, game_disjoint):
-        from effects.infrastructure.effect_model_store import SplitProvenance
+    @staticmethod
+    def _runnable(_records):
+        return Runnable(_NoEncoder(), _AbilityCountingModel(), _batcher(), _FIELDS)
 
-        return SplitProvenance(
-            card_disjoint_games=("card-1",),
-            game_disjoint_games=tuple(game_disjoint),
-        )
+    def test_it_scores_the_game_disjoint_combat_records(self):
+        from effects.application.gate_two import run_gate_two
 
-    def _config(self, tmp_path):
-        from effects.application.evaluate_effect_model import (
-            EvaluateEffectModelConfig,
-        )
-
-        return EvaluateEffectModelConfig(
-            records_dir=tmp_path, cards_folders=(tmp_path / "cardsfolder",),
-        )
-
-    def _context(self, tmp_path, checkpoint):
-        from effects.application.evaluate_effect_model import EvaluationContext
-
-        return EvaluationContext(
-            self._config(tmp_path), checkpoint,
-            vocab_path=tmp_path / "vocab.txt",
-            keyword_path=tmp_path / "keywords.json",
-        )
-
-    def test_it_scores_the_game_disjoint_combat_records(self, tmp_path, monkeypatch):
-        from effects.application import evaluate_effect_model as evaluator
-
-        records = [_printed_board(game="gd-1"), _printed_board(game="train-1")]
-        monkeypatch.setattr(
-            evaluator, "_gate_two_records", lambda config, provenance: records[:1],
-        )
-        monkeypatch.setattr(
-            evaluator, "_gate_two_runnable",
-            lambda *a, **k: Runnable(
-                _NoEncoder(), _AbilityCountingModel(), _batcher(), _FIELDS,
-            ),
-        )
-
-        verdicts = evaluator.run_gate_two(
-            self._context(tmp_path, _Checkpoint(self._provenance(("gd-1",)))),
-        )
+        verdicts = run_gate_two([_printed_board(game="gd-1")], self._runnable)
 
         first_strike = next(v for v in verdicts if v.keyword == "first_strike")
         assert first_strike.qualifying_records == 1
         assert first_strike.direction_agreement == 1.0
 
-    def test_the_reason_lists_agreement_per_field(self, tmp_path, monkeypatch):
-        from effects.application import evaluate_effect_model as evaluator
+    def test_the_reason_lists_agreement_per_field(self):
+        from effects.application.gate_two import run_gate_two
 
-        monkeypatch.setattr(
-            evaluator, "_gate_two_records",
-            lambda config, provenance: [_printed_board(game="gd-1")],
-        )
-        monkeypatch.setattr(
-            evaluator, "_gate_two_runnable",
-            lambda *a, **k: Runnable(
-                _NoEncoder(), _AbilityCountingModel(), _batcher(), _FIELDS,
-            ),
-        )
-
-        verdicts = evaluator.run_gate_two(
-            self._context(tmp_path, _Checkpoint(self._provenance(("gd-1",)))),
-        )
+        verdicts = run_gate_two([_printed_board(game="gd-1")], self._runnable)
 
         first_strike = next(v for v in verdicts if v.keyword == "first_strike")
         assert "damage_taken 100%" in first_strike.reason
         assert "zone_outcome/died 100%" in first_strike.reason
 
-    def test_no_game_disjoint_combat_record_leaves_every_keyword_at_zero(
-        self, tmp_path, monkeypatch,
-    ):
-        from effects.application import evaluate_effect_model as evaluator
+    def test_no_game_disjoint_combat_record_leaves_every_keyword_at_zero(self):
+        from effects.application.gate_two import run_gate_two
 
-        monkeypatch.setattr(
-            evaluator, "_gate_two_records", lambda config, provenance: [],
-        )
-
-        def _never(*_args, **_kwargs):
+        def _never(_records):
             raise AssertionError("no records: the model must not be loaded")
 
-        monkeypatch.setattr(evaluator, "_gate_two_runnable", _never)
-
-        verdicts = evaluator.run_gate_two(
-            self._context(tmp_path, _Checkpoint(self._provenance(()))),
-        )
+        verdicts = run_gate_two([], _never)
 
         assert len(verdicts) == 8
         assert all(v.qualifying_records == 0 for v in verdicts)
         assert all("under-sampled" in v.reason for v in verdicts)
-
-
-class _Checkpoint:
-    def __init__(self, provenance) -> None:
-        self.provenance = provenance

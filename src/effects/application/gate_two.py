@@ -28,15 +28,19 @@ from __future__ import annotations
 
 import logging
 import time
-from collections.abc import Iterator
+from collections.abc import Callable, Iterable, Iterator
 from dataclasses import dataclass, field
-from itertools import batched
-from typing import NamedTuple
+from itertools import batched, chain, islice
+from pathlib import Path
+from typing import TYPE_CHECKING, NamedTuple
 
 import torch
 
 from effects.application.gate_one import BATCH_RECORDS
 from effects.domain.damage_step_keywords import (
+    DAMAGE_STEP_KEYWORDS,
+    MIN_DIRECTION_AGREEMENT,
+    MIN_QUALIFYING_RECORDS,
     CombatParticipant,
     DamageStepKeyword,
     KeywordResolver,
@@ -50,13 +54,27 @@ from effects.domain.effect_model import (
     FieldSpec,
     FieldType,
 )
+from effects.domain.evaluation_report import (
+    CheckName,
+    CheckResult,
+    CheckStatus,
+    KeywordVerdict,
+)
 from effects.domain.head_decoding import (
     direction_balance,
     expected_magnitude,
     field_outputs,
 )
 
+if TYPE_CHECKING:
+    from effects.infrastructure.model_runner import Runnable
+
 logger = logging.getLogger(__name__)
+
+#: Records read eagerly before gate 2 loads its checkpoint. The loader measures
+#: each slot kind's width from real records, and every combat record on a board
+#: with a creature and a player answers that identically.
+SLOT_WIDTH_SAMPLE = 8
 
 #: Records read between two progress lines. The game-disjoint stratum streams
 #: from the raw corpus and runs for many minutes with nothing else to say.
@@ -317,3 +335,144 @@ def _subject_vectors(
         if key in wanted:
             found[key] = outputs[index]
     return found
+
+
+# ── the verdict ─────────────────────────────────────────────────────────
+
+
+def evaluate_keyword(
+    row: DamageStepKeyword,
+    *,
+    qualifying_records: int,
+    agreeing_records: int,
+    per_field: dict[str, FieldAgreement] | None = None,
+) -> KeywordVerdict:
+    """Route one keyword: pass, or send it to a stage-three probe (FR-119).
+
+    Under-sampled routes the same way as wrong. A keyword with 40 qualifying
+    records has not been tested, and treating "untested" as "passed" is how a
+    canary stops being one.
+
+    ``per_field`` is reported but never routes: a row's verdict is "did every
+    field move", and the breakdown says *which* one did not — a keyword whose
+    magnitude moves and whose consequence does not is a different problem from
+    one the model ignores entirely, and the combined percentage cannot tell them
+    apart.
+    """
+    agreement = (
+        agreeing_records / qualifying_records if qualifying_records else 0.0
+    )
+    breakdown = _render_per_field(per_field)
+    if qualifying_records < MIN_QUALIFYING_RECORDS:
+        return KeywordVerdict(
+            row.keyword, qualifying_records, agreement, routed_to_probe=True,
+            reason=(
+                f"under-sampled: {qualifying_records} qualifying records < "
+                f"{MIN_QUALIFYING_RECORDS}" + breakdown
+            ),
+        )
+    if agreement < MIN_DIRECTION_AGREEMENT:
+        return KeywordVerdict(
+            row.keyword, qualifying_records, agreement, routed_to_probe=True,
+            reason=(
+                f"direction agreement {agreement:.1%} < "
+                f"{MIN_DIRECTION_AGREEMENT:.0%} on {', '.join(row.fields)}"
+                + breakdown
+            ),
+        )
+    return KeywordVerdict(
+        row.keyword, qualifying_records, agreement, routed_to_probe=False,
+        reason=f"direction agreement {agreement:.1%}" + breakdown,
+    )
+
+
+def _render_per_field(per_field: dict[str, FieldAgreement] | None) -> str:
+    """The per-effect tail of a keyword's report line, or nothing."""
+    if not per_field:
+        return ""
+    parts = [
+        f"{label} {agreeing / scored:.0%}"
+        for label, (agreeing, scored) in per_field.items() if scored
+    ]
+    return f" ({', '.join(parts)})" if parts else ""
+
+
+def evaluate_gate_two(verdicts: list[KeywordVerdict]) -> CheckResult:
+    """The canary's routing report. **Blocks nothing** (FR-119).
+
+    Its output is a build decision, not a ship decision: the keywords routed
+    here are exactly the ones stage three needs probe machinery for, and a run
+    where none are routed means that machinery is never written.
+    """
+    routed = [v.keyword for v in verdicts if v.routed_to_probe]
+    detail = (
+        "all eight keywords pass; no stage-three probe machinery is needed"
+        if not routed
+        else f"routed to a stage-three probe: {', '.join(routed)}"
+    )
+    return CheckResult(
+        CheckName.GATE_2, CheckStatus.REPORTED, detail,
+        {v.keyword: v.direction_agreement for v in verdicts},
+    )
+
+
+# ── the gate ────────────────────────────────────────────────────────────
+
+
+def gate_two_records(config, provenance) -> Iterator:
+    """The combat records of the checkpoint's **game-disjoint** games (FR-120).
+
+    Game-disjoint rather than card-disjoint: the gate asks whether the model
+    uses a keyword it has seen, not whether it generalizes to text it has not,
+    and holding out the carriers as well would empty six of the eight
+    populations to answer a question gate 1 already answers.
+
+    An iterator, not a list. The split is a thousand games and a parsed record
+    costs about 45 KB, so the scorer reads it a chunk at a time.
+    """
+    from effects.domain.records import RecordKind
+    from effects.infrastructure.record_io import read_records_matching
+
+    games = frozenset(provenance.game_disjoint_games)
+    if not games:
+        return iter(())
+    return read_records_matching(
+        Path(config.records_dir), game_ids=games, kinds={RecordKind.COMBAT.value},
+    )
+
+
+def run_gate_two(
+    records: Iterable,
+    load: Callable[[list], Runnable],
+    rows: tuple[DamageStepKeyword, ...] = DAMAGE_STEP_KEYWORDS,
+) -> list[KeywordVerdict]:
+    """Score the eight keywords and route each one (FR-119 – FR-122).
+
+    ``load`` turns a few records into the checkpoint ready to run, with a
+    batcher measured from them; the evaluator passes its main checkpoint's,
+    loaded once for the whole run. Nothing is loaded when ``records`` holds no
+    combat record to score: every keyword is then under-sampled at n=0, which
+    is the same verdict a corpus with forty records gets and for the same
+    reason.
+    """
+    records = iter(records)
+    # A handful of records up front, because the loader measures the slot
+    # widths from real ones; the rest stays a stream the scorer reads in chunks.
+    head = list(islice(records, SLOT_WIDTH_SAMPLE))
+    if not head:
+        scores = {row.keyword: KeywordScore() for row in rows}
+    else:
+        runnable = load(head)
+        scores = score_keywords(
+            chain(head, records), rows, runnable.encoder, runnable.model,
+            runnable.batcher, fields=runnable.fields,
+        )
+    return [
+        evaluate_keyword(
+            row,
+            qualifying_records=scores[row.keyword].qualifying,
+            agreeing_records=scores[row.keyword].agreeing,
+            per_field=scores[row.keyword].per_field,
+        )
+        for row in rows
+    ]

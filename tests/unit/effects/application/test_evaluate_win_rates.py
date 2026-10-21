@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from effects.application.evaluate_effect_model import (
+from effects.application.evaluation_context import (
     DEFAULT_WIN_RATES,
     EvaluateEffectModelConfig,
-    EvaluationReport,
 )
+from effects.domain.evaluation_report import EvaluationReport
 from effects.infrastructure.cli import build_parser
 
 
