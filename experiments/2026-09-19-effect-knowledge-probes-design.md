@@ -58,16 +58,16 @@ Rungs 2 and 3 read the same trunk vector in two ways. The probe at rung 2 is fit
 
 The share is (rung 1 − rung 0) / (rung 3 − rung 0): the fraction of the distance from the board alone to the model's own answer that `e` closes without any trunk. The chart at the top of this record shows the rungs per question, and the shares sort the questions into the groups below.
 
-| question, card-disjoint records | share carried by `e`, median over 12 checkpoints | range |
+| question, card-disjoint records | share carried by `e`, median over 14 checkpoints | range |
 |---|---:|---|
 | how long a pump lasts | 1.01 | 0.90–1.06 |
 | affordable | 0.93 | 0.85–0.97 |
-| legal target | 0.49 | 0.19–0.58 |
-| damage taken | 0.55 | 0.46–0.75 |
-| legal target, carrying protection | 0.29 | 0.19–0.41 |
+| legal target | 0.51 | 0.19–0.58 |
+| damage taken | 0.56 | 0.46–0.75 |
+| legal target, carrying protection | 0.28 | 0.17–0.41 |
 | trigger fires | 0.30 | 0.22–0.36 |
-| dies | 0.22 | 0.07–0.30 |
-| card affected | 0.22 | 0.16–0.34 |
+| dies | 0.20 | 0.04–0.30 |
+| card affected | 0.23 | 0.16–0.37 |
 
 *Data: `probe_ladder.csv`.*
 
@@ -76,7 +76,7 @@ The share is (rung 1 − rung 0) / (rung 3 − rung 0): the fraction of the dist
 - **Blocking is known from the board alone.** On whether a creature may block, a probe on the board alone already scores about as well as anything deeper, and on card-disjoint records the model's own prediction scores below it. The share is not defined there, because the model gains nothing over the board. The model's prediction trails the probe on the trunk's vector only on card-disjoint records: on game-disjoint ones the two score the same, which points to the probe learning the held-out cards' restrictions from its own fitting data.
 - **Damage taken sits between the two groups, and the model's damage field uses most of what the trunk knows.** `e` closes about half the gap on damage taken. A probe reads about two thirds of its variance from the trunk's vector at a creature's slot, and the model's own damage field about half at the median and up to two thirds. The ladder reads the model's damage as the predicted amount alone: every damage item took damage, so the question is how much given the creature was hit.
 
-The groups are robust: the lowest share among the first two questions is about twice the highest among the last four, across all twelve checkpoints. The 256-wide arm sorts its questions the same way as the narrower ones, so four times the width of `e` does not move deaths or trigger firing into the vector. The game-disjoint records sort the questions about the same way. A protected target's legality drops to no share there, because `e` adds nothing over the board on those records.
+The groups are robust: the lowest share among the first two questions is about twice the highest among the last four, across all fourteen checkpoints. The 256-wide checkpoints sort their questions the same way as the narrower ones, so four times the width of `e` does not move deaths or trigger firing into the vector. The game-disjoint records sort the questions about the same way. A protected target's legality drops to no share there, because `e` adds nothing over the board on those records.
 
 **The board decides blocking partly because gen-2's block labels come from the AI's block plan.** More than half of the corpus's "may not block" labels name a creature the AI had already planned to block another attacker with, and the snapshot shows that planned block on the board ([the gen-2 record](2026-09-18-effect-model-gen2-improvements-design.md#most-block-legality-labels-that-say-a-creature-may-not-block-describe-the-ais-unfinished-block-plan)). A probe on the board alone can read the planned block and predict the label without knowing any rule. The `may_block` rung of the ladder therefore measures partly how well a vector shows the plan. Gen-3 records block legality before anyone declares, from the rules alone.
 
@@ -135,24 +135,24 @@ Noise in the card slots costs nothing on any subset, because the lines that woul
 
 Every gen-2 checkpoint lowers the predicted chance of a block when the attacker gains flying, horsemanship, fear or intimidate. Only horsemanship and fear are also tied to the blockers that answer them. The evasion grid takes 40 real block-legality records from the validation games, one per game, in which the blocker was legal and neither creature has an evasion keyword. It grants the attacker one keyword and gives the blocker one trait, then reads the model's predicted chance that this blocker may block this attacker. The rule's answer is computed for every edited record. The script is `scripts/effect_knowledge_probes/evasion_grid.py`.
 
-![Predicted block legality by attacker keyword and blocker trait for three checkpoints, rule-allowed cells outlined](2026-09-18-effect-model-gen2/charts/evasion-grid.png)
+![Predicted block legality by attacker keyword and blocker trait for four checkpoints, rule-allowed cells outlined](2026-09-18-effect-model-gen2/charts/evasion-grid.png)
 
 *Each cell averages the predicted chance of a legal block over the same 40 records; red outlines mark the cells the rule allows. Data: `evasion_grid.csv`.*
 
-The absolute level of the prediction is not a probability to read at face value. Even with no keyword and no trait, where every block is legal, arm `e64-lethality` predicts about one in ten and run B64's last epoch about one in three. The `blocker_legal` output ranks blockers better than it calibrates them, so the comparisons below are within each checkpoint: how much a blocker trait lifts the prediction against an attacker with the keyword, against how much it lifts it against an attacker without one.
+The absolute level of the prediction is not a probability to read at face value. Even with no keyword and no trait, where every block is legal, arm `e64-lethality` predicts about one in ten, run B64's last epoch about one in three and run B256's last epoch about one in two. The `blocker_legal` output ranks blockers better than it calibrates them, so the comparisons below are within each checkpoint: how much a blocker trait lifts the prediction against an attacker with the keyword, against how much it lifts it against an attacker without one.
 
 **The low level fits labels that mark many legal blocks as forbidden.** More than half of the gen-2 corpus's "may not block" labels name a creature the AI had already planned to block another attacker with, not a creature any rule kept out ([the gen-2 record](2026-09-18-effect-model-gen2-improvements-design.md#most-block-legality-labels-that-say-a-creature-may-not-block-describe-the-ais-unfinished-block-plan)). A model trained on them learns to doubt a block a rule allows. The grid's rankings within a row compare edits of one record and are less exposed to this than its absolute level.
 
 | attacker keyword, blocker trait | the trait's lift against that keyword | its lift against no keyword | checkpoints where the first is larger | the rule |
 |---|---:|---:|---:|---|
-| horsemanship, horsemanship | ×10.6 | ×1.9 | 14 of 14 | allows |
-| fear, artifact | ×2.4 | ×1.2 | 14 of 14 | allows |
-| fear, black | ×1.8 | ×1.1 | 14 of 14 | allows |
-| intimidate, artifact | ×2.4 | ×1.2 | 14 of 14 | allows |
-| intimidate, black | ×1.8 | ×1.1 | 13 of 14 | forbids, unless the attacker is also black |
-| intimidate, shares a colour | ×1.09 | ×1.05 | 10 of 14 | allows |
-| flying, flying | ×1.8 | ×1.4 | 13 of 14 | allows |
-| flying, reach | ×1.13 | ×1.09 | 12 of 14 | allows |
+| horsemanship, horsemanship | ×15.0 | ×1.9 | 17 of 17 | allows |
+| fear, artifact | ×2.5 | ×1.2 | 17 of 17 | allows |
+| fear, black | ×2.0 | ×1.1 | 17 of 17 | allows |
+| intimidate, artifact | ×2.8 | ×1.2 | 17 of 17 | allows |
+| intimidate, black | ×2.2 | ×1.1 | 16 of 17 | forbids, unless the attacker is also black |
+| intimidate, shares a colour | ×1.10 | ×1.06 | 13 of 17 | allows |
+| flying, flying | ×1.8 | ×1.4 | 16 of 17 | allows |
+| flying, reach | ×1.14 | ×1.08 | 15 of 17 | allows |
 
 *Lifts are the median over checkpoints of the predicted chance with the trait divided by the chance without it, in the same row. Data: `evasion_grid.csv`.*
 
@@ -173,15 +173,15 @@ The ranking within each attacker row, allowed blocks against forbidden ones, put
 
 On real targeting decisions the model separates legal targets from illegal ones almost perfectly, whatever the restriction, and the flips show that much of this rests on what a target looks like rather than on the restriction's own condition. The probe takes 1,500 real targeting decisions from the validation games, at most three per game. Each battlefield permanent on the board is an item, labelled legal or not by Forge's own list of legal targets. The model's answer is the affected gate at that permanent's slot. Items are grouped by the acting ability's `ValidTgts$` restriction and by the kind of condition it states. The script is `scripts/effect_knowledge_probes/target_restrictions.py`.
 
-| kind of restriction | items | legal | AUC, median over 14 checkpoints | range |
+| kind of restriction | items | legal | AUC, median over 17 checkpoints | range |
 |---|---:|---:|---:|---|
 | a card type only, such as `Creature` or `Any` | 10,859 | 2,410 | 0.999 | 0.997–0.999 |
-| who controls it, such as `Creature.YouCtrl` | 1,414 | 242 | 0.996 | 0.984–0.999 |
+| who controls it, such as `Creature.YouCtrl` | 1,414 | 242 | 0.998 | 0.984–0.999 |
 | other, such as `Permanent.nonLand` | 1,225 | 224 | 0.982 | 0.959–0.989 |
-| attacking, blocking or tapped | 451 | 36 | 0.988 | 0.977–0.995 |
-| a colour, such as `Creature.nonBlack` | 420 | 77 | 0.966 | 0.958–0.989 |
+| attacking, blocking or tapped | 451 | 36 | 0.992 | 0.977–0.996 |
+| a colour, such as `Creature.nonBlack` | 420 | 77 | 0.967 | 0.958–0.989 |
 | a number, such as `Creature.powerLE2` | 267 | 57 | 0.974 | 0.966–0.985 |
-| a keyword, such as `Creature.withFlying` | 60 | 11 | 0.977 | 0.935–0.985 |
+| a keyword, such as `Creature.withFlying` | 60 | 11 | 0.980 | 0.935–0.989 |
 
 *Data: `target_families.csv`, and per restriction `target_restrictions.csv`. A supertype family holds 79 items with 2 legal ones, too few to score.*
 
@@ -216,13 +216,13 @@ The verdict's absolute level is low on every checkpoint: the exact board, which 
 
 *Data: `colour_pips.csv` and `colour_pips_ranking.csv`.*
 
-| configuration | change from exact, median over 14 checkpoints | range | decisions below exact, median |
+| configuration | change from exact, median over 17 checkpoints | range | decisions below exact, median |
 |---|---:|---|---:|
-| surplus | +0.108 | +0.064 to +0.134 | 0% |
-| one short | −0.105 | −0.069 to −0.136 | 100% |
-| pip missing | −0.016 | −0.009 to −0.027 | 75% |
-| pip missing, +2 | +0.090 | +0.056 to +0.119 | 1% |
-| all off colour | −0.018 | −0.011 to −0.033 | 79% |
+| surplus | +0.106 | +0.064 to +0.134 | 0% |
+| one short | −0.108 | −0.069 to −0.136 | 100% |
+| pip missing | −0.018 | −0.009 to −0.027 | 75% |
+| pip missing, +2 | +0.087 | +0.056 to +0.119 | 1% |
+| all off colour | −0.021 | −0.011 to −0.033 | 79% |
 
 *Data: `colour_pips.csv`; per kind of cost, `colour_pips_by_cost.csv`.*
 
@@ -242,18 +242,18 @@ Draws, discards, mills and moves between hand, library, graveyard, exile and the
 
 The model knows whether a player draws, discards or mills, and which player, and predicts fewer cards than the player gets. Card counts are read at the player slots. The model's answer for a player is the affected gate times the field's predicted count.
 
-| cards a player | player slots | affected | AUC, median over 14 checkpoints | range | more predicted for the affected player, median | actual cards, mean | predicted cards, median |
+| cards a player | player slots | affected | AUC, median over 17 checkpoints | range | more predicted for the affected player, median | actual cards, mean | predicted cards, median |
 |---|---:|---:|---:|---|---:|---:|---:|
-| draws | 4,000 | 616 | 0.989 | 0.981–0.992 | 97.5% | 1.35 | 1.13 |
-| discards | 4,000 | 148 | 0.997 | 0.995–0.998 | 98.5% | 1.21 | 0.91 |
-| mills | 4,000 | 120 | 0.994 | 0.981–0.997 | 98% | 2.76 | 2.16 |
+| draws | 4,000 | 616 | 0.989 | 0.981–0.992 | 97% | 1.35 | 1.09 |
+| discards | 4,000 | 148 | 0.997 | 0.995–0.998 | 99% | 1.21 | 0.90 |
+| mills | 4,000 | 120 | 0.995 | 0.981–0.997 | 98% | 2.76 | 2.17 |
 
 *The fourth-from-last column covers the records where exactly one player was affected: 419 for draws, 124 for discards, 84 for mills. Data: `zone_counts.csv`.*
 
 - **Whether a player is affected, and which one, is known.** The model separates affected players from the rest at an AUC near 0.99, and predicts more cards for the affected player than for the other on at least nine records in ten, on every checkpoint.
-- **The count is predicted below the real one.** Every field's median prediction is short of the mean actual count, by a sixth for draws, a quarter for discards and a fifth for mills.
+- **The count is predicted below the real one.** Every field's median prediction is short of the mean actual count, by a fifth for draws, a quarter for discards and a fifth for mills.
 
-Where a moved card goes is right on most moves, and two pairs of destinations get confused. Card moves are read at the moved card's slot, grouped by the zone the card was in. Whether a card moves at all is ranked at an AUC of 0.991 to 0.995 for permanents, 0.992 to 0.997 for cards in a graveyard and 0.977 to 0.990 for cards in hand. For the cards that did move, the chart shows how often the model's most probable destination other than staying put is the right one. The head names an outcome by its event, so a card put into a graveyard from anywhere is `died` and a card put onto the battlefield is `blinked`; the chart names the destination zone.
+Where a moved card goes is right on most moves, and two pairs of destinations get confused. Card moves are read at the moved card's slot, grouped by the zone the card was in. Whether a card moves at all is ranked at an AUC of 0.991 to 0.995 for permanents, 0.992 to 0.998 for cards in a graveyard and 0.977 to 0.990 for cards in hand. For the cards that did move, the chart shows how often the model's most probable destination other than staying put is the right one. The head names an outcome by its event, so a card put into a graveyard from anywhere is `died` and a card put onto the battlefield is `blinked`; the chart names the destination zone.
 
 ![Share of moved cards whose most probable destination is right, by starting zone and destination, one dot per checkpoint](2026-09-18-effect-model-gen2/charts/zone-outcomes.png)
 
@@ -270,9 +270,9 @@ The predicted count rises with the number of cards the script states, but covers
 
 *Data: `zone_amounts.csv`.*
 
-- **Draws and mills rise far less than the rule.** From one card to six, the predicted draw rises from about 1.2 to 1.9 at the median, where the rule rises from 1 to 6. Mills about double, from 1.8 to 3.8.
-- **Discard barely moves**, from 0.8 to 1.2 at the median, and the earliest checkpoint does not move at all.
-- **The continuation runs follow the number more closely than the arms do.** At six cards milled the arms predict 1.9 to 3.5, and the continuation runs 3.6 to 4.8.
+- **Draws and mills rise far less than the rule.** From one card to six, the predicted draw rises from about 1.2 to 1.9 at the median, where the rule rises from 1 to 6. Mills about double, from 1.8 to 3.9.
+- **Discard barely moves**, from 0.8 to 1.1 at the median, and the earliest checkpoint does not move at all.
+- **The continuation runs follow the number more closely than the arms do.** At six cards milled the arms predict 1.9 to 3.5, and the continuation runs 3.4 to 4.9. Every continuation checkpoint but run A256's predicts more than any arm.
 
 This probe reads the head only, so it cannot say whether the trunk holds the number and the head fails to use it.
 
@@ -282,8 +282,8 @@ The predicted effect follows a player target only partly. The target flip takes 
 
 *Data: `zone_who.csv`, which also holds each player's predicted count before and after.*
 
-- **Most of the predicted cards move, and about a third stay.** Before the flip the targeted player holds nineteen twentieths of the predicted cards at the median. After it, the originally targeted player still holds about a third.
-- **How much moves varies widely between checkpoints.** The 64-wide continuation runs move nearly all of a discard to the new target, while arm `e128-lethality` leaves two thirds of a discard and a mill where the target was. No order by width or by stage of training holds across the three effects.
+- **Most of the predicted cards move, and a quarter to a third stay.** Before the flip the targeted player holds nineteen twentieths of the predicted cards at the median. After it, the originally targeted player still holds about a third of a draw and a quarter of a discard or a mill.
+- **How much moves varies widely between checkpoints.** The 64-wide continuation runs move nearly all of a discard to the new target, and the 256-wide continuation runs nearly all of a mill. Arm `e128-lethality` leaves two thirds of a discard and a mill where the target was. No order by width or by stage of training holds across the three effects.
 
 ## Design of the suite
 

@@ -95,3 +95,15 @@ A256 last,loses land,143,0.907,0.769
 A256 last,to the acting player,14,0.574,0.454
 A256 last,loses artifact,8,0.986,0.434
 A256 last,loses enchantment,7,0.948,0.779
+B256 best,loses creature,1380,0.979,0.969
+B256 best,to the opponent,183,0.952,0.105
+B256 best,loses land,143,0.905,0.852
+B256 best,to the acting player,14,0.504,0.236
+B256 best,loses artifact,8,0.971,0.437
+B256 best,loses enchantment,7,0.81,0.29
+B256 last,loses creature,1380,0.982,0.949
+B256 last,to the opponent,183,0.967,0.064
+B256 last,loses land,143,0.911,0.86
+B256 last,to the acting player,14,0.545,0.285
+B256 last,loses artifact,8,0.995,0.466
+B256 last,loses enchantment,7,0.925,0.461

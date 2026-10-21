@@ -47,3 +47,9 @@ A256 best,amount only (exact against one short),0.648
 A256 last,every configuration,0.612
 A256 last,"colours only (exact, surplus against pip missing, +2 and all off colour)",0.556
 A256 last,amount only (exact against one short),0.648
+B256 best,every configuration,0.612
+B256 best,"colours only (exact, surplus against pip missing, +2 and all off colour)",0.548
+B256 best,amount only (exact against one short),0.661
+B256 last,every configuration,0.622
+B256 last,"colours only (exact, surplus against pip missing, +2 and all off colour)",0.551
+B256 last,amount only (exact against one short),0.68

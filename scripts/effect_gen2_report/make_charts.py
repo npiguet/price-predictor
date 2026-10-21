@@ -154,7 +154,7 @@ def training_losses() -> None:
     metrics = ("card_disjoint", "game_disjoint", "train")
     fig, axes = plt.subplots(len(metrics), len(widths), figsize=(4.3 * len(widths), 9.4),
                              sharey="row", squeeze=False)
-    limits = {"card_disjoint": (3.4, 4.6), "game_disjoint": (2.75, 3.7), "train": (2.7, 4.7)}
+    limits = {"card_disjoint": (3.4, 4.6), "game_disjoint": (2.75, 3.7), "train": (2.6, 4.7)}
     for col, width in enumerate(widths):
         for row, metric in enumerate(metrics):
             ax = axes[row][col]
@@ -184,7 +184,7 @@ def training_losses() -> None:
             if row == len(metrics) - 1:
                 ax.set_xlabel("epoch")
     fig.suptitle("Validation and training losses by epoch; a star marks each run's lowest "
-                 "card-disjoint epoch, the one it keeps", y=1.0)
+                 "card-disjoint epoch", y=1.0)
     save(fig, "training-losses")
 
 
@@ -238,6 +238,18 @@ def merged_last_epochs(ck: pd.DataFrame) -> pd.DataFrame:
     return ck
 
 
+def merged_labels(names: list[str]) -> list[tuple[str, str]]:
+    """``(checkpoint, label)`` for ``names``, a run's last epoch dropped when it is its best."""
+    merged = merged_last_epochs(csv("checkpoints.csv").set_index("checkpoint")).index
+    out = []
+    for name in names:
+        if f"{name} = last" in merged:
+            out.append((name, f"{short(name)} = last"))
+        elif name in merged or name not in set(csv("checkpoints.csv").checkpoint):
+            out.append((name, short(name)))
+    return out
+
+
 #: Labels moved off the crowded corner of the game-disjoint panel, in points.
 PROBE_LABEL_OFFSETS = {
     ("game_disjoint", "A256 best = last"): (-62, 6),
@@ -245,6 +257,8 @@ PROBE_LABEL_OFFSETS = {
     ("game_disjoint", "B128 last"): (-50, -4),
     ("game_disjoint", "A64 best"): (8, -5),
     ("game_disjoint", "A64 last"): (6, 3),
+    ("game_disjoint", "B256 best"): (-34, 7),
+    ("card_disjoint", "B256 best"): (-30, 7),
 }
 
 
@@ -255,7 +269,8 @@ def probes_vs_loss() -> None:
     ck = ck.set_index("checkpoint")
     for stratum in ("card-disjoint", "game-disjoint"):
         ck[f"probe_{stratum}"] = m[m.stratum == stratum].groupby("checkpoint").score.mean()
-    ck = merged_last_epochs(ck)
+    # A checkpoint whose probes have not run yet has no point to draw.
+    ck = merged_last_epochs(ck).dropna(subset=["probe_game-disjoint"])
     fig, axes = plt.subplots(1, 2, figsize=(10, 4.2), sharey=True)
     for ax, (loss, label) in zip(axes, (("card_disjoint", "card-disjoint loss"),
                                         ("game_disjoint", "game-disjoint loss"))):
@@ -275,8 +290,8 @@ def probes_vs_loss() -> None:
                             arrowprops=dict(arrowstyle="->", color=GRAY, lw=1))
         ax.set_xlabel(f"{label} (lower is better)")
     axes[0].set_ylabel("mean of the model's own probe scores,\ngame-disjoint records")
-    fig.suptitle("Probes against each validation loss; arrows go from a run's kept epoch to "
-                 "its last (open squares: no lethality copies)", y=1.0)
+    fig.suptitle("Probes against each validation loss; arrows go from a run's lowest card-disjoint "
+                 "epoch to its last (open squares: no lethality copies)", y=1.0)
     save(fig, "probes-vs-loss")
 
 
@@ -312,15 +327,16 @@ def damage_grids() -> None:
     g = csv("damage_grids.csv")
     g = g[g.record_set == "probe set"]
     chosen = present(["e64", "e64-lethality", "e128-lethality", "e256-lethality", "A64 best",
-                      "A64 last", "B64 last", "A128 best", "B128 last", "A256 best", "A256 last",
+                      "A64 last", "B64 last", "A128 best", "B128 last", "A256 best", "B256 best",
                       "B256 last"], g.checkpoint)
+    chosen = merged_labels(chosen)
     cols = 4
     rows = int(np.ceil(len(chosen) / cols))
     fig, axes = plt.subplots(rows, cols, figsize=(3.0 * cols, 3.1 * rows), squeeze=False)
-    for i, (ax, name) in enumerate(zip(axes.flat, chosen)):
+    for i, (ax, (name, title)) in enumerate(zip(axes.flat, chosen)):
         d = g[g.checkpoint == name].pivot(index="damage", columns="toughness",
                                           values="predicted_death")
-        heatmap(ax, d.values, short(name), "toughness", "damage" if i % cols == 0 else "")
+        heatmap(ax, d.values, title, "toughness", "damage" if i % cols == 0 else "")
         rule_staircase(ax)
     for ax in list(axes.flat)[len(chosen):]:
         ax.axis("off")
@@ -425,7 +441,8 @@ def boundary_by_epoch() -> None:
     axes[0][0].set_ylabel("predicted death given affected,\n40 training records")
     axes[0][0].legend(fontsize=8, loc="lower left")
     fig.suptitle("Where the lethal boundary sits, epoch by epoch (dotted: the arm; thin: the A run;"
-                 " thick: the B run); dashed lines mark the epochs each run keeps", y=1.02)
+                 " thick: the B run); dashed lines mark each run's lowest card-disjoint epoch",
+                 y=1.02)
     save(fig, "boundary-by-epoch")
 
 
@@ -559,7 +576,7 @@ def combat_keywords() -> None:
 
 def gate2_heatmap() -> None:
     g = csv("gate2.csv")
-    order = present(CHECKPOINTS, g.checkpoint)
+    order, labels = zip(*merged_labels(present(CHECKPOINTS, g.checkpoint)))
     kws = ["lifelink", "indestructible", "trample", "first_strike", "deathtouch", "infect",
            "double_strike"]
     g = g[~((g.checkpoint == "e64 (earlier inputs)")
@@ -573,12 +590,12 @@ def gate2_heatmap() -> None:
         for j in range(len(order)):
             if not np.isnan(grid[i, j]):
                 ax.text(j, i, f"{grid[i, j]:.0f}", ha="center", va="center", fontsize=7.5)
-    labels = []
+    rows = []
     for kw in kws:
         half = 196 * np.sqrt(0.8 * 0.2 / n[kw])
-        labels.append(f"{kw.replace('_', ' ')}  (n={n[kw]}, ±{half:.0f})")
-    ax.set_yticks(range(len(kws)), labels)
-    ax.set_xticks(range(len(order)), [short(o) for o in order], rotation=35, ha="right")
+        rows.append(f"{kw.replace('_', ' ')}  (n={n[kw]}, ±{half:.0f})")
+    ax.set_yticks(range(len(kws)), rows)
+    ax.set_xticks(range(len(order)), labels, rotation=35, ha="right")
     ax.grid(False)
     fig.colorbar(im, ax=ax, label="direction agreement %", shrink=0.8)
     ax.set_title("Gate 2: how often a keyword moves the prediction the way it moves the real "
@@ -718,7 +735,7 @@ def width_summary() -> None:
                  or f"{n} = last" in merged_last_epochs(ck).index]]
     fig, axes = plt.subplots(1, 4, figsize=(13, 3.3))
     metrics = [(ck.card_disjoint, "card-disjoint loss"), (ck.game_disjoint, "game-disjoint loss"),
-               (probe.loc[ck.index, "game-disjoint"], "probe mean, game-disjoint"),
+               (probe["game-disjoint"].reindex(ck.index).dropna(), "probe mean, game-disjoint"),
                (g3.loc[g3.index.intersection(ck.index), "participation_ratio"],
                 "participation ratio of e")]
     for ax, (series, title) in zip(axes, metrics):
@@ -780,7 +797,7 @@ EVASION_COLUMNS = ["none", "flying", "reach", "horsemanship", "shadow", "artifac
 def evasion_grid() -> None:
     """Predicted block legality per attacker keyword and blocker trait, rule cells outlined."""
     g = csv("evasion_grid.csv")
-    chosen = present(["e64-lethality", "B64 last", "B128 last"], g.checkpoint)
+    chosen = present(["e64-lethality", "B64 last", "B128 last", "B256 last"], g.checkpoint)
     fig, axes = plt.subplots(1, len(chosen), figsize=(5.4 * len(chosen), 5.4), squeeze=False)
     for ax, name in zip(axes[0], chosen):
         d = g[g.checkpoint == name]

@@ -159,3 +159,23 @@ A256 last,unblockable,,0.47,nan
 A256 last,protection-blocker,,0.42,nan
 A256 last,protection-other,0.44,0.28,0.666
 A256 last,all rows,,,0.628
+B256 best,none,0.54,0.44,0.612
+B256 best,flying,0.36,0.29,0.594
+B256 best,horsemanship,0.73,0.04,0.989
+B256 best,fear,0.32,0.18,0.745
+B256 best,intimidate,0.19,0.2,0.559
+B256 best,shadow,0.45,0.55,0.388
+B256 best,unblockable,,0.53,nan
+B256 best,protection-blocker,,0.33,nan
+B256 best,protection-other,0.35,0.18,0.666
+B256 best,all rows,,,0.616
+B256 last,none,0.62,0.5,0.63
+B256 last,flying,0.43,0.33,0.615
+B256 last,horsemanship,0.85,0.04,0.99
+B256 last,fear,0.39,0.21,0.739
+B256 last,intimidate,0.26,0.22,0.613
+B256 last,shadow,0.5,0.62,0.367
+B256 last,unblockable,,0.6,nan
+B256 last,protection-blocker,,0.38,nan
+B256 last,protection-other,0.4,0.21,0.657
+B256 last,all rows,,,0.621

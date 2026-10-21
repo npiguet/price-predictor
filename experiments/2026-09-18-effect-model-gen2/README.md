@@ -16,7 +16,7 @@ python scripts/effect_gen2_report/make_charts.py  # charts/ from data/ alone
 
 ## Names
 
-A **run** is one training run: an arm (`e64`, `e128`, `e64-lethality`, ...) or a continuation (A64, B64, A128, B128, ...). A **checkpoint** is the run's kept epoch, the one with the lowest card-disjoint loss, named after the run (`e64-lethality`, `A64 best`). A continuation run's last epoch is also probed and is named `A64 last`. `e64 (earlier inputs)` is arm `e64`'s first run, before the input corrections. `gen-1` is the gen-1 checkpoint.
+A **run** is one training run: an arm (`e64`, `e128`, `e64-lethality`, ...) or a continuation (A64, B64, A128, B128, ...). A **checkpoint** is the run's kept epoch, the one with the lowest card-disjoint loss, named after the run (`e64-lethality`, `A64 best`). A continuation run's last epoch is also probed and is named `A64 last`. Run B256 never went below the checkpoint it started from and keeps run A256's epoch 53; `B256 best` is its own lowest epoch, 55, probed in the run directory's `-best` copy. `e64 (earlier inputs)` is arm `e64`'s first run, before the input corrections. `gen-1` is the gen-1 checkpoint.
 
 ## Data
 
@@ -25,7 +25,7 @@ A **run** is one training run: an arm (`e64`, `e128`, `e64-lethality`, ...) or a
 | `runs.csv` | run: width of `e`, lethality copies, learning-rate scale, the run it continues, first and last epoch | `train.log` |
 | `epochs.csv` | run and epoch: training, card-disjoint and game-disjoint loss, gate F1, zone accuracy, deviance | the epoch summary lines of `train.log` |
 | `fields_by_epoch.csv` | run, epoch and output field: card-disjoint loss and explained deviance (% of the constant prediction's loss removed) | the `fields:` line after each epoch summary |
-| `checkpoints.csv` | probed checkpoint: its run, role (best or last), epoch and validation losses | `train.log`, and the `-last` directories |
+| `checkpoints.csv` | probed checkpoint: its run, role (best or last), epoch and validation losses | `train.log`, and the `-last` and `-best` directories |
 | `gate2.csv` | checkpoint and keyword: qualifying records, direction agreement, verdict | `evaluate.log` |
 | `gate3.csv` | checkpoint: mean pairwise cosine, top component share, participation ratio | `evaluate.log`, the embedding probes' `pca_full_variance.md`; gen-1 and the noise pilots transcribed |
 | `probe_ladder.csv` | checkpoint, target, stratum, rung and probe: score (AUC, or R² for amounts) | the knowledge probes' `scorecard.json`; for gen-2, rung 3 of `damage_taken` from `ladder-check-amount-alone.txt` beside each checkpoint, which reads the predicted amount without the affected gate |

@@ -95,3 +95,15 @@ A256 last,one short,300,0,0.192,0.098,1
 A256 last,pip missing,300,0,0.268,0.021,0.81
 A256 last,"pip missing, +2",300,0,0.355,-0.065,0.1
 A256 last,all off colour,300,0,0.264,0.026,0.84
+B256 best,exact,300,1,0.23,0,0
+B256 best,surplus,300,1,0.333,-0.103,0
+B256 best,one short,300,0,0.119,0.111,1
+B256 best,pip missing,300,0,0.212,0.018,0.78
+B256 best,"pip missing, +2",300,0,0.316,-0.087,0.03
+B256 best,all off colour,300,0,0.209,0.021,0.82
+B256 last,exact,300,1,0.23,0,0
+B256 last,surplus,300,1,0.356,-0.126,0
+B256 last,one short,300,0,0.1,0.13,1
+B256 last,pip missing,300,0,0.207,0.023,0.81
+B256 last,"pip missing, +2",300,0,0.333,-0.103,0.02
+B256 last,all off colour,300,0,0.204,0.027,0.84
