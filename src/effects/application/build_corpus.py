@@ -49,7 +49,7 @@ from effects.domain.record_quality import (
     quality_defect,
     unjoinable_key_defect,
 )
-from effects.domain.records import EffectRecord, RecordKind
+from effects.domain.records import EffectRecord, RecordKind, acting_keys
 from effects.domain.token_key_remap import RemapCounts, TokenKeyRemapper, remap_record_dict
 
 if TYPE_CHECKING:
@@ -85,9 +85,10 @@ def ability_key(record: EffectRecord) -> str | None:
     key alone would group records the trainer separates whenever the first key
     names a script with no sidecar.
     """
-    if not record.ability:
+    keys = acting_keys(record)
+    if not keys:
         return None
-    return _KEY_SEPARATOR.join(_render_key(key) for key in record.ability)
+    return _KEY_SEPARATOR.join(_render_key(key) for key in keys)
 
 
 def _render_key(key: ProvenanceKey) -> str:

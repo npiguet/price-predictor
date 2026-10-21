@@ -175,3 +175,32 @@ def test_an_unconverted_script_reads_as_no_text(tmp_path):
     with pytest.raises(UnconvertedScript):
         sidecars.get(key.script_file)
     assert text_for_key(key, sidecars, "script") is None
+
+
+def test_a_decisions_acting_text_is_its_candidates():
+    """A ``decision`` record names no acting line of its own; ``[ACT]`` reads
+    its candidate's, and rarity has to key on the same text or the whole
+    decision class weighs as if it had none."""
+    from effects.application.train_effect_model import ability_text_of
+    from effects.domain.records import (
+        Candidate,
+        PlayabilityDecisionPayload,
+        PlayabilitySubkind,
+    )
+
+    key = ProvenanceKey("cardsfolder/s/shock.txt", 0, "spell", 0)
+    record = _record(
+        "g1", kind=RecordKind.PLAYABILITY, moment=None,
+        subkind=PlayabilitySubkind.DECISION,
+        payload=PlayabilityDecisionPayload(candidates=(Candidate(
+            ability=(key,), can_play=True, affordable=True, has_legal_target=True,
+        ),)),
+    )
+    sidecars = FakeSidecarCache(
+        lines={key: SidecarLine(
+            line_index=0, line_kind="spell", provenance=(key,),
+            script_text="DealDamage",
+        )},
+    )
+
+    assert ability_text_of(record, sidecars, "script") == "DealDamage"

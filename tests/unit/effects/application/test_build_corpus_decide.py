@@ -52,13 +52,13 @@ def _provenance_key(label: str) -> ProvenanceKey:
 
 def _rendered_key(label: str) -> str:
     """``label``, rendered the way a real survey key would be."""
-    return ability_key(SimpleNamespace(ability=(_provenance_key(label),)))
+    return ability_key(SimpleNamespace(payload=None, ability=(_provenance_key(label),)))
 
 
 REPRINT_A = _rendered_key("reprint-a")
 REPRINT_B = _rendered_key("reprint-b")
 UNKNOWN_KEY = _rendered_key("unknown-key")
-MISMATCH_KEY = ability_key(SimpleNamespace(ability=(
+MISMATCH_KEY = ability_key(SimpleNamespace(payload=None, ability=(
     ProvenanceKey("cardsfolder/x/reprint_a.txt", 0, "trigger", 0),
 )))
 HELD_OUT_KEY = _rendered_key("held-out-text")

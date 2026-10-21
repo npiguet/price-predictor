@@ -41,7 +41,7 @@ from effects.domain.effect_head_input import (
     continuous_masked_keywords,
 )
 from effects.domain.effect_model import collate_surfaces, scatter_e_rows
-from effects.domain.records import PlayabilityDecisionPayload
+from effects.domain.records import PlayabilityDecisionPayload, acting_keys
 from effects.infrastructure.sidecar_io import UnconfiguredTree
 
 #: Rows in the ``identity`` baseline's free-embedding table. Ample for the
@@ -443,7 +443,7 @@ class SurfaceBatcher:
             return text
 
         for record in records:
-            for key in self.acting_keys(record):
+            for key in acting_keys(record):
                 if note(key) is not None:
                     break
             for entity in record.state.entities:
@@ -452,19 +452,6 @@ class SurfaceBatcher:
                         for mode in self.options_for(key):
                             note(mode)
         return texts
-
-    @staticmethod
-    def acting_keys(record) -> tuple:
-        """The keys ``[ACT]`` reads: the acting line, or a decision's candidate.
-
-        A ``decision`` record names no acting line of its own; its ``[ACT]``
-        carries the candidate's ``e`` (FR-060a), and Java writes one candidate
-        per record, so it is the payload's first.
-        """
-        payload = record.payload
-        if isinstance(payload, PlayabilityDecisionPayload):
-            return payload.candidates[0].ability if payload.candidates else ()
-        return record.ability or ()
 
     def options_for(self, key) -> tuple:
         """The keys of the charm-mode lines that follow ``key``'s line (FR-063a).

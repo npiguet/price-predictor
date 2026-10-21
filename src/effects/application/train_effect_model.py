@@ -44,7 +44,13 @@ from effects.domain.effect_model import (
     CLASS_TRIGGER,
     SAMPLING_CLASSES,
 )
-from effects.domain.records import EffectRecord, Moment, PlayabilitySubkind, RecordKind
+from effects.domain.records import (
+    EffectRecord,
+    Moment,
+    PlayabilitySubkind,
+    RecordKind,
+    acting_keys,
+)
 
 if TYPE_CHECKING:
     from effects.infrastructure.sidecar_io import SidecarCache
@@ -1096,9 +1102,7 @@ def ability_text_of(
     ``combat`` and the ``attackers``/``blockers`` subkinds have none, which is
     what makes them sample uniformly rather than by rarity.
     """
-    if not record.ability:
-        return None
-    for key in record.ability:
+    for key in acting_keys(record):
         text = text_for_key(key, sidecars, surface)
         if text is not None:
             return text

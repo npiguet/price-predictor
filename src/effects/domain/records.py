@@ -620,3 +620,18 @@ def events_of(record: EffectRecord) -> tuple[Event, ...]:
     if isinstance(payload, TriggerPayload):
         return (payload.event,) if payload.fired else ()
     return ()
+
+
+def acting_keys(record: EffectRecord) -> tuple[ProvenanceKey, ...]:
+    """The keys ``[ACT]`` reads: the acting line, or a decision's candidate.
+
+    A ``decision`` record names no acting line of its own; its ``[ACT]``
+    carries the candidate's ``e`` (FR-060a), and Java writes one candidate per
+    record, so it is the payload's first. Rarity, the per-text caps and gate 1's
+    stratum all key on this, because a text keyed one way there and read
+    another way at ``[ACT]`` weighs the whole decision class as textless.
+    """
+    payload = record.payload
+    if isinstance(payload, PlayabilityDecisionPayload):
+        return payload.candidates[0].ability if payload.candidates else ()
+    return record.ability or ()

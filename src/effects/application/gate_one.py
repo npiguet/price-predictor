@@ -41,7 +41,7 @@ from effects.domain.effect_model import (
 )
 from effects.domain.effect_targets import derive_targets
 from effects.domain.keyword_names import normalize_keyword
-from effects.domain.records import RecordKind
+from effects.domain.records import RecordKind, acting_keys
 from effects.domain.rule_families import rule_family
 
 logger = logging.getLogger(__name__)
@@ -71,7 +71,7 @@ class GateOneMetrics:
 
 def acting_text(record, batcher: SurfaceBatcher) -> str | None:
     """The text of the line that acted, or None where nothing did."""
-    for key in record.ability or ():
+    for key in acting_keys(record):
         text = batcher.text_of(key)
         if text is not None:
             return text
@@ -257,7 +257,7 @@ def record_keywords(
     both channels the resolver reads.
     """
     found: set[str] = set()
-    for key in record.ability or ():
+    for key in acting_keys(record):
         try:
             line = batcher.sidecars.line_for(key)
         except KeyError:
