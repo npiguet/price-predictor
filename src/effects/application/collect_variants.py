@@ -32,6 +32,12 @@ import random
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from effects.application.collect_coverage import (
+    build_coverage_decks,
+    collector_supervisor,
+    load_exclusions,
+    play_decks,
+)
 from effects.domain.collection_caps import CollectionCaps
 from effects.domain.coverage import DeckCandidate
 from effects.domain.script_variants import (
@@ -254,14 +260,6 @@ def generate_variants(
     return generated
 
 
-def held_out_cards(
-    split_from: Path | None, exclude_cards: Path | None = None,
-) -> frozenset[str]:
-    from effects.application.collect_coverage import load_exclusions
-
-    return load_exclusions(split_from=split_from, exclude_cards=exclude_cards)
-
-
 def _brace_wrap_mana_cost(cost: str) -> str:
     """Forge's raw ``ManaCost:`` shards, brace-delimited like the converted
     corpus (e.g. ``"2 R R"`` -> ``"{2}{R}{R}"``).
@@ -299,17 +297,30 @@ def _deck_candidate(variant: GeneratedVariant) -> DeckCandidate:
 
 def run(config: CollectVariantsConfig) -> int:
     """Generate variants, then play them through the records-only worker."""
-    from effects.application.collect_coverage import build_coverage_decks
-    from effects.infrastructure.collector_connector import CollectorSupervisor
-    from effects.infrastructure.deck_file import COVERAGE_SET_CODE, write_deck_file
-    from effects.infrastructure.record_io import count_records
-
     if not Path(config.forge_cards_path).is_dir():
         logger.error(
             "No Forge card scripts at %s. This command reads the *source* "
             "scripts, not the converted ones.", config.forge_cards_path,
         )
         return 1
+    budget = _size_budget(config)
+    if budget <= 0:
+        return 1
+    variants = _generate(config, budget)
+    if not variants:
+        return 1
+    code = _write_sidecars(Path(config.variant_scripts))
+    if code != 0:
+        return code
+    variants = _keep_loadable(variants, Path(config.variant_scripts))
+    if not variants:
+        return 1
+    return _play_and_check_growth(config, variants, budget)
+
+
+def _size_budget(config: CollectVariantsConfig) -> int:
+    """How many variant scripts this run may generate; says why when none."""
+    from effects.infrastructure.record_io import count_records
 
     # A directory listing, not a corpus read: it bounds how many variants can
     # exist, which is what says how far the record count has to go.
@@ -327,9 +338,13 @@ def run(config: CollectVariantsConfig) -> int:
             "the corpus when variants are written to a directory of their own.",
             source, existing, config.variant_volume, budget,
         )
-        return 1
+    return budget
 
-    held_out = held_out_cards(config.split_from, config.exclude_cards)
+
+def _generate(config: CollectVariantsConfig, budget: int) -> list[GeneratedVariant]:
+    held_out = load_exclusions(
+        split_from=config.split_from, exclude_cards=config.exclude_cards,
+    )
     variants = generate_variants(
         config.forge_cards_path, config.variant_scripts,
         held_out=held_out, limit=budget, seed=config.seed,
@@ -341,23 +356,35 @@ def run(config: CollectVariantsConfig) -> int:
     )
     if not variants:
         logger.error("No script had a perturbable parameter")
-        return 1
+    return variants
 
-    # A variant without a sidecar produces records nothing can join, and the
-    # join fails loudly, so this runs before the first game rather than after.
-    code = VariantSidecarConnector().run(Path(config.variant_scripts))
+
+def _write_sidecars(variant_scripts: Path) -> int:
+    """Write every variant's sidecar before the first game rather than after.
+
+    A variant without a sidecar produces records nothing can join, and the
+    join fails loudly.
+    """
+    code = VariantSidecarConnector().run(variant_scripts)
     if code != 0:
         logger.error(
             "VariantSidecarMain exited %d; variant records would have no "
             "sidecar to join against", code,
         )
-        return code
+    return code
 
-    # Forge decides which perturbations it will load, and it has just told us:
-    # the sidecar pass staged the variants and wrote the list. Decking a name
-    # Forge rejected kills the worker that draws it, because a decks-only round
-    # refuses the deck rather than playing basics.
-    deckable = loadable_variants(variants, Path(config.variant_scripts))
+
+def _keep_loadable(
+    variants: list[GeneratedVariant], variant_scripts: Path,
+) -> list[GeneratedVariant]:
+    """The variants Forge loaded, saying how many it rejected.
+
+    Forge decides which perturbations it will load, and the sidecar pass has
+    just told us: it staged the variants and wrote the list. Decking a name
+    Forge rejected kills the worker that draws it, because a decks-only round
+    refuses the deck rather than playing basics.
+    """
+    deckable = loadable_variants(variants, variant_scripts)
     rejected = len(variants) - len(deckable)
     if rejected:
         logger.warning(
@@ -372,37 +399,40 @@ def run(config: CollectVariantsConfig) -> int:
             "Forge loaded none of the %d perturbed scripts, so there is "
             "nothing to deck.", len(variants),
         )
-        return 1
-    variants = deckable
+    return deckable
 
-    supervisor = CollectorSupervisor(
-        worker_count=config.workers, effect_records=config.effect_records,
-        caps=config.caps, variant_scripts=Path(config.variant_scripts),
-    )
+
+def _play_and_check_growth(
+    config: CollectVariantsConfig, variants: list[GeneratedVariant], budget: int,
+) -> int:
+    """Play one round of variant decks and fail it when it collected nothing."""
+    from effects.infrastructure.record_io import count_records
+
     # Every variant is weighted equally: coverage's shortfall weighting has
     # nothing to weight against here, since a variant round exists to get
     # each freshly-generated script into a game at all, not to balance
     # against records the corpus already has for it.
     decks_file = Path(config.effect_records) / "variant-decks.txt"
-    candidates = {variant.name: _deck_candidate(variant) for variant in variants}
     decks = build_coverage_decks(
-        {variant.name: 1.0 for variant in variants}, candidates, config.decks_per_round,
+        {variant.name: 1.0 for variant in variants},
+        {variant.name: _deck_candidate(variant) for variant in variants},
+        config.decks_per_round,
         rng=random.Random(config.seed),
     )
-    write_deck_file(decks, decks_file, label="variant", set_code=COVERAGE_SET_CODE)
-    # The destination's own count, which is what the growth check compares
-    # against. `existing` sized the volume cap and may have come from another
-    # directory entirely.
-    before = count_records(config.effect_records)
-    try:
-        supervisor.play_round(decks_file, matches=config.decks_per_round)
-    finally:
-        # Closes the worker log files and shuts the pool down (final-fix-3.md
-        # item 5) -- see collect_coverage.run's identical finally for why.
-        supervisor.stop()
+    with collector_supervisor(
+        workers=config.workers, effect_records=config.effect_records,
+        caps=config.caps, variant_scripts=Path(config.variant_scripts),
+    ) as supervisor:
+        # The destination's own count, which is what the growth check compares
+        # against. The budget's count may have come from another directory.
+        before = count_records(config.effect_records)
+        play_decks(
+            supervisor, decks, decks_file,
+            label="variant", matches=config.decks_per_round,
+        )
 
-    # Counted again rather than assumed. The pre-flight count above exists
-    # only to size the budget, so without this the command returns 0 with no
+    # Counted again rather than assumed. The pre-flight count exists only to
+    # size the budget, so without this the command returns 0 with no
     # evidence that a single variant record was ever written -- and the
     # whole-run failure is a real one: if the staged scripts do not reach
     # Forge's card database under the names the decks file spells, every deck
