@@ -73,12 +73,58 @@ def test_a_dropped_key_gets_no_ability_token():
     assert [slot.e for slot in surface.of_kind(SlotKind.ABILITY)] == [0]
 
 
+def _prepared(variant: str):
+    """One record prepared under ``variant``'s masks, through the real pipeline."""
+    from effects.domain.ability_tokenizer import AbilityTokenizer
+    from effects.domain.effect_head_input import feature_widths
+    from effects.domain.variants import variant_masks
+
+    record = _record()
+    batcher = SurfaceBatcher(
+        tokenizer=AbilityTokenizer({"[PAD]": 0, "[UNK]": 1, "[CLS]": 2, "[MASK]": 3}),
+        sidecars=_Sidecars(), masks=variant_masks(variant), surface="script",
+        e_dim=4, widths=feature_widths([record]), device=torch.device("cpu"),
+    )
+    prepared = batcher.prepare([record])
+    return prepared.surfaces[0], prepared.inputs
+
+
+def _columns(surface, kind):
+    return [index for index, slot in enumerate(surface.slots) if slot.kind is kind]
+
+
 def test_the_state_only_variant_keeps_the_zero_token_for_a_real_line():
-    rows = {"creatures you control get +1/+1": 0, "deals 3 damage to any target": 1}
-    surface = _batcher(zero_e=True).surface_for(_record(), rows)
-    abilities = surface.of_kind(SlotKind.ABILITY)
-    assert len(abilities) == 1
-    assert abilities[0].e == (0.0,) * 4
+    surface, inputs = _prepared("state-only")
+    (ability,) = _columns(surface, SlotKind.ABILITY)
+    assert inputs["e_rows"][0, ability] == -1
+    assert torch.all(inputs["e_vectors"][0, ability] == 0.0)
+
+
+def test_the_state_only_variant_zeroes_the_acting_lines_e():
+    surface, inputs = _prepared("state-only")
+    (act,) = _columns(surface, SlotKind.ACT)
+    assert inputs["e_rows"][0, act] == -1
+
+
+def test_the_no_state_variant_keeps_the_acting_lines_e():
+    """FR-094: every input zeroed except [ACT] and the record-kind flag."""
+    surface, inputs = _prepared("no-state")
+    (act,) = _columns(surface, SlotKind.ACT)
+    (ability,) = _columns(surface, SlotKind.ABILITY)
+    assert inputs["e_rows"][0, act] >= 0
+    assert inputs["e_rows"][0, ability] == -1
+
+
+def test_the_no_state_variant_keeps_only_the_record_kind_flags_of_global():
+    from effects.domain.effect_head_input import KIND_FLAG_WIDTH
+
+    full = _prepared("full")[1]["slot_features"][SlotKind.GLOBAL][0, 0]
+    _surface, inputs = _prepared("no-state")
+    blank = inputs["slot_features"][SlotKind.GLOBAL][0, 0]
+    assert torch.all(blank[:-KIND_FLAG_WIDTH] == 0.0)
+    assert torch.equal(blank[-KIND_FLAG_WIDTH:], full[-KIND_FLAG_WIDTH:])
+    assert full[:-KIND_FLAG_WIDTH].abs().sum() > 0
+    assert torch.all(inputs["slot_features"][SlotKind.CARD] == 0.0)
 
 
 class _Counting(_Sidecars):

@@ -34,7 +34,9 @@ from effects.domain.ability_encoder import (
 from effects.domain.ability_tokenizer import AbilityTokenizer
 from effects.domain.damage_step_keywords import keyword_of_line
 from effects.domain.effect_head_input import (
+    ACT_SLOT,
     INPUT_LAYOUT,
+    KIND_FLAG_WIDTH,
     SlotKind,
     build_effect_head_input,
     continuous_masked_keywords,
@@ -656,14 +658,12 @@ class SurfaceBatcher:
         """
 
         def e_for(key):
-            if self.masks.zero_e:
-                return None
             text = self.text_of(key)
             return None if text is None else rows.get(text)
 
         def has_line(key) -> bool:
-            # Asked before the mask, so a masked line keeps its zero token
-            # and a dropped key gets none: the two are different facts.
+            # A dropped key gets no token; a line a variant masks keeps its
+            # token, zeroed in ``prepare``, so the geometry is the model's.
             return self.text_of(key) is not None
 
         return build_effect_head_input(
@@ -716,22 +716,38 @@ class SurfaceBatcher:
             self.surface_for(record, rows, strip)
             for record, strip in zip(records, strips)
         ]
-        inputs = collate_surfaces(
+        inputs = self._masked(collate_surfaces(
             surfaces, e_dim=self.e_dim, widths=self.widths,
-        )
-        if self.masks.zero_state:
-            # The average-effect control: no board at all. Zeroed here rather
-            # than left out of the surface so the slots, and therefore the
-            # per-entity targets, keep their shape.
-            for kind in (SlotKind.PLAYER, SlotKind.CARD):
-                inputs["slot_features"][kind] = torch.zeros_like(
-                    inputs["slot_features"][kind]
-                )
+        ))
         return PreparedBatch(
             texts=texts, rows=rows, prepared=prepared,
             encoder_inputs=encoder_inputs, stand_in=stand_in,
             surfaces=surfaces, inputs=inputs,
         )
+
+    def _masked(self, inputs: dict) -> dict:
+        """The collated inputs with the variant's masks applied (FR-094).
+
+        Zeroed here rather than left out of the surface, so the slots, and
+        therefore the per-entity targets, keep their shape. ``no-state`` is
+        the average-effect control: no board, no global state but the record's
+        kind flags, and no ability on the board — only ``[ACT]`` and its ``e``.
+        """
+        masks = self.masks
+        features = inputs["slot_features"]
+        if masks.zero_state:
+            for kind in (SlotKind.PLAYER, SlotKind.CARD):
+                features[kind] = torch.zeros_like(features[kind])
+            features[SlotKind.GLOBAL][..., :-KIND_FLAG_WIDTH] = 0.0
+        if masks.zero_act_e or masks.zero_context_e:
+            zeroed = torch.full(
+                (inputs["e_rows"].shape[1],), masks.zero_context_e, dtype=torch.bool,
+            )
+            if zeroed.numel() > ACT_SLOT:
+                zeroed[ACT_SLOT] = masks.zero_act_e
+            inputs["e_rows"][:, zeroed] = -1
+            inputs["e_vectors"][:, zeroed] = 0.0
+        return inputs
 
     def materialize(self, prepared: PreparedBatch, encoder: AbilityEncoder):
         """``build``'s device half: ``(model_kwargs, surfaces)``.

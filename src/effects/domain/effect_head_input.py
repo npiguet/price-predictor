@@ -319,6 +319,15 @@ def global_features(
     return tuple(out)
 
 
+#: Width of the record-kind flags that end every ``[GLOBAL]`` slot: the kind,
+#: moment and subkind one-hots, each with its trailing "other/absent" slot.
+#: The ``no-state`` baseline keeps exactly these (FR-094).
+KIND_FLAG_WIDTH = len(_RECORD_KINDS) + len(_MOMENTS) + len(_PLAYABILITY_SUBKINDS) + 3
+
+#: The ``[ACT]`` slot's index in every surface: ``[GLOBAL]`` is first, then it.
+ACT_SLOT = 1
+
+
 def act_features(record: EffectRecord) -> tuple[float, ...]:
     """Announced values and the resolution outcome flag.
 

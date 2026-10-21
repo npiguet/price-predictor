@@ -19,9 +19,12 @@ class VariantMasks:
     in the inputs rather than in the code (FR-094).
     """
 
-    #: Zero the acting line's and every entity ability token's ``e``.
-    zero_e: bool = False
-    #: Zero the ``[PLAYER]`` and ``[CARD]`` features and their ability tokens.
+    #: Zero the ``[ACT]`` slot's ``e``: the acting line, or a decision's candidate.
+    zero_act_e: bool = False
+    #: Zero every entity ability token's ``e``: the board's own abilities.
+    zero_context_e: bool = False
+    #: Zero the ``[PLAYER]`` and ``[CARD]`` features, and every ``[GLOBAL]``
+    #: feature but the record-kind flags.
     zero_state: bool = False
     #: Replace the encoder with a free per-text embedding table.
     identity_embedding: bool = False
@@ -58,12 +61,13 @@ class Variant(StrEnum):
 
 #: ``no-state`` zeroes the entity ability ``e`` tokens as well as the state
 #: features. Leaving them live would let it read the board through the abilities
-#: on it, and it would no longer be the average-effect control.
+#: on it, and it would no longer be the average-effect control. It keeps the
+#: acting line's ``e``: the average effect is the average *of that ability*.
 _MASKS: dict[Variant, VariantMasks] = {
     Variant.FULL: VariantMasks(),
     Variant.IDENTITY: VariantMasks(identity_embedding=True),
-    Variant.STATE_ONLY: VariantMasks(zero_e=True),
-    Variant.NO_STATE: VariantMasks(zero_state=True, zero_e=True),
+    Variant.STATE_ONLY: VariantMasks(zero_act_e=True, zero_context_e=True),
+    Variant.NO_STATE: VariantMasks(zero_state=True, zero_context_e=True),
     Variant.TAXONOMY: VariantMasks(taxonomy_embedding=True),
 }
 
