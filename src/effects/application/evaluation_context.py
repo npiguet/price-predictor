@@ -61,15 +61,22 @@ class EvaluationContext:
         """Another checkpoint over ``records``, loaded now and not kept."""
         return self._load(checkpoint).runnable(records)
 
-    def _load(self, checkpoint) -> LoadedModel:
-        from effects.infrastructure.model_runner import build_sidecars, load_model
-
+    @property
+    def sidecars(self) -> SidecarCache:
+        """The run's one sidecar cache, which every loaded checkpoint shares."""
         if self._sidecars is None:
+            from effects.infrastructure.model_runner import build_sidecars
+
             self._sidecars = build_sidecars(self.config)
+        return self._sidecars
+
+    def _load(self, checkpoint) -> LoadedModel:
+        from effects.infrastructure.model_runner import load_model
+
         return load_model(
             self.config, checkpoint,
             vocab_path=self.vocab_path, keyword_path=self.keyword_path,
-            sidecars=self._sidecars,
+            sidecars=self.sidecars,
         )
 
 

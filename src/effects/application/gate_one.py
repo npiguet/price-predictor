@@ -26,7 +26,7 @@ import math
 from collections.abc import Iterator
 from dataclasses import dataclass
 from functools import partial
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Protocol
 
 import numpy as np
 import torch
@@ -85,46 +85,80 @@ class GateOneMetrics:
     mean_poisson_deviance: float
 
 
-def acting_text(record, batcher: SurfaceBatcher) -> str | None:
+class TextsOf(Protocol):
+    """Anything that names a key's text on the checkpoint's surface: a
+    ``SurfaceBatcher`` or the ``KeyResolver`` it reads through."""
+
+    def text_of(self, key) -> str | None: ...
+
+
+def acting_text(record, texts: TextsOf) -> str | None:
     """The text of the line that acted, or None where nothing did."""
-    return _text_of_keys(acting_keys(record), batcher)
+    return _text_of_keys(acting_keys(record), texts)
 
 
-def _text_of_keys(keys, batcher: SurfaceBatcher) -> str | None:
+def _text_of_keys(keys, texts: TextsOf) -> str | None:
     for key in keys:
-        text = batcher.text_of(key)
+        text = texts.text_of(key)
         if text is not None:
             return text
     return None
 
 
-def training_texts(acting, batcher: SurfaceBatcher) -> set[str]:
-    """Every acting-line text the training games contain.
+def training_texts(acting, texts: TextsOf) -> set[str]:
+    """Every acting-line text the training records contain.
 
     ``acting`` is the training records' distinct ``acting_keys`` tuples rather
-    than the records: the training stratum is the whole raw corpus, and its
-    distinct acting lines are what fits in memory.
+    than the records: the distinct acting lines are what gate 1 needs and what
+    fits in memory.
     """
-    texts = {_text_of_keys(keys, batcher) for keys in acting}
-    texts.discard(None)
-    return texts
+    found = {_text_of_keys(keys, texts) for keys in acting}
+    found.discard(None)
+    return found
 
 
-def unique_text_records(records, batcher: SurfaceBatcher, *, seen) -> list:
+def unique_text_records(records, texts: TextsOf, *, seen) -> list:
     """The unique-text stratum: resolution records whose text is not in ``seen``.
 
     Resolution records only, because the gate's three margins are about what an
     ability does when it resolves. A combat record has no acting line at all,
-    so it could not be stratified by text even in principle.
+    so it could not be stratified by text even in principle. ``records`` is
+    read once, so it may be a stream.
     """
     stratum = []
     for record in records:
         if record.kind is not RecordKind.RESOLUTION:
             continue
-        text = acting_text(record, batcher)
+        text = acting_text(record, texts)
         if text is not None and text not in seen:
             stratum.append(record)
     return stratum
+
+
+def unique_text_stratum(corpus_path, card_disjoint_games, texts: TextsOf) -> list:
+    """Gate 1's population, read from the curated corpus the checkpoint trained on.
+
+    "Seen" is every text a record of the corpus's ``training/`` acts with —
+    what the identity baseline could have memorized — and the candidates are
+    the card-disjoint stratum's resolutions, streamed so only the stratum is
+    held. Neither comes from the raw shards: a raw game outside the recorded
+    validation sets is not necessarily a training game (curation drops
+    held-out games, and collection continues after a build).
+    """
+    from effects.infrastructure.corpus_store import CorpusStore
+    from effects.infrastructure.model_runner import (
+        card_disjoint_resolutions,
+        training_acting_keys,
+    )
+
+    seen = training_texts(
+        training_acting_keys(CorpusStore(corpus_path).training_dir), texts,
+    )
+    logger.info("gate 1: %d acting texts in the training stratum", len(seen))
+    return unique_text_records(
+        card_disjoint_resolutions(corpus_path, frozenset(card_disjoint_games)),
+        texts, seen=seen,
+    )
 
 
 # ── scoring: one forward pass, two readers ──────────────────────────────
@@ -359,42 +393,48 @@ def run_gate_one(context: EvaluationContext, identity) -> CheckResult:
     of an evaluation, so it happens only when the baseline is actually
     supplied. The baseline is loaded for this gate alone and released after it.
     """
-    from effects.infrastructure.model_runner import stratum_records
+    from effects.application.ability_text import KeyResolver
+    from effects.domain.ability_encoder import surface_of
 
-    records, training_acting, message = stratum_records(
-        context.config, context.main,
-    )
-    if not records:
-        return CheckResult(CheckName.GATE_1, CheckStatus.SKIPPED, message)
-
+    if context.corpus_path is None:
+        return CheckResult(
+            CheckName.GATE_1, CheckStatus.SKIPPED,
+            "the checkpoint records no curated corpus, so nothing says which "
+            "texts it trained on; gate 1 reads the corpus's training and "
+            "card-disjoint strata",
+        )
+    games = context.main.provenance.card_disjoint_games
+    if not games:
+        return CheckResult(
+            CheckName.GATE_1, CheckStatus.SKIPPED,
+            "the checkpoint records no card-disjoint games, so there is no "
+            "held-out stratum to score gate 1 on",
+        )
     # Both checkpoints read one vocabulary (require_same_split), so one
-    # surface's texts decide the stratum for both.
-    stratum = None
+    # surface's texts decide the stratum for both: the batcher's own join.
+    texts = KeyResolver(context.sidecars, surface_of(context.vocab_path))
+    stratum = unique_text_stratum(context.corpus_path, games, texts)
+    if not stratum:
+        return CheckResult(
+            CheckName.GATE_1, CheckStatus.SKIPPED,
+            "no resolution record in the card-disjoint split has an "
+            "ability text absent from training; the identity baseline "
+            "could recall every text in it, so the comparison would "
+            "measure memorization on both sides rather than reading",
+        )
+    logger.info("gate 1: %d records in the unique-text stratum", len(stratum))
+
     scores = {}
     loaders = {
         "model": context.main_runnable,
         "identity": partial(context.runnable_of, identity),
     }
     for name, load in loaders.items():
-        runnable = load(records)
-        batcher = runnable.batcher
-        if stratum is None:
-            stratum = unique_text_records(
-                records, batcher, seen=training_texts(training_acting, batcher),
-            )
-        if not stratum:
-            return CheckResult(
-                CheckName.GATE_1, CheckStatus.SKIPPED,
-                "no resolution record in the card-disjoint split has an "
-                "ability text absent from training; the identity baseline "
-                "could recall every text in it, so the comparison would "
-                "measure memorization on both sides rather than reading",
-            )
+        runnable = load(stratum)
         scores[name] = measure(
-            stratum, runnable.encoder, runnable.model, batcher,
+            stratum, runnable.encoder, runnable.model, runnable.batcher,
             fields=runnable.fields,
         )
-
     return evaluate_gate_one(scores["model"], scores["identity"])
 
 
