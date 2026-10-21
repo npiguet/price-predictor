@@ -737,7 +737,7 @@ def _key(trait_kind: str, face: int = 0):
 
 
 class _Sidecars:
-    """A sidecar cache over made-up lines: ``get`` for a card, ``line_for`` for a key."""
+    """A sidecar cache over made-up lines: ``get`` for a card, ``line_or_none`` for a key."""
 
     def __init__(self, lines, api_by_kind=None):
         self.lines = lines
@@ -746,7 +746,7 @@ class _Sidecars:
     def get(self, script_file):
         return SimpleNamespace(lines=self.lines)
 
-    def line_for(self, key):
+    def line_or_none(self, key):
         api = self.api_by_kind.get(key.trait_kind)
         return None if api is None else SimpleNamespace(script_api_type=api)
 

@@ -103,10 +103,7 @@ def chosen_record(record, sidecars):
     if (record.kind is not RecordKind.RESOLUTION or record.moment is not Moment.RESOLUTION
             or record.fork or not record.ability):
         return None
-    try:
-        line = sidecars.line_for(record.ability[0])
-    except Exception:  # an unjoinable or unconverted key carries no text
-        return None
+    line = sidecars.line_or_none(record.ability[0])
     text = line.script_text if line is not None else None
     apis = chain_apis(text) & ZONE_APIS
     if not apis:

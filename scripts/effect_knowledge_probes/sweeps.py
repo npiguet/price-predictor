@@ -212,10 +212,7 @@ def set_untapped_lands(record, player_id: str, pips: list[str], amount: int):
 def _has_mana_ability(entity, sidecars) -> bool:
     for key in (*entity.printed, *entity.granted_attached,
                 *entity.granted_temporary.abilities):
-        try:
-            line = sidecars.line_for(key)
-        except KeyError:
-            line = None
+        line = sidecars.line_or_none(key)
         if line is not None and line.script_api_type in _MANA_APIS:
             return True
     return False
@@ -314,10 +311,7 @@ class SweepSelector:
             return
         if not record.ability:
             return
-        try:
-            line = self.sidecars.line_for(record.ability[0])
-        except KeyError:
-            line = None
+        line = self.sidecars.line_or_none(record.ability[0])
         script = (line.script_text or "") if line is not None else ""
         api = line.script_api_type if line is not None else None
         target = _damaged_creature(record)

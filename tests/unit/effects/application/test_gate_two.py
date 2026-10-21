@@ -96,6 +96,9 @@ class _Sidecars:
     def line_for(self, key):
         return _LINES.get(key)
 
+    def line_or_none(self, key):
+        return _LINES.get(key)
+
     def prose_for(self, key):
         return None
 

@@ -293,6 +293,28 @@ class TestSidecarCache:
         key = ProvenanceKey("cardsfolder/b/bird_token.txt", 0, "static", 0)
         assert cache.line_for(key) is None
 
+    def test_line_or_none_reads_every_gap_as_no_line(self, tmp_path):
+        """One policy for a reader that tolerates gaps: a dropped key, a script
+        never converted, a tree this run has no root for, and a key the sidecar
+        does not describe all read as no line."""
+        cache = self._write_trees(tmp_path)
+        assert cache.line_or_none(_TRIGGER).script_api_type == "PutCounter"
+        for key in (
+            _DROPPED,
+            ProvenanceKey("cardsfolder/b/bird_token.txt", 0, "static", 0),
+            ProvenanceKey("variant-scripts/shock_variant.txt", 0, "spell", 0),
+            _ABSENT,
+        ):
+            assert cache.line_or_none(key) is None
+
+    def test_line_or_none_counts_the_keys_a_sidecar_does_not_describe(self, tmp_path):
+        """That case is the join's fail-loudly one: tolerated here, never hidden."""
+        cache = self._write_trees(tmp_path)
+        for _ in range(2):
+            cache.line_or_none(_ABSENT)
+        cache.line_or_none(_DROPPED)
+        assert cache.undescribed == {_SCRIPT: 2}
+
     def test_the_cache_joins_a_record_key_to_its_row(self, tmp_path):
         cache = self._write_trees(tmp_path)
         assert cache.row_for(_TRIGGER) == 1

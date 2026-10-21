@@ -357,10 +357,7 @@ def record_keywords(
     """
     found: set[str] = set()
     for key in acting_keys(record):
-        try:
-            line = batcher.sidecars.line_for(key)
-        except KeyError:
-            line = None
+        line = batcher.sidecars.line_or_none(key)
         keyword = keyword_of_line(line) if line is not None else None
         if keyword is not None:
             found.add(normalize_keyword(keyword))

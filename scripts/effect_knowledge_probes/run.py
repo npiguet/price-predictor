@@ -158,10 +158,7 @@ def _acting_text_function(sidecars, surface: str):
 
     def acting_text(key):
         if key not in memo:
-            try:
-                line = sidecars.line_for(key)
-            except KeyError:
-                line = None
+            line = sidecars.line_or_none(key)
             memo[key] = (None if line is None
                          else encoding_text(line, sidecars.prose_for(key), surface))
         return memo[key]

@@ -146,10 +146,7 @@ def decision_items(record, sidecars):
     candidate = payload.candidates[0]
     restriction = None
     for key in candidate.ability or ():
-        try:
-            line = sidecars.line_for(key)
-        except Exception:  # an unjoinable or unconverted key carries no text
-            line = None
+        line = sidecars.line_or_none(key)
         restriction = restriction_of(line.script_text if line is not None else None)
         if restriction:
             break

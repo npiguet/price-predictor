@@ -85,10 +85,7 @@ def _keyword_static(keys, sidecars) -> bool | None:
     from effects.domain.rule_families import KEYWORD_API_TYPE
 
     for key in keys:
-        try:
-            line = sidecars.line_for(key)
-        except _sidecar_errors():
-            line = None
+        line = sidecars.line_or_none(key)
         if line is not None:
             return line.script_api_type == KEYWORD_API_TYPE
     return None

@@ -332,6 +332,9 @@ class SidecarCache:
         #: all of them tokens, but a conversion that broke would raise that
         #: share without otherwise changing the shape of a run.
         self.unresolved: dict[str, int] = {}
+        #: ``script_file -> times asked`` for keys :meth:`line_or_none` read as
+        #: no line although the sidecar exists and does not describe them.
+        self.undescribed: dict[str, int] = {}
 
     def path_for(self, script_file: str) -> Path:
         tree, _, relative = script_file.partition("/")
@@ -368,6 +371,27 @@ class SidecarCache:
         try:
             return self.get(key.script_file).line_for(key)
         except UnconvertedScript:
+            return None
+
+    def line_or_none(self, key: ProvenanceKey) -> SidecarLine | None:
+        """The line a key names, or None wherever the join gives none.
+
+        The one policy for a reader that reads keys off a board rather than
+        training on them — the evaluator's keyword resolver and breakdowns, the
+        knowledge probes — where a gap costs one ability its text and nothing
+        else: a dropped key, a script never converted, a tree this run has no
+        root for, and a key the sidecar does not describe all read as no line.
+        The last is the join's fail-loudly case (:meth:`line_for` raises on it),
+        so it is tallied in :attr:`undescribed` rather than lost.
+        """
+        try:
+            return self.line_for(key)
+        except UnconfiguredTree:
+            return None
+        except KeyError:
+            self.undescribed[key.script_file] = (
+                self.undescribed.get(key.script_file, 0) + 1
+            )
             return None
 
     def prose_for(self, key: ProvenanceKey) -> str | None:

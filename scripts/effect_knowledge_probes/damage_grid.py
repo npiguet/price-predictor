@@ -58,9 +58,8 @@ def qualifying_records(directory: Path, count: int, shards: int) -> list[tuple[o
         for record in read_shard(shard):
             if not record.ability:
                 continue
-            try:
-                line = sidecars.line_for(record.ability[0])
-            except Exception:
+            line = sidecars.line_or_none(record.ability[0])
+            if line is None:
                 continue
             qualified = qualify(record, line, derive_targets(record), resolver.keywords_of)
             if (qualified is None or qualified.kind != "damage" or qualified.stated != "text"
