@@ -301,8 +301,9 @@ def _record_losses(
     The trainer's own loss over a batch of one, so the breakdowns cannot drift
     from what training minimized: the gate over every real entity, then each
     field over the affected entities its record supervises. A field with no
-    such entity is left out rather than reported as zero. One record means the per-record normalization divides by one, so each
-    part is that record's raw sum. Read on the host, where the batch already
+    such entity is left out rather than reported as zero. One record means the
+    per-record normalization divides by one, so each part is that record's raw
+    sum. Read on the host, where the batch already
     is, so scoring a record costs no device synchronization.
     """
     rows = slice(row, row + 1)
