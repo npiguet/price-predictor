@@ -1584,7 +1584,10 @@ class TrainingLoop(StepPreparation):
         # scores, `shipped`, for the backward pass.
         (computed.total / self.config.grad_accum).backward()
         self._mlm_backward(computed, run.encoder, run.model)
-        if (run.step + 1) % self.config.grad_accum == 0:
+        # Counted within the epoch, which drops any partial accumulation it
+        # began: the run's global step would put every later epoch's boundary
+        # on the wrong micro-step.
+        if (tally.taken + 1) % self.config.grad_accum == 0:
             norms = _optimizer_step(run.optimizer, read=due)
             if due:
                 stats.norms = norms
