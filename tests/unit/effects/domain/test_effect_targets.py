@@ -319,7 +319,9 @@ class TestPayloadKinds:
         )
         assert derive_targets(record)["E1"].fields["damage_taken"] == 0.0
 
-    def test_a_fired_trigger_reads_its_event(self):
+    def test_a_fired_trigger_supervises_no_entity_with_the_event_that_caused_it(self):
+        """The event is the trigger's input overlay; its own effects arrive as the
+        resolution record of the ability it put on the stack."""
         record = _record(
             TriggerPayload(
                 event=Event(type=EventType.LIFE_CHANGE, subjects=("P0",),
@@ -328,7 +330,7 @@ class TestPayloadKinds:
             ),
             kind=RecordKind.TRIGGER, moment=None,
         )
-        assert derive_targets(record)["P0"].fields["life_delta"] == 3.0
+        assert derive_targets(record) == {}
 
     def test_an_unfired_trigger_produces_no_entity_targets(self):
         record = _record(

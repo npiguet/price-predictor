@@ -150,7 +150,7 @@ def derive_targets(record: EffectRecord) -> dict[str, EntityTargets]:
             )
         return entry
 
-    for event in events_of(record):
+    for event in _outcome_events(record):
         for subject in event.subjects:
             entry = slot(subject)
             entry.affected = True
@@ -159,6 +159,19 @@ def derive_targets(record: EffectRecord) -> dict[str, EntityTargets]:
     _apply_playability(record, slot)
     _apply_continuous(record, slot)
     return targets
+
+
+def _outcome_events(record: EffectRecord) -> tuple[Event, ...]:
+    """The events that are this record's outcome, which is not every event it carries.
+
+    A fired trigger's event is what caused it, read as the pending-event overlay
+    on its input; what the trigger then does arrives as the resolution record
+    of the ability it put on the stack. A trigger record supervises the verdict
+    head's fired bit alone (base spec, record-kind table).
+    """
+    if isinstance(record.payload, TriggerPayload):
+        return ()
+    return events_of(record)
 
 
 def _apply_event(entry: EntityTargets, event: Event) -> None:
