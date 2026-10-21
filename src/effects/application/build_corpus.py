@@ -60,6 +60,7 @@ from effects.domain.sampling import (
     DEFAULT_KIND_MIX,
     sampling_class,
 )
+from effects.domain.split import HeldOutCards
 from effects.domain.strata import OUTPUT_STRATA, Stratum
 from effects.domain.token_key_remap import RemapCounts, TokenKeyRemapper, remap_record_dict
 
@@ -961,50 +962,60 @@ def _card_disjoint_games(
 _KEYLESS = ""
 
 
+@dataclass(slots=True)
+class Member:
+    """What one ability text supplies to one cell (FR-049).
+
+    ``heap`` holds the text's ``--text-cap`` smallest record hashes, enough to
+    place any quota; the keyless member, for records whose key folds to no
+    text or that carry none, has no heap and is sampled by hash rate instead.
+    """
+
+    distinct: int = 0
+    heap: CapHeap | None = None
+
+    def once(self, name: str, text_cap: int) -> int:
+        """Records this member can supply once each: the text cap, or all of them."""
+        if name == _KEYLESS or text_cap <= 0:
+            return self.distinct
+        return min(self.distinct, text_cap)
+
+    def capacity(self, name: str, *, text_cap: int, reuse_cap: int) -> int:
+        """Records this member can supply with repeats."""
+        from effects.domain.corpus_curation import text_capacity
+
+        return text_capacity(
+            self.distinct, text_cap=0 if name == _KEYLESS else text_cap,
+            reuse_cap=reuse_cap,
+        )
+
+
 def _cell_members(
     survey: Survey, key_text: dict[str, str], *, heap_cap: int,
-) -> tuple[dict[Cell, dict[str, list]], dict[tuple[Cell, str], list[str]]]:
-    """``cell -> member -> [distinct records, CapHeap]`` and each member's keys.
+) -> tuple[dict[Cell, dict[str, Member]], dict[tuple[Cell, str], list[str]]]:
+    """``cell -> member name -> Member`` and each member's keys.
 
     A member is an ability text, or ``_KEYLESS`` for the records whose key folds
     to no text or that carry no key at all.
     """
-    members: dict[Cell, dict[str, list]] = defaultdict(dict)
+    members: dict[Cell, dict[str, Member]] = defaultdict(dict)
     keys_of: dict[tuple[Cell, str], list[str]] = defaultdict(list)
     for (cell, key), count in survey.cell_key_records.items():
         text = key_text.get(key)
         if text is None:
-            entry = members[cell].setdefault(_KEYLESS, [0, None])
-            entry[0] += count
+            members[cell].setdefault(_KEYLESS, Member()).distinct += count
             continue
-        entry = members[cell].setdefault(text, [0, CapHeap(heap_cap)])
-        entry[0] += count
-        entry[1].merge(survey.cell_key_heaps[cell, key])
+        member = members[cell].setdefault(text, Member(heap=CapHeap(heap_cap)))
+        member.distinct += count
+        member.heap.merge(survey.cell_key_heaps[cell, key])
         keys_of[cell, text].append(key)
     for cell, count in survey.cell_keyless.items():
-        entry = members[cell].setdefault(_KEYLESS, [0, None])
-        entry[0] += count
+        members[cell].setdefault(_KEYLESS, Member()).distinct += count
     return members, keys_of
 
 
-def _distinct_capacity(member: str, distinct: int, text_cap: int) -> int:
-    """Records a member can supply once each: the text cap, or all of them."""
-    if member == _KEYLESS or text_cap <= 0:
-        return distinct
-    return min(distinct, text_cap)
-
-
-def _capacity(member: str, distinct: int, *, text_cap: int, reuse_cap: int) -> int:
-    """Records a member can supply with repeats (FR-049)."""
-    from effects.domain.corpus_curation import text_capacity
-
-    return text_capacity(
-        distinct, text_cap=0 if member == _KEYLESS else text_cap, reuse_cap=reuse_cap,
-    )
-
-
 def _split_cell(
-    budget: int, entries: dict[str, list], *, text_cap: int, reuse_cap: int,
+    budget: int, members: dict[str, Member], *, text_cap: int, reuse_cap: int,
 ) -> dict[str, int]:
     """A cell's budget over its members: distinct records first, then repeats.
 
@@ -1015,23 +1026,30 @@ def _split_cell(
     """
     from effects.domain.budget_allocation import allocate
 
-    once = {
-        member: _distinct_capacity(member, entry[0], text_cap) for member, entry in entries.items()
-    }
-    first = allocate(budget, once)
+    first = allocate(budget, {
+        name: member.once(name, text_cap) for name, member in members.items()
+    })
     left = budget - sum(first.values())
     if left <= 0:
         return first
-    more = {
-        member: _capacity(member, entry[0], text_cap=text_cap, reuse_cap=reuse_cap) - first[member]
-        for member, entry in entries.items()
-    }
-    second = allocate(left, more)
-    return {member: first[member] + second.get(member, 0) for member in entries}
+    second = allocate(left, {
+        name: member.capacity(name, text_cap=text_cap, reuse_cap=reuse_cap) - first[name]
+        for name, member in members.items()
+    })
+    return {name: first[name] + second.get(name, 0) for name in members}
+
+
+@dataclass
+class _ClassPlans:
+    """What :func:`_plan_classes` fills in, level by level."""
+
+    plans: dict[tuple[Cell, str], CopyPlan] = field(default_factory=dict)
+    keyless: dict[Cell, CopyPlan] = field(default_factory=dict)
+    families: dict[str, dict[str, FamilyShare]] = field(default_factory=dict)
 
 
 def _plan_classes(
-    members: dict[Cell, dict[str, list]],
+    members: dict[Cell, dict[str, Member]],
     keys_of: dict[tuple[Cell, str], list[str]],
     targets: dict[str, int],
     config: BuildCorpusConfig,
@@ -1048,27 +1066,9 @@ def _plan_classes(
     smallest record hashes.
     """
     from effects.domain.budget_allocation import allocate
-    from effects.domain.corpus_curation import copy_plan, rate_plan
 
-    def capacity(cell: Cell) -> int:
-        return sum(
-            _capacity(member, entry[0], text_cap=config.text_cap, reuse_cap=config.reuse_cap)
-            for member, entry in members[cell].items()
-        )
-
-    def distinct(cell: Cell) -> int:
-        return sum(entry[0] for entry in members[cell].values())
-
-    tree: dict[str, dict[str, dict[str, dict[Cell, int]]]] = {}
-    for cell in members:
-        tree.setdefault(cell.klass, {}).setdefault(cell.half, {}).setdefault(
-            cell.family, {},
-        )[cell] = capacity(cell)
-
-    plans: dict[tuple[Cell, str], CopyPlan] = {}
-    keyless: dict[Cell, CopyPlan] = {}
-    families: dict[str, dict[str, FamilyShare]] = {}
-    for klass, halves in sorted(tree.items()):
+    out = _ClassPlans()
+    for klass, halves in sorted(_capacity_tree(members, config).items()):
         budget = targets.get(klass, 0)
         half_budgets = allocate(budget, {
             half: sum(sum(cells.values()) for cells in fams.values())
@@ -1085,26 +1085,54 @@ def _plan_classes(
             fair = budget // len(halves) // len(fams) if fams else 0
             for family, cells in sorted(fams.items()):
                 cell_budgets = allocate(fam_budgets[family], cells)
-                label = family_label(Cell(klass, half, family))
-                families.setdefault(klass, {})[label] = FamilyShare(
-                    available=sum(distinct(cell) for cell in cells),
-                    share=fair,
-                    planned=sum(cell_budgets.values()),
+                out.families.setdefault(klass, {})[family_label(Cell(klass, half, family))] = (
+                    FamilyShare(
+                        available=sum(
+                            member.distinct for cell in cells for member in members[cell].values()
+                        ),
+                        share=fair,
+                        planned=sum(cell_budgets.values()),
+                    )
                 )
                 for cell, cell_budget in sorted(cell_budgets.items()):
-                    quotas = _split_cell(
-                        cell_budget, members[cell],
-                        text_cap=config.text_cap, reuse_cap=config.reuse_cap,
-                    )
-                    for member, quota in quotas.items():
-                        count, heap = members[cell][member]
-                        if member == _KEYLESS:
-                            keyless[cell] = rate_plan(count, quota)
-                            continue
-                        plan = copy_plan(heap.values(), count, quota)
-                        for key in keys_of[cell, member]:
-                            plans[cell, key] = plan
-    return plans, keyless, families
+                    _plan_cell(cell, cell_budget, members[cell], keys_of, config, out)
+    return out.plans, out.keyless, out.families
+
+
+def _capacity_tree(
+    members: dict[Cell, dict[str, Member]], config: BuildCorpusConfig,
+) -> dict[str, dict[str, dict[str, dict[Cell, int]]]]:
+    """``class -> half -> family -> cell -> capacity``: the levels the budget splits over."""
+    tree: dict[str, dict[str, dict[str, dict[Cell, int]]]] = {}
+    for cell, cell_members in members.items():
+        tree.setdefault(cell.klass, {}).setdefault(cell.half, {}).setdefault(
+            cell.family, {},
+        )[cell] = sum(
+            member.capacity(name, text_cap=config.text_cap, reuse_cap=config.reuse_cap)
+            for name, member in cell_members.items()
+        )
+    return tree
+
+
+def _plan_cell(
+    cell: Cell, budget: int, members: dict[str, Member],
+    keys_of: dict[tuple[Cell, str], list[str]], config: BuildCorpusConfig,
+    out: _ClassPlans,
+) -> None:
+    """One cell's budget, split over its texts and turned into copy plans."""
+    from effects.domain.corpus_curation import copy_plan, rate_plan
+
+    quotas = _split_cell(
+        budget, members, text_cap=config.text_cap, reuse_cap=config.reuse_cap,
+    )
+    for name, quota in quotas.items():
+        member = members[name]
+        if name == _KEYLESS:
+            out.keyless[cell] = rate_plan(member.distinct, quota)
+            continue
+        plan = copy_plan(member.heap.values(), member.distinct, quota)
+        for key in keys_of[cell, name]:
+            out.plans[cell, key] = plan
 
 
 def _keyword_misfires(
@@ -1222,9 +1250,9 @@ def decide(
 
     members, keys_of = _cell_members(survey, key_text, heap_cap=heap_cap)
     available: Counter[str] = Counter()
-    for cell, entries in members.items():
-        for member, entry in entries.items():
-            available[cell.klass] += _distinct_capacity(member, entry[0], config.text_cap)
+    for cell, cell_members in members.items():
+        for name, member in cell_members.items():
+            available[cell.klass] += member.once(name, config.text_cap)
     try:
         targets, shortfall = class_targets(
             dict(available), config.mix(), ceiling=config.training_records,
@@ -1846,70 +1874,132 @@ def _held_out_text_report(
 
 def build(config: BuildCorpusConfig) -> int:
     """Build a curated dataset, or verify an existing one. Returns an exit code."""
-    from effects.application.train_effect_model import (
-        load_card_files,
-        load_card_texts,
-    )
     from effects.domain.ability_encoder import surface_of
-    from effects.domain.corpus_manifest import ClassCounts, CorpusManifest
-    from effects.domain.split import text_keyed_holdout
-    from effects.infrastructure.corpus_store import CorpusStore, current_sources
-    from effects.infrastructure.sidecar_io import SidecarCache, sidecar_roots
+    from effects.infrastructure.corpus_store import CorpusStore
 
     store = CorpusStore(config.output)
-    records_dir = Path(config.records_dir)
-
     if config.verify:
-        manifest = store.load()
-        added, removed, resized = manifest.drift(current_sources(records_dir))
-        for label, names in (("added", added), ("removed", removed), ("resized", resized)):
-            if names:
-                logger.warning(
-                    "%d shard(s) %s since this dataset was built: %s%s",
-                    len(names), label, ", ".join(names[:5]),
-                    ", …" if len(names) > 5 else "",
-                )
-        # Drift stays shard-based, but which Forge token scripts were on disk
-        # decides which old token keys resolved (FR-151), so a dataset built
-        # against another token tree is a different dataset even when every
-        # shard matches.
-        built_against = manifest.forge_tokenscripts
-        if built_against and built_against != str(Path(config.forge_tokenscripts or "")):
-            logger.warning(
-                "This dataset's token keys were remapped against %s, and "
-                "--forge-tokenscripts now names %s. Which token scripts are on "
-                "disk decides which keys resolved, so the two trees build "
-                "different datasets from the same shards.",
-                built_against, config.forge_tokenscripts,
-            )
-        if added or removed or resized:
-            logger.warning("Rebuild with `python -m effects build-corpus`.")
-            return 1
-        logger.info("Dataset is current against %s.", records_dir)
-        return 0
+        return _verify(config, store)
 
-    folders = sidecar_roots(config.cards_folders)
-    cards_folder = folders.get("cardsfolder", Path(config.cards_folders[0]))
-    roots = dict(folders)
-    if config.variant_scripts:
-        # Keyed "variant-scripts" because that is the tree a variant line's
-        # own provenance names, and the trainer registers it under the same
-        # name. Without it every variant key resolves to no text: no rarity
-        # entry and no per-text cap, while every real ability has both.
-        roots["variant-scripts"] = Path(config.variant_scripts)
-    sidecars = SidecarCache(roots)
-    card_files = load_card_files(cards_folder)
-    held_out = text_keyed_holdout(
-        card_files,
-        load_card_texts(card_files, sidecars),
-        permille=config.holdout_permille,
-        max_carriers=config.holdout_max_carriers,
-        unit=config.holdout_unit,
-    )
+    records_dir = Path(config.records_dir)
+    sources = _Sources.of(config)
+    held_out = _select_holdout(config, sources)
     surface = surface_of(config.vocab_path)
     logger.info(
         "Holdout (%s unit): %d ability text(s) on %d card(s); encoding surface %r.",
         config.holdout_unit, len(held_out.texts), len(held_out.names), surface,
+    )
+    remapper = _token_key_remapper(config, sources.folders, sources.card_files)
+    _refuse_mixed_generations(records_dir)
+    survey, mode_counts = _survey(config, held_out, sources, remapper)
+    decisions = _decide_or_refuse(config, survey, sources, surface, held_out)
+
+    # Before the first output shard, and only on a real build: a rebuild
+    # replaces the dataset rather than layering over it (FR-144).
+    store.clear_outputs()
+    written = run_write_pass(
+        [shard.name for shard in survey.shards],
+        config=_write_config(config, store, survey, decisions, sources, remapper, mode_counts),
+        workers=config.workers,
+    )
+    _report_write_pass(survey, written, remapper)
+    _repack_outputs(store, shard_records=config.shard_records)
+    _write_validation_samples(config, store, decisions)
+
+    manifest = _manifest(
+        config, surface, held_out, survey, decisions, written, mode_counts, remapper,
+    )
+    store.save(manifest)
+    _log_report(config, manifest, survey, decisions, written)
+    logger.info(
+        "Wrote %d training record(s) to %s (digest %s).",
+        sum(written.kept.values()), store.directory, manifest.digest(),
+    )
+    return 0
+
+
+def _verify(config: BuildCorpusConfig, store) -> int:
+    """``--verify``: the manifest's drift against the corpus on disk; writes nothing."""
+    from effects.infrastructure.corpus_store import current_sources
+
+    records_dir = Path(config.records_dir)
+    manifest = store.load()
+    added, removed, resized = manifest.drift(current_sources(records_dir))
+    for label, names in (("added", added), ("removed", removed), ("resized", resized)):
+        if names:
+            logger.warning(
+                "%d shard(s) %s since this dataset was built: %s%s",
+                len(names), label, ", ".join(names[:5]),
+                ", …" if len(names) > 5 else "",
+            )
+    # Drift stays shard-based, but which Forge token scripts were on disk
+    # decides which old token keys resolved (FR-151), so a dataset built
+    # against another token tree is a different dataset even when every
+    # shard matches.
+    built_against = manifest.forge_tokenscripts
+    if built_against and built_against != str(Path(config.forge_tokenscripts or "")):
+        logger.warning(
+            "This dataset's token keys were remapped against %s, and "
+            "--forge-tokenscripts now names %s. Which token scripts are on "
+            "disk decides which keys resolved, so the two trees build "
+            "different datasets from the same shards.",
+            built_against, config.forge_tokenscripts,
+        )
+    if added or removed or resized:
+        logger.warning("Rebuild with `python -m effects build-corpus`.")
+        return 1
+    logger.info("Dataset is current against %s.", records_dir)
+    return 0
+
+
+@dataclass(frozen=True)
+class _Sources:
+    """The converted trees a build reads its ability texts from."""
+
+    #: Tree name -> converted root (``cardsfolder``, ``tokenscripts``).
+    folders: dict[str, Path]
+    #: ``folders`` plus the variant tree, when ``--variant-scripts`` names one.
+    roots: dict[str, Path]
+    sidecars: SidecarCache
+    #: ``card name -> script file`` over the converted card tree.
+    card_files: dict[str, str]
+
+    @classmethod
+    def of(cls, config: BuildCorpusConfig) -> _Sources:
+        from effects.application.train_effect_model import load_card_files
+        from effects.infrastructure.sidecar_io import SidecarCache, sidecar_roots
+
+        folders = sidecar_roots(config.cards_folders)
+        roots = dict(folders)
+        if config.variant_scripts:
+            # Keyed "variant-scripts" because that is the tree a variant line's
+            # own provenance names, and the trainer registers it under the same
+            # name. Without it every variant key resolves to no text: no rarity
+            # entry and no per-text cap, while every real ability has both.
+            roots["variant-scripts"] = Path(config.variant_scripts)
+        cards_folder = folders.get("cardsfolder", Path(config.cards_folders[0]))
+        return cls(
+            folders=folders, roots=roots, sidecars=SidecarCache(roots),
+            card_files=load_card_files(cards_folder),
+        )
+
+    @property
+    def root_paths(self) -> dict[str, str]:
+        """``roots`` as strings, which is how a worker process receives them."""
+        return {name: str(path) for name, path in self.roots.items()}
+
+
+def _select_holdout(config: BuildCorpusConfig, sources: _Sources) -> HeldOutCards:
+    """The trainer's own holdout rule over the converted trees; refuses an empty one."""
+    from effects.application.train_effect_model import load_card_texts
+    from effects.domain.split import text_keyed_holdout
+
+    held_out = text_keyed_holdout(
+        sources.card_files,
+        load_card_texts(sources.card_files, sources.sidecars),
+        permille=config.holdout_permille,
+        max_carriers=config.holdout_max_carriers,
+        unit=config.holdout_unit,
     )
     if not held_out.names:
         tried = ", ".join(
@@ -1919,15 +2009,17 @@ def build(config: BuildCorpusConfig) -> int:
         raise BuildCorpusError(
             "Nothing is held out, so the card-disjoint stratum would be empty "
             "and gate 1 would have nothing to measure at all. Cards folders "
-            f"tried: {tried}; {len(card_files)} converted card(s) read, "
+            f"tried: {tried}; {len(sources.card_files)} converted card(s) read, "
             f"{len(held_out.texts)} held-out ability text(s), no held-out card. "
             "Run from the repository root so the relative --cards-folder paths "
             "resolve, raise --holdout-permille, or check that the converted "
             "tree has sidecars with script text."
         )
+    return held_out
 
-    remapper = _token_key_remapper(config, folders, card_files)
 
+def _refuse_mixed_generations(records_dir: Path) -> None:
+    """Before any record is read (FR-033)."""
     from effects.infrastructure.record_io import (
         MixedGenerationsError,
         iter_shards,
@@ -1935,21 +2027,25 @@ def build(config: BuildCorpusConfig) -> int:
     )
 
     try:
-        # Before any record is read (FR-033).
         refuse_mixed_generations(iter_shards(records_dir))
     except MixedGenerationsError as exc:
         raise BuildCorpusError(str(exc)) from exc
 
+
+def _survey(
+    config: BuildCorpusConfig, held_out: HeldOutCards, sources: _Sources, remapper,
+) -> tuple[Survey, dict[str, int]]:
+    """The parallel survey, its legality families resolved, and the mode counts."""
     survey = run_survey(
-        records_dir,
+        Path(config.records_dir),
         config=SurveyConfig(
-            records_dir=str(records_dir),
+            records_dir=str(config.records_dir),
             held_out_names=held_out.names,
             held_out_script_files=held_out.script_files,
             text_cap=config.text_cap,
             seed=config.seed,
             max_events=config.max_events,
-            sidecar_roots={name: str(path) for name, path in roots.items()},
+            sidecar_roots=sources.root_paths,
             remapper=remapper,
             game_disjoint_keywords=tuple(
                 normalize_keyword(name) for name in config.game_disjoint_keywords
@@ -1962,17 +2058,23 @@ def build(config: BuildCorpusConfig) -> int:
         survey.records, len(survey.games), len(survey.held_out_games),
     )
     mode_counts = legality_mode_counts(survey)
-    survey = resolve_legality_families(survey, mode_counts)
+    return resolve_legality_families(survey, mode_counts), mode_counts
 
+
+def _decide_or_refuse(
+    config: BuildCorpusConfig, survey: Survey, sources: _Sources, surface: str,
+    held_out: HeldOutCards,
+) -> Decisions:
+    """:func:`decide`, refusing a dataset gate 1 could not be scored on."""
     decisions = decide(
-        survey, sidecars=sidecars, surface=surface,
+        survey, sidecars=sources.sidecars, surface=surface,
         held_out_texts=held_out.texts, config=config,
     )
     if not decisions.card_disjoint:
         raise BuildCorpusError(
             "No game is admitted to the card-disjoint stratum, so the dataset "
             "cannot score gate 1 and the trainer would refuse it in its first "
-            f"minute. {records_dir} holds {len(survey.games)} game(s), "
+            f"minute. {config.records_dir} holds {len(survey.games)} game(s), "
             f"{len(survey.held_out_games)} of which name one of the "
             f"{len(held_out.names)} held-out card(s). Depleted and "
             "full-strength shards live in sibling subdirectories of the raw "
@@ -1983,30 +2085,34 @@ def build(config: BuildCorpusConfig) -> int:
             "under --card-disjoint-text-cap, and one that carries none is "
             "never admitted."
         )
-    # Before the first output shard, and only on a real build: a rebuild
-    # replaces the dataset rather than layering over it (FR-144).
-    store.clear_outputs()
-    written = run_write_pass(
-        [shard.name for shard in survey.shards],
-        config=WriteConfig(
-            records_dir=str(records_dir),
-            parts_dirs={
-                stratum: str(store.parts_dir_for(stratum)) for stratum in OUTPUT_STRATA
-            },
-            gate_one_keys=decisions.gate_one_keys,
-            max_events=config.max_events,
-            plans=decisions.plans,
-            keyless_plans=decisions.keyless_plans,
-            card_disjoint=decisions.card_disjoint,
-            game_disjoint=decisions.game_disjoint,
-            held_out_games=survey.held_out_games,
-            seed=config.seed,
-            sidecar_roots={name: str(path) for name, path in roots.items()},
-            remapper=remapper,
-            legality_mode_counts=mode_counts,
-        ),
-        workers=config.workers,
+    return decisions
+
+
+def _write_config(
+    config: BuildCorpusConfig, store, survey: Survey, decisions: Decisions,
+    sources: _Sources, remapper, mode_counts: dict[str, int],
+) -> WriteConfig:
+    return WriteConfig(
+        records_dir=str(config.records_dir),
+        parts_dirs={
+            stratum: str(store.parts_dir_for(stratum)) for stratum in OUTPUT_STRATA
+        },
+        gate_one_keys=decisions.gate_one_keys,
+        max_events=config.max_events,
+        plans=decisions.plans,
+        keyless_plans=decisions.keyless_plans,
+        card_disjoint=decisions.card_disjoint,
+        game_disjoint=decisions.game_disjoint,
+        held_out_games=survey.held_out_games,
+        seed=config.seed,
+        sidecar_roots=sources.root_paths,
+        remapper=remapper,
+        legality_mode_counts=mode_counts,
     )
+
+
+def _report_write_pass(survey: Survey, written: WriteResult, remapper) -> None:
+    """The write pass's refusals, remaps and attribution, checked and logged."""
     _check_refusals(written)
     if remapper is not None:
         _report_remap(survey, written)
@@ -2037,55 +2143,57 @@ def build(config: BuildCorpusConfig) -> int:
             dict(sorted(survey.quality_dropped.items())),
             dict(sorted(written.quality_dropped.items())),
         )
-    _repack_outputs(store, shard_records=config.shard_records)
 
-    if config.validation_sample > 0:
-        from effects.application.validation_samples import draw_samples, write_samples
 
-        samples = draw_samples(
-            card_disjoint=store.card_disjoint_dir, game_disjoint=store.game_disjoint_dir,
-            gate_one=store.gate_one_dir, mix=config.mix(), size=config.validation_sample,
-            seed=config.seed, held_out_text_of_key=decisions.held_out_text_of_key,
-        )
-        sampled = write_samples(store, samples)
-        for stratum, count in sampled.items():
-            logger.info("%-22s %9d record(s) sampled for validation", stratum, count)
-        _check_samples(sampled, size=config.validation_sample)
-    else:
+def _write_validation_samples(
+    config: BuildCorpusConfig, store, decisions: Decisions,
+) -> None:
+    if config.validation_sample <= 0:
         logger.info("no validation sample written (--validation-sample 0)")
+        return
+    from effects.application.validation_samples import draw_samples, write_samples
+
+    samples = draw_samples(
+        card_disjoint=store.card_disjoint_dir, game_disjoint=store.game_disjoint_dir,
+        gate_one=store.gate_one_dir, mix=config.mix(), size=config.validation_sample,
+        seed=config.seed, held_out_text_of_key=decisions.held_out_text_of_key,
+    )
+    sampled = write_samples(store, samples)
+    for stratum, count in sampled.items():
+        logger.info("%-22s %9d record(s) sampled for validation", stratum, count)
+    _check_samples(sampled, size=config.validation_sample)
+
+
+def _unique_texts(keys, key_text: Mapping[str, str]) -> int:
+    """Distinct ability texts behind ``keys``: what a record count cannot say."""
+    return len({key_text.get(key, key) for key in keys})
+
+
+def _manifest(
+    config: BuildCorpusConfig, surface: str, held_out: HeldOutCards, survey: Survey,
+    decisions: Decisions, written: WriteResult, mode_counts: dict[str, int], remapper,
+):
+    """Everything the build decided and wrote, as the manifest records it."""
+    from effects.domain.corpus_manifest import ClassCounts, CorpusManifest
 
     per_class = {
         name: ClassCounts(
             read=written.read.get(name, 0),
             kept=written.kept.get(name, 0),
             dropped_by_cap=written.dropped_by_cap.get(name, 0),
-            unique_texts=len({
-                decisions.key_text.get(key, key)
-                for key in written.kept_keys.get(name, ())
-            }),
+            unique_texts=_unique_texts(written.kept_keys.get(name, ()), decisions.key_text),
         )
         for name in sorted(written.read)
     }
-    # The same fold as per_class's unique_texts, one axis over: by output
-    # (stratum) rather than by sampling class (FR-143, FR-145). per_stratum
-    # covers every stratum; unique_texts covers every output in
-    # OUTPUT_STRATA -- dropped-held-out writes nothing, so it has no ability texts
-    # of its own to count.
-    per_stratum = {name: written.stratum.get(name, 0) for name in Stratum}
     trained = sum(written.kept.values())
     delivered_mix = {
         name: count / trained for name, count in sorted(written.kept.items())
     } if trained else {}
-    unique_texts = {
-        name: len({
-            decisions.key_text.get(key, key)
-            for key in written.stratum_keys.get(name, ())
-        })
-        for name in OUTPUT_STRATA
-    }
     families, signatures = _family_tables(decisions, written)
-    held_out_report = _held_out_text_report(survey, decisions, written, held_out.texts)
-    manifest = CorpusManifest(
+    without_resolution, under_floor = _held_out_text_report(
+        survey, decisions, written, held_out.texts,
+    )
+    return CorpusManifest(
         seed=config.seed,
         surface=surface,
         vocab_path=config.vocab_path,
@@ -2104,13 +2212,19 @@ def build(config: BuildCorpusConfig) -> int:
         rarity=decisions.rarity,
         sources=survey.shards,
         per_class=per_class,
-        per_stratum=per_stratum,
-        unique_texts=unique_texts,
+        # Every stratum is counted; unique texts only for the outputs, since
+        # dropped-held-out writes nothing (FR-143, FR-145).
+        per_stratum={name: written.stratum.get(name, 0) for name in Stratum},
+        unique_texts={
+            name: _unique_texts(written.stratum_keys.get(name, ()), decisions.key_text)
+            for name in OUTPUT_STRATA
+        },
         shortfall=decisions.shortfall,
         quality_dropped=dict(written.quality_dropped),
-        # The hundred worst scripts, not all of them: every permanent carries
-        # the implicit spell this refusal is mostly about, and the manifest is
-        # read by people.
+        # The hundred worst scripts and stems, not all of them: every permanent
+        # carries the implicit spell the textless refusal is mostly about, a
+        # corpus can leave a long tail of one-off token ambiguities, and the
+        # manifest is read by people.
         no_acting_text_scripts=dict(written.textless_scripts.most_common(100)),
         games_by_source=survey.games_by_source,
         held_out_games_by_source=survey.held_out_games_by_source,
@@ -2119,8 +2233,6 @@ def build(config: BuildCorpusConfig) -> int:
         max_events_per_record=config.max_events,
         unattributed_records=written.unattributed,
         token_keys_remapped=written.remap.remapped,
-        # The hundred worst stems, not all of them: a corpus can leave a long
-        # tail of one-off ambiguities, and the manifest is read by people.
         token_keys_ambiguous=dict(written.remap.ambiguous.most_common(100)),
         forge_tokenscripts=(
             str(config.forge_tokenscripts) if remapper is not None else ""
@@ -2132,16 +2244,42 @@ def build(config: BuildCorpusConfig) -> int:
         legality_counts=_nested(written.legality),
         legality_mode_counts=mode_counts,
         keyword_threshold_games=tuple(sorted(decisions.keyword_threshold_games)),
-        held_out_texts_without_resolution=held_out_report[0],
-        held_out_texts_under_five_games=held_out_report[1],
+        held_out_texts_without_resolution=without_resolution,
+        held_out_texts_under_five_games=under_floor,
         game_disjoint_share=config.game_disjoint_share,
         game_disjoint_keyword_share=config.game_disjoint_keyword_share,
         game_disjoint_keywords=tuple(config.game_disjoint_keywords),
         reuse_cap=config.reuse_cap,
     )
-    store.save(manifest)
 
-    for name, counts in per_class.items():
+
+#: A directory whose share of held-out games is above zero and below this
+#: holds a few held-out games where it should hold none: a leak in collection,
+#: not a full-strength source.
+_LEAK_SHARE = 0.05
+
+
+def _log_report(
+    config: BuildCorpusConfig, manifest, survey: Survey, decisions: Decisions,
+    written: WriteResult,
+) -> None:
+    """The operator's report, read off the manifest the build just wrote."""
+    _log_counts(manifest)
+    _log_sources(survey)
+    _log_refusals(written)
+    _log_mixture(manifest, decisions)
+    logger.info(
+        "game-disjoint %d game(s), %d of them under the keyword threshold; "
+        "%d held-out text(s) with no gate-one resolution record, %d under %d games",
+        len(decisions.game_disjoint), len(decisions.keyword_threshold_games),
+        len(manifest.held_out_texts_without_resolution),
+        len(manifest.held_out_texts_under_five_games), HELD_OUT_GAME_FLOOR,
+    )
+
+
+def _log_counts(manifest) -> None:
+    """Records and unique texts per class and per stratum, and the legality halves."""
+    for name, counts in manifest.per_class.items():
         logger.info(
             "%-22s read %9d  kept %9d  cap dropped %8d  unique texts %7d",
             name, counts.read, counts.kept, counts.dropped_by_cap, counts.unique_texts,
@@ -2149,44 +2287,57 @@ def build(config: BuildCorpusConfig) -> int:
     for name in OUTPUT_STRATA:
         logger.info(
             "%-22s %9d record(s)  %7d unique text(s)",
-            name, per_stratum[name], unique_texts[name],
+            name, manifest.per_stratum[name], manifest.unique_texts[name],
         )
     logger.info(
         "%-22s %9d record(s)", Stratum.DROPPED_HELD_OUT,
-        per_stratum[Stratum.DROPPED_HELD_OUT],
+        manifest.per_stratum[Stratum.DROPPED_HELD_OUT],
     )
+    for subkind, counts in sorted(manifest.legality_counts.items()):
+        logger.info(
+            "%-22s real %9d  what-if %9d  unknown %9d",
+            f"legality {subkind}", counts.get(LegalityDecision.REAL, 0),
+            counts.get(LegalityDecision.WHAT_IF, 0),
+            counts.get(LegalityDecision.UNKNOWN, 0),
+        )
+
+
+def _log_sources(survey: Survey) -> None:
+    """Held-out games per source directory, warning on the share that means a leak."""
     for source in sorted(survey.games_by_source):
         games = survey.games_by_source[source]
         held = survey.held_out_games_by_source.get(source, 0)
         share = held / games if games else 0.0
-        report = logger.warning if 0 < share < 0.05 else logger.info
-        report(
+        leak = 0 < share < _LEAK_SHARE
+        (logger.warning if leak else logger.info)(
             "%-22s %7d game(s), %6d name a held-out card (%.1f%%)%s",
             source, games, held, 100.0 * share,
             " — a few held-out games in a directory that should hold none is "
-            "a leak in collection, not a full-strength source" if 0 < share < 0.05 else "",
+            "a leak in collection, not a full-strength source" if leak else "",
         )
+
+
+def _log_refusals(written: WriteResult) -> None:
     for reason, count in sorted(written.quality_dropped.items()):
         logger.info("%-22s %9d record(s) refused", reason, count)
-    if written.textless_scripts:
-        worst = sorted(written.textless_scripts.items(), key=lambda kv: -kv[1])[:5]
-        logger.info(
-            "no-acting-text refusals by script, most first: %s",
-            ", ".join(f"{script} ({count})" for script, count in worst),
-        )
-    if written.unjoinable_scripts:
-        logger.info(
-            "unjoinable-key refusals by script, most first: %s",
-            ", ".join(
-                f"{script} ({count})"
-                for script, count in written.unjoinable_scripts.most_common(5)
-            ),
-        )
+    for label, scripts in (
+        ("no-acting-text", written.textless_scripts),
+        ("unjoinable-key", written.unjoinable_scripts),
+    ):
+        if scripts:
+            logger.info(
+                "%s refusals by script, most first: %s", label,
+                ", ".join(f"{script} ({count})" for script, count in scripts.most_common(5)),
+            )
+
+
+def _log_mixture(manifest, decisions: Decisions) -> None:
+    """The class mixture requested against delivered, and every shortfall."""
     # Requested against delivered, side by side: the mixture in `class_mix` is
     # what the build was asked for, and only this says whether it got it.
-    requested = config.mix()
-    for name in sorted(set(requested) | set(delivered_mix)):
-        asked, got = requested.get(name, 0.0), delivered_mix.get(name, 0.0)
+    requested, delivered = manifest.class_mix, manifest.delivered_mix
+    for name in sorted(set(requested) | set(delivered)):
+        asked, got = requested.get(name, 0.0), delivered.get(name, 0.0)
         logger.info(
             "%-22s requested %6.2f%%  delivered %6.2f%%  (%.2fx)",
             name, 100.0 * asked, 100.0 * got, (got / asked) if asked else 0.0,
@@ -2196,7 +2347,7 @@ def build(config: BuildCorpusConfig) -> int:
             "%s is short %d record(s) of its share: --training-records asks for "
             "more than the corpus can supply at this mixture.", name, missing,
         )
-    for klass, per_family in sorted(families.items()):
+    for klass, per_family in sorted(manifest.families.items()):
         for family, row in sorted(per_family.items()):
             if row["shortfall"]:
                 logger.warning(
@@ -2205,21 +2356,3 @@ def build(config: BuildCorpusConfig) -> int:
                     klass, family, row["shortfall"], row["share"], row["available"],
                     row["written"], row["repeats"],
                 )
-    for subkind, counts in sorted(manifest.legality_counts.items()):
-        logger.info(
-            "%-22s real %9d  what-if %9d  unknown %9d",
-            f"legality {subkind}", counts.get(LegalityDecision.REAL, 0),
-            counts.get(LegalityDecision.WHAT_IF, 0),
-            counts.get("unknown", 0),
-        )
-    logger.info(
-        "game-disjoint %d game(s), %d of them under the keyword threshold; "
-        "%d held-out text(s) with no gate-one resolution record, %d under five games",
-        len(decisions.game_disjoint), len(decisions.keyword_threshold_games),
-        len(held_out_report[0]), len(held_out_report[1]),
-    )
-    logger.info(
-        "Wrote %d training record(s) to %s (digest %s).",
-        sum(written.kept.values()), store.directory, manifest.digest(),
-    )
-    return 0
