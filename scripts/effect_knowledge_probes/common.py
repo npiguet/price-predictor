@@ -25,10 +25,12 @@ from types import SimpleNamespace
 
 import numpy as np
 
+from effects.infrastructure import default_paths
+
 ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_CARDS_FOLDERS = (ROOT / "output" / "cardsfolder", ROOT / "output" / "tokenscripts")
-DEFAULT_ABILITIES = ROOT / "output" / "effects" / "abilities"
-DEFAULT_REPORTS = ROOT / "output" / "effects" / "reports"
+DEFAULT_CARDS_FOLDERS = tuple(ROOT / folder for folder in default_paths.DEFAULT_CARDS_FOLDERS)
+DEFAULT_ABILITIES = ROOT / default_paths.DEFAULT_ABILITIES_ROOT
+DEFAULT_REPORTS = ROOT / default_paths.DEFAULT_REPORTS_DIR
 
 #: The two validation strata, as the corpus names its directories.
 STRATA: tuple[str, ...] = ("card-disjoint", "game-disjoint")

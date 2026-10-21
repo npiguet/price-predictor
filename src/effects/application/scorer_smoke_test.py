@@ -36,10 +36,12 @@ from pathlib import Path
 
 import numpy as np
 
+from effects.infrastructure import default_paths
+
 logger = logging.getLogger(__name__)
 
 #: The converted tree the scratch copy is taken from. Read, never written.
-DEFAULT_CARDS_PATH = Path("output/cardsfolder")
+DEFAULT_CARDS_PATH = Path(default_paths.DEFAULT_CARDS_FOLDERS[0])
 
 #: The vocabulary file a sealed encoder checkpoint is paired with: the sealed
 #: pipeline writes it beside the checkpoint, which is where ``encode-cards``'s
@@ -52,19 +54,19 @@ SEALED_VOCAB_NAME = "vocab.txt"
 class ScorerSmokeTestConfig:
     scratch_dir: Path
     checkpoint: Path = field(
-        default_factory=lambda: Path("models/effects/effect-model/latest.pt"),
+        default_factory=lambda: Path(default_paths.DEFAULT_CHECKPOINT),
     )
     sealed_encoder_checkpoint: Path = field(
-        default_factory=lambda: Path("models/sealed/encoder/latest.pt"),
+        default_factory=lambda: Path(default_paths.DEFAULT_SEALED_ENCODER),
     )
     abilities_root: Path = field(
-        default_factory=lambda: Path("output/effects/abilities"),
+        default_factory=lambda: Path(default_paths.DEFAULT_ABILITIES_ROOT),
     )
     cards_path: Path = DEFAULT_CARDS_PATH
     #: The match outcomes Phase A trains on. Read, never written; the sealed
     #: corpus lives wherever the operator keeps its training data.
     outcomes_path: Path = field(
-        default_factory=lambda: Path("output/sealed/match-outcomes.txt"),
+        default_factory=lambda: Path(default_paths.DEFAULT_MATCH_OUTCOMES),
     )
 
     @property

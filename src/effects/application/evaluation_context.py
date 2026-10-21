@@ -89,12 +89,14 @@ DEFAULT_WIN_RATES = Path(default_paths.DEFAULT_WIN_RATES)
 @dataclass
 class EvaluateEffectModelConfig:
     checkpoint: Path = field(
-        default_factory=lambda: Path("models/effects/effect-model/latest.pt"),
+        default_factory=lambda: Path(default_paths.DEFAULT_CHECKPOINT),
     )
     variant_checkpoints: dict[str, Path] = field(default_factory=dict)
-    records_dir: Path = field(default_factory=lambda: Path("output/effects/records/"))
-    cards_folders: tuple[Path, ...] = (
-        Path("output/cardsfolder/"), Path("output/tokenscripts/"),
+    records_dir: Path = field(
+        default_factory=lambda: Path(default_paths.DEFAULT_RECORDS_DIR),
+    )
+    cards_folders: tuple[Path, ...] = tuple(
+        Path(folder) for folder in default_paths.DEFAULT_CARDS_FOLDERS
     )
     variant_scripts: Path | None = None
     vocab_path: Path | None = None
@@ -103,7 +105,7 @@ class EvaluateEffectModelConfig:
     #: `--checkpoint` recorded, if any (FR-147).
     corpus: Path | None = None
     abilities_root: Path = field(
-        default_factory=lambda: Path("output/effects/abilities"),
+        default_factory=lambda: Path(default_paths.DEFAULT_ABILITIES_ROOT),
     )
     #: The per-card win-rate table the decodability battery reads (FR-070).
     win_rates: Path = field(default_factory=lambda: DEFAULT_WIN_RATES)

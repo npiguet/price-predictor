@@ -50,8 +50,10 @@ from effects.infrastructure.default_paths import (
     DEFAULT_FORGE_CARDS_PATH,
     DEFAULT_FORGE_TOKENSCRIPTS,
     DEFAULT_KEYWORD_DEFINITIONS,
+    DEFAULT_MATCH_OUTCOMES,
     DEFAULT_RECORDS_DIR,
     DEFAULT_SCRIPT_VOCAB_PATH,
+    DEFAULT_SEALED_ENCODER,
     DEFAULT_VARIANT_SCRIPTS,
     DEFAULT_VOCAB_PATH,
     DEFAULT_WIN_RATES,
@@ -1626,7 +1628,7 @@ def _scorer_smoke_test_parser(subparsers) -> None:
     )
     parser.add_argument(
         "--sealed-encoder-checkpoint", type=Path,
-        default="models/sealed/encoder/latest.pt",
+        default=DEFAULT_SEALED_ENCODER,
         help="Sealed encoder whose vectors pooled e is concatenated with",
     )
     parser.add_argument(
@@ -1637,8 +1639,8 @@ def _scorer_smoke_test_parser(subparsers) -> None:
         ),
     )
     parser.add_argument(
-        "--outcomes-path", type=Path, default="output/sealed/match-outcomes.txt",
-        help="Match outcomes Phase A trains on (default: output/sealed/match-outcomes.txt)",
+        "--outcomes-path", type=Path, default=DEFAULT_MATCH_OUTCOMES,
+        help=f"Match outcomes Phase A trains on (default: {DEFAULT_MATCH_OUTCOMES})",
     )
     parser.add_argument(
         "--scratch-dir", type=Path, required=True,
