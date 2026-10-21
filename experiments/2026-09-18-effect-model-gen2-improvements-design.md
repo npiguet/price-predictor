@@ -165,6 +165,8 @@ The keywords sort into three groups:
 
 The corpus explains the last group. A collector bug lost the creature damage and deaths of every first-strike damage step, and the repair dropped the blocked first-strike fights it could not recover. The probe forks are the only blocked first-strike fights the model sees, and they do not teach the step. Gen-3 collects the first-strike step whole, and the gen-3 draft adds combat copies labelled by the rule as an option.
 
+The grid's edited boards also contradict their own assignment input, so its first-strike and power-axis readings may understate what the model knows. Each card slot of a combat record carries the damage the creature assigns, beside its power. The grid edited power and the damage step and kept the base record's assignment. A creature without first strike therefore still showed its damage assigned in the first-strike step, and an attacker edited to power 8 still showed the base record's assignment. The checkpoints above have not yet been re-read with the grid's assignment set from the edited board ([the grid's assignment](#the-combat-grids-edits-have-to-move-the-damage-assignment-with-them-2026-10-21)).
+
 ### Three combat keywords hold on every checkpoint, and double strike swings far beyond its sampling noise
 
 Gate 2 asks, on the game-disjoint stratum, whether the model's predictions move the way a damage-step keyword moves the real outcome. A probe fork copies a real combat and strips the keyword from one creature. The gate counts how often the model's predicted change and the real change point the same way, and passes a keyword at 70% over at least 200 qualifying records.
@@ -231,7 +233,7 @@ The gen-3 draft, [`2026-XX-XX-effect-model-gen3-design.md`](2026-XX-XX-effect-mo
 - **Checkpoints judged by probes and rule scenarios**, from the disagreement between the loss and the probes, with each field's loss divided by its constant prediction's.
 - **The first-strike step collected whole, the combat snapshot taken before damage, and the block pairing in the input**, from the combat results.
 - **Every line of a permanent on the board**, from the board-abilities results in the probes record.
-- **Block legality recorded before anyone declares, and outcome notes that name only what they happened to**, from [the collector defects](#five-collector-defects-shaped-gen-2s-labels-and-gen-3-collects-without-them) found after the runs.
+- **Block legality recorded before anyone declares, outcome notes that name only what they happened to, each damage step's own assignment, and combat records that stop where the stack starts**, from [the collector defects](#nine-collector-defects-shaped-gen-2s-labels-and-gen-3-collects-without-them) found after the runs.
 
 ## Design: what gen-2 changes from gen-1, and why
 
@@ -1580,9 +1582,13 @@ A power cut stopped the retrained arm at epoch 9. Training now rewrites a resume
 
 The combat grid's first version granted first strike and double strike on regular-step boards and scored them against a rule spanning both steps. A record covers one step, and the model predicts that step alone, so the grid now sets the step marker to match the keyword and reads each step against its own rule. Only regular-step records qualify as the grid's base, which left the same 40 blocks qualifying. The grid also clears the damage a combat snapshot already shows, which the combat results describe.
 
-### Five collector defects shaped gen-2's labels, and gen-3 collects without them
+#### The combat grid's edits have to move the damage assignment with them (2026-10-21)
 
-A review of the Forge hooks after the gen-2 runs found five places where the corpus records something other than what happened in the game. Each one reaches a field the model trains on, and the first reaches two probes. The gen-2 corpus is not collected again. Gen-3 collects from scratch with all five fixed ([gen-3 design](2026-XX-XX-effect-model-gen3-design.md#the-forge-hooks-recorded-the-ais-block-plan-as-block-legality-and-four-outcomes-reached-the-wrong-entities)).
+The combat grid now sets both creatures' damage assignment from the edited board. A creature that strikes in the step assigns its power to the creature it fights, and one that does not strike assigns nothing. Before, the grid kept the base record's `assignment_choices`, which the input reads as each creature's number of targets and total damage assigned. Every cell off the base record's own power, and every first-strike-step cell, therefore asked about a board whose assignment disagreed with its power or its step.
+
+### Nine collector defects shaped gen-2's labels, and gen-3 collects without them
+
+A review of the Forge hooks and the connector's collectors after the gen-2 runs found nine places where the corpus records something other than what happened in the game. Each one reaches a field the model trains on, and the first reaches two probes. The gen-2 corpus is not collected again. Gen-3 collects from scratch with all nine fixed ([gen-3 design](2026-XX-XX-effect-model-gen3-design.md#the-forge-hooks-and-collectors-recorded-planned-events-as-real-ones-and-several-outcomes-reached-the-wrong-record)).
 
 #### Most block-legality labels that say a creature may not block describe the AI's unfinished block plan
 
@@ -1616,6 +1622,54 @@ The affected gate never learns that a prevention shield touches what it protects
 #### An ability's own card is marked affected by the coins, tokens and copies it produces
 
 The affected gate learns that an ability changes its own card whenever it makes something. When a note named no subject, the collector named the acting ability's card instead. Token creation, made cards, copies, coin flips, clashes, votes, ventures and spell copies all name no subject. Each one therefore marks the card whose ability acted as affected, with no change recorded on it. For a creature whose triggered or activated ability makes tokens, this marking is the only reason the record shows the creature affected.
+
+#### A double striker's second hit is recorded with no damage assigned
+
+Nearly every double striker that hits in both damage steps is recorded at the regular step with no damage assigned, while the record's events show it dealing damage. Each card slot of a combat record's input carries how many targets the creature assigns combat damage to and how much it assigns in total, read from the record's `assignment_choices`. The collector believed Forge kept one assignment table for a whole combat, so at the regular step it left out every assignment the first-strike step had already written. Forge in fact clears the table after each damage step. What the collector left out was therefore a double striker's second assignment whenever it repeated the first, which for an unblocked double striker is every time.
+
+| full-strength raw shards | count |
+|---|---:|
+| regular-step damage sources that also dealt first-strike damage | 1,188 |
+| … with no row in the record's `assignment_choices` | 1,167 |
+| regular-step damage sources with double strike in the snapshot | 1,552 |
+| … with no row in the record's `assignment_choices` | 1,181 |
+
+The observed record also read the table at the step's first damage or prevention event. By then Forge's damage replacements had begun rewriting the table in place, so a prevented hit could show as less damage assigned, or none, and the input carried part of the outcome. The probe forks read the table before any replacement and left nothing out. The training corpus therefore teaches two conventions at once. A fork shows a double striker assigning damage in both steps, and an observed record shows it assigning nothing in the second. The combat grid's double-strike second-hit variant reads a board with the assignment intact, a combination real double strikers never showed in training. Gate 2 builds both of its predictions from observed records, so the forks' different reading does not reach it. Data: `hook_defects_in_corpus.csv`.
+
+#### Events from abilities that resolve after combat damage are written into the combat record
+
+Combat records carry the draws, tokens, discards and mills of abilities that resolved after the damage. A damage step has a priority window after its damage is dealt, and combat-damage triggers resolve in it: "whenever this creature deals combat damage to a player, draw a card", the monarch's transfer, a saboteur's discard. The collector filed every event of a damage step into the step's combat record. Those triggers' own resolution records therefore miss their effects, and a creature a spell damaged in the window is recorded as taking combat damage. Combat damage draws no card and makes no token, yet the combat records hold thousands of both.
+
+| full-strength raw shards | count |
+|---|---:|
+| observed combat records | 192,895 |
+| … holding an event attributed to a resolving ability | 2,601 |
+| `card_drawn` events in observed combat records | 2,718 |
+| `token_created` events in observed combat records | 1,904 |
+| `card_discarded` events in observed combat records | 1,029 |
+| `card_milled` events in observed combat records | 1,003 |
+| `monarch_changed` events in observed combat records | 562 |
+
+The model therefore learns from a combat record that combat itself sometimes draws cards or makes tokens, and from the trigger's resolution record that the trigger does less than its text says. The combat grid reads only deaths, and a block qualifies only when its deaths obey the damage rule, so a trigger's extra death keeps a record out of the grid rather than changing what it reads.
+
+#### "Tapped for mana" trigger records are partly the AI's questions about taps it was planning
+
+Some trigger records for triggers that fire when a land is tapped for mana describe a tap that never happened. Forge's AI, while it plans how to pay a cost, asks the engine which of these triggers a tap of each land would fire, so that it can count the extra mana. The trigger hook sat in the engine check that answers the question, so every answer became a trigger record. The fired label is true of the planned tap, and the board is the real one, but the record presents the tap as an event. A fifth of these records repeat another's game, turn, step, land and verdict, which a real tap does only when the land untaps and taps again in the same step. The planned and the real taps cannot be told apart from the records. The cards affected are a small set, such as Wild Growth, Utopia Sprawl, Overgrowth and Mana Flare, and the planning queries also spend those lines' per-game budget of trigger records.
+
+| full-strength raw shards | count |
+|---|---:|
+| `TapsForMana` trigger records | 4,911 |
+| … fired | 2,700 |
+| … repeating another's game, turn, step, land and verdict | 996 |
+
+#### A prevention shield with nothing left to prevent records a prevention of 0
+
+One `damage_prevented` event in fifteen prevented nothing. A shield that prevents a fixed amount, once that amount is used up, still answers Forge that it applied, with the damage unchanged. The hook wrote the difference, 0, as a prevention. The `damage_prevented` amount is therefore trained on zeros that stand for no event, and a probe counting prevention events by presence counts these too. In gen-2 the note named no recipient, so the affected gate is not touched by it.
+
+| full-strength raw shards | count |
+|---|---:|
+| `damage_prevented` events | 4,030 |
+| … of amount 0 | 262 |
 
 ## Data and charts
 

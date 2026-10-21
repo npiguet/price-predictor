@@ -77,9 +77,9 @@ correctly. The source can be recovered from the payload's `assignment_choices`. 
 is missing, several attackers' identical hits produce byte-identical events, which inflates the
 validator's "repeats an event" check. Gen-1 and gen-2 shards both carry the gap.
 
-## The Forge hooks recorded the AI's block plan as block legality, and four outcomes reached the wrong entities
+## The Forge hooks and collectors recorded planned events as real ones, and several outcomes reached the wrong record
 
-Gen-3's hooks fix all five defects the gen-2 record describes ([gen-2 record](2026-09-18-effect-model-gen2-improvements-design.md#five-collector-defects-shaped-gen-2s-labels-and-gen-3-collects-without-them)). The fixes are commits on the `effect-record-hooks` branch of `../forge` and in the connector. They change what a record says, so they are in place before gen-3's first collection.
+Gen-3's hooks and collectors fix all nine defects the gen-2 record describes ([gen-2 record](2026-09-18-effect-model-gen2-improvements-design.md#nine-collector-defects-shaped-gen-2s-labels-and-gen-3-collects-without-them)). The fixes are commits on the `effect-record-hooks` branch of `../forge` and in the connector. They change what a record says, so they are in place before gen-3's first collection.
 
 **Block and attack legality are asked by Forge's declare steps, before anyone declares.** The hook lists every creature the player controls as a candidate, and the combat holds no blocks yet when it is asked. A creature planned for one block can no longer read as forbidden for another. A tapped or "can't block" creature is always listed as forbidden. The answer is the same whatever controls the seat, so the random seat no longer writes legality records of its own, and the AI's internal legality queries are no longer hooked. Every legality record is therefore a real declaration, one per defender or attacker per combat. `--legality-rate`, which sampled the AI's what-if queries, now has nothing to sample; removing the flag is left to the gen-3 collection work.
 
@@ -90,6 +90,14 @@ Gen-3's hooks fix all five defects the gen-2 record describes ([gen-2 record](20
 **Prevented damage names the creature or player it would have been dealt to.**
 
 **A note that names no subject marks nothing affected.** Coin flips, token creation, copies, votes and ventures no longer mark the acting card as affected.
+
+**A combat record carries its own damage step's assignment, as the players made it.** Forge copies the assignment the moment it is complete, before prevention or redirection rewrites the damage, and holds it until the next step's assignment replaces it. The collector writes that copy whole. A double striker therefore shows its assignment in both steps, a prevented hit still shows the damage assigned, and the observed record and its probe fork read the same thing.
+
+**A combat record stops where the stack starts.** The first ability or spell to go on the stack in a damage step writes the step's combat record, and nothing after it joins one. A combat-damage trigger's draw, token or discard is written in the trigger's own resolution record, and damage a spell deals in the window is not combat damage.
+
+**Trigger records describe only events that happen.** The engine's query of which triggers an event would fire no longer notifies the hook, so the AI's questions about taps it is planning write nothing. A static trigger is also evaluated once per event rather than once when its event is collected and again when it runs.
+
+**A prevention that prevented nothing writes no note.** A shield whose amount is used up no longer records a prevention of 0.
 
 **Two bits of the `library_events` field are still never set.** The target mapping writes the `scry` bit for both scry and surveil, and nothing writes the `surveil` or `tutor` bit. The mapping is in `src/effects/domain/effect_targets.py` and is left to the gen-3 target work.
 
@@ -130,16 +138,19 @@ random seat to stop looping on a free, repeatable ability.
 printed base and fold set-base effects into the boosts, so a creature that survives only because of
 a boost looks like an ordinary 2/2. This needs checking in general, not only on this card.
 
-## Two sampling rules over-represent some questions
-
-**What-if legality queries are sampled before they are de-duplicated.** A what-if query is the AI
-asking whether an attack or block would be legal without committing to it. `--legality-rate` draws
-each query before identical snapshots are merged, so a question the AI asks K times survives with
-probability 1 − (1 − r)^K. Blocker what-ifs outnumber real block decisions about five to one.
+## The held-out coverage round over-represents some texts, and what-if legality sampling has nothing left to sample
 
 **The held-out coverage round covers more than the held-out texts.** `collect-coverage
 --only-cards` targets every text carried only by held-out cards. That set is larger than the
 held-out texts themselves.
+
+**What-if legality queries no longer reach the corpus.** A what-if query is the AI asking whether
+an attack or block would be legal without committing to it. In gen-2, `--legality-rate` drew each
+query before identical snapshots were merged, so a question the AI asked K times survived with
+probability 1 − (1 − r)^K, and blocker what-ifs outnumbered real block decisions about five to one.
+Gen-3's legality hook is asked by Forge's declare steps rather than by the AI, so every legality
+record is a real declaration and there is nothing left to sample
+([the Forge hooks](#the-forge-hooks-and-collectors-recorded-planned-events-as-real-ones-and-several-outcomes-reached-the-wrong-record)).
 
 ## The observed-mana probe counts every mana event as one mana
 
@@ -471,7 +482,7 @@ The acting-player bits stay. Every row but the owner rows is an input-layout cha
 
 **The model can read part of the answer off the board.** Gen-2's input gives each card a thermometer of toughness minus marked damage, so a blocker the attacker already damaged shows whether that damage is lethal. A combat record then asks about a board on which half the step has happened, and how much of the outcome leaks depends on which damage Forge dealt first.
 
-**The fix is to take the snapshot at the start of the damage step.** The damage-step probe forks already copy the game at the phase event, before any damage, so the observed record can take its snapshot at the same moment. The assignment and the combat shape are read at the first damage event, as now, because Forge has assigned the damage by then.
+**The fix is to take the snapshot at the start of the damage step.** The damage-step probe forks already copy the game at the phase event, before any damage, so the observed record can take its snapshot at the same moment. The combat shape is read at the first damage event, as now, because no creature has left combat by then. The assignment can be read at any point of the step, because Forge holds each step's assignment as it was made.
 
 ## The board input should say which attacker each blocker blocks
 
