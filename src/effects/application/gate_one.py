@@ -31,27 +31,27 @@ from effects.application.breakdowns import TOTAL, RecordResult
 from effects.application.surface_batching import SurfaceBatcher
 from effects.domain.damage_step_keywords import KeywordResolver, keyword_of_line
 from effects.domain.effect_model import (
-    FIELD_SLICES,
     FIELDS_BY_NAME,
     GATE_INDEX,
-    FieldType,
     entity_target_tensors,
     per_entity_loss,
 )
 from effects.domain.effect_targets import derive_targets
 from effects.domain.gate_metrics import balanced_accuracy, f1_score, poisson_deviance
+from effects.domain.head_decoding import (
+    MAGNITUDE_TYPES,
+    expected_magnitude,
+    field_outputs,
+)
 from effects.domain.keyword_names import normalize_keyword
 from effects.domain.records import RecordKind, acting_keys
 from effects.domain.rule_families import rule_family
 
 logger = logging.getLogger(__name__)
 
-#: Fields whose magnitude the Poisson deviance is read over — "how much damage",
-#: "how many cards". A model not reading the text can only answer at the corpus
-#: average.
-_COUNT_TYPES = (FieldType.COUNT, FieldType.SIGNED_DELTA)
-
 BATCH_RECORDS = 32
+
+ZONE_OUTCOME = "zone_outcome"
 
 
 @dataclass(frozen=True, slots=True)
@@ -121,15 +121,7 @@ def measure(
     the same heads the loss shaped. ``legality_mode_counts`` is the dataset
     manifest's, so each record's family is the one the build placed it in.
     """
-    gate_pred: list[np.ndarray] = []
-    gate_true: list[np.ndarray] = []
-    zone_pred: list[np.ndarray] = []
-    zone_true: list[np.ndarray] = []
-    count_pred: list[np.ndarray] = []
-    count_true: list[np.ndarray] = []
-
-    zone_spec = FIELDS_BY_NAME.get("zone_outcome")
-    count_specs = [spec for spec in fields if spec.type in _COUNT_TYPES]
+    margins = MarginAccumulator(fields)
     results: list[RecordResult] = []
     # One resolver for the whole pass: it memoizes each provenance key's
     # keyword, and the stratum repeats the same few hundred cards.
@@ -140,58 +132,98 @@ def measure(
     with torch.no_grad():
         for start in range(0, len(records), BATCH_RECORDS):
             chunk = records[start : start + BATCH_RECORDS]
-            batch, surfaces = batcher.build(chunk, encoder)
-            outputs = model.per_entity(model(**batch))
-            targets = [derive_targets(record) for record in chunk]
-            gate, field_targets, mask, index = entity_target_tensors(
-                surfaces, targets, fields,
+            gathered, gate, field_targets, mask = _forward(
+                chunk, encoder, model, batcher, fields,
             )
-            index = index.to(outputs.device)
-            gathered = outputs.gather(
-                1, index.unsqueeze(-1).expand(-1, -1, outputs.shape[-1]),
-            ).float().cpu()
             for row, record in enumerate(chunk):
                 results.append(_record_result(
                     record, batcher, resolver,
                     _record_losses(row, gathered, gate, field_targets, mask, fields),
                     legality_mode_counts,
                 ))
+            margins.add(gathered, gate, field_targets, mask)
+    return margins.metrics(records=tuple(results))
 
-            real = mask.bool()
-            gate_pred.append(
-                (gathered[..., GATE_INDEX][real] > 0).numpy().astype(np.int8)
-            )
-            gate_true.append(gate[real].numpy().astype(np.int8))
 
-            affected = real & gate.bool()
-            if zone_spec is not None and "zone_outcome" in field_targets:
-                start_i, end_i = FIELD_SLICES["zone_outcome"]
-                logits = gathered[..., start_i:end_i][affected]
-                if logits.numel():
-                    zone_pred.append(logits.argmax(-1).numpy())
-                    zone_true.append(
-                        field_targets["zone_outcome"][affected].numpy()
-                    )
-            for spec in count_specs:
-                target = field_targets.get(spec.name)
-                if target is None:
-                    continue
-                start_i, end_i = FIELD_SLICES[spec.name]
-                slice_ = gathered[..., start_i:end_i][affected]
-                if not slice_.numel():
-                    continue
-                # A signed delta predicts direction then magnitude; the
-                # magnitude is the last column either way.
-                log_rate = slice_[..., -1]
-                count_pred.append(torch.exp(log_rate).numpy())
-                count_true.append(np.abs(target[affected].numpy()))
+def _forward(chunk, encoder, model, batcher: SurfaceBatcher, fields):
+    """``(gathered, gate, field_targets, mask)`` for one chunk, on the host.
 
-    return GateOneMetrics(
-        affected_gate_f1=_f1(gate_pred, gate_true),
-        zone_outcome_accuracy=balanced_accuracy(_cat(zone_pred), _cat(zone_true)),
-        mean_poisson_deviance=_deviance(count_pred, count_true),
-        records=tuple(results),
+    ``gathered`` is the per-entity head's output at each target entity's slot,
+    aligned column for column with the targets ``entity_target_tensors`` built.
+    """
+    batch, surfaces = batcher.build(chunk, encoder)
+    outputs = model.per_entity(model(**batch))
+    targets = [derive_targets(record) for record in chunk]
+    gate, field_targets, mask, index = entity_target_tensors(
+        surfaces, targets, fields,
     )
+    index = index.to(outputs.device)
+    gathered = outputs.gather(
+        1, index.unsqueeze(-1).expand(-1, -1, outputs.shape[-1]),
+    ).float().cpu()
+    return gathered, gate, field_targets, mask
+
+
+class MarginAccumulator:
+    """The three margins' predictions and observations, chunk by chunk.
+
+    Pooled over the whole pass rather than averaged per chunk, so a chunk with
+    one affected entity weighs what that one entity does.
+    """
+
+    def __init__(self, fields) -> None:
+        self._magnitude_specs = [
+            spec for spec in fields if spec.type in MAGNITUDE_TYPES
+        ]
+        self._gate_pred: list[np.ndarray] = []
+        self._gate_true: list[np.ndarray] = []
+        self._zone_pred: list[np.ndarray] = []
+        self._zone_true: list[np.ndarray] = []
+        self._count_pred: list[np.ndarray] = []
+        self._count_true: list[np.ndarray] = []
+
+    def add(
+        self, gathered: torch.Tensor, gate: torch.Tensor,
+        field_targets: dict[str, torch.Tensor], mask: torch.Tensor,
+    ) -> None:
+        """Fold one chunk's gathered outputs and targets in.
+
+        The gate is read over every real entity; zone and magnitude only over
+        the entities the gate's *target* marks affected, the ones those fields
+        are supervised on.
+        """
+        real = mask.bool()
+        self._gate_pred.append(
+            (gathered[..., GATE_INDEX][real] > 0).numpy().astype(np.int8)
+        )
+        self._gate_true.append(gate[real].numpy().astype(np.int8))
+
+        affected = real & gate.bool()
+        if ZONE_OUTCOME in field_targets:
+            logits = field_outputs(gathered, FIELDS_BY_NAME[ZONE_OUTCOME])[affected]
+            if logits.numel():
+                self._zone_pred.append(logits.argmax(-1).numpy())
+                self._zone_true.append(field_targets[ZONE_OUTCOME][affected].numpy())
+        for spec in self._magnitude_specs:
+            target = field_targets.get(spec.name)
+            if target is None:
+                continue
+            slice_ = field_outputs(gathered, spec)[affected]
+            if not slice_.numel():
+                continue
+            self._count_pred.append(expected_magnitude(spec, slice_).numpy())
+            self._count_true.append(np.abs(target[affected].numpy()))
+
+    def metrics(self, *, records: tuple[RecordResult, ...] = ()) -> GateOneMetrics:
+        """The three margins over everything added; NaN where nothing was."""
+        return GateOneMetrics(
+            affected_gate_f1=_f1(self._gate_pred, self._gate_true),
+            zone_outcome_accuracy=balanced_accuracy(
+                _cat(self._zone_pred), _cat(self._zone_true),
+            ),
+            mean_poisson_deviance=_deviance(self._count_pred, self._count_true),
+            records=records,
+        )
 
 
 def _record_losses(

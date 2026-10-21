@@ -263,3 +263,54 @@ class TestPerRecordLosses:
             for name, value in expected.items():
                 assert losses[name] == pytest.approx(value, rel=1e-6, abs=1e-6), name
             assert losses[TOTAL] == pytest.approx(sum(expected.values()), rel=1e-6)
+
+
+class TestMarginAccumulator:
+    """The three margins pool every chunk's entities, then reduce once."""
+
+    def _chunk(self, affected_damage: float):
+        import torch
+
+        from effects.domain.effect_model import (
+            FIELD_SLICES,
+            GATE_INDEX,
+            PER_ENTITY_WIDTH,
+            ZONE_OUTCOMES,
+        )
+
+        gathered = torch.zeros(1, 2, PER_ENTITY_WIDTH)
+        gathered[0, 0, GATE_INDEX] = 3.0   # predicted affected
+        gathered[0, 1, GATE_INDEX] = -3.0  # predicted unaffected
+        start, _ = FIELD_SLICES["zone_outcome"]
+        gathered[0, 0, start + ZONE_OUTCOMES.index("died")] = 5.0
+        damage, _ = FIELD_SLICES["damage_taken"]
+        gathered[0, 0, damage] = torch.log(torch.tensor(affected_damage))
+        targets = {
+            "zone_outcome": torch.tensor(
+                [[float(ZONE_OUTCOMES.index("died")), 0.0]],
+            ),
+            "damage_taken": torch.tensor([[2.0, 0.0]]),
+        }
+        return gathered, torch.tensor([[1.0, 0.0]]), targets, torch.ones(1, 2)
+
+    def test_a_perfect_chunk_scores_perfectly(self):
+        from effects.application.gate_one import MarginAccumulator
+        from effects.domain.effect_model import FIELDS_BY_NAME
+
+        margins = MarginAccumulator(
+            (FIELDS_BY_NAME["zone_outcome"], FIELDS_BY_NAME["damage_taken"]),
+        )
+        margins.add(*self._chunk(2.0))
+        metrics = margins.metrics()
+        assert metrics.affected_gate_f1 == pytest.approx(1.0)
+        assert metrics.zone_outcome_accuracy == pytest.approx(1.0)
+        assert metrics.mean_poisson_deviance == pytest.approx(0.0, abs=1e-6)
+
+    def test_nothing_added_is_unmeasured_rather_than_perfect(self):
+        import math
+
+        from effects.application.gate_one import MarginAccumulator
+
+        metrics = MarginAccumulator(()).metrics()
+        assert math.isnan(metrics.affected_gate_f1)
+        assert math.isnan(metrics.mean_poisson_deviance)

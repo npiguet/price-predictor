@@ -41,11 +41,15 @@ from effects.domain.damage_step_keywords import (
     subject_id,
 )
 from effects.domain.effect_model import (
-    FIELD_SLICES,
     FIELDS_BY_NAME,
     ZONE_OUTCOMES,
     FieldSpec,
     FieldType,
+)
+from effects.domain.head_decoding import (
+    direction_balance,
+    expected_magnitude,
+    field_outputs,
 )
 
 logger = logging.getLogger(__name__)
@@ -93,15 +97,13 @@ def read_field(
     Any other type raises rather than guessing: the table pins every effect to a
     real head, and a row naming a field this cannot read is a table bug.
     """
-    start, end = FIELD_SLICES[spec.name]
-    slice_ = vector[start:end]
+    slice_ = field_outputs(vector, spec)
     match spec.type:
         case FieldType.COUNT:
-            return float(torch.exp(slice_[0]))
+            return float(expected_magnitude(spec, slice_))
         case FieldType.SIGNED_DELTA:
-            probabilities = torch.softmax(slice_[:3], dim=-1)
-            sign = float(probabilities[2] - probabilities[0])
-            return sign * float(torch.exp(slice_[3]))
+            sign = float(direction_balance(spec, slice_))
+            return sign * float(expected_magnitude(spec, slice_))
         case FieldType.CATEGORICAL:
             if spec.name != "zone_outcome" or category is None:
                 raise ValueError(
