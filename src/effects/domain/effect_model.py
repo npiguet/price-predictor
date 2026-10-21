@@ -227,9 +227,25 @@ FIELDS_BY_NAME: dict[str, FieldSpec] = {s.name: s for s in PER_ENTITY_FIELDS}
 
 #: Created-objects head (FR-078): K group slots plus one overflow flag.
 CREATED_OBJECT_SLOTS = 4
-#: Per slot: present, scripted flag, count, power, toughness, then type and
-#: keyword flags for a characteristics-only group.
-CREATED_SLOT_WIDTH = 3 + 2 + len(CARD_TYPES) + len(OVERLAY_KEYWORDS)
+
+
+class CreatedSlot:
+    """Offsets within one created-objects slot.
+
+    Two binary flags, then three magnitudes, then one flag per card type and
+    per overlay keyword for a characteristics-only group.
+    """
+
+    PRESENT = 0
+    SCRIPTED = 1
+    COUNT = 2
+    POWER = 3
+    TOUGHNESS = 4
+    TYPES = 5
+    KEYWORDS = TYPES + len(CARD_TYPES)
+
+
+CREATED_SLOT_WIDTH = CreatedSlot.KEYWORDS + len(OVERLAY_KEYWORDS)
 CREATED_OBJECTS_WIDTH = CREATED_OBJECT_SLOTS * CREATED_SLOT_WIDTH + 1
 
 #: Verdict head (FR-079): three verdict bits, cost paid per colour, trigger fired.
@@ -800,14 +816,15 @@ def created_objects_loss(
     total = prediction.new_zeros(())
     for slot in range(CREATED_OBJECT_SLOTS):
         base = slot * CREATED_SLOT_WIDTH
+        flags = slice(base + CreatedSlot.PRESENT, base + CreatedSlot.COUNT)
         total = total + functional.binary_cross_entropy_with_logits(
-            prediction[:, base:base + 2], target[:, base:base + 2],
-            reduction="sum",
+            prediction[:, flags], target[:, flags], reduction="sum",
         )
+        magnitudes = slice(base + CreatedSlot.COUNT, base + CreatedSlot.TYPES)
         total = total + _poisson(
-            prediction[:, base + 2:base + 5], capped(target[:, base + 2:base + 5]),
+            prediction[:, magnitudes], capped(target[:, magnitudes]),
         )
-        rest = slice(base + 5, base + CREATED_SLOT_WIDTH)
+        rest = slice(base + CreatedSlot.TYPES, base + CREATED_SLOT_WIDTH)
         total = total + functional.binary_cross_entropy_with_logits(
             prediction[:, rest], target[:, rest], reduction="sum",
         )
