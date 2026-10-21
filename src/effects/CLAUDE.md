@@ -74,7 +74,7 @@ The hooks live on the **`effect-record-hooks` branch of the sibling `../forge` c
 ```bash
 cd ../forge && git checkout effect-record-hooks   # or: git merge master, after an upgrade
 mvn -pl forge-core,forge-game,forge-ai -am install -DskipTests
-cd ../price-predictor/forge-connector && mvn package -DskipTests
+cd ../price-predictor/forge-connector && mvn install -DskipTests
 ```
 
 Rebuild the fat JAR afterwards, always: the worker links against the freshly installed Forge jars. Applied, a run reaches **all eight** sampling classes; unapplied, three, and every record is stamped `degraded`.

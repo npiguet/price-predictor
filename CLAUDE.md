@@ -17,7 +17,7 @@ An ML system that predicts Magic: The Gathering card EUR prices from game-visibl
 pip install -e ".[dev]" --extra-index-url https://download.pytorch.org/whl/cu126
 
 # Fat JAR required by convert / generate-pools / match-outcomes / generate-draft-data
-cd forge-connector && mvn package -DskipTests
+cd forge-connector && mvn install -DskipTests
 ```
 
 ## Architecture
@@ -34,7 +34,7 @@ Four Python packages live under `src/`, each laid out in hexagonal (ports-and-ad
 Java 17+ library at `forge-connector/` with two roles. Its own code is stdlib-only apart from `minlog`, which the `jar-with-dependencies` assembly bundles (`lombok` is `provided`); everything else it compiles against comes from the sibling Forge checkout. Note the worker classpath is only the five JARs `build_forge_classpath` assembles — Forge's own transitive dependencies are **not** on it unless `include_dependency_glob` is set, so a new third-party dependency has to be declared here and bundled.
 
 1. **Client library for Forge**: `PricePredictorClient` + `CardAttributes` give Forge a 5-line API for hitting the `POST /api/v1/predict` endpoint. Used by Forge's deck-building heuristics.
-2. **CLI workers invoked by the Python side**: fat JAR built with `mvn package -DskipTests` → `target/forge-connector-1.0.0-SNAPSHOT-jar-with-dependencies.jar`. Main classes invoked by Python subprocess:
+2. **CLI workers invoked by the Python side**: fat JAR built with `mvn install -DskipTests` → `target/forge-connector-1.0.0-SNAPSHOT-jar-with-dependencies.jar`. Main classes invoked by Python subprocess:
    - `ConvertMain` — `python -m price_predictor convert`
    - `PoolMain` — `python -m sealed generate-pools`
    - `MatchWorkerMain` — one per worker in `python -m sealed match-outcomes`
