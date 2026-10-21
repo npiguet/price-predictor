@@ -36,6 +36,7 @@ from effects.domain.keyword_names import overlay_keyword
 from effects.domain.provenance import ProvenanceKey
 from effects.domain.records import (
     CombatPayload,
+    ContinuousPayload,
     EffectRecord,
     Moment,
     PlayabilityDecisionPayload,
@@ -151,16 +152,6 @@ def _phase_in(phase: str | None, layout: str | None) -> str | None:
     if layout is EARLIER_LAYOUT or phase is None:
         return phase
     return PHASE_ALIASES.get(phase.strip().lower(), phase)
-
-
-def _counter_name(name: str, layout: str | None) -> str:
-    if layout is EARLIER_LAYOUT:
-        return name
-    return COUNTER_ALIASES.get(name, name)
-
-
-def _keyword_in(keyword: str, layout: str | None) -> str:
-    return keyword if layout is EARLIER_LAYOUT else overlay_keyword(keyword)
 
 
 @lru_cache(maxsize=None)
@@ -414,46 +405,46 @@ def card_features(
     computed here rather than left to the trunk: subtracting is one more thing
     a transformer would have to learn before it could compare.
     """
-    state = record.state
     out: list[float] = []
+    _push_characteristics(out, entity)
+    _push_overlay(out, entity, record, masked_keywords=masked_keywords, layout=layout)
+    _push_stack_extras(out, entity)
+    out += _damage_assignment_features(entity, record)
+    out += _pending_event_features(entity, record)
+    if layout is not EARLIER_LAYOUT:
+        _push_comparable_amounts(out, entity)
+    return tuple(out)
 
-    # ── structured characteristics ──
+
+def _push_characteristics(out: list[float], entity: EntityState) -> None:
+    """Types, supertypes, colours, mana value and the P/T breakdown."""
     out += _multi_hot(entity.types, CARD_TYPES)
     out += _multi_hot(entity.supertypes, SUPERTYPES)
     out += _multi_hot(entity.colors, COLORS)
     _push_scalar(out, entity.mana_value)
     pt = entity.pt
-    if pt is not None:
-        for pair in (pt.base, pt.boosts, pt.counters):
-            _push_scalar(out, pair[0])
-            _push_scalar(out, pair[1])
-        out.append(1.0)
-    else:
+    if pt is None:
         out += _NO_PT
+        return
+    for pair in (pt.base, pt.boosts, pt.counters):
+        _push_scalar(out, pair[0])
+        _push_scalar(out, pair[1])
+    out.append(1.0)
 
-    # ── overlay ──
+
+def _push_overlay(
+    out: list[float], entity: EntityState, record: EffectRecord, *,
+    masked_keywords: frozenset[str], layout: str | None,
+) -> None:
+    """What the game has done to the card: zone, status, counters, combat,
+    temporary grants, and its relation to the acting player and the targets."""
+    state = record.state
     out += _one_hot(entity.zone, ZONES)
     out.append(1.0 if entity.tapped else 0.0)
     out.append(1.0 if entity.sick else 0.0)
     out.append(1.0 if entity.face_down else 0.0)
     _push_scalar(out, entity.damage)
-    counters = entity.counters
-    if counters:
-        if layout is not EARLIER_LAYOUT:
-            renamed: dict[str, int] = {}
-            for name, value in counters.items():
-                name = _counter_name(name, layout)
-                renamed[name] = renamed.get(name, 0) + value
-            counters = renamed
-        for counter in COUNTER_TYPES:
-            _push_scalar(out, counters.get(counter, 0))
-        _push_scalar(out, sum(
-            value for name, value in counters.items()
-            if name not in COUNTER_TYPES
-        ))
-    else:
-        # The common case by far, and every one of those scalars is zero.
-        out += _NO_COUNTERS
+    _push_counters(out, entity.counters, layout)
     combat = entity.combat
     out.append(1.0 if combat and combat.attacking else 0.0)
     out.append(1.0 if combat and combat.blocking else 0.0)
@@ -467,8 +458,7 @@ def card_features(
         out += _multi_hot(granted, OVERLAY_KEYWORDS)
     else:
         out += _multi_hot(
-            [_keyword_in(keyword, layout) for keyword in granted],
-            OVERLAY_KEYWORDS_GEN2,
+            [overlay_keyword(keyword) for keyword in granted], OVERLAY_KEYWORDS_GEN2,
         )
     _push_scalar(out, len(entity.granted_temporary.abilities))
     out.append(1.0 if state.controller_tag(
@@ -476,30 +466,45 @@ def card_features(
     out.append(1.0 if entity.id in state.refs.targets else 0.0)
     out.append(1.0 if entity.id == state.refs.source else 0.0)
 
-    # ── stack extras ──
+
+def _push_counters(out: list[float], counters, layout: str | None) -> None:
+    if not counters:
+        # The common case by far, and every one of those scalars is zero.
+        out += _NO_COUNTERS
+        return
+    if layout is not EARLIER_LAYOUT:
+        renamed: dict[str, int] = {}
+        for name, value in counters.items():
+            name = COUNTER_ALIASES.get(name, name)
+            renamed[name] = renamed.get(name, 0) + value
+        counters = renamed
+    for counter in COUNTER_TYPES:
+        _push_scalar(out, counters.get(counter, 0))
+    _push_scalar(out, sum(
+        value for name, value in counters.items() if name not in COUNTER_TYPES
+    ))
+
+
+def _push_stack_extras(out: list[float], entity: EntityState) -> None:
     extras = entity.stack_extras
     if extras is None:
         out += _NO_STACK_EXTRAS
-    else:
-        _push_scalar(out, len(extras.targets))
-        _push_scalar(out, sum(extras.per_target_amounts.values()))
-        _push_scalar(out, sum(extras.up_to_counts.values()))
+        return
+    _push_scalar(out, len(extras.targets))
+    _push_scalar(out, sum(extras.per_target_amounts.values()))
+    _push_scalar(out, sum(extras.up_to_counts.values()))
 
-    # ── per-kind overlays ──
-    out += _damage_assignment_features(entity, record)
-    out += _pending_event_features(entity, record)
 
-    # ── comparable amounts (gen-2 layout) ──
-    if layout is not EARLIER_LAYOUT:
-        if pt is None:
-            out += _NO_THERMOMETER * 3
-        else:
-            power = pt.base[0] + pt.boosts[0] + pt.counters[0]
-            toughness = pt.base[1] + pt.boosts[1] + pt.counters[1]
-            out += thermometer(power)
-            out += thermometer(toughness)
-            out += thermometer(toughness - entity.damage)
-    return tuple(out)
+def _push_comparable_amounts(out: list[float], entity: EntityState) -> None:
+    """The gen-2 layout's thermometers: total power, total toughness, and the
+    toughness left after marked damage."""
+    if entity.pt is None:
+        out += _NO_THERMOMETER * 3
+        return
+    power, toughness = entity.pt.total
+    out += thermometer(power)
+    out += thermometer(toughness)
+    out += thermometer(toughness - entity.damage)
 
 
 def _damage_assignment_features(
@@ -626,53 +631,17 @@ def build_effect_head_input(
 
     source_id = record.state.refs.source
     for entity in record.state.entities:
-        # Position ids restart here: an entity plus its abilities is one block,
-        # read the same way wherever the entity sits on the board.
-        position = 0
         gone = stripped.get(entity.id, frozenset())
         entity_slots.append(len(slots))
-        slots.append(Slot(
-            kind=SlotKind.CARD, position=position,
-            features=card_features(
-                entity, record,
-                masked_keywords=masked.get(entity.id, frozenset()) | gone,
-                layout=layout,
+        slots += _entity_block(
+            entity, record, e_for=e_for, zero=zero,
+            masked=masked.get(entity.id, frozenset()) | gone, layout=layout,
+            options_for=options_for,
+            keeps=lambda key, entity=entity, gone=gone: _keeps_ability(
+                key, has_line=has_line, gone=gone, keyword_of=keyword_of,
+                dropout=context_dropout if entity.id != source_id else 0.0, rng=rng,
             ),
-            entity_id=entity.id,
-        ))
-        position += 1
-        is_context = entity.id != source_id
-        for key in _ability_keys(entity):
-            if has_line is not None and not has_line(key):
-                continue
-            if gone and keyword_of is not None and keyword_of(key) in gone:
-                # Dropped rather than zeroed: a zero token would still tell the
-                # head this creature has an ability here, and gate 2 is asking
-                # what the board looks like without the keyword at all.
-                continue
-            if (
-                is_context
-                and context_dropout > 0.0
-                and rng.random() < context_dropout
-            ):
-                continue
-            resolved = e_for(key)
-            slots.append(Slot(
-                kind=SlotKind.ABILITY, position=position,
-                # Explicitly against None: row 0 is a valid matrix row and
-                # ``or`` would read it as a miss.
-                e=zero if resolved is None else resolved,
-                entity_id=entity.id,
-            ))
-            position += 1
-            for mode in (options_for(key) if options_for is not None else ()):
-                resolved = e_for(mode)
-                slots.append(Slot(
-                    kind=SlotKind.ABILITY, position=position,
-                    e=zero if resolved is None else resolved,
-                    entity_id=entity.id, option=True,
-                ))
-                position += 1
+        )
 
     return EffectHeadInput(
         slots=tuple(slots),
@@ -680,6 +649,53 @@ def build_effect_head_input(
         actor_player=record.actor_player,
         entity_slots=tuple(entity_slots),
     )
+
+
+def _entity_block(
+    entity: EntityState, record: EffectRecord, *, e_for, zero, masked, layout,
+    options_for, keeps,
+) -> list[Slot]:
+    """One entity's ``CARD`` slot, then an ``ABILITY`` slot per ability it keeps,
+    each charm root followed by its mode lines.
+
+    Position ids restart at the block: an entity plus its abilities is read the
+    same way wherever the entity sits on the board.
+    """
+    block = [Slot(
+        kind=SlotKind.CARD, position=0,
+        features=card_features(entity, record, masked_keywords=masked, layout=layout),
+        entity_id=entity.id,
+    )]
+    for key in _ability_keys(entity):
+        if not keeps(key):
+            continue
+        modes = options_for(key) if options_for is not None else ()
+        for mode_key, option in ((key, False), *((mode, True) for mode in modes)):
+            resolved = e_for(mode_key)
+            block.append(Slot(
+                kind=SlotKind.ABILITY, position=len(block),
+                # Explicitly against None: row 0 is a valid matrix row and
+                # ``or`` would read it as a miss.
+                e=zero if resolved is None else resolved,
+                entity_id=entity.id, option=option,
+            ))
+    return block
+
+
+def _keeps_ability(key, *, has_line, gone, keyword_of, dropout: float, rng) -> bool:
+    """Whether one of an entity's abilities gets a slot.
+
+    ``dropout`` is zero for the acting entity: dropping the ability under study
+    would make the record unanswerable.
+    """
+    if has_line is not None and not has_line(key):
+        return False
+    if gone and keyword_of is not None and keyword_of(key) in gone:
+        # Dropped rather than zeroed: a zero token would still tell the head
+        # this creature has an ability here, and gate 2 is asking what the
+        # board looks like without the keyword at all.
+        return False
+    return not (dropout > 0.0 and rng.random() < dropout)
 
 
 def _ability_keys(entity: EntityState) -> tuple[ProvenanceKey, ...]:
@@ -730,8 +746,8 @@ def continuous_masked_keywords(record: EffectRecord) -> dict[str, frozenset[str]
     changed keywords, not the card's printed type line.
     """
     payload = record.payload
-    if record.kind is not RecordKind.CONTINUOUS or not hasattr(
-        payload, "contributions"
+    if record.kind is not RecordKind.CONTINUOUS or not isinstance(
+        payload, ContinuousPayload,
     ):
         return {}
     return {
