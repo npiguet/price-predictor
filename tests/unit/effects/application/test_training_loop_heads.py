@@ -282,3 +282,8 @@ class TestTheBatchersTheLoopBuilds:
         # Likewise the input layout (FR-063c): a loader builds the inputs the
         # checkpoint recorded, and one recording none reads the earlier layout.
         assert settings["input_layout"] == "gen-2"
+
+    def test_the_checkpoint_records_the_seed_the_run_drew(self, monkeypatch):
+        """A run with no --seed is reproducible only through the one it drew."""
+        loop = _loop(monkeypatch)
+        assert loop._training_settings()["seed"] == loop.seed
