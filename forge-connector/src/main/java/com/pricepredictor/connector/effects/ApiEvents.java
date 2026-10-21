@@ -100,7 +100,7 @@ final class ApiEvents {
      *
      * <p>This is a strict subset of the {@code rewrite} record this connector
      * already writes for every replacement, from {@code
-     * ReplacementHandler.observeReplacement} -- see the comment on {@code
+     * ReplacementObserver.observe} -- see the comment on {@code
      * EventType.REPLACEMENT_APPLIED} in {@code event_schema.py} for why the two
      * must not be read as independent evidence of the same replacement.
      */

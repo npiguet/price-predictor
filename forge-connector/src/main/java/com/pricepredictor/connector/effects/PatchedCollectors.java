@@ -439,7 +439,7 @@ public final class PatchedCollectors implements AutoCloseable {
      * unit test can call.
      *
      * <p>The host is taken as delivered, deliberately not re-resolved through
-     * {@code game.getCardState(host)} the way {@code executeReplacementInternal}
+     * {@code game.getCardState(host)} the way {@code executeReplacementUnobserved}
      * does: that answers an alternate-state card, and the entity id in
      * {@code state.entities} is the one this object carries.
      *
@@ -1724,7 +1724,7 @@ public final class PatchedCollectors implements AutoCloseable {
      * accident, only by being the same object. A clause with no identifiable
      * host is treated as not belonging here rather than let through by
      * default: on the real resolution path a host card is always present
-     * (the same assumption {@code AbilityUtils.resolveApiAbilityBody}
+     * (the same assumption {@code AbilityUtils.resolveApiAbilityUnobserved}
      * already makes, unconditionally dereferencing it), so this branch is
      * never live in production and only ever chooses the safer of two
      * defaults for a state that should not occur.
@@ -3294,7 +3294,7 @@ public final class PatchedCollectors implements AutoCloseable {
      * <p>A triggered or replacement ability belongs to its host's controller,
      * which is often not whoever's turn it is: a death trigger fires on the
      * opponent's turn as often as on its own. Forge decides it the same way —
-     * {@code TriggerHandler.runSingleTriggerBody} defaults the controller to
+     * {@code TriggerHandler.runSingleTriggerUnobserved} defaults the controller to
      * the host card's.
      */
     private String controllerOf(Card source) {

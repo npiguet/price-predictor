@@ -675,7 +675,7 @@ recorded.
 ```
 
 The original pair `{incoming, outgoing}` assumed a replacement edits the event's parameter map in
-place. Forge mostly does not. `ReplacementHandler.executeReplacementInternal` runs the `ReplaceWith$`
+place. Forge mostly does not. `ReplacementHandler.executeReplacementUnobserved` runs the `ReplaceWith$`
 ability — `playSpellAbilityNoStack(effectSA, true)` — and then writes only a `ReplacementResult` into
 the map; for `Prevented`, `Skipped` and `NotReplaced` it returns without touching the map at all. So
 "enters tapped", "if it would die, exile it instead" and "prevent that damage" are substitutions
@@ -704,7 +704,7 @@ Hence:
 - `replaced_by` keys `effectSA` — the substituted ability — through the same provenance resolver that
   keys the record's own `ability` field, so the two are joinable against the sidecar identically.
 
-What each outcome may carry follows from where in `executeReplacementInternal` it returns, and that is
+What each outcome may carry follows from where in `executeReplacementUnobserved` it returns, and that is
 what the validator judges:
 
 | Result | `outgoing` | `replaced_by` |
