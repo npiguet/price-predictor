@@ -30,7 +30,13 @@ from effects.application.train_effect_model import (
     TrainEffectModelConfig,
     fields_for_epoch,
 )
-from effects.application.training_loop import StepLoss, TrainingLoop, parameter_groups
+from effects.application.training_loop import (
+    EpochTally,
+    RunContext,
+    StepLoss,
+    TrainingLoop,
+    parameter_groups,
+)
 from effects.domain.ability_encoder import AbilityEncoder, AbilityEncoderConfig
 from effects.domain.ability_tokenizer import SPECIAL_TOKENS, AbilityTokenizer
 from effects.domain.effect_head_input import SlotKind
@@ -63,6 +69,15 @@ def records():
 @pytest.fixture(scope="module")
 def definitions():
     return load_keyword_definitions(_FIXTURES / "keyword-definitions.json")
+
+def _run(encoder, model, tokenizer, sidecars, widths, optimizer) -> RunContext:
+    """The run a shard trains in, with no configs: nothing here saves."""
+    return RunContext(
+        encoder_config=None, model_config=None, encoder=encoder, model=model,
+        tokenizer=tokenizer, sidecars=sidecars, widths=widths,
+        optimizer=optimizer, warmup=1,
+    )
+
 
 
 def _config(**overrides) -> TrainEffectModelConfig:
@@ -176,17 +191,13 @@ def _train(monkeypatch, records, definitions, *, prefetch: bool):
     fields = fields_for_epoch(
         loop.config, present=frozenset(sampling_class(r) for r in records), epoch=1,
     )
-    running = torch.zeros(())
     task, steps = _shard(
         loop, records, tokenizer, sidecars, widths, STEPS, fields,
         heads=loop._training_heads(model),
     )
-    step, taken = loop._train_on_shard(
-        task, steps, 0.0,
-        encoder=encoder, model=model, tokenizer=tokenizer, sidecars=sidecars,
-        widths=widths, optimizer=optimizer, warmup=1, running=running,
-        step=0, taken=0, of=1,
-    )
+    run = _run(encoder, model, tokenizer, sidecars, widths, optimizer)
+    tally = EpochTally(running=torch.zeros(()))
+    loop._train_on_shard(task, steps, 0.0, run, tally, of=1)
     monkeypatch.undo()
     parameters = {
         f"{owner}.{name}": value.detach().clone()
@@ -195,8 +206,8 @@ def _train(monkeypatch, records, definitions, *, prefetch: bool):
     }
     return {
         "losses": losses, "terms": terms, "threads": threads,
-        "parameters": parameters, "running": float(running),
-        "counters": (step, taken),
+        "parameters": parameters, "running": float(tally.running),
+        "counters": (run.step, tally.taken),
     }
 
 
@@ -265,11 +276,12 @@ def _stubbed(monkeypatch, records, *, failing_at: int | None = None):
     loop = _loop(monkeypatch, prefetch=True)
     sidecars = SidecarCache(dict(_SIDECAR_ROOTS))
     task, steps = _shard(loop, records, None, sidecars, {}, 4, (), heads=frozenset())
+    run = _run(
+        _Stub(), model, None, sidecars, {},
+        torch.optim.SGD(model.parameters(), lr=0.1),
+    )
     loop._train_on_shard(
-        task, steps, 0.0,
-        encoder=_Stub(), model=model, tokenizer=None, sidecars=sidecars,
-        widths={}, optimizer=torch.optim.SGD(model.parameters(), lr=0.1),
-        warmup=1, running=torch.zeros(()), step=0, taken=0, of=1,
+        task, steps, 0.0, run, EpochTally(running=torch.zeros(())), of=1,
     )
     return marks, prepared
 

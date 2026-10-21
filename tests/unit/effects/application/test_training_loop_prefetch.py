@@ -105,13 +105,13 @@ def run(tmp_path, make_record, monkeypatch):  # noqa: F811
             mark("load", path.name, "finish")
             return [f"{path.name} records"]
 
-        def train_on_shard(self, task, steps, waited, *,
-                           step, taken, **kwargs):
+        def train_on_shard(self, task, steps, waited, run, tally, **kwargs):
             mark("train", task.shard.name, "start")
             time.sleep(PAUSE)
             trained.append((task.shard.name, steps))
             mark("train", task.shard.name, "finish")
-            return step + task.budget, taken + task.budget
+            run.step += task.budget
+            tally.taken += task.budget
 
         def pool(*args, **kwargs):
             pools.append(_SpyPool(*args, **kwargs))
