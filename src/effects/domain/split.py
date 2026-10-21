@@ -10,7 +10,7 @@ shipping gate, score partly on cards the encoder had already seen.
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 
 from effects.domain.card_names import fold_card_name
@@ -63,9 +63,9 @@ class CorpusSplit:
     on games the model had trained on.
     """
 
-    held_out_cards: tuple[str, ...]
-    card_disjoint_games: frozenset[str]
-    game_disjoint_games: frozenset[str]
+    held_out_cards: tuple[str, ...] = ()
+    card_disjoint_games: frozenset[str] = frozenset()
+    game_disjoint_games: frozenset[str] = frozenset()
 
     @property
     def validation_games(self) -> frozenset[str]:
@@ -132,90 +132,3 @@ def record_names_held_out_card(
             if key.script_file in held_out.script_files:
                 return True
     return False
-
-
-def shard_games(
-    records: Iterable[EffectRecord], held_out: HeldOutCards,
-) -> tuple[frozenset[str], frozenset[str]]:
-    """One shard's games, split by whether any record names a held-out card.
-
-    Decidable from the shard alone because a game never spans two shards: the
-    collector gives every shard its own game-id namespace. Returns
-    ``(tainted, clean)``, and a game appears in exactly one of them.
-    """
-    tainted: set[str] = set()
-    seen: set[str] = set()
-    for record in records:
-        seen.add(record.game_id)
-        if record.game_id not in tainted and record_names_held_out_card(
-            record, held_out
-        ):
-            tainted.add(record.game_id)
-    return frozenset(tainted), frozenset(seen - tainted)
-
-
-class SplitAccumulator:
-    """The split, built up shard by shard instead of derived in one pass.
-
-    A game naming a held-out card joins the card-disjoint stratum wherever it is
-    found, because training on it would let the shipping gate score on cards the
-    encoder had already seen. A clean game joins the game-disjoint stratum only
-    when it comes from a reserved shard, which is what makes the validation
-    records the same ones every epoch.
-
-    A ``--split-from`` run inherits a fixed split instead: the corpus grows
-    between runs, and re-deriving the boundary would move it.
-    """
-
-    def __init__(
-        self,
-        *,
-        held_out_cards: Sequence[str] = (),
-        inherited: CorpusSplit | None = None,
-    ) -> None:
-        self._held_out_cards = tuple(held_out_cards)
-        self._inherited = inherited
-        self._card_disjoint: set[str] = set()
-        self._game_disjoint: set[str] = set()
-
-    @classmethod
-    def inheriting(cls, split: CorpusSplit) -> SplitAccumulator:
-        return cls(held_out_cards=split.held_out_cards, inherited=split)
-
-    @property
-    def inherited(self) -> bool:
-        return self._inherited is not None
-
-    def note_shard(
-        self,
-        records: Iterable[EffectRecord],
-        held_out: HeldOutCards,
-        *,
-        reserved: bool,
-    ) -> tuple[frozenset[str], frozenset[str]]:
-        """Record one shard's games and return its ``(tainted, clean)`` sets."""
-        tainted, clean = shard_games(records, held_out)
-        self.note_games(tainted, clean, reserved=reserved)
-        return tainted, clean
-
-    def note_games(
-        self, tainted: Iterable[str], clean: Iterable[str], *, reserved: bool,
-    ) -> None:
-        """Record one shard's games, already split where the shard was read.
-
-        What the training loop calls when a worker process read the shard:
-        the game ids cross back to it, the records never do.
-        """
-        if self._inherited is None:
-            self._card_disjoint |= set(tainted)
-            if reserved:
-                self._game_disjoint |= set(clean)
-
-    def split(self) -> CorpusSplit:
-        if self._inherited is not None:
-            return self._inherited
-        return CorpusSplit(
-            held_out_cards=self._held_out_cards,
-            card_disjoint_games=frozenset(self._card_disjoint),
-            game_disjoint_games=frozenset(self._game_disjoint),
-        )

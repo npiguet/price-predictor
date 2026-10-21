@@ -114,8 +114,6 @@ from effects.domain.rarity import RARITY_BUCKETS
 from effects.domain.sampling import SAMPLING_CLASSES, sampling_class
 from effects.domain.split import (
     CorpusSplit,
-    HeldOutCards,
-    SplitAccumulator,
 )
 from effects.domain.variants import variant_masks
 from effects.infrastructure.effect_model_store import (
@@ -350,8 +348,7 @@ class TrainingLoop(StepPreparation):
         self,
         config: TrainEffectModelConfig,
         *,
-        held_out: HeldOutCards,
-        inherited: CorpusSplit | None,
+        split: CorpusSplit,
         training_shards: Sequence[Path],
         validation_samples: Mapping[str, Path],
         holdout_permille: int,
@@ -373,10 +370,9 @@ class TrainingLoop(StepPreparation):
         #: thread above it moves where the host half runs and not what it
         #: computes, so it is not a training setting.
         self.prefetch_workers = max(int(config.prefetch_workers), 0)
-        self.held_out = held_out
-        #: The corpus's own split, which every ``--corpus`` run inherits; the
-        #: host half reads it to keep validation games out of training.
-        self.inherited = inherited
+        #: The corpus's own split, read from its manifest: the host half keeps
+        #: its validation games out of training, and the checkpoint records it.
+        self.split = split
         self.training_shards = list(training_shards)
         #: The corpus's fixed validation samples, one file per stratum
         #: (FR-089). Read once by ``_load_validation`` and never redrawn: the
@@ -411,10 +407,6 @@ class TrainingLoop(StepPreparation):
         #: The curated dataset's manifest digest at read time (FR-147), read
         #: into the checkpoint's provenance by ``_provenance`` below.
         self.corpus_digest = corpus_digest
-        self.accumulator = (
-            SplitAccumulator.inheriting(inherited) if inherited is not None
-            else SplitAccumulator(held_out_cards=tuple(sorted(held_out.names)))
-        )
         self.masks = variant_masks(config.variant)
         # The surface follows the vocabulary the run loads, so the text an
         # ability is encoded from and the vocabulary it is tokenized against can
@@ -1244,8 +1236,8 @@ class TrainingLoop(StepPreparation):
         )
         pool = StepWorkerPool(
             PreparerSettings(
-                config=self.config, seed=self.seed, held_out=self.held_out,
-                inherited=self.inherited, rarity=self.rarity,
+                config=self.config, seed=self.seed, split=self.split,
+                rarity=self.rarity,
                 api_types=tuple(self.api_types),
                 param_keys=tuple(self.param_keys), widths=dict(widths),
                 heads=heads, legality_mode_counts=self.legality_mode_counts,
@@ -1353,13 +1345,12 @@ class TrainingLoop(StepPreparation):
             torch.cuda.empty_cache()
 
     def _note_opened(self, opened: ShardOpened) -> None:
-        """Fold a shard's split into the run's; say what the rarity table covers.
+        """Say, once per run, how much of a shard the rarity table covers.
 
         The coverage is said once per run rather than once per shard: a table
         matching nothing is otherwise invisible, since every weight falls back
         to the shard's own count and the run looks exactly like a healthy one.
         """
-        self.accumulator.note_games(opened.tainted, frozenset(), reserved=False)
         if (
             opened.rarity_coverage is None or not opened.trainable
             or self._rarity_reported
@@ -1622,7 +1613,7 @@ class TrainingLoop(StepPreparation):
         recomputed against a grown corpus would not be the one this model
         trained against.
         """
-        split = self.accumulator.split()
+        split = self.split
         return SplitProvenance(
             held_out_cards=split.held_out_cards,
             card_disjoint_games=tuple(sorted(split.card_disjoint_games)),

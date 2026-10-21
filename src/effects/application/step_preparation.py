@@ -70,8 +70,6 @@ from effects.domain.sampling import (
 )
 from effects.domain.split import (
     CorpusSplit,
-    HeldOutCards,
-    shard_games,
 )
 from effects.domain.value_targets import params, segments, value_targets
 from effects.domain.variants import VariantMasks
@@ -206,8 +204,6 @@ class ShardOpened:
 
     trainable: int
     held_back: int
-    #: Games naming a held-out card, for the split accumulator.
-    tainted: frozenset[str]
     #: ``(found, distinct)``: how many of the trainable records' distinct
     #: ability texts the rarity table names; None without a table.
     rarity_coverage: tuple[int, int] | None
@@ -259,7 +255,7 @@ class StepPreparation:
     """The host half's methods, shared by the training loop and its workers.
 
     A mixin over the attributes both set: ``config``, ``seed``, ``surface``,
-    ``masks``, ``held_out``, ``inherited``, ``rarity``, ``api_types``,
+    ``masks``, ``split``, ``rarity``, ``api_types``,
     ``param_keys``, ``truncations``, ``noise``, ``identity_table`` and
     ``device``. The worker's ``noise``, ``identity_table`` and ``device`` are
     inert — they are read only by the device half, which never runs there.
@@ -269,8 +265,9 @@ class StepPreparation:
     seed: int
     surface: str
     masks: VariantMasks
-    held_out: HeldOutCards
-    inherited: CorpusSplit | None
+    #: The corpus's split, read from its manifest; its validation games never
+    #: reach training.
+    split: CorpusSplit
     rarity: Mapping[str, int] | None
     #: The manifest's records per legality mode, which places a legality
     #: record in the family the build placed it in; None without one.
@@ -588,26 +585,18 @@ class StepPreparation:
     ) -> Iterator[ShardOpened | StepReady]:
         """One shard's messages: a ``ShardOpened``, then ``task.budget`` steps.
 
-        The split first. A game naming a held-out card is never trained on;
-        under an inherited split (every ``--corpus`` run) the validation games
-        are the manifest's, and otherwise the shard's own tainted games, which
-        is the whole of the accumulated set as far as this shard is concerned
-        because a game never spans two shards.
+        The split first: a game the manifest places in a validation stratum
+        is never trained on, and a game never spans two shards.
 
         Then the weighted shuffle without replacement, from ``plan_rng``, and
         each step's host half from its own ``step_rng``: exactly the budget,
         and the shard ends with no trainable record in it.
         """
-        tainted, _clean = shard_games(records, self.held_out)
-        excluded = (
-            self.inherited.validation_games if self.inherited is not None
-            else tainted
-        )
+        excluded = self.split.validation_games
         training = [r for r in records if r.game_id not in excluded]
         texts = self._texts(training, sidecars)
         yield ShardOpened(
             trainable=len(training), held_back=len(records) - len(training),
-            tainted=tainted,
             rarity_coverage=(
                 rarity_coverage(texts.values(), self.rarity)
                 if self.rarity is not None else None
@@ -648,14 +637,13 @@ class PreparerSettings:
     """What a worker process needs to rebuild the host half: picklable, once.
 
     Sent once per worker at start rather than with every shard, because the
-    rarity table and the inherited split are corpus-wide and each is several
-    megabytes for a real corpus.
+    rarity table and the split are corpus-wide and each is several megabytes
+    for a real corpus.
     """
 
     config: TrainEffectModelConfig
     seed: int
-    held_out: HeldOutCards
-    inherited: CorpusSplit | None
+    split: CorpusSplit
     rarity: Mapping[str, int] | None
     api_types: tuple[str, ...]
     param_keys: tuple[str, ...]
@@ -680,8 +668,7 @@ class StepPreparer(StepPreparation):
         from effects.domain.variants import variant_masks
 
         self.masks = variant_masks(settings.config.variant)
-        self.held_out = settings.held_out
-        self.inherited = settings.inherited
+        self.split = settings.split
         self.rarity = settings.rarity
         self.legality_mode_counts = settings.legality_mode_counts
         self.api_types = list(settings.api_types)

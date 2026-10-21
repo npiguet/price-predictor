@@ -38,7 +38,6 @@ from effects.domain.records import (
 )
 from effects.domain.split import (
     CorpusSplit,
-    HeldOutCards,
     text_keyed_holdout,
 )
 from effects.domain.variants import Variant
@@ -693,11 +692,7 @@ def run(config: TrainEffectModelConfig) -> int:
     # Copied into the checkpoint's split (FR-042), so evaluation knows the
     # unit without re-reading the manifest.
     config.holdout_unit = manifest.holdout_unit
-    held_out = HeldOutCards(
-        names=frozenset(manifest.held_out_cards), script_files=frozenset(),
-        texts=frozenset(manifest.held_out_texts),
-    )
-    inherited = CorpusSplit(
+    split = CorpusSplit(
         held_out_cards=manifest.held_out_cards,
         card_disjoint_games=frozenset(manifest.card_disjoint_games),
         game_disjoint_games=frozenset(manifest.game_disjoint_games),
@@ -713,8 +708,7 @@ def run(config: TrainEffectModelConfig) -> int:
 
     return TrainingLoop(
         config,
-        held_out=held_out,
-        inherited=inherited,
+        split=split,
         training_shards=training_shards,
         validation_samples=validation_samples,
         holdout_permille=manifest.holdout_permille,

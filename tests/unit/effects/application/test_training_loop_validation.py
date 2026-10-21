@@ -25,7 +25,7 @@ from effects.domain.effect_model import (
 )
 from effects.domain.records import CombatPayload, RecordKind
 from effects.domain.sampling import SAMPLING_CLASSES
-from effects.domain.split import HeldOutCards
+from effects.domain.split import CorpusSplit
 from effects.infrastructure.record_io import write_shard
 from tests.unit.effects.domain.conftest import (  # noqa: F401
     ability_key,
@@ -49,8 +49,7 @@ def samples(tmp_path, make_record):  # noqa: F811
 def test_the_loop_loads_both_samples_and_the_probe(samples):
     loop = TrainingLoop(
         TrainEffectModelConfig(corpus="unused"),
-        held_out=HeldOutCards(names=frozenset(), script_files=frozenset()),
-        inherited=None, training_shards=[], validation_samples=samples,
+        split=CorpusSplit(), training_shards=[], validation_samples=samples,
         holdout_permille=20, holdout_max_carriers=8,
         gate_one_records=0, rarity={}, corpus_digest="",
     )
@@ -75,8 +74,7 @@ def test_the_checkpoint_records_the_corpuss_holdout_rule_not_a_constant():
     """
     loop = TrainingLoop(
         TrainEffectModelConfig(corpus="unused"),
-        held_out=HeldOutCards(names=frozenset(), script_files=frozenset()),
-        inherited=None, training_shards=[], validation_samples={},
+        split=CorpusSplit(), training_shards=[], validation_samples={},
         holdout_permille=30, holdout_max_carriers=5,
         gate_one_records=0, rarity={}, corpus_digest="",
     )
@@ -101,8 +99,7 @@ def test_validation_batches_drop_the_augmentations_but_keep_the_withholding():
             corpus="unused", keyword_expand_p=0.5, context_dropout=0.3,
             withhold_keyword="lifelink",
         ),
-        held_out=HeldOutCards(names=frozenset(), script_files=frozenset()),
-        inherited=None, training_shards=[], validation_samples={},
+        split=CorpusSplit(), training_shards=[], validation_samples={},
         holdout_permille=20, holdout_max_carriers=8,
         gate_one_records=0, rarity={}, corpus_digest="",
     )
@@ -136,8 +133,7 @@ def test_a_sample_missing_a_class_says_so(tmp_path, make_record, caplog):  # noq
                              kind=RecordKind.COMBAT, payload=CombatPayload())])
     loop = TrainingLoop(
         TrainEffectModelConfig(corpus="unused"),
-        held_out=HeldOutCards(names=frozenset(), script_files=frozenset()),
-        inherited=None, training_shards=[], validation_samples=paths,
+        split=CorpusSplit(), training_shards=[], validation_samples=paths,
         holdout_permille=20, holdout_max_carriers=8,
         gate_one_records=0, rarity={}, corpus_digest="",
     )
@@ -155,8 +151,7 @@ def test_a_sample_missing_a_class_says_so(tmp_path, make_record, caplog):  # noq
 def test_a_sample_naming_every_class_says_nothing(caplog):
     loop = TrainingLoop(
         TrainEffectModelConfig(corpus="unused"),
-        held_out=HeldOutCards(names=frozenset(), script_files=frozenset()),
-        inherited=None, training_shards=[], validation_samples={},
+        split=CorpusSplit(), training_shards=[], validation_samples={},
         holdout_permille=20, holdout_max_carriers=8,
         gate_one_records=0, rarity={}, corpus_digest="",
     )

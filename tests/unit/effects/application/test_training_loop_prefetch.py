@@ -25,7 +25,7 @@ from effects.application.train_effect_model import (
 )
 from effects.application.training_loop import TrainingLoop
 from effects.domain.records import CombatPayload, RecordKind
-from effects.domain.split import HeldOutCards
+from effects.domain.split import CorpusSplit
 from effects.infrastructure.record_io import write_shard
 from effects.infrastructure.sidecar_io import SidecarCache
 from tests.unit.effects.domain.conftest import (  # noqa: F401
@@ -165,8 +165,7 @@ def run(tmp_path, make_record, monkeypatch):  # noqa: F811
         )
         return TrainingLoop(
             config,
-            held_out=HeldOutCards(names=frozenset(), script_files=frozenset()),
-            inherited=None, training_shards=shards, validation_samples=samples,
+            split=CorpusSplit(), training_shards=shards, validation_samples=samples,
             holdout_permille=20, holdout_max_carriers=8, gate_one_records=0,
             rarity={}, corpus_digest="",
         ).execute()

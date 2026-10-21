@@ -16,7 +16,7 @@ from effects.application import training_loop as loop_module
 from effects.application.train_effect_model import TrainEffectModelConfig
 from effects.application.training_loop import TrainingLoop, autocast_enabled
 from effects.domain.records import CombatPayload, RecordKind
-from effects.domain.split import HeldOutCards
+from effects.domain.split import CorpusSplit
 from effects.infrastructure.record_io import write_shard
 from tests.unit.effects.domain.conftest import (  # noqa: F401
     ability_key,
@@ -82,8 +82,7 @@ def _bare_loop(monkeypatch) -> TrainingLoop:
     monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
     return TrainingLoop(
         TrainEffectModelConfig(corpus="unused"),
-        held_out=HeldOutCards(names=frozenset(), script_files=frozenset()),
-        inherited=None, training_shards=[], validation_samples={},
+        split=CorpusSplit(), training_shards=[], validation_samples={},
         holdout_permille=20, holdout_max_carriers=8,
         gate_one_records=0, rarity={}, corpus_digest="",
     )
@@ -245,8 +244,7 @@ def _run_execute(monkeypatch, tmp_path, make_record, *, cuda: bool):  # noqa: F8
         prefetch_workers=0,
     )
     code = TrainingLoop(
-        config, held_out=HeldOutCards(names=frozenset(), script_files=frozenset()),
-        inherited=None, training_shards=[shard], validation_samples=samples,
+        config, split=CorpusSplit(), training_shards=[shard], validation_samples=samples,
         holdout_permille=20, holdout_max_carriers=8, gate_one_records=0,
         rarity={}, corpus_digest="",
     ).execute()

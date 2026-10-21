@@ -37,7 +37,7 @@ from effects.domain.records import (
     TriggerPayload,
     events_of,
 )
-from effects.domain.split import HeldOutCards
+from effects.domain.split import CorpusSplit
 from effects.infrastructure.record_io import read_shard
 from effects.infrastructure.sidecar_io import SidecarCache
 
@@ -61,8 +61,7 @@ def _loop(monkeypatch, **config) -> TrainingLoop:
     monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
     return TrainingLoop(
         TrainEffectModelConfig(corpus="unused", **config),
-        held_out=HeldOutCards(names=frozenset(), script_files=frozenset()),
-        inherited=None, training_shards=[], validation_samples={},
+        split=CorpusSplit(), training_shards=[], validation_samples={},
         holdout_permille=20, holdout_max_carriers=8,
         gate_one_records=0, rarity={}, corpus_digest="",
     )

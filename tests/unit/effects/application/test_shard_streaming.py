@@ -38,10 +38,7 @@ from effects.domain.records import (
     ResolutionPayload,
 )
 from effects.domain.split import (
-    CorpusSplit,
     HeldOutCards,
-    SplitAccumulator,
-    shard_games,
 )
 from effects.domain.state_snapshot import EntityState, GlobalState, StateSnapshot
 
@@ -70,97 +67,6 @@ def _record(game_id: str, entities=()) -> EffectRecord:
 
 def _held() -> HeldOutCards:
     return HeldOutCards(names=frozenset({"Serra Angel"}), script_files=frozenset())
-
-
-class TestShardGames:
-    """Sorting one shard's games by whether they name a held-out card."""
-
-    def _records(self):
-        return [
-            _record("g0", entities=(_entity("Serra Angel"),)),
-            _record("g0", entities=(_entity("Grizzly Bears"),)),
-            _record("g1", entities=(_entity("Grizzly Bears"),)),
-            _record("g2", entities=(_entity("Serra Angel"),)),
-        ]
-
-    def test_a_game_naming_a_held_out_card_is_tainted(self):
-        tainted, _clean = shard_games(self._records(), _held())
-        assert tainted == frozenset({"g0", "g2"})
-
-    def test_the_whole_game_is_tainted_not_just_the_naming_record(self):
-        # g0's second record names no held-out card and is still out.
-        tainted, clean = shard_games(self._records(), _held())
-        assert "g0" in tainted
-        assert "g0" not in clean
-
-    def test_a_game_naming_nothing_held_out_is_clean(self):
-        _tainted, clean = shard_games(self._records(), _held())
-        assert clean == frozenset({"g1"})
-
-    def test_an_empty_shard_yields_no_games(self):
-        tainted, clean = shard_games([], _held())
-        assert not tainted and not clean
-
-
-class TestSplitAccumulator:
-    """Building the enumerated split as shards go by."""
-
-    def test_a_tainted_game_is_card_disjoint_wherever_it_is_found(self):
-        # Found in a training shard, not a reserved one: still excluded from
-        # training, and still evaluable.
-        acc = SplitAccumulator(held_out_cards=("Serra Angel",))
-        acc.note_shard(
-            [_record("g0", entities=(_entity("Serra Angel"),))], _held(),
-            reserved=False,
-        )
-        assert acc.split().card_disjoint_games == frozenset({"g0"})
-
-    def test_a_clean_game_in_a_reserved_shard_is_game_disjoint(self):
-        acc = SplitAccumulator(held_out_cards=())
-        acc.note_shard([_record("g1")], _held(), reserved=True)
-        assert acc.split().game_disjoint_games == frozenset({"g1"})
-
-    def test_a_clean_game_in_a_training_shard_is_neither(self):
-        acc = SplitAccumulator(held_out_cards=())
-        acc.note_shard([_record("g1")], _held(), reserved=False)
-        split = acc.split()
-        assert not split.card_disjoint_games and not split.game_disjoint_games
-        assert split.is_training_game("g1")
-
-    def test_the_two_strata_never_overlap(self):
-        acc = SplitAccumulator(held_out_cards=("Serra Angel",))
-        acc.note_shard(
-            [_record("g0", entities=(_entity("Serra Angel"),)), _record("g1")],
-            _held(), reserved=True,
-        )
-        split = acc.split()
-        assert not (split.card_disjoint_games & split.game_disjoint_games)
-
-    def test_the_accumulated_split_names_only_games_it_saw(self):
-        acc = SplitAccumulator(held_out_cards=())
-        acc.note_shard([_record("g1")], _held(), reserved=True)
-        assert acc.split().validation_games == frozenset({"g1"})
-
-    def test_the_held_out_card_list_is_carried_through(self):
-        acc = SplitAccumulator(held_out_cards=("Serra Angel",))
-        assert acc.split().held_out_cards == ("Serra Angel",)
-
-    def test_an_inherited_split_overrides_the_local_rule(self):
-        # A --split-from run reuses the checkpoint's games rather than
-        # re-deriving them, so a grown corpus cannot move the boundary.
-        inherited = CorpusSplit(
-            held_out_cards=("Serra Angel",),
-            card_disjoint_games=frozenset({"g5"}),
-            game_disjoint_games=frozenset({"g6"}),
-        )
-        acc = SplitAccumulator.inheriting(inherited)
-        acc.note_shard(
-            [_record("g0", entities=(_entity("Serra Angel"),))], _held(),
-            reserved=False,
-        )
-        # g0 names a held-out card but is not in the inherited split, so the
-        # inherited boundary stands.
-        assert acc.split() == inherited
 
 
 class TestEpochShards:

@@ -50,6 +50,7 @@ from effects.domain.sampling import (
     sample_weights,
     sampling_class,
 )
+from effects.domain.split import CorpusSplit
 from effects.domain.state_snapshot import GlobalState, StateSnapshot
 
 _SNAPSHOT = StateSnapshot(
@@ -251,7 +252,6 @@ class TestWeightsKeyByAbilityText:
         from effects.application.train_effect_model import TrainEffectModelConfig
         from effects.application.training_loop import TrainingLoop
         from effects.domain.provenance import ProvenanceKey, SidecarLine
-        from effects.domain.split import HeldOutCards
         from tests.unit.effects.application.test_ability_text import (
             FakeSidecarCache,
         )
@@ -279,8 +279,7 @@ class TestWeightsKeyByAbilityText:
         ]
         loop = TrainingLoop(
             TrainEffectModelConfig(),
-            held_out=HeldOutCards(names=frozenset(), script_files=frozenset()),
-            inherited=None, training_shards=[], validation_samples={},
+            split=CorpusSplit(), training_shards=[], validation_samples={},
             holdout_permille=20, holdout_max_carriers=8,
         )
 
@@ -296,12 +295,10 @@ class TestProvenanceRecordsTheCorpus:
     def test_a_corpus_runs_provenance_records_the_manifest_digest(self):
         from effects.application.train_effect_model import TrainEffectModelConfig
         from effects.application.training_loop import TrainingLoop
-        from effects.domain.split import HeldOutCards
 
         loop = TrainingLoop(
             TrainEffectModelConfig(corpus="output/effects/corpus"),
-            held_out=HeldOutCards(names=frozenset(), script_files=frozenset()),
-            inherited=None, training_shards=[], validation_samples={},
+            split=CorpusSplit(), training_shards=[], validation_samples={},
             holdout_permille=20, holdout_max_carriers=8,
             corpus_digest="abc123",
         )
@@ -315,12 +312,10 @@ class TestProvenanceRecordsTheCorpus:
         """Nothing is pinned until a manifest has been read."""
         from effects.application.train_effect_model import TrainEffectModelConfig
         from effects.application.training_loop import TrainingLoop
-        from effects.domain.split import HeldOutCards
 
         loop = TrainingLoop(
             TrainEffectModelConfig(),
-            held_out=HeldOutCards(names=frozenset(), script_files=frozenset()),
-            inherited=None, training_shards=[], validation_samples={},
+            split=CorpusSplit(), training_shards=[], validation_samples={},
             holdout_permille=20, holdout_max_carriers=8,
         )
 
