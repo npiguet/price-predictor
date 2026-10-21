@@ -655,8 +655,9 @@ def _build_corpus_parser(subparsers) -> None:
     parser.add_argument(
         "--shard-records", type=int, default=2000,
         help=(
-            "Records per output shard after repacking, cut at game boundaries; "
-            "0 keeps one output shard per source shard (default: 2000)"
+            "Records per output shard after repacking, about this many each: whole "
+            "games are dealt to shards by a seeded hash of their game id and each "
+            "shard is shuffled; 0 keeps one output shard per source shard (default: 2000)"
         ),
     )
     parser.add_argument(
