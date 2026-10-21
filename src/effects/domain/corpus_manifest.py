@@ -9,7 +9,7 @@ gates against it would score them partly on games the model trained on.
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, field
+from dataclasses import MISSING, Field, asdict, dataclass, field, fields
 from typing import Any
 
 from effects.domain.canonical_digest import canonical_digest
@@ -45,6 +45,33 @@ class ClassCounts:
 
 def _optional_float(value) -> float | None:
     return None if value is None else float(value)
+
+
+def _optional_int(value) -> int | None:
+    return None if value is None else int(value)
+
+
+def _int_map(values: dict) -> dict[str, int]:
+    return {k: int(v) for k, v in values.items()}
+
+
+def _nested_int_map(values: dict) -> dict[str, dict[str, int]]:
+    return {k: _int_map(inner) for k, inner in values.items()}
+
+
+#: Field metadata marking a field ``as_dict`` leaves out while it holds its
+#: default: every gen-2 field, and the one gen-1 field gen-2 stopped writing.
+_OMITTED_AT_DEFAULT = "omitted_at_default"
+_GEN1_IMPLIED = {_OMITTED_AT_DEFAULT: True}
+
+
+def _default_of(spec: Field) -> Any:
+    """The value a manifest lacking ``spec`` reads as; KeyError if it has none."""
+    if spec.default is not MISSING:
+        return spec.default
+    if spec.default_factory is not MISSING:
+        return spec.default_factory()
+    raise KeyError(spec.name)
 
 
 @dataclass(frozen=True, slots=True)
@@ -156,56 +183,53 @@ class CorpusManifest:
     #: ``--game-disjoint-games``, the sampled-count rule gen-2 replaced with a
     #: per-game threshold (FR-044). No longer written; a manifest that carries
     #: it is still read, and keeps its digest.
-    game_disjoint_target: int | None = None
+    game_disjoint_target: int | None = field(default=None, metadata=_GEN1_IMPLIED)
 
     # ── gen-2 (feature 024). Each is omitted from ``as_dict`` while it holds
     # the value a gen-1 manifest implies, so a gen-1 manifest re-serializes to
     # the same digest and every checkpoint pinned to it stays evaluable. ──
 
     #: ``template`` or ``text`` (FR-042); absent reads as ``text``.
-    holdout_unit: str = "text"
+    holdout_unit: str = field(default="text", metadata=_GEN1_IMPLIED)
     #: ``class -> family -> {available, share, written, repeats, shortfall}``.
-    families: dict[str, dict[str, dict[str, int]]] = field(default_factory=dict)
+    families: dict[str, dict[str, dict[str, int]]] = field(
+        default_factory=dict, metadata=_GEN1_IMPLIED,
+    )
     #: ``class -> family -> {outcome signature: records written}``.
-    signatures: dict[str, dict[str, dict[str, int]]] = field(default_factory=dict)
+    signatures: dict[str, dict[str, dict[str, int]]] = field(
+        default_factory=dict, metadata=_GEN1_IMPLIED,
+    )
     #: ``class -> {on_policy, off_policy}`` training records, by ``random_seat``.
-    policy_counts: dict[str, dict[str, int]] = field(default_factory=dict)
+    policy_counts: dict[str, dict[str, int]] = field(
+        default_factory=dict, metadata=_GEN1_IMPLIED,
+    )
     #: ``legality subkind -> {real, what_if, unknown}`` training records.
-    legality_counts: dict[str, dict[str, int]] = field(default_factory=dict)
+    legality_counts: dict[str, dict[str, int]] = field(
+        default_factory=dict, metadata=_GEN1_IMPLIED,
+    )
     #: Surveyed records per legality mode. A legality record's family is its
     #: rarest mode, so every reader placing records in families — the build's
     #: write pass, the trainer's epoch line, the evaluator — reads it here.
-    legality_mode_counts: dict[str, int] = field(default_factory=dict)
+    legality_mode_counts: dict[str, int] = field(
+        default_factory=dict, metadata=_GEN1_IMPLIED,
+    )
     #: Game-disjoint games placed only under ``--game-disjoint-keyword-share``.
-    keyword_threshold_games: tuple[str, ...] = ()
+    keyword_threshold_games: tuple[str, ...] = field(default=(), metadata=_GEN1_IMPLIED)
     #: Held-out texts with no gate-one resolution record.
-    held_out_texts_without_resolution: tuple[str, ...] = ()
+    held_out_texts_without_resolution: tuple[str, ...] = field(
+        default=(), metadata=_GEN1_IMPLIED,
+    )
     #: ``held-out text -> games`` for the texts recorded in fewer than five.
-    held_out_texts_under_five_games: dict[str, int] = field(default_factory=dict)
+    held_out_texts_under_five_games: dict[str, int] = field(
+        default_factory=dict, metadata=_GEN1_IMPLIED,
+    )
     #: The game-disjoint and reuse flags as run; None on a gen-1 manifest.
-    game_disjoint_share: float | None = None
-    game_disjoint_keyword_share: float | None = None
-    game_disjoint_keywords: tuple[str, ...] = ()
-    reuse_cap: int | None = None
-
-    #: Every gen-2 field and the value at which it is left out of ``as_dict``,
-    #: plus the one gen-1 field gen-2 stopped writing.
-    _GEN1_DEFAULTS = {
-        "game_disjoint_target": None,
-        "holdout_unit": "text",
-        "families": {},
-        "signatures": {},
-        "policy_counts": {},
-        "legality_counts": {},
-        "legality_mode_counts": {},
-        "keyword_threshold_games": (),
-        "held_out_texts_without_resolution": (),
-        "held_out_texts_under_five_games": {},
-        "game_disjoint_share": None,
-        "game_disjoint_keyword_share": None,
-        "game_disjoint_keywords": (),
-        "reuse_cap": None,
-    }
+    game_disjoint_share: float | None = field(default=None, metadata=_GEN1_IMPLIED)
+    game_disjoint_keyword_share: float | None = field(
+        default=None, metadata=_GEN1_IMPLIED,
+    )
+    game_disjoint_keywords: tuple[str, ...] = field(default=(), metadata=_GEN1_IMPLIED)
+    reuse_cap: int | None = field(default=None, metadata=_GEN1_IMPLIED)
 
     def as_dict(self) -> dict[str, Any]:
         data = asdict(self)
@@ -213,13 +237,17 @@ class CorpusManifest:
         data["per_class"] = {
             name: asdict(counts) for name, counts in self.per_class.items()
         }
-        for name, default in self._GEN1_DEFAULTS.items():
+        for name, default in _GEN1_DEFAULTS.items():
             if getattr(self, name) == default:
                 data.pop(name, None)
         return data
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> CorpusManifest:
+        def stored(name: str) -> Any:
+            """The written value, or the field's default on an older manifest."""
+            return data[name] if name in data else _default_of(_FIELDS[name])
+
         return cls(
             seed=int(data["seed"]),
             surface=str(data["surface"]),
@@ -236,76 +264,55 @@ class CorpusManifest:
             held_out_texts=tuple(data["held_out_texts"]),
             card_disjoint_games=tuple(data["card_disjoint_games"]),
             game_disjoint_games=tuple(data["game_disjoint_games"]),
-            rarity={k: int(v) for k, v in data["rarity"].items()},
+            rarity=_int_map(data["rarity"]),
             sources=tuple(
                 SourceShard(name=s["name"], size=int(s["size"]))
                 for s in data["sources"]
             ),
             per_class={
-                name: ClassCounts(**{k: int(v) for k, v in counts.items()})
+                name: ClassCounts(**_int_map(counts))
                 for name, counts in data["per_class"].items()
             },
-            per_stratum={k: int(v) for k, v in data["per_stratum"].items()},
-            unique_texts={k: int(v) for k, v in data["unique_texts"].items()},
-            shortfall={k: int(v) for k, v in data["shortfall"].items()},
-            quality_dropped={k: int(v) for k, v in data.get("quality_dropped", {}).items()},
-            games_by_source={k: int(v) for k, v in data.get("games_by_source", {}).items()},
-            held_out_games_by_source={
-                k: int(v) for k, v in data.get("held_out_games_by_source", {}).items()
-            },
-            shard_records=int(data.get("shard_records", 0)),
-            validation_sample=int(data.get("validation_sample", 0)),
-            max_events_per_record=int(data.get("max_events_per_record", 0)),
-            unattributed_records=int(data.get("unattributed_records", 0)),
-            token_keys_remapped=int(data.get("token_keys_remapped", 0)),
-            token_keys_ambiguous={
-                k: int(v) for k, v in data.get("token_keys_ambiguous", {}).items()
-            },
-            no_acting_text_scripts={
-                k: int(v) for k, v in data.get("no_acting_text_scripts", {}).items()
-            },
-            forge_tokenscripts=str(data.get("forge_tokenscripts", "")),
-            game_disjoint_target=(
-                int(data["game_disjoint_target"])
-                if data.get("game_disjoint_target") is not None else None
-            ),
-            holdout_unit=str(data.get("holdout_unit", "text")),
+            per_stratum=_int_map(data["per_stratum"]),
+            unique_texts=_int_map(data["unique_texts"]),
+            shortfall=_int_map(data["shortfall"]),
+            quality_dropped=_int_map(stored("quality_dropped")),
+            games_by_source=_int_map(stored("games_by_source")),
+            held_out_games_by_source=_int_map(stored("held_out_games_by_source")),
+            shard_records=int(stored("shard_records")),
+            validation_sample=int(stored("validation_sample")),
+            max_events_per_record=int(stored("max_events_per_record")),
+            unattributed_records=int(stored("unattributed_records")),
+            token_keys_remapped=int(stored("token_keys_remapped")),
+            token_keys_ambiguous=_int_map(stored("token_keys_ambiguous")),
+            no_acting_text_scripts=_int_map(stored("no_acting_text_scripts")),
+            forge_tokenscripts=str(stored("forge_tokenscripts")),
+            game_disjoint_target=_optional_int(stored("game_disjoint_target")),
+            holdout_unit=str(stored("holdout_unit")),
             families={
-                klass: {family: {k: int(v) for k, v in row.items()}
-                        for family, row in per_family.items()}
-                for klass, per_family in data.get("families", {}).items()
+                klass: _nested_int_map(per_family)
+                for klass, per_family in stored("families").items()
             },
             signatures={
-                klass: {family: {sig: int(n) for sig, n in per_sig.items()}
-                        for family, per_sig in per_family.items()}
-                for klass, per_family in data.get("signatures", {}).items()
+                klass: _nested_int_map(per_family)
+                for klass, per_family in stored("signatures").items()
             },
-            policy_counts={
-                klass: {k: int(v) for k, v in counts.items()}
-                for klass, counts in data.get("policy_counts", {}).items()
-            },
-            legality_counts={
-                subkind: {k: int(v) for k, v in counts.items()}
-                for subkind, counts in data.get("legality_counts", {}).items()
-            },
-            legality_mode_counts={
-                mode: int(n) for mode, n in data.get("legality_mode_counts", {}).items()
-            },
-            keyword_threshold_games=tuple(data.get("keyword_threshold_games", ())),
+            policy_counts=_nested_int_map(stored("policy_counts")),
+            legality_counts=_nested_int_map(stored("legality_counts")),
+            legality_mode_counts=_int_map(stored("legality_mode_counts")),
+            keyword_threshold_games=tuple(stored("keyword_threshold_games")),
             held_out_texts_without_resolution=tuple(
-                data.get("held_out_texts_without_resolution", ())
+                stored("held_out_texts_without_resolution")
             ),
-            held_out_texts_under_five_games={
-                k: int(v) for k, v in data.get("held_out_texts_under_five_games", {}).items()
-            },
-            game_disjoint_share=_optional_float(data.get("game_disjoint_share")),
+            held_out_texts_under_five_games=_int_map(
+                stored("held_out_texts_under_five_games")
+            ),
+            game_disjoint_share=_optional_float(stored("game_disjoint_share")),
             game_disjoint_keyword_share=_optional_float(
-                data.get("game_disjoint_keyword_share")
+                stored("game_disjoint_keyword_share")
             ),
-            game_disjoint_keywords=tuple(data.get("game_disjoint_keywords", ())),
-            reuse_cap=(
-                int(data["reuse_cap"]) if data.get("reuse_cap") is not None else None
-            ),
+            game_disjoint_keywords=tuple(stored("game_disjoint_keywords")),
+            reuse_cap=_optional_int(stored("reuse_cap")),
         )
 
     #: Fields the digest leaves out: operator-facing tallies that say nothing
@@ -345,3 +352,12 @@ class CorpusManifest:
             sorted(name for name in set(was) & set(now) if was[name] != now[name])
         )
         return added, removed, resized
+
+
+_FIELDS = {spec.name: spec for spec in fields(CorpusManifest)}
+
+#: Every field ``as_dict`` leaves out, and the value at which it does.
+_GEN1_DEFAULTS = {
+    name: _default_of(spec) for name, spec in _FIELDS.items()
+    if spec.metadata.get(_OMITTED_AT_DEFAULT)
+}

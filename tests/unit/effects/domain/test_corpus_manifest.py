@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from effects.domain.corpus_manifest import ClassCounts, CorpusManifest, SourceShard
+from effects.domain.corpus_manifest import _GEN1_DEFAULTS, ClassCounts, CorpusManifest, SourceShard
 
 
 def manifest(**overrides) -> CorpusManifest:
@@ -213,7 +213,8 @@ def test_the_gen1_corpus_still_matches_the_digest_its_checkpoint_recorded():
 
 
 def test_gen2_fields_are_left_out_at_their_gen1_values(manifest_dict):
-    for name in CorpusManifest._GEN1_DEFAULTS:
+    assert len(_GEN1_DEFAULTS) == 14
+    for name in _GEN1_DEFAULTS:
         if name != "game_disjoint_target":
             assert name not in manifest_dict
 
