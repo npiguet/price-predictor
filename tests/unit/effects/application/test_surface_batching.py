@@ -13,7 +13,7 @@ import pytest
 import torch
 
 from effects.application.surface_batching import NoiseState, SurfaceBatcher
-from effects.domain.effect_head_input import SlotKind
+from effects.domain.effect_head_input import ACT_SLOT, SlotKind
 from effects.domain.provenance import ProvenanceKey, SidecarLine
 from effects.domain.records import (
     EffectRecord,
@@ -26,7 +26,12 @@ from effects.domain.state_snapshot import EntityState, GlobalState, StateSnapsho
 from effects.domain.variants import VariantMasks
 from effects.infrastructure.record_io import read_shard
 from effects.infrastructure.sidecar_io import SidecarCache
-from tests.unit.effects.builders import make_entity, make_record, make_snapshot
+from tests.unit.effects.builders import (
+    make_entity,
+    make_record,
+    make_snapshot,
+    slots_of_kind,
+)
 
 _ACT = ProvenanceKey("cardsfolder/l/lightning_bolt.txt", 0, "spell", 0)
 _ANTHEM = ProvenanceKey("cardsfolder/a/anthem.txt", 0, "static", 0)
@@ -70,7 +75,7 @@ def _batcher(sidecars=None, **masks) -> SurfaceBatcher:
 def test_a_dropped_key_gets_no_ability_token():
     rows = {"creatures you control get +1/+1": 0, "deals 3 damage to any target": 1}
     surface = _batcher().surface_for(_record(), rows)
-    assert [slot.e for slot in surface.of_kind(SlotKind.ABILITY)] == [0]
+    assert [slot.e for slot in slots_of_kind(surface, SlotKind.ABILITY)] == [0]
 
 
 def _prepared(variant: str):
@@ -269,7 +274,7 @@ def test_a_decision_records_act_slot_reads_its_candidates_e():
     texts = batcher.batch_texts([record])
     rows = {text: row for row, text in enumerate(sorted(texts))}
     surface = batcher.surface_for(record, rows)
-    act = surface.slots[surface.act_index]
+    act = surface.slots[ACT_SLOT]
     candidate_text = batcher.text_of(record.payload.candidates[0].ability[0])
     assert act.e == rows[candidate_text]
 
@@ -309,7 +314,7 @@ def test_a_real_gen2_charm_gets_its_four_mode_rows_after_its_root():
     texts = batcher.batch_texts([record])
     assert len(texts) == 5  # the root and each mode's own chain
     rows = {text: row for row, text in enumerate(sorted(texts))}
-    abilities = batcher.surface_for(record, rows).of_kind(SlotKind.ABILITY)
+    abilities = slots_of_kind(batcher.surface_for(record, rows), SlotKind.ABILITY)
     assert [slot.option for slot in abilities] == [False, True, True, True, True]
     assert [slot.e for slot in abilities[1:]] == [
         rows[batcher.text_of(mode)] for mode in modes

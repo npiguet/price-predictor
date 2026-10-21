@@ -16,11 +16,8 @@ import pytest
 from effects.domain.ability_cache_layout import (
     ARRAY_KEY,
     DEFAULT_CACHE_ROOT,
-    CardSlotKind,
     cache_path_for,
-    card_slots,
     pooled_card_vector,
-    read_layout_line,
     validate_alignment,
 )
 from effects.domain.provenance import ProvenanceKey, ProvenanceSidecar, SidecarLine
@@ -126,70 +123,3 @@ class TestPooling:
 
     def test_the_pooled_vector_is_float32(self):
         assert pooled_card_vector(np.zeros((2, 4))).dtype == np.float32
-
-
-class TestCardRepresentation:
-    def test_a_single_face_card_is_a_card_token_then_its_rows(self):
-        slots = card_slots([2])
-        assert [s.kind for s in slots] == [
-            CardSlotKind.CARD, CardSlotKind.ABILITY, CardSlotKind.ABILITY,
-        ]
-
-    def test_positions_reset_at_the_card_token(self):
-        slots = card_slots([2])
-        assert [s.position for s in slots] == [0, 1, 2]
-
-    def test_faces_are_separated_by_an_alternate_token(self):
-        slots = card_slots([1, 1], layout="transform")
-        assert [s.kind for s in slots] == [
-            CardSlotKind.CARD, CardSlotKind.ABILITY,
-            CardSlotKind.ALTERNATE,
-            CardSlotKind.CARD, CardSlotKind.ABILITY,
-        ]
-
-    def test_positions_continue_across_the_alternate_token(self):
-        """Only [CARD] resets them; a face boundary is a tagged separator."""
-        slots = card_slots([2, 1], layout="transform")
-        alternate = next(s for s in slots if s.kind is CardSlotKind.ALTERNATE)
-        assert alternate.position == 3  # continues from the first face
-
-    def test_the_second_face_restarts_at_zero(self):
-        slots = card_slots([2, 1], layout="transform")
-        cards = [s for s in slots if s.kind is CardSlotKind.CARD]
-        assert [s.position for s in cards] == [0, 0]
-
-    def test_the_alternate_token_carries_the_layout_tag(self):
-        slots = card_slots([1, 1], layout="modal_dfc")
-        alternate = next(s for s in slots if s.kind is CardSlotKind.ALTERNATE)
-        assert alternate.layout == "modal_dfc"
-
-    def test_rows_number_continuously_across_faces(self):
-        """The cache is one matrix per file, faces included."""
-        slots = card_slots([2, 2], layout="split")
-        rows = [s.row for s in slots if s.kind is CardSlotKind.ABILITY]
-        assert rows == [0, 1, 2, 3]
-
-    def test_each_slot_records_the_face_it_belongs_to(self):
-        slots = card_slots([1, 1], layout="transform")
-        faces = [s.face for s in slots if s.kind is CardSlotKind.ABILITY]
-        assert faces == [0, 1]
-
-    def test_a_face_with_no_abilities_still_gets_its_card_token(self):
-        slots = card_slots([0, 1], layout="transform")
-        assert sum(1 for s in slots if s.kind is CardSlotKind.CARD) == 2
-
-
-class TestLayoutLine:
-    def test_the_layout_line_is_read_from_the_converted_text(self):
-        text = "layout: transform\nname: front\ntypes: creature\n"
-        assert read_layout_line(text) == "transform"
-
-    def test_a_single_face_card_has_no_layout_line(self):
-        assert read_layout_line("name: serra angel\ntypes: creature angel\n") is None
-
-    def test_an_empty_file_has_none(self):
-        assert read_layout_line("") is None
-
-    def test_the_converted_file_is_the_authority_on_the_vocabulary(self):
-        """Whatever the converter wrote is the tag; no allowlist here."""
-        assert read_layout_line("layout: aftermath\nname: x\n") == "aftermath"

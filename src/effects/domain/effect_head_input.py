@@ -269,18 +269,8 @@ class EffectHeadInput:
     """The full token surface for one record."""
 
     slots: tuple[Slot, ...]
-    record_kind: RecordKind
-    actor_player: str
-    #: Index into ``slots`` of the ``[ACT]`` token, always 1.
-    act_index: int = 1
     #: Slot indices of the per-entity head's targets: every CARD and PLAYER.
     entity_slots: tuple[int, ...] = field(default_factory=tuple)
-
-    def positions(self) -> tuple[int, ...]:
-        return tuple(slot.position for slot in self.slots)
-
-    def of_kind(self, kind: SlotKind) -> tuple[Slot, ...]:
-        return tuple(slot for slot in self.slots if slot.kind is kind)
 
 
 # ── feature builders ────────────────────────────────────────────────────
@@ -652,12 +642,7 @@ def build_effect_head_input(
             ),
         )
 
-    return EffectHeadInput(
-        slots=tuple(slots),
-        record_kind=record.kind,
-        actor_player=record.actor_player,
-        entity_slots=tuple(entity_slots),
-    )
+    return EffectHeadInput(slots=tuple(slots), entity_slots=tuple(entity_slots))
 
 
 def _entity_block(

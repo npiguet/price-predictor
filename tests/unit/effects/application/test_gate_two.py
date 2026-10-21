@@ -69,6 +69,7 @@ from effects.domain.state_snapshot import (
 )
 from effects.domain.variants import VariantMasks
 from effects.infrastructure.model_runner import Runnable
+from tests.unit.effects.builders import slots_of_kind
 
 # ── a board: one first-striking attacker, one blocker ────────────────────
 
@@ -224,7 +225,7 @@ class TestStrippingTheAbilityChannel:
             record, rows, strip_keywords={"A": frozenset({"first_strike"})},
         )
         kept = [
-            slot.e for slot in stripped.of_kind(SlotKind.ABILITY)
+            slot.e for slot in slots_of_kind(stripped, SlotKind.ABILITY)
             if slot.entity_id == "A"
         ]
         assert kept == [rows["W: this creature gets +1/+0"]]
@@ -258,14 +259,14 @@ class TestStrippingTheAbilityChannel:
         )
         assert all(
             slot.e != (0.0,) * 4
-            for slot in stripped.of_kind(SlotKind.ABILITY)
+            for slot in slots_of_kind(stripped, SlotKind.ABILITY)
         )
 
 
 class TestStrippingTheOverlayChannel:
     def _overlay_bit(self, surface, entity_id: str) -> float:
         slot = next(
-            s for s in surface.of_kind(SlotKind.CARD) if s.entity_id == entity_id
+            s for s in slots_of_kind(surface, SlotKind.CARD) if s.entity_id == entity_id
         )
         # The multi-hot sits at a fixed offset from the end of the card block;
         # find it by the one value the base board sets.
@@ -303,7 +304,7 @@ class TestBatchThreading:
 
 def _ability_count(surface, entity_id: str) -> int:
     return sum(
-        1 for slot in surface.of_kind(SlotKind.ABILITY)
+        1 for slot in slots_of_kind(surface, SlotKind.ABILITY)
         if slot.entity_id == entity_id
     )
 

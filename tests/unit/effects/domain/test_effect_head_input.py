@@ -14,6 +14,7 @@ import random
 import pytest
 
 from effects.domain.effect_head_input import (
+    ACT_SLOT,
     CARD_TYPES,
     COMBAT_SUBSTEPS,
     COUNTER_TYPES,
@@ -65,7 +66,12 @@ from effects.domain.state_snapshot import (
     Refs,
     StateSnapshot,
 )
-from tests.unit.effects.builders import make_entity, make_record, make_snapshot
+from tests.unit.effects.builders import (
+    make_entity,
+    make_record,
+    make_snapshot,
+    slots_of_kind,
+)
 
 E_DIM = 4
 _ZERO = (0.0,) * E_DIM
@@ -132,7 +138,7 @@ class TestSurfaceShape:
         surface = _build(_record())
         assert surface.slots[0].kind is SlotKind.GLOBAL
         assert surface.slots[1].kind is SlotKind.ACT
-        assert surface.act_index == 1
+        assert ACT_SLOT == 1
 
     def test_players_come_before_cards(self):
         kinds = [slot.kind for slot in _build(_record()).slots]
@@ -140,8 +146,8 @@ class TestSurfaceShape:
 
     def test_every_player_and_entity_gets_a_slot(self):
         surface = _build(_record())
-        assert len(surface.of_kind(SlotKind.PLAYER)) == 2
-        assert len(surface.of_kind(SlotKind.CARD)) == 2
+        assert len(slots_of_kind(surface, SlotKind.PLAYER)) == 2
+        assert len(slots_of_kind(surface, SlotKind.CARD)) == 2
 
     def test_the_per_entity_head_targets_every_card_and_player(self):
         """FR-081: the gate trains on every entity, players included."""
@@ -169,7 +175,7 @@ class TestPositionReset:
 
     def test_each_card_restarts_at_zero(self):
         surface = _build(_record())
-        for slot in surface.of_kind(SlotKind.CARD):
+        for slot in slots_of_kind(surface, SlotKind.CARD):
             assert slot.position == 0
 
     def test_an_entitys_abilities_number_upward_from_its_card(self):
@@ -267,7 +273,7 @@ class TestAbilityTokens:
     def test_printed_and_attachment_granted_lines_become_tokens(self):
         entity = _entity("E1", printed=(_ANTHEM,), granted_attached=(_WARD,))
         surface = _build(_record(state=_snapshot(entities=(entity,))))
-        vectors = [s.e for s in surface.of_kind(SlotKind.ABILITY)]
+        vectors = [s.e for s in slots_of_kind(surface, SlotKind.ABILITY)]
         assert vectors == [_VECTORS[_ANTHEM], _VECTORS[_WARD]]
 
     def test_temporary_grants_do_not_become_tokens(self):
@@ -277,14 +283,14 @@ class TestAbilityTokens:
             granted_temporary=GrantedTemporary(abilities=(_WARD,)),
         )
         surface = _build(_record(state=_snapshot(entities=(entity,))))
-        assert len(surface.of_kind(SlotKind.ABILITY)) == 1
+        assert len(slots_of_kind(surface, SlotKind.ABILITY)) == 1
 
     def test_context_dropout_can_drop_a_context_ability(self):
         record = _record()
         kept = _build(record, context_dropout=0.0)
         dropped = _build(record, context_dropout=1.0, rng=random.Random(1))
-        assert len(dropped.of_kind(SlotKind.ABILITY)) < len(
-            kept.of_kind(SlotKind.ABILITY)
+        assert len(slots_of_kind(dropped, SlotKind.ABILITY)) < len(
+            slots_of_kind(kept, SlotKind.ABILITY)
         )
 
     def test_the_acting_entitys_abilities_are_never_dropped(self):
@@ -293,7 +299,7 @@ class TestAbilityTokens:
         surface = _build(
             _record(state=state), context_dropout=1.0, rng=random.Random(1),
         )
-        acting = [s for s in surface.of_kind(SlotKind.ABILITY) if s.entity_id == "E1"]
+        acting = [s for s in slots_of_kind(surface, SlotKind.ABILITY) if s.entity_id == "E1"]
         assert len(acting) == 1
 
     def test_dropout_is_reproducible_under_a_seeded_rng(self):
@@ -432,12 +438,12 @@ class TestPerKindVariations:
 class TestFeatureWidths:
     def test_every_card_slot_has_the_same_width(self):
         surface = _build(_record())
-        widths = {len(slot.features) for slot in surface.of_kind(SlotKind.CARD)}
+        widths = {len(slot.features) for slot in slots_of_kind(surface, SlotKind.CARD)}
         assert len(widths) == 1
 
     def test_every_player_slot_has_the_same_width(self):
         surface = _build(_record())
-        widths = {len(slot.features) for slot in surface.of_kind(SlotKind.PLAYER)}
+        widths = {len(slot.features) for slot in slots_of_kind(surface, SlotKind.PLAYER)}
         assert len(widths) == 1
 
     def test_act_width_is_the_same_whether_populated_or_empty(self):
@@ -469,7 +475,7 @@ class TestKeysWithNoLine:
             _entity("E1", printed=(self._PHANTOM, _ANTHEM)),
         )))
         surface = _build(record, has_line=lambda key: key in _VECTORS)
-        abilities = surface.of_kind(SlotKind.ABILITY)
+        abilities = slots_of_kind(surface, SlotKind.ABILITY)
         assert [slot.e for slot in abilities] == [_VECTORS[_ANTHEM]]
 
     def test_positions_stay_contiguous_after_a_skip(self):
@@ -489,13 +495,13 @@ class TestKeysWithNoLine:
         surface = build_effect_head_input(
             record, e_for=lambda key: None, e_dim=E_DIM, has_line=lambda key: True,
         )
-        assert [slot.e for slot in surface.of_kind(SlotKind.ABILITY)] == [_ZERO]
+        assert [slot.e for slot in slots_of_kind(surface, SlotKind.ABILITY)] == [_ZERO]
 
     def test_without_the_predicate_every_key_keeps_its_token(self):
         record = _record(state=_snapshot(entities=(
             _entity("E1", printed=(self._PHANTOM,)),
         )))
-        assert [slot.e for slot in _build(record).of_kind(SlotKind.ABILITY)] == [_ZERO]
+        assert [slot.e for slot in slots_of_kind(_build(record), SlotKind.ABILITY)] == [_ZERO]
 
 
 class TestFeatureEquivalence:
@@ -776,13 +782,13 @@ class TestOptionRows:
         surface = self._surface(
             lambda key: modes if key == self._CHARM else (),
         )
-        abilities = surface.of_kind(SlotKind.ABILITY)
+        abilities = slots_of_kind(surface, SlotKind.ABILITY)
         assert [slot.option for slot in abilities] == [False, True, True, True, False]
         assert [slot.e[0] for slot in abilities[1:4]] == [0.0, 1.0, 2.0]
         assert [slot.position for slot in abilities] == [1, 2, 3, 4, 5]
 
     def test_no_options_callback_adds_no_rows(self):
-        abilities = self._surface(None).of_kind(SlotKind.ABILITY)
+        abilities = slots_of_kind(self._surface(None), SlotKind.ABILITY)
         assert [slot.option for slot in abilities] == [False, False]
 
     def test_the_batcher_reads_the_modes_off_the_sidecar(self):

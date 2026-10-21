@@ -25,7 +25,7 @@ import torch
 import torch.nn as nn
 
 from effects.domain.ability_encoder import ENCODER_D_MODEL
-from effects.domain.effect_head_input import SlotKind
+from effects.domain.effect_head_input import ACT_SLOT, SlotKind
 from effects.domain.effect_head_layout import (
     CREATED_OBJECTS_WIDTH,
     PER_ENTITY_WIDTH,
@@ -190,6 +190,6 @@ class EffectModel(nn.Module):
         """Read the created-objects head at ``[GLOBAL]`` (slot 0)."""
         return self.created_objects_head(hidden[:, 0, :])
 
-    def verdict(self, hidden: torch.Tensor, act_index: int = 1) -> torch.Tensor:
+    def verdict(self, hidden: torch.Tensor) -> torch.Tensor:
         """Read the verdict head at ``[ACT]``."""
-        return self.verdict_head(hidden[:, act_index, :])
+        return self.verdict_head(hidden[:, ACT_SLOT, :])

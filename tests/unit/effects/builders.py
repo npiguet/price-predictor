@@ -105,3 +105,8 @@ def make_record(kind: RecordKind = RecordKind.RESOLUTION, **overrides) -> Effect
         defaults["payload"] = _default_payload(kind, moment, subkind)
     defaults.update(overrides)
     return EffectRecord(**defaults)
+
+
+def slots_of_kind(surface, kind) -> tuple:
+    """A token surface's slots of one ``SlotKind``, in surface order."""
+    return tuple(slot for slot in surface.slots if slot.kind is kind)

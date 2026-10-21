@@ -826,10 +826,7 @@ class TestCollateSurfaces:
                 slots.append(Slot(
                     kind=kind, position=position, features=features, e=e,
                 ))
-            surfaces.append(EffectHeadInput(
-                slots=tuple(slots), record_kind=RecordKind.RESOLUTION,
-                actor_player="P0",
-            ))
+            surfaces.append(EffectHeadInput(slots=tuple(slots)))
         self._assert_same(surfaces, e_dim=e_dim, widths=widths)
 
     def test_an_empty_batch_keeps_its_shapes(self):
