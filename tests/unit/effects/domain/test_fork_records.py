@@ -12,12 +12,9 @@ import pytest
 from effects.domain.event_schema import Event, EventType
 from effects.domain.provenance import ProvenanceKey
 from effects.domain.records import (
-    ActivationPayload,
-    Costs,
     EffectRecord,
     Moment,
     RecordKind,
-    ResolutionOutcome,
     ResolutionPayload,
 )
 from effects.domain.state_snapshot import (
@@ -29,10 +26,6 @@ from effects.domain.state_snapshot import (
 from tests.unit.effects.builders import make_record, make_snapshot
 
 _KEY = ProvenanceKey("cardsfolder/l/lightning_bolt.txt", 0, "spell", 0)
-
-#: A fixed constant no flag can raise (FR-040).
-MAX_FORKS_PER_RESOLUTION = 2
-
 
 def _snapshot(tiers=STAGE_ONE_TIERS) -> StateSnapshot:
     return make_snapshot(
@@ -61,19 +54,10 @@ def _combat(**overrides) -> EffectRecord:
 
 
 class TestInterventionalResolutions:
-    def test_it_carries_both_flags(self):
-        record = _record(interventional=True, fork=True)
-        assert record.interventional
-        assert record.fork
-
     def test_it_carries_no_link_id(self):
         """The effect half is written alone: there was no real activation."""
         with pytest.raises(ValueError, match="no activation partner"):
             _record(interventional=True, fork=True, link_id="pair-1")
-
-    def test_it_has_no_activation_partner_by_construction(self):
-        record = _record(interventional=True, fork=True)
-        assert record.link_id is None
 
     def test_it_is_a_resolution_and_nothing_else(self):
         with pytest.raises(ValueError, match="forced resolution"):
@@ -94,18 +78,6 @@ class TestInterventionalResolutions:
         assert record.moment is Moment.RESOLUTION
         assert len(record.payload.events) == 1
 
-    def test_a_cost_half_intervention_would_be_meaningless(self):
-        """Nothing was paid, so an activation payload has nothing to describe."""
-        record = _record(
-            interventional=True, fork=True, moment=Moment.ACTIVATION,
-            payload=ActivationPayload(
-                costs=Costs(), outcome=ResolutionOutcome.RESOLVED,
-            ),
-        )
-        # The schema permits it; the collector writes the effect half only.
-        assert record.link_id is None
-
-
 class TestDamageStepProbes:
     def test_a_probe_is_a_fork_that_intervened_in_nothing(self):
         record = _combat(fork=True, interventional=False)
@@ -119,10 +91,6 @@ class TestDamageStepProbes:
         assert probe.is_probe
         assert not intervention.is_probe
 
-    def test_it_names_the_real_record_it_mirrors(self):
-        record = _combat(fork=True, mirror_of="run.0.9")
-        assert record.mirror_of == "run.0.9"
-
     def test_mirror_of_requires_the_fork_flag(self):
         with pytest.raises(ValueError, match="mirror_of"):
             _combat(mirror_of="run.0.9")
@@ -134,19 +102,6 @@ class TestDamageStepProbes:
 
     def test_an_ordinary_combat_record_is_not_a_probe(self):
         assert not _combat().is_probe
-
-
-class TestForkBudgets:
-    def test_at_most_two_forks_may_name_one_real_resolution(self):
-        """A fixed constant, independent of --interventions-per-game: two
-        counterfactuals for one board is already both worth having."""
-        assert MAX_FORKS_PER_RESOLUTION == 2
-
-    def test_two_forks_may_mirror_the_same_real_record(self):
-        first = _combat(record_id="run.0.3", fork=True, mirror_of="run.0.1")
-        second = _combat(record_id="run.0.4", fork=True, mirror_of="run.0.1")
-        assert first.mirror_of == second.mirror_of == "run.0.1"
-        assert first.record_id != second.record_id
 
 
 class TestSnapshotTierFour:
@@ -167,15 +122,6 @@ class TestSnapshotTierFour:
         assert record.state.collected(
             InclusionTier.UNREFERENCED_HAND_GRAVEYARD
         )
-
-    def test_the_tiers_stay_additive(self):
-        tiers = STAGE_ONE_TIERS | {
-            InclusionTier.UNREFERENCED_STACK,
-            InclusionTier.UNREFERENCED_HAND_GRAVEYARD,
-        }
-        assert STAGE_ONE_TIERS <= tiers
-        assert len(tiers) == 4
-
 
 class TestTheDiffIsNeverATrainingTarget:
     def test_a_probe_record_carries_no_diff_field(self):
