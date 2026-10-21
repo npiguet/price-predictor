@@ -450,7 +450,7 @@ class _Sources:
 
     @classmethod
     def of(cls, config: BuildCorpusConfig) -> _Sources:
-        from effects.application.train_effect_model import load_card_files
+        from effects.infrastructure.card_sources import load_card_files
         from effects.infrastructure.sidecar_io import SidecarCache, sidecar_roots
 
         folders = sidecar_roots(config.cards_folders)
@@ -479,8 +479,8 @@ def _select_holdout(config: BuildCorpusConfig, sources: _Sources) -> HeldOutCard
     Token scripts are carriers like cards: a token printing a held-out text
     puts its script in the holdout, so the games it appears in are held out.
     """
-    from effects.application.train_effect_model import load_card_texts
     from effects.domain.split import text_keyed_holdout
+    from effects.infrastructure.card_sources import load_card_texts
     from effects.infrastructure.sidecar_io import load_tree_texts
 
     held_out = text_keyed_holdout(

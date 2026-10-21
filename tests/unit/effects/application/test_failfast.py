@@ -18,9 +18,9 @@ from effects.application.train_effect_model import (
     TrainEffectModelConfig,
     learning_rate_at,
     warmup_steps,
-    withheld_keyword_tokens,
 )
 from effects.domain.ability_encoder import AbilityEncoderConfig
+from effects.domain.ability_tokenizer import withheld_keyword_tokens
 from effects.domain.effect_model import EffectModelConfig
 from effects.domain.variants import (
     variant_masks,

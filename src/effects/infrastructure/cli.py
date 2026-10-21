@@ -877,7 +877,7 @@ def run_holdout_cards(args: argparse.Namespace) -> int:
         holdout_report,
         write_depletion_list,
     )
-    from effects.application.train_effect_model import (
+    from effects.infrastructure.card_sources import (
         load_card_files,
         load_card_texts,
         load_first_printings,

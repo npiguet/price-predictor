@@ -19,7 +19,6 @@ import logging
 import numpy as np
 import torch
 
-from effects.application.train_effect_model import withheld_keyword_tokens
 from effects.domain.ability_encoder import (
     AbilityEncoder,
     AbilityEncoderConfig,
@@ -32,6 +31,7 @@ from effects.domain.ability_encoder import (
 from effects.domain.ability_tokenizer import (
     INFERENCE_KEYWORD_EXPAND_P,
     AbilityTokenizer,
+    withheld_keyword_tokens,
 )
 from effects.domain.provenance import ProvenanceSidecar, SidecarLine
 

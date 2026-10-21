@@ -338,7 +338,7 @@ class TestHeldOutExclusion:
 
     def test_held_out_cards_are_absent_from_the_coverage_unit(self, tmp_path):
         from effects.application.collect_coverage import build_coverage_units
-        from effects.application.train_effect_model import load_card_files
+        from effects.infrastructure.card_sources import load_card_files
 
         (tmp_path / "s").mkdir()
         for stem, name in (("serra_angel", "Serra Angel"), ("shock", "Shock")):
@@ -1263,7 +1263,7 @@ class TestNonDeckTypesLeaveTheUnit:
         with patch.object(collector_connector, "CollectorSupervisor",
                           return_value=MagicMock(interrupted=False)), \
              patch.object(collect_coverage, "consult_castability", _consult), \
-             patch("effects.application.train_effect_model.load_card_texts",
+             patch("effects.infrastructure.card_sources.load_card_texts",
                    return_value=texts_by_card), \
              caplog.at_level(logging.INFO, logger=collect_coverage.__name__):
             collect_coverage.run(collect_coverage.CollectCoverageConfig(

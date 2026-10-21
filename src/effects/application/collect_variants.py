@@ -452,8 +452,8 @@ def _keep_unheld(
     config: CollectVariantsConfig, variants: list[GeneratedVariant],
 ) -> list[GeneratedVariant]:
     """:func:`drop_held_out_variants` under the holdout ``build-corpus`` chooses."""
-    from effects.application.train_effect_model import load_card_files, load_card_texts
     from effects.domain.split import text_keyed_holdout
+    from effects.infrastructure.card_sources import load_card_files, load_card_texts
     from effects.infrastructure.sidecar_io import SidecarCache, load_tree_texts, sidecar_roots
 
     roots = sidecar_roots(config.cards_folders)

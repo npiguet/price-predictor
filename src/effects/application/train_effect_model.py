@@ -29,9 +29,7 @@ import random
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING
 
-from effects.domain.ability_tokenizer import keyword_token
 from effects.domain.records import (
     EffectRecord,
 )
@@ -41,9 +39,6 @@ from effects.domain.split import (
 )
 from effects.domain.strata import VALIDATION_STRATA, Stratum
 from effects.domain.variants import Variant
-
-if TYPE_CHECKING:
-    from effects.infrastructure.sidecar_io import SidecarCache
 
 logger = logging.getLogger(__name__)
 
@@ -72,25 +67,6 @@ DEFAULT_SHARDS_PER_EPOCH = 256
 #: workers keep up with no margin, three keep up with one parsing. More buy
 #: nothing once the device is the bottleneck and cost each a shard of memory.
 DEFAULT_PREFETCH_WORKERS = 3
-
-
-def load_card_texts(
-    card_files: Mapping[str, str], sidecars: SidecarCache,
-) -> dict[str, list[str]]:
-    """``card name -> the script texts of its sidecar's lines``.
-
-    The I/O half of the holdout, kept apart from the selection so the rule can
-    be exercised without a converted tree on disk.
-    """
-    out: dict[str, list[str]] = {}
-    for name, script_file in card_files.items():
-        sidecar = sidecars.get(script_file)
-        if sidecar is None:
-            continue
-        out[name] = [
-            line.script_text for line in sidecar.lines if line.script_text
-        ]
-    return out
 
 
 # ── reading the corpus one shard at a time ──────────────────────────────
@@ -144,52 +120,6 @@ def steps_per_shard(total: int, count: int) -> list[int]:
         return []
     base, remainder = divmod(max(total, 0), count)
     return [base + (1 if index < remainder else 0) for index in range(count)]
-
-
-def load_card_files(cards_folder: Path) -> dict[str, str]:
-    """``card name -> tree-prefixed script file`` for one converted tree.
-
-    Names come from each file's ``name:`` line, which is authoritative — the
-    filename is a sanitized derivative and several cards share a stem.
-    """
-    from price_predictor.domain.tokenizer import extract_card_name
-
-    cards_folder = Path(cards_folder)
-    out: dict[str, str] = {}
-    for path in sorted(cards_folder.rglob("*.txt")):
-        try:
-            text = path.read_text(encoding="utf-8")
-        except OSError:
-            continue
-        name = extract_card_name(text)
-        if not name:
-            continue
-        relative = path.relative_to(cards_folder).as_posix()
-        out[name] = f"cardsfolder/{relative}"
-    return out
-
-
-def load_first_printings(printings_path: Path) -> dict[str, str]:
-    """``card name -> earliest release date`` from an MTGJSON dump.
-
-    Faces are indexed under their own names as well as the combined one, so a
-    record naming either resolves.
-    """
-    import json
-
-    data = json.loads(Path(printings_path).read_text(encoding="utf-8"))
-    earliest: dict[str, str] = {}
-    for set_info in data.get("data", {}).values():
-        cards = set_info if isinstance(set_info, list) else set_info.get("cards", [])
-        release = (
-            set_info.get("releaseDate", "") if isinstance(set_info, dict) else ""
-        )
-        for card in cards:
-            for key in {card.get("name"), card.get("faceName")} - {None, ""}:
-                previous = earliest.get(key)
-                if previous is None or (release and release < previous):
-                    earliest[key] = release
-    return earliest
 
 
 class EmptyHoldoutError(RuntimeError):
@@ -412,20 +342,6 @@ def learning_rate_at(step: int, *, warmup: int) -> float:
     return LEARNING_RATE * (step + 1) / warmup
 
 
-# ── keyword withholding (FR-117) ────────────────────────────────────────
-
-
-def withheld_keyword_tokens(withheld: str | None) -> frozenset[str]:
-    """The token form of the keyword ``--withhold-keyword`` names, if any.
-
-    Withholding is what gives the zero-shot check something to measure: the
-    model never sees the keyword's *token*, only the sentence it stands for —
-    the batcher force-expands it to its definition — so the check asks whether
-    a keyword it has only ever read as prose lands near the right neighbours.
-    """
-    return frozenset({keyword_token(withheld)}) if withheld else frozenset()
-
-
 # ── the epoch loop ──────────────────────────────────────────────────────
 
 
@@ -515,6 +431,7 @@ def check_manifest_holdout(manifest, config: TrainEffectModelConfig) -> None:
     so it is refused before any step rather than discovered at evaluation.
     """
     from effects.domain.text_holdout import normalize_script_text
+    from effects.infrastructure.card_sources import load_card_files, load_card_texts
     from effects.infrastructure.sidecar_io import SidecarCache, load_tree_texts, sidecar_roots
 
     unit = manifest.holdout_unit

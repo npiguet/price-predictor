@@ -17,10 +17,6 @@ from __future__ import annotations
 
 import json
 
-from effects.application.train_effect_model import (
-    load_card_files,
-    load_first_printings,
-)
 from effects.domain.provenance import ProvenanceKey
 from effects.domain.records import (
     EffectRecord,
@@ -30,6 +26,10 @@ from effects.domain.split import (
     record_names_held_out_card,
 )
 from effects.domain.state_snapshot import EntityState
+from effects.infrastructure.card_sources import (
+    load_card_files,
+    load_first_printings,
+)
 from tests.unit.effects.builders import make_entity, make_record, make_snapshot
 
 

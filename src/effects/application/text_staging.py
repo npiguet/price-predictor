@@ -17,7 +17,6 @@ from dataclasses import dataclass
 import numpy as np
 import torch
 
-from effects.application.train_effect_model import withheld_keyword_tokens
 from effects.domain.ability_encoder import (
     AbilityEncoder,
     EncodedLine,
@@ -26,7 +25,7 @@ from effects.domain.ability_encoder import (
     encoding_role_spans,
     prepare_line,
 )
-from effects.domain.ability_tokenizer import AbilityTokenizer
+from effects.domain.ability_tokenizer import AbilityTokenizer, withheld_keyword_tokens
 from effects.domain.variants import VariantMasks
 
 #: Texts per encoder pass. A batch's texts are sorted by length and encoded in

@@ -134,6 +134,17 @@ def keyword_token(display_name: str) -> str:
     return display_name.lower().replace("'", "").replace(" ", "_")
 
 
+def withheld_keyword_tokens(withheld: str | None) -> frozenset[str]:
+    """The token form of the keyword ``--withhold-keyword`` names, if any.
+
+    Withholding is what gives the zero-shot check something to measure: the
+    model never sees the keyword's *token*, only the sentence it stands for —
+    the batcher force-expands it to its definition — so the check asks whether
+    a keyword it has only ever read as prose lands near the right neighbours.
+    """
+    return frozenset({keyword_token(withheld)}) if withheld else frozenset()
+
+
 _HOST_BODIED_TOKENS: frozenset[str] = frozenset(
     keyword_token(name) for name in HOST_BODIED_KEYWORDS
 )
