@@ -33,6 +33,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from effects.domain.collection_caps import CollectionCaps
+from effects.domain.coverage import DeckCandidate
 from effects.domain.script_variants import (
     is_multi_face,
     perturb,
@@ -282,25 +283,18 @@ def _brace_wrap_mana_cost(cost: str) -> str:
     return "".join(f"{{{shard}}}" for shard in cost.split())
 
 
-def _deck_text(variant: GeneratedVariant) -> str:
-    """The converted-shaped text `compute_basic_lands` needs for a variant.
+def _deck_candidate(variant: GeneratedVariant) -> DeckCandidate:
+    """The deck candidate ``compute_basic_lands`` reads for a variant.
 
     A variant has no converted prose by design (FR-056), and the manabase
-    heuristic reads only the name, mana cost and type line, so those are
-    rendered from the perturbed script rather than the tree.
+    heuristic reads only the mana cost, so that is taken from the perturbed
+    script rather than the tree.
     """
     lines = variant.path.read_text(encoding="utf-8").splitlines()
     cost = next(
         (ln.split(":", 1)[1] for ln in lines if ln.startswith("ManaCost:")), "",
     )
-    types = next(
-        (ln.split(":", 1)[1] for ln in lines if ln.startswith("Types:")), "",
-    )
-    return (
-        f"name: {variant.name}\n"
-        f"mana cost: {_brace_wrap_mana_cost(cost)}\n"
-        f"types: {types}\n"
-    )
+    return DeckCandidate(variant.name, _brace_wrap_mana_cost(cost) or None)
 
 
 def run(config: CollectVariantsConfig) -> int:
@@ -390,9 +384,9 @@ def run(config: CollectVariantsConfig) -> int:
     # each freshly-generated script into a game at all, not to balance
     # against records the corpus already has for it.
     decks_file = Path(config.effect_records) / "variant-decks.txt"
-    texts = {variant.name: _deck_text(variant) for variant in variants}
+    candidates = {variant.name: _deck_candidate(variant) for variant in variants}
     decks = build_coverage_decks(
-        {variant.name: 1.0 for variant in variants}, texts, config.decks_per_round,
+        {variant.name: 1.0 for variant in variants}, candidates, config.decks_per_round,
         rng=random.Random(config.seed),
     )
     write_deck_file(decks, decks_file, label="variant", set_code=COVERAGE_SET_CODE)

@@ -263,8 +263,10 @@ class TestConfig:
 class TestCoverageDeckBuilding:
     """A coverage deck is 40 cards and favours the cards that need records."""
 
-    def _texts(self, names):
-        return {n: f"name: {n}\nmana cost: {{1}}{{G}}\ntypes: creature\n" for n in names}
+    def _candidates(self, names):
+        from effects.domain.coverage import DeckCandidate
+
+        return {n: DeckCandidate(n, "{1}{G}") for n in names}
 
     def test_a_deck_is_forty_cards_with_twenty_three_nonlands(self):
         import random
@@ -273,7 +275,7 @@ class TestCoverageDeckBuilding:
 
         names = [f"card {i}" for i in range(40)]
         decks = build_coverage_decks(
-            {n: 1.0 for n in names}, self._texts(names), count=3,
+            {n: 1.0 for n in names}, self._candidates(names), count=3,
             rng=random.Random(1),
         )
 
@@ -297,14 +299,14 @@ class TestCoverageDeckBuilding:
         weights = {n: 1.0 for n in names}
         weights["card 0"] = 500.0
         decks = build_coverage_decks(
-            weights, self._texts(names), count=40, rng=random.Random(1),
+            weights, self._candidates(names), count=40, rng=random.Random(1),
         )
 
         flat = [n for deck in decks for n in deck]
         assert flat.count("card 0") > flat.count("card 1")
 
     def test_a_card_with_no_converted_text_is_skipped(self):
-        """A weight can name a card the tree has no text for; basics need text."""
+        """A weight can name a card the tree has no text for; basics need its cost."""
         import random
 
         from effects.application.collect_coverage import build_coverage_decks
@@ -312,10 +314,29 @@ class TestCoverageDeckBuilding:
         names = [f"card {i}" for i in range(40)]
         decks = build_coverage_decks(
             {**{n: 1.0 for n in names}, "ghost": 5.0},
-            self._texts(names), count=2, rng=random.Random(1),
+            self._candidates(names), count=2, rng=random.Random(1),
         )
 
         assert all("ghost" not in deck for deck in decks)
+
+
+class TestDeckCandidateFromConvertedText:
+    """The cost a converted card hands the manabase heuristic."""
+
+    def test_the_mana_cost_line_is_read(self):
+        from effects.domain.coverage import DeckCandidate
+
+        candidate = DeckCandidate.from_converted_text(
+            "bolt", "name: bolt\nmana cost: {2}{R}{R}\ntypes: instant\n",
+        )
+        assert candidate == DeckCandidate("bolt", "{2}{R}{R}")
+        assert candidate.mana_cost_line() == "{2}{R}{R}"
+
+    @pytest.mark.parametrize("text", ["name: land\ntypes: land\n", "mana cost:  \n"])
+    def test_a_missing_or_empty_cost_is_none(self, text):
+        from effects.domain.coverage import DeckCandidate
+
+        assert DeckCandidate.from_converted_text("x", text).mana_cost is None
 
 
 class TestHeldOutExclusion:
@@ -1070,7 +1091,11 @@ class TestHeldOutTextUnit:
         import random
 
         from effects.application.collect_coverage import build_coverage_decks
-        from effects.domain.coverage import TextCoverage, text_deck_weights
+        from effects.domain.coverage import (
+            DeckCandidate,
+            TextCoverage,
+            text_deck_weights,
+        )
 
         carriers = {"t1": frozenset({"alpha"}), "t2": frozenset({"beta"})}
         coverage = {"t1": TextCoverage(text="t1"), "t2": TextCoverage(
@@ -1078,8 +1103,10 @@ class TestHeldOutTextUnit:
         )}
         weights = text_deck_weights(coverage, carriers, 5)
         assert weights == {"alpha": 5.0}
-        texts = {"alpha": "name: alpha\nmana cost: {R}\n", "beta": "name: beta\n"}
-        decks = build_coverage_decks(weights, texts, 3, rng=random.Random(0))
+        candidates = {
+            "alpha": DeckCandidate("alpha", "{R}"), "beta": DeckCandidate("beta", None),
+        }
+        decks = build_coverage_decks(weights, candidates, 3, rng=random.Random(0))
         basics = {"Plains", "Island", "Swamp", "Mountain", "Forest"}
         assert all(set(deck) <= {"alpha"} | basics for deck in decks)
 

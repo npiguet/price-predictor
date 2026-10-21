@@ -25,7 +25,7 @@ from effects.application.collect_variants import (
     RANDOM_SEED,
     CollectVariantsConfig,
     GeneratedVariant,
-    _deck_text,
+    _deck_candidate,
     generate_variants,
     loadable_variants,
     perturb_script,
@@ -470,7 +470,7 @@ class TestRunClosesTheSupervisor:
 
         ``generate_variants`` is stubbed out below rather than exercised for
         real, so nothing else would write this file -- and ``run()`` now
-        reads it (``_deck_text``) to build the round's decks.
+        reads it (``_deck_candidate``) to build the round's decks.
         """
         path = tmp_path / "variant-scripts" / "lightning_bolt_variant_0.txt"
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -673,9 +673,9 @@ class TestDeckTextManaCostIsParseable:
 
         from effects.application.collect_coverage import build_coverage_decks
 
-        texts = {variant.name: _deck_text(variant)}
         decks = build_coverage_decks(
-            {variant.name: 1.0}, texts, 1, rng=random.Random(0),
+            {variant.name: 1.0}, {variant.name: _deck_candidate(variant)}, 1,
+            rng=random.Random(0),
         )
 
         deck = decks[0]
@@ -693,7 +693,6 @@ class TestDeckTextManaCostIsParseable:
         ``convert_mana_cost`` rejoins them back to the exact literal
         ``ManaCost.parse`` special-cases, rather than the fix turning a land
         into a card with bogus, unparseable mana symbols."""
-        from effects.application.collect_coverage import _NonlandText
         from sealed.domain.manabase import compute_basic_lands
 
         path = tmp_path / "plains_variant.txt"
@@ -709,9 +708,41 @@ class TestDeckTextManaCostIsParseable:
         # Zero pips either way -- the point is this must land in the same
         # all-zero-pips (colorless-fallback) case a missing ManaCost: line
         # does, not raise and not inject a spurious color.
-        lands = compute_basic_lands([_NonlandText(_deck_text(variant))] * 23)
+        lands = compute_basic_lands([_deck_candidate(variant)] * 23)
         assert sum(lands.values()) == 17
         assert set(lands) == {"Plains", "Island", "Swamp", "Mountain", "Forest"}
+
+
+class TestTheVariantCandidateMatchesAConvertedCard:
+    def test_a_variant_hands_the_manabase_what_a_converted_card_would(
+        self, tmp_path,
+    ):
+        """The same cost reaches ``compute_basic_lands`` from either source, so
+        a variant gets the basics a converted card of that cost gets."""
+        from effects.domain.coverage import DeckCandidate
+
+        path = tmp_path / "bolt_variant.txt"
+        path.write_text(
+            "Name:Bolt Variant 0\nManaCost:2 R R\nTypes:Instant\n",
+            encoding="utf-8",
+        )
+        variant = GeneratedVariant(
+            name="Bolt Variant 0", source_card="Bolt", path=path,
+            perturbation="numeric",
+        )
+
+        assert _deck_candidate(variant) == DeckCandidate.from_converted_text(
+            "Bolt Variant 0", "name: bolt variant 0\nmana cost: {2}{R}{R}\n",
+        )
+
+    def test_a_script_without_a_cost_names_none(self, tmp_path):
+        path = tmp_path / "x.txt"
+        path.write_text("Name:X Variant 0\nTypes:Instant\n", encoding="utf-8")
+        variant = GeneratedVariant(
+            name="X Variant 0", source_card="X", path=path, perturbation="numeric",
+        )
+
+        assert _deck_candidate(variant).mana_cost is None
 
 
 class TestTheRunReportsWhatItCollected:

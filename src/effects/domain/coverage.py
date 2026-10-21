@@ -71,6 +71,35 @@ class ConsultVerdict(StrEnum):
 UNCASTABLE_RANK_MULTIPLIER = 0.25
 
 
+@dataclass(frozen=True, slots=True)
+class DeckCandidate:
+    """A card a coverage deck can hold, as the manabase heuristic reads it.
+
+    ``compute_basic_lands`` reads one thing of each nonland:
+    ``mana_cost_line()``. FR-002 declares only ``compute_basic_lands`` on the
+    allowed surface of ``sealed.domain.manabase``, not the ``ConvertedCardText``
+    wrapper its signature is typed against, so rather than reaching past the
+    declared surface for that wrapper this carries the one value it reads. A
+    converted card supplies it from its text; a variant, which has no
+    converted text by design (FR-056), from its script.
+    """
+
+    name: str
+    #: Brace-delimited like the converted corpus (``{2}{R}{R}``), the shape
+    #: ``convert_mana_cost`` parses; None when the card names no cost.
+    mana_cost: str | None
+
+    @classmethod
+    def from_converted_text(cls, name: str, converted_text: str) -> DeckCandidate:
+        for line in converted_text.splitlines():
+            if line.strip().lower().startswith("mana cost:"):
+                return cls(name, line.split(":", 1)[1].strip() or None)
+        return cls(name, None)
+
+    def mana_cost_line(self) -> str | None:
+        return self.mana_cost
+
+
 class CoverageUnit(Protocol):
     """What the round loop and ``retire_stalled`` read of a coverage unit.
 

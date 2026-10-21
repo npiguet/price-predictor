@@ -34,6 +34,7 @@ import logging
 import os
 import random
 from collections import Counter, defaultdict
+from collections.abc import Mapping
 from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass, field, replace
 from pathlib import Path
@@ -42,6 +43,7 @@ from effects.domain.collection_caps import CollectionCaps
 from effects.domain.coverage import (
     CardCoverage,
     ConsultVerdict,
+    DeckCandidate,
     TextCoverage,
     deck_weights,
     held_out_texts_of,
@@ -213,30 +215,9 @@ class CoverageCounter:
             )
 
 
-@dataclass(frozen=True)
-class _NonlandText:
-    """Adapts a raw converted-text string to what ``compute_basic_lands`` reads.
-
-    FR-002 declares only ``compute_basic_lands`` on the allowed surface of
-    ``sealed.domain.manabase``, not the ``ConvertedCardText`` wrapper its
-    signature is typed against — so rather than reaching past the declared
-    surface for that wrapper, this mirrors the single method the manabase
-    heuristic actually calls (``mana_cost_line``) over the plain string
-    ``build_coverage_decks`` already has on hand.
-    """
-
-    text: str
-
-    def mana_cost_line(self) -> str | None:
-        for line in self.text.splitlines():
-            if line.strip().lower().startswith("mana cost:"):
-                return line.split(":", 1)[1].strip() or None
-        return None
-
-
 def build_coverage_decks(
     weights: dict[str, float],
-    texts: dict[str, str],
+    candidates: Mapping[str, DeckCandidate],
     count: int,
     *,
     rng: random.Random,
@@ -244,17 +225,17 @@ def build_coverage_decks(
     """``count`` 40-card decks drawn from ``weights`` (FR-046).
 
     23 nonlands sampled with replacement in proportion to weight, then basics
-    from ``compute_basic_lands`` over the chosen cards' converted text. With
+    from ``compute_basic_lands`` over the chosen cards' mana costs. With
     replacement because a weight of 500 against 1 should be able to fill a deck
     with one card: the point is to get that card into games, not to build a
     deck anyone would play.
 
-    A weighted card with no converted text is skipped — the manabase heuristic
-    reads the text, and a card without one cannot be placed.
+    A weighted card that is no candidate is skipped — the manabase heuristic
+    reads its cost, and a card the tree has no text for cannot be placed.
     """
     from sealed.domain.manabase import compute_basic_lands
 
-    pool = [(name, w) for name, w in weights.items() if name in texts and w > 0]
+    pool = [(name, w) for name, w in weights.items() if name in candidates and w > 0]
     if not pool:
         return []
     names = [name for name, _ in pool]
@@ -263,7 +244,7 @@ def build_coverage_decks(
     decks: list[list[str]] = []
     for _ in range(count):
         nonlands = rng.choices(names, weights=ws, k=NONLANDS_PER_DECK)
-        basics = compute_basic_lands([_NonlandText(texts[n]) for n in nonlands])
+        basics = compute_basic_lands([candidates[n] for n in nonlands])
         deck = list(nonlands)
         for land, n in basics.items():
             deck.extend([land] * n)
@@ -454,6 +435,10 @@ def run(config: CollectCoverageConfig) -> int:
         if name in coverage:
             coverage[name].verdict = verdict
 
+    candidates = {
+        name: DeckCandidate.from_converted_text(name, text)
+        for name, text in texts.items()
+    }
     decks_file = Path(config.effect_records) / "coverage-decks.txt"
     rng = random.Random(RANDOM_SEED)
 
@@ -473,7 +458,7 @@ def run(config: CollectCoverageConfig) -> int:
             if not weights:
                 break
             decks = build_coverage_decks(
-                weights, texts, config.decks_per_round, rng=rng,
+                weights, candidates, config.decks_per_round, rng=rng,
             )
             if not decks:
                 logger.error(
@@ -734,7 +719,10 @@ def run_text_coverage(config: CollectCoverageConfig) -> int:
         sum(1 for unit in coverage.values() if not unit.castable),
     )
 
-    texts = {name: text for name, text in texts.items() if name in present}
+    candidates = {
+        name: DeckCandidate.from_converted_text(name, text)
+        for name, text in texts.items() if name in present
+    }
     decks_file = Path(config.effect_records) / "coverage-decks.txt"
     rng = random.Random(RANDOM_SEED)
     caps = held_out_round_caps(config.caps)
@@ -748,7 +736,9 @@ def run_text_coverage(config: CollectCoverageConfig) -> int:
             round_number += 1
             previous = {text: len(unit.games) for text, unit in coverage.items()}
             weights = rank_by_consult(text_deck_weights(coverage, carriers, floor), verdicts)
-            decks = build_coverage_decks(weights, texts, config.decks_per_round, rng=rng)
+            decks = build_coverage_decks(
+                weights, candidates, config.decks_per_round, rng=rng,
+            )
             if not decks:
                 logger.error("No unfinished held-out text has a card with converted text.")
                 break
