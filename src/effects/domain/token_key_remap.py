@@ -264,6 +264,15 @@ def _key_dicts(obj) -> Iterator[dict]:
             yield from _key_dicts(item)
 
 
+def _old_keys(obj, remapper: TokenKeyRemapper) -> Iterator[tuple[dict, str, str]]:
+    """``(key, script_file, token name)`` for every old token key below ``obj``."""
+    for key in _key_dicts(obj):
+        script_file = key["script_file"]
+        name = remapper.is_old_token_key(script_file)
+        if name is not None:
+            yield key, script_file, name
+
+
 def _entity_key_sites(entity: dict) -> tuple:
     """An entity's key lists in its raw JSON, as ``EntityState`` names them."""
     return (
@@ -288,35 +297,8 @@ def remap_record_dict(data: dict, remapper: TokenKeyRemapper, counts: RemapCount
     name alone (step 1). A key that stays ambiguous is counted once, keyed
     by the old script's stem.
     """
-    state = data.get("state") or {}
-
-    # Per old script_file, every stem (or None) some entity carrying it
-    # resolved to -- the record-wide memo below trusts a file only when
-    # every entity that carried it agreed.
-    per_file_stems: dict[str, set[str | None]] = {}
-    # The stems of entity keys that stayed ambiguous, counted only after the
-    # other key sites so the counter sees them in the order it always has:
-    # the manifest keeps the 100 most common, and ties keep insertion order.
-    entity_ambiguous: list[str] = []
-
-    for entity in state.get("entities") or ():
-        resolved: dict[str, str | None] = {}
-        for site in _entity_key_sites(entity):
-            for key in _key_dicts(site):
-                script_file = key["script_file"]
-                name = remapper.is_old_token_key(script_file)
-                if name is None:
-                    continue
-                if script_file in resolved:
-                    stem = resolved[script_file]
-                else:
-                    stem = resolved[script_file] = remapper.resolve(name, entity=entity)
-                per_file_stems.setdefault(script_file, set()).add(stem)
-                if stem is None:
-                    entity_ambiguous.append(_stem_of(script_file))
-                else:
-                    _rewrite(key, stem)
-                    counts.remapped += 1
+    entities = (data.get("state") or {}).get("entities") or ()
+    per_file_stems, entity_ambiguous = _remap_entity_keys(entities, remapper, counts)
 
     # Trust an old file's resolution for the record's other key sites only
     # when every entity that carried it agreed on one non-None stem.
@@ -325,23 +307,46 @@ def remap_record_dict(data: dict, remapper: TokenKeyRemapper, counts: RemapCount
         for script_file, stems in per_file_stems.items()
         if len(stems) == 1 and None not in stems
     }
-
-    for name_of_field, value in data.items():
-        if name_of_field == "state":
-            continue
-        for key in _key_dicts(value):
-            script_file = key["script_file"]
-            name = remapper.is_old_token_key(script_file)
-            if name is None:
-                continue
-            if script_file in memo:
-                stem = memo[script_file]
-            else:
-                stem = memo[script_file] = remapper.resolve(name)
-            if stem is None:
-                counts.ambiguous[_stem_of(script_file)] += 1
-                continue
+    outside_state = [value for field_name, value in data.items() if field_name != "state"]
+    for key, script_file, name in _old_keys(outside_state, remapper):
+        if script_file in memo:
+            stem = memo[script_file]
+        else:
+            stem = memo[script_file] = remapper.resolve(name)
+        if stem is None:
+            counts.ambiguous[_stem_of(script_file)] += 1
+        else:
             _rewrite(key, stem)
             counts.remapped += 1
 
     counts.ambiguous.update(entity_ambiguous)
+
+
+def _remap_entity_keys(
+    entities, remapper: TokenKeyRemapper, counts: RemapCounts,
+) -> tuple[dict[str, set[str | None]], list[str]]:
+    """Rewrite each entity's old keys against that entity alone.
+
+    Returns, per old script_file, every stem (or None) some entity carrying it
+    resolved to -- the record-wide memo trusts a file only when every entity
+    that carried it agreed -- and the stems of the entity keys that stayed
+    ambiguous. Those are counted by the caller only after the other key
+    sites, so the counter sees them in the order it always has: the manifest
+    keeps the 100 most common, and ties keep insertion order.
+    """
+    per_file_stems: dict[str, set[str | None]] = {}
+    ambiguous: list[str] = []
+    for entity in entities:
+        resolved: dict[str, str | None] = {}
+        for site in _entity_key_sites(entity):
+            for key, script_file, name in _old_keys(site, remapper):
+                if script_file not in resolved:
+                    resolved[script_file] = remapper.resolve(name, entity=entity)
+                stem = resolved[script_file]
+                per_file_stems.setdefault(script_file, set()).add(stem)
+                if stem is None:
+                    ambiguous.append(_stem_of(script_file))
+                else:
+                    _rewrite(key, stem)
+                    counts.remapped += 1
+    return per_file_stems, ambiguous
