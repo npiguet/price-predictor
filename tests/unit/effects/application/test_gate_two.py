@@ -884,3 +884,89 @@ class TestEvaluatorWiring:
         assert len(verdicts) == 8
         assert all(v.qualifying_records == 0 for v in verdicts)
         assert all("under-sampled" in v.reason for v in verdicts)
+
+
+# ── who is counted (FR-119, FR-120) ──────────────────────────────────────
+
+
+def _two_first_strikers() -> EffectRecord:
+    """Two first-striking attackers in one combat, each blocked by its own 2/2."""
+    creatures = []
+    for index in range(2):
+        creatures.append(_creature(
+            f"A{index}", 2, 2, printed=(_FIRST_STRIKE,),
+            combat=CombatStatus(
+                attacking="P1", blocked_by=(f"B{index}",), became_blocked=True,
+            ),
+        ))
+        creatures.append(_creature(
+            f"B{index}", 2, 2, controller="P1", printed=(_OTHER,),
+            combat=CombatStatus(blocking=(f"A{index}",)),
+        ))
+    return _combat_record(*creatures, substep="first_strike")
+
+
+def _scores(records):
+    return score_keywords(
+        records, (KEYWORDS_BY_NAME["first_strike"],),
+        _NoEncoder(), _AbilityCountingModel(), _batcher(), fields=_FIELDS,
+    )["first_strike"]
+
+
+class TestPopulation:
+    def test_a_fork_record_never_qualifies(self):
+        """A damage-step probe re-runs a real combat: a near-duplicate board."""
+        import dataclasses
+
+        probe = dataclasses.replace(
+            _printed_board(game="gd-1"), record_id="gd-1.2", fork=True,
+            mirror_of="gd-1.1",
+        )
+        assert _scores([probe]).qualifying == 0
+        assert _scores([_printed_board(game="gd-1"), probe]).qualifying == 1
+
+    def test_two_carriers_in_one_record_count_one_qualifying_record(self):
+        """FR-119's threshold counts records; agreement averages the carriers."""
+        score = _scores([_two_first_strikers()])
+        assert score.qualifying == 1
+        assert score.observations == 2
+        assert score.agreeing == 2
+
+    def test_the_verdict_reads_agreement_over_observations(self):
+        from effects.application.gate_two import evaluate_keyword
+
+        verdict = evaluate_keyword(
+            KEYWORDS_BY_NAME["first_strike"], qualifying_records=300,
+            observations=400, agreeing=300,
+        )
+        assert verdict.qualifying_records == 300
+        assert verdict.observations == 400
+        assert verdict.direction_agreement == pytest.approx(0.75)
+
+
+class TestGateTwoRecords:
+    def _write(self, directory, *records):
+        from effects.infrastructure.record_io import write_shard
+
+        write_shard(directory / "shard-00001.jsonl.gz", records)
+
+    def test_a_curated_corpus_is_read_rather_than_the_raw_shards(self, tmp_path):
+        """The raw shards hold records the corpus repair dropped."""
+        import dataclasses
+
+        from effects.application.gate_two import gate_two_records
+        from effects.infrastructure.corpus_store import CorpusStore
+        from effects.infrastructure.effect_model_store import SplitProvenance
+
+        raw, corpus = tmp_path / "raw", tmp_path / "corpus"
+        curated = _printed_board(game="gd-1")
+        dropped = dataclasses.replace(curated, record_id="gd-1.9")
+        self._write(raw, curated, dropped)
+        self._write(CorpusStore(corpus).game_disjoint_dir, curated)
+        config = type("Config", (), {"records_dir": raw})()
+        provenance = SplitProvenance(game_disjoint_games=("gd-1",))
+
+        read = list(gate_two_records(config, provenance, corpus_path=corpus))
+        assert [r.record_id for r in read] == [curated.record_id]
+        raw_read = list(gate_two_records(config, provenance, corpus_path=None))
+        assert len(raw_read) == 2

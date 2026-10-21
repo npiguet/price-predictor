@@ -193,7 +193,7 @@ class TestGateTwo:
     def test_enough_records_and_enough_agreement_passes(self):
         verdict = evaluate_keyword(
             KEYWORDS_BY_NAME["deathtouch"],
-            qualifying_records=500, agreeing_records=400,
+            qualifying_records=500, agreeing=400,
         )
         assert verdict.passed
         assert not verdict.routed_to_probe
@@ -202,7 +202,7 @@ class TestGateTwo:
         """Untested is not passed — that is how a canary stops being one."""
         verdict = evaluate_keyword(
             KEYWORDS_BY_NAME["wither"],
-            qualifying_records=40, agreeing_records=40,
+            qualifying_records=40, agreeing=40,
         )
         assert verdict.routed_to_probe
         assert "under-sampled" in verdict.reason
@@ -210,7 +210,7 @@ class TestGateTwo:
     def test_too_little_agreement_routes_to_a_probe(self):
         verdict = evaluate_keyword(
             KEYWORDS_BY_NAME["trample"],
-            qualifying_records=1000, agreeing_records=600,
+            qualifying_records=1000, agreeing=600,
         )
         assert verdict.routed_to_probe
         assert "direction agreement" in verdict.reason
@@ -219,13 +219,13 @@ class TestGateTwo:
         verdict = evaluate_keyword(
             KEYWORDS_BY_NAME["lifelink"],
             qualifying_records=MIN_QUALIFYING_RECORDS,
-            agreeing_records=int(MIN_QUALIFYING_RECORDS * MIN_DIRECTION_AGREEMENT),
+            agreeing=int(MIN_QUALIFYING_RECORDS * MIN_DIRECTION_AGREEMENT),
         )
         assert verdict.passed
 
     def test_the_gate_blocks_nothing(self):
         verdicts = [
-            evaluate_keyword(row, qualifying_records=10, agreeing_records=0)
+            evaluate_keyword(row, qualifying_records=10, agreeing=0)
             for row in DAMAGE_STEP_KEYWORDS
         ]
         result = evaluate_gate_two(verdicts)
@@ -236,11 +236,11 @@ class TestGateTwo:
         verdicts = [
             evaluate_keyword(
                 KEYWORDS_BY_NAME["infect"], qualifying_records=10,
-                agreeing_records=10,
+                agreeing=10,
             ),
             evaluate_keyword(
                 KEYWORDS_BY_NAME["lifelink"], qualifying_records=500,
-                agreeing_records=500,
+                agreeing=500,
             ),
         ]
         detail = evaluate_gate_two(verdicts).detail
@@ -250,7 +250,7 @@ class TestGateTwo:
     def test_all_passing_says_no_probe_machinery_is_needed(self):
         """That output is the whole reason the gate runs before stage three."""
         verdicts = [
-            evaluate_keyword(row, qualifying_records=500, agreeing_records=500)
+            evaluate_keyword(row, qualifying_records=500, agreeing=500)
             for row in DAMAGE_STEP_KEYWORDS
         ]
         assert "no stage-three probe machinery" in evaluate_gate_two(verdicts).detail
@@ -451,7 +451,7 @@ class TestReport:
     def test_gate_two_never_stops_it(self):
         report = EvaluationReport()
         report.keyword_verdicts = [
-            evaluate_keyword(row, qualifying_records=1, agreeing_records=0)
+            evaluate_keyword(row, qualifying_records=1, agreeing=0)
             for row in DAMAGE_STEP_KEYWORDS
         ]
         report.add(evaluate_gate_two(report.keyword_verdicts))

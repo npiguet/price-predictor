@@ -19,9 +19,14 @@ generalizes to unseen text, and holding out cards would shrink the eight
 populations to nothing while answering a question gate 1 already answers.
 
 And the count and the agreement describe **one population**, decided by the
-table's own predicate (:mod:`effects.domain.damage_step_keywords`). The
-under-sampled verdict and the agreement verdict sit on the same report line, and
-two populations behind them would make that line unreadable.
+table's own predicate (:mod:`effects.domain.damage_step_keywords`), over the
+combats the games actually played: a damage-step probe or an intervention is a
+fork of a real board and qualifies nothing. The under-sampled verdict and the
+agreement verdict sit on the same report line, and two populations behind them
+would make that line unreadable. Within it the threshold counts **records** —
+FR-119's 200 is a count of combats — while the agreement averages the
+**observations**, one per (record, carrier), because each carrier is its own
+perturbation and a combat holding two first strikers answers twice.
 """
 
 from __future__ import annotations
@@ -87,6 +92,10 @@ class FieldAgreement(NamedTuple):
 class KeywordScore:
     """One keyword's population and how much of it agreed.
 
+    ``qualifying`` counts distinct records, ``observations`` the (record,
+    carrier) perturbations scored, and ``agreeing`` the observations that
+    moved every field the rules' way.
+
     ``per_field`` is reported beside the total because the two halves of a row
     fail differently: a keyword whose damage field moves and whose zone field
     does not is a head that learned the magnitude and not the consequence, and
@@ -97,18 +106,21 @@ class KeywordScore:
     agreeing: int = 0
     #: ``effect label -> (agreeing, scored)``.
     per_field: dict[str, FieldAgreement] = field(default_factory=dict)
+    observations: int = 0
 
 
 @dataclass(slots=True)
 class _Tally:
     """One keyword's running counts while the pass is still reading."""
 
-    qualifying: int = 0
+    records: set[str] = field(default_factory=set)
+    observations: int = 0
     agreeing: int = 0
     per_field: dict[str, FieldAgreement] = field(default_factory=dict)
 
-    def add(self, agreed: bool, per_effect: dict[str, bool]) -> None:
-        self.qualifying += 1
+    def add(self, record_id: str, agreed: bool, per_effect: dict[str, bool]) -> None:
+        self.records.add(record_id)
+        self.observations += 1
         self.agreeing += 1 if agreed else 0
         for label, ok in per_effect.items():
             agreeing, scored = self.per_field.get(label, FieldAgreement(0, 0))
@@ -117,7 +129,9 @@ class _Tally:
             )
 
     def score(self) -> KeywordScore:
-        return KeywordScore(self.qualifying, self.agreeing, self.per_field)
+        return KeywordScore(
+            len(self.records), self.agreeing, self.per_field, self.observations,
+        )
 
 
 # ── decoding a head into one comparable number ──────────────────────────
@@ -261,11 +275,18 @@ def _qualifying(
     records, rows: tuple[DamageStepKeyword, ...], resolver: KeywordResolver,
     progress: _Progress,
 ) -> Iterator[tuple]:
-    """Every qualifying ``(record, row, participant)``, read lazily."""
+    """Every qualifying ``(record, row, participant)``, read lazily.
+
+    A fork — a damage-step probe or an intervention — is never one: it re-runs
+    a real board the population already holds, so counting it would weigh that
+    combat twice and count a near-duplicate toward the threshold.
+    """
     for record in records:
         progress.read += 1
         if progress.read % PROGRESS_EVERY_RECORDS == 0:
             progress.log()
+        if record.fork or record.interventional:
+            continue
         for row, participant in qualifying_observations(record, rows, resolver):
             progress.observed += 1
             yield record, row, participant
@@ -287,7 +308,7 @@ def _score_chunk(
     batch, surfaces = batcher.build(built, encoder, strips)
     outputs = model.per_entity(model(**batch)).cpu()
 
-    for offset, (_record, row, participant) in enumerate(chunk):
+    for offset, (record, row, participant) in enumerate(chunk):
         twin = len(chunk) + offset
         agreed, per_effect = score_observation(
             row, participant,
@@ -295,7 +316,7 @@ def _score_chunk(
             _subject_vectors(surfaces[twin], outputs[twin], row, participant),
             fields=fields, keywords_of=keywords_of,
         )
-        tallies[row.keyword].add(agreed, per_effect)
+        tallies[row.keyword].add(record.record_id, agreed, per_effect)
 
 
 def _subject_vectors(
@@ -329,7 +350,8 @@ def evaluate_keyword(
     row: DamageStepKeyword,
     *,
     qualifying_records: int,
-    agreeing_records: int,
+    agreeing: int,
+    observations: int | None = None,
     per_field: dict[str, FieldAgreement] | None = None,
 ) -> KeywordVerdict:
     """Route one keyword: pass, or send it to a stage-three probe (FR-119).
@@ -338,15 +360,18 @@ def evaluate_keyword(
     records has not been tested, and treating "untested" as "passed" is how a
     canary stops being one.
 
+    The threshold reads ``qualifying_records``; the agreement is ``agreeing``
+    over ``observations``, which default to one per record.
+
     ``per_field`` is reported but never routes: a row's verdict is "did every
     field move", and the breakdown says *which* one did not — a keyword whose
     magnitude moves and whose consequence does not is a different problem from
     one the model ignores entirely, and the combined percentage cannot tell them
     apart.
     """
-    agreement = (
-        agreeing_records / qualifying_records if qualifying_records else 0.0
-    )
+    if observations is None:
+        observations = qualifying_records
+    agreement = agreeing / observations if observations else 0.0
     breakdown = _render_per_field(per_field)
     if qualifying_records < MIN_QUALIFYING_RECORDS:
         return KeywordVerdict(
@@ -355,6 +380,7 @@ def evaluate_keyword(
                 f"under-sampled: {qualifying_records} qualifying records < "
                 f"{MIN_QUALIFYING_RECORDS}" + breakdown
             ),
+            observations=observations,
         )
     if agreement < MIN_DIRECTION_AGREEMENT:
         return KeywordVerdict(
@@ -362,12 +388,17 @@ def evaluate_keyword(
             reason=(
                 f"direction agreement {agreement:.1%} < "
                 f"{MIN_DIRECTION_AGREEMENT:.0%} on {', '.join(row.fields)}"
-                + breakdown
+                f" over {observations} observations" + breakdown
             ),
+            observations=observations,
         )
     return KeywordVerdict(
         row.keyword, qualifying_records, agreement, routed_to_probe=False,
-        reason=f"direction agreement {agreement:.1%}" + breakdown,
+        reason=(
+            f"direction agreement {agreement:.1%} over {observations} "
+            "observations" + breakdown
+        ),
+        observations=observations,
     )
 
 
@@ -404,13 +435,17 @@ def evaluate_gate_two(verdicts: list[KeywordVerdict]) -> CheckResult:
 # ── the gate ────────────────────────────────────────────────────────────
 
 
-def gate_two_records(config, provenance) -> Iterator:
+def gate_two_records(config, provenance, *, corpus_path: Path | None) -> Iterator:
     """The combat records of the checkpoint's **game-disjoint** games (FR-120).
 
     Game-disjoint rather than card-disjoint: the gate asks whether the model
     uses a keyword it has seen, not whether it generalizes to text it has not,
     and holding out the carriers as well would empty six of the eight
     populations to answer a question gate 1 already answers.
+
+    From the curated corpus's ``validation/game-disjoint`` when the checkpoint
+    trained on one: the raw shards also hold the records curation refused or
+    repaired away. The raw corpus is read only for a checkpoint with no corpus.
 
     An iterator, not a list. The split is a thousand games and a parsed record
     costs about 45 KB, so the scorer reads it a chunk at a time.
@@ -421,8 +456,14 @@ def gate_two_records(config, provenance) -> Iterator:
     games = frozenset(provenance.game_disjoint_games)
     if not games:
         return iter(())
+    if corpus_path is not None:
+        from effects.infrastructure.corpus_store import CorpusStore
+
+        directory = CorpusStore(corpus_path).game_disjoint_dir
+    else:
+        directory = Path(config.records_dir)
     return read_records_matching(
-        Path(config.records_dir), game_ids=games, kinds={RecordKind.COMBAT.value},
+        directory, game_ids=games, kinds={RecordKind.COMBAT.value},
     )
 
 
@@ -456,7 +497,8 @@ def run_gate_two(
         evaluate_keyword(
             row,
             qualifying_records=scores[row.keyword].qualifying,
-            agreeing_records=scores[row.keyword].agreeing,
+            agreeing=scores[row.keyword].agreeing,
+            observations=scores[row.keyword].observations,
             per_field=scores[row.keyword].per_field,
         )
         for row in rows

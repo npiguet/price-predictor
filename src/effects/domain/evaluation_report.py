@@ -85,13 +85,20 @@ class CheckResult:
 
 @dataclass(frozen=True, slots=True)
 class KeywordVerdict:
-    """One damage-step keyword's routing verdict from gate 2. Blocks nothing."""
+    """One damage-step keyword's routing verdict from gate 2. Blocks nothing.
+
+    ``qualifying_records`` counts distinct records and is what the threshold
+    reads; ``observations`` counts the (record, carrier) perturbations the
+    agreement averages, more than the records wherever one combat holds two
+    carriers of the keyword.
+    """
 
     keyword: str
     qualifying_records: int
     direction_agreement: float
     routed_to_probe: bool
     reason: str
+    observations: int = 0
 
     @property
     def passed(self) -> bool:

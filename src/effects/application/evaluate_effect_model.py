@@ -185,7 +185,9 @@ def run(config: EvaluateEffectModelConfig) -> EvaluationReport:
 
     logger.info("gate 2: scoring the damage-step keywords on the game-disjoint stratum")
     report.keyword_verdicts = run_gate_two(
-        gate_two_records(context.config, context.main.provenance),
+        gate_two_records(
+            context.config, context.main.provenance, corpus_path=context.corpus_path,
+        ),
         context.main_runnable,
     )
     report.add(evaluate_gate_two(report.keyword_verdicts))
