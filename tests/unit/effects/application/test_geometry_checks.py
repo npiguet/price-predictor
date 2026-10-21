@@ -13,13 +13,9 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from effects.application.evaluate_effect_model import (
-    NEIGHBOUR_QUERIES,
-    CheckStatus,
-    EvaluateEffectModelConfig,
-    load_shipping_cache,
-)
+from effects.application.evaluation_context import EvaluateEffectModelConfig
 from effects.application.geometry_checks import (
+    NEIGHBOUR_QUERIES,
     CachedVectors,
     check_decodability,
     check_nearest_neighbours,
@@ -31,6 +27,7 @@ from effects.application.geometry_checks import (
     write_scorer_smoke_cache,
 )
 from effects.domain.ability_cache_layout import ARRAY_KEY
+from effects.domain.evaluation_report import CheckStatus
 from effects.domain.line_query import LineQuery, normalize_prose
 from effects.domain.provenance import ProvenanceKey, ProvenanceSidecar, SidecarLine
 from effects.domain.ward_twins import BARE_KEYWORDS, WARD, WARD_TWINS
@@ -247,17 +244,23 @@ class TestTheShippingCache:
             abilities_root=abilities,
         )
 
+    def _load(self, tmp_path):
+        config = self._config(tmp_path)
+        return load_cache(
+            config.abilities_root, config.cards_folders, surface="script",
+        )
+
     def test_it_spans_the_card_and_token_trees(self, tmp_path):
-        loaded = load_shipping_cache(self._config(tmp_path), surface="script")
+        loaded = self._load(tmp_path)
         assert set(loaded.texts()) == {"Flying", "Sacrifice | GainLife$ 3"}
 
     def test_synthetic_variant_scripts_are_not_in_it(self, tmp_path):
         """A perturbed script is collection input, not a line the cache serves."""
-        loaded = load_shipping_cache(self._config(tmp_path), surface="script")
+        loaded = self._load(tmp_path)
         assert "DealDamage | NumDmg$ 5" not in loaded.texts()
 
     def test_a_token_is_not_a_card_for_the_pooled_vectors(self, tmp_path):
-        loaded = load_shipping_cache(self._config(tmp_path), surface="script")
+        loaded = self._load(tmp_path)
         assert set(loaded.by_card) == {"Serra Angel"}
 
 
@@ -509,6 +512,17 @@ class TestDecodability:
         assert result.status is CheckStatus.SKIPPED
         assert "too few" in result.detail
 
+    def test_the_skip_counts_the_cards_that_have_a_win_rate(self, tmp_path):
+        """The threshold is on labelled cards, so that is the count to print."""
+        win_rates = tmp_path / "cards-win-rates.txt"
+        win_rates.write_text(
+            "card_name;a\n" + "".join(f"Storm Crow {i};0.5\n" for i in range(3)),
+            encoding="utf-8",
+        )
+        by_card = {f"storm crow {i}": np.ones(4) for i in range(60)}
+        result = check_decodability(CachedVectors(by_card=by_card), win_rates)
+        assert result.status is CheckStatus.SKIPPED
+        assert "only 3 of 60 cached cards have a win rate" in result.detail
 
     def test_the_cache_s_lowercase_names_join_the_canonical_win_rate_names(self, tmp_path):
         """A sidecar names its card in lowercase; the win-rate table in Forge's
@@ -559,6 +573,30 @@ class TestVariantComparison:
         result = check_variant_geometry(full, collapsed, "no-state")
         assert result.status is CheckStatus.REPORTED
         assert result.values["full_cosine"] < result.values["no-state_cosine"]
+
+    def test_each_cache_s_geometry_is_measured_once(self, monkeypatch):
+        """Gate 3 measures the shipping cache; both comparisons reuse it."""
+        from effects.application import geometry_checks
+        from effects.application.geometry_checks import run_gate_three
+
+        calls = []
+        measure = geometry_checks.mean_pairwise_cosine
+
+        def counted(vectors, **kwargs):
+            calls.append(vectors.shape)
+            return measure(vectors, **kwargs)
+
+        monkeypatch.setattr(geometry_checks, "mean_pairwise_cosine", counted)
+        rng = np.random.default_rng(2)
+        full = CachedVectors(by_text={f"t{i}": rng.normal(size=8) for i in range(50)})
+        baselines = [
+            CachedVectors(by_text={f"t{i}": rng.normal(size=8) for i in range(50)})
+            for _ in range(2)
+        ]
+        run_gate_three(full, Path("abilities"))
+        for baseline in baselines:
+            check_variant_geometry(full, baseline, "no-state")
+        assert len(calls) == 3
 
 
 class TestScorerSmokeCache:

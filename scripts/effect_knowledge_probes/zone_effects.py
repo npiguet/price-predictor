@@ -21,7 +21,8 @@ from) and reports four things:
 2. **Where a moved card goes, by the zone it starts in.** Every card the
    resolution moved is an item, grouped by its zone before the move (battlefield,
    graveyard, hand, exile, stack) and the outcome it got. The model's answer is
-   its zone-outcome distribution at that card's slot; the table gives the mean
+   its zone-outcome distribution at that card's slot, times the affected gate as
+   every count here is; the table gives the mean
    probability of the right outcome and how often it is the most probable outcome
    other than ``stayed``. The outcome vocabulary is the head's: a card put into a
    graveyard from anywhere is ``died``, and one put onto the battlefield is
@@ -37,23 +38,21 @@ from) and reports four things:
 from __future__ import annotations
 
 import argparse
-import importlib.util
 import re
+import sys
 from collections import defaultdict
 from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
 
-spec = importlib.util.spec_from_file_location(
-    "effect_knowledge_probes.run", Path(__file__).resolve().parent / "run.py")
-run = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(run)
-common = run.sibling("common")
-sweeps = run.sibling("sweeps")
-auc = run.sibling("target_restrictions").auc
+if __package__ in (None, ""):
+    # Run by path: put scripts/ on the path so the suite imports as a package.
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-CORPUS = Path("output/effects/corpus-gen2")
+from effect_knowledge_probes import common, record_walk  # noqa: E402
+from effect_knowledge_probes.common import auc  # noqa: E402
+
 ZONE_APIS = frozenset({
     "Draw", "Discard", "Mill", "ChangeZone", "ChangeZoneAll", "Dig",
     "Destroy", "DestroyAll", "Sacrifice", "SacrificeAll",
@@ -102,10 +101,7 @@ def chosen_record(record, sidecars):
     if (record.kind is not RecordKind.RESOLUTION or record.moment is not Moment.RESOLUTION
             or record.fork or not record.ability):
         return None
-    try:
-        line = sidecars.line_for(record.ability[0])
-    except Exception:  # an unjoinable or unconverted key carries no text
-        return None
+    line = sidecars.line_or_none(record.ability[0])
     text = line.script_text if line is not None else None
     apis = chain_apis(text) & ZONE_APIS
     if not apis:
@@ -114,58 +110,37 @@ def chosen_record(record, sidecars):
 
 
 def qualifying_records(directories, count: int, shards: int, per_game: int, sidecars):
-    from effects.infrastructure.record_io import iter_shards, read_shard
-
-    chosen, per = [], defaultdict(int)
-    for directory in directories:
-        for shard in iter_shards(directory)[:shards]:
-            for record in read_shard(shard):
-                if per[record.game_id] >= per_game:
-                    continue
-                found = chosen_record(record, sidecars)
-                if found is not None:
-                    per[record.game_id] += 1
-                    chosen.append(found)
-                    if len(chosen) >= count:
-                        return chosen
-    return chosen
+    return record_walk.qualifying(
+        directories, lambda record: chosen_record(record, sidecars), count,
+        per_game=per_game, shards=shards)
 
 
 # ── reading the model ───────────────────────────────────────────────────
 
 
 def _read(outputs, surface, row) -> dict:
-    """``{"players": {id: {field: count}}, "cards": {id: (gate, outcome probs)}}``."""
-    import torch
+    """``{"players": {id: {field: count}}, "cards": {id: outcome probabilities}}``.
 
-    from effects.domain.effect_model import FIELD_SLICES, GATE_INDEX
+    Both gated (:class:`HeadReading`): a count is the gate times the predicted
+    rate, and each outcome's probability the gate times the class's, so the
+    ``stayed``-or-unaffected mass is ``1 - sum`` of the moved outcomes.
+    """
+    from effects.domain.head_decoding import HeadReading
 
     players, cards = {}, {}
-    zone = slice(*FIELD_SLICES["zone_outcome"])
     for index, slot in enumerate(surface.slots):
-        vector = outputs[row, index]
-        gate = torch.sigmoid(vector[GATE_INDEX])
+        reading = HeadReading(outputs[row, index])
         if slot.kind.name == "PLAYER":
             players[slot.player_id] = {
-                field: float(gate * torch.exp(vector[FIELD_SLICES[field][0]]))
-                for field in COUNT_FIELDS.values()
+                field: float(reading.expected(field)) for field in COUNT_FIELDS.values()
             }
         elif slot.kind.name == "CARD" and slot.entity_id is not None:
-            cards[slot.entity_id] = (float(gate),
-                                     torch.softmax(vector[zone].float(), -1).cpu().numpy())
+            cards[slot.entity_id] = reading.zone_probabilities().cpu().numpy()
     return {"players": players, "cards": cards}
 
 
-def predict_all(probe_model, records, chunk: int = 32) -> list[dict]:
-    out = []
-    for i in range(0, len(records), chunk):
-        out += sweeps._predict(probe_model, records[i:i + chunk],
-                               lambda o, v, s, r: _read(o, s, r))
-    return out
-
-
-def _fmt(values, digits: int = 2) -> str:
-    return f"{np.mean(values):.{digits}f}" if len(values) else "n/a"
+def predict_all(probe_model, records) -> list[dict]:
+    return common.predict_all(probe_model, records, lambda o, v, s, r: _read(o, s, r))
 
 
 # ── the four reports ────────────────────────────────────────────────────
@@ -204,7 +179,8 @@ def report_counts(chosen, readings) -> None:
                 predicted.append(reading["players"][hit[0]][field])
         share = f"{right / single:.2f}" if single else "n/a"
         print(f"| {field} | {len(labels)} | {sum(labels)} | {auc(labels, scores):.3f} | "
-              f"{naming} | {single} | {share} | {_fmt(actual)} | {_fmt(predicted)} |",
+              f"{naming} | {single} | {share} | {common.fmt_mean(actual, 2)} | "
+              f"{common.fmt_mean(predicted, 2)} |",
               flush=True)
 
 
@@ -218,12 +194,12 @@ def report_zones(chosen, readings) -> None:
         for entity in record.state.entities:
             if entity.id not in reading["cards"]:
                 continue
-            gate, probs = reading["cards"][entity.id]
+            probs = reading["cards"][entity.id]
             entry = targets.get(entity.id)
             outcome = entry.fields.get("zone_outcome") if entry is not None else None
             went = outcome is not None and outcome != stayed
             moved[entity.zone][0].append(went)
-            moved[entity.zone][1].append(gate * (1.0 - probs[stayed]))
+            moved[entity.zone][1].append(float(probs.sum() - probs[stayed]))
             if not went:
                 continue
             others = probs.copy()
@@ -254,8 +230,8 @@ def report_zones(chosen, readings) -> None:
                                                        -len(kv[1]["right"]))):
         instead = max(row["instead"].items(), key=lambda kv: kv[1])[0] \
             if row["instead"] else ""
-        print(f"| {zone} | {outcome} | {len(row['right'])} | {_fmt(row['right'])} | "
-              f"{_fmt(row['top'])} | {instead} |", flush=True)
+        print(f"| {zone} | {outcome} | {len(row['right'])} | {common.fmt_mean(row['right'], 2)} | "
+              f"{common.fmt_mean(row['top'], 2)} | {instead} |", flush=True)
 
 
 def _affected_player(record, targets, field):
@@ -285,8 +261,8 @@ def report_amounts(chosen, probe_model, per_sweep: int) -> None:
             curve = []
             for amount in AMOUNTS:
                 with batcher.reading_as(key, set_amount(original, amount)):
-                    reading = sweeps._predict(probe_model, [record],
-                                              lambda o, v, s, r: _read(o, s, r))[0]
+                    reading = common.predict(probe_model, [record],
+                                             lambda o, v, s, r: _read(o, s, r))[0]
                 curve.append(reading["players"].get(player, {}).get(field, float("nan")))
             rows.append(curve)
             if len(rows) >= per_sweep:
@@ -327,8 +303,8 @@ def report_who(chosen, readings, probe_model) -> None:
             cells["ta"].append(reading["players"][player][field])
             cells["ob"].append(before["players"][other][field])
             cells["oa"].append(reading["players"][other][field])
-        print(f"| {api} | {len(edited)} | {_fmt(cells['tb'])} | {_fmt(cells['ta'])} | "
-              f"{_fmt(cells['ob'])} | {_fmt(cells['oa'])} |", flush=True)
+        means = " | ".join(common.fmt_mean(cells[k], 2) for k in ("tb", "ta", "ob", "oa"))
+        print(f"| {api} | {len(edited)} | {means} |", flush=True)
 
 
 def main() -> None:
@@ -340,16 +316,11 @@ def main() -> None:
     parser.add_argument("--per-sweep", type=int, default=40)
     args = parser.parse_args()
 
-    sidecars = common.sidecar_cache(common.DEFAULT_CARDS_FOLDERS)
-    directories = [CORPUS / "validation" / "card-disjoint",
-                   CORPUS / "validation" / "game-disjoint"]
-    chosen = qualifying_records(directories, args.records, args.shards, args.per_game,
-                                sidecars)
-    checkpoint = common.load_checkpoint(args.checkpoint)
-    probe_model = common.load_probe_model(
-        args.checkpoint, list(common.DEFAULT_CARDS_FOLDERS), [c[0] for c in chosen],
-        checkpoint=checkpoint)
-    print(f"{args.checkpoint.parent.name} ({checkpoint.epoch}), {len(chosen)} validation "
+    context = common.probe_context(args.checkpoint)
+    chosen = qualifying_records(context.validation_dirs(), args.records, args.shards,
+                                args.per_game, context.sidecars())
+    probe_model = context.model([c[0] for c in chosen])
+    print(f"{args.checkpoint.parent.name} ({context.checkpoint.epoch}), {len(chosen)} validation "
           f"resolutions naming a zone-moving API", flush=True)
 
     readings = predict_all(probe_model, [c[0] for c in chosen])

@@ -15,7 +15,13 @@ first key of ``record.ability`` that resolves to a sidecar line, encoded on
 the checkpoint's surface. The key → text map comes from ``cache/keymap.pkl``
 (written by ``build_texts.py``), so no worker builds a ``SidecarCache``.
 Records are parsed as raw JSON and never held: each worker folds one shard
-into sums and returns them.
+into one row of sums per record and returns them.
+
+Each record is profiled **once**. Curation writes a training record up to
+``--reuse-cap`` times, as separate lines with one ``record_id``, so the
+profile, the probes' ``n/(n+5)`` weights and the kind shares would otherwise
+count a repeated record as several observations. The copies can land in
+different shards, so the rows are de-duplicated where they are merged.
 
 "Own side" means the acting player or a permanent they control in the
 record's pre-resolution snapshot; "opponent side" the other player or their
@@ -214,9 +220,31 @@ def _continuous(acc: dict, record: dict) -> None:
             acc["sum_cont_typecolour"] += 1
 
 
-def fold_shard(path: str) -> dict[str, dict]:
-    out: dict[str, dict] = defaultdict(lambda: defaultdict(float))
-    games: dict[str, set] = defaultdict(set)
+def fold_record(acc: dict, record: dict) -> None:
+    """One record's contribution to its acting text's sums."""
+    kind = record["kind"]
+    acc["n_records"] += 1
+    if kind == "resolution":
+        if record.get("moment") == "activation":
+            acc["n_cost"] += 1
+            _activation(acc, record)
+        else:
+            acc["n_effect"] += 1
+            _resolution(acc, record)
+    elif kind == "continuous":
+        acc["n_continuous"] += 1
+        _continuous(acc, record)
+    elif kind == "trigger":
+        acc["n_trigger"] += 1
+        if (record["payload"] or {}).get("fired"):
+            acc["trigger_fired"] += 1
+    else:
+        acc[f"n_{kind}"] += 1
+
+
+def fold_shard(path: str) -> list[tuple[str, str, str, dict]]:
+    """``(record_id, acting text, game_id, sums)`` for each record of one shard."""
+    rows = []
     with gzip.open(path, "rt", encoding="utf-8") as handle:
         for raw in handle:
             try:
@@ -226,27 +254,38 @@ def fold_shard(path: str) -> dict[str, dict]:
             text = acting_text(record)
             if text is None:
                 continue
-            acc = out[text]
-            kind = record["kind"]
-            acc["n_records"] += 1
-            games[text].add(record["game_id"])
-            if kind == "resolution":
-                if record.get("moment") == "activation":
-                    acc["n_cost"] += 1
-                    _activation(acc, record)
-                else:
-                    acc["n_effect"] += 1
-                    _resolution(acc, record)
-            elif kind == "continuous":
-                acc["n_continuous"] += 1
-                _continuous(acc, record)
-            elif kind == "trigger":
-                acc["n_trigger"] += 1
-                if (record["payload"] or {}).get("fired"):
-                    acc["trigger_fired"] += 1
-            else:
-                acc[f"n_{kind}"] += 1
-    return {t: (dict(a), games[t]) for t, a in out.items()}
+            acc: dict = defaultdict(float)
+            fold_record(acc, record)
+            rows.append((record["record_id"], text, record["game_id"], dict(acc)))
+    return rows
+
+
+class ProfileTotals:
+    """Each acting text's sums over its distinct records."""
+
+    def __init__(self) -> None:
+        self.sums: dict[str, dict] = defaultdict(lambda: defaultdict(float))
+        self.games: dict[str, set] = defaultdict(set)
+        self._seen: set[str] = set()
+
+    def add(self, record_id: str, text: str, game_id: str, acc: dict) -> None:
+        """Fold one record's sums in; a copy of one already folded adds nothing."""
+        if record_id in self._seen:
+            return
+        self._seen.add(record_id)
+        target = self.sums[text]
+        for key, value in acc.items():
+            target[key] += value
+        self.games[text].add(game_id)
+
+    def frame(self) -> pd.DataFrame:
+        """One row per text: its game count, its sums, and the shares :func:`derive` reads."""
+        rows = []
+        for text, acc in self.sums.items():
+            row = {"text": text, "n_games": len(self.games[text])}
+            row.update(acc)
+            rows.append(row)
+        return derive(pd.DataFrame(rows).fillna(0.0))
 
 
 def main() -> None:
@@ -263,25 +302,15 @@ def main() -> None:
         )
     shards = sorted(str(p) for p in paths.training.glob("*.jsonl*"))
     keymap = paths.reusable("cache/keymap.pkl")
-    totals: dict[str, dict] = defaultdict(lambda: defaultdict(float))
-    games: dict[str, set] = defaultdict(set)
+    totals = ProfileTotals()
     with Pool(args.workers, initializer=_init,
               initargs=(str(keymap),)) as pool:
-        for done, part in enumerate(pool.imap_unordered(fold_shard, shards), 1):
-            for text, (acc, text_games) in part.items():
-                target = totals[text]
-                for key, value in acc.items():
-                    target[key] += value
-                games[text] |= text_games
+        for done, rows in enumerate(pool.imap_unordered(fold_shard, shards), 1):
+            for row in rows:
+                totals.add(*row)
             if done % 50 == 0:
-                print(f"{done}/{len(shards)} shards, {len(totals)} texts", flush=True)
-    rows = []
-    for text, acc in totals.items():
-        row = {"text": text, "n_games": len(games[text])}
-        row.update(acc)
-        rows.append(row)
-    frame = pd.DataFrame(rows).fillna(0.0)
-    frame = derive(frame)
+                print(f"{done}/{len(shards)} shards, {len(totals.sums)} texts", flush=True)
+    frame = totals.frame()
     paths.profile_table.parent.mkdir(parents=True, exist_ok=True)
     frame.to_csv(paths.profile_table, index=False)
     print(f"{len(frame)} acting texts, {int(frame.n_records.sum())} records "

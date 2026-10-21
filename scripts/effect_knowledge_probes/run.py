@@ -29,41 +29,42 @@ Nothing here does work at import time.
 from __future__ import annotations
 
 import argparse
-import hashlib
-import importlib.util
 import json
 import sys
 import time
 from collections import defaultdict
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from pathlib import Path
 
 import numpy as np
 
-_HERE = Path(__file__).resolve().parent
+if __package__ in (None, ""):
+    # Run by path: put scripts/ on the path so the suite imports as a package.
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from effect_knowledge_probes import (  # noqa: E402
+    ablation,
+    common,
+    labels,
+    ladder,
+    sweeps,
+)
+from effect_knowledge_probes import board as board_probe  # noqa: E402
+from effect_knowledge_probes.probe_set import (  # noqa: E402
+    FrozenLineItem,
+    FrozenRecordItem,
+    ProbeSet,
+    load_probe_set,
+    probe_set_path,
+)
+from effect_knowledge_probes.scorecard import Scorecard  # noqa: E402
 
 
 def progress(message: str) -> None:
     """One timestamped line, flushed: a probing run takes the better part of an
     hour, and without these nothing says whether it is alive or where it is."""
     print(f"{datetime.now().strftime('%H:%M:%S')} {message}", flush=True)
-
-
-def sibling(name: str):
-    """A module of this suite, loaded by path under a name of its own.
-
-    By path because ``scripts/`` is not a package, and under
-    ``effect_knowledge_probes.<name>`` because the embedding probes beside it
-    have a ``common`` module of their own.
-    """
-    qualified = f"effect_knowledge_probes.{name}"
-    if qualified not in sys.modules:
-        spec = importlib.util.spec_from_file_location(qualified, _HERE / f"{name}.py")
-        module = importlib.util.module_from_spec(spec)
-        sys.modules[qualified] = module
-        spec.loader.exec_module(module)
-    return sys.modules[qualified]
 
 
 #: Probe games per validation stratum, by smallest ``crc32`` of the game id.
@@ -77,20 +78,7 @@ ABLATION_RECORDS = 1024
 METHOD_C_STEPS = 2000
 
 
-def canonical_digest(payload: dict) -> str:
-    """sha256 of the canonical JSON (sorted keys, no whitespace), ``digest`` excluded."""
-    body = {k: v for k, v in payload.items() if k != "digest"}
-    canonical = json.dumps(body, sort_keys=True, separators=(",", ":"))
-    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
-
-
-def probe_set_path(reports_dir: Path, corpus_digest: str) -> Path:
-    return Path(reports_dir) / f"knowledge-probes-set-{corpus_digest[:12]}.json"
-
-
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    common = sibling("common")
-    labels = sibling("labels")
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--checkpoint", type=Path, required=True)
     parser.add_argument("--corpus", type=Path,
@@ -99,8 +87,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                         help="where the probe games' shards are; default the "
                              "corpus's validation strata")
     parser.add_argument("--cards-folder", action="append", type=Path,
-                        help="sidecar tree (repeatable); default output/cardsfolder "
-                             "and output/tokenscripts")
+                        help="sidecar tree (repeatable); default the trees the "
+                             "checkpoint recorded")
     parser.add_argument("--abilities-root", type=Path, default=common.DEFAULT_ABILITIES)
     parser.add_argument("--vocab-path", type=Path)
     parser.add_argument("--keyword-definitions", type=Path)
@@ -131,7 +119,6 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--board-shards", type=int, default=None,
                         help="validation shards read per stratum for the board subsets")
     args = parser.parse_args(argv)
-    args.cards_folder = args.cards_folder or list(common.DEFAULT_CARDS_FOLDERS)
     unknown = set(args.families or ()) - set(labels.FAMILIES)
     if unknown:
         parser.error(f"unknown families: {sorted(unknown)}")
@@ -141,16 +128,6 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 # ── freezing the probe set ──────────────────────────────────────────────
 
 
-def _key_json(key) -> dict | None:
-    return None if key is None else key.as_dict()
-
-
-def _key_from(data: dict | None):
-    from effects.domain.provenance import ProvenanceKey
-
-    return None if data is None else ProvenanceKey.from_dict(data)
-
-
 def _acting_text_function(sidecars, surface: str):
     from effects.domain.ability_encoder import encoding_text
 
@@ -158,10 +135,7 @@ def _acting_text_function(sidecars, surface: str):
 
     def acting_text(key):
         if key not in memo:
-            try:
-                line = sidecars.line_for(key)
-            except KeyError:
-                line = None
+            line = sidecars.line_or_none(key)
             memo[key] = (None if line is None
                          else encoding_text(line, sidecars.prose_for(key), surface))
         return memo[key]
@@ -169,93 +143,133 @@ def _acting_text_function(sidecars, surface: str):
     return acting_text
 
 
-def _game_shards(args, corpus: Path, stratum: str) -> list[Path]:
-    common = sibling("common")
+def _game_shards(args, context: common.ProbeContext, stratum: str) -> list[Path]:
     if args.records_dir is not None:
         return common.shards_of(args.records_dir)
-    return common.shards_of(common.stratum_dir(corpus, stratum))
+    return common.shards_of(context.stratum_dir(stratum))
 
 
-def freeze(args, checkpoint, corpus: Path, manifest, corpus_digest: str) -> dict:
-    """Enumerate and label every probe item once for this corpus."""
-    from effects.domain.records import Moment, RecordKind, TriggerPayload
-    from effects.infrastructure.record_io import iter_shards, read_shard
-    from effects.infrastructure.sidecar_io import converted_text_path
+class ObservedOutcomes:
+    """What each text was seen to do: its effect profiles and the mana it made.
 
-    common, labels, sweeps = sibling("common"), sibling("labels"), sibling("sweeps")
-    surface = getattr(manifest, "surface", None) or "script"
-    sidecars = common.sidecar_cache(args.cards_folder)
-    acting_text = _acting_text_function(sidecars, surface)
+    Observed one record at a time and kept as per-text lists of small arrays,
+    so the probe games and the training shards feed one set of labels without
+    either being held.
+    """
 
+    def __init__(self, acting_text) -> None:
+        self._acting_text = acting_text
+        self.profiles: dict[str, list[np.ndarray]] = defaultdict(list)
+        self.mana: dict[str, list[float]] = defaultdict(list)
+
+    def observe(self, record) -> None:
+        from effects.domain.records import Moment, RecordKind
+
+        if record.kind is not RecordKind.RESOLUTION or record.moment is not Moment.RESOLUTION:
+            return
+        text = self._acting_text(record.ability[0]) if record.ability else None
+        if not text:
+            return
+        profile = labels.effect_profile(record)
+        if profile is not None:
+            self.profiles[text].append(profile)
+        produced = labels.mana_observed(record)
+        if produced is not None:
+            self.mana[text].append(produced)
+
+
+@dataclass
+class ProbeGameScan:
+    """What one pass over the probe games of both strata yields."""
+
+    games: dict[str, list[str]]
+    sources: dict[str, list[str]]
+    record_items: list[FrozenRecordItem]
+    joined: labels.JoinResult
+    sweeps: dict
+    #: ``trigger record id -> (trigger key, fired)``, for the interaction pairs.
+    triggers: dict[str, tuple]
+
+
+def _scan_probe_games(args, context: common.ProbeContext, acting_text,
+                      outcomes: ObservedOutcomes) -> ProbeGameScan:
+    """Choose each stratum's probe games and label their record items, streamed.
+
+    One pass per stratum, and nothing keeps a record past its loop body: the
+    trigger join, the sweep selector and ``outcomes`` take what they need as
+    each record goes by. A trigger item's partner is filled in once every game
+    has been read, since its cause can be any resolution of the game.
+    """
+    from effects.domain.records import TriggerPayload
+
+    corpus, sidecars = context.corpus, context.sidecars()
     strata_games = {
-        "card-disjoint": list(manifest.card_disjoint_games),
-        "game-disjoint": list(manifest.game_disjoint_games),
+        "card-disjoint": list(context.manifest.card_disjoint_games),
+        "game-disjoint": list(context.manifest.game_disjoint_games),
     }
     games, sources = {}, {}
-    record_items: list[dict] = []
+    record_items: list[FrozenRecordItem] = []
     join = labels.TriggerJoin()
     selector = sweeps.SweepSelector(sidecars)
-    profiles: dict[str, list[np.ndarray]] = defaultdict(list)
-    mana: dict[str, list[float]] = defaultdict(list)
-    #: trigger record id -> (trigger key, fired), for the interaction pairs.
     triggers: dict[str, tuple] = {}
-
-    def observe(record) -> None:
-        if record.kind is RecordKind.RESOLUTION and record.moment is Moment.RESOLUTION:
-            text = acting_text(record.ability[0]) if record.ability else None
-            if text:
-                profile = labels.effect_profile(record)
-                if profile is not None:
-                    profiles[text].append(profile)
-                produced = labels.mana_observed(record)
-                if produced is not None:
-                    mana[text].append(produced)
-
+    empty_join = labels.JoinResult(cause={}, fired=0, fired_joined=0)
     for stratum, ids in strata_games.items():
         chosen = sorted(ids, key=common.stable_hash)[: args.games_per_stratum]
         games[stratum] = sorted(chosen)
         used: set[str] = set()
-        per_target: dict[str, list[tuple[int, dict]]] = defaultdict(list)
-        # One streaming pass: nothing keeps a record past this loop body. The
-        # join's partners are filled in once every game has been read.
-        empty_join = labels.JoinResult(cause={}, fired=0, fired_joined=0)
+        per_target: dict[str, list[tuple[int, FrozenRecordItem]]] = defaultdict(list)
         for shard, record in common.read_games(
-                _game_shards(args, corpus, stratum), set(chosen)):
+                _game_shards(args, context, stratum), set(chosen)):
             used.add(shard.relative_to(corpus).as_posix()
                      if shard.is_relative_to(corpus) else str(shard))
-            observe(record)
+            outcomes.observe(record)
             join.observe(record)
             selector.observe(record)
             if isinstance(record.payload, TriggerPayload) and record.ability:
                 triggers[record.record_id] = (record.ability[0], record.payload.fired)
             for item in labels.record_items(record, sidecars, empty_join, acting_text):
                 order = common.stable_hash(f"{item.record_id}|{item.entity or ''}")
-                per_target[item.target].append((order, {
-                    "record_id": item.record_id, "stratum": stratum,
-                    "family": labels.TARGETS_BY_NAME[item.target].family,
-                    "target": item.target, "label": item.label,
-                    "entity": item.entity, "partner": None,
-                    "partner_entity": item.partner_entity, "group": item.group,
-                }))
+                per_target[item.target].append((order, FrozenRecordItem(
+                    record_id=item.record_id, stratum=stratum,
+                    family=labels.TARGETS_BY_NAME[item.target].family,
+                    target=item.target, label=item.label, entity=item.entity,
+                    partner=None, partner_entity=item.partner_entity, group=item.group,
+                )))
         sources[stratum] = sorted(used)
         for rows in per_target.values():
             rows.sort(key=lambda pair: pair[0])
             record_items.extend(row for _, row in rows[: args.items_per_target])
 
     joined = join.result()
-    for row in record_items:
-        if row["target"] == "fires":
-            row["partner"] = _key_json(joined.cause.get(row["record_id"]))
-    sweep_set = selector.result()
+    record_items = [
+        replace(item, partner=_key_json(joined.cause.get(item.record_id)))
+        if item.target == "fires" else item
+        for item in record_items
+    ]
+    return ProbeGameScan(games, sources, record_items, joined, selector.result(), triggers)
 
-    training = sorted(iter_shards(Path(corpus) / "training"))[: args.profile_shards]
-    for shard in training:
+
+def _key_json(key) -> dict | None:
+    return None if key is None else key.as_dict()
+
+
+def _observe_training(args, context: common.ProbeContext, outcomes: ObservedOutcomes) -> None:
+    """The first ``--profile-shards`` training shards, for the observed-outcome labels."""
+    from effects.infrastructure.record_io import iter_shards, read_shard
+
+    for shard in sorted(iter_shards(context.training_dir))[: args.profile_shards]:
         for record in read_shard(shard):
-            observe(record)
-    spread = labels.state_dependence(profiles)
+            outcomes.observe(record)
 
-    items_out = []
-    line_items = common.line_items(args.cards_folder, surface)
+
+def _label_lines(context: common.ProbeContext, line_items, surface: str,
+                 outcomes: ObservedOutcomes) -> list[FrozenLineItem]:
+    """Every encoded line's script labels, plus what its records were seen to do."""
+    from effects.infrastructure.sidecar_io import converted_text_path
+
+    sidecars = context.sidecars()
+    spread = labels.state_dependence(outcomes.profiles)
+    frozen = []
     for item in line_items:
         try:
             path = sidecars.path_for(item.script_file)
@@ -267,17 +281,23 @@ def freeze(args, checkpoint, corpus: Path, manifest, corpus_digest: str) -> dict
         if item.text in spread:
             found["spread"], n = spread[item.text]
             weights["spread"] = labels.state_weight(n)
-        if mana.get(item.text):
-            found["observed_mana"] = float(np.mean(mana[item.text]))
+        if outcomes.mana.get(item.text):
+            found["observed_mana"] = float(np.mean(outcomes.mana[item.text]))
         if found:
-            entry = {"key": item.key.as_dict(), "labels": found}
-            if weights:
-                entry["weights"] = weights
-            items_out.append(entry)
+            frozen.append(FrozenLineItem(item.key.as_dict(), found, weights))
+    return frozen
 
+
+def _interaction_pairs(scan: ProbeGameScan, line_items) -> list[dict]:
+    """Trigger lines with their causes: joined from the games, then mined from scripts.
+
+    Mined pairs are positives by construction and far outnumber the joined
+    ones, so they are capped at the joined count: uncapped, a probe could score
+    by telling a mined pair from a joined one rather than reading the pair.
+    """
     pair_labels: dict[tuple, float] = {}
-    for record_id, (trigger_key, fired) in triggers.items():
-        cause = joined.cause.get(record_id)
+    for record_id, (trigger_key, fired) in scan.triggers.items():
+        cause = scan.joined.cause.get(record_id)
         if cause is None:
             continue
         pair = (json.dumps(trigger_key.as_dict(), sort_keys=True),
@@ -285,9 +305,6 @@ def freeze(args, checkpoint, corpus: Path, manifest, corpus_digest: str) -> dict
         pair_labels[pair] = max(pair_labels.get(pair, 0.0), float(fired))
     pairs = [{"a": json.loads(a), "b": json.loads(b), "label": label, "source": "join"}
              for (a, b), label in sorted(pair_labels.items())]
-    # Mined pairs are positives by construction and far outnumber the joined
-    # ones, so they are capped at the joined count: uncapped, a probe could score
-    # by telling a mined pair from a joined one rather than reading the pair.
     mined = []
     for a, b in labels.mined_pairs(line_items):
         signature = (json.dumps(a.as_dict(), sort_keys=True),
@@ -297,47 +314,35 @@ def freeze(args, checkpoint, corpus: Path, manifest, corpus_digest: str) -> dict
     for _, a, b in sorted(mined, key=lambda row: row[0])[: len(pairs)]:
         pairs.append({"a": a.as_dict(), "b": b.as_dict(), "label": 1.0,
                       "source": "mined"})
+    return pairs
 
-    payload = {
-        "corpus": str(corpus),
-        "corpus_digest": corpus_digest,
-        "surface": surface,
-        "games": games,
-        "sources": sources,
-        "items": items_out,
-        "pairs": pairs,
-        "record_items": record_items,
-        "sweeps": sweep_set,
-        "join_rate": joined.join_rate,
-        "join": {"fired": joined.fired, "fired_joined": joined.fired_joined},
-        "settings": {
+
+def freeze(args, context: common.ProbeContext) -> ProbeSet:
+    """Enumerate and label every probe item once for this corpus."""
+    surface = getattr(context.manifest, "surface", None) or "script"
+    acting_text = _acting_text_function(context.sidecars(), surface)
+    outcomes = ObservedOutcomes(acting_text)
+    scan = _scan_probe_games(args, context, acting_text, outcomes)
+    _observe_training(args, context, outcomes)
+    line_items = common.line_items(context.cards_folders, surface)
+    return ProbeSet(
+        corpus=str(context.corpus), corpus_digest=context.corpus_digest,
+        surface=surface, games=scan.games, sources=scan.sources,
+        items=_label_lines(context, line_items, surface, outcomes),
+        pairs=_interaction_pairs(scan, line_items),
+        record_items=scan.record_items, sweeps=scan.sweeps,
+        join_rate=scan.joined.join_rate,
+        join={"fired": scan.joined.fired, "fired_joined": scan.joined.fired_joined},
+        settings={
             "games_per_stratum": args.games_per_stratum,
             "items_per_target": args.items_per_target,
             "profile_shards": args.profile_shards,
-            "cards_folders": [str(f) for f in args.cards_folder],
+            "cards_folders": [str(f) for f in context.cards_folders],
         },
-    }
-    payload["digest"] = canonical_digest(payload)
-    return payload
+    ).sealed()
 
 
-def load_probe_set(path: Path, corpus_digest: str) -> dict:
-    """The frozen set for this corpus; refuses a missing or mismatched one."""
-    if not path.exists():
-        raise SystemExit(
-            f"no frozen probe set at {path}: run with --freeze-probe-set first "
-            "(once per curated corpus)")
-    probe_set = json.loads(path.read_text(encoding="utf-8"))
-    if probe_set.get("corpus_digest") != corpus_digest:
-        raise SystemExit(
-            f"{path} was frozen against corpus digest "
-            f"{probe_set.get('corpus_digest')}, not this corpus's {corpus_digest}")
-    if probe_set.get("digest") != canonical_digest(probe_set):
-        raise SystemExit(f"{path} does not match its own digest; it was edited")
-    return probe_set
-
-
-# ── probing ─────────────────────────────────────────────────────────────
+# ── probing: the line and pair ladders ──────────────────────────────────
 
 
 def _union_groups(pairs: list[tuple[str, str]]) -> list[str]:
@@ -356,16 +361,23 @@ def _union_groups(pairs: list[tuple[str, str]]) -> list[str]:
     return [find(a) for a, _ in pairs]
 
 
-def line_ladder(probe_set, probe_model, cache, targets, act_hidden, held_out_cards,
-                mlp_options, bootstrap) -> dict:
+def line_split(carriers: set[str], held_out_cards: set[str]) -> str:
+    """``held-out`` when every card printing the text is held out, else ``trained``.
+
+    Every game naming a held-out card is kept out of training, so a text printed
+    on one held-out card and one trained card was still trained on, through the
+    trained card. Only a text no trained card prints was never seen.
+    """
+    return "held-out" if carriers and carriers <= held_out_cards else "trained"
+
+
+def line_ladder(probe_set: ProbeSet, probe_model, cache, targets, act_hidden,
+                held_out_cards, mlp_options, bootstrap) -> dict:
     """The short ladder for every line target: ``e``, its width control, ``[ACT]``.
 
     ``cache`` is ``(items, text_by_key)`` from ``common.line_items`` over the
     checkpoint's cache: every line it encodes, read once per run.
     """
-    from effects.domain.provenance import ProvenanceKey
-
-    ladder = sibling("ladder")
     items, text_by_key = cache
     by_text = {item.text: item for item in items}
     e_dim = probe_model.e_dim
@@ -375,16 +387,16 @@ def line_ladder(probe_set, probe_model, cache, targets, act_hidden, held_out_car
         if spec.scope != "line":
             continue
         rows = []
-        for entry in probe_set["items"]:
-            label = entry["labels"].get(spec.name)
+        for entry in probe_set.items:
+            label = entry.labels.get(spec.name)
             if label is None:
                 continue
-            text = text_by_key.get(ProvenanceKey.from_dict(entry["key"]))
+            text = text_by_key.get(entry.provenance_key())
             item = by_text.get(text)
             if item is None or item.e is None:
                 continue
-            weight = entry.get("weights", {}).get(spec.name, 1.0)
-            split = "held-out" if item.carriers & held_out_cards else "trained"
+            weight = entry.weights.get(spec.name, 1.0)
+            split = line_split(item.carriers, held_out_cards)
             rows.append((text, item.e, label, weight, split))
         strata = {}
         for split in ("held-out", "trained"):
@@ -419,15 +431,14 @@ def line_ladder(probe_set, probe_model, cache, targets, act_hidden, held_out_car
     return results
 
 
-def pair_ladder(probe_set, probe_model, cache, mlp_options, bootstrap) -> dict:
+def pair_ladder(probe_set: ProbeSet, probe_model, cache, mlp_options, bootstrap) -> dict:
     """Interaction pairs: a trigger line with its cause, read from both ``e``."""
     from effects.domain.provenance import ProvenanceKey
 
-    ladder = sibling("ladder")
     items, text_by_key = cache
     by_text = {item.text: item for item in items}
     rows = []
-    for pair in probe_set["pairs"]:
+    for pair in probe_set.pairs:
         a = by_text.get(text_by_key.get(ProvenanceKey.from_dict(pair["a"])))
         b = by_text.get(text_by_key.get(ProvenanceKey.from_dict(pair["b"])))
         if a is None or b is None or a.e is None or b.e is None:
@@ -456,6 +467,9 @@ def pair_ladder(probe_set, probe_model, cache, mlp_options, bootstrap) -> dict:
     return {"scope": "pair", "kind": "binary", "strata": {"all": result}}
 
 
+# ── probing: method C ───────────────────────────────────────────────────
+
+
 class _NoTrunk:
     """Method C's zero-layer trunk: the slots reach the heads as embedded."""
 
@@ -481,7 +495,6 @@ def method_c(args, probe_model, corpus: Path, eval_records: list) -> dict:
     from effects.domain.effect_targets import derive_targets
     from effects.infrastructure.record_io import iter_shards, read_shard
 
-    ablation = sibling("ablation")
     layers = args.method_c_layers
     config = replace(probe_model.checkpoint.model_config, n_layers=max(layers, 1))
     shallow = EffectModel(config).to(probe_model.device)
@@ -522,94 +535,85 @@ def method_c(args, probe_model, corpus: Path, eval_records: list) -> dict:
     }
 
 
-def probe(args, checkpoint, corpus: Path, probe_set: dict) -> dict:
-    """Run every selected family, the sweeps and the ablation; return the scorecard."""
-    import torch
+# ── probing: the stages of one run ──────────────────────────────────────
 
-    from effects.infrastructure.record_io import read_shard
 
-    common, labels, ladder = sibling("common"), sibling("labels"), sibling("ladder")
-    sweeps, ablation = sibling("sweeps"), sibling("ablation")
-    board_probe = sibling("board")
-    started = time.time()
-    if torch.cuda.is_available():
-        torch.cuda.reset_peak_memory_stats()
-    families = set(args.families or labels.FAMILIES)
-    targets = [spec for spec in labels.TARGETS if spec.family in families]
-    board = {spec.name for spec in targets if spec.scope in ("act", "entity")}
-    kinds = {spec.name: spec.kind for spec in labels.TARGETS}
+@dataclass
+class ProbeRecords:
+    """The records a probing run reads, by stratum, and its board items by record."""
 
+    by_stratum: dict[str, list]
+    items: dict[str, dict[str, list]]
+    #: ``stratum -> {subset: records}`` for the board-abilities ablation.
+    board_subsets: dict[str, dict[str, list]]
+
+    def every(self) -> list:
+        """Every record a forward pass will see, so the batcher measures them all."""
+        found = [r for rows in self.by_stratum.values() for r in rows]
+        for subsets in self.board_subsets.values():
+            found += [r for rows in subsets.values() for r in rows]
+        return found
+
+
+def _read_probe_records(args, context: common.ProbeContext, probe_set: ProbeSet,
+                        board_targets: set[str]) -> ProbeRecords:
+    """The frozen items' records and the sweeps', then the board subsets."""
     wanted: dict[str, set[str]] = defaultdict(set)
-    items_by_stratum: dict[str, dict[str, list]] = defaultdict(lambda: defaultdict(list))
-    for row in probe_set["record_items"]:
-        if row["target"] not in board:
+    items: dict[str, dict[str, list]] = defaultdict(lambda: defaultdict(list))
+    for frozen in probe_set.record_items:
+        if frozen.target not in board_targets:
             continue
-        wanted[row["stratum"]].add(row["record_id"])
-        items_by_stratum[row["stratum"]][row["record_id"]].append(labels.RecordItem(
-            record_id=row["record_id"], target=row["target"], label=row["label"],
-            entity=row["entity"], partner=_key_from(row["partner"]),
-            partner_entity=row["partner_entity"], group=row["group"],
-        ))
+        wanted[frozen.stratum].add(frozen.record_id)
+        items[frozen.stratum][frozen.record_id].append(frozen.record_item())
     sweep_ids = set()
     if not args.no_sweeps:
-        sweep_ids = {r["record_id"] for rows in probe_set["sweeps"].values() for r in rows}
+        sweep_ids = {r["record_id"] for rows in probe_set.sweeps.values() for r in rows}
 
-    def shards_for(stratum):
-        names = probe_set["sources"].get(stratum, [])
-        return [Path(n) if Path(n).is_absolute() else Path(corpus) / n for n in names]
-
-    records_by_stratum: dict[str, list] = {}
-    for stratum, game_ids in probe_set["games"].items():
+    by_stratum: dict[str, list] = {}
+    for stratum, game_ids in probe_set.games.items():
         progress(f"reading {len(game_ids)} {stratum} probe games")
-        records_by_stratum[stratum] = [
+        by_stratum[stratum] = [
             record for _, record in common.read_games(
-                shards_for(stratum), set(game_ids), wanted[stratum] | sweep_ids)
+                context.source_shards(probe_set.sources.get(stratum, [])),
+                set(game_ids), wanted[stratum] | sweep_ids)
         ]
-        progress(f"  {len(records_by_stratum[stratum])} records")
-    every = [r for rows in records_by_stratum.values() for r in rows]
-    if not every:
+        progress(f"  {len(by_stratum[stratum])} records")
+    if not any(by_stratum.values()):
         raise SystemExit("no probe records were found in the probe set's sources")
-    board_chosen: dict[str, dict[str, list]] = {}
-    if not args.no_board:
-        board_sidecars = common.sidecar_cache(args.cards_folder)
-        for stratum in common.STRATA:
-            directory = Path(corpus) / "validation" / stratum
-            if not directory.exists():
-                continue
-            progress(f"board subsets: scanning {stratum}")
-            board_chosen[stratum] = board_probe.collect(
-                board_probe.stratum_records(
-                    directory, shards=args.board_shards or board_probe.SHARDS_PER_STRATUM),
-                board_sidecars, per_subset=args.board_records or board_probe.RECORDS_PER_SUBSET)
-            progress("  " + ", ".join(
-                f"{name} {len(rows)}" for name, rows in board_chosen[stratum].items()))
-            every += [r for rows in board_chosen[stratum].values() for r in rows]
-    progress(f"loading {args.checkpoint}")
-    probe_model = common.load_probe_model(
-        args.checkpoint, args.cards_folder, every, checkpoint=checkpoint,
-        vocab_path=args.vocab_path, keyword_path=args.keyword_definitions)
-    mlp_options = {}
-    bootstrap = ladder.BOOTSTRAP_RESAMPLES
+    return ProbeRecords(by_stratum, items, _board_subsets(args, context))
 
-    scorecard: dict = {
-        "checkpoint": str(args.checkpoint),
-        "probe_set_digest": probe_set["digest"],
-        "corpus_digest": probe_set["corpus_digest"],
-        "date": datetime.now(UTC).strftime("%Y-%m-%d"),
-        "e_dim": probe_model.e_dim,
-        "surface": probe_model.surface,
-        "join_rate": probe_set.get("join_rate"),
-        "families": {family: {"targets": {}} for family in sorted(families)},
-    }
 
-    def put(name: str, entry: dict) -> None:
-        spec = labels.TARGETS_BY_NAME[name]
-        scorecard["families"][spec.family]["targets"][name] = entry
+def _board_subsets(args, context: common.ProbeContext) -> dict[str, dict[str, list]]:
+    """Each validation stratum's board-abilities subsets (``board.py``), unless skipped."""
+    if args.no_board:
+        return {}
+    chosen: dict[str, dict[str, list]] = {}
+    for stratum in common.STRATA:
+        directory = context.stratum_dir(stratum)
+        if not directory.exists():
+            continue
+        progress(f"board subsets: scanning {stratum}")
+        chosen[stratum] = board_probe.collect(
+            board_probe.stratum_records(
+                directory, shards=args.board_shards or board_probe.SHARDS_PER_STRATUM),
+            context.sidecars(),
+            per_subset=args.board_records or board_probe.RECORDS_PER_SUBSET)
+        progress("  " + ", ".join(
+            f"{name} {len(rows)}" for name, rows in chosen[stratum].items()))
+    return chosen
 
+
+def _board_ladder(args, scorecard: Scorecard, probe_model, records: ProbeRecords,
+                  kinds: dict[str, str], mlp_options, bootstrap) -> dict[str, list]:
+    """Every board-dependent target's ladder, per stratum; returns ``[ACT]`` by text.
+
+    The trunk's ``[ACT]`` output is gathered from the same forward pass, by
+    acting text, for the line ladder's rung 2.
+    """
     act_hidden: dict[str, list] = {}
-    for stratum, records in records_by_stratum.items():
-        items = items_by_stratum[stratum]
-        chosen = [r for r in records if r.record_id in items]
+    for stratum, stratum_records in records.by_stratum.items():
+        items = records.items[stratum]
+        chosen = [r for r in stratum_records if r.record_id in items]
         progress(f"{stratum}: extracting rung features over {len(chosen)} records")
         extracted = ladder.extract_features(
             probe_model, chosen, items, per_layer=args.per_layer, act_hidden=act_hidden)
@@ -619,70 +623,120 @@ def probe(args, checkpoint, corpus: Path, probe_set: dict) -> dict:
                 continue
             progress(f"{stratum}: ladder {position}/{len(inputs)} {name} (n={len(data.y)})")
             spec = labels.TARGETS_BY_NAME[name]
-            entry = scorecard["families"][spec.family]["targets"].setdefault(
-                name, {"scope": spec.scope, "kind": spec.kind, "strata": {}})
+            entry = scorecard.target(spec.family, name, scope=spec.scope, kind=spec.kind)
             entry["strata"][stratum] = ladder.run_ladder(
                 data, mlp_options=mlp_options, bootstrap=bootstrap)
             if data.layers:
                 entry["strata"][stratum]["per_layer"] = entry["strata"][stratum].pop(
                     "per_layer", [])
+    return act_hidden
 
-    progress("line-level probes over the ability cache")
-    text_by_key: dict = {}
-    cache = (common.line_items(args.cards_folder, probe_model.surface, args.abilities_root,
-                               text_by_key=text_by_key), text_by_key)
-    held_out_cards = set(checkpoint.provenance.held_out_cards)
-    for name, entry in line_ladder(probe_set, probe_model, cache, targets, act_hidden,
-                                   held_out_cards, mlp_options, bootstrap).items():
-        put(name, entry)
-    if "interactions" in families:
-        put("fires_pair", pair_ladder(probe_set, probe_model, cache, mlp_options, bootstrap))
 
-    if not args.no_sweeps:
-        progress("board sweeps")
-        by_id = {r.record_id: r for r in every}
-        scorecard["sweeps"] = {}
-        verdict_trained = ladder.verdict_head_trained(checkpoint)
-        for name, rows in probe_set["sweeps"].items():
-            if name == "affordability" and not verdict_trained:
-                # It reads the verdict head, which this checkpoint never
-                # trained: a curve from random weights says nothing.
-                scorecard["sweeps"][name] = {"unavailable": ladder.UNTRAINED_VERDICT_NOTE}
+def _run_sweeps(probe_set: ProbeSet, probe_model, records: list, checkpoint) -> dict:
+    """Every board sweep over its frozen records: per-record curves and their mean."""
+    by_id = {r.record_id: r for r in records}
+    out: dict = {}
+    verdict_trained = ladder.verdict_head_trained(checkpoint)
+    for name, rows in probe_set.sweeps.items():
+        if name == "affordability" and not verdict_trained:
+            # It reads the verdict head, which this checkpoint never trained: a
+            # curve from random weights says nothing.
+            out[name] = {"unavailable": ladder.UNTRAINED_VERDICT_NOTE}
+            continue
+        curves: dict[str, list] = defaultdict(list)
+        for row in rows:
+            record = by_id.get(row["record_id"])
+            if record is None:
                 continue
-            curves: dict[str, list] = defaultdict(list)
-            for row in rows:
-                record = by_id.get(row["record_id"])
-                if record is None:
-                    continue
-                label = f"damage_{row['host']}" if name == "damage" else name
-                curves[label].append(sweeps.run_sweep(name, probe_model, record, row))
-            for label, curve in curves.items():
-                scorecard["sweeps"][label] = {
-                    "mean": sweeps.summarize(curve), "records": curve,
-                }
+            label = f"damage_{row['host']}" if name == "damage" else name
+            curves[label].append(sweeps.run_sweep(name, probe_model, record, row))
+        for label, curve in curves.items():
+            out[label] = {"mean": sweeps.summarize(curve), "records": curve}
+    return out
+
+
+def _validation_samples(context: common.ProbeContext, limit: int) -> list:
+    """The first ``limit`` records of each stratum's fixed validation sample."""
+    from effects.infrastructure.record_io import read_shard
 
     samples = []
     for stratum in common.STRATA:
-        path = Path(corpus) / "validation" / "samples" / f"{stratum}.jsonl.gz"
+        path = Path(context.corpus) / "validation" / "samples" / f"{stratum}.jsonl.gz"
         if path.exists():
             for count, record in enumerate(read_shard(path)):
-                if count >= args.ablation_records:
+                if count >= limit:
                     break
                 samples.append(record)
+    return samples
+
+
+def _run_ablations(args, context: common.ProbeContext, scorecard: Scorecard, probe_model,
+                   line_cache, board_subsets) -> None:
+    """Method B over the validation samples and the board subsets, and method C."""
+    samples = _validation_samples(context, args.ablation_records)
     stats = None
     if not args.no_ablation and samples:
         progress(f"ablation over {len(samples)} records")
-        stats = ablation.cache_statistics(cache[0])
-        scorecard["ablation"] = ablation.run_ablation(probe_model, samples, stats)
-    if board_chosen:
+        stats = ablation.cache_statistics(line_cache)
+        scorecard.ablation = ablation.run_ablation(probe_model, samples, stats)
+    if board_subsets:
         progress("board-abilities ablation")
-        stats = stats or ablation.cache_statistics(cache[0])
-        scorecard["board_abilities"] = board_probe.run(probe_model, board_chosen, stats, ablation)
+        stats = stats or ablation.cache_statistics(line_cache)
+        scorecard.board_abilities = board_probe.run(probe_model, board_subsets, stats)
     if args.method_c and samples:
         progress("method C: a shallow trunk on frozen e")
-        scorecard["method_c"] = method_c(args, probe_model, corpus, samples)
+        scorecard.method_c = method_c(args, probe_model, context.corpus, samples)
 
-    scorecard["runtime"] = {
+
+def probe(args, context: common.ProbeContext, probe_set: ProbeSet) -> Scorecard:
+    """Run every selected family, the sweeps and the ablation; return the scorecard."""
+    import torch
+
+    started = time.time()
+    if torch.cuda.is_available():
+        torch.cuda.reset_peak_memory_stats()
+    families = set(args.families or labels.FAMILIES)
+    targets = [spec for spec in labels.TARGETS if spec.family in families]
+    board_targets = {spec.name for spec in targets if spec.scope in ("act", "entity")}
+    kinds = {spec.name: spec.kind for spec in labels.TARGETS}
+
+    records = _read_probe_records(args, context, probe_set, board_targets)
+    every = records.every()
+    progress(f"loading {args.checkpoint}")
+    probe_model = context.model(
+        every, vocab_path=args.vocab_path, keyword_path=args.keyword_definitions)
+    mlp_options = {}
+    bootstrap = ladder.BOOTSTRAP_RESAMPLES
+
+    scorecard = Scorecard(
+        checkpoint=str(args.checkpoint), probe_set_digest=probe_set.digest,
+        corpus_digest=probe_set.corpus_digest,
+        date=datetime.now(UTC).strftime("%Y-%m-%d"),
+        e_dim=probe_model.e_dim, surface=probe_model.surface,
+        join_rate=probe_set.join_rate,
+        families={family: {"targets": {}} for family in sorted(families)},
+    )
+    act_hidden = _board_ladder(args, scorecard, probe_model, records, kinds,
+                               mlp_options, bootstrap)
+
+    progress("line-level probes over the ability cache")
+    text_by_key: dict = {}
+    cache = (common.line_items(context.cards_folders, probe_model.surface, args.abilities_root,
+                               text_by_key=text_by_key), text_by_key)
+    held_out_cards = set(context.checkpoint.provenance.held_out_cards)
+    for name, entry in line_ladder(probe_set, probe_model, cache, targets, act_hidden,
+                                   held_out_cards, mlp_options, bootstrap).items():
+        scorecard.put(labels.TARGETS_BY_NAME[name].family, name, entry)
+    if "interactions" in families:
+        scorecard.put(labels.TARGETS_BY_NAME["fires_pair"].family, "fires_pair",
+                      pair_ladder(probe_set, probe_model, cache, mlp_options, bootstrap))
+
+    if not args.no_sweeps:
+        progress("board sweeps")
+        scorecard.sweeps = _run_sweeps(probe_set, probe_model, every, context.checkpoint)
+    _run_ablations(args, context, scorecard, probe_model, cache[0], records.board_subsets)
+
+    scorecard.runtime = {
         "wall_seconds": time.time() - started,
         "peak_gpu_bytes": common.peak_gpu_bytes(),
     }
@@ -692,18 +746,11 @@ def probe(args, checkpoint, corpus: Path, probe_set: dict) -> dict:
 # ── tables ──────────────────────────────────────────────────────────────
 
 
-def _fmt(value) -> str:
-    if value is None:
-        return ""
-    if isinstance(value, float):
-        return "nan" if np.isnan(value) else f"{value:.3f}"
-    return str(value)
-
-
-def write_tables(out_dir: Path, scorecard: dict) -> None:
+def write_tables(out_dir: Path, scorecard: Scorecard) -> None:
     """One markdown table per family, plus the sweeps and the ablation."""
+    fmt = common.fmt
     out_dir.mkdir(parents=True, exist_ok=True)
-    for family, body in scorecard["families"].items():
+    for family, body in scorecard.families.items():
         lines = [f"# {family}", "", "## Rungs", "",
                  "| target | stratum | n | rung | linear | mlp | model |",
                  "|---|---|---:|---|---:|---:|---:|"]
@@ -713,43 +760,42 @@ def write_tables(out_dir: Path, scorecard: dict) -> None:
                 for rung, scores in result["rungs"].items():
                     lines.append(
                         f"| {target} | {stratum} | {result['n']} | {rung} | "
-                        f"{_fmt(scores.get('linear'))} | {_fmt(scores.get('mlp'))} | "
-                        f"{_fmt(scores.get('model'))} |")
+                        f"{fmt(scores.get('linear'))} | {fmt(scores.get('mlp'))} | "
+                        f"{fmt(scores.get('model'))} |")
                 for probe_type, value in (result.get("share") or {}).items():
                     if value:
                         ci = value.get("ci") or [None, None]
                         shares.append(f"| {target} | {stratum} | {probe_type} | "
-                                      f"{_fmt(value['value'])} | {_fmt(ci[0])} | "
-                                      f"{_fmt(ci[1])} |")
+                                      f"{fmt(value['value'])} | {fmt(ci[0])} | "
+                                      f"{fmt(ci[1])} |")
         if shares:
             lines += ["", "## Share of the gap closed by e", "",
                       "| target | stratum | probe | share | 95% low | 95% high |",
                       "|---|---|---|---:|---:|---:|", *shares]
         (out_dir / f"{family}.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
-    if scorecard.get("sweeps"):
+    if scorecard.sweeps:
         lines = ["# Board sweeps", ""]
-        for name, body in scorecard["sweeps"].items():
+        for name, body in scorecard.sweeps.items():
             if "unavailable" in body:
                 lines += [f"## {name}", "", f"Not run: {body['unavailable']}.", ""]
                 continue
             lines += [f"## {name}", "", "| value | mean prediction | n |", "|---:|---:|---:|"]
-            lines += [f"| {p['value']} | {_fmt(p['prediction'])} | {p['n']} |"
+            lines += [f"| {p['value']} | {fmt(p['prediction'])} | {p['n']} |"
                       for p in body["mean"]]
             lines.append("")
         (out_dir / "sweeps.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
-    if scorecard.get("ablation"):
-        abl = sibling("ablation")
-        header = [f"{r} {s}" for r in abl.REPLACEMENTS for s in abl.SCOPES]
+    if scorecard.ablation:
+        header = [f"{r} {s}" for r in ablation.REPLACEMENTS for s in ablation.SCOPES]
         lines = ["# Ablation: loss increase per field", "",
                  "| field | base | " + " | ".join(header) + " |",
                  "|---|---:|" + "---:|" * len(header)]
-        for name, body in sorted(scorecard["ablation"].items()):
-            cells = [_fmt(body[r][s]) for r in abl.REPLACEMENTS for s in abl.SCOPES]
-            lines.append(f"| {name} | {_fmt(body['base_loss'])} | " + " | ".join(cells) + " |")
+        for name, body in sorted(scorecard.ablation.items()):
+            cells = [fmt(body[r][s]) for r in ablation.REPLACEMENTS for s in ablation.SCOPES]
+            lines.append(f"| {name} | {fmt(body['base_loss'])} | " + " | ".join(cells) + " |")
         (out_dir / "ablation.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
-    if scorecard.get("board_abilities"):
+    if scorecard.board_abilities:
         (out_dir / "board-abilities.md").write_text(
-            sibling("board").table(scorecard["board_abilities"]), encoding="utf-8")
+            board_probe.table(scorecard.board_abilities), encoding="utf-8")
 
 
 def probe_set_location(args: argparse.Namespace, corpus_digest: str) -> Path:
@@ -758,41 +804,31 @@ def probe_set_location(args: argparse.Namespace, corpus_digest: str) -> Path:
 
 
 def report_dir(reports_dir: Path, checkpoint: Path, date: str) -> Path:
-    stem = sibling("common").checkpoint_stem(checkpoint)
+    stem = common.checkpoint_stem(checkpoint)
     return Path(reports_dir) / f"knowledge-probes-{stem}-{date.replace('-', '')}"
 
 
 def main(argv: list[str] | None = None) -> int:
-    from effects.infrastructure.corpus_store import CorpusStore
-
     args = parse_args(argv)
-    common = sibling("common")
-    checkpoint = common.load_checkpoint(args.checkpoint)
-    corpus = args.corpus or (Path(checkpoint.provenance.corpus_path)
-                             if checkpoint.provenance.corpus_path else None)
-    if corpus is None or not (Path(corpus) / "manifest.json").exists():
-        raise SystemExit("no curated corpus: pass --corpus, or probe a checkpoint "
-                         "trained with --corpus")
-    manifest = CorpusStore(Path(corpus)).load()
-    corpus_digest = manifest.digest()
-    set_path = probe_set_location(args, corpus_digest)
+    context = common.probe_context(
+        args.checkpoint, corpus=args.corpus, cards_folders=args.cards_folder)
+    set_path = probe_set_location(args, context.corpus_digest)
     if args.freeze_probe_set:
-        payload = freeze(args, checkpoint, Path(corpus), manifest, corpus_digest)
-        common.write_json(set_path, payload)
-        print(f"froze {len(payload['items'])} line items, "
-              f"{len(payload['record_items'])} record items, "
-              f"{len(payload['pairs'])} pairs; join rate "
-              f"{payload['join_rate']:.3f}; digest {payload['digest'][:12]} -> {set_path}")
+        frozen = freeze(args, context)
+        common.write_json(set_path, frozen.to_json())
+        print(f"froze {len(frozen.items)} line items, "
+              f"{len(frozen.record_items)} record items, "
+              f"{len(frozen.pairs)} pairs; join rate "
+              f"{frozen.join_rate:.3f}; digest {frozen.digest[:12]} -> {set_path}")
         return 0
-    probe_set = load_probe_set(set_path, corpus_digest)
-    scorecard = probe(args, checkpoint, Path(corpus), probe_set)
-    out_dir = report_dir(args.reports_dir, args.checkpoint, scorecard["date"])
-    common.write_json(out_dir / "scorecard.json", scorecard)
+    probe_set = load_probe_set(set_path, context.corpus_digest)
+    scorecard = probe(args, context, probe_set)
+    out_dir = report_dir(args.reports_dir, args.checkpoint, scorecard.date)
+    common.write_json(out_dir / "scorecard.json", scorecard.to_json())
     write_tables(out_dir, scorecard)
-    runtime = scorecard["runtime"]
-    peak = runtime["peak_gpu_bytes"] / 2**30
+    peak = scorecard.runtime["peak_gpu_bytes"] / 2**30
     print(f"scorecard -> {out_dir / 'scorecard.json'} "
-          f"({runtime['wall_seconds']:.0f} s, peak GPU {peak:.2f} GiB)")
+          f"({scorecard.runtime['wall_seconds']:.0f} s, peak GPU {peak:.2f} GiB)")
     return 0
 
 

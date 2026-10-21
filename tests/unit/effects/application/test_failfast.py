@@ -319,7 +319,7 @@ class TestCorpusMismatch:
     dataset rather than the vocabulary file."""
 
     def test_evaluate_refuses_a_corpus_rebuilt_since_training(self, tmp_path):
-        from effects.application.evaluate_effect_model import (
+        from effects.application.evaluation_context import (
             CorpusMismatchError,
             check_corpus,
         )
@@ -331,12 +331,12 @@ class TestCorpusMismatch:
             check_corpus(provenance, actual_digest="something-else")
 
     def test_evaluate_accepts_a_checkpoint_that_read_no_curated_corpus(self):
-        from effects.application.evaluate_effect_model import check_corpus
+        from effects.application.evaluation_context import check_corpus
 
         check_corpus(SplitProvenance(), actual_digest="anything")  # no raise
 
     def test_matching_digests_pass(self, tmp_path):
-        from effects.application.evaluate_effect_model import check_corpus
+        from effects.application.evaluation_context import check_corpus
 
         provenance = SplitProvenance(
             corpus_path=str(tmp_path), corpus_digest="same",
@@ -344,7 +344,7 @@ class TestCorpusMismatch:
         check_corpus(provenance, actual_digest="same")  # no raise
 
     def test_the_error_names_the_corpus_path_and_both_digests(self, tmp_path):
-        from effects.application.evaluate_effect_model import (
+        from effects.application.evaluation_context import (
             CorpusMismatchError,
             check_corpus,
         )
@@ -371,7 +371,7 @@ class TestCorpusPathResolution:
     _CHECKPOINT = Path("models/effects/effect-model/latest.pt")
 
     def test_defaults_to_the_checkpoints_recorded_path(self):
-        from effects.application.evaluate_effect_model import resolve_corpus_path
+        from effects.application.evaluation_context import resolve_corpus_path
 
         provenance = SplitProvenance(
             corpus_path="output/effects/corpus", corpus_digest="abc123",
@@ -381,7 +381,7 @@ class TestCorpusPathResolution:
         ) == Path("output/effects/corpus")
 
     def test_an_explicit_corpus_overrides(self, tmp_path):
-        from effects.application.evaluate_effect_model import resolve_corpus_path
+        from effects.application.evaluation_context import resolve_corpus_path
 
         provenance = SplitProvenance(
             corpus_path="output/effects/corpus", corpus_digest="abc123",
@@ -392,7 +392,7 @@ class TestCorpusPathResolution:
 
     def test_returns_none_when_the_checkpoint_read_no_curated_corpus(self, tmp_path):
         """No digest recorded means nothing to check, whatever --corpus says."""
-        from effects.application.evaluate_effect_model import resolve_corpus_path
+        from effects.application.evaluation_context import resolve_corpus_path
 
         assert resolve_corpus_path(
             SplitProvenance(), corpus=None, checkpoint=self._CHECKPOINT,
@@ -409,7 +409,7 @@ class TestCorpusPathResolution:
         would break a batch-eval script passing --corpus uniformly across a
         mix of curated and legacy checkpoints), and honouring it would be
         meaningless (there is no digest to compare freshness against)."""
-        from effects.application.evaluate_effect_model import resolve_corpus_path
+        from effects.application.evaluation_context import resolve_corpus_path
 
         with caplog.at_level("WARNING"):
             resolve_corpus_path(
@@ -424,7 +424,7 @@ class TestCorpusPathResolution:
         """A recorded digest means the override has something to check
         against, isolating corpus_digest as the one thing that decides
         whether the warning fires."""
-        from effects.application.evaluate_effect_model import resolve_corpus_path
+        from effects.application.evaluation_context import resolve_corpus_path
 
         provenance = SplitProvenance(
             corpus_path="output/effects/corpus", corpus_digest="abc123",

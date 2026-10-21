@@ -25,22 +25,18 @@ knowing anything the head does not use, and each check removes one:
 from __future__ import annotations
 
 import argparse
-import importlib.util
-from collections import defaultdict
+import sys
+from collections import Counter, defaultdict
+from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
 
-spec = importlib.util.spec_from_file_location(
-    "effect_knowledge_probes.run", Path(__file__).resolve().parent / "run.py")
-run = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(run)
-common = run.sibling("common")
-labels = run.sibling("labels")
-ladder = run.sibling("ladder")
+if __package__ in (None, ""):
+    # Run by path: put scripts/ on the path so the suite imports as a package.
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-PROBE_SET = Path("output/effects/reports/knowledge-probes-set-b3adb69a2950.json")
-CORPUS = Path("output/effects/corpus-gen2")
+from effect_knowledge_probes import common, labels, ladder  # noqa: E402
 
 
 def _spearman(y, prediction) -> float:
@@ -106,65 +102,35 @@ def check(data, records, games, kind) -> list[tuple[str, dict]]:
     return rows
 
 
-def read_amount_alone() -> None:
-    """Make rung 3 of ``damage_taken`` the predicted amount alone, without the gate.
-
-    The ladder reads the head's damage as the affected gate times the predicted
-    amount. Every damage item took damage, so the probe is told the creature was
-    hit, while the gate's own uncertainty scales the head's answer.
-    """
-    original = ladder._readout
-
-    def readout(target, outputs, verdict, slot, row, **kwargs):
-        if target != "damage_taken":
-            return original(target, outputs, verdict, slot, row, **kwargs)
-        import torch
-
-        from effects.domain.effect_model import FIELD_SLICES
-
-        start, _ = FIELD_SLICES["damage_taken"]
-        return float(torch.exp(outputs[row, slot, start]))
-
-    ladder._readout = readout
-
-
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("checkpoint", type=Path)
     parser.add_argument("--targets", default="damage_taken,may_block,dies")
-    parser.add_argument("--probe-set", type=Path, default=PROBE_SET)
-    parser.add_argument("--amount-alone", action="store_true",
-                        help="read damage_taken's rung 3 without the affected gate")
+    parser.add_argument("--probe-set-dir", type=Path, default=common.DEFAULT_REPORTS,
+                        help="where the corpus's frozen probe set is")
     args = parser.parse_args()
-    import json
-
-    if args.amount_alone:
-        read_amount_alone()
+    context = common.probe_context(args.checkpoint)
 
     targets = set(args.targets.split(","))
-    probe_set = json.loads(args.probe_set.read_text(encoding="utf-8"))
+    probe_set = context.load_probe_set(args.probe_set_dir)
     kinds = {s.name: s.kind for s in labels.TARGETS}
     items_by_stratum: dict[str, dict[str, list]] = defaultdict(lambda: defaultdict(list))
-    for row in probe_set["record_items"]:
-        if row["target"] not in targets:
+    for frozen in probe_set.record_items:
+        if frozen.target not in targets:
             continue
-        items_by_stratum[row["stratum"]][row["record_id"]].append(labels.RecordItem(
-            record_id=row["record_id"], target=row["target"], label=row["label"],
-            entity=row["entity"], partner=None, partner_entity=row["partner_entity"],
-            group=row["group"]))
+        # No partner: none of the targets checked here reads one.
+        items_by_stratum[frozen.stratum][frozen.record_id].append(
+            replace(frozen, partner=None).record_item())
     records_by_stratum = {}
-    for stratum, game_ids in probe_set["games"].items():
-        shards = [Path(n) if Path(n).is_absolute() else CORPUS / n
-                  for n in probe_set["sources"].get(stratum, [])]
+    for stratum, game_ids in probe_set.games.items():
+        shards = context.source_shards(probe_set.sources.get(stratum, []))
         wanted = set(items_by_stratum[stratum])
         records_by_stratum[stratum] = [
             record for _, record in common.read_games(shards, set(game_ids), wanted)]
         print(f"{stratum}: {len(records_by_stratum[stratum])} records", flush=True)
     every = [r for rows in records_by_stratum.values() for r in rows]
-    checkpoint = common.load_checkpoint(args.checkpoint)
-    probe_model = common.load_probe_model(
-        args.checkpoint, list(common.DEFAULT_CARDS_FOLDERS), every, checkpoint=checkpoint)
-    print(f"{args.checkpoint.parent.name} ({checkpoint.epoch})", flush=True)
+    probe_model = context.model(every)
+    print(f"{args.checkpoint.parent.name} ({context.checkpoint.epoch})", flush=True)
 
     for stratum, records in records_by_stratum.items():
         game_of = {r.record_id: r.game_id for r in records}
@@ -180,7 +146,8 @@ def main() -> None:
             games = [game_of[r] for r in record_ids]
             kind = kinds[target]
             rows = check(data, record_ids, games, kind)
-            singles = sum(1 for r in record_ids if record_ids.count(r) == 1)
+            per_record = Counter(record_ids)
+            singles = sum(1 for r in record_ids if per_record[r] == 1)
             print(f"\n{target}, {stratum}: {len(items)} items, {len(set(record_ids))} records, "
                   f"{len(set(games))} games, {singles} items alone in their record "
                   f"({'AUC' if kind == 'binary' else 'R²'})")

@@ -13,13 +13,13 @@ from pathlib import Path
 import pytest
 
 from effects.application import breakdowns as bd
-from effects.application.breakdowns import RecordResult
-from effects.application.evaluate_effect_model import (
+from effects.application.breakdowns import (
     CARD_DISJOINT,
     GAME_DISJOINT,
-    CheckStatus,
+    RecordResult,
     breakdown_checks,
 )
+from effects.domain.evaluation_report import CheckStatus
 from effects.domain.records import WHAT_IF_SUBKINDS, LegalityDecision
 from effects.domain.rule_families import rule_family
 from effects.infrastructure.record_io import read_shard

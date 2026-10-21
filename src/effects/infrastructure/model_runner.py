@@ -18,6 +18,8 @@ from __future__ import annotations
 
 import logging
 import random
+import re
+from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -199,17 +201,33 @@ def load_runnable(
     ).runnable(records)
 
 
+#: Model state a shipped checkpoint may lack. The training-only heads are
+#: filtered out at save time (FR-076), and the option-kind embedding, which
+#: starts at zero, postdates checkpoints that read every row as it trained
+#: without it (FR-063a). Anything else missing would run at its random
+#: initial weights while every number it produced still looked like a result.
+OPTIONAL_STATE_PREFIXES: tuple[str, ...] = (
+    *(f"{head}." for head in EffectModel.TRAINING_ONLY_HEADS),
+    "option_kind_embedding.",
+)
+
+
 def _load_weights(checkpoint, device) -> tuple[AbilityEncoder, EffectModel]:
+    """The checkpoint's encoder and model on ``device``, in evaluation mode."""
     # Built at the size the checkpoint recorded (FR-061): a non-default arm
     # loads without its flags restated.
     encoder = AbilityEncoder(checkpoint.encoder_config).to(device)
     if checkpoint.encoder_state:
         encoder.load_state_dict(checkpoint.encoder_state)
     model = EffectModel(checkpoint.model_config).to(device)
-    # The training-only heads are filtered out at save time, so the shipped
-    # state is a strict subset of what the model declares.
-    model.load_state_dict(checkpoint.model_state, strict=False)
-    return encoder, model
+    missing, unexpected = model.load_state_dict(checkpoint.model_state, strict=False)
+    absent = [key for key in missing if not key.startswith(OPTIONAL_STATE_PREFIXES)]
+    if absent or unexpected:
+        raise RuntimeError(
+            f"the checkpoint's model state does not fit the model it declares: "
+            f"missing {absent}, unexpected {list(unexpected)}"
+        )
+    return encoder.eval(), model.eval()
 
 
 def _identity_table(checkpoint, device) -> torch.nn.Embedding | None:
@@ -242,39 +260,62 @@ def evaluation_fields(records) -> tuple[FieldSpec, ...]:
     )
 
 
-def stratum_records(config, checkpoint) -> tuple[list, set, str]:
-    """``(card_disjoint, training_acting, why_not)`` from the checkpoint's split.
+#: Where a shard line names its record, read before the line is parsed.
+_RECORD_ID = re.compile(r'"record_id":"([^"]*)"')
+_RECORD_ID_SPAN = 256
 
-    The split comes from the checkpoint rather than being recomputed: the corpus
-    is append-only, so a recomputed split would score the gate partly on games
-    the model trained on.
 
-    The training side comes back as its distinct ``acting_keys`` tuples, because
-    gate 1's stratum is defined by what the training games contain — a text the
-    baseline never saw is the only one it cannot simply recall — and that is all
-    it needs of them. The training records themselves are the whole raw corpus.
+def training_acting_keys(directory: Path) -> set[tuple]:
+    """Every distinct ``acting_keys`` tuple among the records under ``directory``.
+
+    ``directory`` is the curated corpus's ``training/``: what the checkpoint
+    actually trained on, and so what the identity baseline could have
+    memorized. A record curation wrote several times (``--reuse-cap``) is
+    parsed once; the set is all gate 1 needs, and the records are never held.
     """
     from effects.domain.records import acting_keys
-    from effects.infrastructure.record_io import read_records
+    from effects.infrastructure.record_io import (
+        iter_shard_lines,
+        iter_shards,
+        parse_record_line,
+        record_from_dict,
+    )
 
-    held_out = frozenset(checkpoint.provenance.card_disjoint_games)
-    if not held_out:
-        return [], set(), (
-            "the checkpoint records no card-disjoint games, so there is no "
-            "held-out stratum to score gate 1 on"
-        )
-    validation = checkpoint.provenance.validation_games
-    card_disjoint, training_acting = [], set()
-    for record in read_records(Path(config.records_dir)):
-        if record.game_id in held_out:
-            card_disjoint.append(record)
-        elif record.game_id not in validation:
-            keys = acting_keys(record)
+    shards = iter_shards(directory)
+    read: set[str] = set()
+    acting: set[tuple] = set()
+    for done, shard in enumerate(shards, start=1):
+        for line in iter_shard_lines(shard):
+            found = _RECORD_ID.search(line, 0, _RECORD_ID_SPAN)
+            if found is not None:
+                if found.group(1) in read:
+                    continue
+                read.add(found.group(1))
+            stripped = line.strip()
+            if not stripped:
+                continue
+            keys = acting_keys(record_from_dict(parse_record_line(stripped)))
             if keys:
-                training_acting.add(keys)
-    if not card_disjoint:
-        return [], set(), (
-            f"none of the checkpoint's {len(held_out)} card-disjoint games "
-            f"appear in {config.records_dir}"
-        )
-    return card_disjoint, training_acting, ""
+                acting.add(keys)
+        if done % 50 == 0:
+            logger.info(
+                "gate 1: %d of %d training shards read, %d acting lines",
+                done, len(shards), len(acting),
+            )
+    return acting
+
+
+def card_disjoint_resolutions(corpus_path: Path, games: frozenset[str]) -> Iterator:
+    """The resolution records of the curated corpus's card-disjoint ``games``, streamed.
+
+    Resolutions only, the one kind gate 1's stratum holds; the stratum's other
+    kinds are never parsed.
+    """
+    from effects.domain.records import RecordKind
+    from effects.infrastructure.corpus_store import CorpusStore
+    from effects.infrastructure.record_io import read_records_matching
+
+    return read_records_matching(
+        CorpusStore(corpus_path).card_disjoint_dir,
+        game_ids=games, kinds={RecordKind.RESOLUTION.value},
+    )

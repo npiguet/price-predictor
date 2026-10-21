@@ -96,6 +96,9 @@ class _Sidecars:
     def line_for(self, key):
         return _LINES.get(key)
 
+    def line_or_none(self, key):
+        return _LINES.get(key)
+
     def prose_for(self, key):
         return None
 
@@ -346,14 +349,22 @@ def _vector(**values: float) -> torch.Tensor:
     return out
 
 
+def _affected(vector: torch.Tensor) -> torch.Tensor:
+    """``vector`` with the gate certain the entity was affected."""
+    from effects.domain.effect_model import GATE_INDEX
+
+    vector[GATE_INDEX] = 20.0
+    return vector
+
+
 class TestReadField:
     def test_a_count_field_reads_as_its_rate(self):
-        vector = _vector(damage_taken=math.log(3.0))
+        vector = _affected(_vector(damage_taken=math.log(3.0)))
         value = read_field(vector, FIELDS_BY_NAME["damage_taken"], None)
         assert value == pytest.approx(3.0)
 
     def test_a_categorical_field_reads_as_the_classs_probability(self):
-        vector = torch.zeros(PER_ENTITY_WIDTH)
+        vector = _affected(torch.zeros(PER_ENTITY_WIDTH))
         start, end = FIELD_SLICES["zone_outcome"]
         vector[start:end] = -20.0
         vector[start + ZONE_OUTCOMES.index("died")] = 20.0
@@ -362,7 +373,7 @@ class TestReadField:
 
     def test_a_signed_delta_reads_as_its_expected_signed_value(self):
         """Direction and magnitude are separate heads; one number needs both."""
-        vector = torch.zeros(PER_ENTITY_WIDTH)
+        vector = _affected(torch.zeros(PER_ENTITY_WIDTH))
         start, _end = FIELD_SLICES["life_delta"]
         vector[start] = -20.0       # negative
         vector[start + 1] = -20.0   # zero
@@ -372,7 +383,7 @@ class TestReadField:
         assert value == pytest.approx(4.0, abs=1e-4)
 
     def test_a_negative_signed_delta_reads_negative(self):
-        vector = torch.zeros(PER_ENTITY_WIDTH)
+        vector = _affected(torch.zeros(PER_ENTITY_WIDTH))
         start, _end = FIELD_SLICES["life_delta"]
         vector[start] = 20.0
         vector[start + 1] = -20.0
@@ -380,6 +391,12 @@ class TestReadField:
         vector[start + 3] = math.log(4.0)
         value = read_field(vector, FIELDS_BY_NAME["life_delta"], None)
         assert value == pytest.approx(-4.0, abs=1e-4)
+
+    def test_every_reading_is_scaled_by_the_affected_gate(self):
+        """The field heads train only where an entity was affected."""
+        vector = _vector(damage_taken=math.log(3.0))  # gate logit 0: P = 0.5
+        value = read_field(vector, FIELDS_BY_NAME["damage_taken"], None)
+        assert value == pytest.approx(1.5)
 
     def test_a_field_type_the_table_should_never_name_raises(self):
         spec = next(s for s in PER_ENTITY_FIELDS if s.name == "tap_state")
@@ -428,6 +445,30 @@ class TestScoreObservation:
         """A model that ignored the keyword is not a model that got it right."""
         agreed, _per_effect = self._first_strike(2.0, 2.0)
         assert not agreed
+
+    def test_a_move_in_the_affected_gate_alone_agrees(self):
+        """Stripped of first strike, the blocker takes nothing in this step.
+
+        The head says so through the gate, while the damage head — supervised
+        only where an entity was affected — still reads how much a hit would
+        deal. A reading of the field head alone sees no change and calls the
+        keyword ignored.
+        """
+        from effects.domain.effect_model import GATE_INDEX
+
+        record = _printed_board()
+        participant = _participant(record, "A")
+        hit = _vector(damage_taken=math.log(3.0))
+        hit[GATE_INDEX] = 4.0
+        untouched = _vector(damage_taken=math.log(3.0))
+        untouched[GATE_INDEX] = -4.0
+        agreed, per_effect = score_observation(
+            _only(KEYWORDS_BY_NAME["first_strike"], "damage_taken"), participant,
+            {"B0": hit}, {"B0": untouched},
+            fields=_FIELDS, keywords_of=_overlay_keywords,
+        )
+        assert agreed
+        assert per_effect == {"opponent.damage_taken": True}
 
     def test_every_effect_must_agree(self):
         record = _printed_board()
@@ -813,99 +854,122 @@ class TestEvaluatorWiring:
     that always sings the same note.
     """
 
-    def _provenance(self, game_disjoint):
-        from effects.infrastructure.effect_model_store import SplitProvenance
+    @staticmethod
+    def _runnable(_records):
+        return Runnable(_NoEncoder(), _AbilityCountingModel(), _batcher(), _FIELDS)
 
-        return SplitProvenance(
-            card_disjoint_games=("card-1",),
-            game_disjoint_games=tuple(game_disjoint),
-        )
+    def test_it_scores_the_game_disjoint_combat_records(self):
+        from effects.application.gate_two import run_gate_two
 
-    def _config(self, tmp_path):
-        from effects.application.evaluate_effect_model import (
-            EvaluateEffectModelConfig,
-        )
-
-        return EvaluateEffectModelConfig(
-            records_dir=tmp_path, cards_folders=(tmp_path / "cardsfolder",),
-        )
-
-    def _context(self, tmp_path, checkpoint):
-        from effects.application.evaluate_effect_model import EvaluationContext
-
-        return EvaluationContext(
-            self._config(tmp_path), checkpoint,
-            vocab_path=tmp_path / "vocab.txt",
-            keyword_path=tmp_path / "keywords.json",
-        )
-
-    def test_it_scores_the_game_disjoint_combat_records(self, tmp_path, monkeypatch):
-        from effects.application import evaluate_effect_model as evaluator
-
-        records = [_printed_board(game="gd-1"), _printed_board(game="train-1")]
-        monkeypatch.setattr(
-            evaluator, "_gate_two_records", lambda config, provenance: records[:1],
-        )
-        monkeypatch.setattr(
-            evaluator, "_gate_two_runnable",
-            lambda *a, **k: Runnable(
-                _NoEncoder(), _AbilityCountingModel(), _batcher(), _FIELDS,
-            ),
-        )
-
-        verdicts = evaluator.run_gate_two(
-            self._context(tmp_path, _Checkpoint(self._provenance(("gd-1",)))),
-        )
+        verdicts = run_gate_two([_printed_board(game="gd-1")], self._runnable)
 
         first_strike = next(v for v in verdicts if v.keyword == "first_strike")
         assert first_strike.qualifying_records == 1
         assert first_strike.direction_agreement == 1.0
 
-    def test_the_reason_lists_agreement_per_field(self, tmp_path, monkeypatch):
-        from effects.application import evaluate_effect_model as evaluator
+    def test_the_reason_lists_agreement_per_field(self):
+        from effects.application.gate_two import run_gate_two
 
-        monkeypatch.setattr(
-            evaluator, "_gate_two_records",
-            lambda config, provenance: [_printed_board(game="gd-1")],
-        )
-        monkeypatch.setattr(
-            evaluator, "_gate_two_runnable",
-            lambda *a, **k: Runnable(
-                _NoEncoder(), _AbilityCountingModel(), _batcher(), _FIELDS,
-            ),
-        )
-
-        verdicts = evaluator.run_gate_two(
-            self._context(tmp_path, _Checkpoint(self._provenance(("gd-1",)))),
-        )
+        verdicts = run_gate_two([_printed_board(game="gd-1")], self._runnable)
 
         first_strike = next(v for v in verdicts if v.keyword == "first_strike")
         assert "damage_taken 100%" in first_strike.reason
         assert "zone_outcome/died 100%" in first_strike.reason
 
-    def test_no_game_disjoint_combat_record_leaves_every_keyword_at_zero(
-        self, tmp_path, monkeypatch,
-    ):
-        from effects.application import evaluate_effect_model as evaluator
+    def test_no_game_disjoint_combat_record_leaves_every_keyword_at_zero(self):
+        from effects.application.gate_two import run_gate_two
 
-        monkeypatch.setattr(
-            evaluator, "_gate_two_records", lambda config, provenance: [],
-        )
-
-        def _never(*_args, **_kwargs):
+        def _never(_records):
             raise AssertionError("no records: the model must not be loaded")
 
-        monkeypatch.setattr(evaluator, "_gate_two_runnable", _never)
-
-        verdicts = evaluator.run_gate_two(
-            self._context(tmp_path, _Checkpoint(self._provenance(()))),
-        )
+        verdicts = run_gate_two([], _never)
 
         assert len(verdicts) == 8
         assert all(v.qualifying_records == 0 for v in verdicts)
         assert all("under-sampled" in v.reason for v in verdicts)
 
 
-class _Checkpoint:
-    def __init__(self, provenance) -> None:
-        self.provenance = provenance
+# ── who is counted (FR-119, FR-120) ──────────────────────────────────────
+
+
+def _two_first_strikers() -> EffectRecord:
+    """Two first-striking attackers in one combat, each blocked by its own 2/2."""
+    creatures = []
+    for index in range(2):
+        creatures.append(_creature(
+            f"A{index}", 2, 2, printed=(_FIRST_STRIKE,),
+            combat=CombatStatus(
+                attacking="P1", blocked_by=(f"B{index}",), became_blocked=True,
+            ),
+        ))
+        creatures.append(_creature(
+            f"B{index}", 2, 2, controller="P1", printed=(_OTHER,),
+            combat=CombatStatus(blocking=(f"A{index}",)),
+        ))
+    return _combat_record(*creatures, substep="first_strike")
+
+
+def _scores(records):
+    return score_keywords(
+        records, (KEYWORDS_BY_NAME["first_strike"],),
+        _NoEncoder(), _AbilityCountingModel(), _batcher(), fields=_FIELDS,
+    )["first_strike"]
+
+
+class TestPopulation:
+    def test_a_fork_record_never_qualifies(self):
+        """A damage-step probe re-runs a real combat: a near-duplicate board."""
+        import dataclasses
+
+        probe = dataclasses.replace(
+            _printed_board(game="gd-1"), record_id="gd-1.2", fork=True,
+            mirror_of="gd-1.1",
+        )
+        assert _scores([probe]).qualifying == 0
+        assert _scores([_printed_board(game="gd-1"), probe]).qualifying == 1
+
+    def test_two_carriers_in_one_record_count_one_qualifying_record(self):
+        """FR-119's threshold counts records; agreement averages the carriers."""
+        score = _scores([_two_first_strikers()])
+        assert score.qualifying == 1
+        assert score.observations == 2
+        assert score.agreeing == 2
+
+    def test_the_verdict_reads_agreement_over_observations(self):
+        from effects.application.gate_two import evaluate_keyword
+
+        verdict = evaluate_keyword(
+            KEYWORDS_BY_NAME["first_strike"], qualifying_records=300,
+            observations=400, agreeing=300,
+        )
+        assert verdict.qualifying_records == 300
+        assert verdict.observations == 400
+        assert verdict.direction_agreement == pytest.approx(0.75)
+
+
+class TestGateTwoRecords:
+    def _write(self, directory, *records):
+        from effects.infrastructure.record_io import write_shard
+
+        write_shard(directory / "shard-00001.jsonl.gz", records)
+
+    def test_a_curated_corpus_is_read_rather_than_the_raw_shards(self, tmp_path):
+        """The raw shards hold records the corpus repair dropped."""
+        import dataclasses
+
+        from effects.application.gate_two import gate_two_records
+        from effects.infrastructure.corpus_store import CorpusStore
+        from effects.infrastructure.effect_model_store import SplitProvenance
+
+        raw, corpus = tmp_path / "raw", tmp_path / "corpus"
+        curated = _printed_board(game="gd-1")
+        dropped = dataclasses.replace(curated, record_id="gd-1.9")
+        self._write(raw, curated, dropped)
+        self._write(CorpusStore(corpus).game_disjoint_dir, curated)
+        config = type("Config", (), {"records_dir": raw})()
+        provenance = SplitProvenance(game_disjoint_games=("gd-1",))
+
+        read = list(gate_two_records(config, provenance, corpus_path=corpus))
+        assert [r.record_id for r in read] == [curated.record_id]
+        raw_read = list(gate_two_records(config, provenance, corpus_path=None))
+        assert len(raw_read) == 2
