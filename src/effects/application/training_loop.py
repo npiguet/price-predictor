@@ -849,7 +849,10 @@ class TrainingLoop(StepPreparation):
         (masked, batcher), loss.pending_mlm = loss.pending_mlm, None
         with self._autocast():
             token_hidden, token_targets = batcher.mlm_forward(encoder, masked)
-            term = mlm_loss(model.mlm_head(token_hidden).float(), token_targets)
+            term = mlm_loss(
+                model.mlm_head(token_hidden).float(), token_targets,
+                rows=masked.rows,
+            )
         (self.config.mlm_weight * term / self.config.grad_accum).backward()
         loss.terms[Head.MLM] = term.detach()
 

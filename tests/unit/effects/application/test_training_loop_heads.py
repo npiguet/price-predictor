@@ -10,6 +10,7 @@ computed at all.
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 import torch
@@ -101,7 +102,7 @@ class _Batcher:
 
     def draw_mlm_mask(self, prepared, mask_prob):
         self.mlm_calls += 1
-        return "masked"
+        return SimpleNamespace(rows=len(self.encoded.texts))
 
     def mlm_forward(self, encoder, masked):
         hidden = torch.randn(len(self.encoded.texts), 8)

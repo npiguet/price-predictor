@@ -1,8 +1,16 @@
 """The effect head's losses (FR-080, FR-081, FR-082, FR-085).
 
 Each field's loss follows what the field is, as :mod:`effect_head_layout`
-declares it, and each head's term is normalized per record so a large board or
-a batch with few supervising records weighs no differently from any other.
+declares it.
+
+**One reduction for every head**: a row's loss is summed over that row's
+targets, then averaged over the rows of the batch (:func:`per_row`). A row is
+the head's unit — a record for the per-entity, created-objects and verdict
+heads, an encoded text for the value, script-API and MLM heads — and every row
+of the batch counts in the average, including one with nothing to score, so a
+batch with few supervising rows does not weigh them up and a large board
+weighs no more than a small one. A loss weight therefore scales the same kind
+of number on every head.
 """
 
 from __future__ import annotations
@@ -27,6 +35,11 @@ from effects.domain.effect_head_layout import (
 )
 from effects.domain.state_snapshot import COLORS
 from effects.domain.value_targets import VALUE_TARGETS, ValueKind
+
+
+def per_row(total: torch.Tensor, rows: int) -> torch.Tensor:
+    """A head's summed loss as its mean per row: the one reduction every head uses."""
+    return total / max(int(rows), 1)
 
 
 def at_least_targets(amounts: torch.Tensor) -> torch.Tensor:
@@ -186,13 +199,13 @@ def per_entity_loss(
             parts[spec.name] = float(loss.detach())
         total = total + loss
 
-    records = max(int(outputs.shape[0]), 1)
+    records = int(outputs.shape[0])
     # The parts were summed over the batch like the total; dividing them by the
     # same record count is what makes the printed breakdown add up to the
     # printed loss rather than to `records` times it.
     if report_parts:
-        parts = {name: value / records for name, value in parts.items()}
-    return total / records, parts
+        parts = {name: value / max(records, 1) for name, value in parts.items()}
+    return per_row(total, records), parts
 
 
 def created_objects_loss(
@@ -207,11 +220,10 @@ def created_objects_loss(
     type and keyword flags are bits.
 
     ``mask`` selects the records that supervise the head — effect halves and
-    rewrites with an outgoing event. The sum is normalized over every record of
-    the batch, like the per-entity loss, so a batch with few supervising
-    records does not weigh them up.
+    rewrites with an outgoing event. Averaged over every record of the batch
+    (:func:`per_row`).
     """
-    records = max(int(prediction.shape[0]), 1)
+    records = int(prediction.shape[0])
     if mask is not None:
         # Decided on the host, where the mask was built: no device read.
         rows = mask.detach().bool().cpu().nonzero().squeeze(1)
@@ -238,7 +250,7 @@ def created_objects_loss(
     total = total + functional.binary_cross_entropy_with_logits(
         prediction[:, -1], target[:, -1], reduction="sum",
     )
-    return total / records
+    return per_row(total, records)
 
 
 def verdict_loss(
@@ -250,10 +262,10 @@ def verdict_loss(
     scored — or per output ``(batch, VERDICT_WIDTH)``, which is what training
     passes: a ``decision`` record supervises the three verdict bits, a cost half
     the cost paid and a ``trigger`` record the fired bit, and none of them says
-    anything about the others' columns. Normalized over every record of the
-    batch, like the per-entity loss.
+    anything about the others' columns. Averaged over every record of the
+    batch (:func:`per_row`).
     """
-    records = max(int(prediction.shape[0]), 1)
+    records = int(prediction.shape[0])
     # Tested on the host, where the mask was built: no device read.
     mask = mask.detach().bool().cpu()
     if mask.dim() == 1:
@@ -273,7 +285,7 @@ def verdict_loss(
     total = (binary[:, :bits] * weights[:, :bits]).sum()
     total = total + (counts * weights[:, cost]).sum()
     total = total + (binary[:, -1] * weights[:, -1]).sum()
-    return total / records
+    return per_row(total, records)
 
 
 def value_loss(
@@ -285,9 +297,10 @@ def value_loss(
     direction-and-magnitude split, a cost flag binary — the same losses the
     per-entity fields of those types use. Every amount also scores its
     at-least bits by binary cross-entropy, averaged over the bits. A masked
-    target contributes nothing, and the sum is normalized over the texts.
+    target contributes nothing, and the sum is averaged over the texts
+    (:func:`per_row`).
     """
-    rows = max(int(prediction.shape[0]), 1)
+    rows = int(prediction.shape[0])
     # The mask is decided on the host, where the targets were built: testing a
     # device mask and indexing by it would stall the step once per target.
     mask = mask.detach().bool().cpu()
@@ -319,17 +332,20 @@ def value_loss(
                 prediction.index_select(0, selected)[:, start:end],
                 at_least_targets(wanted.float()), reduction="sum",
             ) / AT_LEAST_STEPS
-    return total / rows
+    return per_row(total, rows)
 
 
-def mlm_loss(logits: torch.Tensor, targets: torch.Tensor) -> torch.Tensor:
-    """Cross-entropy at the masked positions, which are the rows given.
+def mlm_loss(
+    logits: torch.Tensor, targets: torch.Tensor, *, rows: int,
+) -> torch.Tensor:
+    """Cross-entropy at the masked positions given, per text of the pass.
 
-    Training-only: it teaches the encoder the language of card text, which the
-    effect objective alone would only reach through whichever words happened to
-    change an outcome.
+    Summed over every masked token and averaged over the ``rows`` texts the
+    pass masked them in (:func:`per_row`). Training-only: it teaches the
+    encoder the language of card text, which the effect objective alone would
+    only reach through whichever words happened to change an outcome.
     """
-    return functional.cross_entropy(logits, targets)
+    return per_row(functional.cross_entropy(logits, targets, reduction="sum"), rows)
 
 
 def api_loss(
@@ -342,7 +358,11 @@ def api_loss(
 
     It teaches ``e`` the script structure the prose surface does not spell
     out; on the script surface it reinforces what the encoder reads directly.
+    One row per text: its type's cross-entropy plus every key's binary
+    cross-entropy, averaged over the texts (:func:`per_row`).
     """
+    given = type_logits if type_logits is not None else key_logits
+    rows = int(given.shape[0]) if given is not None else 0
     total = None
     if type_logits is not None and type_targets is not None:
         # A line with no API type (a replacement, say) carries -1 and is
@@ -354,15 +374,15 @@ def api_loss(
             total = functional.cross_entropy(
                 type_logits.index_select(0, known),
                 type_targets.to(type_logits.device).index_select(0, known),
+                reduction="sum",
             )
     if key_logits is not None and key_targets is not None:
         keys = functional.binary_cross_entropy_with_logits(
-            key_logits, key_targets.float(),
+            key_logits, key_targets.float(), reduction="sum",
         )
         total = keys if total is None else total + keys
     if total is None:
         if type_targets is None and key_targets is None:
             raise ValueError("api_loss needs at least one of its two targets")
-        logits = type_logits if type_logits is not None else key_logits
-        return logits.new_zeros(())
-    return total
+        return given.new_zeros(())
+    return per_row(total, rows)

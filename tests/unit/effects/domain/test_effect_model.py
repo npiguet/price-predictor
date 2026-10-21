@@ -465,8 +465,8 @@ class TestLosses:
         targets = torch.tensor([3, 7])
         right = torch.full((2, 32), -10.0)
         right[0, 3] = right[1, 7] = 10.0
-        assert float(mlm_loss(right, targets)) < 1e-3
-        assert float(mlm_loss(torch.zeros(2, 32), targets)) > 1.0
+        assert float(mlm_loss(right, targets, rows=1)) < 1e-3
+        assert float(mlm_loss(torch.zeros(2, 32), targets, rows=1)) > 1.0
 
     def test_api_loss_accepts_either_target_alone(self):
         types = api_loss(torch.randn(2, 5), torch.tensor([0, 1]), None, None)
@@ -1162,3 +1162,30 @@ class TestCountTargetsAreNonnegative:
             )
 
         assert torch.equal(floor(-5.0), floor(0.0))
+
+
+class TestOneReductionPolicy:
+    """Every head's term sums each row's targets and averages over rows.
+
+    A row is the head's unit — a record for the per-entity, created-objects and
+    verdict heads, an encoded text for the value, script-API and MLM heads — so
+    a head's weight flag scales the same kind of number whichever head it is.
+    """
+
+    def test_the_mlm_term_sums_a_texts_masked_tokens_and_averages_over_texts(self):
+        logits = torch.zeros(6, 32)
+        targets = torch.zeros(6, dtype=torch.long)
+        per_token = math.log(32)
+        # Six masked tokens over three texts: two tokens' loss per text.
+        assert float(mlm_loss(logits, targets, rows=3)) == pytest.approx(2 * per_token)
+
+    def test_the_api_keys_term_sums_a_texts_keys(self):
+        keys = 1245
+        loss = api_loss(None, None, torch.zeros(4, keys), torch.zeros(4, keys))
+        assert float(loss) == pytest.approx(keys * math.log(2), rel=1e-5)
+
+    def test_the_api_types_term_averages_over_every_text(self):
+        """A text with no API type is a row with nothing to score, not one left out."""
+        logits = torch.zeros(4, 5)
+        loss = api_loss(logits, torch.tensor([0, -1, -1, -1]), None, None)
+        assert float(loss) == pytest.approx(math.log(5) / 4, rel=1e-5)

@@ -249,6 +249,11 @@ class MaskedTokens:
     positions: torch.Tensor
     targets: torch.Tensor
 
+    @property
+    def rows(self) -> int:
+        """The texts the pass masked tokens in: the MLM term's rows."""
+        return int(self.inputs["token_ids"].shape[0])
+
     def pin(self) -> None:
         """Every tensor in page-locked memory; see ``pinned``."""
         self.inputs = pinned(self.inputs)
