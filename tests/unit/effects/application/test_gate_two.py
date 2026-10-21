@@ -36,7 +36,7 @@ from effects.application.gate_two import (
     subject_id,
 )
 from effects.application.surface_batching import (
-    IDENTITY_TABLE_SIZE,
+    IdentityTable,
     SurfaceBatcher,
 )
 from effects.domain.damage_step_keywords import (
@@ -189,7 +189,9 @@ def _batcher() -> SurfaceBatcher:
         tokenizer=None, sidecars=_Sidecars(),
         masks=VariantMasks(identity_embedding=True),
         surface="script", e_dim=4, widths={}, device=torch.device("cpu"),
-        identity_table=torch.nn.Embedding(IDENTITY_TABLE_SIZE, 4),
+        identity_table=IdentityTable(
+            [line.script_text for line in _LINES.values()], 4,
+        ),
     )
 
 

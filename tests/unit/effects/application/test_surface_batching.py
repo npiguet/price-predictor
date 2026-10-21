@@ -469,3 +469,39 @@ def test_a_withheld_keywords_token_never_appears_even_inside_an_expansion():
     flying = words.index("flying")
     for line in batcher.prepare_texts(["flying", "reach", "creatures with flying"]):
         assert flying not in line.token_ids
+
+
+# ── the identity baseline's table (FR-094) ──────────────────────────────
+
+
+def test_every_known_text_has_a_row_of_its_own():
+    """An exact index: two texts never share a free vector, however many there are."""
+    from effects.application.surface_batching import IdentityTable
+
+    texts = [f"deals {n} damage to any target" for n in range(50_000)]
+    table = IdentityTable(texts, e_dim=2)
+    rows = table.rows(texts).tolist()
+    assert len(set(rows)) == len(texts)
+    assert IdentityTable.UNKNOWN_ROW not in rows
+
+
+def test_a_text_the_index_never_saw_reads_the_shared_unknown_row():
+    from effects.application.surface_batching import IdentityTable
+
+    table = IdentityTable(["flying"], e_dim=2)
+    assert table.rows(["vigilance", "trample"]).tolist() == [IdentityTable.UNKNOWN_ROW] * 2
+
+
+def test_the_identity_batch_reads_each_texts_own_row():
+    from effects.application.surface_batching import IdentityTable
+
+    texts = ["creatures you control get +1/+1", "deals 3 damage to any target"]
+    table = IdentityTable(texts, e_dim=4)
+    batcher = SurfaceBatcher(
+        tokenizer=None, sidecars=_Sidecars(), masks=VariantMasks(identity_embedding=True),
+        surface="script", e_dim=4, widths={}, device=torch.device("cpu"),
+        identity_table=table,
+    )
+    rows, matrix = batcher.encode_texts({text: None for text in texts}, encoder=None)
+    for text, row in rows.items():
+        assert torch.equal(matrix[row], table(table.rows([text]))[0])

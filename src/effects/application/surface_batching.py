@@ -14,9 +14,8 @@ baseline, and gate 1 is decided by comparing the two.
 
 from __future__ import annotations
 
-import hashlib
 import random
-from collections.abc import Iterator
+from collections.abc import Iterable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 
@@ -44,11 +43,6 @@ from effects.domain.effect_head_input import (
 from effects.domain.records import PlayabilityDecisionPayload, acting_keys
 from effects.domain.surface_collation import collate_surfaces, scatter_e_rows
 from effects.domain.variants import VariantMasks
-
-#: Rows in the ``identity`` baseline's free-embedding table. Ample for the
-#: corpus's distinct ability texts, so collisions stay rare.
-IDENTITY_TABLE_SIZE = 1 << 17
-
 
 #: Running-covariance decay for the noise on ``e`` (FR-056).
 NOISE_DECAY = 0.99
@@ -283,8 +277,7 @@ class PreparedBatch:
     #: ``collate_lines`` over ``prepared``, or None when the encoder is not
     #: called.
     encoder_inputs: dict[str, torch.Tensor] | None
-    #: The baselines' stand-in for the encoder: the ``identity`` table's rows
-    #: to look up, or the ``taxonomy`` vectors themselves.
+    #: The ``taxonomy`` baseline's vectors, which stand in for the encoder.
     stand_in: torch.Tensor | None
     surfaces: list
     #: ``collate_surfaces``' output, the variant's state mask applied.
@@ -313,14 +306,48 @@ def pinned(value):
     return value
 
 
-def text_slot(text: str, size: int) -> int:
-    """A stable table row for an ability text.
+class IdentityTable(torch.nn.Module):
+    """The ``identity`` baseline's free ``e`` per ability text, indexed exactly.
 
-    ``hash()`` is salted per process and would give the baseline a different
-    table on every run, so this hashes the bytes explicitly.
+    One row per text the run can see — every sidecar line, spelled as the
+    key-to-text join spells it (``ability_text.known_texts``) — plus one row
+    every other text shares, such as a counterfactual copy's edited text. An
+    exact index rather than a hash: a hash into a fixed table put about a
+    quarter of the corpus's texts on a row another text also trained, which is
+    exactly the memorization the baseline exists to measure.
+
+    The texts ride in the checkpoint beside the weights (:meth:`state`), so a
+    loaded baseline reads each text's own vector.
     """
-    digest = hashlib.sha256(text.encode("utf-8")).digest()
-    return int.from_bytes(digest[:8], "big") % size
+
+    #: The row every text outside the index reads.
+    UNKNOWN_ROW = 0
+
+    def __init__(self, texts: Iterable[str], e_dim: int) -> None:
+        super().__init__()
+        self.texts: tuple[str, ...] = tuple(sorted(set(texts)))
+        self._rows = {text: row for row, text in enumerate(self.texts, start=1)}
+        self.embedding = torch.nn.Embedding(len(self.texts) + 1, e_dim)
+
+    def rows(self, texts: Iterable[str]) -> torch.Tensor:
+        """Each text's row, on the host; the unknown row for a text not indexed."""
+        return torch.tensor(
+            [self._rows.get(text, self.UNKNOWN_ROW) for text in texts],
+            dtype=torch.long,
+        )
+
+    def forward(self, rows: torch.Tensor) -> torch.Tensor:
+        return self.embedding(rows)
+
+    def state(self) -> dict:
+        """The texts and their vectors: what a checkpoint keeps."""
+        return {"texts": list(self.texts), "weight": self.embedding.weight.detach().cpu()}
+
+    @classmethod
+    def from_state(cls, state: dict) -> IdentityTable:
+        table = cls(state["texts"], int(state["weight"].shape[1]))
+        table.embedding.weight.data.copy_(state["weight"])
+        return table
 
 
 class SurfaceBatcher:
@@ -340,7 +367,7 @@ class SurfaceBatcher:
         keyword_expand_p: float = 0.0,
         context_dropout: float = 0.0,
         rng: random.Random | None = None,
-        identity_table: torch.nn.Embedding | None = None,
+        identity_table: IdentityTable | None = None,
         noise: NoiseState | None = None,
         truncations: TruncationLog | None = None,
         input_layout: str | None = INPUT_LAYOUT,
@@ -488,7 +515,9 @@ class SurfaceBatcher:
         """
         rows, prepared, inputs, stand_in = self._stage_texts(texts)
         self._prepared = prepared
-        return rows, self._encode_staged(inputs, stand_in, encoder)
+        return rows, self._encode_staged(
+            sorted(rows, key=rows.__getitem__), inputs, stand_in, encoder,
+        )
 
     def _stage_texts(self, texts: dict[str, object]):
         """``encode_texts``' host half: ``(rows, prepared, inputs, stand_in)``.
@@ -501,32 +530,30 @@ class SurfaceBatcher:
         ordered = sorted(texts)
         rows = {text: row for row, text in enumerate(ordered)}
         if self.masks.identity_embedding:
-            # The table's rows, keyed by hash rather than by a corpus-wide
-            # text list, so the baseline needs no pass over the corpus to
-            # number its texts and a text unseen at that pass cannot break
-            # it. Collisions cost the baseline a little, and the baseline is
-            # what the real model must beat.
-            return rows, [], None, torch.tensor(
-                [text_slot(text, IDENTITY_TABLE_SIZE) for text in ordered],
-                dtype=torch.long,
-            )
+            # The table looks its rows up in the device half, where it lives.
+            return rows, [], None, None
         if self.masks.taxonomy_embedding:
             return rows, [], None, self._taxonomy_vectors(ordered, texts)
         prepared = self.prepare_texts(ordered)
         return rows, prepared, collate_lines(prepared, self.tokenizer.pad_id), None
 
     def _encode_staged(
-        self, inputs: dict[str, torch.Tensor] | None,
+        self, ordered: list[str], inputs: dict[str, torch.Tensor] | None,
         stand_in: torch.Tensor | None, encoder: AbilityEncoder,
     ) -> torch.Tensor | None:
-        """``encode_texts``' device half: the batch's ``e`` matrix, or None."""
-        if stand_in is not None and self.masks.identity_embedding:
+        """``encode_texts``' device half: the batch's ``e`` matrix, or None.
+
+        ``ordered`` is the batch's texts in matrix-row order.
+        """
+        if self.masks.identity_embedding and ordered:
             if self.identity_table is None:
                 raise ValueError(
                     "the identity baseline needs its embedding table; construct "
                     "the batcher with identity_table="
                 )
-            return self.identity_table(stand_in.to(self.device, non_blocking=True))
+            return self.identity_table(
+                self.identity_table.rows(ordered).to(self.device, non_blocking=True),
+            )
         if stand_in is not None:
             return stand_in.to(self.device, non_blocking=True)
         if inputs is None:
@@ -758,14 +785,15 @@ class SurfaceBatcher:
         """
         self._prepared = prepared.prepared
         rows = prepared.rows
+        ordered = sorted(rows, key=rows.__getitem__)
         matrix = self._encode_staged(
-            prepared.encoder_inputs, prepared.stand_in, encoder,
+            ordered, prepared.encoder_inputs, prepared.stand_in, encoder,
         )
         if self.noise is not None and matrix is not None:
             # Every e of the batch, whichever variant produced it (FR-056).
             matrix = self.noise.apply(matrix)
         self.encoded = EncodedBatch(
-            texts=sorted(rows, key=rows.__getitem__), lines=prepared.texts,
+            texts=ordered, lines=prepared.texts,
             matrix=matrix, prepared=self._prepared,
         )
         inputs = prepared.inputs

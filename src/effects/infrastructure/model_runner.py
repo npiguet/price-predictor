@@ -24,7 +24,7 @@ from pathlib import Path
 import torch
 
 from effects.application.surface_batching import (
-    IDENTITY_TABLE_SIZE,
+    IdentityTable,
     SurfaceBatcher,
 )
 from effects.application.train_effect_model import RANDOM_SEED
@@ -130,7 +130,7 @@ class LoadedModel:
     encoder: AbilityEncoder
     model: EffectModel
     tokenizer: AbilityTokenizer
-    identity_table: torch.nn.Embedding | None
+    identity_table: IdentityTable | None
     surface: str
     device: torch.device
     sidecars: SidecarCache
@@ -213,25 +213,21 @@ def _load_weights(checkpoint, device) -> tuple[AbilityEncoder, EffectModel]:
     return encoder, model
 
 
-def _identity_table(checkpoint, device) -> torch.nn.Embedding | None:
+def _identity_table(checkpoint, device) -> IdentityTable | None:
     """The identity baseline's learned ``e`` table; None for any other variant."""
     if not variant_masks(checkpoint.variant).identity_embedding:
         return None
-    table = torch.nn.Embedding(
-        IDENTITY_TABLE_SIZE, checkpoint.encoder_config.e_dim,
-    ).to(device)
     saved = checkpoint.extra.get(IDENTITY_TABLE_KEY)
     if saved is not None:
-        table.load_state_dict(saved)
-    else:
-        logger.warning(
-            "The identity baseline at %s carries no embedding table, so "
-            "its e vectors are random rather than the ones it trained. "
-            "Gate 1's margin against it is not meaningful — retrain the "
-            "baseline with a build that saves the table.",
-            checkpoint.variant,
-        )
-    return table
+        return IdentityTable.from_state(saved).to(device)
+    logger.warning(
+        "The identity baseline at %s carries no embedding table, so "
+        "its e vectors are random rather than the ones it trained. "
+        "Gate 1's margin against it is not meaningful — retrain the "
+        "baseline with a build that saves the table.",
+        checkpoint.variant,
+    )
+    return IdentityTable((), checkpoint.encoder_config.e_dim).to(device)
 
 
 def evaluation_fields(records) -> tuple[FieldSpec, ...]:

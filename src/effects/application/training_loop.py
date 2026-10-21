@@ -45,6 +45,7 @@ from pathlib import Path
 
 import torch
 
+from effects.application.ability_text import known_texts
 from effects.application.gate_one import measure
 from effects.application.step_preparation import (
     NO_TEXT_BUCKET,
@@ -62,7 +63,7 @@ from effects.application.step_preparation import (
     one_ahead,
 )
 from effects.application.surface_batching import (
-    IDENTITY_TABLE_SIZE,
+    IdentityTable,
     NoiseState,
     SurfaceBatcher,
 )
@@ -138,6 +139,7 @@ from effects.infrastructure.effect_model_store import (
 from effects.infrastructure.model_runner import IDENTITY_TABLE_KEY
 from effects.infrastructure.sidecar_io import (
     script_vocabularies,
+    sidecar_roots,
 )
 from price_predictor.infrastructure.torch_training import clip_per_group
 
@@ -982,11 +984,7 @@ class TrainingLoop(StepPreparation):
         # encoder's parameters go unused for that variant and its own table is
         # what the optimizer has to see.
         self.identity_table = (
-            torch.nn.Embedding(IDENTITY_TABLE_SIZE, self.config.e_dim).to(
-                self.device
-            )
-            if self.masks.identity_embedding
-            else None
+            self._identity_table() if self.masks.identity_embedding else None
         )
         return RunContext(
             encoder_config=encoder_config, model_config=model_config,
@@ -1001,6 +999,15 @@ class TrainingLoop(StepPreparation):
                 steps_per_epoch=self.config.steps_per_epoch,
             ),
         )
+
+    def _identity_table(self) -> IdentityTable:
+        """The identity baseline's table, one row per text the sidecars hold."""
+        texts = known_texts(
+            sidecar_roots(self.config.cards_folders, self.config.variant_scripts),
+            self.surface,
+        )
+        logger.info("Identity table over %d ability texts.", len(texts))
+        return IdentityTable(texts, self.config.e_dim).to(self.device)
 
     def _run_epoch(
         self, epoch: int, run: RunContext, stopper: EarlyStopper, pool,
@@ -1180,7 +1187,7 @@ class TrainingLoop(StepPreparation):
             # encoder, so a checkpoint without it reloads as random vectors and
             # hands gate 1 a margin nobody earned.
             extra=(
-                {IDENTITY_TABLE_KEY: self.identity_table.state_dict()}
+                {IDENTITY_TABLE_KEY: self.identity_table.state()}
                 if self.identity_table is not None else {}
             ),
             cards_folders=tuple(str(folder) for folder in self.config.cards_folders),

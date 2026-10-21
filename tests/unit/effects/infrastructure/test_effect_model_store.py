@@ -304,18 +304,18 @@ class TestExtraRoundTrip:
     def test_a_variants_extra_payload_survives_a_round_trip(
         self, tmp_path, files,
     ):
-        table = torch.nn.Embedding(8, 4).state_dict()
+        from effects.application.surface_batching import IdentityTable
+
+        table = IdentityTable(["flying", "trample"], 4)
         store = EffectModelStore(tmp_path / "effect-model")
         store.save(replace(
             _checkpoint(files),
             variant="identity",
-            extra={"identity_table": table},
+            extra={"identity_table": table.state()},
         ))
-        loaded = store.load()
-        assert "identity_table" in loaded.extra
-        assert torch.equal(
-            loaded.extra["identity_table"]["weight"], table["weight"],
-        )
+        loaded = IdentityTable.from_state(store.load().extra["identity_table"])
+        assert loaded.texts == table.texts
+        assert torch.equal(loaded.embedding.weight, table.embedding.weight)
 
     def test_a_checkpoint_with_no_extra_loads_an_empty_one(
         self, tmp_path, files,
