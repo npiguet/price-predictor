@@ -115,6 +115,7 @@ from effects.domain.sampling import SAMPLING_CLASSES, sampling_class
 from effects.domain.split import (
     CorpusSplit,
 )
+from effects.domain.strata import VALIDATION_STRATA, Stratum
 from effects.domain.variants import variant_masks
 from effects.infrastructure.effect_model_store import (
     EPOCHS_DIR,
@@ -479,14 +480,15 @@ class TrainingLoop(StepPreparation):
 
     def _load_validation(self) -> None:
         """Read the corpus's fixed samples; nothing is drawn here (FR-089)."""
-        self.card_disjoint = load_shard(self.validation_samples["card-disjoint"])
-        self.game_disjoint = load_shard(self.validation_samples["game-disjoint"])
+        self.card_disjoint = load_shard(self.validation_samples[Stratum.CARD_DISJOINT])
+        self.game_disjoint = load_shard(self.validation_samples[Stratum.GAME_DISJOINT])
         self.probe = self.card_disjoint[:PROBE_RECORDS] or self.game_disjoint[:PROBE_RECORDS]
         self.present = {
             sampling_class(record) for record in (*self.card_disjoint, *self.game_disjoint)
         }
-        for stratum, records in (("card-disjoint", self.card_disjoint),
-                                 ("game-disjoint", self.game_disjoint)):
+        for stratum, records in zip(
+            VALIDATION_STRATA, (self.card_disjoint, self.game_disjoint),
+        ):
             logger.info(
                 "%s validation: %d records over %d games, %d classes",
                 stratum, len(records), len({r.game_id for r in records}),

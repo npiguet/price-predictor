@@ -60,6 +60,7 @@ from effects.domain.sampling import (
     DEFAULT_KIND_MIX,
     sampling_class,
 )
+from effects.domain.strata import OUTPUT_STRATA, Stratum
 from effects.domain.token_key_remap import RemapCounts, TokenKeyRemapper, remap_record_dict
 
 if TYPE_CHECKING:
@@ -1270,37 +1271,17 @@ MAX_REFUSED_SHARE = 0.5
 MAX_UNJOINABLE_SHARE = 0.001
 MAX_UNJOINABLE_RECORDS = 20
 
-#: Every write-pass stratum, in report order. All but the last are the real
-#: outputs -- shard directories a downstream reader loads, and what
-#: FR-143/FR-145 mean by "each output" -- and ``OUTPUTS`` is exactly that
-#: prefix, so "every output in OUTPUTS" is what the reports iterate;
-#: "dropped-held-out" is accounting only, since nothing is written for it, so
-#: it is counted in ``per_stratum`` but never carries a unique-text figure.
-#: "gate-one" is a *slice* of "card-disjoint" rather than a fourth
-#: destination: its records are written twice on purpose, so
-#: the evaluator reads gate 1's unique-text stratum without re-filtering the
-#: whole card-disjoint output, and its per-stratum count therefore overlaps
-#: card-disjoint's rather than partitioning with it.
-STRATA: tuple[str, ...] = (
-    "training", "card-disjoint", "game-disjoint", "gate-one", "dropped-held-out",
-)
-OUTPUTS: tuple[str, ...] = STRATA[:-1]
-
-
 @dataclass(frozen=True, slots=True)
 class WriteConfig:
     """Where one shard's records go, and by what rule.
 
-    The four output directories name **parts** directories rather than the
+    ``parts_dirs`` names a **parts** directory per output rather than the
     strata themselves: a worker writes one part per source shard, and
     ``build()`` repacks the parts into uniform shards afterwards.
     """
 
     records_dir: str
-    training_dir: str
-    card_disjoint_dir: str
-    game_disjoint_dir: str
-    gate_one_dir: str
+    parts_dirs: dict[Stratum, str]
     gate_one_keys: frozenset[str]
     max_events: int
     plans: dict[tuple[Cell, str], CopyPlan]
@@ -1329,18 +1310,18 @@ class WriteResult:
     dropped_by_cap: Counter[str] = field(default_factory=Counter)
     read: Counter[str] = field(default_factory=Counter)
     kept_keys: dict[str, set[str]] = field(default_factory=dict)
-    #: Records written to each output, keyed "training" / "card-disjoint" /
-    #: "game-disjoint", plus "dropped-held-out" for held-out games the
+    #: Records written to each output, plus the held-out games the
     #: card-disjoint cap declined. FR-145 wants the report per stratum as well
     #: as per class, and a stratum nobody counted is a stratum nobody notices
     #: is empty.
-    stratum: Counter[str] = field(default_factory=Counter)
-    #: Ability keys admitted to each output in ``OUTPUTS``, never
-    #: "dropped-held-out", which writes nothing -- the same role
-    #: ``kept_keys`` plays per class, but per
-    #: stratum instead: ``build()`` folds these through ``decisions.key_text``
-    #: to get each output's unique-ability-text count (FR-143, FR-145).
-    stratum_keys: dict[str, set[str]] = field(default_factory=dict)
+    stratum: Counter[Stratum] = field(default_factory=Counter)
+    #: Ability keys admitted to each output, never to dropped-held-out, which
+    #: writes nothing -- the role ``kept_keys`` plays per class, per stratum
+    #: instead: ``build()`` folds these through ``decisions.key_text`` to get
+    #: each output's unique-ability-text count (FR-143, FR-145).
+    stratum_keys: dict[Stratum, set[str]] = field(
+        default_factory=lambda: defaultdict(set),
+    )
     #: Records refused by ``effects.domain.record_quality``, by reason
     #: (FR-148). Counted before every routing decision, so a defective record
     #: reaches no output at all and belongs to no class's read count.
@@ -1380,8 +1361,54 @@ class WriteResult:
     signature_written: Counter[tuple[str, str, str]] = field(default_factory=Counter)
     #: Training records per ``(class, on_policy | off_policy)``.
     policy: Counter[tuple[str, str]] = field(default_factory=Counter)
-    #: Training legality records per ``(subkind, real | what_if | unknown)``.
+    #: Training legality records per ``(subkind, real | what-if | unknown)``.
     legality: Counter[tuple[str, str]] = field(default_factory=Counter)
+
+    def note_refusal(self, record: EffectRecord, klass: str, defect: str) -> None:
+        self.quality_dropped[defect] += 1
+        self.refused_by_class[klass] += 1
+        if defect == NO_ACTING_TEXT:
+            self.textless_scripts[record.ability[0].script_file] += 1
+        elif defect == UNJOINABLE_KEY:
+            self.unjoinable_scripts[record.ability[0].script_file] += 1
+
+    def note_written(self, stratum: Stratum, key: str | None, count: int = 1) -> None:
+        self.stratum[stratum] += count
+        if key is not None:
+            self.stratum_keys[stratum].add(key)
+
+    def note_training(
+        self, record: EffectRecord, klass: str, cell: Cell, key: str | None,
+        copies: int,
+    ) -> None:
+        """One training record written ``copies`` times, in every tally it feeds."""
+        self.kept[klass] += copies
+        self.note_written(Stratum.TRAINING, key, copies)
+        label = family_label(cell)
+        self.family_written[klass, label] += copies
+        self.family_distinct[klass, label] += 1
+        self.signature_written[klass, label, cell.signature] += copies
+        policy = "off_policy" if record.random_seat else "on_policy"
+        self.policy[klass, policy] += copies
+        if cell.half:
+            decision = LegalityDecision.of(record)
+            self.legality[record.subkind.value, decision.value] += copies
+        if key is not None:
+            self.kept_keys.setdefault(klass, set()).add(key)
+
+    def merge(self, part: WriteResult) -> None:
+        """Fold one shard's result into this run's: every tally, summed."""
+        for spec in dataclasses.fields(self):
+            mine, theirs = getattr(self, spec.name), getattr(part, spec.name)
+            if isinstance(mine, Counter):
+                mine.update(theirs)
+            elif isinstance(mine, RemapCounts):
+                mine.merge(theirs)
+            elif isinstance(mine, dict):
+                for name, keys in theirs.items():
+                    mine.setdefault(name, set()).update(keys)
+            else:
+                setattr(self, spec.name, mine + theirs)
 
 
 _WRITE: WriteConfig | None = None
@@ -1434,10 +1461,7 @@ def write_shard_pass(relative: str) -> WriteResult:
     out = WriteResult()
     sidecars = _worker_sidecars(config.sidecar_roots)
     resolver = _worker_resolver(config.sidecar_roots)
-    training: list = []
-    card_disjoint: list = []
-    game_disjoint: list = []
-    gate_one: list = []
+    outputs: dict[Stratum, list] = {stratum: [] for stratum in OUTPUT_STRATA}
 
     # The remap's counts land here first and are folded into ``out.remap``
     # only for a record that reaches an output, so the manifest's figure is
@@ -1445,105 +1469,81 @@ def write_shard_pass(relative: str) -> WriteResult:
     # (FR-151). A record the quality check refuses, the per-text cap drops
     # or the held-out rule discards takes its remaps with it.
     pending = RemapCounts()
-
     for record in read_shard_remapped(
         Path(config.records_dir) / relative, config.remapper, pending,
     ):
-        written = False
-        try:
-            name = sampling_class(record)
-            # Computed once, up front: every branch below -- including the two
-            # validation strata, which never used to look at it at all -- needs
-            # it to track which ability texts that output actually holds.
-            key = ability_key(record)
-            # Before the read count, so a refused record is not counted as read
-            # against a class whose availability the survey computed without it.
-            defect = _refusal(
-                record, max_events=config.max_events, roots=config.sidecar_roots,
-            )
-            if defect is not None:
-                out.quality_dropped[defect] += 1
-                out.refused_by_class[name] += 1
-                if defect == NO_ACTING_TEXT:
-                    out.textless_scripts[record.ability[0].script_file] += 1
-                elif defect == UNJOINABLE_KEY:
-                    out.unjoinable_scripts[record.ability[0].script_file] += 1
-                continue
-            out.read[name] += 1
-            if has_unattributed_events(record):
-                out.unattributed += 1
-            if record.game_id in config.card_disjoint:
-                card_disjoint.append(record)
-                written = True
-                out.stratum["card-disjoint"] += 1
-                if key is not None:
-                    out.stratum_keys.setdefault("card-disjoint", set()).add(key)
-                if (
-                    record.kind is RecordKind.RESOLUTION
-                    and key is not None and key in config.gate_one_keys
-                ):
-                    gate_one.append(record)
-                    out.stratum["gate-one"] += 1
-                    out.stratum_keys.setdefault("gate-one", set()).add(key)
-                continue
-            if record.game_id in config.game_disjoint:
-                game_disjoint.append(record)
-                written = True
-                out.stratum["game-disjoint"] += 1
-                if key is not None:
-                    out.stratum_keys.setdefault("game-disjoint", set()).add(key)
-                continue
-            if record.game_id in config.held_out_games:
-                # Held out but not admitted to the stratum: dropped, never trained
-                # on (FR-088). Nothing is written for it, so it earns no entry in
-                # stratum_keys -- only an output in OUTPUTS does.
-                out.stratum["dropped-held-out"] += 1
-                continue
-            cell = cell_of(record, sidecars, resolver, config.legality_mode_counts)
-            plan = config.plans.get((cell, key)) if key is not None else None
-            if plan is None:
-                plan = config.keyless_plans.get(cell, _NO_COPIES)
-            copies = plan.copies(record_hash(record.record_id, seed=config.seed))
-            if copies <= 0:
-                out.dropped_by_cap[name] += 1
-                continue
-            training.extend([record] * copies)
-            written = True
-            out.kept[name] += copies
-            out.stratum["training"] += copies
-            label = family_label(cell)
-            out.family_written[name, label] += copies
-            out.family_distinct[name, label] += 1
-            out.signature_written[name, label, cell.signature] += copies
-            out.policy[name, "off_policy" if record.random_seat else "on_policy"] += copies
-            if cell.half:
-                decision = LegalityDecision.of(record)
-                out.legality[record.subkind.value, decision.value] += copies
-            if key is not None:
-                out.kept_keys.setdefault(name, set()).add(key)
-                out.stratum_keys.setdefault("training", set()).add(key)
-        finally:
-            if written:
-                out.remap.merge(pending)
-            pending.remapped = 0
-            pending.ambiguous.clear()
+        if _write_record(record, config, out, outputs, sidecars, resolver):
+            out.remap.merge(pending)
+        pending.remapped = 0
+        pending.ambiguous.clear()
 
     shard_name = _output_name(relative)
     # Only where there is something to write. A source shard contributes to one
-    # stratum far more often than to three, so writing all three unconditionally
-    # produced two empty files per source shard -- 2,103 files from 701 sources.
-    # An empty validation shard is read and logged before the first training
-    # step; an empty training shard drawn into an epoch forfeits its share of
-    # the step budget, because `_train_on_shard` returns early on one.
-    for directory, records in (
-        (config.training_dir, training),
-        (config.card_disjoint_dir, card_disjoint),
-        (config.game_disjoint_dir, game_disjoint),
-        (config.gate_one_dir, gate_one),
-    ):
+    # stratum far more often than to every one, and an empty training shard
+    # drawn into an epoch forfeits its share of the step budget, because
+    # `_train_on_shard` returns early on one.
+    for stratum, records in outputs.items():
         if records:
-            write_shard(Path(directory) / shard_name, records)
+            write_shard(Path(config.parts_dirs[stratum]) / shard_name, records)
     return out
+
+
+def _write_record(
+    record: EffectRecord, config: WriteConfig, out: WriteResult,
+    outputs: dict[Stratum, list], sidecars, resolver,
+) -> bool:
+    """Route one record to its outputs and tally it; whether anything was written."""
+    klass = sampling_class(record)
+    # Before the read count, so a refused record is not counted as read
+    # against a class whose availability the survey computed without it.
+    defect = _refusal(record, max_events=config.max_events, roots=config.sidecar_roots)
+    key = ability_key(record)
+    if defect is not None:
+        out.note_refusal(record, klass, defect)
+        return False
+    out.read[klass] += 1
+    if has_unattributed_events(record):
+        out.unattributed += 1
+
+    stratum = _held_back_stratum(record, config)
+    if stratum is Stratum.DROPPED_HELD_OUT:
+        # Held out but not admitted to the stratum: dropped, never trained on
+        # (FR-088). Nothing is written for it, so it earns no stratum key.
+        out.stratum[stratum] += 1
+        return False
+    if stratum is not None:
+        outputs[stratum].append(record)
+        out.note_written(stratum, key)
+        if (
+            stratum is Stratum.CARD_DISJOINT and record.kind is RecordKind.RESOLUTION
+            and key is not None and key in config.gate_one_keys
+        ):
+            outputs[Stratum.GATE_ONE].append(record)
+            out.note_written(Stratum.GATE_ONE, key)
+        return True
+
+    cell = cell_of(record, sidecars, resolver, config.legality_mode_counts)
+    plan = config.plans.get((cell, key)) if key is not None else None
+    if plan is None:
+        plan = config.keyless_plans.get(cell, _NO_COPIES)
+    copies = plan.copies(record_hash(record.record_id, seed=config.seed))
+    if copies <= 0:
+        out.dropped_by_cap[klass] += 1
+        return False
+    outputs[Stratum.TRAINING].extend([record] * copies)
+    out.note_training(record, klass, cell, key, copies)
+    return True
+
+
+def _held_back_stratum(record: EffectRecord, config: WriteConfig) -> Stratum | None:
+    """The validation stratum a record's game is placed in, or None for training."""
+    if record.game_id in config.card_disjoint:
+        return Stratum.CARD_DISJOINT
+    if record.game_id in config.game_disjoint:
+        return Stratum.GAME_DISJOINT
+    if record.game_id in config.held_out_games:
+        return Stratum.DROPPED_HELD_OUT
+    return None
 
 
 def run_write_pass(
@@ -1554,31 +1554,10 @@ def run_write_pass(
     started = time.monotonic()
     total = WriteResult()
 
-    def absorb(part: WriteResult) -> None:
-        total.kept.update(part.kept)
-        total.dropped_by_cap.update(part.dropped_by_cap)
-        total.read.update(part.read)
-        total.stratum.update(part.stratum)
-        total.quality_dropped.update(part.quality_dropped)
-        total.refused_by_class.update(part.refused_by_class)
-        total.textless_scripts.update(part.textless_scripts)
-        total.unjoinable_scripts.update(part.unjoinable_scripts)
-        total.unattributed += part.unattributed
-        total.remap.merge(part.remap)
-        total.family_written.update(part.family_written)
-        total.family_distinct.update(part.family_distinct)
-        total.signature_written.update(part.signature_written)
-        total.policy.update(part.policy)
-        total.legality.update(part.legality)
-        for name, keys in part.kept_keys.items():
-            total.kept_keys.setdefault(name, set()).update(keys)
-        for name, keys in part.stratum_keys.items():
-            total.stratum_keys.setdefault(name, set()).update(keys)
-
     if workers is not None and workers <= 1:
         init_write_worker(config)
         for index, name in enumerate(names, start=1):
-            absorb(write_shard_pass(name))
+            total.merge(write_shard_pass(name))
             if index % progress_every == 0:
                 logger.info("Wrote %s", progress_line(
                     done=index, total=len(names),
@@ -1592,7 +1571,7 @@ def run_write_pass(
         for index, part in enumerate(
             pool.map(write_shard_pass, names, chunksize=1), start=1,
         ):
-            absorb(part)
+            total.merge(part)
             if index % progress_every == 0:
                 logger.info("Wrote %s", progress_line(
                     done=index, total=len(names),
@@ -1613,14 +1592,11 @@ def _repack_outputs(store: CorpusStore, *, shard_records: int) -> None:
 
     from effects.infrastructure.record_io import iter_shards, repack_shards
 
-    for stratum, target in (
-        ("training", store.training_dir),
-        ("card-disjoint", store.card_disjoint_dir),
-        ("game-disjoint", store.game_disjoint_dir),
-        ("gate-one", store.gate_one_dir),
-    ):
+    for stratum in OUTPUT_STRATA:
         parts = iter_shards(store.parts_dir_for(stratum))
-        paths = repack_shards(parts, target, shard_records=shard_records)
+        paths = repack_shards(
+            parts, store.output_dir(stratum), shard_records=shard_records,
+        )
         logger.info(
             "%-22s %d part(s) repacked into %d shard(s)",
             stratum, len(parts), len(paths),
@@ -1852,7 +1828,7 @@ def _held_out_text_report(
 
     covered = {
         decisions.held_out_text_of_key[key]
-        for key in written.stratum_keys.get("gate-one", ())
+        for key in written.stratum_keys.get(Stratum.GATE_ONE, ())
         if key in decisions.held_out_text_of_key
     }
     games: dict[str, set[str]] = defaultdict(set)
@@ -2014,10 +1990,9 @@ def build(config: BuildCorpusConfig) -> int:
         [shard.name for shard in survey.shards],
         config=WriteConfig(
             records_dir=str(records_dir),
-            training_dir=str(store.parts_dir_for("training")),
-            card_disjoint_dir=str(store.parts_dir_for("card-disjoint")),
-            game_disjoint_dir=str(store.parts_dir_for("game-disjoint")),
-            gate_one_dir=str(store.parts_dir_for("gate-one")),
+            parts_dirs={
+                stratum: str(store.parts_dir_for(stratum)) for stratum in OUTPUT_STRATA
+            },
             gate_one_keys=decisions.gate_one_keys,
             max_events=config.max_events,
             plans=decisions.plans,
@@ -2093,10 +2068,10 @@ def build(config: BuildCorpusConfig) -> int:
     }
     # The same fold as per_class's unique_texts, one axis over: by output
     # (stratum) rather than by sampling class (FR-143, FR-145). per_stratum
-    # covers every name in STRATA; unique_texts covers every output in
-    # OUTPUTS -- dropped-held-out writes nothing, so it has no ability texts
+    # covers every stratum; unique_texts covers every output in
+    # OUTPUT_STRATA -- dropped-held-out writes nothing, so it has no ability texts
     # of its own to count.
-    per_stratum = {name: written.stratum.get(name, 0) for name in STRATA}
+    per_stratum = {name: written.stratum.get(name, 0) for name in Stratum}
     trained = sum(written.kept.values())
     delivered_mix = {
         name: count / trained for name, count in sorted(written.kept.items())
@@ -2106,7 +2081,7 @@ def build(config: BuildCorpusConfig) -> int:
             decisions.key_text.get(key, key)
             for key in written.stratum_keys.get(name, ())
         })
-        for name in OUTPUTS
+        for name in OUTPUT_STRATA
     }
     families, signatures = _family_tables(decisions, written)
     held_out_report = _held_out_text_report(survey, decisions, written, held_out.texts)
@@ -2171,12 +2146,15 @@ def build(config: BuildCorpusConfig) -> int:
             "%-22s read %9d  kept %9d  cap dropped %8d  unique texts %7d",
             name, counts.read, counts.kept, counts.dropped_by_cap, counts.unique_texts,
         )
-    for name in OUTPUTS:
+    for name in OUTPUT_STRATA:
         logger.info(
             "%-22s %9d record(s)  %7d unique text(s)",
             name, per_stratum[name], unique_texts[name],
         )
-    logger.info("%-22s %9d record(s)", "dropped-held-out", per_stratum["dropped-held-out"])
+    logger.info(
+        "%-22s %9d record(s)", Stratum.DROPPED_HELD_OUT,
+        per_stratum[Stratum.DROPPED_HELD_OUT],
+    )
     for source in sorted(survey.games_by_source):
         games = survey.games_by_source[source]
         held = survey.held_out_games_by_source.get(source, 0)

@@ -52,6 +52,7 @@ from effects.domain.gate_metrics import (
 )
 from effects.domain.line_query import LineQuery
 from effects.domain.records import LegalityDecision
+from effects.domain.strata import VALIDATION_STRATA
 
 if TYPE_CHECKING:
     from effects.infrastructure.effect_model_store import SplitProvenance
@@ -752,7 +753,7 @@ NEIGHBOUR_QUERIES: tuple[LineQuery, ...] = (
 #: thousand raw games would hold gigabytes for the same breakdown.
 BREAKDOWN_RAW_RECORDS = 4096
 
-CARD_DISJOINT, GAME_DISJOINT = "card-disjoint", "game-disjoint"
+CARD_DISJOINT, GAME_DISJOINT = VALIDATION_STRATA
 
 
 def breakdown_records(config, main, corpus_path: Path | None) -> dict[str, list]:

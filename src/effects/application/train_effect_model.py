@@ -39,6 +39,7 @@ from effects.domain.split import (
     CorpusSplit,
     text_keyed_holdout,
 )
+from effects.domain.strata import VALIDATION_STRATA, Stratum
 from effects.domain.variants import Variant
 
 if TYPE_CHECKING:
@@ -627,7 +628,7 @@ def run(config: TrainEffectModelConfig) -> int:
         logger.error("No training shards under %s.", store.training_dir)
         return 1
     validation_samples = {
-        stratum: store.sample_path(stratum) for stratum in ("card-disjoint", "game-disjoint")
+        stratum: store.sample_path(stratum) for stratum in VALIDATION_STRATA
     }
     missing = [str(p) for p in validation_samples.values() if not p.exists()]
     if missing:
@@ -660,7 +661,7 @@ def run(config: TrainEffectModelConfig) -> int:
     logger.info(
         "Curated corpus at %s: %d training shards, %d gate-one record(s), "
         "%d held-out ability text(s) on %d card(s).",
-        config.corpus, len(training_shards), manifest.per_stratum.get("gate-one", 0),
+        config.corpus, len(training_shards), manifest.per_stratum.get(Stratum.GATE_ONE, 0),
         len(manifest.held_out_texts), len(manifest.held_out_cards),
     )
 
@@ -673,7 +674,7 @@ def run(config: TrainEffectModelConfig) -> int:
         validation_samples=validation_samples,
         holdout_permille=manifest.holdout_permille,
         holdout_max_carriers=manifest.holdout_max_carriers,
-        gate_one_records=manifest.per_stratum.get("gate-one", 0),
+        gate_one_records=manifest.per_stratum.get(Stratum.GATE_ONE, 0),
         rarity=manifest.rarity,
         legality_mode_counts=manifest.legality_mode_counts or None,
         corpus_digest=manifest.digest(),
