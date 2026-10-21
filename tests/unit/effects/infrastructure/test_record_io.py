@@ -55,6 +55,7 @@ from effects.infrastructure.record_io import (
     format_record_line,
     iter_shard_lines,
     iter_shards,
+    parse_record_line,
     read_records,
     read_shard,
     record_from_dict,
@@ -945,3 +946,44 @@ class TestInternedProvenanceKeys:
         data = record_to_dict(record)
         assert record_from_dict(data) == record
         assert record_from_dict(data) == record_from_dict(json.loads(json.dumps(data)))
+
+
+class TestTheWireFormIsPinned:
+    """The bytes a record serializes to, pinned against a digest.
+
+    A round trip alone cannot catch a codec change that alters encoder and
+    decoder together — a renamed key, a reordered field — and the corpus is
+    append-only, so a shard written under the changed form would no longer
+    read the way the shards beside it do. The digests were taken from the
+    serializer before its codecs were regrouped.
+    """
+
+    @staticmethod
+    def _digest(records) -> str:
+        import hashlib
+
+        digest = hashlib.sha256()
+        for record in records:
+            digest.update(format_record_line(record).encode("utf-8"))
+            digest.update(b"\n")
+        return digest.hexdigest()
+
+    def test_the_gen1_fixture_serializes_to_the_pinned_bytes(self):
+        records = list(read_shard(_GEN1_FIXTURE))
+        assert len(records) == 53
+        assert self._digest(records) == (
+            "103eb3f98ab57d273be2f7c8c599ab3d5eb0f11e16ee8fa75a3ccf7a5d1f71d3"
+        )
+
+    def test_every_kind_serializes_to_the_pinned_bytes(self):
+        records = [_record(**ALL_KINDS[name]) for name in sorted(ALL_KINDS)]
+        assert self._digest(records) == (
+            "c8736a4d14319f0512573a25c3b307f355d52b16062e6c2c8768c667c1161a83"
+        )
+
+    def test_the_fixture_round_trips_through_its_own_wire_form(self):
+        for record in read_shard(_GEN1_FIXTURE):
+            line = format_record_line(record)
+            again = record_from_dict(parse_record_line(line))
+            assert again == record
+            assert format_record_line(again) == line
