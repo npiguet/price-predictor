@@ -9,7 +9,6 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.StringJoiner;
 
 /**
@@ -63,24 +62,16 @@ final class CombatShape {
     }
 
     /**
-     * Add this step's share of the combat's damage assignment.
+     * Add this damage step's assignment.
      *
-     * <p>Called after the assignment has run, which is a different moment from
-     * {@link #of}: the attackers have to be read before the damage and the
-     * assignment only exists after it.
-     *
-     * <p>Forge accumulates the assignment over a whole combat and never clears
-     * it, so at the regular step the table still holds what first strike
-     * assigned. {@code alreadyWritten} carries what earlier steps of the same
-     * combat recorded, and grows as this reads. A double striker that assigns
-     * the same damage twice is counted once — the engine stores the latest
-     * value per pair, so "assigned again, identically" and "not assigned again"
-     * are the same table.
-     *
-     * @param alreadyWritten seen assignments for this combat, or null when the
-     *                       combat is a fork's and has no earlier step
+     * <p>Called once the assignment has run, which can be a different moment
+     * from {@link #of}: the assignment exists only after it. Forge keeps a copy
+     * of each step's assignment as the players made it, before prevention or
+     * redirection rewrote the damage, so a double striker's regular step
+     * carries its own assignment and a prevented hit still shows what was
+     * assigned. The observed record and its probe branch read the same thing.
      */
-    void addAssignment(Combat combat, Set<String> alreadyWritten) {
+    void addAssignment(Combat combat) {
         if (combat == null) {
             return;
         }
@@ -98,10 +89,6 @@ final class CombatShape {
                 continue;
             }
             String from = SnapshotBuilder.entityId(source);
-            if (alreadyWritten != null
-                    && !alreadyWritten.add(from + ">" + target + "=" + amount)) {
-                continue;
-            }
             assignment
                     .computeIfAbsent(from, key -> new LinkedHashMap<>())
                     .put(target, amount);

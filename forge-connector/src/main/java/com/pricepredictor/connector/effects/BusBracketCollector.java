@@ -212,13 +212,16 @@ public final class BusBracketCollector {
      */
     private final StatDiffer stats = new StatDiffer();
     /**
-     * Assignments already written, for the length of one combat.
+     * Whether this damage step's combat record has been written because
+     * something used the stack after the damage.
      *
-     * <p>Forge's assignment table is never cleared between the first-strike and
-     * regular steps, so without this the regular step's record repeats first
-     * strike's. Cleared when the combat ends, not when a step does.
+     * <p>A damage step has a priority window after its damage, in which
+     * combat-damage triggers and anything cast resolve. Their events are
+     * theirs, not the combat's, so the first bracket to open in the step writes
+     * the combat record, and nothing after it joins one. Reset at the next
+     * phase.
      */
-    private final Set<String> assignmentsSeen = new LinkedHashSet<>();
+    private boolean combatWindowClosed;
     private final Set<String> combatParticipants = new LinkedHashSet<>();
     private String combatSubstep;
     private String combatState;
@@ -321,6 +324,12 @@ public final class BusBracketCollector {
         // A cast, an activation or a trigger reaching the stack is the next
         // action: whatever the held resolution killed has died by now.
         flushHeldResolution();
+        // And whatever the combat damage killed: state-based actions run
+        // before anything goes on the stack.
+        if (inCombatDamageStep()) {
+            flushCombat();
+            combatWindowClosed = true;
+        }
         openBracket(ability);
         if (ability == null) {
             return;
@@ -441,6 +450,7 @@ public final class BusBracketCollector {
     public void onPhase(GameEventTurnPhase event) {
         flushHeldResolution();
         flushCombat();
+        combatWindowClosed = false;
         // An effect that empties the stack -- ending the turn, ending combat --
         // resolves nothing afterwards, so a phase boundary is the last chance
         // to notice what it swept away.
@@ -451,9 +461,6 @@ public final class BusBracketCollector {
     public void onCombatEnded(GameEventCombatEnded event) {
         flushHeldResolution();
         flushCombat();
-        // The next combat's assignment table starts empty, so what this one
-        // wrote must stop suppressing entries in it.
-        assignmentsSeen.clear();
     }
 
     /**
@@ -486,9 +493,9 @@ public final class BusBracketCollector {
     public void onCardDamaged(GameEventCardDamaged event) {
         String subject = "E" + event.card().getId();
         EffectEvent damage = EventAttribution.stamp(
-                BusEvents.cardDamaged(event, isCombatDamage()), resolving,
+                BusEvents.cardDamaged(event, inCombatDamage()), resolving,
                 BusEvents.causeOf(event));
-        if (isCombatDamage()) {
+        if (inCombatDamage()) {
             openCombatBracket();
             combatParticipants.add(subject);
             combatEvents.add(damage);
@@ -836,7 +843,7 @@ public final class BusBracketCollector {
         // itself — what caused it are properties of the bracket it landed in,
         // and only this side knows that.
         EventAttribution.stamp(event, resolving, namedCause);
-        if (isCombatDamage()) {
+        if (inCombatDamage()) {
             openCombatBracket();
             if (fileEvent(event, combatEvents, combatEventKeys)) {
                 combatParticipants.addAll(event.subjects());
@@ -1403,13 +1410,21 @@ public final class BusBracketCollector {
      * COMBAT_DAMAGE}, and a test on that substring alone sent the step's
      * creature damage, life changes and deaths to the ordinary bracket.
      */
-    private boolean isCombatDamage() {
+    private boolean inCombatDamageStep() {
         var phase = game.getPhaseHandler();
         if (phase == null || phase.getPhase() == null) {
             return false;
         }
         String step = phase.getPhase().toString();
         return step.contains("COMBAT_DAMAGE") || step.contains("FIRST_STRIKE_DAMAGE");
+    }
+
+    /**
+     * Whether an event now is the combat's: dealt in a damage step, before
+     * anything has used the stack in it ({@link #combatWindowClosed}).
+     */
+    private boolean inCombatDamage() {
+        return !combatWindowClosed && inCombatDamageStep();
     }
 
     /**
@@ -1434,11 +1449,12 @@ public final class BusBracketCollector {
                 && phase.getPhase().toString().contains("FIRST_STRIKE")
                 ? "first_strike" : "regular";
         combatState = snapshots.toJson(null, List.of());
-        // The damage has been assigned by now -- the first damage event is what
-        // opened this bracket -- but nothing has died yet, so this is the one
-        // moment both halves of the shape are readable.
+        // Nothing has died yet, so this is the moment the attackers and
+        // blockers are all still in combat. The assignment is Forge's copy of
+        // this step's, taken before any replacement, so it reads the same
+        // whenever in the step it is read.
         combatShape = CombatShape.of(game.getCombat());
-        combatShape.addAssignment(game.getCombat(), assignmentsSeen);
+        combatShape.addAssignment(game.getCombat());
     }
 
     /**

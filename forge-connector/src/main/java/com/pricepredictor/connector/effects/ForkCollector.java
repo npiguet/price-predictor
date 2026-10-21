@@ -736,11 +736,11 @@ public final class ForkCollector {
                 state = snapshots.toJson(null, List.of());
                 fork.getCombat().removeAbsentCombatants();
                 // Who is blocking whom, before the damage removes any of them; the
-                // assignment only exists after. Gate 2 reads this branch against
-                // the record it mirrors, so both are read the same way.
+                // assignment only exists after. Both are read as the observed
+                // record reads them, so the branch and the record it mirrors agree.
                 shape = CombatShape.of(fork.getCombat());
                 if (fork.getCombat().assignCombatDamage(firstStrike)) {
-                    shape.addAssignment(fork.getCombat(), null);
+                    shape.addAssignment(fork.getCombat());
                     fork.getCombat().dealAssignedDamage();
                     // And then let the deaths happen. Damage alone kills nothing;
                     // a creature with lethal damage on it leaves the battlefield
