@@ -40,7 +40,7 @@ from effects.domain.corpus_curation import (
 )
 from effects.domain.corpus_manifest import SourceShard
 from effects.domain.keyword_names import normalize_keyword
-from effects.domain.provenance import ProvenanceKey
+from effects.domain.provenance import ProvenanceKey, parse_keys, render_keys
 from effects.domain.record_quality import (
     NO_ACTING_TEXT,
     UNJOINABLE_KEY,
@@ -70,9 +70,6 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-_KEY_FIELD_SEPARATOR = "|"
-_KEY_SEPARATOR = ";"
-
 
 class BuildCorpusError(ValueError):
     """A build this corpus, these flags or this working directory cannot do.
@@ -100,26 +97,12 @@ def ability_key(record: EffectRecord) -> str | None:
     keys = acting_keys(record)
     if not keys:
         return None
-    return _KEY_SEPARATOR.join(_render_key(key) for key in keys)
-
-
-def _render_key(key: ProvenanceKey) -> str:
-    fields = [key.script_file, str(key.face), key.trait_kind, str(key.index_within_kind)]
-    if key.option is not None:
-        fields.append(str(key.option))
-    return _KEY_FIELD_SEPARATOR.join(fields)
+    return render_keys(keys)
 
 
 def parse_ability_key(rendered: str) -> tuple[ProvenanceKey, ...]:
-    """The inverse of :func:`ability_key`."""
-    keys = []
-    for part in rendered.split(_KEY_SEPARATOR):
-        script_file, face, trait_kind, index, *option = part.split(_KEY_FIELD_SEPARATOR)
-        keys.append(ProvenanceKey(
-            script_file, int(face), trait_kind, int(index),
-            int(option[0]) if option else None,
-        ))
-    return tuple(keys)
+    """The inverse of :func:`ability_key`; cached by :func:`parse_keys`."""
+    return parse_keys(rendered)
 
 
 def game_hash(game_id: str) -> int:
