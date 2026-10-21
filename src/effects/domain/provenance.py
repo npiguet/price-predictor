@@ -275,6 +275,10 @@ class ProvenanceSidecar:
     _declared_max: dict[tuple[int, str], int] = field(
         default_factory=dict, init=False, repr=False, compare=False,
     )
+    # ``dropped_keys`` as a set, for the membership test every join makes.
+    _dropped: frozenset[ProvenanceKey] = field(
+        default=frozenset(), init=False, repr=False, compare=False,
+    )
 
     def __post_init__(self) -> None:
         index: dict[ProvenanceKey, int] = {}
@@ -287,6 +291,7 @@ class ProvenanceSidecar:
             _note_declared(declared, key)
         object.__setattr__(self, "_row_by_key", index)
         object.__setattr__(self, "_declared_max", declared)
+        object.__setattr__(self, "_dropped", frozenset(self.dropped_keys))
 
     def is_runtime_only(self, key: ProvenanceKey) -> bool:
         """Is this a trait Forge attached to a live card rather than one parsed?
@@ -316,7 +321,7 @@ class ProvenanceSidecar:
         row = self._row_by_key.get(key)
         if row is not None:
             return row
-        if key in self.dropped_keys or self.is_runtime_only(key):
+        if key in self._dropped or self.is_runtime_only(key):
             return None
         raise KeyError(self._mismatch_message(key))
 
@@ -330,7 +335,7 @@ class ProvenanceSidecar:
         """
         if key in self._row_by_key:
             return KeyResolution.LINE
-        if key in self.dropped_keys:
+        if key in self._dropped:
             return KeyResolution.DROPPED
         if self.is_runtime_only(key):
             return KeyResolution.RUNTIME_ONLY

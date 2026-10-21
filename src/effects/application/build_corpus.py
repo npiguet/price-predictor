@@ -659,10 +659,6 @@ def run_survey(
 DEFAULT_GAME_DISJOINT_KEYWORDS: tuple[str, ...] = (
     "first strike", "deathtouch", "trample", "indestructible", "wither", "infect",
 )
-_DAMAGE_STEP_NAMES = frozenset({
-    "first_strike", "double_strike", "deathtouch", "lifelink", "trample",
-    "indestructible", "wither", "infect",
-})
 
 
 @dataclass(frozen=True, slots=True)
@@ -765,14 +761,16 @@ class BuildCorpusConfig:
             raise BuildCorpusError(
                 f"--holdout-unit is {self.holdout_unit!r}; expected template or text."
             )
+        from effects.domain.damage_step_keywords import KEYWORDS_BY_NAME
+
         unknown = [
             name for name in self.game_disjoint_keywords
-            if normalize_keyword(name) not in _DAMAGE_STEP_NAMES
+            if normalize_keyword(name) not in KEYWORDS_BY_NAME
         ]
         if unknown:
             raise BuildCorpusError(
                 f"--game-disjoint-keywords names {', '.join(unknown)}, which gate 2 "
-                f"does not score; it scores {', '.join(sorted(_DAMAGE_STEP_NAMES))}."
+                f"does not score; it scores {', '.join(sorted(KEYWORDS_BY_NAME))}."
             )
 
     def mix(self) -> dict[str, float]:
