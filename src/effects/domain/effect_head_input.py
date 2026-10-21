@@ -755,3 +755,31 @@ def continuous_masked_keywords(record: EffectRecord) -> dict[str, frozenset[str]
         for contribution in payload.contributions
         if contribution.keywords
     }
+
+
+def feature_widths(records, *, layout: str | None = INPUT_LAYOUT) -> dict[SlotKind, int]:
+    """Each slot kind's width, measured from real records.
+
+    Measured rather than declared: the vocabularies the features are built from
+    live in this module, and a constant elsewhere would be a second place to
+    keep them in step. A player's and a card's width need a record that has one.
+    """
+    probe = records[0]
+    widths = {
+        SlotKind.GLOBAL: len(global_features(probe, layout=layout)),
+        SlotKind.ACT: len(act_features(probe)),
+        SlotKind.PLAYER: 0,
+        SlotKind.CARD: 0,
+    }
+    for record in records:
+        if record.state.players:
+            widths[SlotKind.PLAYER] = len(
+                player_features(record.state.players[0], record, layout=layout)
+            )
+        if record.state.entities:
+            widths[SlotKind.CARD] = len(
+                card_features(record.state.entities[0], record, layout=layout)
+            )
+        if widths[SlotKind.PLAYER] and widths[SlotKind.CARD]:
+            break
+    return widths

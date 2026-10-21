@@ -96,10 +96,7 @@ from effects.domain.effect_head_input import (
     INPUT_LAYOUT,
     INPUT_LAYOUT_KEY,
     SlotKind,
-    act_features,
-    card_features,
-    global_features,
-    player_features,
+    feature_widths,
 )
 from effects.domain.effect_model import (
     FLOOR_EPSILON,
@@ -107,9 +104,11 @@ from effects.domain.effect_model import (
     EffectModelConfig,
     EntityTargetBatch,
     FieldSpec,
+    PartsMean,
     api_loss,
     constant_predictor_floor,
     created_objects_loss,
+    gather_entities,
     mlm_loss,
     per_entity_loss,
     value_loss,
@@ -675,31 +674,7 @@ class TrainingLoop(StepPreparation):
         )
 
     def _feature_widths(self, records: Sequence) -> dict[SlotKind, int]:
-        """Measure each slot kind's width from a real record.
-
-        Measured rather than declared: the vocabularies the features are built
-        from live in one module, and a constant here would be a second place to
-        keep them in step.
-        """
-        probe = records[0]
-        widths = {
-            SlotKind.GLOBAL: len(global_features(probe)),
-            SlotKind.ACT: len(act_features(probe)),
-            SlotKind.PLAYER: 0,
-            SlotKind.CARD: 0,
-        }
-        for record in records:
-            if record.state.players:
-                widths[SlotKind.PLAYER] = len(
-                    player_features(record.state.players[0], record)
-                )
-            if record.state.entities:
-                widths[SlotKind.CARD] = len(
-                    card_features(record.state.entities[0], record)
-                )
-            if widths[SlotKind.PLAYER] and widths[SlotKind.CARD]:
-                break
-        return widths
+        return feature_widths(records)
 
     # ── stepping ────────────────────────────────────────────────────────
 
@@ -782,12 +757,8 @@ class TrainingLoop(StepPreparation):
             batch, _surfaces = batcher.materialize(prepared.batch, encoder)
             hidden = model(**batch)
             outputs = model.per_entity(hidden)
-            # One batched gather rather than a slice per row: `index` selects
-            # each surface's [CARD] and [PLAYER] columns, and the rows are
-            # independent.
-            index = prepared.index.to(self.device, non_blocking=True)
-            gathered = outputs.gather(
-                1, index.unsqueeze(-1).expand(-1, -1, outputs.shape[-1]),
+            gathered = gather_entities(
+                outputs, prepared.index.to(self.device, non_blocking=True),
             )
             # The gate and the entity mask stay on the host, where they were
             # built: the loss picks its rows there, so the step never waits
@@ -1650,8 +1621,7 @@ class TrainingLoop(StepPreparation):
         size = self.config.batch_size
         total = torch.zeros((), device=self.device)
         batches = 0
-        summed: dict[str, float] = defaultdict(float)
-        counted: dict[str, int] = defaultdict(int)
+        means = PartsMean()
         with torch.no_grad():
             for start in range(0, len(records), size):
                 chunk = records[start:start + size]
@@ -1668,18 +1638,11 @@ class TrainingLoop(StepPreparation):
                 # Accumulated on the device; read once below.
                 total += computed.total
                 batches += 1
-                for name, value in computed.parts.items():
-                    summed[name] += value
-                    counted[name] += 1
+                means.add(computed.parts)
         run.encoder.train()
         run.model.train()
         if parts is not None:
-            # Averaged over the batches that carried each field rather than over
-            # every batch: a field its batch did not supervise contributes no
-            # zero, which would read as the model having got it right.
-            parts.update(
-                {name: summed[name] / counted[name] for name in summed}
-            )
+            parts.update(means.means())
         return float(total) / batches if batches else float("nan")
 
     def _provenance(self) -> SplitProvenance:

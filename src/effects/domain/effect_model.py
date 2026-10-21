@@ -326,6 +326,13 @@ class EffectModelConfig:
             )
 
 
+def _mlp(width_in: int, hidden: int, width_out: int) -> nn.Sequential:
+    """The two-layer head every output uses."""
+    return nn.Sequential(
+        nn.Linear(width_in, hidden), nn.GELU(), nn.Linear(hidden, width_out),
+    )
+
+
 class EffectModel(nn.Module):
     """Trunk plus the three shipped heads and the training-only auxiliaries."""
 
@@ -363,15 +370,9 @@ class EffectModel(nn.Module):
         self.norm = nn.LayerNorm(d)
 
         # ── shipped heads ──
-        self.per_entity_head = nn.Sequential(
-            nn.Linear(d, d), nn.GELU(), nn.Linear(d, PER_ENTITY_WIDTH),
-        )
-        self.created_objects_head = nn.Sequential(
-            nn.Linear(d, d), nn.GELU(), nn.Linear(d, CREATED_OBJECTS_WIDTH),
-        )
-        self.verdict_head = nn.Sequential(
-            nn.Linear(d, d), nn.GELU(), nn.Linear(d, VERDICT_WIDTH),
-        )
+        self.per_entity_head = _mlp(d, d, PER_ENTITY_WIDTH)
+        self.created_objects_head = _mlp(d, d, CREATED_OBJECTS_WIDTH)
+        self.verdict_head = _mlp(d, d, VERDICT_WIDTH)
 
         # ── training-only auxiliaries (FR-063), filtered at save time ──
         self.mlm_head = (
@@ -387,9 +388,7 @@ class EffectModel(nn.Module):
             if config.n_param_keys else None
         )
         # Amounts and costs the script states, read from e alone (FR-058).
-        self.value_head = nn.Sequential(
-            nn.Linear(config.e_dim, d), nn.GELU(), nn.Linear(d, VALUE_WIDTH),
-        )
+        self.value_head = _mlp(config.e_dim, d, VALUE_WIDTH)
 
     #: Head names filtered out of the saved artifact (FR-076, FR-059).
     TRAINING_ONLY_HEADS: tuple[str, ...] = (
@@ -771,21 +770,45 @@ def constant_predictor_floor(
     degenerate = {
         spec.name for spec in fields if _degenerate(batches, spec.name)
     }
-    summed: dict[str, float] = defaultdict(float)
-    counted: dict[str, int] = defaultdict(int)
+    means = PartsMean()
     for batch in batches:
         _, parts = per_entity_loss(
             vector.expand(*batch.gate.shape, PER_ENTITY_WIDTH),
             batch.gate, dict(batch.fields), batch.mask,
             fields=fields, report_parts=True,
         )
-        for name, value in parts.items():
-            summed[name] += value
-            counted[name] += 1
+        means.add(parts)
     return {
-        name: 0.0 if name in degenerate else summed[name] / counted[name]
-        for name in summed
+        name: 0.0 if name in degenerate else mean
+        for name, mean in means.means().items()
     }
+
+
+class PartsMean:
+    """Each field's loss averaged over the batches that carried it.
+
+    Over those batches rather than every batch: a field a batch did not
+    supervise contributes no zero, which would read as the model having got
+    it right.
+    """
+
+    def __init__(self) -> None:
+        self._summed: dict[str, float] = defaultdict(float)
+        self._counted: dict[str, int] = defaultdict(int)
+
+    def add(self, parts: Mapping[str, float]) -> None:
+        for name, value in parts.items():
+            self._summed[name] += value
+            self._counted[name] += 1
+
+    def means(self) -> dict[str, float]:
+        return {name: self._summed[name] / self._counted[name] for name in self._summed}
+
+
+def gather_entities(outputs: torch.Tensor, index: torch.Tensor) -> torch.Tensor:
+    """``(batch, entities, width)``: each surface's ``[CARD]`` and ``[PLAYER]``
+    columns of the per-entity output, in one batched gather."""
+    return outputs.gather(1, index.unsqueeze(-1).expand(-1, -1, outputs.shape[-1]))
 
 
 def created_objects_loss(
@@ -1056,12 +1079,14 @@ def entity_target_tensors(
     trunk output. A record that mentions an entity no slot represents is simply
     not gathered — the surface is the authority on what exists.
     """
+    # Built in numpy and handed over whole: assigning element by element into
+    # torch tensors costs a dispatch per element, on every step's host half.
     batch = len(surfaces)
     width = max((len(s.entity_slots) for s in surfaces), default=1)
-    gate = torch.zeros(batch, width)
-    mask = torch.zeros(batch, width)
-    index = torch.zeros(batch, width, dtype=torch.long)
-    collected: dict[str, torch.Tensor] = {}
+    gate = np.zeros((batch, width), dtype=np.float32)
+    mask = np.zeros((batch, width), dtype=np.float32)
+    index = np.zeros((batch, width), dtype=np.int64)
+    collected: dict[str, np.ndarray] = {}
 
     for spec in fields:
         # Only a multi-binary field's *target* is as wide as its prediction.
@@ -1073,7 +1098,7 @@ def entity_target_tensors(
             if spec.type is FieldType.MULTI_BINARY
             else (batch, width)
         )
-        collected[spec.name] = torch.zeros(*shape)
+        collected[spec.name] = np.zeros(shape, dtype=np.float32)
 
     for row, (surface, targets) in enumerate(zip(surfaces, targets_per_surface)):
         for column, slot_index in enumerate(surface.entity_slots):
@@ -1090,9 +1115,12 @@ def entity_target_tensors(
                 if value is None:
                     continue
                 if isinstance(value, list):
-                    collected[spec.name][row, column, : len(value)] = torch.tensor(
-                        value, dtype=torch.float32,
-                    )
+                    collected[spec.name][row, column, : len(value)] = value
                 else:
                     collected[spec.name][row, column] = float(value)
-    return gate, collected, mask, index
+    return (
+        torch.from_numpy(gate),
+        {name: torch.from_numpy(values) for name, values in collected.items()},
+        torch.from_numpy(mask),
+        torch.from_numpy(index),
+    )
