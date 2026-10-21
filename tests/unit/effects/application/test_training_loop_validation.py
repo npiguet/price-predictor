@@ -18,7 +18,7 @@ from effects.application.training_loop import (
     _format_floor,
     _format_parts,
 )
-from effects.domain.effect_head_layout import FIELDS_BY_NAME
+from effects.domain.effect_head_layout import FIELDS_BY_NAME, EntityFieldTargets
 from effects.domain.loss_floor import EntityTargetBatch, constant_predictor_floor
 from effects.domain.records import CombatPayload, RecordKind
 from effects.domain.sampling import SAMPLING_CLASSES
@@ -235,7 +235,9 @@ def test_a_field_whose_targets_never_vary_reads_not_applicable_end_to_end():
     """
     gate = torch.ones(2, 2)
     batch = EntityTargetBatch(
-        gate=gate, fields={"damage_taken": torch.zeros(2, 2)}, mask=gate,
+        gate=gate,
+        fields=EntityFieldTargets.everywhere({"damage_taken": torch.zeros(2, 2)}),
+        mask=gate,
     )
     fields = (FIELDS_BY_NAME["damage_taken"],)
 

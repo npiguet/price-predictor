@@ -22,7 +22,7 @@ import random
 from collections import Counter
 from collections.abc import Iterator, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from enum import StrEnum
 from pathlib import Path
 
@@ -49,6 +49,7 @@ from effects.domain.effect_head_input import SlotKind
 from effects.domain.effect_head_layout import (
     CREATED_OBJECTS_WIDTH,
     VERDICT_WIDTH,
+    EntityFieldTargets,
     FieldSpec,
     active_fields,
 )
@@ -154,7 +155,7 @@ class PreparedStep:
     fields: tuple[FieldSpec, ...]
     #: ``entity_target_tensors``' four outputs.
     gate: torch.Tensor
-    field_targets: dict[str, torch.Tensor]
+    field_targets: EntityFieldTargets
     mask: torch.Tensor
     index: torch.Tensor
     heads: HeadTargets
@@ -177,7 +178,9 @@ class PreparedStep:
     def pin(self) -> None:
         """Every tensor the device half copies, in page-locked memory."""
         self.batch.pin()
-        self.field_targets = pinned(self.field_targets)
+        self.field_targets = replace(
+            self.field_targets, values=pinned(dict(self.field_targets.values)),
+        )
         self.index = self.index.pin_memory()
         self.heads.pin()
 

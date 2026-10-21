@@ -128,7 +128,7 @@ def run_ablation(probe_model, records: list, stats: CacheStatistics, *,
         device = gathered.device
         _total, parts = per_entity_loss(
             gathered.float(), gate.to(device),
-            {k: v.to(device) for k, v in field_targets.items()},
+            field_targets.to(device),
             mask.to(device), fields=fields, report_parts=True,
         )
         return parts
@@ -205,7 +205,7 @@ def field_losses(model, probe_model, records: list, *, batch_size: int = 32) -> 
             device = gathered.device
             _total, parts = per_entity_loss(
                 gathered, gate.to(device),
-                {k: v.to(device) for k, v in field_targets.items()},
+                field_targets.to(device),
                 mask.to(device), fields=probe_model.fields, report_parts=True,
             )
             for name, value in parts.items():

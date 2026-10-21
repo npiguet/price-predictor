@@ -30,7 +30,7 @@ import torch
 from effects.application.breakdowns import TOTAL, RecordResult
 from effects.application.surface_batching import SurfaceBatcher
 from effects.domain.damage_step_keywords import KeywordResolver, keyword_of_line
-from effects.domain.effect_head_layout import FIELDS_BY_NAME, GATE_INDEX
+from effects.domain.effect_head_layout import FIELDS_BY_NAME, GATE_INDEX, EntityFieldTargets
 from effects.domain.effect_losses import per_entity_loss
 from effects.domain.effect_targets import derive_targets
 from effects.domain.gate_metrics import balanced_accuracy, f1_score, poisson_deviance
@@ -178,7 +178,7 @@ class MarginAccumulator:
 
     def add(
         self, gathered: torch.Tensor, gate: torch.Tensor,
-        field_targets: dict[str, torch.Tensor], mask: torch.Tensor,
+        field_targets: EntityFieldTargets, mask: torch.Tensor,
     ) -> None:
         """Fold one chunk's gathered outputs and targets in.
 
@@ -194,19 +194,21 @@ class MarginAccumulator:
 
         affected = real & gate.bool()
         if ZONE_OUTCOME in field_targets:
-            logits = field_outputs(gathered, FIELDS_BY_NAME[ZONE_OUTCOME])[affected]
+            scored = affected & field_targets.present[ZONE_OUTCOME]
+            logits = field_outputs(gathered, FIELDS_BY_NAME[ZONE_OUTCOME])[scored]
             if logits.numel():
                 self._zone_pred.append(logits.argmax(-1).numpy())
-                self._zone_true.append(field_targets[ZONE_OUTCOME][affected].numpy())
+                self._zone_true.append(field_targets.values[ZONE_OUTCOME][scored].numpy())
         for spec in self._magnitude_specs:
-            target = field_targets.get(spec.name)
+            target = field_targets.values.get(spec.name)
             if target is None:
                 continue
-            slice_ = field_outputs(gathered, spec)[affected]
+            scored = affected & field_targets.present[spec.name]
+            slice_ = field_outputs(gathered, spec)[scored]
             if not slice_.numel():
                 continue
             self._count_pred.append(expected_magnitude(spec, slice_).numpy())
-            self._count_true.append(np.abs(target[affected].numpy()))
+            self._count_true.append(np.abs(target[scored].numpy()))
 
     def metrics(self, *, records: tuple[RecordResult, ...] = ()) -> GateOneMetrics:
         """The three margins over everything added; NaN where nothing was."""
@@ -222,7 +224,7 @@ class MarginAccumulator:
 
 def _record_losses(
     row: int, gathered: torch.Tensor, gate: torch.Tensor,
-    field_targets: dict[str, torch.Tensor], mask: torch.Tensor, fields,
+    field_targets: EntityFieldTargets, mask: torch.Tensor, fields,
 ) -> dict[str, float]:
     """One record's per-entity loss by field: ``per_entity_loss`` on it alone.
 
@@ -237,7 +239,7 @@ def _record_losses(
     rows = slice(row, row + 1)
     _total, losses = per_entity_loss(
         gathered[rows], gate[rows],
-        {name: target[rows] for name, target in field_targets.items()},
+        field_targets.select(rows),
         mask[rows], fields=fields, report_parts=True,
     )
     losses[TOTAL] = sum(losses.values())

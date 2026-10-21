@@ -21,6 +21,7 @@ from effects.domain.effect_head_layout import (
     VALUE_SLICES,
     VERDICT_BITS,
     CreatedSlot,
+    EntityFieldTargets,
     FieldSpec,
     FieldType,
 )
@@ -100,7 +101,7 @@ def field_loss(
 def per_entity_loss(
     outputs: torch.Tensor,
     gate_target: torch.Tensor,
-    field_targets: dict[str, torch.Tensor],
+    field_targets: EntityFieldTargets,
     entity_mask: torch.Tensor,
     *,
     fields: tuple[FieldSpec, ...],
@@ -111,7 +112,8 @@ def per_entity_loss(
     Args:
         outputs: ``(batch, entities, PER_ENTITY_WIDTH)``.
         gate_target: ``(batch, entities)``, 1 where the entity was affected.
-        field_targets: per-field ``(batch, entities, …)`` targets.
+        field_targets: per-field ``(batch, entities, …)`` targets and where
+            each is present.
         entity_mask: ``(batch, entities)``, 1 for a real entity.
         fields: the fields active at this step, from :func:`active_fields`.
         report_parts: read each term back as a Python float for logging. Off by
@@ -122,10 +124,11 @@ def per_entity_loss(
             breakdown a log line prints sums to the loss printed beside it.
 
     The gate trains on every entity — players included, since the head is mapped
-    over ``[PLAYER]`` outputs too. Conditional fields train only where the
-    gate's *target* fires, not where its prediction does: supervising on the
-    prediction would let a head that gates everything off escape the field loss
-    entirely.
+    over ``[PLAYER]`` outputs too. A conditional field trains only where the
+    gate's *target* fires and the field is present — where the record said
+    something about it — and not where the gate's prediction fires: supervising
+    on the prediction would let a head that gates everything off escape the
+    field loss entirely.
 
     Normalizing per record rather than per entity keeps a twelve-permanent board
     from outweighing a two-permanent one; each record is one observation of an
@@ -140,7 +143,7 @@ def per_entity_loss(
     real_mask = entity_mask.detach().bool().cpu()
     gate_host = gate_target.detach().cpu()
     real = real_mask.flatten().nonzero().squeeze(1)
-    hit = (real_mask & gate_host.bool()).flatten().nonzero().squeeze(1)
+    hit_mask = real_mask & gate_host.bool()
     flat_outputs = outputs.reshape(-1, outputs.shape[-1])
     gate = functional.binary_cross_entropy_with_logits(
         flat_outputs.index_select(0, real.to(device, non_blocking=True))[:, GATE_INDEX],
@@ -151,19 +154,22 @@ def per_entity_loss(
         parts["gate"] = float(gate.detach())
     total = gate
 
-    any_affected = hit.numel() > 0
-    hit_device = hit.to(device, non_blocking=True)
-    affected_outputs = flat_outputs.index_select(0, hit_device) if any_affected else None
     for spec in fields:
-        target = field_targets.get(spec.name)
-        if target is None or not any_affected:
+        target = field_targets.values.get(spec.name)
+        if target is None:
             continue
+        present = field_targets.present[spec.name].detach().bool().cpu()
+        rows = (hit_mask & present).flatten().nonzero().squeeze(1)
+        if rows.numel() == 0:
+            continue
+        rows_device = rows.to(device, non_blocking=True)
         start, end = FIELD_SLICES[spec.name]
         flat_target = target.reshape(-1, *target.shape[2:])
-        rows = hit if flat_target.device.type == "cpu" else hit_device
         loss = field_loss(
-            spec, affected_outputs[:, start:end],
-            flat_target.index_select(0, rows).to(device, non_blocking=True),
+            spec, flat_outputs.index_select(0, rows_device)[:, start:end],
+            flat_target.index_select(
+                0, rows if flat_target.device.type == "cpu" else rows_device,
+            ).to(device, non_blocking=True),
         )
         if report_parts:
             parts[spec.name] = float(loss.detach())

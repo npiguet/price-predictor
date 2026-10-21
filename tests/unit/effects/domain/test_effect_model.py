@@ -36,6 +36,7 @@ from effects.domain.effect_head_layout import (
     VERDICT_BITS,
     VERDICT_WIDTH,
     ZONE_OUTCOMES,
+    EntityFieldTargets,
     FieldGroup,
     FieldScope,
     FieldSpec,
@@ -277,7 +278,7 @@ class TestLosses:
     def test_a_conditional_field_contributes_nothing_where_the_gate_is_off(self):
         outputs = self._outputs()
         entity_mask = torch.ones(2, 3)
-        targets = {"damage_taken": torch.zeros(2, 3)}
+        targets = EntityFieldTargets.everywhere({"damage_taken": torch.zeros(2, 3)})
         fields = (FIELDS_BY_NAME["damage_taken"],)
         off = per_entity_loss(
             outputs, torch.zeros(2, 3), targets, entity_mask, fields=fields,
@@ -344,7 +345,7 @@ class TestLosses:
         count, so a two-record batch printed fields summing to twice its loss.
         """
         outputs = self._outputs()
-        targets = {"damage_taken": torch.ones(2, 3)}
+        targets = EntityFieldTargets.everywhere({"damage_taken": torch.ones(2, 3)})
         fields = (FIELDS_BY_NAME["damage_taken"],)
         total, parts = per_entity_loss(
             outputs, torch.ones(2, 3), targets, torch.ones(2, 3),
@@ -547,10 +548,10 @@ class TestConstantPredictorFloor:
         gate = torch.tensor(gate, dtype=torch.float32)
         return EntityTargetBatch(
             gate=gate,
-            fields={
+            fields=EntityFieldTargets.everywhere({
                 name: torch.tensor(value, dtype=torch.float32)
                 for name, value in fields.items()
-            },
+            }),
             mask=torch.ones_like(gate) if mask is None
             else torch.tensor(mask, dtype=torch.float32),
         )
@@ -657,10 +658,10 @@ class TestDegenerateFields:
         gate = torch.tensor(gate, dtype=torch.float32)
         return EntityTargetBatch(
             gate=gate,
-            fields={
+            fields=EntityFieldTargets.everywhere({
                 name: torch.tensor(value, dtype=torch.float32)
                 for name, value in fields.items()
-            },
+            }),
             mask=torch.ones_like(gate),
         )
 
@@ -1017,7 +1018,7 @@ class TestHostPickedRowsMatchBooleanMasks:
                 case FieldType.CATEGORICAL:
                     out[spec.name] = torch.randint(
                         0, spec.arity, (batch, entities), generator=generator)
-        return PER_ENTITY_FIELDS, out
+        return PER_ENTITY_FIELDS, EntityFieldTargets.everywhere(out)
 
     def _reference(self, outputs, gate_target, field_targets, entity_mask, fields):
         from effects.domain.effect_head_layout import FIELD_SLICES, GATE_INDEX
@@ -1033,7 +1034,7 @@ class TestHostPickedRowsMatchBooleanMasks:
             if affected.any():
                 total = total + field_loss(
                     spec, outputs[..., start:end][affected],
-                    field_targets[spec.name][affected],
+                    field_targets.values[spec.name][affected],
                 )
         return total / outputs.shape[0]
 
@@ -1110,7 +1111,9 @@ class TestMagnitudeCap:
         def floor(value):
             batch = EntityTargetBatch(
                 gate=torch.ones(1, 2),
-                fields={"damage_taken": torch.tensor([[2.0, value]])},
+                fields=EntityFieldTargets.everywhere(
+                    {"damage_taken": torch.tensor([[2.0, value]])},
+                ),
                 mask=torch.ones(1, 2),
             )
             return constant_predictor_outputs(

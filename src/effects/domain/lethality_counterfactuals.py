@@ -339,7 +339,7 @@ def _relabel(entry: EntityTargets, qualified: Qualified, amount: int, dies: bool
         fields["zone_outcome"] = _DIED
     else:
         fields.pop("zone_outcome", None)
-    return EntityTargets(affected=True, fields=fields)
+    return replace(entry, affected=True, fields=fields)
 
 
 def counterfactual(record, qualified: Qualified, targets: dict[str, EntityTargets],
@@ -388,5 +388,5 @@ def counterfactual(record, qualified: Qualified, targets: dict[str, EntityTarget
     for subject in qualified.players:
         fields = dict(targets[subject].fields)
         fields["life_delta"] = float(-amount)
-        relabelled[subject] = EntityTargets(affected=True, fields=fields)
+        relabelled[subject] = replace(targets[subject], fields=fields)
     return Counterfactual(record=copied, key=key, text=edited, targets=relabelled)

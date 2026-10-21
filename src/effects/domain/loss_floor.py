@@ -16,6 +16,7 @@ from effects.domain.effect_head_layout import (
     FIELD_SLICES,
     GATE_INDEX,
     PER_ENTITY_WIDTH,
+    EntityFieldTargets,
     FieldSpec,
     FieldType,
 )
@@ -43,7 +44,7 @@ class EntityTargetBatch:
     """
 
     gate: torch.Tensor
-    fields: Mapping[str, torch.Tensor]
+    fields: EntityFieldTargets
     mask: torch.Tensor
 
 
@@ -70,11 +71,13 @@ def _supervised(
 ) -> torch.Tensor | None:
     """One field's targets over every supervised entity of every batch.
 
-    Supervised is where the gate's *target* fires, which is the same selection
-    :func:`per_entity_loss` scores a conditional field on.
+    Supervised is where the gate's *target* fires and the field is present,
+    which is the same selection :func:`per_entity_loss` scores it on.
     """
     parts = [
-        batch.fields[name][batch.mask.bool() & batch.gate.bool()]
+        batch.fields.values[name][
+            batch.mask.bool() & batch.gate.bool() & batch.fields.present[name].bool()
+        ]
         for batch in batches if name in batch.fields
     ]
     if not parts:
@@ -174,7 +177,7 @@ def constant_predictor_floor(
     for batch in batches:
         _, parts = per_entity_loss(
             vector.expand(*batch.gate.shape, PER_ENTITY_WIDTH),
-            batch.gate, dict(batch.fields), batch.mask,
+            batch.gate, batch.fields, batch.mask,
             fields=fields, report_parts=True,
         )
         means.add(parts)

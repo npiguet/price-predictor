@@ -770,10 +770,7 @@ class TrainingLoop(StepPreparation):
             # for the device to say which entities were real or affected.
             loss, parts = per_entity_loss(
                 gathered, prepared.gate,
-                {
-                    k: v.to(self.device, non_blocking=True)
-                    for k, v in prepared.field_targets.items()
-                },
+                prepared.field_targets.to(self.device, non_blocking=True),
                 prepared.mask, fields=prepared.fields,
                 report_parts=report_parts,
             )

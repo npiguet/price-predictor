@@ -506,7 +506,7 @@ def method_c(args, probe_model, corpus: Path, eval_records: list) -> dict:
         gathered = outputs.gather(
             1, index.to(device).unsqueeze(-1).expand(-1, -1, outputs.shape[-1]))
         loss, _ = per_entity_loss(gathered, gate.to(device),
-                                  {k: v.to(device) for k, v in targets.items()},
+                                  targets.to(device),
                                   mask.to(device), fields=fields)
         optimizer.zero_grad()
         loss.backward()

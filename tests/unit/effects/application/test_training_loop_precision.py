@@ -15,6 +15,7 @@ import torch
 from effects.application import training_loop as loop_module
 from effects.application.train_effect_model import TrainEffectModelConfig
 from effects.application.training_loop import StepLoss, TrainingLoop, autocast_enabled
+from effects.domain.effect_head_layout import EntityFieldTargets
 from effects.domain.records import CombatPayload, RecordKind
 from effects.domain.split import CorpusSplit
 from effects.infrastructure.record_io import write_shard
@@ -116,7 +117,8 @@ def _run_loss_for(monkeypatch, loop, *, autocast: bool):
     # whether autocast encloses it is not the question.
     prepared = loop_module.PreparedStep(
         batcher=_Batcher(), batch=None, fields=("dummy",),
-        gate=torch.zeros((1, 1)), field_targets={}, mask=torch.zeros((1, 1)),
+        gate=torch.zeros((1, 1)), field_targets=EntityFieldTargets({}, {}),
+        mask=torch.zeros((1, 1)),
         index=torch.zeros((1, 1), dtype=torch.long),
         heads=loop_module.HeadTargets(),
     )

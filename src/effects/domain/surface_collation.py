@@ -10,7 +10,7 @@ import numpy as np
 import torch
 
 from effects.domain.effect_head_input import SlotKind
-from effects.domain.effect_head_layout import FieldSpec, FieldType
+from effects.domain.effect_head_layout import EntityFieldTargets, FieldSpec, FieldType
 
 
 def gather_entities(outputs: torch.Tensor, index: torch.Tensor) -> torch.Tensor:
@@ -105,13 +105,16 @@ def scatter_e_rows(
 
 def entity_target_tensors(
     surfaces: list, targets_per_surface: list[dict], fields: tuple[FieldSpec, ...],
-) -> tuple[torch.Tensor, dict[str, torch.Tensor], torch.Tensor, torch.Tensor]:
+) -> tuple[torch.Tensor, EntityFieldTargets, torch.Tensor, torch.Tensor]:
     """Gather per-entity outputs and their targets into aligned tensors.
 
     Returns ``(gate_target, field_targets, entity_mask, entity_index)``, where
     ``entity_index`` selects the ``[CARD]`` and ``[PLAYER]`` columns of the
     trunk output. A record that mentions an entity no slot represents is simply
-    not gathered — the surface is the authority on what exists.
+    not gathered — the surface is the authority on what exists. Each field is
+    present only where its entity's targets supervise it
+    (``EntityTargets.supervised``); everywhere else its value is a placeholder
+    zero the loss never reads.
     """
     # Built in numpy and handed over whole: assigning element by element into
     # torch tensors costs a dispatch per element, on every step's host half.
@@ -121,6 +124,7 @@ def entity_target_tensors(
     mask = np.zeros((batch, width), dtype=np.float32)
     index = np.zeros((batch, width), dtype=np.int64)
     collected: dict[str, np.ndarray] = {}
+    present: dict[str, np.ndarray] = {}
 
     for spec in fields:
         # Only a multi-binary field's *target* is as wide as its prediction.
@@ -133,6 +137,7 @@ def entity_target_tensors(
             else (batch, width)
         )
         collected[spec.name] = np.zeros(shape, dtype=np.float32)
+        present[spec.name] = np.zeros((batch, width), dtype=np.bool_)
 
     for row, (surface, targets) in enumerate(zip(surfaces, targets_per_surface)):
         for column, slot_index in enumerate(surface.entity_slots):
@@ -145,16 +150,20 @@ def entity_target_tensors(
                 continue
             gate[row, column] = 1.0 if entry.affected else 0.0
             for spec in fields:
-                value = entry.fields.get(spec.name)
+                value = entry.supervised(spec)
                 if value is None:
                     continue
+                present[spec.name][row, column] = True
                 if isinstance(value, list):
                     collected[spec.name][row, column, : len(value)] = value
                 else:
                     collected[spec.name][row, column] = float(value)
     return (
         torch.from_numpy(gate),
-        {name: torch.from_numpy(values) for name, values in collected.items()},
+        EntityFieldTargets(
+            {name: torch.from_numpy(values) for name, values in collected.items()},
+            {name: torch.from_numpy(rows) for name, rows in present.items()},
+        ),
         torch.from_numpy(mask),
         torch.from_numpy(index),
     )

@@ -6,14 +6,26 @@ wrong tail. A signed delta decomposes into a direction and a magnitude, because
 "gains life" and "loses life" are a different question from "how much". A closed
 vocabulary is categorical. A gate is binary.
 
-Torch-free: the targets, the losses, the floor and the model all read the
-layout, and none of them owns it.
+A field is scored on an affected entity only where the record says something
+about it (FR-077, FR-081). Two things make a field *present*: a value the
+record wrote — an event, or a payload's legality mark — or the field's
+**silent** value, which is what "affected, and nothing said" means for a field
+whose absence is itself an observation. A creature a burn spell damaged and did
+not kill stayed where it was and gained no counters; that is known. Whether it
+was tapped is not, and a tapped creature is not the opposite of one no event
+mentioned. So a field takes its silent value only where the record's sampling
+class supervises it and the entity is the kind the field describes — a player
+is never scored on a zone, a permanent never on life — and the tap state, the
+durations and the legality bits have no silent value at all.
 """
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from enum import StrEnum
+
+import torch
 
 from effects.domain.effect_head_input import (
     CARD_TYPES,
@@ -22,6 +34,7 @@ from effects.domain.effect_head_input import (
 )
 from effects.domain.sampling import (
     CLASS_COMBAT,
+    CLASS_CONTINUOUS,
     CLASS_PLAYABILITY_DECISION,
     CLASS_PLAYABILITY_LEGALITY,
     CLASS_RESOLUTION_COST,
@@ -42,11 +55,14 @@ DURATIONS: tuple[str, ...] = ("instant", "end_of_turn", "permanent")
 LIBRARY_EVENTS: tuple[str, ...] = ("scry", "surveil", "tutor", "reveal", "reorder")
 
 
-#: Classes whose records describe an outcome for an arbitrary entity. Used
-#: below to say "every effect-shaped record supervises this field".
+#: Classes whose records list every outcome event of what they describe, so an
+#: affected entity no event of a kind names underwent none of that kind.
 _EFFECTFUL = frozenset({
     CLASS_RESOLUTION_EFFECT, CLASS_REWRITE, CLASS_RESOLUTION_COST, CLASS_COMBAT,
 })
+#: The effectful classes plus ``continuous``, whose contribution names every
+#: P/T, keyword, type and colour change its static makes to the entity.
+_STATIC_CHANNELS = _EFFECTFUL | {CLASS_CONTINUOUS}
 
 
 class FieldType(StrEnum):
@@ -70,10 +86,11 @@ class FieldGroup(StrEnum):
 
 
 class FieldScope(StrEnum):
-    """Which slot kind a field is predicted at."""
+    """Which kind of entity a field describes, and so where its silent value applies."""
 
     PERMANENT = "permanent"
     PLAYER = "player"
+    #: The legality bits, which only a payload's own marks ever set.
     LEGALITY = "legality"
 
 
@@ -89,6 +106,10 @@ class FieldSpec:
     group: FieldGroup = FieldGroup.DENSE
     #: Sampling classes whose records carry a target for this field.
     supervised_by: frozenset[str] = field(default_factory=lambda: _EFFECTFUL)
+    #: The value an affected entity of ``scope`` takes when a record of a
+    #: supervising class names no change to the field; every member of a
+    #: multi-binary field. None for a field only a written value supervises.
+    silent: float | None = None
 
     @property
     def width(self) -> int:
@@ -104,6 +125,27 @@ class FieldSpec:
                 return 4
         raise ValueError(f"unhandled field type {self.type}")
 
+    def supervised_value(
+        self, written: Mapping[str, object], unknown: frozenset[str] | set[str],
+        *, record_class: str | None, scope: FieldScope | None,
+    ):
+        """This field's target for one affected entity, or None where it is absent.
+
+        ``written`` holds what the record set; ``unknown`` the fields it
+        declares it cannot say, which no silent value overrides.
+        """
+        value = written.get(self.name)
+        if value is not None:
+            return value
+        if (
+            self.silent is None or self.name in unknown
+            or scope is not self.scope or record_class not in self.supervised_by
+        ):
+            return None
+        if self.type is FieldType.MULTI_BINARY:
+            return [self.silent] * self.arity
+        return self.silent
+
 
 def _counter_fields() -> tuple[FieldSpec, ...]:
     """One signed delta per tracked counter type, plus a catch-all."""
@@ -113,6 +155,7 @@ def _counter_fields() -> tuple[FieldSpec, ...]:
             type=FieldType.SIGNED_DELTA,
             scope=FieldScope.PERMANENT,
             group=FieldGroup.SPARSE,
+            silent=0.0,
         )
         for name in (*COUNTER_TYPES, "OTHER")
     )
@@ -124,6 +167,7 @@ def _mana_fields() -> tuple[FieldSpec, ...]:
             name=f"mana_delta_{color.lower()}",
             type=FieldType.SIGNED_DELTA,
             scope=FieldScope.PLAYER,
+            silent=0.0,
         )
         for color in COLORS
     )
@@ -134,45 +178,57 @@ def _mana_fields() -> tuple[FieldSpec, ...]:
 PER_ENTITY_FIELDS: tuple[FieldSpec, ...] = (
     # ── permanents and stack entities ──
     FieldSpec("zone_outcome", FieldType.CATEGORICAL, FieldScope.PERMANENT,
-              arity=len(ZONE_OUTCOMES)),
+              arity=len(ZONE_OUTCOMES), silent=float(ZONE_OUTCOMES.index("stayed"))),
+    # Tapped or untapped only where an event says so: a creature no event
+    # mentions is neither.
     FieldSpec("tap_state", FieldType.BINARY, FieldScope.PERMANENT),
-    FieldSpec("damage_taken", FieldType.COUNT, FieldScope.PERMANENT),
-    FieldSpec("power_delta", FieldType.SIGNED_DELTA, FieldScope.PERMANENT),
-    FieldSpec("toughness_delta", FieldType.SIGNED_DELTA, FieldScope.PERMANENT),
+    FieldSpec("damage_taken", FieldType.COUNT, FieldScope.PERMANENT, silent=0.0),
+    FieldSpec("power_delta", FieldType.SIGNED_DELTA, FieldScope.PERMANENT,
+              supervised_by=_STATIC_CHANNELS, silent=0.0),
+    FieldSpec("toughness_delta", FieldType.SIGNED_DELTA, FieldScope.PERMANENT,
+              supervised_by=_STATIC_CHANNELS, silent=0.0),
     FieldSpec("pt_duration", FieldType.CATEGORICAL, FieldScope.PERMANENT,
-              arity=len(DURATIONS), group=FieldGroup.SPARSE),
+              arity=len(DURATIONS), group=FieldGroup.SPARSE,
+              supervised_by=_STATIC_CHANNELS),
     *_counter_fields(),
     FieldSpec("types_gained", FieldType.MULTI_BINARY, FieldScope.PERMANENT,
-              arity=len(CARD_TYPES), group=FieldGroup.SPARSE),
+              arity=len(CARD_TYPES), group=FieldGroup.SPARSE,
+              supervised_by=_STATIC_CHANNELS, silent=0.0),
     FieldSpec("types_lost", FieldType.MULTI_BINARY, FieldScope.PERMANENT,
-              arity=len(CARD_TYPES), group=FieldGroup.SPARSE),
+              arity=len(CARD_TYPES), group=FieldGroup.SPARSE,
+              supervised_by=_STATIC_CHANNELS, silent=0.0),
     FieldSpec("colors_gained", FieldType.MULTI_BINARY, FieldScope.PERMANENT,
-              arity=len(COLORS), group=FieldGroup.SPARSE),
+              arity=len(COLORS), group=FieldGroup.SPARSE,
+              supervised_by=_STATIC_CHANNELS, silent=0.0),
     FieldSpec("colors_lost", FieldType.MULTI_BINARY, FieldScope.PERMANENT,
-              arity=len(COLORS), group=FieldGroup.SPARSE),
+              arity=len(COLORS), group=FieldGroup.SPARSE,
+              supervised_by=_STATIC_CHANNELS, silent=0.0),
     FieldSpec("type_color_duration", FieldType.CATEGORICAL, FieldScope.PERMANENT,
-              arity=len(DURATIONS), group=FieldGroup.SPARSE),
+              arity=len(DURATIONS), group=FieldGroup.SPARSE,
+              supervised_by=_STATIC_CHANNELS),
     FieldSpec("keywords_gained", FieldType.MULTI_BINARY, FieldScope.PERMANENT,
-              arity=len(OVERLAY_KEYWORDS), group=FieldGroup.SPARSE),
+              arity=len(OVERLAY_KEYWORDS), group=FieldGroup.SPARSE,
+              supervised_by=_STATIC_CHANNELS, silent=0.0),
     FieldSpec("keywords_lost", FieldType.MULTI_BINARY, FieldScope.PERMANENT,
-              arity=len(OVERLAY_KEYWORDS), group=FieldGroup.SPARSE),
+              arity=len(OVERLAY_KEYWORDS), group=FieldGroup.SPARSE,
+              supervised_by=_STATIC_CHANNELS, silent=0.0),
     FieldSpec("control_change", FieldType.BINARY, FieldScope.PERMANENT,
-              group=FieldGroup.SPARSE),
+              group=FieldGroup.SPARSE, silent=0.0),
     FieldSpec("attached_to_change", FieldType.BINARY, FieldScope.PERMANENT,
-              group=FieldGroup.SPARSE),
+              group=FieldGroup.SPARSE, silent=0.0),
     # ── players ──
-    FieldSpec("life_delta", FieldType.SIGNED_DELTA, FieldScope.PLAYER),
-    FieldSpec("cards_drawn", FieldType.COUNT, FieldScope.PLAYER),
-    FieldSpec("cards_discarded", FieldType.COUNT, FieldScope.PLAYER),
-    FieldSpec("cards_milled", FieldType.COUNT, FieldScope.PLAYER),
+    FieldSpec("life_delta", FieldType.SIGNED_DELTA, FieldScope.PLAYER, silent=0.0),
+    FieldSpec("cards_drawn", FieldType.COUNT, FieldScope.PLAYER, silent=0.0),
+    FieldSpec("cards_discarded", FieldType.COUNT, FieldScope.PLAYER, silent=0.0),
+    FieldSpec("cards_milled", FieldType.COUNT, FieldScope.PLAYER, silent=0.0),
     FieldSpec("library_events", FieldType.MULTI_BINARY, FieldScope.PLAYER,
-              arity=len(LIBRARY_EVENTS)),
+              arity=len(LIBRARY_EVENTS), silent=0.0),
     # Poison is not in FR-077's player group, but the snapshot tracks it and
     # gate 2's infect row has nowhere else to land: infect's whole player-side
     # effect is poison, so without this field that row could never fire.
-    FieldSpec("poison_delta", FieldType.SIGNED_DELTA, FieldScope.PLAYER),
+    FieldSpec("poison_delta", FieldType.SIGNED_DELTA, FieldScope.PLAYER, silent=0.0),
     *_mana_fields(),
-    # ── legality bits ──
+    # ── legality bits: only a payload's own marks set them ──
     FieldSpec("target_legal", FieldType.BINARY, FieldScope.LEGALITY,
               supervised_by=frozenset({CLASS_PLAYABILITY_DECISION})),
     FieldSpec("attacker_legal", FieldType.BINARY, FieldScope.LEGALITY,
@@ -253,7 +309,6 @@ for _name, _kind in VALUE_TARGETS:
 VALUE_WIDTH = _value_offset
 
 
-
 def per_entity_fields_of_type(*types: FieldType) -> tuple[FieldSpec, ...]:
     """Every per-entity field of one of ``types``.
 
@@ -283,3 +338,51 @@ def active_fields(
         and (spec.group is FieldGroup.DENSE or step >= curriculum_step)
     )
 
+
+
+@dataclass(frozen=True)
+class EntityFieldTargets:
+    """A batch's per-entity field targets, each beside where it is present.
+
+    ``values[name]`` is ``(batch, entities)`` — ``(batch, entities, arity)`` for
+    a multi-binary field — and ``present[name]`` the ``(batch, entities)`` bool
+    mask of the entities whose record supervises the field. A field is scored
+    only where the gate's target fires *and* it is present.
+
+    ``present`` stays on the host whatever device the values move to: the loss
+    picks its rows there, so no step waits for the device to say which.
+    """
+
+    values: Mapping[str, torch.Tensor]
+    present: Mapping[str, torch.Tensor]
+
+    @classmethod
+    def everywhere(cls, values: Mapping[str, torch.Tensor]) -> EntityFieldTargets:
+        """``values`` present at every entity."""
+        return cls(
+            dict(values),
+            {
+                name: torch.ones(value.shape[:2], dtype=torch.bool)
+                for name, value in values.items()
+            },
+        )
+
+    def __contains__(self, name: str) -> bool:
+        return name in self.values
+
+    def to(self, device, *, non_blocking: bool = False) -> EntityFieldTargets:
+        """The values on ``device``; the presence masks stay where they are."""
+        return EntityFieldTargets(
+            {
+                name: value.to(device, non_blocking=non_blocking)
+                for name, value in self.values.items()
+            },
+            self.present,
+        )
+
+    def select(self, rows) -> EntityFieldTargets:
+        """The records ``rows`` indexes, every field and mask alike."""
+        return EntityFieldTargets(
+            {name: value[rows] for name, value in self.values.items()},
+            {name: mask[rows] for name, mask in self.present.items()},
+        )
