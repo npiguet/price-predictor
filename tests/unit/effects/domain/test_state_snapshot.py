@@ -24,6 +24,7 @@ from effects.domain.state_snapshot import (
     StackExtras,
     StateSnapshot,
 )
+from tests.unit.effects.builders import make_snapshot
 
 
 @pytest.fixture
@@ -41,10 +42,9 @@ def _snapshot(**overrides) -> StateSnapshot:
             PlayerState(id="P0", life=14, hand=3, library=21, graveyard=9),
             PlayerState(id="P1", life=8, hand=1, library=30, graveyard=4),
         ),
-        "entities": (),
     }
     defaults.update(overrides)
-    return StateSnapshot(**defaults)
+    return make_snapshot(**defaults)
 
 
 class TestInclusionTiers:

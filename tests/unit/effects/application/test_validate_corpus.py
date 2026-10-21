@@ -53,13 +53,13 @@ from effects.domain.records import (
     TriggerPayload,
 )
 from effects.domain.state_snapshot import (
-    EntityState,
     GlobalState,
     InclusionTier,
     StateSnapshot,
 )
 from effects.infrastructure.record_io import ShardWriter
 from effects.infrastructure.sidecar_io import SidecarCache, write_sidecar
+from tests.unit.effects.builders import make_entity, make_snapshot
 
 _KEY = ProvenanceKey("cardsfolder/l/lightning_bolt.txt", 0, "spell", 0)
 _BEARS = "cardsfolder/g/grizzly_bears.txt"
@@ -70,16 +70,12 @@ _STAGE_TWO = frozenset({
 
 
 def _snapshot(turn: int = 3, names: tuple[str, ...] = (), tiers=None) -> StateSnapshot:
-    return StateSnapshot(
+    return make_snapshot(
         global_=GlobalState(
             turn=turn, phase="main1", active="P0", priority="P0", stack_size=0,
         ),
-        players=(),
         entities=tuple(
-            EntityState(
-                id=f"E{index}", name=name, zone="battlefield", controller="P0",
-            )
-            for index, name in enumerate(names)
+            make_entity(f"E{index}", name) for index, name in enumerate(names)
         ),
         tiers=_STAGE_TWO if tiers is None else tiers,
     )

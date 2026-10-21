@@ -52,7 +52,6 @@ from effects.domain.records import (
     PlayabilitySubkind,
     RecordKind,
     ResolutionOutcome,
-    ResolutionPayload,
     TriggerPayload,
 )
 from effects.domain.state_snapshot import (
@@ -66,6 +65,7 @@ from effects.domain.state_snapshot import (
     Refs,
     StateSnapshot,
 )
+from tests.unit.effects.builders import make_entity, make_record, make_snapshot
 
 E_DIM = 4
 _ZERO = (0.0,) * E_DIM
@@ -87,12 +87,11 @@ def _e_for(key: ProvenanceKey):
 
 def _entity(entity_id: str, **overrides) -> EntityState:
     defaults = {
-        "id": entity_id, "name": "Serra Angel", "zone": "battlefield",
-        "controller": "P0", "types": ("Creature",), "colors": ("W",),
+        "name": "Serra Angel", "types": ("Creature",), "colors": ("W",),
         "mana_value": 5, "pt": PowerToughness(base=(4, 4)),
     }
     defaults.update(overrides)
-    return EntityState(**defaults)
+    return make_entity(entity_id, defaults.pop("name"), **defaults)
 
 
 def _snapshot(**overrides) -> StateSnapshot:
@@ -110,24 +109,18 @@ def _snapshot(**overrides) -> StateSnapshot:
         ),
     }
     defaults.update(overrides)
-    return StateSnapshot(**defaults)
+    return make_snapshot(**defaults)
 
 
 def _record(**overrides) -> EffectRecord:
     kind = overrides.pop("kind", RecordKind.RESOLUTION)
     defaults: dict = {
-        "record_id": "run.0.1", "run_id": "run", "timestamp": "t",
-        "game_id": "run.0.1", "kind": kind, "actor_player": "P0",
-        "state": _snapshot(),
+        "record_id": "run.0.1", "game_id": "run.0.1", "state": _snapshot(),
     }
     if kind is RecordKind.RESOLUTION:
-        defaults["moment"] = Moment.RESOLUTION
         defaults["ability"] = (_BOLT,)
-        defaults["payload"] = ResolutionPayload()
-    elif kind is RecordKind.COMBAT:
-        defaults["payload"] = CombatPayload()
     defaults.update(overrides)
-    return EffectRecord(**defaults)
+    return make_record(kind, **defaults)
 
 
 def _build(record, **kwargs):

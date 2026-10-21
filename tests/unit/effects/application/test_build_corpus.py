@@ -60,10 +60,11 @@ from effects.domain.records import (
     ResolutionPayload,
     RewritePayload,
 )
-from effects.domain.state_snapshot import EntityState, GlobalState, StateSnapshot
+from effects.domain.state_snapshot import StateSnapshot
 from effects.infrastructure.corpus_store import CorpusStore
 from effects.infrastructure.record_io import iter_shards, read_records, read_shard, write_shard
 from effects.infrastructure.sidecar_io import sidecar_path_for, write_sidecar
+from tests.unit.effects.builders import make_entity, make_snapshot
 
 _HELD_OUT_CARD = "Held Out Bears"
 #: Found by brute force over ``text_is_held_out(..., permille=20)`` (the
@@ -172,14 +173,9 @@ def _write_forge_tokenscripts(root: Path) -> Path:
 
 
 def _snapshot(entity_names: tuple[str, ...] = ()) -> StateSnapshot:
-    return StateSnapshot(
-        global_=GlobalState(
-            turn=1, phase="main1", active="P0", priority="P0", stack_size=0,
-        ),
-        players=(),
+    return make_snapshot(
         entities=tuple(
-            EntityState(id=f"E{index}", name=name, zone="battlefield", controller="P0")
-            for index, name in enumerate(entity_names)
+            make_entity(f"E{index}", name) for index, name in enumerate(entity_names)
         ),
     )
 
