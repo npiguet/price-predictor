@@ -131,3 +131,26 @@ def test_effects_never_imports_the_sealed_application_layer() -> None:
         "a subprocess so the two application layers stay disjoint:\n  "
         + "\n  ".join(violations)
     )
+
+
+#: Modules the corpus workers and record readers import, which must not pull in
+#: torch: every build-corpus survey and write worker is a fresh process, and
+#: loading torch in each costs seconds and hundreds of megabytes for nothing.
+_TORCH_FREE = (
+    "effects.domain.keyword_names",
+    "effects.domain.records",
+    "effects.domain.record_quality",
+    "effects.domain.corpus_curation",
+)
+
+
+@pytest.mark.parametrize("module", _TORCH_FREE)
+def test_corpus_side_modules_never_load_torch(module: str) -> None:
+    import subprocess
+    import sys
+
+    probe = f"import sys, {module}\nprint('torch' in sys.modules)\n"
+    result = subprocess.run(
+        [sys.executable, "-c", probe], capture_output=True, text=True, check=True,
+    )
+    assert result.stdout.strip() == "False", f"{module} loads torch"

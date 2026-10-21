@@ -48,10 +48,9 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from effects.domain.effect_targets import events_of
 from effects.domain.event_schema import ATTRIBUTION_UNRESOLVED
 from effects.domain.provenance import KeyResolution, ProvenanceKey
-from effects.domain.records import EffectRecord, RecordKind
+from effects.domain.records import EffectRecord, RecordKind, events_of
 
 NO_ABILITY = "no-ability"
 EVENT_FLOOD = "event-flood"
