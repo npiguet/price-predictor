@@ -860,7 +860,7 @@ def _held_out_text_of_key(
     silently, since an empty match looks exactly like a corpus with no
     held-out ability in it. Normalized the same way for the same reason.
     """
-    from effects.domain.ability_encoder import SURFACE_SCRIPT
+    from effects.domain.ability_tokenizer import SURFACE_SCRIPT
     from effects.domain.text_holdout import normalize_script_text
 
     out: dict[str, str] = {}

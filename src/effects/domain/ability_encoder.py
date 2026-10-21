@@ -32,7 +32,12 @@ from dataclasses import dataclass
 import torch
 import torch.nn as nn
 
-from effects.domain.ability_tokenizer import AbilityTokenizer, Token
+from effects.domain.ability_tokenizer import (
+    SURFACE_PROSE,
+    SURFACE_SCRIPT,
+    AbilityTokenizer,
+    Token,
+)
 
 #: Role vocabulary, in a fixed order so an embedding row means the same thing
 #: across checkpoints. Index 0 is "no role" — the token sat outside every span.
@@ -185,9 +190,6 @@ class AbilityEncoder(nn.Module):
 
 
 # ── surfaces (FR-062, stage four) ───────────────────────────────────────
-
-SURFACE_PROSE = "prose"
-SURFACE_SCRIPT = "script"
 
 
 def surface_of(vocab_path) -> str:

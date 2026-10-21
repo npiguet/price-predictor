@@ -39,9 +39,8 @@ from effects.domain.keyword_formatting import (
 from effects.domain.provenance import RoleSpan
 from price_predictor.domain.tokenizer import MtgTokenizer
 
-#: The two encoding surfaces. Spelled here rather than imported from
-#: ``ability_encoder``, which loads torch, so the tokenizer stays importable by
-#: the corpus tools that never touch a model.
+#: The two encoding surfaces, defined here rather than beside the encoder,
+#: which loads torch, so every corpus tool can name them without a model.
 SURFACE_PROSE = "prose"
 SURFACE_SCRIPT = "script"
 
@@ -650,11 +649,6 @@ class AbilityTokenizer:
         if not template:
             return ""
         return strip_specifiers(java_format(template, list(values or ())))
-
-    @staticmethod
-    def _keyword_token(display_name: str) -> str:
-        """Forge's display name as the token form the vocabulary carries."""
-        return keyword_token(display_name)
 
 
 def camel_parts(word: str) -> list[tuple[int, int]]:
