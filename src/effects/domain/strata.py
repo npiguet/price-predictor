@@ -22,6 +22,11 @@ class Stratum(StrEnum):
     #: is written for it, so it is counted but never carries a unique-text
     #: figure.
     DROPPED_HELD_OUT = "dropped-held-out"
+    #: Records of training games acting through a held-out ability text: a
+    #: token or a variant script carrying it, or its template under
+    #: ``--holdout-unit template``. Accounting only, like the stratum above;
+    #: the rest of the game still trains.
+    DROPPED_HELD_OUT_TEXT = "dropped-held-out-text"
 
 
 #: The strata a build writes a directory for, in report order.

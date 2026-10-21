@@ -278,6 +278,12 @@ class CorpusManifest:
         default=(), metadata=_gen1_implied(tuple),
     )
     reuse_cap: int | None = field(default=None, metadata=_gen1_implied(_optional_int))
+    #: Training records the plan asked of each class, copies included, read
+    #: against ``per_class[...].kept``: a class delivered under its target is
+    #: a plan that counted records the write pass could not write.
+    class_targets: dict[str, int] = field(
+        default_factory=dict, metadata=_gen1_implied(_int_map),
+    )
 
     def as_dict(self) -> dict[str, Any]:
         data = asdict(self)

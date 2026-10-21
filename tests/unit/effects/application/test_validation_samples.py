@@ -132,7 +132,6 @@ def test_round_robin_stops_when_every_text_is_exhausted():
 
 def test_card_disjoint_resolution_slots_spread_over_held_out_texts(tmp_path, make_record):  # noqa: F811
     """Spec Story 4 scenario 9: a text with many records cannot crowd one with few."""
-    from effects.application.build_corpus import ability_key as render
     from effects.domain.provenance import ProvenanceKey
 
     common = ProvenanceKey("cardsfolder/c/common.txt", 0, "spell", 0)
@@ -145,14 +144,12 @@ def test_card_disjoint_resolution_slots_spread_over_held_out_texts(tmp_path, mak
     for name in ("card", "gate"):
         write_shard(tmp_path / name / "s.jsonl.gz", records)
     write_shard(tmp_path / "game" / "s.jsonl.gz", records[:1])
-    text_of_key = {
-        render(records[0]): "common text", render(records[-1]): "rare text",
-    }
+    text_of = {common: "common text", rare: "rare text"}
 
     samples = draw_samples(
         card_disjoint=tmp_path / "card", game_disjoint=tmp_path / "game",
         gate_one=tmp_path / "gate", mix={CLASS_RESOLUTION_EFFECT: 1.0}, size=10, seed=1,
-        held_out_text_of_key=text_of_key,
+        held_out_text_of=lambda record: text_of[record.ability[0]],
     )
     chosen = [r.record_id for r in samples["card-disjoint"]]
     assert len(chosen) == 10
