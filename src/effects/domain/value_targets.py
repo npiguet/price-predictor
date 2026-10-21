@@ -16,6 +16,10 @@ Two masking rules carry the whole design:
   or ``NumDmg$ Count$Valid Creature`` in any segment masks damage, because the
   number depends on the board and the head reads no board. An amount no
   segment mentions is a stated zero, not a mask: a draw spell deals no damage.
+  An API that reads its amount with a default reads it the way Forge does —
+  ``Draw`` with no ``NumCards$`` draws one, ``PutCounter`` with no
+  ``CounterNum$`` puts one — and moving counters, or choosing whether to add
+  or remove them, masks both counter targets, since the script fixes neither.
 - **Cost targets come from ``Cost$`` only (FR-058a).** A card's mana cost covers
   the whole card and no line's text carries it, so a spell line masks its mana
   targets even where an additional cost puts mana in ``Cost$``. Its tap and
@@ -52,6 +56,7 @@ VALUE_TARGETS: tuple[tuple[str, ValueKind], ...] = (
     ("power_change", ValueKind.SIGNED),
     ("toughness_change", ValueKind.SIGNED),
     ("counters_placed", ValueKind.COUNT),
+    ("counters_removed", ValueKind.COUNT),
     ("cards_drawn", ValueKind.COUNT),
     ("mana_w", ValueKind.COUNT),
     ("mana_u", ValueKind.COUNT),
@@ -65,17 +70,30 @@ VALUE_TARGETS: tuple[tuple[str, ValueKind], ...] = (
 )
 VALUE_TARGET_NAMES: tuple[str, ...] = tuple(name for name, _ in VALUE_TARGETS)
 
-#: Amount targets and the script keys each one sums.
+#: Amount targets any segment states, and the script keys each one sums: a
+#: pump's ``NumAtt$``/``NumDef$``, a static's ``AddPower$``/``AddToughness$``.
 _AMOUNT_KEYS: dict[str, tuple[str, ...]] = {
     "damage": ("NumDmg",),
-    "power_change": ("NumAtt", "PowerBonus"),
-    "toughness_change": ("NumDef", "ToughnessBonus"),
-    "counters_placed": ("CounterNum",),
-    "cards_drawn": ("NumCards",),
+    "power_change": ("NumAtt", "AddPower"),
+    "toughness_change": ("NumDef", "AddToughness"),
 }
-#: ``NumCards$`` means cards drawn only on a ``Draw`` segment; elsewhere it
-#: counts cards discarded, milled, revealed or dug.
-_DRAW_ONLY = frozenset({"cards_drawn"})
+#: ``API -> (target, key, Forge's default)`` for amounts whose key means that
+#: target only on that API: ``NumCards$`` elsewhere counts cards discarded,
+#: milled or dug, and ``CounterNum$`` sits on a few unrelated APIs too. A
+#: default of None has none, and an absent key masks the target.
+_API_AMOUNTS: dict[str, tuple[str, str, str | None]] = {
+    "Draw": ("cards_drawn", "NumCards", "1"),
+    "PutCounter": ("counters_placed", "CounterNum", "1"),
+    "PutCounterAll": ("counters_placed", "CounterNum", "1"),
+    "RemoveCounter": ("counters_removed", "CounterNum", "1"),
+    "RemoveCounterAll": ("counters_removed", "CounterNum", None),
+}
+_COUNTER_TARGETS: tuple[str, ...] = ("counters_placed", "counters_removed")
+#: APIs that move counters in a direction or amount the script does not fix.
+_COUNTER_UNSTATED = frozenset({"MoveCounter", "AddOrRemoveCounter", "ReplaceCounter"})
+_AMOUNT_TARGETS: tuple[str, ...] = (
+    *_AMOUNT_KEYS, *dict.fromkeys(target for target, _, _ in _API_AMOUNTS.values()),
+)
 _MANA_TARGETS: tuple[str, ...] = (
     "mana_w", "mana_u", "mana_b", "mana_r", "mana_g", "mana_c", "mana_generic",
 )
@@ -124,9 +142,14 @@ def params(segment: str) -> dict[str, str]:
     return found
 
 
-def _api_of(found: dict[str, str]) -> str | None:
+def api_of(found: dict[str, str]) -> str | None:
+    """The segment's effect API, whichever of ``SP$``/``AB$``/``DB$`` names it.
+
+    None where none does, or where the one present is empty: an empty API
+    names no effect.
+    """
     for key in _API_KEYS:
-        if key in found:
+        if found.get(key):
             return found[key]
     return None
 
@@ -139,23 +162,28 @@ def value_targets(text: str) -> ValueTargets:
     values = dict.fromkeys(VALUE_TARGET_NAMES, 0.0)
     masked: set[str] = set()
 
+    def add(target: str, raw: str | None) -> None:
+        if raw is not None and _LITERAL_RE.fullmatch(raw):
+            values[target] += int(raw)
+        else:
+            masked.add(target)
+
     # A charm's root states only its choices (FR-005a); its modes carry the
     # amounts on their own option lines.
-    if _api_of(root) == "Charm" or "Choices" in root:
-        masked.update(_AMOUNT_KEYS)
+    if api_of(root) == "Charm" or "Choices" in root:
+        masked.update(_AMOUNT_TARGETS)
     else:
         for found in parsed:
             for target, keys in _AMOUNT_KEYS.items():
-                if target in _DRAW_ONLY and _api_of(found) != "Draw":
-                    continue
                 for key in keys:
-                    raw = found.get(key)
-                    if raw is None:
-                        continue
-                    if _LITERAL_RE.fullmatch(raw):
-                        values[target] += int(raw)
-                    else:
-                        masked.add(target)
+                    if key in found:
+                        add(target, found[key])
+            api = api_of(found)
+            if api in _API_AMOUNTS:
+                target, key, default = _API_AMOUNTS[api]
+                add(target, found.get(key, default))
+            elif api in _COUNTER_UNSTATED:
+                masked.update(_COUNTER_TARGETS)
 
     cost = root.get("Cost")
     if cost is None:

@@ -36,7 +36,7 @@ from enum import Enum, StrEnum, auto
 from effects.domain.effect_head_layout import ZONE_OUTCOMES
 from effects.domain.effect_targets import EntityTargets
 from effects.domain.provenance import ProvenanceKey
-from effects.domain.value_targets import params, segments
+from effects.domain.value_targets import api_of, params, segments
 
 #: The tree a copy's acting key names, so its edited text never shares a key
 #: with the real line's.
@@ -178,11 +178,6 @@ def _literal(value: str | None) -> int | None:
     return int(value) if value is not None and _INT.match(value) else None
 
 
-def _api_of(found: dict[str, str]) -> str | None:
-    """The segment's effect API, whichever of the three heads names it."""
-    return found.get("SP") or found.get("AB") or found.get("DB")
-
-
 def _kind_of(api: str | None) -> EffectKind | None:
     if api in DAMAGE_APIS:
         return EffectKind.DAMAGE
@@ -227,7 +222,7 @@ def _the_one_amount(line, record) -> _Amount | None:
         found = params(segment)
         if _blocked(found):
             return None
-        kind = _kind_of(_api_of(found))
+        kind = _kind_of(api_of(found))
         if kind is not None:
             found_amounts.append(_amount(kind, found, record.state.refs.x))
     if len(found_amounts) != 1 or found_amounts[0] is None:
