@@ -1,0 +1,3 @@
+{"id": "701.37a", "output": "trained", "outputs": ["counters_delta_p1p1", "new:designations_changed"], "input": "incomplete", "inputs_missing": ["new:designations"], "note": "Monstrous status is not in the snapshot."}
+{"id": "701.37b", "output": "trained", "outputs": ["counters_delta_p1p1", "new:designations_changed"], "input": "incomplete", "inputs_missing": ["new:designations"], "note": "Monstrous status is not in the snapshot."}
+{"id": "701.37c", "output": "trained", "outputs": ["damage_taken", "zone_outcome"], "input": "incomplete", "inputs_missing": ["new:x_paid_on_permanent", "new:designations"], "note": "Counters on the permanent only hint at the X it became monstrous with."}

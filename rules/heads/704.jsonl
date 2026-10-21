@@ -1,0 +1,28 @@
+{"id": "704.3", "output": "trained", "outputs": ["zone_outcome"], "input": "incomplete", "inputs_missing": ["planned:every_line", "snapshot:subtypes"], "note": "Piker's death needs the King's anthem to go away, a static on a non-acting permanent over a Goblin subtype."}
+{"id": "704.4", "output": "trained", "outputs": ["zone_outcome"], "input": "incomplete", "inputs_missing": ["planned:every_line"], "note": "Maro's size is a characteristic-defining static on a non-acting permanent; only the hand size is read."}
+{"id": "704.5a", "output": "recorded", "outputs": ["record:event:player_removed", "new:game_result"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "704.5b", "output": "recorded", "outputs": ["record:event:player_removed", "new:game_result"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "704.5c", "output": "recorded", "outputs": ["record:event:player_removed", "new:game_result"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "704.5d", "output": "missing", "outputs": ["new:token_ceases"], "input": "incomplete", "inputs_missing": ["snapshot:token_script_id"], "note": "The destroy is a zone change but the token vanishing afterwards is not; whether the permanent is a token is not read."}
+{"id": "704.5e", "output": "missing", "outputs": ["new:copy_ceases"], "input": "incomplete", "inputs_missing": ["snapshot:copy_source"], "note": "A copy of a spell is not marked as a copy in anything the model reads."}
+{"id": "704.5f", "output": "trained", "outputs": ["zone_outcome"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "704.5g", "output": "trained", "outputs": ["zone_outcome", "tap_state"], "input": "incomplete", "inputs_missing": ["new:regeneration_shield"], "note": "The shield variant needs the pending regeneration shield, which no snapshot field holds."}
+{"id": "704.5h", "output": "trained", "outputs": ["zone_outcome"], "input": "incomplete", "inputs_missing": ["new:damage_sources_this_turn", "planned:every_line"], "note": "Deathtouch is a printed keyword line on the damage source."}
+{"id": "704.5i", "output": "trained", "outputs": ["zone_outcome", "counters_delta_loyalty"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "704.5j", "output": "trained", "outputs": ["zone_outcome"], "input": "incomplete", "inputs_missing": ["snapshot:name"], "note": "Same-name is the deciding fact; controller and legendary are read."}
+{"id": "704.5k", "output": "trained", "outputs": ["zone_outcome"], "input": "incomplete", "inputs_missing": ["new:timestamps"], "note": "Which world permanent is newest is a timestamp."}
+{"id": "704.5m", "output": "trained", "outputs": ["zone_outcome"], "input": "incomplete", "inputs_missing": ["snapshot:subtypes", "snapshot:attached_to_target", "new:chosen_values"], "note": "The protection colour chosen decides the first scenario."}
+{"id": "704.5n", "output": "trained", "outputs": ["attached_to_change"], "input": "incomplete", "inputs_missing": ["snapshot:subtypes", "snapshot:attached_to_target"], "note": ""}
+{"id": "704.5p", "output": "trained", "outputs": ["attached_to_change"], "input": "complete", "inputs_missing": [], "note": "Being a creature is read as a card type."}
+{"id": "704.5q", "output": "trained", "outputs": ["counters_delta_p1p1", "counters_delta_m1m1"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "704.5r", "output": "trained", "outputs": ["counters_delta_other"], "input": "incomplete", "inputs_missing": ["planned:every_line"], "note": "The cap is a static on the permanent itself."}
+{"id": "704.5s", "output": "trained", "outputs": ["zone_outcome"], "input": "incomplete", "inputs_missing": ["snapshot:subtypes", "planned:every_line"], "note": "Final chapter number lives in the chapter abilities."}
+{"id": "704.5t", "output": "missing", "outputs": ["new:dungeon_progress"], "input": "incomplete", "inputs_missing": ["new:dungeon_room"], "note": ""}
+{"id": "704.5v", "output": "trained", "outputs": ["zone_outcome"], "input": "incomplete", "inputs_missing": ["snapshot:subtypes", "planned:every_line"], "note": "The Siege's defeat trigger is a triggered line on a non-acting permanent."}
+{"id": "704.5w", "output": "trained", "outputs": ["zone_outcome"], "input": "incomplete", "inputs_missing": ["snapshot:subtypes"], "note": "Non-Siege versus Siege is a subtype."}
+{"id": "704.5x", "output": "missing", "outputs": ["new:protector_change"], "input": "incomplete", "inputs_missing": ["new:protector"], "note": "Cannot arise in a two-player game."}
+{"id": "704.5y", "output": "missing", "outputs": ["new:legal_targets"], "input": "complete", "inputs_missing": [], "note": "The attackers record lists who may attack, not which player or battle each may attack."}
+{"id": "704.5z", "output": "trained", "outputs": ["zone_outcome"], "input": "incomplete", "inputs_missing": ["snapshot:subtypes", "snapshot:attached_to_target", "new:timestamps"], "note": "The Role token ceasing to exist is not distinguished from dying."}
+{"id": "704.5aa", "output": "missing", "outputs": ["new:speed_change"], "input": "incomplete", "inputs_missing": ["new:speed", "planned:every_line"], "note": ""}
+{"id": "704.7", "output": "trained", "outputs": ["life_delta", "cards_drawn", "zone_outcome", "new:rewrite_result"], "input": "incomplete", "inputs_missing": ["planned:every_line"], "note": "Lich's Mirror's replacement lands as the effect half's life, draw and zone changes; the averted loss itself is only the rewrite result."}
+{"id": "704.8", "output": "trained", "outputs": ["trigger_fired"], "input": "incomplete", "inputs_missing": ["new:last_known_information", "planned:every_line"], "note": "The record shows the dead creature without its counters."}

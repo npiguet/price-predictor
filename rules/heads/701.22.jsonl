@@ -1,0 +1,2 @@
+{"id": "701.22b", "output": "trained", "outputs": ["trigger_fired"], "input": "incomplete", "inputs_missing": ["snapshot:pending_event"], "note": "The scry amount of the pending event is not read."}
+{"id": "701.22d", "output": "trained", "outputs": ["trigger_fired"], "input": "complete", "inputs_missing": [], "note": ""}

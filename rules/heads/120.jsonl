@@ -1,0 +1,21 @@
+{"id": "120.1a", "output": "trained", "outputs": ["damage_taken", "zone_outcome"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "120.2a", "output": "trained", "outputs": ["damage_taken", "life_delta", "zone_outcome"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "120.2b", "output": "trained", "outputs": ["damage_taken", "zone_outcome"], "input": "incomplete", "inputs_missing": ["planned:every_line"], "note": "Black Knight's protection reads only as a protection flag; which colour it is sits on its static line."}
+{"id": "120.3a", "output": "trained", "outputs": ["life_delta"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "120.3b", "output": "trained", "outputs": ["poison_delta"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "120.3c", "output": "trained", "outputs": ["counters_delta_loyalty"], "input": "incomplete", "inputs_missing": ["new:replacement_shield"], "note": "The prevention shield from the earlier Mending Hands is not in the snapshot."}
+{"id": "120.3d", "output": "trained", "outputs": ["counters_delta_m1m1", "power_delta", "toughness_delta"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "120.3e", "output": "trained", "outputs": ["damage_taken"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "120.3f", "output": "trained", "outputs": ["life_delta"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "120.3g", "output": "trained", "outputs": ["poison_delta", "life_delta"], "input": "incomplete", "inputs_missing": ["planned:every_line"], "note": "Toxic is outside the keyword overlay list and sits on a static line."}
+{"id": "120.3h", "output": "trained", "outputs": ["counters_delta_defense"], "input": "incomplete", "inputs_missing": ["new:replacement_shield"], "note": "The prevention shield from the earlier Mending Hands is not in the snapshot."}
+{"id": "120.4", "output": "trained", "outputs": ["life_delta", "damage_taken"], "input": "incomplete", "inputs_missing": ["new:replacement_shield", "planned:every_line"], "note": "Samite Healer prevention is a pending shield and Boon Reflection a static on another permanent."}
+{"id": "120.4a", "output": "trained", "outputs": ["damage_taken", "life_delta", "zone_outcome"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "120.4b", "output": "trained", "outputs": ["trigger_fired", "damage_taken", "life_delta"], "input": "incomplete", "inputs_missing": ["new:replacement_shield"], "note": "The prevention shield from Samite Healer or Mending Hands is not in the snapshot."}
+{"id": "120.4c", "output": "trained", "outputs": ["life_delta"], "input": "incomplete", "inputs_missing": ["planned:every_line"], "note": "Boon Reflection is a replacement on a permanent that is not acting."}
+{"id": "120.4d", "output": "trained", "outputs": ["damage_taken", "life_delta"], "input": "incomplete", "inputs_missing": ["new:replacement_shield", "planned:every_line"], "note": "Final results depend on the prevention shield and on Boon Reflection."}
+{"id": "120.5", "output": "trained", "outputs": ["damage_taken", "zone_outcome"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "120.6", "output": "trained", "outputs": ["damage_taken", "zone_outcome", "tap_state"], "input": "incomplete", "inputs_missing": ["new:replacement_shield"], "note": "The regeneration shield is a pending replacement; regenerated has no target path of its own."}
+{"id": "120.8", "output": "trained", "outputs": ["trigger_fired", "damage_taken"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "120.9", "output": "trained", "outputs": ["trigger_fired", "life_delta"], "input": "incomplete", "inputs_missing": ["snapshot:attached_to_target"], "note": "Which creature Spirit Link is attached to is only a flag."}
+{"id": "120.10", "output": "trained", "outputs": ["trigger_fired", "created_objects"], "input": "complete", "inputs_missing": [], "note": ""}

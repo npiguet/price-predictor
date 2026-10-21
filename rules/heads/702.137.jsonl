@@ -1,0 +1,1 @@
+{"id": "702.137a", "output": "trained", "outputs": ["can_play", "affordable", "new:cost_after_adjustment"], "input": "incomplete", "inputs_missing": ["new:this_turn_history"], "note": "Opponent life lost this turn is not recorded; only the current life."}

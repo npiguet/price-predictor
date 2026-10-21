@@ -1,0 +1,6 @@
+{"id": "714.2b", "output": "trained", "outputs": ["trigger_fired"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "714.2c", "output": "trained", "outputs": ["trigger_fired"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "714.3a", "output": "trained", "outputs": ["counters_delta_lore"], "input": "incomplete", "inputs_missing": ["snapshot:subtypes", "planned:every_line", "new:chosen_values"], "note": "ETB replacement line, read ahead keyword and Saga subtype are not read, nor the read-ahead choice"}
+{"id": "714.3b", "output": "trained", "outputs": ["counters_delta_lore"], "input": "incomplete", "inputs_missing": ["snapshot:subtypes", "new:chosen_values"], "note": "the read-ahead choice is not an input"}
+{"id": "714.3c", "output": "trained", "outputs": ["trigger_fired", "counters_delta_lore"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "714.4", "output": "trained", "outputs": ["zone_outcome"], "input": "incomplete", "inputs_missing": ["planned:every_line", "snapshot:subtypes"], "note": "final chapter number sits on trigger lines"}

@@ -1,0 +1,1 @@
+{"id": "702.94a", "output": "trained", "outputs": ["trigger_fired", "can_play", "affordable", "new:cost_after_adjustment"], "input": "incomplete", "inputs_missing": ["new:this_turn_history"], "note": "First card drawn this turn is not among the this-turn counts."}

@@ -1,0 +1,2 @@
+{"id": "702.99a", "output": "trained", "outputs": ["zone_outcome", "trigger_fired"], "input": "incomplete", "inputs_missing": ["new:exiled_with"], "note": "The encoded card is an exile object linked to the creature."}
+{"id": "702.99c", "output": "trained", "outputs": ["trigger_fired"], "input": "incomplete", "inputs_missing": ["new:exiled_with"], "note": ""}

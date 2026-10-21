@@ -1,0 +1,2 @@
+{"id": "702.184a", "output": "trained", "outputs": ["tap_state", "counters_delta_charge"], "input": "complete", "inputs_missing": [], "note": "Creature type change from station thresholds is a static line."}
+{"id": "702.184c", "output": "trained", "outputs": ["tap_state", "counters_delta_charge"], "input": "incomplete", "inputs_missing": ["planned:every_line"], "note": ""}

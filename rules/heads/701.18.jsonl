@@ -1,0 +1,1 @@
+{"id": "701.18a", "output": "planned", "outputs": ["planned:timing", "planned:failed_checks"], "input": "complete", "inputs_missing": [], "note": "can_play trains the bit; the failing check is what is planned."}

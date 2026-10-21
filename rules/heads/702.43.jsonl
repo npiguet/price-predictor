@@ -1,0 +1,2 @@
+{"id": "702.43a", "output": "trained", "outputs": ["counters_delta_p1p1", "zone_outcome", "trigger_fired"], "input": "incomplete", "inputs_missing": ["planned:every_line"], "note": "enters-with-counters is a static line"}
+{"id": "702.43b", "output": "trained", "outputs": ["counters_delta_p1p1", "trigger_fired"], "input": "incomplete", "inputs_missing": ["planned:every_line"], "note": ""}

@@ -1,0 +1,6 @@
+{"id": "701.50a", "output": "trained", "outputs": ["cards_drawn", "cards_discarded", "counters_delta_p1p1"], "input": "incomplete", "inputs_missing": ["new:library_top"], "note": ""}
+{"id": "701.50b", "output": "trained", "outputs": ["cards_drawn", "cards_discarded", "counters_delta_p1p1"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "701.50c", "output": "trained", "outputs": ["cards_drawn", "cards_discarded", "counters_delta_p1p1"], "input": "incomplete", "inputs_missing": ["new:library_top", "new:chosen_values"], "note": ""}
+{"id": "701.50d", "output": "trained", "outputs": ["cards_drawn", "cards_discarded", "counters_delta_p1p1"], "input": "incomplete", "inputs_missing": ["new:library_top"], "note": ""}
+{"id": "701.50e", "output": "trained", "outputs": ["trigger_fired"], "input": "incomplete", "inputs_missing": ["planned:every_line"], "note": ""}
+{"id": "701.50f", "output": "trained", "outputs": ["trigger_fired"], "input": "incomplete", "inputs_missing": ["planned:every_line"], "note": ""}

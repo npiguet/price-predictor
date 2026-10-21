@@ -1,0 +1,2 @@
+{"id": "701.63a", "output": "trained", "outputs": ["counters_delta_p1p1", "created_objects"], "input": "complete", "inputs_missing": [], "note": "The counters-or-token branch is the controller's choice, a decision rather than a state fact."}
+{"id": "701.63b", "output": "trained", "outputs": ["gate"], "input": "complete", "inputs_missing": [], "note": "The effect half exists with no events, so the gate is trained."}

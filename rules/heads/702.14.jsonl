@@ -1,0 +1,2 @@
+{"id": "702.14c", "output": "trained", "outputs": ["blocker_legal"], "input": "incomplete", "inputs_missing": ["snapshot:subtypes", "planned:every_line"], "note": "The defending land's type is a subtype, and the overlay drops the land type after landwalk."}
+{"id": "702.14d", "output": "trained", "outputs": ["blocker_legal"], "input": "incomplete", "inputs_missing": ["snapshot:subtypes", "planned:every_line"], "note": "The matching land type is a subtype, and the overlay drops the land type after landwalk."}

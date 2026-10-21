@@ -1,0 +1,18 @@
+{"id": "709.2", "output": "trained", "outputs": ["cards_discarded"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "709.3a", "output": "trained", "outputs": ["can_play", "affordable"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "709.3b", "output": "trained", "outputs": ["has_legal_target", "target_legal", "can_play"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "709.3c", "output": "trained", "outputs": ["damage_taken", "zone_outcome", "tap_state", "cards_drawn", "new:spell_copied"], "input": "complete", "inputs_missing": [], "note": "Which half the copy is cast as is the acting ability; the copy's creation has no target."}
+{"id": "709.4", "output": "trained", "outputs": ["gate", "zone_outcome", "library_events"], "input": "incomplete", "inputs_missing": ["new:library_contents"], "note": "Library cards are not in the snapshot, only the library size."}
+{"id": "709.4a", "output": "trained", "outputs": ["zone_outcome"], "input": "incomplete", "inputs_missing": ["snapshot:name", "new:chosen_values"], "note": ""}
+{"id": "709.4b", "output": "trained", "outputs": ["has_legal_target", "target_legal", "can_play", "gate", "zone_outcome"], "input": "incomplete", "inputs_missing": ["new:library_contents"], "note": "The stack case is complete; the library-search scenario needs library cards."}
+{"id": "709.4c", "output": "trained", "outputs": ["power_delta", "toughness_delta", "keywords_gained"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "709.4d", "output": "trained", "outputs": ["has_legal_target", "target_legal", "can_play", "zone_outcome"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "709.5", "output": "trained", "outputs": ["trigger_fired", "cards_drawn"], "input": "incomplete", "inputs_missing": ["new:room_unlocked", "planned:every_line"], "note": "Which door is unlocked is not recorded and a Room's trigger lines are not read."}
+{"id": "709.5a", "output": "trained", "outputs": ["has_legal_target", "target_legal", "can_play"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "709.5b", "output": "recorded", "outputs": ["record:event:spell_copied", "new:spell_copied", "new:room_unlocked"], "input": "incomplete", "inputs_missing": ["new:room_unlocked", "snapshot:copy_source"], "note": "Scenario skipped; judged from the rule text."}
+{"id": "709.5d", "output": "trained", "outputs": ["trigger_fired", "new:room_unlocked"], "input": "incomplete", "inputs_missing": ["new:room_unlocked"], "note": "The designation entered with is not an output or an input."}
+{"id": "709.5e", "output": "planned", "outputs": ["planned:timing"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "709.5f", "output": "recorded", "outputs": ["record:event:state_flag_change", "new:room_unlocked"], "input": "incomplete", "inputs_missing": ["new:room_unlocked"], "note": ""}
+{"id": "709.5g", "output": "recorded", "outputs": ["record:event:state_flag_change", "new:room_unlocked"], "input": "incomplete", "inputs_missing": ["new:room_unlocked"], "note": ""}
+{"id": "709.5h", "output": "trained", "outputs": ["trigger_fired"], "input": "incomplete", "inputs_missing": ["new:room_unlocked"], "note": ""}
+{"id": "709.5i", "output": "trained", "outputs": ["trigger_fired", "power_delta", "toughness_delta"], "input": "incomplete", "inputs_missing": ["new:room_unlocked"], "note": ""}

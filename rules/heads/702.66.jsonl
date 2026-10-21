@@ -1,0 +1,2 @@
+{"id": "702.66a", "output": "trained", "outputs": ["zone_outcome", "mana_paid", "affordable"], "input": "incomplete", "inputs_missing": ["planned:every_line"], "note": ""}
+{"id": "702.66b", "output": "trained", "outputs": ["mana_paid", "affordable"], "input": "incomplete", "inputs_missing": ["planned:every_line"], "note": ""}

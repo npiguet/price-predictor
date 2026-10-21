@@ -1,0 +1,4 @@
+{"id": "702.102a", "output": "trained", "outputs": ["can_play"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "702.102b", "output": "trained", "outputs": ["zone_outcome", "gate"], "input": "complete", "inputs_missing": [], "note": "Pyroblast's effect half counters the blue fused spell or affects nothing."}
+{"id": "702.102c", "output": "trained", "outputs": ["affordable", "can_play"], "input": "complete", "inputs_missing": [], "note": "The summed cost is a cost_after_adjustment the model does not predict."}
+{"id": "702.102d", "output": "trained", "outputs": ["counters_delta_p1p1", "cards_drawn"], "input": "complete", "inputs_missing": [], "note": ""}

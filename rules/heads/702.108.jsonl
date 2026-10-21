@@ -1,0 +1,2 @@
+{"id": "702.108a", "output": "trained", "outputs": ["trigger_fired", "power_delta", "toughness_delta", "pt_duration"], "input": "complete", "inputs_missing": [], "note": "Prowess is the acting line of its trigger record and the cast spell's card types and controller are read."}
+{"id": "702.108b", "output": "trained", "outputs": ["trigger_fired", "power_delta", "toughness_delta", "pt_duration"], "input": "incomplete", "inputs_missing": ["planned:every_line"], "note": "The second instance comes from a static on another permanent."}

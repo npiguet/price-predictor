@@ -1,0 +1,5 @@
+{"id": "711.2a", "output": "trained", "outputs": ["keywords_gained", "gate", "new:base_pt_change"], "input": "complete", "inputs_missing": [], "note": "The striation's keyword is a continuous contribution; its set base P/T is not in the PT boost table, so power_delta is not trained."}
+{"id": "711.2b", "output": "trained", "outputs": ["keywords_gained", "gate", "new:base_pt_change"], "input": "complete", "inputs_missing": [], "note": "The striation's keyword is a continuous contribution; its set base P/T is not in the PT boost table, so power_delta is not trained."}
+{"id": "711.4", "output": "trained", "outputs": ["can_play", "affordable"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "711.5", "output": "trained", "outputs": ["gate", "keywords_gained", "new:base_pt_change"], "input": "complete", "inputs_missing": [], "note": "Only the striation's keyword is a contribution; the set base P/T has no target."}
+{"id": "711.6", "output": "trained", "outputs": ["target_legal", "has_legal_target"], "input": "complete", "inputs_missing": [], "note": ""}

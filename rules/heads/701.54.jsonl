@@ -1,0 +1,5 @@
+{"id": "701.54a", "output": "recorded", "outputs": ["record:event:ring_tempts", "new:designations_changed"], "input": "incomplete", "inputs_missing": ["new:designations"], "note": ""}
+{"id": "701.54b", "output": "trained", "outputs": ["gate", "new:designations_changed"], "input": "incomplete", "inputs_missing": ["snapshot:copy_source", "new:designations"], "note": "The Ring emblem's continuous record names only the real Ring-bearer, so the gate shows the copy is left out."}
+{"id": "701.54c", "output": "trained", "outputs": ["blocker_legal", "trigger_fired", "new:emblem_created"], "input": "incomplete", "inputs_missing": ["snapshot:emblem_abilities", "new:designations", "new:game_history"], "note": ""}
+{"id": "701.54d", "output": "trained", "outputs": ["trigger_fired"], "input": "incomplete", "inputs_missing": ["planned:every_line"], "note": ""}
+{"id": "701.54e", "output": "trained", "outputs": ["gate", "new:designations_changed"], "input": "incomplete", "inputs_missing": ["new:designations"], "note": "The Ring emblem's continuous record stops naming the stolen creature; the designation loss itself has no output."}

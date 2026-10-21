@@ -1,0 +1,1 @@
+{"id": "702.114a", "output": "trained", "outputs": ["colors_lost", "target_legal", "zone_outcome"], "input": "complete", "inputs_missing": [], "note": "Colour is read from the current snapshot, so devoid needs no line."}

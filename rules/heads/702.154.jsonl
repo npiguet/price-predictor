@@ -1,0 +1,2 @@
+{"id": "702.154a", "output": "trained", "outputs": ["trigger_fired", "power_delta", "pt_duration"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "702.154d", "output": "trained", "outputs": ["trigger_fired"], "input": "incomplete", "inputs_missing": ["new:chosen_values"], "note": ""}

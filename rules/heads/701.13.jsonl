@@ -1,0 +1,1 @@
+{"id": "701.13a", "output": "trained", "outputs": ["zone_outcome"], "input": "incomplete", "inputs_missing": ["snapshot:name", "new:chosen_values"], "note": "The exile-by-name variant turns on a chosen card name."}

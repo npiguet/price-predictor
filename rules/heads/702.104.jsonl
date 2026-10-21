@@ -1,0 +1,2 @@
+{"id": "702.104a", "output": "trained", "outputs": ["counters_delta_p1p1"], "input": "incomplete", "inputs_missing": ["new:chosen_values"], "note": "The opponent's tribute choice is not read."}
+{"id": "702.104b", "output": "trained", "outputs": ["trigger_fired"], "input": "complete", "inputs_missing": [], "note": ""}

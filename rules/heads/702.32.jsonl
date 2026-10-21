@@ -1,0 +1,1 @@
+{"id": "702.32a", "output": "trained", "outputs": ["counters_delta_other", "trigger_fired", "zone_outcome", "new:permanent_spell_resolution"], "input": "incomplete", "inputs_missing": ["planned:every_line"], "note": "The upkeep part is trained; the entering fade counters sit in a refused permanent-spell record."}

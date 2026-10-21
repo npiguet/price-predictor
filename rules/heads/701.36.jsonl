@@ -1,0 +1,2 @@
+{"id": "701.36a", "output": "trained", "outputs": ["created_objects"], "input": "incomplete", "inputs_missing": ["new:chosen_values", "snapshot:token_script_id"], "note": "Token versus card and the token chosen to copy are not read."}
+{"id": "701.36b", "output": "trained", "outputs": ["created_objects"], "input": "incomplete", "inputs_missing": ["snapshot:token_script_id"], "note": "A creature token cannot be told from a creature card."}

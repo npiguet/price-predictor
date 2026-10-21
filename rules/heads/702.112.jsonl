@@ -1,0 +1,3 @@
+{"id": "702.112a", "output": "trained", "outputs": ["trigger_fired", "counters_delta_p1p1"], "input": "incomplete", "inputs_missing": ["new:designations"], "note": "Renown is the acting line of its trigger record; renowned is a designation that is not recorded."}
+{"id": "702.112b", "output": "trained", "outputs": ["trigger_fired", "counters_delta_p1p1"], "input": "incomplete", "inputs_missing": ["new:designations"], "note": "A blinked creature is a new object; its renowned state is not recorded."}
+{"id": "702.112c", "output": "trained", "outputs": ["trigger_fired", "counters_delta_p1p1", "gate"], "input": "incomplete", "inputs_missing": ["planned:every_line", "new:designations"], "note": "The second trigger resolves with no events, so the gate is trained."}

@@ -1,0 +1,2 @@
+{"id": "300.2", "output": "trained", "outputs": ["has_legal_target", "can_play"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "300.2a", "output": "trained", "outputs": ["can_play"], "input": "complete", "inputs_missing": [], "note": ""}

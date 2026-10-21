@@ -1,0 +1,4 @@
+{"id": "701.49a", "output": "recorded", "outputs": ["record:event:dungeon_ventured", "new:dungeon_progress"], "input": "incomplete", "inputs_missing": ["new:dungeon_room"], "note": ""}
+{"id": "701.49b", "output": "recorded", "outputs": ["record:event:dungeon_ventured", "new:dungeon_progress"], "input": "incomplete", "inputs_missing": ["new:dungeon_room"], "note": ""}
+{"id": "701.49c", "output": "recorded", "outputs": ["record:event:dungeon_ventured", "new:dungeon_progress"], "input": "incomplete", "inputs_missing": ["new:dungeon_room"], "note": ""}
+{"id": "701.49d", "output": "recorded", "outputs": ["record:event:dungeon_ventured", "new:dungeon_progress"], "input": "incomplete", "inputs_missing": ["new:dungeon_room", "new:initiative"], "note": ""}

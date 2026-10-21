@@ -1,0 +1,2 @@
+{"id": "702.86a", "output": "trained", "outputs": ["trigger_fired", "zone_outcome"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "702.86b", "output": "trained", "outputs": ["trigger_fired"], "input": "complete", "inputs_missing": [], "note": ""}

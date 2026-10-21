@@ -1,0 +1,2 @@
+{"id": "702.60a", "output": "trained", "outputs": ["library_events", "zone_outcome", "trigger_fired"], "input": "incomplete", "inputs_missing": ["snapshot:name", "new:library_contents"], "note": "same-name check needs card name and the unrevealed library"}
+{"id": "702.60b", "output": "trained", "outputs": ["trigger_fired"], "input": "incomplete", "inputs_missing": ["planned:every_line"], "note": "the second ripple is granted by a static on Thrumming Stone"}

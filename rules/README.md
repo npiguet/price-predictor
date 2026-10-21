@@ -26,6 +26,8 @@ survives, the spell resolves or fizzles, the trigger fires or does not.
 | `packets.json` | units grouped into agent work packets | `packets` |
 | `triage/<unit>.jsonl` | phase 1: one classification line per rule | triage agents |
 | `scenarios/<unit>.json` | phase 2: scenarios for the unit's mechanical and legality rules, with their variants | scenario agents |
+| `MODEL-FIELDS.md` | what the gen-2 effect model reads and is trained on, compiled from the code; the reference the heads pass checks against | by hand |
+| `heads/<unit>.jsonl` | heads pass: for each mechanical or legality rule, whether an output is trained on its outcome and which deciding facts the model does not read | heads agents (`scripts/rules_heads_workflow.js`) |
 | `STATUS.md` | per-unit checklist and totals | `status` |
 | `FINDINGS.md` | implementation notes: the rules that need new record fields, by family; why rules were skipped; the writers' Forge notes by kind and the suspected Forge departures to test first; the verifier's error types; limits of the scenarios as written | by hand, from the sidecars |
 | `RUN-NOTES.md` | per chunk of units, what the scenario writer flagged (interactions whose outcome depends on Forge's implementation, rules skipped as unreachable) and what the verifier fixed | from the workflow results |
@@ -60,6 +62,27 @@ Later phases, not yet started, in order of preference for finding each rule's si
    into structured actions.
 
 Rule tests are then drawn from games kept out of training.
+
+## Heads schema (`heads/<unit>.jsonl`)
+
+One line per rule whose category is `mechanical` or `legality` and whose observability is not
+`none`, checked against `MODEL-FIELDS.md`:
+
+```json
+{"id": "704.5f", "output": "trained", "outputs": ["zone_outcome"], "input": "complete", "inputs_missing": [], "note": ""}
+```
+
+- `output`: `trained` (an existing output is trained on the outcome), `recorded` (a record
+  carries it, no output is trained on it), `missing` (no record carries it), `planned` (the gen-3
+  design plans the output: timing or failed-check columns).
+- `outputs`: existing output names as `MODEL-FIELDS.md` spells them, or tagged `record:<field or
+  event:type>`, `new:<output>`, `planned:<output>`.
+- `input`: `complete` when the model reads every fact that decides the outcome, else
+  `incomplete`; `inputs_missing` lists those facts tagged `snapshot:` (recorded, not read),
+  `planned:` (planned in gen-3) or `new:` (not recorded).
+
+`validate --heads` checks completeness and the enums. Rerun the pass whenever the input layout or
+the heads change, to count what the change made learnable.
 
 ## Triage schema (`triage/<unit>.jsonl`)
 

@@ -1,0 +1,11 @@
+{"id": "116.2a", "output": "planned", "outputs": ["planned:timing", "planned:failed_checks"], "input": "complete", "inputs_missing": [], "note": "timing and the once-per-turn limit are the failed checks"}
+{"id": "116.2b", "output": "missing", "outputs": ["new:face_change"], "input": "incomplete", "inputs_missing": ["planned:every_line"], "note": "special action is not a record; the morph cost is on a line the model does not read"}
+{"id": "116.2c", "output": "trained", "outputs": ["blocker_legal"], "input": "incomplete", "inputs_missing": ["planned:every_line", "snapshot:subtypes"], "note": "the special action writes no record, so the Licid's unattach reaches attached_to_change nowhere; only blocker_legal downstream is trained"}
+{"id": "116.2d", "output": "trained", "outputs": ["library_events", "gate"], "input": "incomplete", "inputs_missing": ["planned:every_line", "new:this_turn_history"], "note": "the special action is unrecorded; its effect is whether the search happens"}
+{"id": "116.2e", "output": "planned", "outputs": ["planned:timing"], "input": "incomplete", "inputs_missing": ["planned:every_line"], "note": ""}
+{"id": "116.2f", "output": "planned", "outputs": ["planned:timing"], "input": "incomplete", "inputs_missing": ["planned:every_line"], "note": ""}
+{"id": "116.2g", "output": "planned", "outputs": ["planned:timing", "affordable"], "input": "incomplete", "inputs_missing": ["planned:every_line", "new:companion_zone", "new:game_history"], "note": ""}
+{"id": "116.2h", "output": "planned", "outputs": ["planned:timing", "affordable"], "input": "incomplete", "inputs_missing": ["planned:every_line"], "note": ""}
+{"id": "116.2k", "output": "planned", "outputs": ["planned:timing"], "input": "incomplete", "inputs_missing": ["planned:every_line"], "note": ""}
+{"id": "116.2m", "output": "planned", "outputs": ["planned:timing", "affordable"], "input": "incomplete", "inputs_missing": ["planned:every_line", "new:room_unlocked"], "note": ""}
+{"id": "116.3", "output": "missing", "outputs": ["new:priority_holder"], "input": "complete", "inputs_missing": [], "note": ""}

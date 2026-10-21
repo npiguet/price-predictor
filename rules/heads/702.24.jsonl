@@ -1,0 +1,2 @@
+{"id": "702.24a", "output": "trained", "outputs": ["trigger_fired", "counters_delta_other", "zone_outcome", "tap_state"], "input": "complete", "inputs_missing": [], "note": "The upkeep payment is made during resolution, so it shows as tapped lands, not as a cost half's mana_paid."}
+{"id": "702.24b", "output": "trained", "outputs": ["trigger_fired", "counters_delta_other", "zone_outcome", "tap_state"], "input": "complete", "inputs_missing": [], "note": "Mana Chains's instance is attachment-granted, and each trigger is the acting line on its own record."}

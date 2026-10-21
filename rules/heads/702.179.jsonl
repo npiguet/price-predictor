@@ -1,0 +1,4 @@
+{"id": "702.179a", "output": "missing", "outputs": ["new:speed_change"], "input": "incomplete", "inputs_missing": ["new:speed", "planned:every_line"], "note": ""}
+{"id": "702.179c", "output": "missing", "outputs": ["new:speed_change"], "input": "incomplete", "inputs_missing": ["new:speed"], "note": "Skipped scenario; no Forge card."}
+{"id": "702.179d", "output": "trained", "outputs": ["trigger_fired", "new:speed_change"], "input": "incomplete", "inputs_missing": ["new:speed", "new:this_turn_history"], "note": "trigger_fired is trained; the speed change itself is not."}
+{"id": "702.179f", "output": "missing", "outputs": ["new:speed_change"], "input": "incomplete", "inputs_missing": ["new:speed"], "note": "Both variants bounce the creature; only the speed differs, and no record carries it."}

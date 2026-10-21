@@ -1,0 +1,2 @@
+{"id": "702.113a", "output": "trained", "outputs": ["counters_delta_p1p1", "types_gained", "keywords_gained", "new:subtypes_gained"], "input": "complete", "inputs_missing": [], "note": "The Elemental subtype is not an output."}
+{"id": "702.113b", "output": "trained", "outputs": ["has_legal_target", "can_play", "affordable"], "input": "complete", "inputs_missing": [], "note": ""}

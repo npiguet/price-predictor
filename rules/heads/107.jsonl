@@ -1,0 +1,24 @@
+{"id": "107.1b", "output": "trained", "outputs": ["power_delta", "toughness_delta", "life_delta"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "107.2", "output": "trained", "outputs": ["gate"], "input": "complete", "inputs_missing": [], "note": "No scenario (not reachable in Forge); judged from text."}
+{"id": "107.3b", "output": "trained", "outputs": ["life_delta", "damage_taken"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "107.3c", "output": "trained", "outputs": ["power_delta", "toughness_delta"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "107.3e", "output": "recorded", "outputs": ["record:event:counter_change", "new:created_objects"], "input": "incomplete", "inputs_missing": ["new:x_of_other_object"], "note": "The token is not in the snapshot, so its X counters reach no slot; created_objects reads it as a 0/0 whatever X is."}
+{"id": "107.3g", "output": "trained", "outputs": ["life_delta", "zone_outcome"], "input": "complete", "inputs_missing": [], "note": "Mana value is read as Forge computes it, X counted as 0 off the stack."}
+{"id": "107.3h", "output": "trained", "outputs": ["can_play", "affordable", "created_objects"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "107.3j", "output": "trained", "outputs": ["power_delta", "toughness_delta", "zone_outcome"], "input": "complete", "inputs_missing": [], "note": "The gained ability's line and its announced X are read at [ACT]."}
+{"id": "107.3k", "output": "trained", "outputs": ["damage_taken", "counters_delta_p1p1", "zone_outcome", "can_play"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "107.3m", "output": "trained", "outputs": ["counters_delta_p1p1", "library_events"], "input": "incomplete", "inputs_missing": ["new:x_paid_on_permanent", "planned:every_line"], "note": "The enters-with-counters replacement is unread and the spell's X is gone once it is a permanent."}
+{"id": "107.3n", "output": "recorded", "outputs": ["record:event:spell_copied", "new:spell_copied"], "input": "incomplete", "inputs_missing": ["new:x_of_other_object"], "note": "Each copy's own resolution trains life_delta the same whatever X is; the number of copies reaches no output."}
+{"id": "107.4c", "output": "trained", "outputs": ["can_play", "affordable"], "input": "incomplete", "inputs_missing": ["new:mana_cost"], "note": "Only mana value is read for a spell in hand, not its cost symbols."}
+{"id": "107.4e", "output": "trained", "outputs": ["can_play", "affordable"], "input": "incomplete", "inputs_missing": ["new:mana_cost"], "note": "Only mana value is read for a spell in hand, not its cost symbols."}
+{"id": "107.4f", "output": "trained", "outputs": ["can_play", "affordable", "life_delta"], "input": "incomplete", "inputs_missing": ["new:mana_cost"], "note": "Only mana value is read for a spell in hand, not its cost symbols."}
+{"id": "107.4h", "output": "trained", "outputs": ["can_play", "affordable"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "107.5", "output": "trained", "outputs": ["can_play"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "107.6", "output": "trained", "outputs": ["can_play"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "107.7", "output": "trained", "outputs": ["counters_delta_loyalty", "can_play"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "107.8a", "output": "trained", "outputs": ["power_delta", "toughness_delta", "keywords_gained", "keywords_lost"], "input": "complete", "inputs_missing": [], "note": "The level static is the acting ability of its own continuous record, and level counters are read."}
+{"id": "107.8b", "output": "trained", "outputs": ["power_delta", "toughness_delta", "keywords_gained", "keywords_lost"], "input": "complete", "inputs_missing": [], "note": "The level static is the acting ability of its own continuous record, and level counters are read."}
+{"id": "107.14", "output": "recorded", "outputs": ["record:event:energy_change", "new:energy_delta"], "input": "complete", "inputs_missing": [], "note": "The paid energy is an event without a target path; the one_energy legality is trained as can_play."}
+{"id": "107.15a", "output": "trained", "outputs": ["trigger_fired"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "107.16a", "output": "trained", "outputs": ["trigger_fired", "can_play", "new:class_level_change", "planned:timing"], "input": "incomplete", "inputs_missing": ["new:class_level"], "note": "The level-2 trigger and the bar's legality are trained, but the level change itself is a state_flag_change with no target path."}
+{"id": "107.17a", "output": "missing", "outputs": ["new:ticket_delta"], "input": "incomplete", "inputs_missing": ["new:ticket_counters"], "note": "No scenario (no Forge card pays a ticket cost); a player's ticket counters are not in the snapshot."}

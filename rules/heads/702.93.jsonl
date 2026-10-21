@@ -1,0 +1,1 @@
+{"id": "702.93a", "output": "trained", "outputs": ["trigger_fired", "zone_outcome", "counters_delta_p1p1", "control_change"], "input": "incomplete", "inputs_missing": ["planned:owner", "new:last_known_information"], "note": "It returns under its owner's control, and whether it had a +1/+1 counter as it died is not on the dead card."}

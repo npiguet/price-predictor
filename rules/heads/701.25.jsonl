@@ -1,0 +1,3 @@
+{"id": "701.25a", "output": "recorded", "outputs": ["record:event:zone_change", "new:cards_surveilled_to_graveyard"], "input": "incomplete", "inputs_missing": ["new:library_contents", "new:chosen_values"], "note": "Surveil writes a look and zone changes of untargeted library cards with no snapshot slot, so only the look, the same in every variant, reaches library_events."}
+{"id": "701.25c", "output": "trained", "outputs": ["trigger_fired"], "input": "incomplete", "inputs_missing": ["snapshot:pending_event"], "note": "The surveil amount of the pending event is not read."}
+{"id": "701.25d", "output": "trained", "outputs": ["trigger_fired"], "input": "complete", "inputs_missing": [], "note": ""}

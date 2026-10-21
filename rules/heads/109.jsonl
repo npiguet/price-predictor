@@ -1,0 +1,2 @@
+{"id": "109.4b", "output": "trained", "outputs": ["life_delta"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "109.5", "output": "trained", "outputs": ["power_delta", "toughness_delta", "cards_drawn"], "input": "complete", "inputs_missing": [], "note": "Benalish Marshal's static is the acting ability of its continuous record and its controller is read."}

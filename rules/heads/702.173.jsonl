@@ -1,0 +1,1 @@
+{"id": "702.173a", "output": "trained", "outputs": ["can_play", "affordable"], "input": "incomplete", "inputs_missing": ["snapshot:subtypes", "new:damage_sources_this_turn"], "note": ""}

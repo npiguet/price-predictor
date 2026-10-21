@@ -1,0 +1,12 @@
+{"id": "104.2a", "output": "missing", "outputs": ["new:game_result"], "input": "incomplete", "inputs_missing": ["new:conceded", "planned:every_line"], "note": "A concession resolves nothing, so no record is open to carry the removal; Platinum Angel's static is unread."}
+{"id": "104.2b", "output": "recorded", "outputs": ["record:event:player_removed", "new:game_result"], "input": "complete", "inputs_missing": [], "note": "The win is carried by the loser's removal; the trigger itself is trained as trigger_fired."}
+{"id": "104.3b", "output": "recorded", "outputs": ["record:event:player_removed", "new:game_result"], "input": "complete", "inputs_missing": [], "note": "life_delta is trained on the damage, not on the loss."}
+{"id": "104.3c", "output": "recorded", "outputs": ["record:event:player_removed", "new:game_result"], "input": "complete", "inputs_missing": [], "note": "cards_drawn is trained on the draw, not on the loss."}
+{"id": "104.3d", "output": "recorded", "outputs": ["record:event:player_removed", "new:game_result"], "input": "complete", "inputs_missing": [], "note": "poison_delta is trained on the counters, not on the loss."}
+{"id": "104.3e", "output": "recorded", "outputs": ["record:event:player_removed", "new:game_result"], "input": "incomplete", "inputs_missing": ["new:cast_from_zone"], "note": "Whether Phage was cast from hand is not read."}
+{"id": "104.3f", "output": "recorded", "outputs": ["record:event:player_removed", "new:game_result"], "input": "complete", "inputs_missing": [], "note": "No scenario (not reachable in two-player Forge); judged from text."}
+{"id": "104.4a", "output": "missing", "outputs": ["new:game_result"], "input": "complete", "inputs_missing": [], "note": "A drawn game has no winner, and the collector writes a game outcome only for a winner."}
+{"id": "104.4b", "output": "missing", "outputs": ["new:game_result"], "input": "incomplete", "inputs_missing": ["snapshot:subtypes", "new:game_history"], "note": "The loop and the Dragon subtype test are not visible."}
+{"id": "104.4c", "output": "missing", "outputs": ["new:game_result"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "104.5", "output": "recorded", "outputs": ["record:event:player_removed", "new:game_result"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "104.6", "output": "missing", "outputs": ["new:game_restart"], "input": "incomplete", "inputs_missing": ["new:exiled_with"], "note": "The restart is a game-level event no record carries."}

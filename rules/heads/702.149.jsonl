@@ -1,0 +1,3 @@
+{"id": "702.149a", "output": "trained", "outputs": ["trigger_fired", "counters_delta_p1p1"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "702.149b", "output": "trained", "outputs": ["trigger_fired", "counters_delta_p1p1"], "input": "incomplete", "inputs_missing": ["planned:every_line"], "note": "The granted training instance comes from a static on another permanent."}
+{"id": "702.149c", "output": "trained", "outputs": ["trigger_fired"], "input": "complete", "inputs_missing": [], "note": ""}

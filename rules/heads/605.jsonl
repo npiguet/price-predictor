@@ -1,0 +1,4 @@
+{"id": "605.3a", "output": "planned", "outputs": ["planned:timing"], "input": "incomplete", "inputs_missing": ["new:activation_in_progress"], "note": "Mid-payment activation is a timing check, and whether a cast is in progress is not recorded."}
+{"id": "605.3b", "output": "trained", "outputs": ["mana_delta_g", "has_legal_target"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "605.3c", "output": "trained", "outputs": ["can_play"], "input": "incomplete", "inputs_missing": ["new:activation_in_progress"], "note": ""}
+{"id": "605.4a", "output": "trained", "outputs": ["can_play", "affordable"], "input": "incomplete", "inputs_missing": ["planned:every_line"], "note": "Mana Flare is a triggered mana ability on a non-acting permanent."}

@@ -1,0 +1,10 @@
+{"id": "702.22b", "output": "recorded", "outputs": ["record:event:keyword_change", "new:keywords_other"], "input": "incomplete", "inputs_missing": ["planned:every_line"], "note": "Bands-with-other is outside the keyword list, so its loss reaches no output."}
+{"id": "702.22c", "output": "missing", "outputs": ["new:band_legal"], "input": "incomplete", "inputs_missing": ["planned:every_line", "new:band_membership"], "note": ""}
+{"id": "702.22d", "output": "missing", "outputs": ["new:attack_target_legal"], "input": "incomplete", "inputs_missing": ["new:band_membership", "new:attack_target"], "note": ""}
+{"id": "702.22e", "output": "recorded", "outputs": ["record:event:became_blocked", "new:became_blocked"], "input": "incomplete", "inputs_missing": ["planned:every_line", "new:band_membership"], "note": ""}
+{"id": "702.22f", "output": "recorded", "outputs": ["record:event:removed_from_combat", "new:removed_from_combat"], "input": "incomplete", "inputs_missing": ["planned:every_line", "new:band_membership"], "note": ""}
+{"id": "702.22g", "output": "trained", "outputs": ["blocker_legal"], "input": "incomplete", "inputs_missing": ["planned:every_line"], "note": "Pegasus's flying is a printed static; band membership does not change the verdict."}
+{"id": "702.22h", "output": "recorded", "outputs": ["record:event:became_blocked", "new:became_blocked"], "input": "incomplete", "inputs_missing": ["planned:every_line", "new:band_membership", "planned:block_pairing"], "note": ""}
+{"id": "702.22i", "output": "recorded", "outputs": ["record:event:became_blocked", "new:became_blocked"], "input": "incomplete", "inputs_missing": ["planned:every_line", "new:band_membership"], "note": ""}
+{"id": "702.22j", "output": "trained", "outputs": ["damage_taken"], "input": "incomplete", "inputs_missing": ["planned:every_line", "new:band_membership", "planned:block_pairing", "planned:active_player"], "note": ""}
+{"id": "702.22k", "output": "trained", "outputs": ["damage_taken"], "input": "incomplete", "inputs_missing": ["planned:every_line", "new:band_membership", "planned:block_pairing", "planned:active_player"], "note": ""}

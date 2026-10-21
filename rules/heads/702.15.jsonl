@@ -1,0 +1,4 @@
+{"id": "702.15b", "output": "trained", "outputs": ["life_delta", "damage_taken"], "input": "incomplete", "inputs_missing": ["new:replacement_shield"], "note": "Holy Day's prevention is a pending effect no snapshot carries."}
+{"id": "702.15c", "output": "trained", "outputs": ["life_delta"], "input": "incomplete", "inputs_missing": ["new:this_turn_history"], "note": "The dead creature's lifelink from the Aura is gone by the trigger's resolution and its last known information is not recorded."}
+{"id": "702.15d", "output": "trained", "outputs": ["life_delta"], "input": "complete", "inputs_missing": [], "note": "Soulfire Grand Master's grant shows as lifelink in the Shock card's own keyword overlay."}
+{"id": "702.15e", "output": "trained", "outputs": ["trigger_fired", "life_delta"], "input": "complete", "inputs_missing": [], "note": ""}

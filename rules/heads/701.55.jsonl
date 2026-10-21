@@ -1,0 +1,4 @@
+{"id": "701.55a", "output": "trained", "outputs": ["cards_drawn", "cards_discarded", "created_objects"], "input": "incomplete", "inputs_missing": ["new:this_turn_history", "new:chosen_values"], "note": ""}
+{"id": "701.55b", "output": "trained", "outputs": ["cards_discarded"], "input": "incomplete", "inputs_missing": ["new:chosen_values"], "note": ""}
+{"id": "701.55c", "output": "trained", "outputs": ["life_delta", "cards_discarded", "cards_drawn"], "input": "incomplete", "inputs_missing": ["planned:every_line", "new:chosen_values"], "note": ""}
+{"id": "701.55d", "output": "trained", "outputs": ["life_delta", "cards_discarded", "cards_drawn"], "input": "incomplete", "inputs_missing": ["planned:active_player", "new:chosen_values"], "note": "Judged from the rule text; unreachable in a two-player game."}

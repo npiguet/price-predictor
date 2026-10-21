@@ -1,0 +1,5 @@
+{"id": "307.1", "output": "planned", "outputs": ["planned:timing"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "307.2", "output": "trained", "outputs": ["life_delta", "zone_outcome"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "307.4", "output": "trained", "outputs": ["gate"], "input": "complete", "inputs_missing": [], "note": "The sorcery staying put is an absent zone change, seen as the entity gate staying 0."}
+{"id": "307.5", "output": "planned", "outputs": ["planned:timing", "planned:failed_checks"], "input": "incomplete", "inputs_missing": ["planned:every_line", "new:chosen_values"], "note": "The sorcery-casting prohibition is a static on a non-acting permanent, and the Archon's chosen card type is not recorded."}
+{"id": "307.5a", "output": "trained", "outputs": ["trigger_fired", "zone_outcome"], "input": "incomplete", "inputs_missing": ["new:this_turn_history", "planned:every_line"], "note": "The cast timing of the spell is not recorded, and the check lives in a line that is not read."}

@@ -1,0 +1,1 @@
+{"id": "402.2", "output": "missing", "outputs": ["new:turn_based_action"], "input": "incomplete", "inputs_missing": ["planned:every_line"], "note": "The cleanup discard is a turn-based action filed with no bracket open, so no record keeps it; Reliquary Tower is a static on a non-acting permanent."}

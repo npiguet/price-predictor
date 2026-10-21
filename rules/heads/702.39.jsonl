@@ -1,0 +1,2 @@
+{"id": "702.39a", "output": "trained", "outputs": ["tap_state", "blocker_legal", "trigger_fired"], "input": "incomplete", "inputs_missing": ["planned:every_line"], "note": "must-block is a restriction; its effect shows through the block and damage records"}
+{"id": "702.39b", "output": "trained", "outputs": ["trigger_fired"], "input": "incomplete", "inputs_missing": ["planned:every_line", "snapshot:subtypes"], "note": "second provoke comes from a static grant on another Sliver"}

@@ -1,0 +1,2 @@
+{"id": "702.187b", "output": "trained", "outputs": ["can_play", "affordable"], "input": "incomplete", "inputs_missing": ["new:this_turn_history"], "note": ""}
+{"id": "702.187c", "output": "trained", "outputs": ["can_play"], "input": "incomplete", "inputs_missing": ["new:this_turn_history", "planned:every_line"], "note": ""}

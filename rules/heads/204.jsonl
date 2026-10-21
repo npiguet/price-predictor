@@ -1,0 +1,1 @@
+{"id": "204.2", "output": "recorded", "outputs": ["record:snapshot_colors", "new:colors_state"], "input": "incomplete", "inputs_missing": ["new:color_indicator"], "note": "Colors are an input; no output is trained on the derivation."}

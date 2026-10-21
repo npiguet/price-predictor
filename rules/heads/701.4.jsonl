@@ -1,0 +1,1 @@
+{"id": "701.4b", "output": "trained", "outputs": ["zone_outcome"], "input": "incomplete", "inputs_missing": ["new:optional_costs_paid"], "note": "whether a Dragon was beheld is not recorded"}

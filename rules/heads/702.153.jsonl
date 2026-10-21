@@ -1,0 +1,2 @@
+{"id": "702.153a", "output": "trained", "outputs": ["trigger_fired", "new:spell_copied"], "input": "incomplete", "inputs_missing": ["new:chosen_values"], "note": "The copy itself reaches no target."}
+{"id": "702.153b", "output": "trained", "outputs": ["trigger_fired"], "input": "incomplete", "inputs_missing": ["new:chosen_values"], "note": ""}

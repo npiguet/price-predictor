@@ -1,0 +1,3 @@
+{"id": "702.126a", "output": "trained", "outputs": ["can_play", "affordable", "tap_state", "mana_paid"], "input": "incomplete", "inputs_missing": ["planned:every_line"], "note": ""}
+{"id": "702.126b", "output": "trained", "outputs": ["can_play", "affordable", "mana_paid"], "input": "incomplete", "inputs_missing": ["planned:every_line"], "note": "Thalia's cost increase is a static on another permanent."}
+{"id": "702.126c", "output": "trained", "outputs": ["can_play", "affordable", "mana_paid"], "input": "incomplete", "inputs_missing": ["planned:every_line"], "note": ""}

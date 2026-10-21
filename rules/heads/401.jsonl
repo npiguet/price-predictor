@@ -1,0 +1,3 @@
+{"id": "401.5", "output": "missing", "outputs": ["new:top_card_revealed"], "input": "incomplete", "inputs_missing": ["new:library_top"], "note": "The library is a size only; the top card and whether it is revealed are not recorded."}
+{"id": "401.6", "output": "missing", "outputs": ["new:top_card_revealed"], "input": "incomplete", "inputs_missing": ["new:library_top"], "note": "Judged from the rule text; the scenario is skipped."}
+{"id": "401.7", "output": "recorded", "outputs": ["record:event:zone_change", "new:library_position"], "input": "complete", "inputs_missing": [], "note": "A zone_change to a library maps to library_top whatever its library_position says, so library_bottom is never trained."}

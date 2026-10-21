@@ -1,0 +1,7 @@
+{"id": "715.2b", "output": "missing", "outputs": ["new:face_change"], "input": "incomplete", "inputs_missing": ["snapshot:copy_source", "snapshot:face"], "note": ""}
+{"id": "715.2c", "output": "trained", "outputs": ["cards_drawn", "cards_discarded"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "715.3a", "output": "trained", "outputs": ["can_play", "affordable", "has_legal_target"], "input": "complete", "inputs_missing": [], "note": "the Adventure is its own spell line with its own cost"}
+{"id": "715.3b", "output": "trained", "outputs": ["has_legal_target", "target_legal", "can_play"], "input": "incomplete", "inputs_missing": ["snapshot:face"], "note": "the Adventure's characteristics on the stack decide whether a creature-spell counter can target it; the snapshot does not show them"}
+{"id": "715.3c", "output": "trained", "outputs": ["life_delta", "has_legal_target", "new:spell_copied"], "input": "incomplete", "inputs_missing": ["snapshot:face", "snapshot:copy_source"], "note": "the copy's own resolution trains what it does; the copy event itself has no target path"}
+{"id": "715.3d", "output": "trained", "outputs": ["zone_outcome"], "input": "incomplete", "inputs_missing": ["snapshot:face"], "note": "the exile-and-recast permission is not an outcome of this resolution"}
+{"id": "715.4", "output": "trained", "outputs": ["has_legal_target", "target_legal", "zone_outcome"], "input": "incomplete", "inputs_missing": ["snapshot:face"], "note": "hand and graveyard characteristics are read; the stack case needs the face"}

@@ -1,0 +1,1 @@
+{"id": "408.2", "output": "recorded", "outputs": ["record:event:card_made", "new:emblem_created"], "input": "complete", "inputs_missing": [], "note": "The emblem count is an input afterwards; creating one is not a trained output."}

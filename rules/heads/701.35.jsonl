@@ -1,0 +1,1 @@
+{"id": "701.35a", "output": "trained", "outputs": ["blocker_legal", "attacker_legal", "can_play"], "input": "incomplete", "inputs_missing": ["new:designations"], "note": "Detained status and its expiry are not in the snapshot."}

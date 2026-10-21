@@ -1,0 +1,4 @@
+{"id": "701.3a", "output": "trained", "outputs": ["attached_to_change"], "input": "incomplete", "inputs_missing": ["snapshot:subtypes", "planned:every_line"], "note": "the enchant restriction is a static line"}
+{"id": "701.3b", "output": "trained", "outputs": ["attached_to_change"], "input": "incomplete", "inputs_missing": ["snapshot:attached_to_target"], "note": "only an attached flag is read, not the host"}
+{"id": "701.3c", "output": "trained", "outputs": ["keywords_lost", "keywords_gained"], "input": "incomplete", "inputs_missing": ["new:timestamps"], "note": ""}
+{"id": "701.3d", "output": "trained", "outputs": ["attached_to_change", "trigger_fired", "zone_outcome"], "input": "complete", "inputs_missing": [], "note": "the unattached trigger is the acting ability of its trigger record, and the attached flag is read"}

@@ -1,0 +1,2 @@
+{"id": "701.62a", "output": "recorded", "outputs": ["record:event:zone_change", "record:event:face_change", "new:face_change"], "input": "complete", "inputs_missing": [], "note": "Both the manifested and the binned card are library cards with no slot; no mill event is written."}
+{"id": "701.62b", "output": "trained", "outputs": ["trigger_fired"], "input": "incomplete", "inputs_missing": ["planned:every_line"], "note": ""}

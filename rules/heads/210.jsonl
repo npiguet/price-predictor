@@ -1,0 +1,1 @@
+{"id": "210.1", "output": "recorded", "outputs": ["record:event:counter_change", "zone_outcome", "new:permanent_spell_resolution"], "input": "incomplete", "inputs_missing": ["new:printed_defense"], "note": "The countered case is trained on Counterspell's record; the entering counters sit in a refused permanent-spell record."}

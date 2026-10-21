@@ -1,0 +1,1 @@
+{"id": "702.127a", "output": "trained", "outputs": ["can_play", "zone_outcome"], "input": "incomplete", "inputs_missing": ["planned:every_line"], "note": "The cast half is the acting line, but the aftermath keyword is outside the overlay list and its line is unread."}

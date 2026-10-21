@@ -1,0 +1,3 @@
+{"id": "702.5a", "output": "trained", "outputs": ["target_legal", "has_legal_target", "can_play"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "702.5c", "output": "trained", "outputs": ["target_legal", "has_legal_target", "can_play"], "input": "complete", "inputs_missing": [], "note": "Judged from the rule text; no Forge card illustrates it."}
+{"id": "702.5d", "output": "trained", "outputs": ["target_legal", "can_play"], "input": "complete", "inputs_missing": [], "note": ""}

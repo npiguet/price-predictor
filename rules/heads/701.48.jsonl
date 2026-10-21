@@ -1,0 +1,1 @@
+{"id": "701.48a", "output": "trained", "outputs": ["cards_discarded", "cards_drawn", "new:library_zone_outcome"], "input": "incomplete", "inputs_missing": ["new:chosen_values", "new:sideboard"], "note": "The Lesson fetched from outside the game reaches no slot."}

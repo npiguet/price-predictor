@@ -1,0 +1,1 @@
+{"id": "702.142a", "output": "trained", "outputs": ["can_play", "planned:failed_checks"], "input": "incomplete", "inputs_missing": ["new:this_turn_history"], "note": "Whether boast was already activated this turn is not recorded."}

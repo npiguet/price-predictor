@@ -1,0 +1,2 @@
+{"id": "701.65a", "output": "trained", "outputs": ["zone_outcome", "can_play", "new:cost_after_adjustment"], "input": "incomplete", "inputs_missing": ["planned:owner", "new:exiled_with"], "note": "Casting from exile for {2} rests on an exile permission and on ownership; the {2} cost reaches no output."}
+{"id": "701.65b", "output": "trained", "outputs": ["trigger_fired"], "input": "complete", "inputs_missing": [], "note": ""}

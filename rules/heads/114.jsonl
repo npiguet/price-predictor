@@ -1,0 +1,2 @@
+{"id": "114.2", "output": "missing", "outputs": ["new:emblem_created"], "input": "complete", "inputs_missing": [], "note": "Emblem count is an input only."}
+{"id": "114.4", "output": "trained", "outputs": ["trigger_fired", "power_delta", "toughness_delta"], "input": "incomplete", "inputs_missing": ["snapshot:emblem_abilities"], "note": ""}

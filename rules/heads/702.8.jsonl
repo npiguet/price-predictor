@@ -1,0 +1,1 @@
+{"id": "702.8a", "output": "planned", "outputs": ["planned:timing", "can_play"], "input": "complete", "inputs_missing": [], "note": "Casting speed is the planned timing column; can_play already carries the legal/illegal verdict."}

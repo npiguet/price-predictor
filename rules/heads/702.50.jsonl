@@ -1,0 +1,2 @@
+{"id": "702.50a", "output": "recorded", "outputs": ["record:event:delayed_trigger_created", "record:event:spell_copied", "new:delayed_trigger_created", "new:spell_copied"], "input": "incomplete", "inputs_missing": ["new:game_history"], "note": ""}
+{"id": "702.50b", "output": "trained", "outputs": ["can_play"], "input": "incomplete", "inputs_missing": ["new:game_history"], "note": ""}

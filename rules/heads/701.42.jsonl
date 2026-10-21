@@ -1,0 +1,3 @@
+{"id": "701.42a", "output": "trained", "outputs": ["zone_outcome", "trigger_fired", "new:face_change"], "input": "incomplete", "inputs_missing": ["snapshot:name", "planned:owner"], "note": "The exile reaches zone_outcome; the melded permanent itself has no output."}
+{"id": "701.42b", "output": "trained", "outputs": ["zone_outcome"], "input": "incomplete", "inputs_missing": ["snapshot:token_script_id", "snapshot:copy_source"], "note": "Both variants exile both objects; only whether they then meld differs, and the model has no token flag."}
+{"id": "701.42c", "output": "trained", "outputs": ["zone_outcome", "gate"], "input": "incomplete", "inputs_missing": ["snapshot:name", "snapshot:token_script_id"], "note": ""}

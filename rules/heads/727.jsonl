@@ -1,0 +1,7 @@
+{"id": "727.1", "output": "missing", "outputs": ["new:game_restart", "new:game_result"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "727.1a", "output": "missing", "outputs": ["new:game_restart"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "727.2", "output": "missing", "outputs": ["new:game_restart"], "input": "incomplete", "inputs_missing": ["planned:owner"], "note": "A card goes to its owner's library, and owner is not read."}
+{"id": "727.3", "output": "recorded", "outputs": ["record:event:player_removed", "new:game_result"], "input": "incomplete", "inputs_missing": ["planned:owner"], "note": "The new library is every card a player owns, counted across zones by owner, which is not read."}
+{"id": "727.4", "output": "trained", "outputs": ["trigger_fired", "new:game_restart"], "input": "incomplete", "inputs_missing": ["new:exiled_with"], "note": "The returned card's enters trigger is trained; which card returns is the card exiled with Karn, and exile is not read."}
+{"id": "727.5", "output": "missing", "outputs": ["new:game_restart"], "input": "incomplete", "inputs_missing": ["new:exiled_with", "planned:owner"], "note": "The exempt card is the permanent card exiled with Karn, which the snapshot does not link."}
+{"id": "727.6", "output": "missing", "outputs": ["new:game_restart", "new:subgame_boundary"], "input": "incomplete", "inputs_missing": ["new:game_history"], "note": ""}

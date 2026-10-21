@@ -1,0 +1,6 @@
+{"id": "702.19a", "output": "trained", "outputs": ["damage_taken", "life_delta"], "input": "incomplete", "inputs_missing": ["planned:every_line"], "note": ""}
+{"id": "702.19b", "output": "trained", "outputs": ["damage_taken", "life_delta"], "input": "incomplete", "inputs_missing": ["planned:every_line"], "note": ""}
+{"id": "702.19c", "output": "trained", "outputs": ["damage_taken", "life_delta", "counters_delta_loyalty"], "input": "incomplete", "inputs_missing": ["planned:every_line", "snapshot:attack_target"], "note": ""}
+{"id": "702.19d", "output": "trained", "outputs": ["damage_taken", "life_delta", "counters_delta_loyalty"], "input": "incomplete", "inputs_missing": ["planned:every_line", "snapshot:attack_target"], "note": ""}
+{"id": "702.19e", "output": "trained", "outputs": ["damage_taken", "life_delta"], "input": "incomplete", "inputs_missing": ["planned:every_line", "snapshot:attack_target"], "note": ""}
+{"id": "702.19f", "output": "trained", "outputs": ["damage_taken", "life_delta", "counters_delta_loyalty"], "input": "incomplete", "inputs_missing": ["planned:every_line", "snapshot:attack_target"], "note": ""}

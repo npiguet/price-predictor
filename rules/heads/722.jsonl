@@ -1,0 +1,4 @@
+{"id": "722.3", "output": "trained", "outputs": ["can_play"], "input": "incomplete", "inputs_missing": ["new:designations"], "note": ""}
+{"id": "722.3a", "output": "missing", "outputs": ["new:designations_changed"], "input": "incomplete", "inputs_missing": ["new:designations"], "note": ""}
+{"id": "722.3b", "output": "missing", "outputs": ["new:designations_changed"], "input": "incomplete", "inputs_missing": ["new:designations"], "note": ""}
+{"id": "722.3c", "output": "recorded", "outputs": ["record:event:card_made", "new:designations_changed"], "input": "incomplete", "inputs_missing": ["new:designations"], "note": ""}

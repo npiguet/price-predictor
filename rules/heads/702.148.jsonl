@@ -1,0 +1,1 @@
+{"id": "702.148a", "output": "trained", "outputs": ["zone_outcome", "has_legal_target"], "input": "incomplete", "inputs_missing": ["new:mana_spent"], "note": "Which text applies depends on the cleave cost being paid."}

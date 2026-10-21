@@ -1,0 +1,1 @@
+{"id": "504.1", "output": "missing", "outputs": ["new:turn_based_action"], "input": "incomplete", "inputs_missing": ["planned:every_line"], "note": "The draw-step draw is filed with no bracket open and dropped; Necropotence's skip is a replacement on a non-acting permanent."}

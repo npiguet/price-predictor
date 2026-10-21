@@ -1,0 +1,2 @@
+{"id": "701.9a", "output": "trained", "outputs": ["cards_discarded", "zone_outcome"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "701.9c", "output": "trained", "outputs": ["zone_outcome", "life_delta"], "input": "incomplete", "inputs_missing": ["planned:every_line", "new:chosen_values"], "note": "Library of Leng's replacement is on a non-acting permanent and whether A applies it is not read"}

@@ -1,0 +1,41 @@
+{"id": "603.1a", "output": "trained", "outputs": ["zone_outcome"], "input": "incomplete", "inputs_missing": ["planned:every_line"], "note": "The 'can't be countered' text is part of a triggered ability, and a trigger's line is not an ability token."}
+{"id": "603.1b", "output": "trained", "outputs": ["trigger_fired"], "input": "incomplete", "inputs_missing": ["new:this_turn_history"], "note": "The occurrence period of the conditions is earlier history."}
+{"id": "603.2", "output": "trained", "outputs": ["trigger_fired"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "603.2a", "output": "trained", "outputs": ["trigger_fired"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "603.2b", "output": "trained", "outputs": ["trigger_fired"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "603.2c", "output": "trained", "outputs": ["trigger_fired"], "input": "complete", "inputs_missing": [], "note": "One bit per trigger record; each occurrence is its own record."}
+{"id": "603.2d", "output": "trained", "outputs": ["trigger_fired"], "input": "incomplete", "inputs_missing": ["planned:every_line"], "note": "Panharmonicon is a static on a non-acting permanent."}
+{"id": "603.2e", "output": "trained", "outputs": ["trigger_fired"], "input": "incomplete", "inputs_missing": ["snapshot:pending_event_type"], "note": "The overlay says only that a pending event names Temple Garden, not whether it is a tap or a zone change."}
+{"id": "603.2f", "output": "trained", "outputs": ["trigger_fired"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "603.2g", "output": "trained", "outputs": ["trigger_fired"], "input": "incomplete", "inputs_missing": ["new:active_effects"], "note": "The prevention shield is a floating effect that no slot carries."}
+{"id": "603.2h", "output": "trained", "outputs": ["trigger_fired"], "input": "incomplete", "inputs_missing": ["new:this_turn_history"], "note": ""}
+{"id": "603.3", "output": "trained", "outputs": ["life_delta", "zone_outcome"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "603.3a", "output": "trained", "outputs": ["life_delta"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "603.3c", "output": "recorded", "outputs": ["record:resolution_outcome", "new:resolution_outcome"], "input": "complete", "inputs_missing": [], "note": "Removal without resolving writes no effect half."}
+{"id": "603.3d", "output": "recorded", "outputs": ["record:resolution_outcome", "new:resolution_outcome"], "input": "complete", "inputs_missing": [], "note": "Removal without resolving writes no effect half."}
+{"id": "603.4", "output": "trained", "outputs": ["trigger_fired", "gate", "new:game_result"], "input": "complete", "inputs_missing": [], "note": "A failed condition on resolution is an effect half with no events; the win itself is a player_removed event with no target path."}
+{"id": "603.5", "output": "trained", "outputs": ["life_delta", "gate"], "input": "complete", "inputs_missing": [], "note": "The choice is a decision; the declined case is an effect half with no events."}
+{"id": "603.6", "output": "trained", "outputs": ["zone_outcome"], "input": "complete", "inputs_missing": [], "note": "Leaving and returning (new object) would need timestamps; the scenario delta is the zone alone."}
+{"id": "603.6a", "output": "trained", "outputs": ["trigger_fired"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "603.6b", "output": "trained", "outputs": ["trigger_fired"], "input": "incomplete", "inputs_missing": ["planned:every_line"], "note": "Humility and Living Plane are statics on non-acting permanents."}
+{"id": "603.6c", "output": "trained", "outputs": ["trigger_fired"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "603.6d", "output": "trained", "outputs": ["tap_state", "trigger_fired"], "input": "incomplete", "inputs_missing": ["planned:every_line"], "note": "Torpor Orb is a static on a non-acting permanent."}
+{"id": "603.6e", "output": "trained", "outputs": ["trigger_fired", "zone_outcome"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "603.7", "output": "recorded", "outputs": ["record:event:delayed_trigger_created", "new:delayed_trigger_created"], "input": "incomplete", "inputs_missing": ["new:delayed_triggers"], "note": "Whether the spell created the delayed trigger reaches no output; later firing needs the pending delayed trigger as input."}
+{"id": "603.7a", "output": "trained", "outputs": ["trigger_fired"], "input": "incomplete", "inputs_missing": ["new:delayed_triggers"], "note": ""}
+{"id": "603.7b", "output": "trained", "outputs": ["trigger_fired"], "input": "incomplete", "inputs_missing": ["new:delayed_triggers"], "note": ""}
+{"id": "603.7c", "output": "trained", "outputs": ["zone_outcome"], "input": "incomplete", "inputs_missing": ["new:delayed_triggers", "new:timestamps"], "note": "A returned object is a new object, which needs timestamps."}
+{"id": "603.7d", "output": "trained", "outputs": ["cards_drawn"], "input": "incomplete", "inputs_missing": ["new:delayed_triggers"], "note": "The delayed trigger's controller shows as which player draws."}
+{"id": "603.7e", "output": "trained", "outputs": ["zone_outcome"], "input": "incomplete", "inputs_missing": ["new:delayed_triggers"], "note": "The delayed trigger's controller shows as whose creature is sacrificed."}
+{"id": "603.7f", "output": "trained", "outputs": ["gate"], "input": "incomplete", "inputs_missing": ["new:delayed_triggers", "planned:every_line"], "note": "The controller decides which player or permanent the effect names, not whether it fires."}
+{"id": "603.7g", "output": "trained", "outputs": ["gate"], "input": "incomplete", "inputs_missing": ["new:delayed_triggers", "planned:every_line"], "note": "The controller decides which player or permanent the effect names, not whether it fires."}
+{"id": "603.7h", "output": "recorded", "outputs": ["record:event:delayed_trigger_created", "new:delayed_trigger_created"], "input": "incomplete", "inputs_missing": ["new:delayed_triggers", "new:this_turn_history"], "note": "A delayed trigger never created writes no trigger record, so trigger_fired has no negative to learn from."}
+{"id": "603.8", "output": "trained", "outputs": ["trigger_fired"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "603.10", "output": "trained", "outputs": ["trigger_fired"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "603.10a", "output": "trained", "outputs": ["trigger_fired"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "603.10b", "output": "trained", "outputs": ["trigger_fired"], "input": "complete", "inputs_missing": [], "note": "Phased-out status is not read, but the variant delta is the active player."}
+{"id": "603.10c", "output": "trained", "outputs": ["trigger_fired"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "603.10d", "output": "trained", "outputs": ["trigger_fired"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "603.10e", "output": "trained", "outputs": ["trigger_fired"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "603.12", "output": "trained", "outputs": ["trigger_fired"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "603.12a", "output": "trained", "outputs": ["trigger_fired"], "input": "complete", "inputs_missing": [], "note": ""}

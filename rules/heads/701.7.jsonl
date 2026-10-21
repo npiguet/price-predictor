@@ -1,0 +1,2 @@
+{"id": "701.7a", "output": "trained", "outputs": ["created_objects"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "701.7b", "output": "trained", "outputs": ["created_objects"], "input": "incomplete", "inputs_missing": ["planned:every_line"], "note": "the replacement and type-changing lines are on non-acting permanents; the counter lands on a new token with no entity slot"}

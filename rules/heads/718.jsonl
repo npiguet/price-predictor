@@ -1,0 +1,7 @@
+{"id": "718.2a", "output": "missing", "outputs": ["new:face_change"], "input": "incomplete", "inputs_missing": ["snapshot:copy_source", "snapshot:face"], "note": ""}
+{"id": "718.3a", "output": "trained", "outputs": ["can_play", "affordable"], "input": "complete", "inputs_missing": [], "note": "the prototype is its own spell line with its own cost"}
+{"id": "718.3b", "output": "trained", "outputs": ["zone_outcome", "gate"], "input": "complete", "inputs_missing": [], "note": "the prototyped object's color, P/T and mana value are computed snapshot inputs; Hydroblast countering it is the trained consequence"}
+{"id": "718.3c", "output": "recorded", "outputs": ["record:event:spell_copied", "new:spell_copied"], "input": "incomplete", "inputs_missing": ["snapshot:copy_source", "snapshot:face"], "note": ""}
+{"id": "718.3d", "output": "recorded", "outputs": ["record:event:permanent_copied", "new:permanent_copied"], "input": "incomplete", "inputs_missing": ["snapshot:copy_source", "snapshot:face"], "note": ""}
+{"id": "718.4", "output": "trained", "outputs": ["has_legal_target", "target_legal"], "input": "complete", "inputs_missing": [], "note": "the graveyard card's mana value is read"}
+{"id": "718.5", "output": "recorded", "outputs": ["record:snapshot_characteristics", "new:mana_value_change"], "input": "complete", "inputs_missing": [], "note": "the outcome is the unchanged snapshot state"}

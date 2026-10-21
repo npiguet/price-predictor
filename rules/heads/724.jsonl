@@ -1,0 +1,15 @@
+{"id": "724.1", "output": "trained", "outputs": ["zone_outcome", "new:removed_from_combat"], "input": "complete", "inputs_missing": [], "note": "stack objects are exiled (zone_outcome); removal from combat has no target path"}
+{"id": "724.1a", "output": "missing", "outputs": ["new:trigger_removed"], "input": "incomplete", "inputs_missing": ["new:turn_ending_in_progress"], "note": "the ceased triggers did trigger; their ceasing to exist reaches no record"}
+{"id": "724.1b", "output": "trained", "outputs": ["zone_outcome"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "724.1c", "output": "trained", "outputs": ["trigger_fired", "zone_outcome"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "724.1d", "output": "recorded", "outputs": ["record:event:phase_skipped", "record:event:removed_from_combat", "new:phase_skipped", "new:removed_from_combat"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "724.1e", "output": "recorded", "outputs": ["record:event:phase_skipped", "new:phase_skipped"], "input": "complete", "inputs_missing": [], "note": "a skipped end step writes no trigger record, so trigger_fired gets no negative"}
+{"id": "724.1f", "output": "trained", "outputs": ["trigger_fired"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "724.2", "output": "trained", "outputs": ["zone_outcome", "new:removed_from_combat"], "input": "complete", "inputs_missing": [], "note": "stack objects are exiled (zone_outcome); removal from combat has no target path"}
+{"id": "724.2a", "output": "missing", "outputs": ["new:trigger_removed"], "input": "incomplete", "inputs_missing": ["new:turn_ending_in_progress"], "note": "the ceased triggers did trigger; their ceasing to exist reaches no record"}
+{"id": "724.2b", "output": "trained", "outputs": ["zone_outcome"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "724.2c", "output": "trained", "outputs": ["trigger_fired", "zone_outcome"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "724.2d", "output": "recorded", "outputs": ["record:event:phase_skipped", "record:event:removed_from_combat", "new:phase_skipped", "new:removed_from_combat"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "724.2e", "output": "recorded", "outputs": ["record:event:phase_skipped", "new:phase_skipped"], "input": "complete", "inputs_missing": [], "note": "a skipped end of combat step writes no trigger record, so trigger_fired gets no negative"}
+{"id": "724.2f", "output": "trained", "outputs": ["trigger_fired"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "724.2g", "output": "trained", "outputs": ["gate"], "input": "complete", "inputs_missing": [], "note": ""}

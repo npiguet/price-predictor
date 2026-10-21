@@ -76,6 +76,14 @@ keywords; plus an overflow flag.
   learned only where its outcome reaches another record's events.
 - **Playability:** `cost_after_adjustment` (cost reductions and increases), `legal_targets`
   beyond the per-entity `target_legal` bit, and `responsible_static`.
+- **Permanent-spell resolutions:** a permanent spell resolves through Forge's implicit cast
+  ability, which maps to no rendered line, and `build-corpus` refuses every resolution record
+  whose acting keys all map to no line (`record_quality.py`, `no-acting-text`). What happens as
+  the permanent enters, the legend rule after it for example, is not trained from that record.
+- **Turn-based actions:** the draw-step draw, the cleanup discard, untapping and a Saga's lore
+  counter arrive while no record is open, and the collector discards them.
+- **Zone destinations:** `zone_outcome` maps any move to a library to `library_top` (nothing sets
+  `library_bottom`) and entering the battlefield from any zone to `blinked`.
 - **Keywords outside the list:** a keyword gained or lost that is not one of the listed keywords
   reaches no output.
 - **Types:** subtypes and supertypes gained or lost.

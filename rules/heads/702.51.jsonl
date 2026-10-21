@@ -1,0 +1,2 @@
+{"id": "702.51a", "output": "trained", "outputs": ["tap_state", "mana_paid", "affordable"], "input": "incomplete", "inputs_missing": ["planned:every_line"], "note": "convoke is a static line on the spell"}
+{"id": "702.51b", "output": "trained", "outputs": ["mana_paid", "affordable"], "input": "incomplete", "inputs_missing": ["planned:every_line"], "note": ""}

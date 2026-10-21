@@ -1,0 +1,6 @@
+{"id": "702.145b", "output": "trained", "outputs": ["zone_outcome", "new:day_night_change"], "input": "incomplete", "inputs_missing": ["new:day_night", "planned:every_line"], "note": "Transform is trained as face_changed; day/night and the daybound line on a non-acting permanent are not read."}
+{"id": "702.145c", "output": "trained", "outputs": ["zone_outcome", "new:day_night_change"], "input": "incomplete", "inputs_missing": ["new:day_night"], "note": ""}
+{"id": "702.145d", "output": "recorded", "outputs": ["record:event:day_night_changed", "new:day_night_change"], "input": "incomplete", "inputs_missing": ["new:day_night"], "note": ""}
+{"id": "702.145e", "output": "trained", "outputs": ["zone_outcome", "new:day_night_change"], "input": "incomplete", "inputs_missing": ["new:day_night"], "note": ""}
+{"id": "702.145f", "output": "trained", "outputs": ["zone_outcome", "new:day_night_change"], "input": "incomplete", "inputs_missing": ["new:day_night"], "note": ""}
+{"id": "702.145g", "output": "recorded", "outputs": ["record:event:day_night_changed", "new:day_night_change"], "input": "incomplete", "inputs_missing": ["new:day_night"], "note": ""}

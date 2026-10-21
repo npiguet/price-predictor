@@ -1,0 +1,10 @@
+{"id": "729.1b", "output": "missing", "outputs": ["new:subgame_boundary"], "input": "incomplete", "inputs_missing": ["new:game_history"], "note": ""}
+{"id": "729.2", "output": "missing", "outputs": ["new:subgame_boundary", "new:library_shuffled"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "729.2a", "output": "missing", "outputs": ["new:subgame_boundary", "new:library_shuffled"], "input": "incomplete", "inputs_missing": ["new:game_history", "new:attraction_deck"], "note": "Supplementary deck contents are not in the snapshot."}
+{"id": "729.3", "output": "recorded", "outputs": ["record:event:player_removed", "new:game_result"], "input": "incomplete", "inputs_missing": ["new:game_history"], "note": "Library size is read but the subgame boundary is not."}
+{"id": "729.4", "output": "missing", "outputs": ["new:subgame_boundary"], "input": "incomplete", "inputs_missing": ["new:game_history"], "note": ""}
+{"id": "729.4a", "output": "trained", "outputs": ["trigger_fired"], "input": "incomplete", "inputs_missing": ["new:game_history"], "note": "Deferral to main-game resumption depends on subgame state."}
+{"id": "729.4b", "output": "missing", "outputs": ["new:subgame_boundary", "new:radiation_delta"], "input": "incomplete", "inputs_missing": ["new:game_history", "new:radiation"], "note": ""}
+{"id": "729.5", "output": "missing", "outputs": ["new:subgame_boundary", "new:library_shuffled"], "input": "incomplete", "inputs_missing": ["new:game_history"], "note": ""}
+{"id": "729.5a", "output": "missing", "outputs": ["new:subgame_boundary", "new:library_shuffled"], "input": "incomplete", "inputs_missing": ["new:game_history"], "note": ""}
+{"id": "729.6", "output": "missing", "outputs": ["new:subgame_boundary"], "input": "incomplete", "inputs_missing": ["new:game_history"], "note": ""}

@@ -1,0 +1,23 @@
+{"id": "400.3", "output": "trained", "outputs": ["zone_outcome"], "input": "incomplete", "inputs_missing": ["planned:owner"], "note": "Owner is not recorded, so which graveyard or hand receives the card cannot be read."}
+{"id": "400.4a", "output": "trained", "outputs": ["zone_outcome", "gate"], "input": "incomplete", "inputs_missing": ["new:face"], "note": "A face-down card's snapshot carries its face-down characteristics, so whether it is an instant, sorcery or creature cannot be read."}
+{"id": "400.4b", "output": "missing", "outputs": ["new:rewrite_result"], "input": "complete", "inputs_missing": [], "note": "Judged from the rule text; the scenario is skipped."}
+{"id": "400.6", "output": "trained", "outputs": ["zone_outcome"], "input": "incomplete", "inputs_missing": ["planned:every_line"], "note": "Rest in Peace is a replacement on a non-acting permanent; the spell's effect half carries the move to exile."}
+{"id": "400.7", "output": "trained", "outputs": ["zone_outcome", "counters_delta_p1p1"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "400.7a", "output": "trained", "outputs": ["control_change"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "400.7b", "output": "trained", "outputs": ["keywords_gained", "zone_outcome", "cards_drawn"], "input": "incomplete", "inputs_missing": ["planned:every_line"], "note": "The static that grants blitz to spells sits on a non-acting permanent."}
+{"id": "400.7c", "output": "trained", "outputs": ["life_delta"], "input": "incomplete", "inputs_missing": ["new:chosen_values"], "note": "The prevented source is a choice made on activation and not recorded; the prevented damage itself shows as life_delta staying 0."}
+{"id": "400.7d", "output": "trained", "outputs": ["trigger_fired"], "input": "incomplete", "inputs_missing": ["new:mana_spent"], "note": "Whether the permanent was kicked is not on the permanent."}
+{"id": "400.7e", "output": "trained", "outputs": ["zone_outcome", "trigger_fired"], "input": "incomplete", "inputs_missing": ["planned:every_line"], "note": "Rest in Peace is a replacement on a non-acting permanent."}
+{"id": "400.7f", "output": "trained", "outputs": ["zone_outcome", "trigger_fired"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "400.7g", "output": "trained", "outputs": ["zone_outcome"], "input": "incomplete", "inputs_missing": ["new:cast_permission"], "note": "The flashback permission is not recorded on the card or the spell."}
+{"id": "400.7h", "output": "trained", "outputs": ["zone_outcome"], "input": "incomplete", "inputs_missing": ["new:cast_permission"], "note": "The cast permission is not recorded on the card or the spell."}
+{"id": "400.7i", "output": "trained", "outputs": ["zone_outcome", "gate"], "input": "complete", "inputs_missing": [], "note": "Judged from the rule text; the scenario is skipped."}
+{"id": "400.7j", "output": "trained", "outputs": ["life_delta", "new:resolution_outcome"], "input": "incomplete", "inputs_missing": ["new:linked_choice"], "note": "Fling's and Reanimate's amounts land on a player as life_delta; the Reanimate fizzle contrast is only an input."}
+{"id": "400.7k", "output": "trained", "outputs": ["zone_outcome"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "400.7m", "output": "missing", "outputs": ["new:text_change"], "input": "incomplete", "inputs_missing": ["new:stickers"], "note": "Judged from the rule text; the scenario is skipped."}
+{"id": "400.8", "output": "trained", "outputs": ["trigger_fired"], "input": "complete", "inputs_missing": [], "note": "Judged from the rule text; the scenario is skipped."}
+{"id": "400.9", "output": "missing", "outputs": ["new:face_change"], "input": "incomplete", "inputs_missing": ["snapshot:face"], "note": "Judged from the rule text; the scenario is skipped."}
+{"id": "400.10", "output": "missing", "outputs": ["new:zone_outcome"], "input": "complete", "inputs_missing": [], "note": "Judged from the rule text; the scenario is skipped."}
+{"id": "400.11b", "output": "recorded", "outputs": ["record:event:card_made", "new:zone_outcome"], "input": "incomplete", "inputs_missing": ["new:sideboard"], "note": "Judged from the rule text; the scenario is skipped."}
+{"id": "400.11c", "output": "missing", "outputs": ["new:resolution_outcome"], "input": "incomplete", "inputs_missing": ["new:sideboard"], "note": "Judged from the rule text; the scenario is skipped."}
+{"id": "400.12", "output": "trained", "outputs": ["zone_outcome"], "input": "complete", "inputs_missing": [], "note": ""}

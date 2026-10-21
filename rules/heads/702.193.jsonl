@@ -1,0 +1,2 @@
+{"id": "702.193a", "output": "trained", "outputs": ["can_play", "affordable"], "input": "incomplete", "inputs_missing": ["new:game_history"], "note": "Entered-this-turn is approximated by summoning sickness."}
+{"id": "702.193b", "output": "trained", "outputs": ["affordable", "new:cost_after_adjustment"], "input": "incomplete", "inputs_missing": ["new:mana_cost"], "note": "Only mana value, not the colour pips, is read."}

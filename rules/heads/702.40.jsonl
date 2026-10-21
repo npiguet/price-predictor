@@ -1,0 +1,2 @@
+{"id": "702.40a", "output": "recorded", "outputs": ["record:event:spell_copied", "new:spell_copied"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "702.40b", "output": "trained", "outputs": ["trigger_fired"], "input": "incomplete", "inputs_missing": ["planned:every_line"], "note": "second storm instance is granted by a static on another permanent"}

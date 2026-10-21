@@ -1,0 +1,2 @@
+{"id": "403.2", "output": "trained", "outputs": ["zone_outcome", "can_play", "has_legal_target"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "403.4", "output": "trained", "outputs": ["zone_outcome", "counters_delta_p1p1"], "input": "complete", "inputs_missing": [], "note": ""}

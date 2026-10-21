@@ -1,0 +1,3 @@
+{"id": "701.67a", "output": "trained", "outputs": ["can_play", "affordable"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "701.67b", "output": "trained", "outputs": ["can_play", "affordable"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "701.67c", "output": "trained", "outputs": ["trigger_fired"], "input": "complete", "inputs_missing": [], "note": ""}

@@ -1,0 +1,1 @@
+{"id": "702.72a", "output": "trained", "outputs": ["zone_outcome", "trigger_fired"], "input": "incomplete", "inputs_missing": ["snapshot:subtypes", "new:exiled_with"], "note": "Champion quality is a subtype; the returned card is linked to the champion."}

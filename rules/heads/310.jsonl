@@ -1,0 +1,15 @@
+{"id": "310.1", "output": "planned", "outputs": ["planned:timing"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "310.2", "output": "trained", "outputs": ["zone_outcome"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "310.4b", "output": "recorded", "outputs": ["record:event:counter_change", "new:permanent_spell_resolution"], "input": "incomplete", "inputs_missing": ["new:printed_defense", "planned:every_line"], "note": "The entering defense counters sit in the permanent spell's resolution record, which build-corpus refuses (no-acting-text); printed defense is not read and Doubling Season is a replacement on a non-acting permanent."}
+{"id": "310.5", "output": "missing", "outputs": ["new:legal_targets"], "input": "incomplete", "inputs_missing": ["new:protector"], "note": "The attackers record lists who may attack, not what each may attack; the protector is not recorded."}
+{"id": "310.6", "output": "trained", "outputs": ["counters_delta_defense", "damage_taken"], "input": "incomplete", "inputs_missing": ["snapshot:attack_target"], "note": "Whether the attacker attacks the battle is only a flag."}
+{"id": "310.7", "output": "trained", "outputs": ["zone_outcome"], "input": "incomplete", "inputs_missing": ["snapshot:subtypes", "new:stack_source"], "note": "Siege subtype and which stack object a permanent is the source of are not read."}
+{"id": "310.8", "output": "trained", "outputs": ["zone_outcome"], "input": "incomplete", "inputs_missing": ["snapshot:subtypes"], "note": "Judged from the rule text; the scenario is skipped."}
+{"id": "310.9b", "output": "missing", "outputs": ["new:legal_targets"], "input": "incomplete", "inputs_missing": ["new:protector"], "note": "The attackers record lists who may attack, not what each may attack; the protector is not recorded."}
+{"id": "310.9c", "output": "trained", "outputs": ["blocker_legal"], "input": "incomplete", "inputs_missing": ["new:protector", "snapshot:attack_target"], "note": "The protector and what the anchored attacker attacks are not read."}
+{"id": "310.9d", "output": "trained", "outputs": ["life_delta"], "input": "incomplete", "inputs_missing": ["new:protector", "snapshot:attack_target"], "note": "Protector is not recorded and the attack target is only a flag."}
+{"id": "310.9f", "output": "missing", "outputs": ["new:protector_change"], "input": "incomplete", "inputs_missing": ["new:protector"], "note": ""}
+{"id": "310.9g", "output": "missing", "outputs": ["new:protector_change"], "input": "incomplete", "inputs_missing": ["new:protector"], "note": "Judged from the rule text; the scenario is skipped."}
+{"id": "310.10", "output": "trained", "outputs": ["attached_to_change"], "input": "complete", "inputs_missing": [], "note": "Judged from the rule text; unreachable in Forge."}
+{"id": "310.11", "output": "missing", "outputs": ["new:protector_change"], "input": "incomplete", "inputs_missing": ["new:protector"], "note": ""}
+{"id": "310.12b", "output": "trained", "outputs": ["trigger_fired"], "input": "complete", "inputs_missing": [], "note": ""}

@@ -1,0 +1,2 @@
+{"id": "702.123a", "output": "trained", "outputs": ["trigger_fired", "counters_delta_p1p1", "created_objects"], "input": "incomplete", "inputs_missing": ["new:chosen_values"], "note": "Fabricate is the acting line; the counters-or-Servos choice is not read."}
+{"id": "702.123b", "output": "trained", "outputs": ["trigger_fired", "counters_delta_p1p1", "created_objects"], "input": "incomplete", "inputs_missing": ["planned:every_line", "new:chosen_values"], "note": "The second instance comes from a static on another permanent, and the counters-or-Servos choice is not read."}

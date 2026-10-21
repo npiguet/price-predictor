@@ -1,0 +1,7 @@
+{"id": "701.10a", "output": "trained", "outputs": ["power_delta", "toughness_delta", "pt_duration"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "701.10b", "output": "trained", "outputs": ["power_delta", "toughness_delta", "pt_duration"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "701.10c", "output": "trained", "outputs": ["power_delta", "toughness_delta", "pt_duration"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "701.10d", "output": "trained", "outputs": ["life_delta"], "input": "incomplete", "inputs_missing": ["planned:every_line"], "note": "a life-gain prohibition is a static line on a non-acting permanent"}
+{"id": "701.10e", "output": "trained", "outputs": ["counters_delta_p1p1", "counters_delta_charge", "new:energy_delta"], "input": "complete", "inputs_missing": [], "note": "energy changes have no target path"}
+{"id": "701.10f", "output": "trained", "outputs": ["mana_delta_r"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "701.10g", "output": "trained", "outputs": ["damage_taken", "life_delta", "zone_outcome"], "input": "incomplete", "inputs_missing": ["planned:every_line"], "note": "the doubling replacement is on a non-acting permanent"}

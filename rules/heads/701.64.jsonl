@@ -1,0 +1,2 @@
+{"id": "701.64a", "output": "trained", "outputs": ["trigger_fired"], "input": "incomplete", "inputs_missing": ["new:designations"], "note": "Harnessed is a designation that no snapshot field carries; only the trigger it enables is trained."}
+{"id": "701.64b", "output": "trained", "outputs": ["trigger_fired"], "input": "incomplete", "inputs_missing": ["new:designations"], "note": "Whether the re-entered permanent is harnessed is invisible to the model."}

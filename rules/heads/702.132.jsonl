@@ -1,0 +1,1 @@
+{"id": "702.132a", "output": "trained", "outputs": ["can_play", "affordable", "mana_paid"], "input": "incomplete", "inputs_missing": ["planned:every_line"], "note": "The other player's untapped mana is read per player."}

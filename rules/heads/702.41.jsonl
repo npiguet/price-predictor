@@ -1,0 +1,2 @@
+{"id": "702.41a", "output": "trained", "outputs": ["can_play", "affordable", "new:cost_after_adjustment"], "input": "incomplete", "inputs_missing": ["planned:every_line"], "note": "the verdict is trained; the reduced cost itself is only record:cost_after_adjustment"}
+{"id": "702.41b", "output": "trained", "outputs": ["can_play", "affordable", "new:cost_after_adjustment"], "input": "incomplete", "inputs_missing": ["planned:every_line"], "note": "the granted affinity is a static on Mycosynth Golem"}

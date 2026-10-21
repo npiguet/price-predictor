@@ -1,0 +1,2 @@
+{"id": "702.7b", "output": "trained", "outputs": ["damage_taken", "zone_outcome"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "702.7c", "output": "trained", "outputs": ["damage_taken", "zone_outcome"], "input": "incomplete", "inputs_missing": ["new:this_turn_history"], "note": "Gained or lost first strike shows in the keyword overlay; whether it held as the first-strike step began is not recorded."}

@@ -1,0 +1,5 @@
+{"id": "702.170a", "output": "planned", "outputs": ["planned:timing", "affordable"], "input": "complete", "inputs_missing": [], "note": "The plot special action is its own candidate ability; step, stack size and active flag are read."}
+{"id": "702.170b", "output": "trained", "outputs": ["zone_outcome", "new:designations_changed"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "702.170c", "output": "trained", "outputs": ["zone_outcome", "new:designations_changed"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "702.170d", "output": "planned", "outputs": ["planned:timing"], "input": "incomplete", "inputs_missing": ["planned:owner", "new:designations"], "note": ""}
+{"id": "702.170f", "output": "trained", "outputs": ["zone_outcome", "can_play"], "input": "incomplete", "inputs_missing": ["planned:every_line"], "note": ""}

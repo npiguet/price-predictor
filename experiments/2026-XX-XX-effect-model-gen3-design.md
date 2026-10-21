@@ -647,7 +647,128 @@ express, such as a designation or a turn's history. About 75 name a suspected Fo
 the rules, such as connive 0 firing the "connives" trigger. `rules/FINDINGS.md` lists ten to test
 first.
 
-### Steps still to take, as the catalogue sets them
+### Step 2, the heads map: the model can learn under a third of the rules today, and reading every line of a permanent is the input change that adds the most
+
+**The heads map asks of each mechanical and legality rule whether the model reads what decides it
+and whether an output is trained on its outcome.** It checks the 1,647 rules against gen-2's input
+layout and output heads, as the code builds them. A rule's scenarios make the check concrete. The
+difference between a variant in which the rule's effect happens and one in which it does not is
+the outcome an output has to be trained on. Each variant's change is a fact the model has to read.
+`rules/MODEL-FIELDS.md` lists what the model reads and predicts, and `rules/heads/` holds one line
+per rule.
+
+Each rule gets one of four output verdicts:
+
+- **trained:** an existing output is trained on the outcome, as gen-2 collects and curates records.
+- **recorded:** a record carries the outcome, but no output is trained on it.
+- **missing:** no record carries the outcome.
+- **planned:** the gen-3 turn-rule section already plans the output, as a timing or failed-check
+  column of the legality verdict.
+
+#### Three quarters of the rules reach an existing output, and under a third are learnable today
+
+**A rule is learnable when an output is trained on its outcome and the model reads every fact that
+decides it.** Most rules that reach an output still depend on a fact the model does not read.
+
+| output | inputs complete | inputs incomplete | all |
+|---|---:|---:|---:|
+| trained | 505 | 753 | 1,258 |
+| recorded | 58 | 144 | 202 |
+| missing | 26 | 101 | 127 |
+| planned | 33 | 27 | 60 |
+| all | 622 | 1,025 | 1,647 |
+
+**The zone outcome, the trigger bit and the castability verdict carry the most rules.** The zone
+outcome says whether a permanent died, was exiled or returned to hand. The trigger bit says whether
+a triggered ability fired. The castability verdict says whether a spell or ability could be played.
+
+| existing output, on trained rules | rules |
+|---|---:|
+| zone outcome | 378 |
+| trigger fired | 319 |
+| can play | 245 |
+| life change | 146 |
+| damage taken | 120 |
+| affordable | 116 |
+| +1/+1 counters | 89 |
+| power change | 88 |
+| toughness change | 78 |
+| gate: the entity was affected at all | 77 |
+
+#### Reading every line of a permanent is the input that matters most, and gen-3 already plans it
+
+**The model reads only a permanent's spell and activated abilities.** A rule that turns on a
+static, triggered or replacement ability of a permanent other than the acting one cannot be learned:
+an anthem on another creature, an enchantment that says creatures can't block, a cost reducer. More
+than a quarter of the rules need those lines. For 187 of them they are the only gap.
+
+| fact the model does not read | rules needing it | rules for which it is the only gap |
+|---|---:|---:|
+| every line of a permanent (planned) | 432 | 187 |
+| values chosen earlier: a named colour or creature type, X paid, an optional cost paid | 175 | 75 |
+| designations and game-level state: day and night, monarch, dungeon room, Class level | 139 | 47 |
+| what happened earlier in the turn or the game | 97 | 35 |
+| subtypes | 90 | 17 |
+| which face is up, and what a card is a copy of | 88 | 35 |
+| the objects exiled with a card, and the contents of hidden zones | 68 | 29 |
+| card name, mana cost, token script | 59 | 17 |
+| pending shields and delayed triggers: a regeneration shield, "the next time" effects | 57 | 36 |
+| what a permanent is attached to, what an attacker attacks, what a stack object targets | 54 | 18 |
+| timestamps and order | 28 | 6 |
+| owner, active player, priority holder (planned) | 24 | 4 |
+
+**241 rules miss a fact the snapshot already records, which needs only a change to the input
+layout.** Subtypes, which face is up, what a card is a copy of, its name, what it is attached to,
+what an attacker attacks and what a stack object targets are all in the snapshot and left out of
+the model's input. "Goblins you control get +1/+1" is the plainest case: the snapshot knows which
+creatures are Goblins, and the model does not.
+
+**Values chosen earlier are the largest gap that needs new collection.** The snapshot records the
+choices of the acting ability only: its targets, modes and X. It does not keep a choice made
+earlier for a permanent on the board, such as the colour Gods Willing named or the creature type
+Cavern of Souls named.
+
+#### 389 rules reach no existing output, and timing and game-level state are the largest families
+
+**A fizzle is the plainest case of a recorded outcome no output is trained on.** The record says
+that Red Elemental Blast fizzled, the model reads that as an input, and no output predicts it. The
+same holds for a player losing the game, a permanent being copied, or day becoming night.
+
+| outcome with no existing output | rules | rules for which it is the only gap |
+|---|---:|---:|
+| timing and failed checks of a legality verdict (planned) | 76 | 39 |
+| designations and game-level state changing | 76 | 8 |
+| zone destinations the zone outcome merges | 51 | 4 |
+| copies of spells and permanents | 40 | 4 |
+| subtypes, abilities and text gained or lost | 38 | 8 |
+| a face turning up, transforming or flipping | 33 | 10 |
+| costs after reductions and increases | 30 | 3 |
+| phasing in, regeneration, prevention, a replacement's result | 28 | 1 |
+| permanent spell resolutions | 27 | 1 |
+| a player winning or losing | 26 | 20 |
+| targets changed, delayed triggers created, libraries shuffled | 26 | 3 |
+| removed from combat, became blocked | 20 | 7 |
+| a spell fizzling or partly fizzling | 18 | 10 |
+| extra and skipped turns and phases | 16 | 6 |
+| legal targets and attack targets | 16 | 4 |
+| turn-based actions | 15 | 1 |
+| subgames and restarts | 15 | 1 |
+
+**Three of these families are gaps in what gen-2 collects and trains on, not in its heads.**
+
+- **A permanent spell's resolution never reaches training.** A creature or other permanent spell
+  resolves through Forge's implicit cast ability, which has no line of text. `build-corpus` refuses
+  every resolution record whose acting ability maps to no line. The record of a permanent entering
+  the battlefield is therefore dropped, and with it the legend rule after a second Isamaru,
+  Hound of Konda resolves.
+- **Turn-based actions are dropped.** The draw in the draw step, the cleanup discard, untapping and
+  a Saga's lore counter happen while no record is open. The collector discards events that arrive
+  then, as the first section of part 1 describes.
+- **The zone outcome merges destinations.** Any move to a library reads as the top of the library,
+  and entering the battlefield from any zone reads as a blink. A card shuffled into its library, put
+  on the bottom, or returned from the graveyard to the battlefield is labelled as something else.
+
+### Steps still to take, as the catalogue and the heads map set them
 
 #### Each scenario specifies its rule's detector, and the detectors run over gen-2's corpus first
 
@@ -729,6 +850,28 @@ The `continuous` record already shows the result of every layer, and the 613 sce
 rather than order. A model that predicts those results has learned what the order decides, so rule
 613 needs no new field and no detector. Subgames, the Karn Liberated restart and control of another
 player are rare enough to leave out.
+
+#### The model's inputs and outputs change in the order the heads map sets, cheapest first
+
+**The list runs from the change that needs the least work to the one that needs the most.**
+
+1. **Every line of a permanent.** It is already planned, and it alone makes the most rules learnable.
+2. **The facts the snapshot already records.** Subtypes, faces, copy sources, names, attachments,
+   attack targets and stack targets need input slots and no new collection.
+3. **The collection and curation gaps.** Permanent-spell resolutions have to survive
+   `build-corpus`, and turn-based actions need a record of their own. Both then feed outputs that
+   already exist.
+4. **Outputs for outcomes the records already carry.** The resolution outcome, a player winning
+   or losing, copies, phasing, regeneration, prevention, and extra and skipped turns are each a new
+   output over a record field or event that exists. The zone outcome gains the destinations it now
+   merges.
+5. **New collection with its own inputs and outputs.** The global designation block and the
+   per-card fields above, values chosen earlier, the objects exiled with a card, pending shields and
+   what happened earlier in the turn each need a record field, an input slot, and an output wherever
+   they can change.
+
+**Running the map again over each new layout measures what the change bought.** The map is a pure
+reading of the layout and the scenarios, so a rerun counts the rules each change made learnable.
 
 ## Part 3: outcome
 

@@ -1,0 +1,4 @@
+{"id": "702.44a", "output": "trained", "outputs": ["counters_delta_p1p1", "counters_delta_charge"], "input": "incomplete", "inputs_missing": ["new:mana_spent", "planned:every_line"], "note": ""}
+{"id": "702.44b", "output": "trained", "outputs": ["counters_delta_p1p1", "counters_delta_charge"], "input": "incomplete", "inputs_missing": ["new:mana_spent", "planned:every_line"], "note": ""}
+{"id": "702.44c", "output": "trained", "outputs": ["counters_delta_p1p1"], "input": "incomplete", "inputs_missing": ["new:mana_spent", "planned:every_line"], "note": ""}
+{"id": "702.44d", "output": "trained", "outputs": ["counters_delta_p1p1", "counters_delta_charge"], "input": "incomplete", "inputs_missing": ["new:mana_spent", "planned:every_line"], "note": ""}

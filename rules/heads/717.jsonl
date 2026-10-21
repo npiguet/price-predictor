@@ -1,0 +1,4 @@
+{"id": "717.3", "output": "trained", "outputs": ["gate", "zone_outcome", "new:zone_outcome_battlefield"], "input": "incomplete", "inputs_missing": ["new:attraction_deck"], "note": "a move to the battlefield maps to zone_outcome blinked, not a value for entering"}
+{"id": "717.4", "output": "missing", "outputs": ["new:die_roll"], "input": "incomplete", "inputs_missing": ["snapshot:subtypes"], "note": "Attraction is a subtype"}
+{"id": "717.5", "output": "trained", "outputs": ["trigger_fired"], "input": "incomplete", "inputs_missing": ["new:die_roll", "new:attraction_lights"], "note": "the visit trigger is the acting line; the roll and lit-up numbers are not inputs"}
+{"id": "717.6", "output": "trained", "outputs": ["zone_outcome", "new:zone_outcome_command"], "input": "incomplete", "inputs_missing": ["planned:every_line", "snapshot:face"], "note": "zone_outcome has no command-zone value"}

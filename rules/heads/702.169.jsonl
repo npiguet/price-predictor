@@ -1,0 +1,3 @@
+{"id": "702.169b", "output": "trained", "outputs": ["power_delta"], "input": "incomplete", "inputs_missing": ["new:designations"], "note": "The solved static is the continuous record's acting line."}
+{"id": "702.169c", "output": "trained", "outputs": ["trigger_fired"], "input": "incomplete", "inputs_missing": ["new:designations"], "note": ""}
+{"id": "702.169d", "output": "trained", "outputs": ["can_play"], "input": "incomplete", "inputs_missing": ["new:designations"], "note": ""}

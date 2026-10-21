@@ -1,0 +1,2 @@
+{"id": "701.6a", "output": "trained", "outputs": ["zone_outcome", "life_delta"], "input": "complete", "inputs_missing": [], "note": "a countered spell is zone_outcome countered; a countered ability shows as its effect not occurring"}
+{"id": "701.6b", "output": "trained", "outputs": ["tap_state", "zone_outcome", "mana_paid"], "input": "complete", "inputs_missing": [], "note": ""}

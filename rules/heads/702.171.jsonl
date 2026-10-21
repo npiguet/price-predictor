@@ -1,0 +1,2 @@
+{"id": "702.171a", "output": "trained", "outputs": ["tap_state", "can_play", "planned:timing", "new:designations_changed"], "input": "incomplete", "inputs_missing": ["new:designations"], "note": "Whether the later attack trigger fires depends on the saddled designation, which is not read."}
+{"id": "702.171b", "output": "trained", "outputs": ["trigger_fired", "new:designations_changed"], "input": "incomplete", "inputs_missing": ["new:designations"], "note": ""}

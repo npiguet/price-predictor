@@ -1,0 +1,2 @@
+{"id": "702.125a", "output": "trained", "outputs": ["can_play", "affordable", "new:cost_after_adjustment"], "input": "incomplete", "inputs_missing": ["planned:every_line"], "note": ""}
+{"id": "702.125c", "output": "trained", "outputs": ["can_play", "affordable", "new:cost_after_adjustment"], "input": "incomplete", "inputs_missing": ["planned:every_line"], "note": "The second instance comes from a static on another permanent."}

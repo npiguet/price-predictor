@@ -1,0 +1,3 @@
+{"id": "702.80a", "output": "trained", "outputs": ["counters_delta_m1m1", "damage_taken"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "702.80b", "output": "trained", "outputs": ["counters_delta_m1m1"], "input": "incomplete", "inputs_missing": ["planned:every_line", "new:last_known_information"], "note": "The source is in the graveyard without its granted wither, and the granting static is on a non-acting permanent."}
+{"id": "702.80c", "output": "trained", "outputs": ["counters_delta_m1m1"], "input": "complete", "inputs_missing": [], "note": ""}

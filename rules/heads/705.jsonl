@@ -1,0 +1,2 @@
+{"id": "705.2", "output": "trained", "outputs": ["zone_outcome", "trigger_fired"], "input": "incomplete", "inputs_missing": ["new:flip_result", "new:chosen_values"], "note": "The coin result and the call are recorded nowhere the model reads."}
+{"id": "705.3", "output": "trained", "outputs": ["zone_outcome"], "input": "incomplete", "inputs_missing": ["new:flip_result", "planned:every_line", "new:this_turn_history"], "note": "Edgar's replacement applies to the first flip of the turn only."}

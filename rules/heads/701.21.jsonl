@@ -1,0 +1,1 @@
+{"id": "701.21a", "output": "trained", "outputs": ["zone_outcome"], "input": "incomplete", "inputs_missing": ["new:this_turn_history"], "note": "The destroy variant survives only through a regeneration shield from an earlier activation, which is not in the snapshot."}

@@ -1,0 +1,1 @@
+{"id": "702.97a", "output": "trained", "outputs": ["zone_outcome", "counters_delta_p1p1", "can_play", "new:resolution_outcome"], "input": "complete", "inputs_missing": [], "note": "Sorcery timing is planned:timing; a fizzled activation writes no effect half."}

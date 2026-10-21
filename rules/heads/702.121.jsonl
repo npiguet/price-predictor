@@ -1,0 +1,2 @@
+{"id": "702.121a", "output": "trained", "outputs": ["trigger_fired", "power_delta", "toughness_delta", "pt_duration"], "input": "complete", "inputs_missing": [], "note": "Melee is the acting line of its trigger record and the attacking flags are read."}
+{"id": "702.121b", "output": "trained", "outputs": ["trigger_fired", "power_delta", "toughness_delta", "pt_duration"], "input": "incomplete", "inputs_missing": ["planned:every_line"], "note": "The second instance comes from a static or trigger on another permanent."}

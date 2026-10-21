@@ -1,0 +1,4 @@
+{"id": "701.60a", "output": "recorded", "outputs": ["record:event:state_flag_change", "new:designations_changed"], "input": "incomplete", "inputs_missing": ["new:designations"], "note": ""}
+{"id": "701.60b", "output": "recorded", "outputs": ["record:event:state_flag_change", "new:designations_changed"], "input": "incomplete", "inputs_missing": ["snapshot:copy_source", "new:designations"], "note": ""}
+{"id": "701.60c", "output": "trained", "outputs": ["blocker_legal", "min_blockers"], "input": "incomplete", "inputs_missing": ["new:designations"], "note": ""}
+{"id": "701.60d", "output": "trained", "outputs": ["gate", "new:designations_changed"], "input": "incomplete", "inputs_missing": ["new:designations"], "note": "Suspecting an already suspected creature writes no state_flag_change, so the gate shows it."}

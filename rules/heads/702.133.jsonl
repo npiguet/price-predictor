@@ -1,0 +1,1 @@
+{"id": "702.133a", "output": "trained", "outputs": ["can_play", "zone_outcome", "cards_discarded"], "input": "complete", "inputs_missing": [], "note": "The jump-start cast is its own spell ability read at [ACT]; zone and hand size are read."}

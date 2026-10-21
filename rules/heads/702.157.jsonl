@@ -1,0 +1,2 @@
+{"id": "702.157a", "output": "trained", "outputs": ["created_objects", "trigger_fired", "new:permanent_copied"], "input": "incomplete", "inputs_missing": ["new:chosen_values"], "note": "Token copies carry no copy-source."}
+{"id": "702.157b", "output": "trained", "outputs": ["trigger_fired"], "input": "incomplete", "inputs_missing": ["new:chosen_values"], "note": ""}

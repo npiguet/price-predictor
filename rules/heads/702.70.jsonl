@@ -1,0 +1,2 @@
+{"id": "702.70a", "output": "trained", "outputs": ["poison_delta", "trigger_fired"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "702.70b", "output": "trained", "outputs": ["trigger_fired"], "input": "complete", "inputs_missing": [], "note": ""}

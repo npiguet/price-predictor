@@ -1,0 +1,3 @@
+{"id": "726.2", "output": "trained", "outputs": ["trigger_fired", "new:initiative_change", "new:dungeon_progress"], "input": "incomplete", "inputs_missing": ["new:initiative", "new:dungeon_room"], "note": "The inherent initiative triggers' firing is trained; the transfer and the venture they cause are not recorded."}
+{"id": "726.3", "output": "missing", "outputs": ["new:initiative_change"], "input": "incomplete", "inputs_missing": ["new:initiative"], "note": ""}
+{"id": "726.5", "output": "trained", "outputs": ["trigger_fired", "new:dungeon_progress"], "input": "incomplete", "inputs_missing": ["new:initiative"], "note": "Firing is trained; the venture it causes is not recorded."}

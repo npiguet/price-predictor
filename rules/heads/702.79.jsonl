@@ -1,0 +1,1 @@
+{"id": "702.79a", "output": "trained", "outputs": ["trigger_fired", "zone_outcome", "counters_delta_m1m1"], "input": "incomplete", "inputs_missing": ["new:last_known_information"], "note": "The record shows the dead creature without the counters it had as it died."}

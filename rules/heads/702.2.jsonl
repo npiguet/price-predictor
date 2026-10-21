@@ -1,0 +1,4 @@
+{"id": "702.2b", "output": "trained", "outputs": ["zone_outcome", "damage_taken"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "702.2c", "output": "trained", "outputs": ["damage_taken", "zone_outcome", "life_delta"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "702.2d", "output": "trained", "outputs": ["zone_outcome", "damage_taken"], "input": "complete", "inputs_missing": [], "note": "Judged from the rule text; no Forge card illustrates it."}
+{"id": "702.2e", "output": "trained", "outputs": ["zone_outcome", "damage_taken"], "input": "incomplete", "inputs_missing": ["new:this_turn_history"], "note": "The sacrificed source's deathtouch from the equipment is gone by the effect half, and its last known information is not recorded."}

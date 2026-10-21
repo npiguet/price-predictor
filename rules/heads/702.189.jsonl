@@ -1,0 +1,2 @@
+{"id": "702.189a", "output": "trained", "outputs": ["trigger_fired", "mana_delta_r", "affordable"], "input": "complete", "inputs_missing": [], "note": "The mana emptying at end of combat is seen only through the floating-mana input of later playability records."}
+{"id": "702.189b", "output": "trained", "outputs": ["trigger_fired"], "input": "complete", "inputs_missing": [], "note": ""}

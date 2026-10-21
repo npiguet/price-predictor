@@ -1,0 +1,1 @@
+{"id": "701.56a", "output": "trained", "outputs": ["counters_delta_time", "new:exile_zone_outcome"], "input": "incomplete", "inputs_missing": ["new:exile_contents", "new:chosen_values"], "note": "A suspended card in exile is no ref, so neither its counters nor its cast reach a slot."}

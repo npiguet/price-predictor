@@ -1,0 +1,1 @@
+{"id": "701.69a", "output": "trained", "outputs": ["damage_taken", "zone_outcome"], "input": "incomplete", "inputs_missing": ["planned:every_line", "new:replacement_shield"], "note": "Wolverine's heal is a line on a non-acting permanent and Pyramids' shield is a pending effect no snapshot carries; healing reaches damage_taken through damage_healed."}

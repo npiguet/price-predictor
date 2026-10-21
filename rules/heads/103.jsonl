@@ -1,0 +1,2 @@
+{"id": "103.6a", "output": "missing", "outputs": ["new:pregame_action"], "input": "incomplete", "inputs_missing": ["planned:every_line"], "note": "The opening-hand action precedes turn 1 and no record carries it; Leyline's opening-hand line is not a spell or activated ability."}
+{"id": "103.8a", "output": "missing", "outputs": ["new:turn_based_action"], "input": "complete", "inputs_missing": [], "note": "The skipped draw is a turn-based action with no event, so no record carries the absence."}

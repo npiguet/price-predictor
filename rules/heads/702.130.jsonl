@@ -1,0 +1,2 @@
+{"id": "702.130a", "output": "trained", "outputs": ["trigger_fired", "life_delta"], "input": "complete", "inputs_missing": [], "note": "Afflict is the acting line of its trigger record and became_blocked is read."}
+{"id": "702.130b", "output": "trained", "outputs": ["trigger_fired", "life_delta"], "input": "incomplete", "inputs_missing": ["planned:every_line"], "note": "The second instance comes from an attached Equipment."}

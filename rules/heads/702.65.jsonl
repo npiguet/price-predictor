@@ -1,0 +1,2 @@
+{"id": "702.65a", "output": "trained", "outputs": ["zone_outcome", "attached_to_change"], "input": "incomplete", "inputs_missing": ["snapshot:subtypes"], "note": ""}
+{"id": "702.65b", "output": "trained", "outputs": ["gate"], "input": "incomplete", "inputs_missing": ["snapshot:subtypes", "planned:every_line", "planned:owner"], "note": "enchant restriction is a static line and the owner is not recorded"}

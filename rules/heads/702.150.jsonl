@@ -1,0 +1,1 @@
+{"id": "702.150a", "output": "trained", "outputs": ["counters_delta_loyalty"], "input": "incomplete", "inputs_missing": ["new:mana_spent"], "note": "Life paid for Phyrexian symbols is not an input."}

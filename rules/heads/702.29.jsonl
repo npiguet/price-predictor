@@ -1,0 +1,6 @@
+{"id": "702.29a", "output": "trained", "outputs": ["cards_discarded", "cards_drawn", "can_play"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "702.29b", "output": "missing", "outputs": ["new:turn_based_action"], "input": "incomplete", "inputs_missing": ["planned:every_line"], "note": "The untap-step untap is filed with no bracket open; Tsabo's Web is a static on a non-acting permanent."}
+{"id": "702.29c", "output": "trained", "outputs": ["trigger_fired"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "702.29d", "output": "trained", "outputs": ["trigger_fired"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "702.29e", "output": "trained", "outputs": ["cards_discarded", "library_events", "new:library_shuffled"], "input": "incomplete", "inputs_missing": ["new:library_contents"], "note": "Search result depends on library contents, which the snapshot lacks; the shuffle has no target path."}
+{"id": "702.29f", "output": "trained", "outputs": ["can_play", "trigger_fired"], "input": "incomplete", "inputs_missing": ["planned:every_line"], "note": "Stabilizer is a static on a non-acting permanent."}

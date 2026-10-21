@@ -1,0 +1,1 @@
+{"id": "701.71a", "output": "trained", "outputs": ["counters_delta_loyalty", "created_objects"], "input": "incomplete", "inputs_missing": ["snapshot:subtypes"], "note": "Jace is a subtype; judged from the rule text, as no Forge card performs it."}

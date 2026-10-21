@@ -1,0 +1,1 @@
+{"id": "308.1", "output": "trained", "outputs": ["can_play", "life_delta", "zone_outcome", "planned:timing"], "input": "complete", "inputs_missing": [], "note": "Kindred is a read card type; the instant-versus-sorcery difference is a timing failure, which planned:timing refines."}

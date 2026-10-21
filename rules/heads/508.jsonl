@@ -1,0 +1,24 @@
+{"id": "508.1a", "output": "trained", "outputs": ["attacker_legal"], "input": "incomplete", "inputs_missing": ["planned:every_line"], "note": "Haste is a printed keyword on a static line; the sick flag ignores it."}
+{"id": "508.1c", "output": "trained", "outputs": ["attacker_legal"], "input": "incomplete", "inputs_missing": ["planned:every_line", "snapshot:subtypes"], "note": "Can't-attack statics are not read; Dandan's condition needs the Island subtype; a legal set of attackers is not a per-entity bit."}
+{"id": "508.1d", "output": "missing", "outputs": ["new:attack_requirements"], "input": "incomplete", "inputs_missing": ["planned:every_line"], "note": "Attacker_legal says what may attack, not what must."}
+{"id": "508.1f", "output": "recorded", "outputs": ["record:snapshot_tapped", "new:turn_based_action"], "input": "incomplete", "inputs_missing": ["planned:every_line"], "note": "The declaration tap fires with no bracket open and is cleared unwritten, so it shows only as a later snapshot's tapped flag; vigilance is a printed keyword."}
+{"id": "508.1k", "output": "trained", "outputs": ["life_delta", "damage_taken"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "508.1m", "output": "trained", "outputs": ["trigger_fired"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "508.2a", "output": "trained", "outputs": ["trigger_fired"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "508.2b", "output": "trained", "outputs": ["trigger_fired", "life_delta"], "input": "complete", "inputs_missing": [], "note": "Stack order is only the stack size."}
+{"id": "508.3a", "output": "trained", "outputs": ["trigger_fired", "life_delta"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "508.3b", "output": "trained", "outputs": ["trigger_fired", "life_delta"], "input": "incomplete", "inputs_missing": ["snapshot:attack_target"], "note": "Whether the attacked object is the player or a planeswalker is only a flag."}
+{"id": "508.3c", "output": "trained", "outputs": ["trigger_fired", "life_delta"], "input": "incomplete", "inputs_missing": ["snapshot:subtypes"], "note": "Lizard is a subtype."}
+{"id": "508.3d", "output": "trained", "outputs": ["trigger_fired", "life_delta"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "508.3e", "output": "trained", "outputs": ["trigger_fired", "created_objects"], "input": "incomplete", "inputs_missing": ["snapshot:attack_target"], "note": "Player versus planeswalker attacked is not read."}
+{"id": "508.3f", "output": "trained", "outputs": ["trigger_fired", "poison_delta"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "508.4", "output": "trained", "outputs": ["trigger_fired", "life_delta"], "input": "complete", "inputs_missing": [], "note": "The trigger record's pending event separates a declared attacker from one that entered attacking."}
+{"id": "508.4a", "output": "trained", "outputs": ["counters_delta_loyalty", "life_delta"], "input": "incomplete", "inputs_missing": ["snapshot:attack_target"], "note": "Whether the entering creature attacks the planeswalker is not read."}
+{"id": "508.4b", "output": "trained", "outputs": ["gate"], "input": "complete", "inputs_missing": [], "note": "Judged from the rule text; the effect half has no events."}
+{"id": "508.4c", "output": "trained", "outputs": ["life_delta", "damage_taken"], "input": "incomplete", "inputs_missing": ["planned:every_line"], "note": "Attack restrictions are static lines."}
+{"id": "508.4d", "output": "trained", "outputs": ["life_delta", "cards_drawn", "can_play"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "508.5", "output": "trained", "outputs": ["poison_delta", "trigger_fired"], "input": "complete", "inputs_missing": [], "note": "With two players the defending player is the non-active one."}
+{"id": "508.7a", "output": "trained", "outputs": ["life_delta", "counters_delta_loyalty"], "input": "incomplete", "inputs_missing": ["snapshot:attack_target"], "note": "Which object the creature attacks after reselection is not read."}
+{"id": "508.7b", "output": "trained", "outputs": ["life_delta", "attacker_legal"], "input": "incomplete", "inputs_missing": ["planned:every_line", "snapshot:attack_target"], "note": "Blazing Archon is a static line on a non-acting permanent."}
+{"id": "508.7c", "output": "missing", "outputs": ["new:legal_choices"], "input": "complete", "inputs_missing": [], "note": "Portal Mage's new defender is a choice on resolution, not a target, so no playability record carries its legality."}
+{"id": "508.8", "output": "planned", "outputs": ["planned:timing"], "input": "complete", "inputs_missing": [], "note": ""}

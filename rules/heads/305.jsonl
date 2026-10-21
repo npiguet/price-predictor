@@ -1,0 +1,9 @@
+{"id": "305.1", "output": "planned", "outputs": ["planned:timing"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "305.2", "output": "planned", "outputs": ["planned:failed_checks"], "input": "incomplete", "inputs_missing": ["planned:every_line"], "note": "Exploration is a static on a non-acting permanent."}
+{"id": "305.2a", "output": "planned", "outputs": ["planned:failed_checks"], "input": "incomplete", "inputs_missing": ["planned:every_line"], "note": "The allowed count comes from static abilities of other permanents."}
+{"id": "305.2b", "output": "planned", "outputs": ["planned:failed_checks"], "input": "complete", "inputs_missing": [], "note": "Lands played this turn is read; the limit check is an activation-limit style failed check."}
+{"id": "305.3", "output": "planned", "outputs": ["planned:timing"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "305.4", "output": "planned", "outputs": ["planned:failed_checks"], "input": "complete", "inputs_missing": [], "note": "The later land play is judged by the lands-played count, which is read."}
+{"id": "305.6", "output": "trained", "outputs": ["affordable", "can_play"], "input": "complete", "inputs_missing": [], "note": "The basic-type mana ability shows up as untapped mana production per colour, which is read."}
+{"id": "305.7", "output": "trained", "outputs": ["affordable", "can_play"], "input": "incomplete", "inputs_missing": ["planned:every_line"], "note": "Blood Moon is a static on a non-acting permanent; its effect on production is read but its presence is not."}
+{"id": "305.9", "output": "trained", "outputs": ["can_play"], "input": "complete", "inputs_missing": [], "note": "Land type is read; the cast-versus-play action distinction is carried by the decision."}

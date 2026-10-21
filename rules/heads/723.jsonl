@@ -1,0 +1,5 @@
+{"id": "723.1", "output": "missing", "outputs": ["new:player_control_change"], "input": "incomplete", "inputs_missing": ["new:decision_controller"], "note": ""}
+{"id": "723.1a", "output": "missing", "outputs": ["new:player_control_change"], "input": "incomplete", "inputs_missing": ["new:decision_controller", "new:timestamps"], "note": ""}
+{"id": "723.1b", "output": "missing", "outputs": ["new:player_control_change"], "input": "incomplete", "inputs_missing": ["new:decision_controller", "new:game_history"], "note": ""}
+{"id": "723.3", "output": "trained", "outputs": ["can_play", "control_change"], "input": "incomplete", "inputs_missing": ["new:decision_controller"], "note": "control_change trains the negative: no object changes controller"}
+{"id": "723.7", "output": "trained", "outputs": ["can_play"], "input": "incomplete", "inputs_missing": ["new:decision_controller", "new:active_restrictions"], "note": "the restriction comes from a resolved spell, not a permanent's line"}

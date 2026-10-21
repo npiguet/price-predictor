@@ -1,0 +1,2 @@
+{"id": "702.21a", "output": "trained", "outputs": ["trigger_fired", "zone_outcome"], "input": "complete", "inputs_missing": [], "note": "Ward is the acting ability on its own trigger and resolution records; paying or declining is the opponent's choice."}
+{"id": "702.21b", "output": "trained", "outputs": ["zone_outcome", "life_delta"], "input": "complete", "inputs_missing": [], "note": "Ward reads as the acting line and Raubahn's power at resolution is read; the cost here is life, not mana."}

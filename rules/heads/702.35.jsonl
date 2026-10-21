@@ -1,0 +1,2 @@
+{"id": "702.35a", "output": "trained", "outputs": ["zone_outcome", "cards_discarded"], "input": "incomplete", "inputs_missing": ["planned:every_line"], "note": ""}
+{"id": "702.35c", "output": "trained", "outputs": ["zone_outcome", "gate"], "input": "incomplete", "inputs_missing": ["new:this_turn_history"], "note": "Containment Construct's resolution exiles the card or nothing; whether the graveyard card is still the discarded object is not read."}

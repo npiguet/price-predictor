@@ -1,0 +1,6 @@
+{"id": "702.37a", "output": "trained", "outputs": ["mana_paid", "affordable", "colors_lost", "types_lost", "power_delta", "toughness_delta", "new:subtypes_lost"], "input": "incomplete", "inputs_missing": ["planned:every_line", "snapshot:name", "snapshot:subtypes"], "note": "Face-down characteristics are partly outside the type and keyword lists."}
+{"id": "702.37b", "output": "trained", "outputs": ["counters_delta_p1p1"], "input": "incomplete", "inputs_missing": ["planned:every_line"], "note": ""}
+{"id": "702.37c", "output": "trained", "outputs": ["colors_lost", "types_lost", "power_delta", "toughness_delta", "new:subtypes_lost"], "input": "incomplete", "inputs_missing": ["planned:every_line", "snapshot:name", "snapshot:subtypes"], "note": ""}
+{"id": "702.37d", "output": "trained", "outputs": ["can_play"], "input": "incomplete", "inputs_missing": ["planned:every_line"], "note": ""}
+{"id": "702.37e", "output": "trained", "outputs": ["zone_outcome", "trigger_fired"], "input": "complete", "inputs_missing": [], "note": "The face-down flag and the face-up P/T are read on Shock's record."}
+{"id": "702.37f", "output": "trained", "outputs": ["created_objects"], "input": "incomplete", "inputs_missing": ["new:x_paid_on_permanent"], "note": "The token count is trained on the trigger's resolution; the X paid for the morph cost is not read."}

@@ -1,0 +1,1 @@
+{"id": "702.162a", "output": "trained", "outputs": ["can_play", "affordable"], "input": "complete", "inputs_missing": [], "note": "The converted cast is its own candidate ability, so its line is the [ACT] vector."}

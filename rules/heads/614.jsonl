@@ -1,0 +1,25 @@
+{"id": "614.3", "output": "trained", "outputs": ["zone_outcome", "tap_state", "new:regenerated"], "input": "incomplete", "inputs_missing": ["new:replacement_shield"], "note": "regenerated has no target path; a floating shield is not in the snapshot."}
+{"id": "614.4", "output": "trained", "outputs": ["zone_outcome", "tap_state", "new:regenerated"], "input": "incomplete", "inputs_missing": ["new:replacement_shield"], "note": ""}
+{"id": "614.5", "output": "trained", "outputs": ["life_delta"], "input": "incomplete", "inputs_missing": ["planned:every_line"], "note": "Each Furnace of Rath is a replacement on another permanent."}
+{"id": "614.6", "output": "trained", "outputs": ["zone_outcome", "trigger_fired"], "input": "incomplete", "inputs_missing": ["planned:every_line"], "note": ""}
+{"id": "614.7", "output": "trained", "outputs": ["zone_outcome", "tap_state"], "input": "incomplete", "inputs_missing": ["new:replacement_shield"], "note": "Indestructible is read as a granted keyword; the shield is not in the snapshot."}
+{"id": "614.7a", "output": "trained", "outputs": ["life_delta"], "input": "incomplete", "inputs_missing": ["planned:every_line"], "note": ""}
+{"id": "614.8", "output": "trained", "outputs": ["zone_outcome", "tap_state", "damage_taken", "trigger_fired", "new:removed_from_combat"], "input": "incomplete", "inputs_missing": ["new:replacement_shield"], "note": ""}
+{"id": "614.9", "output": "trained", "outputs": ["damage_taken", "zone_outcome"], "input": "incomplete", "inputs_missing": ["planned:every_line", "new:replacement_shield"], "note": ""}
+{"id": "614.10", "output": "recorded", "outputs": ["record:event:phase_skipped", "new:phase_skipped"], "input": "incomplete", "inputs_missing": ["new:this_turn_history"], "note": ""}
+{"id": "614.10a", "output": "recorded", "outputs": ["record:event:phase_skipped", "new:phase_skipped"], "input": "incomplete", "inputs_missing": ["new:this_turn_history", "new:game_history"], "note": ""}
+{"id": "614.10b", "output": "recorded", "outputs": ["record:event:phase_skipped", "new:phase_skipped"], "input": "incomplete", "inputs_missing": ["new:this_turn_history", "new:game_history"], "note": "Judged from the text; no scenario could be built."}
+{"id": "614.11", "output": "recorded", "outputs": ["record:event:player_won", "new:game_result"], "input": "complete", "inputs_missing": [], "note": "Maniac's replacement is the rewrite's acting line and library size is read."}
+{"id": "614.11a", "output": "trained", "outputs": ["cards_milled", "cards_drawn", "zone_outcome"], "input": "incomplete", "inputs_missing": ["planned:every_line", "new:chosen_values"], "note": "Dredge is a replacement line on a graveyard card."}
+{"id": "614.11b", "output": "trained", "outputs": ["cards_milled", "cards_discarded", "zone_outcome"], "input": "incomplete", "inputs_missing": ["planned:every_line", "new:chosen_values"], "note": ""}
+{"id": "614.12", "output": "trained", "outputs": ["tap_state"], "input": "incomplete", "inputs_missing": ["planned:every_line"], "note": ""}
+{"id": "614.12c", "output": "trained", "outputs": ["trigger_fired", "counters_delta_p1p1"], "input": "incomplete", "inputs_missing": ["new:linked_choice", "planned:every_line"], "note": ""}
+{"id": "614.13", "output": "trained", "outputs": ["zone_outcome"], "input": "incomplete", "inputs_missing": ["planned:every_line", "new:chosen_values"], "note": ""}
+{"id": "614.13c", "output": "recorded", "outputs": ["record:event:zone_change", "new:library_zone_outcome"], "input": "incomplete", "inputs_missing": ["planned:every_line", "new:library_order"], "note": "Library cards are not snapshot entities, so zone_outcome cannot target them."}
+{"id": "614.14", "output": "trained", "outputs": ["can_play", "affordable"], "input": "incomplete", "inputs_missing": ["new:exiled_with", "planned:every_line"], "note": ""}
+{"id": "614.15", "output": "trained", "outputs": ["damage_taken", "zone_outcome"], "input": "incomplete", "inputs_missing": ["planned:every_line"], "note": ""}
+{"id": "614.16", "output": "trained", "outputs": ["created_objects", "zone_outcome"], "input": "incomplete", "inputs_missing": ["planned:every_line"], "note": ""}
+{"id": "614.17a", "output": "trained", "outputs": ["life_delta"], "input": "incomplete", "inputs_missing": ["new:this_turn_history"], "note": ""}
+{"id": "614.17b", "output": "trained", "outputs": ["can_play", "affordable"], "input": "incomplete", "inputs_missing": ["planned:every_line"], "note": ""}
+{"id": "614.17c", "output": "trained", "outputs": ["life_delta"], "input": "incomplete", "inputs_missing": ["planned:every_line", "new:this_turn_history"], "note": ""}
+{"id": "614.17d", "output": "trained", "outputs": ["zone_outcome"], "input": "incomplete", "inputs_missing": ["planned:every_line"], "note": ""}

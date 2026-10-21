@@ -1,0 +1,6 @@
+{"id": "201.2a", "output": "trained", "outputs": ["trigger_fired"], "input": "incomplete", "inputs_missing": ["snapshot:name"], "note": "Face-down is read, but same-name against a face-up copy needs the name."}
+{"id": "201.2b", "output": "trained", "outputs": ["trigger_fired"], "input": "incomplete", "inputs_missing": ["snapshot:name", "snapshot:subtypes"], "note": "Distinct names among Demons need names and the Demon subtype."}
+{"id": "201.2c", "output": "trained", "outputs": ["gate"], "input": "incomplete", "inputs_missing": ["snapshot:name"], "note": "Judged from the rule text; the scenario is skipped."}
+{"id": "201.5", "output": "trained", "outputs": ["zone_outcome", "tap_state", "damage_taken"], "input": "incomplete", "inputs_missing": ["new:replacement_shield"], "note": "The shield is on one object; which object holds it is the whole delta."}
+{"id": "201.5a", "output": "trained", "outputs": ["zone_outcome"], "input": "complete", "inputs_missing": [], "note": "The token power and toughness already reflect the counting ability."}
+{"id": "201.5b", "output": "trained", "outputs": ["zone_outcome", "tap_state"], "input": "incomplete", "inputs_missing": ["new:replacement_shield"], "note": ""}

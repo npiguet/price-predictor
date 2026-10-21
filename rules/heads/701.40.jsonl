@@ -1,0 +1,7 @@
+{"id": "701.40a", "output": "recorded", "outputs": ["record:event:zone_change", "record:event:face_change", "new:face_change"], "input": "complete", "inputs_missing": [], "note": "The moved library card is no ref, so the snapshot has no slot for its events."}
+{"id": "701.40b", "output": "trained", "outputs": ["can_play", "affordable"], "input": "incomplete", "inputs_missing": ["snapshot:face"], "note": "Whether the face-down card is a creature with a mana cost is hidden behind the 2/2."}
+{"id": "701.40c", "output": "trained", "outputs": ["can_play", "affordable"], "input": "incomplete", "inputs_missing": ["snapshot:face", "planned:every_line"], "note": ""}
+{"id": "701.40d", "output": "trained", "outputs": ["can_play", "affordable"], "input": "incomplete", "inputs_missing": ["snapshot:face", "planned:every_line"], "note": ""}
+{"id": "701.40e", "output": "recorded", "outputs": ["record:event:zone_change", "record:event:face_change", "new:face_change"], "input": "complete", "inputs_missing": [], "note": "The moved library card is no ref, so the snapshot has no slot for its events."}
+{"id": "701.40f", "output": "recorded", "outputs": ["record:event:zone_change", "new:face_change"], "input": "incomplete", "inputs_missing": ["planned:every_line"], "note": "Manifesting or not lands only on the library card, which has no slot, so the gate is 0 either way."}
+{"id": "701.40g", "output": "trained", "outputs": ["zone_outcome", "trigger_fired"], "input": "incomplete", "inputs_missing": ["snapshot:face", "planned:every_line"], "note": ""}

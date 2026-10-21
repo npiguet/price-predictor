@@ -1,0 +1,2 @@
+{"id": "209.1", "output": "recorded", "outputs": ["record:event:counter_change", "zone_outcome", "new:permanent_spell_resolution"], "input": "incomplete", "inputs_missing": ["new:printed_loyalty"], "note": "The countered case is trained on Counterspell's record; the entering counters sit in a refused permanent-spell record."}
+{"id": "209.2", "output": "planned", "outputs": ["can_play", "planned:timing", "planned:failed_checks"], "input": "incomplete", "inputs_missing": ["new:this_turn_history"], "note": "Whether a loyalty ability was activated this turn is not recorded."}

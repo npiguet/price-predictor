@@ -1,0 +1,1 @@
+{"id": "701.2a", "output": "trained", "outputs": ["can_play"], "input": "incomplete", "inputs_missing": ["planned:owner"], "note": "the owner case needs who owns a card in hand"}

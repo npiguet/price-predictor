@@ -1,0 +1,2 @@
+{"id": "702.101a", "output": "trained", "outputs": ["trigger_fired", "life_delta", "mana_paid"], "input": "incomplete", "inputs_missing": ["new:chosen_values"], "note": "Whether the extort payment is made is a choice the model does not read."}
+{"id": "702.101b", "output": "trained", "outputs": ["trigger_fired"], "input": "complete", "inputs_missing": [], "note": ""}

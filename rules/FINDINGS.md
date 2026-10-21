@@ -120,3 +120,37 @@ when a draw step lies between the setup and the outcome, mana available for each
   verifier against the rules text and the cards' Forge scripts, not against the engine.
 - **A few cards dominate.** Grizzly Bears appears in about half the scenarios, and the basic lands,
   Shock, Hill Giant, Lightning Bolt and Counterspell follow. 1,382 distinct cards appear in all.
+
+## 6. What the model can learn: the heads pass
+
+`rules/heads/` maps each of the 1,647 mechanical and legality rules to the output trained on its
+outcome and the deciding facts the model does not read, against `MODEL-FIELDS.md`. The totals and
+the families are in the gen-3 design record, part 2, step 2. To list the rules behind any name:
+`grep -l 'new:chosen_values' rules/heads/*.jsonl`, or `grep '"output": "missing"' rules/heads/*.jsonl`.
+
+**Names the families group.** The design record's tables count each rule once per family:
+
+| family | names in `inputs_missing` or `outputs` |
+|---|---|
+| values chosen earlier | `new:chosen_values`, `linked_choice`, `x_paid_on_permanent`, `x_of_other_object`, `optional_costs_paid`, `alternative_cost_paid`, `mana_spent`, `die_result`, `flip_result`, `stored_results`, `cast_from_zone` |
+| designations and game-level state | `new:designations`, `day_night`, `monarch`, `initiative`, `dungeon_room`, `speed`, `city_blessing`, `class_level`, `room_unlocked`, `soulbond_pair`, `protector`, `radiation`, `phased_out_flag`, `band_membership` |
+| earlier in the turn or game | `new:this_turn_history`, `game_history`, `damage_sources_this_turn`, `last_known_information` |
+| faces and copies | `snapshot:face`, `snapshot:copy_source`, `new:face`, `copiable_values`, `merged_components` |
+| exiled-with and hidden zones | `new:exiled_with`, `exile_contents`, `library_contents`, `library_top` |
+| pending shields and delayed triggers | `new:replacement_shield`, `regeneration_shield`, `delayed_triggers`, `active_effects`, `active_restrictions`, `cast_permission` |
+| attachments, attack and stack targets | `snapshot:attached_to_target`, `snapshot:attack_target`, `snapshot:stack_targets`, `planned:block_pairing` |
+| zone destinations merged | `record:event:zone_change`, `new:library_zone_outcome`, `exile_zone_outcome`, `zone_outcome_battlefield`, `zone_outcome_command`, `library_position`, `entered_objects` |
+| game-level state changing | `new:designations_changed`, `dungeon_progress`, `day_night_change`, `speed_change`, `city_blessing_gained`, `monarch_change`, `initiative_change`, `class_level_change`, `room_unlocked`, `soulbond_pair_change`, `protector_change`, `record:event:day_night_changed`, `dungeon_ventured`, `state_flag_change`, `ring_tempts` |
+
+About 30 input names and 50 output names fall in no family, each on five rules or fewer, for
+example `new:attraction_deck`, `new:spliced_text`, `new:base_pt_change` and
+`record:event:counter_change`. The scratch script that made the tables is not kept; the groups
+above are its whole configuration.
+
+**Where packets disagree.** Each packet was judged separately, so a few neighbouring rules read
+the same mechanism differently. The known case was a planeswalker's or battle's entering
+counters. 306.5b and 310.4b said they reach `counters_delta_loyalty` and `counters_delta_defense`,
+and 209.1 filed them under the refused permanent-spell resolution. The refusal decides it: a cast
+planeswalker or battle enters through its own permanent spell's record, which `build-corpus`
+drops. The two lines now say `recorded`. Other disagreements may remain, so read the note on a line
+before relying on it alone.

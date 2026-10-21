@@ -1,0 +1,3 @@
+{"id": "702.23a", "output": "trained", "outputs": ["trigger_fired", "power_delta", "toughness_delta", "pt_duration"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "702.23b", "output": "trained", "outputs": ["power_delta", "toughness_delta", "pt_duration"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "702.23c", "output": "trained", "outputs": ["trigger_fired"], "input": "complete", "inputs_missing": [], "note": ""}

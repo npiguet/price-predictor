@@ -1,0 +1,2 @@
+{"id": "702.52a", "output": "trained", "outputs": ["cards_milled", "cards_drawn", "zone_outcome"], "input": "incomplete", "inputs_missing": ["planned:every_line"], "note": "dredge is a static line of the graveyard card"}
+{"id": "702.52b", "output": "missing", "outputs": ["new:rewrite_result"], "input": "incomplete", "inputs_missing": ["planned:every_line"], "note": "dredge availability is not recorded"}

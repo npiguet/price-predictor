@@ -1,0 +1,2 @@
+{"id": "702.82a", "output": "trained", "outputs": ["counters_delta_p1p1", "zone_outcome"], "input": "incomplete", "inputs_missing": ["new:chosen_values"], "note": "How many creatures are devoured is a choice the record does not carry as an input."}
+{"id": "702.82c", "output": "trained", "outputs": ["counters_delta_p1p1", "zone_outcome"], "input": "complete", "inputs_missing": [], "note": ""}

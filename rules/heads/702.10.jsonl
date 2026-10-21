@@ -1,0 +1,2 @@
+{"id": "702.10b", "output": "trained", "outputs": ["attacker_legal"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "702.10c", "output": "trained", "outputs": ["can_play"], "input": "complete", "inputs_missing": [], "note": "Fervor's haste rides Prodigal Sorcerer's own keyword overlay, which lists every current keyword."}

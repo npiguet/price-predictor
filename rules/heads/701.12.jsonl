@@ -1,0 +1,8 @@
+{"id": "701.12a", "output": "trained", "outputs": ["gate", "control_change"], "input": "complete", "inputs_missing": [], "note": "A partly fizzled exchange writes an effect half with no events, so the gate is trained."}
+{"id": "701.12b", "output": "trained", "outputs": ["control_change"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "701.12c", "output": "trained", "outputs": ["life_delta"], "input": "incomplete", "inputs_missing": ["planned:every_line"], "note": "The can't-gain-life variant needs a static on a non-acting permanent."}
+{"id": "701.12d", "output": "trained", "outputs": ["zone_outcome"], "input": "incomplete", "inputs_missing": ["planned:owner"], "note": "Card ownership of the exchanged cards is not recorded."}
+{"id": "701.12e", "output": "trained", "outputs": ["attached_to_change", "zone_outcome"], "input": "incomplete", "inputs_missing": ["snapshot:subtypes"], "note": "Aura-ness of the card in hand is a subtype; the card type only hints at it."}
+{"id": "701.12f", "output": "trained", "outputs": ["zone_outcome"], "input": "complete", "inputs_missing": [], "note": "Hand to graveyard moves land on zone_outcome only approximately."}
+{"id": "701.12g", "output": "trained", "outputs": ["life_delta", "toughness_delta"], "input": "incomplete", "inputs_missing": ["planned:every_line"], "note": "The can't-gain-life variant needs a static on a non-acting permanent."}
+{"id": "701.12h", "output": "recorded", "outputs": ["record:event:text_change", "new:text_change"], "input": "incomplete", "inputs_missing": ["planned:every_line"], "note": "Deathtouch on a creature is a printed keyword line the model does not read."}

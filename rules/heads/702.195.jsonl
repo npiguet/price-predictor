@@ -1,0 +1,2 @@
+{"id": "702.195a", "output": "trained", "outputs": ["life_delta", "new:designations_changed"], "input": "incomplete", "inputs_missing": ["snapshot:subtypes", "new:designations"], "note": "The story shows only through the Storied condition's damage; the designation itself has no output."}
+{"id": "702.195c", "output": "trained", "outputs": ["trigger_fired"], "input": "incomplete", "inputs_missing": ["new:designations", "planned:every_line"], "note": ""}

@@ -1,0 +1,1 @@
+{"id": "702.30a", "output": "trained", "outputs": ["trigger_fired", "zone_outcome", "tap_state"], "input": "incomplete", "inputs_missing": ["new:game_history"], "note": "Summoning sickness has cleared by the upkeep, so whether control began since the last upkeep is not read; the echo payment is made during resolution."}

@@ -1,0 +1,2 @@
+{"id": "702.68a", "output": "trained", "outputs": ["power_delta", "pt_duration", "trigger_fired"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "702.68b", "output": "trained", "outputs": ["trigger_fired"], "input": "incomplete", "inputs_missing": ["planned:every_line", "snapshot:subtypes"], "note": "the second frenzy trigger is granted by another Sliver's static"}

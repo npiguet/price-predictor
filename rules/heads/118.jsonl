@@ -1,0 +1,24 @@
+{"id": "118.3", "output": "trained", "outputs": ["can_play", "affordable"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "118.3a", "output": "trained", "outputs": ["mana_paid", "can_play"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "118.3b", "output": "trained", "outputs": ["can_play", "cards_drawn", "new:game_result"], "input": "complete", "inputs_missing": [], "note": "life paid as a cost is a cost-half field, not a life_delta target, and losing at 0 life is a player_removed event with no target path"}
+{"id": "118.6", "output": "trained", "outputs": ["can_play", "affordable"], "input": "incomplete", "inputs_missing": ["new:mana_cost"], "note": "mana value 0 is the same with no mana cost and with a {0} cost"}
+{"id": "118.6a", "output": "trained", "outputs": ["can_play", "new:cost_after_adjustment"], "input": "incomplete", "inputs_missing": ["planned:every_line", "new:mana_cost"], "note": ""}
+{"id": "118.7", "output": "trained", "outputs": ["can_play", "new:cost_after_adjustment"], "input": "incomplete", "inputs_missing": ["planned:every_line"], "note": "the adjusted cost is a playability field no output reads"}
+{"id": "118.7a", "output": "trained", "outputs": ["can_play", "new:cost_after_adjustment"], "input": "incomplete", "inputs_missing": ["planned:every_line", "new:mana_cost"], "note": ""}
+{"id": "118.7b", "output": "trained", "outputs": ["can_play", "new:cost_after_adjustment"], "input": "incomplete", "inputs_missing": ["planned:every_line", "new:mana_cost"], "note": ""}
+{"id": "118.7c", "output": "trained", "outputs": ["can_play", "new:cost_after_adjustment"], "input": "incomplete", "inputs_missing": ["planned:every_line", "new:mana_cost"], "note": ""}
+{"id": "118.7d", "output": "trained", "outputs": ["can_play", "new:cost_after_adjustment"], "input": "incomplete", "inputs_missing": ["planned:every_line", "new:mana_cost"], "note": "no scenario; judged from the text"}
+{"id": "118.7e", "output": "trained", "outputs": ["can_play", "new:cost_after_adjustment"], "input": "incomplete", "inputs_missing": ["planned:every_line", "new:mana_cost"], "note": "no scenario; judged from the text"}
+{"id": "118.7f", "output": "trained", "outputs": ["can_play", "new:cost_after_adjustment"], "input": "incomplete", "inputs_missing": ["planned:every_line", "new:mana_cost"], "note": "no scenario; judged from the text"}
+{"id": "118.7g", "output": "trained", "outputs": ["can_play", "new:cost_after_adjustment"], "input": "incomplete", "inputs_missing": ["planned:every_line", "new:mana_cost"], "note": "no scenario; judged from the text"}
+{"id": "118.8c", "output": "trained", "outputs": ["can_play"], "input": "incomplete", "inputs_missing": ["planned:every_line"], "note": "no scenario; the if-able instruction is a line the model does not read"}
+{"id": "118.8d", "output": "trained", "outputs": ["target_legal", "zone_outcome"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "118.9a", "output": "planned", "outputs": ["planned:failed_checks", "can_play"], "input": "incomplete", "inputs_missing": ["planned:every_line"], "note": ""}
+{"id": "118.9c", "output": "trained", "outputs": ["target_legal", "zone_outcome"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "118.9d", "output": "trained", "outputs": ["can_play", "new:cost_after_adjustment"], "input": "incomplete", "inputs_missing": ["planned:every_line"], "note": ""}
+{"id": "118.10", "output": "trained", "outputs": ["can_play", "affordable"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "118.11", "output": "trained", "outputs": ["life_delta", "can_play", "new:rewrite_result"], "input": "incomplete", "inputs_missing": ["planned:every_line"], "note": "the cost half carries no events, so the replaced exile of the sacrificed creature reaches no output; the replacement is a static on a non-acting permanent"}
+{"id": "118.12", "output": "trained", "outputs": ["cards_drawn", "zone_outcome"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "118.12a", "output": "trained", "outputs": ["zone_outcome"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "118.12b", "output": "recorded", "outputs": ["record:event:phase_skipped", "new:phase_skipped"], "input": "complete", "inputs_missing": [], "note": "the skipped draw step is a phase_skipped event with no target path"}
+{"id": "118.14", "output": "trained", "outputs": ["can_play"], "input": "incomplete", "inputs_missing": ["planned:every_line"], "note": ""}

@@ -1,0 +1,2 @@
+{"id": "702.115a", "output": "trained", "outputs": ["trigger_fired", "new:cards_exiled_from_library"], "input": "complete", "inputs_missing": [], "note": "The exiled library card has no entity slot, so only the trigger firing is trained; became_blocked and library size are read."}
+{"id": "702.115b", "output": "trained", "outputs": ["trigger_fired", "new:cards_exiled_from_library"], "input": "complete", "inputs_missing": [], "note": "Each instance is the acting line of its own trigger record; the library exile has no entity slot."}

@@ -1,0 +1,1 @@
+{"id": "728.1", "output": "trained", "outputs": ["cards_milled", "life_delta", "new:radiation_delta"], "input": "incomplete", "inputs_missing": ["new:radiation", "new:library_contents"], "note": "Rad counters are not in the player slot and the life loss depends on which library cards are nonland, which is not read."}

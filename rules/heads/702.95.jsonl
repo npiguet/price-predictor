@@ -1,0 +1,4 @@
+{"id": "702.95a", "output": "trained", "outputs": ["trigger_fired", "new:soulbond_pair_change"], "input": "incomplete", "inputs_missing": ["new:soulbond_pair"], "note": "The pairing itself is not recorded."}
+{"id": "702.95c", "output": "missing", "outputs": ["new:soulbond_pair_change"], "input": "incomplete", "inputs_missing": ["new:soulbond_pair"], "note": ""}
+{"id": "702.95d", "output": "missing", "outputs": ["new:soulbond_pair_change"], "input": "incomplete", "inputs_missing": ["new:soulbond_pair"], "note": ""}
+{"id": "702.95e", "output": "trained", "outputs": ["keywords_gained", "new:soulbond_pair_change"], "input": "incomplete", "inputs_missing": ["new:soulbond_pair"], "note": "The paired bonus stops on the continuous record; the pair breaking itself is not recorded."}

@@ -1,0 +1,10 @@
+{"id": "602.1e", "output": "trained", "outputs": ["can_play", "affordable", "new:cost_after_adjustment"], "input": "incomplete", "inputs_missing": ["planned:every_line"], "note": "The payment modifier and cost increase are statics."}
+{"id": "602.2", "output": "trained", "outputs": ["can_play"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "602.2a", "output": "trained", "outputs": ["zone_outcome", "damage_taken", "life_delta"], "input": "complete", "inputs_missing": [], "note": "A countered ability reaches zone_outcome as a stack object."}
+{"id": "602.4", "output": "trained", "outputs": ["mana_paid"], "input": "incomplete", "inputs_missing": ["new:this_turn_history"], "note": "An earlier resolved cost-altering effect is not in the snapshot."}
+{"id": "602.5", "output": "trained", "outputs": ["can_play"], "input": "incomplete", "inputs_missing": ["planned:every_line", "new:chosen_values", "snapshot:name"], "note": "Pithing Needle's chosen name is not read."}
+{"id": "602.5a", "output": "trained", "outputs": ["can_play"], "input": "complete", "inputs_missing": [], "note": "The summoning-sick flag is read; whether it accounts for haste is the engine's."}
+{"id": "602.5b", "output": "trained", "outputs": ["can_play"], "input": "incomplete", "inputs_missing": ["new:this_turn_history"], "note": "The per-turn activation count is not read."}
+{"id": "602.5c", "output": "trained", "outputs": ["can_play"], "input": "incomplete", "inputs_missing": ["new:this_turn_history"], "note": "Per-source activation counts are not read."}
+{"id": "602.5d", "output": "planned", "outputs": ["planned:timing"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "602.5e", "output": "planned", "outputs": ["planned:timing"], "input": "incomplete", "inputs_missing": ["new:payment_in_progress"], "note": "Whether the activation happens while paying another cost is not recorded."}

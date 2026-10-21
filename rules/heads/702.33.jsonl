@@ -1,0 +1,5 @@
+{"id": "702.33a", "output": "trained", "outputs": ["damage_taken", "zone_outcome"], "input": "incomplete", "inputs_missing": ["new:optional_costs_paid"], "note": ""}
+{"id": "702.33c", "output": "recorded", "outputs": ["record:event:counter_change", "new:permanent_spell_resolution"], "input": "incomplete", "inputs_missing": ["new:optional_costs_paid"], "note": "The entering charge counters sit in a permanent spell's resolution record, which build-corpus refuses."}
+{"id": "702.33e", "output": "trained", "outputs": ["trigger_fired"], "input": "incomplete", "inputs_missing": ["new:optional_costs_paid"], "note": ""}
+{"id": "702.33f", "output": "trained", "outputs": ["trigger_fired"], "input": "incomplete", "inputs_missing": ["new:optional_costs_paid"], "note": ""}
+{"id": "702.33g", "output": "trained", "outputs": ["can_play", "has_legal_target"], "input": "incomplete", "inputs_missing": ["new:optional_costs_paid"], "note": ""}

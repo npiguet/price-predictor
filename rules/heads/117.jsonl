@@ -1,0 +1,11 @@
+{"id": "117.1a", "output": "planned", "outputs": ["planned:timing"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "117.1b", "output": "planned", "outputs": ["planned:timing"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "117.1c", "output": "planned", "outputs": ["planned:timing"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "117.1d", "output": "trained", "outputs": ["zone_outcome", "gate"], "input": "complete", "inputs_missing": [], "note": "the mana ability itself is not a record; the unless-payment shows as countered or not"}
+{"id": "117.2a", "output": "trained", "outputs": ["trigger_fired"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "117.3a", "output": "trained", "outputs": ["trigger_fired", "new:priority_holder"], "input": "complete", "inputs_missing": [], "note": "who receives priority reaches no output; only the upkeep trigger firing is trained"}
+{"id": "117.3b", "output": "missing", "outputs": ["new:priority_holder"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "117.3c", "output": "trained", "outputs": ["damage_taken", "zone_outcome", "power_delta"], "input": "complete", "inputs_missing": [], "note": "stack order is not read but the post-resolution board already shows the earlier effects"}
+{"id": "117.4", "output": "trained", "outputs": ["zone_outcome", "damage_taken"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "117.5", "output": "trained", "outputs": ["zone_outcome", "trigger_fired"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "117.7", "output": "trained", "outputs": ["zone_outcome", "damage_taken", "power_delta"], "input": "complete", "inputs_missing": [], "note": ""}

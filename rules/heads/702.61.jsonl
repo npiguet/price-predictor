@@ -1,0 +1,2 @@
+{"id": "702.61a", "output": "trained", "outputs": ["can_play", "planned:failed_checks"], "input": "incomplete", "inputs_missing": ["planned:every_line"], "note": ""}
+{"id": "702.61b", "output": "trained", "outputs": ["can_play", "trigger_fired"], "input": "incomplete", "inputs_missing": ["planned:every_line"], "note": ""}

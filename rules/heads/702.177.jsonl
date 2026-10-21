@@ -1,0 +1,2 @@
+{"id": "702.177a", "output": "trained", "outputs": ["can_play"], "input": "incomplete", "inputs_missing": ["new:game_history"], "note": "Once-only is a per-permanent activation history."}
+{"id": "702.177b", "output": "trained", "outputs": ["can_play"], "input": "incomplete", "inputs_missing": ["new:this_turn_history", "new:game_history", "planned:every_line"], "note": "The reactivation line is a static, which is not an ability token even on the acting card."}

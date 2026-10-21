@@ -1,0 +1,2 @@
+{"id": "702.57a", "output": "trained", "outputs": ["can_play"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "702.57b", "output": "planned", "outputs": ["planned:timing", "planned:failed_checks"], "input": "incomplete", "inputs_missing": ["new:this_turn_history"], "note": "phase and whether the acting player is active are read; the activation count is not"}

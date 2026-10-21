@@ -1,0 +1,1 @@
+{"id": "404.1", "output": "trained", "outputs": ["zone_outcome"], "input": "incomplete", "inputs_missing": ["planned:every_line", "new:cast_permission", "snapshot:token_script"], "note": "The destination zone is trained; position on top of the graveyard is not. Library of Leng and Leyline of the Void are replacements on non-acting permanents."}
