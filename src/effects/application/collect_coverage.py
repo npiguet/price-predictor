@@ -330,17 +330,27 @@ def load_exclusions(
     precisely the failure this feature has already had once, and a merge would
     hide a disagreement instead of reporting it.
     """
-    from effects.domain.card_names import fold_card_name
-
     if split_from is not None and exclude_cards is not None:
         raise ValueError(TWO_HOLDOUT_SOURCES)
     if exclude_cards is not None:
-        return frozenset(
-            fold_card_name(line.strip())
-            for line in Path(exclude_cards).read_text(encoding="utf-8").splitlines()
-            if line.strip()
-        )
+        return read_name_list(exclude_cards)
     return load_held_out(split_from)
+
+
+def read_name_list(path: Path) -> frozenset[str]:
+    """The card names a one-per-line list holds, folded; blank lines skipped.
+
+    Folded because a list ``holdout-cards`` writes carries Forge's printed
+    case while coverage decks are built from converted names, which are
+    lowercase.
+    """
+    from effects.domain.card_names import fold_card_name
+
+    return frozenset(
+        fold_card_name(line.strip())
+        for line in Path(path).read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    )
 
 
 def load_held_out(split_from: Path | None) -> frozenset[str]:
@@ -665,11 +675,7 @@ def run_text_coverage(config: CollectCoverageConfig) -> int:
     if not cards_folder.is_dir():
         logger.error("No converted cards under %s.", cards_folder)
         return 1
-    listed = frozenset(
-        fold_card_name(line.strip())
-        for line in Path(config.only_cards).read_text(encoding="utf-8").splitlines()
-        if line.strip()
-    )
+    listed = read_name_list(config.only_cards)
     card_files = load_card_files(cards_folder)
     roots = sidecar_roots(config.cards_folders)
     texts_by_card = load_card_texts(card_files, SidecarCache(roots))
