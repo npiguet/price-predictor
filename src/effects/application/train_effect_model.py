@@ -17,9 +17,9 @@ enumerates that split; this module reads it.
 **Rarity weighting counts games, not records.** One long game can produce
 hundreds of records of one ability; weighting by records would make that ability
 look well-observed when it has been seen in one board state. The weights feed a
-weighted shuffle *without replacement* over the resident shard (FR-086): the
-per-batch class draw is gone, because a sixteen-record shard resampled with
-replacement was replayed 640 times.
+weighted shuffle *without replacement* over the resident shard (FR-086) rather
+than a per-batch class draw with replacement, which replays a small shard's few
+records many times over within one epoch.
 """
 
 from __future__ import annotations
@@ -61,12 +61,9 @@ RANDOM_SEED = 42
 #: many different shards those steps are spread across. Raising it costs only
 #: the per-shard load — about a third of a second against a 45-minute epoch —
 #: so the ceiling is how thinly a shard can be sampled and still be worth
-#: opening, not time.
-#:
-#: The previous value of 18 was correct for the corpus it was written against
-#: (701 raw shards, covered once by 40 epochs) and silently wrong for the one
-#: ``build-corpus`` writes, which is 3,194. Eighteen an epoch reads 0.6% of
-#: that, and a run that early-stops at epoch 9 has seen 5% of it.
+#: opening, not time. It scales with the shard count ``build-corpus`` writes:
+#: an epoch that reads a sliver of the corpus, and a run that early-stops having
+#: seen a few percent of it, measures one corner of the data.
 DEFAULT_SHARDS_PER_EPOCH = 256
 
 #: Worker processes preparing training steps (``--prefetch-workers``). Three,
@@ -135,7 +132,10 @@ def epoch_shards(
 
 
 def steps_per_shard(total: int, count: int) -> list[int]:
-    """``total`` optimizer steps divided as evenly as possible over ``count``.
+    """``total`` training steps divided as evenly as possible over ``count``.
+
+    A step is one batch's forward and backward; under ``--grad-accum`` several
+    of them make one optimizer step.
 
     Spread rather than piled onto the last shard: every shard in the epoch
     should contribute comparably, whatever the remainder.
@@ -295,9 +295,9 @@ class TrainEffectModelConfig:
     api_weight: float = 0.05
     #: The epoch whose first step enables the sparse field group (FR-082).
     #: An epoch rather than a step so validation before and after the switch
-    #: scores different field sets at an epoch boundary, never inside one:
-    #: the first run enabled the group at shard 244 of epoch 2 and validated
-    #: twenty-five untrained heads at that epoch's end, a 134-loss spike.
+    #: scores different field sets at an epoch boundary, never inside one: a
+    #: switch mid-epoch validates the new fields' untrained heads at the
+    #: epoch's end, which reads as a loss spike.
     curriculum_epoch: int = 3
     batch_size: int = 32
     grad_accum: int = 1

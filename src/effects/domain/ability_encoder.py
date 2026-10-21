@@ -11,8 +11,11 @@ Three embeddings are added to each token, not one:
 - **token** — the word itself;
 - **position** — where it sits in the line;
 - **role** — ``cost`` / ``effect`` / ``trigger-condition`` / ``target-spec``, read
-  from the sidecar's spans. Without it ``{R}`` in a cost and ``{R}`` in an effect
-  are the same input, and they mean opposite things.
+  from the sidecar's spans over the converted prose (FR-069). Without it ``{R}``
+  in a cost and ``{R}`` in an effect are the same input, and they mean opposite
+  things. The spans index the prose, so only a prose text carries roles; the
+  script surface spells the difference in its own keys (``Cost$``) and every
+  token there reads "no role".
 
 Numbers get a fourth: a **monotone numeric embedding**, a shared learned base
 vector plus ``log1p(n)`` times a learned direction. A number's magnitude is

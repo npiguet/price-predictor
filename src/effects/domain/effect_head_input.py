@@ -158,16 +158,13 @@ def _phase_in(phase: str | None, layout: str | None) -> str | None:
 def _positions(vocabulary: tuple[str, ...]) -> dict[str, int]:
     """``normalized member -> its slot``, built once per vocabulary.
 
-    The one-hots used to lower every member of the vocabulary on every call,
-    and the multi-hot lowered them twice — a vocabulary scan per feature,
-    twenty-seven of them for the overlay keywords alone, a million times over
-    a four-shard run. The vocabularies are checked-in constants, so the scan
-    is done once here and every call is a dict lookup per value present.
+    The vocabularies are checked-in constants, so normalizing them is done once
+    here and every feature is a dict lookup per value present, rather than a
+    scan of the vocabulary per feature — twenty-seven of them for the overlay
+    keywords alone, on every slot of every step.
 
-    First occurrence wins, which is what :func:`_one_hot` did when it returned
-    at its first match; no vocabulary has two members that lower to the same
-    string, and one that did would have meant different things to the two
-    helpers before this as well.
+    First occurrence wins; no vocabulary has two members that normalize to the
+    same string.
     """
     positions: dict[str, int] = {}
     for index, member in enumerate(vocabulary):

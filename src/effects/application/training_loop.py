@@ -216,10 +216,10 @@ def resets_at(config, *, epoch: int) -> bool:
 def parameter_groups(encoder, model, identity_table=None) -> list[dict]:
     """One optimizer group per module, named for ``clip_per_group``.
 
-    Clipped apart rather than together (FR-095): the head's gradient norm ran
-    five to twenty times the encoder's in the first run, and a joint clip at
-    1.0 scaled the encoder's update by the head's norm — the one path the
-    effect loss reaches the encoder through, cut to a twentieth.
+    Clipped apart rather than together (FR-095): the head's gradient norm runs
+    several times the encoder's, and a joint clip at 1.0 would scale the
+    encoder's update by the head's norm — the one path the effect loss reaches
+    the encoder through.
     """
     groups = [
         {"name": "encoder", "params": list(encoder.parameters())},

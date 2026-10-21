@@ -7,13 +7,12 @@ and nothing that reads the weights, so the same code runs on a thread of the
 training process (``--prefetch-workers 0``) or in a worker process of its own,
 and the training process does only the device half.
 
-Moving it into processes is what made its randomness explicit. Every draw the
-host half takes — the shard's weighted shuffle, keyword expansion, context
-dropout, the MLM mask — used to come from one generator shared with the
-training process, in step order, which only one thread can honour. Each draw
-now comes from a generator seeded by ``(seed, epoch, shard position, step)``
-alone, so a step's inputs are a function of where it sits in the run and not of
-which process prepared it, or how many there were.
+Its randomness is explicit for the same reason. Every draw the host half
+takes — the shard's weighted shuffle, keyword expansion, context dropout, the
+MLM mask — comes from a generator seeded by ``(seed, epoch, shard position,
+step)`` alone, so a step's inputs are a function of where it sits in the run
+and not of which process prepared it, or how many there were; one generator
+shared in step order is something only one thread can honour.
 """
 
 from __future__ import annotations
@@ -346,7 +345,7 @@ class StepPreparation:
         """The run's key-to-text join over ``sidecars``, built on first use.
 
         One per sidecar cache rather than one per step: every step meets the
-        same cards, and a batcher built per step used to start its memo empty.
+        same cards, and a memo built per step would start empty every time.
         """
         resolver = getattr(self, "_key_texts", None)
         if resolver is None or resolver.sidecars is not sidecars:

@@ -37,12 +37,11 @@ def collate_surfaces(
     synchronization per slot and severs the gradient.
 
     The padding is done in numpy and handed to torch once per array, because a
-    batch of 32 surfaces holds about two thousand slots and the per-slot
-    ``torch.tensor`` this used to build was the expensive part: each one takes
-    the tensor-construction path for a handful of floats, and there were three
-    hundred thousand of them over a four-shard run. numpy pads into a buffer
-    that is already the right shape and ``torch.from_numpy`` wraps it without
-    copying, so the same bytes reach the model.
+    batch of 32 surfaces holds about two thousand slots and a ``torch.tensor``
+    per slot takes the tensor-construction path for a handful of floats each
+    time. numpy pads into a buffer that is already the right shape and
+    ``torch.from_numpy`` wraps it without copying, so the same bytes reach the
+    model.
     """
     batch = len(surfaces)
     width = max((len(s.slots) for s in surfaces), default=1)
