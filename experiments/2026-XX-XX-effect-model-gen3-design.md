@@ -398,9 +398,13 @@ supply them. The combat copies proposed below are one case.
 
 **The AI writes only candidates that already passed `canPlay`.** `AiController.canPlayAndPayFor` returns before the hook for a candidate that fails it, so every `can_play = false` in the corpus comes from the random seat.
 
+**On the AI seat, gen-1 and gen-2 `has_legal_target` and `affordable` record the AI's choices rather than the rules.** `has_legal_target` reads whether the AI had set targets on the candidate. The AI sets targets only when its evaluation gets that far and finds a target it wants. A candidate the AI put off until later is therefore written with no legal target. A candidate evaluated earlier can keep that evaluation's targets and is written with one. `affordable` comes from `ComputerUtilCost.canPayCost`, which applies the AI's cost preferences on top of the rules. It refuses a planeswalker's last loyalty and a Ward cost the AI dislikes, and it draws from the shared random stream to decide. The random seat uses the same cost check. It counts target candidates rather than reading chosen targets, but it walks a charm's leftover chain of chosen modes instead of the modes the charm offers. Verdict-head results and probes on gen-1 and gen-2 records inherit all of these errors.
+
+**Gen-3 computes all three verdict bits in the collector, from the rules alone, for both seats.** The AI's hook passes only the candidate, before the AI evaluates it and ahead of its `canPlay` filter. The collector's `PlayabilityVerdict` checks mana and additional costs without the AI's cost preferences. It counts each targeting clause's candidates against the clause's minimum. It judges a charm by how many of its offered modes have reachable targets. The random seat filters its own plays on the same verdict.
+
 **Split second on the stack reaches the model only as the stack card's ability text.** The card slots' keyword flags have no `split_second`, and the knowledge probes found the trunk reads little of other cards' text.
 
-**The fix is in the collector, and Forge's own answer is the label.** Each candidate carries a fourth verdict bit, `timing`, holding `canCastTiming`, recorded at the AI's hook and at the random seat alike. Recomputing the rule in Python from the snapshot would miss what Forge already applies:
+**The fix is in the collector, and Forge's own answer is the label.** Each candidate carries a fourth verdict bit, `timing`, holding `canCastTiming`, computed by `PlayabilityVerdict` for the AI seat and the random seat alike. Recomputing the rule in Python from the snapshot would miss what Forge already applies:
 
 - flash granted by a static, such as Leyline of Anticipation or Vedalken Orrery;
 - a static that holds opponents to sorcery timing, such as Teferi, Time Raveler;
