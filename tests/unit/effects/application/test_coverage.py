@@ -366,12 +366,11 @@ def test_satisfied_is_records_at_or_above_target(records, target, expected):
 
 
 class TestRunClosesTheSupervisor:
-    """final-fix-3.md item 5: ``CollectorSupervisor.stop()`` -- the only
-    caller of ``WorkerLogFiles.close_all()`` -- was never invoked by
-    ``run()``, so a coverage run's worker log handles (opened for exactly the
-    latched effect-record failure reporters F4 exists to make visible to an
-    operator) stayed open until the interpreter exited on its own, not when
-    the run itself finished.
+    """``CollectorSupervisor.stop()`` is the only caller of
+    ``WorkerLogFiles.close_all()``. Unless ``run()`` invokes it, a coverage
+    run's worker log handles -- opened so the latched effect-record failure
+    reporters are visible to an operator -- stay open until the interpreter
+    exits on its own, not when the run itself finishes.
     """
 
     def _config(self, tmp_path, **overrides):
@@ -569,7 +568,7 @@ class TestTheRoundPlaysTheComputedDecks:
 
 
 class TestARoundEndsInItsReport:
-    """Final review, CRITICAL 1, at the level the operator sees.
+    """A round ends in its report, at the level the operator sees.
 
     ``run``'s ``finally`` calls ``CollectorSupervisor.stop()``, which called a
     pool method that does not exist, so every round ended in
@@ -619,13 +618,14 @@ class TestARoundEndsInItsReport:
 
 
 class TestCtrlCEndsTheRun:
-    """Final review, IMPORTANT 3: nothing in ``effects`` read
+    """Nothing in ``effects`` used to read
     ``ForgeWorkerPool.interrupted``, so ``run`` built a fresh pool for the
     next round and Ctrl-C degraded to "skip this round, start another".
 
     ``spec=CollectorSupervisor`` rather than a bare ``MagicMock`` on purpose:
     a bare one answers to ``interrupted`` whether or not the supervisor
-    exposes it, which is the same blindness that let CRITICAL 1 ship.
+    exposes it, which is the same blindness ``TestARoundEndsInItsReport``
+    exists for.
     """
 
     def _two_round_config(self, tmp_path):
@@ -673,7 +673,7 @@ class TestCtrlCEndsTheRun:
 
 
 class TestOnlyDeckedCardsCountAStalledRound:
-    """Final review, IMPORTANT 4: ``retire_stalled`` counted a stalled round
+    """``retire_stalled`` used to count a stalled round
     against every card that gained no qualifying record, including cards no
     deck that round ever held.
 

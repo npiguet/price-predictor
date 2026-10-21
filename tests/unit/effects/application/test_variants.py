@@ -445,13 +445,12 @@ def test_variant_name_derives_from_its_source():
 
 
 class TestRunClosesTheSupervisor:
-    """final-fix-3.md item 5: same finding, same fix shape as
-    ``collect_coverage.run`` (see ``TestRunClosesTheSupervisor`` in
-    ``test_coverage.py`` for the full rationale) -- ``run()`` built a
-    ``CollectorSupervisor`` and played a round through it, but never called
-    ``.stop()``, so the worker log handles opened for F4's latched
-    effect-record failure reporters stayed open until the interpreter exited
-    on its own.
+    """The same property as ``collect_coverage.run``'s (see
+    ``TestRunClosesTheSupervisor`` in ``test_coverage.py`` for why): a run
+    that builds a ``CollectorSupervisor`` and plays a round through it must
+    call ``.stop()``, or the worker log handles opened for the latched
+    effect-record failure reporters stay open until the interpreter exits on
+    its own.
     """
 
     def _config(self, tmp_path, **overrides):
@@ -638,8 +637,8 @@ class TestTheVariantRoundPlaysTheVariants:
         assert supervisor.play_round.call_args.kwargs["matches"] == 3
 
 
-class TestDeckTextManaCostIsParseable:
-    """Fix round 1: `_deck_text` rendered the perturbed *script's* raw
+class TestVariantManaCostIsParseable:
+    """A variant's cost once reached the manabase as the perturbed *script's* raw
     ``ManaCost:`` line verbatim -- Forge's own space-separated shards, e.g.
     ``"2 R R"``. `compute_basic_lands` reads its input through
     `convert_mana_cost`, which extracts mana symbols with a ``{...}`` regex
@@ -746,7 +745,7 @@ class TestTheVariantCandidateMatchesAConvertedCard:
 
 
 class TestTheRunReportsWhatItCollected:
-    """Final review, IMPORTANT 5: ``run`` returned 0 with no evidence that a
+    """``run`` used to return 0 with no evidence that a
     single variant record had been written.
 
     It counted the corpus once, before play, purely to size the budget, and
@@ -881,7 +880,7 @@ class TestTheRunReportsWhatItCollected:
     def test_an_interrupted_round_does_not_report_success(
         self, tmp_path, monkeypatch,
     ):
-        """Final review, IMPORTANT 3, on the variant side: ``ForgeWorkerPool``
+        """Ctrl-C on the variant side: ``ForgeWorkerPool``
         swallows SIGINT, so a round the operator stopped returns exactly like
         one that finished."""
         collect_variants, config, supervisor = self._fixture(

@@ -570,9 +570,6 @@ def run(config: CollectCoverageConfig) -> int:
         len(coverage), len(held_out), len(non_deck), config.target_records,
     )
 
-    # The existing corpus is counted once, here, rather than again after every
-    # round. On 1,502 shards that is the difference between paying ~66 minutes
-    # once and paying it per round.
     records_dir = Path(config.effect_records)
     counter = CoverageCounter()
     seeded = counter.update(coverage, records_dir)
