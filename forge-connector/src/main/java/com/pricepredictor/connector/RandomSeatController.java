@@ -52,11 +52,13 @@ import java.util.Random;
  * this seat is never attached, so every override there defers to
  * {@code super}.
  *
- * <p>When a draw succeeds the AI's decision code does not run, so the hooks
- * that would have written the {@code decision}, {@code attackers} and
- * {@code blockers} records never fire; the seat writes them itself through
- * {@link PatchedCollectors}' public emitters, from the lists it drew from
- * (FR-022d), stamping its own declarations {@code what_if = false}.
+ * <p>When a draw succeeds the AI's decision code does not run, so the hook
+ * that would have written the {@code decision} records never fires; the seat
+ * writes them itself through {@link PatchedCollectors}' public emitter, from
+ * the candidates it drew from (FR-022d). The {@code attackers} and
+ * {@code blockers} records need no such help: the engine reports combat
+ * legality from the turn-based declaration itself, before any controller
+ * declares, so the seat's declarations are recorded like every other.
  */
 public final class RandomSeatController extends PlayerControllerAi {
 
@@ -393,9 +395,7 @@ public final class RandomSeatController extends PlayerControllerAi {
      *
      * <p>The engine validates the whole declaration — requirements, maximums,
      * "can't attack alone" — and a declaration it rejects is redrawn; after
-     * {@link RandomChoices#MAX_DRAWS} the AI declares. On success an
-     * {@code attackers} record per defender says who could have attacked
-     * and who was legal against it, stamped a real decision (FR-022d).
+     * {@link RandomChoices#MAX_DRAWS} the AI declares.
      */
     @Override
     public void declareAttackers(Player attacker, Combat combat) {
@@ -413,10 +413,6 @@ public final class RandomSeatController extends PlayerControllerAi {
                 }
             }
             legalByDefender.put(defender, legal);
-        }
-        if (collectors != null) {
-            legalByDefender.forEach((defender, legal) ->
-                    collectors.recordAttackers(player, defender, mine, legal, false));
         }
         for (int attempt = 0; attempt < RandomChoices.MAX_DRAWS; attempt++) {
             combat.clearAttackers();
@@ -472,9 +468,7 @@ public final class RandomSeatController extends PlayerControllerAi {
      *
      * <p>{@code CombatUtil.validateBlocks} is the engine's own check and the
      * engine never calls it, so the seat calls it before returning; a
-     * declaration it rejects is redrawn, then left to the AI. On success a
-     * {@code blockers} record per attacker says who could have blocked it
-     * and how many it takes, stamped a real decision (FR-022d).
+     * declaration it rejects is redrawn, then left to the AI.
      */
     @Override
     public void declareBlockers(Player defender, Combat combat) {
@@ -501,11 +495,6 @@ public final class RandomSeatController extends PlayerControllerAi {
                 }
             }
             legalByAttacker.put(attacker, legal);
-        }
-        if (collectors != null) {
-            legalByAttacker.forEach((attacker, legal) -> collectors.recordBlockers(
-                    player, attacker, candidates, legal,
-                    CombatUtil.getMinNumBlockersForAttacker(attacker, player), false));
         }
         for (int attempt = 0; attempt < RandomChoices.MAX_DRAWS; attempt++) {
             clearBlocks(combat);

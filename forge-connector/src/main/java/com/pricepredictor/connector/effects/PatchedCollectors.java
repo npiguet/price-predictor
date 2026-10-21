@@ -39,7 +39,7 @@ import java.util.function.Supplier;
  * <p>{@code rewrite}, {@code trigger}, {@code playability} and {@code mana}
  * records all need a hook at a point the bus never publishes: what a replacement
  * received before it rewrote it, a trigger condition that evaluated to false, a
- * legality verdict the AI computed and discarded, a mana ability that resolved
+ * legality verdict the rules computed and discarded, a mana ability that resolved
  * on the inline path. Each is installed reflectively and simply does not run on
  * an unpatched checkout.
  *
@@ -334,7 +334,7 @@ public final class PatchedCollectors implements AutoCloseable {
             installed.add("mana");
         }
         if (PatchHooks.install(
-                PatchHooks.AI_CONTROLLER, "setEffectRecordCombatListener",
+                PatchHooks.COMBAT_LEGALITY_OBSERVER, "setEffectRecordCombatListener",
                 combatLegalityHandler())) {
             installed.add("combat-legality");
         }
@@ -365,7 +365,7 @@ public final class PatchedCollectors implements AutoCloseable {
         PatchHooks.uninstall(
                 PatchHooks.ABILITY_MANA_PART, "setEffectRecordManaListener");
         PatchHooks.uninstall(
-                PatchHooks.AI_CONTROLLER, "setEffectRecordCombatListener");
+                PatchHooks.COMBAT_LEGALITY_OBSERVER, "setEffectRecordCombatListener");
         PatchHooks.uninstall(
                 PatchHooks.ABILITY_UTILS, "setEffectRecordClauseListener");
         PatchHooks.uninstall(
@@ -925,7 +925,7 @@ public final class PatchedCollectors implements AutoCloseable {
             // same AiController this hook is installed on), and letting one
             // consume from the shared `sampler` before being dropped would
             // re-randomise the live sample stream for every other subkind that
-            // draws from it (legality, trigger negatives, the mana reservoir) --
+            // draws from it (trigger negatives, the mana reservoir) --
             // exactly the cost triggerFireHandler's own identity check already
             // avoids by running first. A null candidate is pre-existing,
             // unrelated behaviour (the record still names no ability) and is
@@ -1087,108 +1087,68 @@ public final class PatchedCollectors implements AutoCloseable {
      * <p>The eighth sampling class, and the only one that says what the rules
      * *forbid* rather than what happened.
      *
-     * <p>Deduplicated on payload and snapshot (FR-028). The AI asks these
-     * questions repeatedly while it evaluates a combat — once per candidate
-     * block assignment, once per defender it considers — and the board does not
-     * move while it does, so the answers repeat verbatim. Left alone they were
-     * four fifths of the corpus at thirteen hundred records a game. Two records
-     * that would be byte-identical carry the same observation once, so
-     * collapsing them loses nothing, which is what makes this a cap rather than
-     * a sample.
+     * <p>Asked by the engine's turn-based actions just before a player
+     * declares, once per defender and once per attacker coming at the
+     * defending player, so every record is a real declaration whoever
+     * controls the seat — the AI, the random seat or a human — and is stamped
+     * {@code what_if=false}. The engine names the deciding player, every
+     * creature that player controls is a candidate, and the legal set comes
+     * from the rules alone, against a combat holding the attackers and no
+     * blocks yet.
      *
-     * <p>What-ifs are also sampled at {@code --legality-rate} (the cap alone
-     * left these at 34.4% of the first corpus against a 5% training share);
-     * real decisions never are (FR-029). The rate is drawn <b>before</b> the
-     * dedup, because the dedup key now holds the snapshot and building one for
-     * every re-ask the rate then discards is the expensive part. The price is
-     * that a what-if the AI re-asks K times survives with probability
-     * 1 − (1 − rate)^K rather than rate, so the retained what-ifs lean towards
-     * the questions the AI asks most — accepted (research.md, legality
-     * de-duplication), since the real decisions, written in full, are the
-     * subset a reader can take as unweighted.
+     * <p>Deduplicated on payload and snapshot (FR-028): a board on which
+     * nothing moved between two declarations answers the same question the
+     * same way, and two records that would be byte-identical carry one
+     * observation once.
      *
-     * <p>Package-private rather than private (final-fix-3.md item 2), the same
-     * reason {@link #rewriteHandler()} already is: this hook's own
-     * game-identity test calls it with a synthesized argument array.
+     * <p>Package-private rather than private, the same reason
+     * {@link #rewriteHandler()} already is: this hook's own game-identity
+     * test calls it with a synthesized argument array.
      */
     InvocationHandler combatLegalityHandler() {
         return (proxy, method, args) -> {
             if (args == null) {
                 return null;
             }
-            // final-fix-3.md item 2: no CardTraitBase here -- the acting
-            // argument is the GameEntity itself (defender/attacker), so
-            // identity comes straight off it rather than through a host card.
-            // Wrong-type or null is left alone rather than newly dropped;
-            // emitAttackers/emitBlockers already tolerate both.
-            if ("onAttackersComputed".equals(method.getName()) && args.length >= 3) {
-                if (!(args[0] instanceof GameEntity defender) || belongsToLiveGame(defender)) {
-                    emitAttackers(args[0], asCards(args[1]), asCards(args[2]));
+            // No CardTraitBase here: the defender or attacker is the
+            // GameEntity itself, so identity comes straight off it rather
+            // than through a host card. A wrong-typed or null entity is left
+            // to recordAttackers/recordBlockers, which tolerate both.
+            Player decider = args.length > 0 && args[0] instanceof Player player ? player : null;
+            if ("onAttackersDeclarable".equals(method.getName()) && args.length >= 4) {
+                if (!(args[1] instanceof GameEntity defender) || belongsToLiveGame(defender)) {
+                    recordAttackers(
+                            decider,
+                            args[1] instanceof GameEntity entity ? entity : null,
+                            asCards(args[2]), asCards(args[3]));
                 }
-            } else if ("onBlockersComputed".equals(method.getName())
-                    && args.length >= 4) {
-                if (!(args[0] instanceof GameEntity attacker) || belongsToLiveGame(attacker)) {
-                    emitBlockers(
-                            args[0] instanceof Card attackerCard ? attackerCard : null,
-                            asCards(args[1]), asCards(args[2]),
-                            args[3] instanceof Integer min ? min : 0);
+            } else if ("onBlockersDeclarable".equals(method.getName())
+                    && args.length >= 5) {
+                if (!(args[1] instanceof GameEntity attacker) || belongsToLiveGame(attacker)) {
+                    recordBlockers(
+                            decider,
+                            args[1] instanceof Card attackerCard ? attackerCard : null,
+                            asCards(args[2]), asCards(args[3]),
+                            args[4] instanceof Integer min ? min : 0);
                 }
             }
             return null;
         };
     }
 
-    /** The hook path: the deciding player is the candidates' controller (FR-030a). */
-    private void emitAttackers(Object defender, List<Card> candidates, List<Card> legal) {
-        recordAttackers(
-                controllerOfCandidates(candidates),
-                defender instanceof GameEntity entity ? entity : null,
-                candidates, legal, null);
-    }
-
-    private void emitBlockers(
-            Card attacker, List<Card> candidates, List<Card> legal, int minBlockers) {
-        recordBlockers(
-                controllerOfCandidates(candidates), attacker, candidates, legal,
-                minBlockers, null);
-    }
-
-    private static Player controllerOfCandidates(List<Card> candidates) {
-        for (Card card : candidates) {
-            if (card != null && card.getController() != null) {
-                return card.getController();
-            }
-        }
-        return null;
-    }
-
     /**
      * One {@code attackers} record: who may attack this defender, and what
      * keeps the rest out.
      *
-     * <p>Public because the random seat writes its own when its draw succeeds
-     * (FR-022d): the AI's attack code does not run then, so the hook never
-     * fires, and the seat reports the lists it drew from through this door
-     * with {@code whatIf} stamped {@code false}. The hook passes null and the
-     * record is classed by FR-027: a real decision when the snapshot is taken
-     * in the declare-attackers step and the decider is the active player,
-     * a what-if anywhere else.
+     * <p>De-duplicated by FR-028, keyed on the snapshot as well as the
+     * answer, so the same answer on a board that moved is kept.
      *
-     * <p>Only what-ifs are sampled by {@code --legality-rate} (FR-029), and
-     * the draw comes <b>before</b> the snapshot: the AI re-asks this question
-     * on every candidate assignment it weighs, and a snapshot built for an
-     * answer the rate then discards is the cost the ordering saves. Both kinds
-     * then pass the de-duplication of FR-028, keyed on the snapshot as well as
-     * the answer, so the same answer on a board that moved is kept.
-     *
-     * @param decider the controller of the candidates, written as
+     * @param decider the attacking player the engine names, written as
      *                {@code actor_player}
-     * @param whatIf  the classification the caller already knows, or null to
-     *                class by FR-027
      */
-    public void recordAttackers(
+    void recordAttackers(
             Player decider, GameEntity defender, List<Card> candidates,
-            List<Card> legal, Boolean whatIf) {
+            List<Card> legal) {
         if (candidates == null || candidates.isEmpty()) {
             return;
         }
@@ -1206,41 +1166,21 @@ public final class PatchedCollectors implements AutoCloseable {
         }
         String payload = "{\"legal_attackers\":" + attackers
                 + ",\"forbidden\":" + forbidden + "}";
-        boolean real = whatIf != null ? !whatIf : isRealAttackDeclaration(decider);
-        // A what-if is kept when the draw falls below the rate, so the
-        // default rate of 0 keeps none, not one in 2^53.
-        if (!real && sampler.nextDouble() >= caps.legalityRate()) {
-            return;
-        }
-        String state = snapshots.toJson(null, List.of());
-        if (!allowLegalityRecord("attackers", payload, state)) {
-            return;
-        }
-        emit(new EffectRecord(
-                writer.nextRecordId(), writer.runId(),
-                RecordShardWriter.timestamp(), gameId,
-                EffectRecord.KIND_PLAYABILITY, mode)
-                .subkind("attackers")
-                .actor(playerIdOrActive(decider))
-                .whatIf(!real)
-                .state(state)
-                .payload(payload));
+        emitLegality("attackers", decider, payload);
     }
 
     /**
      * One {@code blockers} record: who may block this attacker, how many it
      * takes, and what keeps the rest out. The sibling of
-     * {@link #recordAttackers} in every respect, classed by FR-027's other
-     * half: real when the snapshot is taken in the declare-blockers step and
-     * the anchored attacker is attacking.
+     * {@link #recordAttackers} in every respect.
      *
-     * @param decider the controller of the candidate blockers (FR-030a) —
+     * @param decider the defending player the engine names (FR-030a) —
      *                gen-1 wrote the attacking player here, and a gen-2 shard
      *                is what tells a reader which meaning it holds
      */
-    public void recordBlockers(
+    void recordBlockers(
             Player decider, Card attacker, List<Card> candidates, List<Card> legal,
-            int minBlockers, Boolean whatIf) {
+            int minBlockers) {
         if (attacker == null || candidates == null || candidates.isEmpty()) {
             return;
         }
@@ -1260,45 +1200,23 @@ public final class PatchedCollectors implements AutoCloseable {
                 + ",\"legal_blockers\":" + blockers
                 + ",\"forbidden\":" + forbidden
                 + ",\"min_blockers\":" + minBlockers + "}";
-        boolean real = whatIf != null ? !whatIf : isRealBlockDeclaration(attacker);
-        if (!real && sampler.nextDouble() >= caps.legalityRate()) {
-            return;
-        }
+        emitLegality("blockers", decider, payload);
+    }
+
+    private void emitLegality(String subkind, Player decider, String payload) {
         String state = snapshots.toJson(null, List.of());
-        if (!allowLegalityRecord("blockers", payload, state)) {
+        if (!allowLegalityRecord(subkind, payload, state)) {
             return;
         }
         emit(new EffectRecord(
                 writer.nextRecordId(), writer.runId(),
                 RecordShardWriter.timestamp(), gameId,
                 EffectRecord.KIND_PLAYABILITY, mode)
-                .subkind("blockers")
+                .subkind(subkind)
                 .actor(playerIdOrActive(decider))
-                .whatIf(!real)
+                .whatIf(false)
                 .state(state)
                 .payload(payload));
-    }
-
-    /**
-     * FR-027's attack half: the declare-attackers step, and the decider is
-     * the player whose turn it is. Anything else — the AI weighing next
-     * turn's attack, a block evaluation asking who could have attacked — is
-     * a what-if. A collector over no game answers what-if for everything.
-     */
-    private boolean isRealAttackDeclaration(Player decider) {
-        var phase = game == null ? null : game.getPhaseHandler();
-        return phase != null && decider != null
-                && phase.getPhase() == forge.game.phase.PhaseType.COMBAT_DECLARE_ATTACKERS
-                && phase.getPlayerTurn() == decider;
-    }
-
-    /** FR-027's block half: the declare-blockers step, and the anchor is attacking. */
-    private boolean isRealBlockDeclaration(Card attacker) {
-        var phase = game == null ? null : game.getPhaseHandler();
-        return phase != null
-                && phase.getPhase() == forge.game.phase.PhaseType.COMBAT_DECLARE_BLOCKERS
-                && game.getCombat() != null
-                && game.getCombat().isAttacking(attacker);
     }
 
     /** The deciding player's id, or the active player's where none is known. */
@@ -1310,13 +1228,10 @@ public final class PatchedCollectors implements AutoCloseable {
      * Whether this legality answer is new in this game.
      *
      * <p>Keyed on the subkind, the payload <b>and</b> the snapshot (FR-028).
-     * The payload alone was the gen-1 key, on the reasoning that the board
-     * does not move while the AI evaluates one combat — true, and still the
-     * reason the AI's re-asks collapse to one record, since their snapshots
-     * render identically. What the payload-only key also collapsed was the
-     * same answer on a board that <em>had</em> moved: a creature that may
-     * attack on two different turns is two observations, and the second was
-     * dropped as a repeat of the first.
+     * The payload alone would also collapse the same answer on a board that
+     * <em>had</em> moved: a creature that may attack on two different turns
+     * is two observations, and the second would be dropped as a repeat of
+     * the first.
      */
     public boolean allowLegalityRecord(String subkind, String payload, String state) {
         return allowDistinctRecord(subkind, payload, state);

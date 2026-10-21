@@ -13,6 +13,7 @@ import forge.StaticData;
 import forge.ai.LobbyPlayerAi;
 import forge.deck.Deck;
 import forge.game.Game;
+import forge.game.GameEntity;
 import forge.game.GameRules;
 import forge.game.GameType;
 import forge.game.Match;
@@ -1490,7 +1491,7 @@ class PatchedCollectorTest {
                 "setEffectRecordManaListener").present()) {
             available++;
         }
-        if (PatchHooks.find(PatchHooks.AI_CONTROLLER,
+        if (PatchHooks.find(PatchHooks.COMBAT_LEGALITY_OBSERVER,
                 "setEffectRecordCombatListener").present()) {
             available++;
         }
@@ -2636,8 +2637,13 @@ class PatchedCollectorTest {
         void onCandidate(SpellAbility candidate);
     }
 
+    /** Forge's {@code CombatLegalityObserver.EffectRecordCombatListener}, position by position. */
     private interface CombatLegalityListenerShape {
-        void onAttackersComputed(Object defender, List<Card> candidates, List<Card> legal);
+        void onAttackersDeclarable(Player decider, GameEntity defender,
+                List<Card> candidates, List<Card> legal);
+
+        void onBlockersDeclarable(Player decider, Card attacker,
+                List<Card> candidates, List<Card> legal, int minBlockers);
     }
 
     private interface ManaListenerShape {
@@ -2713,10 +2719,10 @@ class PatchedCollectorTest {
     }
 
     /**
-     * final-fix-3.md item 2: {@code combatLegalityHandler} had no game check
-     * either. The defender is the acting {@code GameEntity} this hook hands
-     * over; the candidate/legal lists may be any real card, since only the
-     * defender's own game identity is what the fix reads.
+     * {@code combatLegalityHandler} checks the game the defender belongs to.
+     * The defender is the acting {@code GameEntity} this hook hands over; the
+     * candidate/legal lists may be any real card, since only the defender's
+     * own game identity is what the check reads.
      */
     @Test
     void anAttackerLegalityAnswerFromAnotherGamesDefenderDoesNotReachTheShard() throws Throwable {
@@ -2724,22 +2730,14 @@ class PatchedCollectorTest {
         Game fork = new Game(List.of(), forkRules, new Match(forkRules, List.of(), "fork"));
         Player forkDefender = new Player("fork-defender", fork, 92301);
         Card candidate = TestCards.build("Grizzly Bears");
-        // legalityRate forced to 1.0: the default (0.1) samples this subkind
-        // after the dedup check, so a run at the default rate could pass
-        // vacuously -- the record dropped by chance rather than by the gate
-        // under test.
-        CollectionCaps fullLegalityRate = new CollectionCaps(
-                CollectionCaps.defaults().manaCap(), CollectionCaps.defaults().playabilityRate(),
-                CollectionCaps.defaults().interventionsPerGame(), CollectionCaps.defaults().probesPerGame(),
-                CollectionCaps.defaults().probeKeywords(), 1.0);
 
         RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1");
         Path path = writer.path();
         try (PatchedCollectors collectors = new PatchedCollectors(
-                TestCards.game(), writer, "run.0-l1.0", fullLegalityRate, 1L)) {
+                TestCards.game(), writer, "run.0-l1.0", CollectionCaps.defaults(), 1L)) {
             collectors.combatLegalityHandler().invoke(null,
-                    methodNamed(CombatLegalityListenerShape.class, "onAttackersComputed"),
-                    new Object[]{forkDefender, List.of(candidate), List.of(candidate)});
+                    methodNamed(CombatLegalityListenerShape.class, "onAttackersDeclarable"),
+                    new Object[]{null, forkDefender, List.of(candidate), List.of(candidate)});
         } finally {
             writer.close();
         }
@@ -2844,21 +2842,14 @@ class PatchedCollectorTest {
     void aLiveAttackerLegalityAnswerReachesTheShard() throws Throwable {
         Player liveDefender = new Player("live-defender", TestCards.game(), 93101);
         Card candidate = TestCards.build("Grizzly Bears");
-        // legalityRate forced to 1.0, for the same reason as the playability
-        // test above: the default 0.1 samples this subkind after the dedup
-        // check, and a run at the default rate could pass vacuously.
-        CollectionCaps fullLegalityRate = new CollectionCaps(
-                CollectionCaps.defaults().manaCap(), CollectionCaps.defaults().playabilityRate(),
-                CollectionCaps.defaults().interventionsPerGame(), CollectionCaps.defaults().probesPerGame(),
-                CollectionCaps.defaults().probeKeywords(), 1.0);
 
         RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1");
         Path path = writer.path();
         try (PatchedCollectors collectors = new PatchedCollectors(
-                TestCards.game(), writer, "run.0-l1.0", fullLegalityRate, 1L)) {
+                TestCards.game(), writer, "run.0-l1.0", CollectionCaps.defaults(), 1L)) {
             collectors.combatLegalityHandler().invoke(null,
-                    methodNamed(CombatLegalityListenerShape.class, "onAttackersComputed"),
-                    new Object[]{liveDefender, List.of(candidate), List.of(candidate)});
+                    methodNamed(CombatLegalityListenerShape.class, "onAttackersDeclarable"),
+                    new Object[]{null, liveDefender, List.of(candidate), List.of(candidate)});
         } finally {
             writer.close();
         }
@@ -2968,14 +2959,13 @@ class PatchedCollectorTest {
     }
 
 
-    // ── gen-2: real decisions, what-ifs and the deciding player ─────────
+    // ── gen-2: declarations and the deciding player ─────────────────────
     //
-    // FR-027 classes a legality record by the snapshot's step and the
-    // deciding player; FR-030a makes that player the actor; FR-029 exempts a
-    // real decision from --legality-rate; FR-030 stamps random_seat off the
-    // actor. The classification reads the live phase handler, so these
-    // build a two-player game set to the step under test rather than driving
-    // the hook over the shared turn-less game.
+    // The engine reports legality from the turn-based declaration itself and
+    // names the deciding player, so every record is a real declaration
+    // (what_if=false) whatever the step, and FR-030a's actor is the player
+    // the engine names; FR-030 stamps random_seat off that actor. These
+    // build a two-player game so the deciding player is a real seat.
 
     private static Game twoPlayerGameIn(PhaseType phase) {
         Deck deck = new Deck();
@@ -2998,43 +2988,31 @@ class PatchedCollectorTest {
         return card;
     }
 
-    /** Legality at a rate of zero: only a real decision can reach the shard. */
-    private static CollectionCaps noWhatIfs() {
-        return new CollectionCaps(
-                CollectionCaps.defaults().manaCap(), CollectionCaps.defaults().playabilityRate(),
-                CollectionCaps.defaults().interventionsPerGame(), CollectionCaps.defaults().probesPerGame(),
-                CollectionCaps.defaults().probeKeywords(), 0.0);
-    }
-
     private static List<String> recordsOf(Path path) throws Exception {
         return readShard(path).stream().filter(l -> l.contains("\"kind\":\"playability\"")).toList();
     }
 
     /**
-     * Spec Story 3 scenario 7, both halves: the active player's declaration
-     * in the declare-attackers step is real and written at a legality rate
-     * of zero; the same answer for the non-active player -- the AI weighing
-     * what the opponent could attack with next turn -- is a what-if and is
-     * sampled out by that rate.
+     * An attackers record is a real declaration made by the player the
+     * engine names, and a candidate the rules keep out is listed as
+     * forbidden rather than left out.
      */
     @Test
-    void anAttackDeclarationIsRealOnlyForTheActivePlayerInItsOwnStep() throws Throwable {
+    void anAttackDeclarationIsRealAndNamesTheDeciderTheEngineReports() throws Throwable {
         Game game = twoPlayerGameIn(PhaseType.COMBAT_DECLARE_ATTACKERS);
         Player active = game.getPlayers().get(0);
         Player other = game.getPlayers().get(1);
-        Card mine = creatureOf(game, active, "Grizzly Bears");
-        Card theirs = creatureOf(game, other, "Runeclaw Bear");
+        Card ready = creatureOf(game, active, "Grizzly Bears");
+        Card tapped = creatureOf(game, active, "Runeclaw Bear");
+        tapped.setTapped(true);
 
         RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1");
         Path path = writer.path();
         try (PatchedCollectors collectors = new PatchedCollectors(
-                game, writer, "run.0-l1.0", noWhatIfs(), 1L)) {
+                game, writer, "run.0-l1.0", CollectionCaps.defaults(), 1L)) {
             collectors.combatLegalityHandler().invoke(null,
-                    methodNamed(CombatLegalityListenerShape.class, "onAttackersComputed"),
-                    new Object[]{other, List.of(mine), List.of(mine)});
-            collectors.combatLegalityHandler().invoke(null,
-                    methodNamed(CombatLegalityListenerShape.class, "onAttackersComputed"),
-                    new Object[]{active, List.of(theirs), List.of(theirs)});
+                    methodNamed(CombatLegalityListenerShape.class, "onAttackersDeclarable"),
+                    new Object[]{active, other, List.of(ready, tapped), List.of(ready)});
         } finally {
             writer.close();
         }
@@ -3042,81 +3020,58 @@ class PatchedCollectorTest {
         List<String> records = recordsOf(path);
         assertEquals(1, records.size(), records.toString());
         String real = records.get(0);
+        assertTrue(real.contains("\"subkind\":\"attackers\""), real);
         assertTrue(real.contains("\"what_if\":false"), real);
         assertTrue(real.contains("\"actor_player\":\"" + SnapshotBuilder.playerId(active) + "\""),
-                "the deciding player is the candidates' controller: " + real);
+                "the deciding player is the one the engine names: " + real);
         assertTrue(real.contains("\"random_seat\":false"), real);
+        assertTrue(real.contains("\"legal_attackers\":[\"" + SnapshotBuilder.entityId(ready) + "\"]"),
+                real);
+        assertTrue(real.contains("\"forbidden\":[{\"entity\":\""
+                + SnapshotBuilder.entityId(tapped) + "\""), real);
     }
 
-    /** The same answer outside the declare-attackers step is a what-if (scenario 7). */
+    /**
+     * Nothing about the step or whose turn it is reclassifies a declaration:
+     * the engine reports only real ones, so a report outside the
+     * declare-attackers step is still written as real.
+     */
     @Test
-    void anAttackAnswerInAnyOtherStepIsAWhatIf() throws Throwable {
+    void aDeclarationIsRealWhateverTheStep() throws Throwable {
         Game game = twoPlayerGameIn(PhaseType.MAIN1);
         Player active = game.getPlayers().get(0);
-        Card mine = creatureOf(game, active, "Grizzly Bears");
+        Player other = game.getPlayers().get(1);
+        Card theirs = creatureOf(game, other, "Grizzly Bears");
 
         RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1");
         Path path = writer.path();
-        CollectionCaps everyWhatIf = new CollectionCaps(
-                CollectionCaps.defaults().manaCap(), CollectionCaps.defaults().playabilityRate(),
-                CollectionCaps.defaults().interventionsPerGame(), CollectionCaps.defaults().probesPerGame(),
-                CollectionCaps.defaults().probeKeywords(), 1.0);
         try (PatchedCollectors collectors = new PatchedCollectors(
-                game, writer, "run.0-l1.0", everyWhatIf, 1L)) {
+                game, writer, "run.0-l1.0", CollectionCaps.defaults(), 1L)) {
             collectors.combatLegalityHandler().invoke(null,
-                    methodNamed(CombatLegalityListenerShape.class, "onAttackersComputed"),
-                    new Object[]{game.getPlayers().get(1), List.of(mine), List.of(mine)});
+                    methodNamed(CombatLegalityListenerShape.class, "onAttackersDeclarable"),
+                    new Object[]{other, active, List.of(theirs), List.of(theirs)});
         } finally {
             writer.close();
         }
 
         List<String> records = recordsOf(path);
         assertEquals(1, records.size(), records.toString());
-        assertTrue(records.get(0).contains("\"what_if\":true"), records.get(0));
+        assertTrue(records.get(0).contains("\"what_if\":false"), records.get(0));
+        assertTrue(records.get(0).contains(
+                "\"actor_player\":\"" + SnapshotBuilder.playerId(other) + "\""), records.get(0));
     }
 
     /**
-     * What-if queries are not collected by default. The AI re-asks one combat
-     * many times while planning, so a query survives sampling in proportion
-     * to how long the AI deliberated, not how often its board occurs.
+     * FR-030a's blockers row: a blockers record names the blocking player
+     * the engine reports, with the attacker it anchors on and how many
+     * blockers that attacker takes.
      */
     @Test
-    void aWhatIfIsNotWrittenAtTheDefaultLegalityRate() throws Throwable {
-        Game game = twoPlayerGameIn(PhaseType.MAIN1);
-        Player active = game.getPlayers().get(0);
-        Card mine = creatureOf(game, active, "Grizzly Bears");
-
-        RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1");
-        Path path = writer.path();
-        try (PatchedCollectors collectors = new PatchedCollectors(
-                game, writer, "run.0-l1.0", CollectionCaps.defaults(), 1L)) {
-            for (int turn = 0; turn < 20; turn++) {
-                active.setLife(20 - turn, null);
-                collectors.combatLegalityHandler().invoke(null,
-                        methodNamed(CombatLegalityListenerShape.class, "onAttackersComputed"),
-                        new Object[]{game.getPlayers().get(1), List.of(mine), List.of(mine)});
-            }
-        } finally {
-            writer.close();
-        }
-
-        assertEquals(List.of(), recordsOf(path));
-    }
-
-    /**
-     * Spec Story 3 scenario 8 and FR-030a's blockers row: a blockers record
-     * in the declare-blockers step whose anchor is attacking is real, and it
-     * names the blocking player -- the candidates' controller -- where gen-1
-     * named the attacker's.
-     */
-    @Test
-    void aBlockDeclarationIsRealWhenItsAnchorIsAttackingAndNamesTheBlockingPlayer()
-            throws Throwable {
+    void aBlockDeclarationIsRealAndNamesTheBlockingPlayer() throws Throwable {
         Game game = twoPlayerGameIn(PhaseType.COMBAT_DECLARE_BLOCKERS);
         Player attacking = game.getPlayers().get(0);
         Player blocking = game.getPlayers().get(1);
         Card attacker = creatureOf(game, attacking, "Grizzly Bears");
-        Card idle = creatureOf(game, attacking, "Runeclaw Bear");
         Card blocker = creatureOf(game, blocking, "Hill Giant");
         Combat combat = new Combat(attacking);
         combat.addAttacker(attacker, blocking);
@@ -3125,15 +3080,10 @@ class PatchedCollectorTest {
         RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1");
         Path path = writer.path();
         try (PatchedCollectors collectors = new PatchedCollectors(
-                game, writer, "run.0-l1.0", noWhatIfs(), 1L)) {
+                game, writer, "run.0-l1.0", CollectionCaps.defaults(), 1L)) {
             collectors.combatLegalityHandler().invoke(null,
-                    methodNamed(BlockersListenerShape.class, "onBlockersComputed"),
-                    new Object[]{attacker, List.of(blocker), List.of(blocker), 1});
-            // The same question about a creature that is not attacking: a
-            // what-if, whatever the step.
-            collectors.combatLegalityHandler().invoke(null,
-                    methodNamed(BlockersListenerShape.class, "onBlockersComputed"),
-                    new Object[]{idle, List.of(blocker), List.of(blocker), 1});
+                    methodNamed(CombatLegalityListenerShape.class, "onBlockersDeclarable"),
+                    new Object[]{blocking, attacker, List.of(blocker), List.of(blocker), 1});
         } finally {
             writer.close();
         }
@@ -3144,20 +3094,18 @@ class PatchedCollectorTest {
         assertTrue(real.contains("\"subkind\":\"blockers\""), real);
         assertTrue(real.contains("\"what_if\":false"), real);
         assertTrue(real.contains("\"actor_player\":\"" + SnapshotBuilder.playerId(blocking) + "\""),
-                "the deciding player is the blockers' controller: " + real);
-    }
-
-    private interface BlockersListenerShape {
-        void onBlockersComputed(Card attacker, List<Card> candidates, List<Card> legal, int min);
+                "the deciding player is the blocking player: " + real);
+        assertTrue(real.contains("\"anchor_attacker\":\"" + SnapshotBuilder.entityId(attacker) + "\""),
+                real);
+        assertTrue(real.contains("\"min_blockers\":1"), real);
     }
 
     /**
-     * Spec Story 3 scenario 9: at a legality rate of one tenth every real
-     * decision is still written -- here twenty of them, each on a board that
-     * moved so the de-duplication keeps them apart.
+     * Every declaration on a board that moved is written, and the same
+     * declaration on an unchanged board is written once (FR-028).
      */
     @Test
-    void everyRealDecisionIsWrittenWhateverTheLegalityRate() throws Throwable {
+    void everyDeclarationOnAMovedBoardIsWrittenAndARepeatIsNot() throws Throwable {
         Game game = twoPlayerGameIn(PhaseType.COMBAT_DECLARE_ATTACKERS);
         Player active = game.getPlayers().get(0);
         Player other = game.getPlayers().get(1);
@@ -3167,13 +3115,15 @@ class PatchedCollectorTest {
         Path path = writer.path();
         try (PatchedCollectors collectors = new PatchedCollectors(
                 game, writer, "run.0-l1.0", CollectionCaps.defaults(), 1L)) {
+            Method declarable = methodNamed(CombatLegalityListenerShape.class, "onAttackersDeclarable");
             for (int turn = 0; turn < 20; turn++) {
                 // A life total that moves is enough to make each snapshot new.
                 active.setLife(20 - turn, null);
-                collectors.combatLegalityHandler().invoke(null,
-                        methodNamed(CombatLegalityListenerShape.class, "onAttackersComputed"),
-                        new Object[]{other, List.of(mine), List.of(mine)});
+                collectors.combatLegalityHandler().invoke(null, declarable,
+                        new Object[]{active, other, List.of(mine), List.of(mine)});
             }
+            collectors.combatLegalityHandler().invoke(null, declarable,
+                    new Object[]{active, other, List.of(mine), List.of(mine)});
         } finally {
             writer.close();
         }
@@ -3183,7 +3133,7 @@ class PatchedCollectorTest {
 
     /**
      * Spec Story 3 scenario 6 on the hook path: a record whose actor is the
-     * random seat says so, and one whose actor is the other player does not.
+     * random seat says so.
      */
     @Test
     void randomSeatIsStampedOffTheActor() throws Throwable {
@@ -3195,11 +3145,11 @@ class PatchedCollectorTest {
         RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1");
         Path path = writer.path();
         try (PatchedCollectors collectors = new PatchedCollectors(
-                game, writer, "run.0-l1.0", noWhatIfs(), 1L)) {
+                game, writer, "run.0-l1.0", CollectionCaps.defaults(), 1L)) {
             collectors.setRandomSeatPlayerId(SnapshotBuilder.playerId(active));
             collectors.combatLegalityHandler().invoke(null,
-                    methodNamed(CombatLegalityListenerShape.class, "onAttackersComputed"),
-                    new Object[]{other, List.of(mine), List.of(mine)});
+                    methodNamed(CombatLegalityListenerShape.class, "onAttackersDeclarable"),
+                    new Object[]{active, other, List.of(mine), List.of(mine)});
         } finally {
             writer.close();
         }
@@ -3207,6 +3157,25 @@ class PatchedCollectorTest {
         List<String> records = recordsOf(path);
         assertEquals(1, records.size(), records.toString());
         assertTrue(records.get(0).contains("\"random_seat\":true"), records.get(0));
+    }
+
+    /**
+     * The combat stand-in is what Forge declares, position by position.
+     * Reflective, so an unpatched checkout skips the assertion.
+     */
+    @Test
+    void theCombatLegalityStandInIsForgesOwnDeclaration() {
+        PatchHooks.Lookup setter = PatchHooks.find(
+                PatchHooks.COMBAT_LEGALITY_OBSERVER, "setEffectRecordCombatListener");
+        if (!setter.present()) {
+            return;
+        }
+        Class<?> declared = setter.method().getParameterTypes()[0];
+        for (String name : List.of("onAttackersDeclarable", "onBlockersDeclarable")) {
+            Class<?>[] theirs = methodNamed(declared, name).getParameterTypes();
+            Class<?>[] ours = methodNamed(CombatLegalityListenerShape.class, name).getParameterTypes();
+            assertArrayEquals(ours, theirs, name);
+        }
     }
 
     /**

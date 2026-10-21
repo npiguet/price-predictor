@@ -84,7 +84,9 @@ public final class EffectRecord {
      * Real decision or what-if query, on the two legality subkinds only
      * (FR-031): {@code false} is a declaration the engine acted on, {@code
      * true} an answer the AI computed while weighing a combat and discarded.
-     * Null everywhere else, and absent from the JSON then.
+     * The collector reports legality at the declaration itself and so writes
+     * only {@code false}; {@code true} is read from shards collected inside
+     * the AI. Null everywhere else, and absent from the JSON then.
      */
     private Boolean whatIf;
     private String actorPlayer;

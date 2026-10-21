@@ -329,12 +329,14 @@ class RandomSeatControllerTest {
     // ── attacks and blocks ──────────────────────────────────────────────
 
     /**
-     * Scenario 2 and 16: with nothing restricting attacks, each creature
-     * attacks in close to half the draws, and each declaration writes an
-     * {@code attackers} record stamped a real decision by the seat itself.
+     * Scenario 2: with nothing restricting attacks, each creature attacks in
+     * close to half the draws. The seat writes no {@code attackers} record of
+     * its own: the engine reports legality from the turn-based declaration,
+     * before any controller declares, and that report covers this seat as it
+     * covers every other.
      */
     @Test
-    void eachCreatureAttacksInAboutHalfTheDrawsAndTheDeclarationIsRecorded() throws IOException {
+    void eachCreatureAttacksInAboutHalfTheDrawsAndTheSeatWritesNoLegalityRecord() throws IOException {
         Game game = gameWithRandomSeatA(PhaseType.COMBAT_DECLARE_ATTACKERS, 1.0, 7L);
         Player a = game.getPlayers().get(0);
         Player b = game.getPlayers().get(1);
@@ -372,22 +374,16 @@ class RandomSeatControllerTest {
         }
         List<String> records = readShard(path).stream()
                 .filter(l -> l.contains("\"subkind\":\"attackers\"")).toList();
-        assertFalse(records.isEmpty(), "the seat writes its own attackers record");
-        for (String record : records) {
-            assertTrue(record.contains("\"what_if\":false"), record);
-            assertTrue(record.contains("\"random_seat\":true"), record);
-            assertTrue(record.contains("\"actor_player\":\"" + SnapshotBuilder.playerId(a) + "\""),
-                    record);
-        }
+        assertEquals(List.of(), records, "the engine's declaration hook records attacks, not the seat");
     }
 
     /**
-     * Scenario 17: the random seat's own block declaration, whichever way it
-     * draws, writes {@code blockers} records naming the seat as the deciding
-     * player and stamped {@code random_seat}; the blocks it declares are legal.
+     * Scenario 17: the random seat draws both a block and no block, and the
+     * blocks it declares are its own creatures'. As with attacks, the seat
+     * writes no {@code blockers} record of its own.
      */
     @Test
-    void aBlockDeclarationNamesTheBlockingSeat() throws IOException {
+    void aBlockDeclarationDrawsBothWaysAndTheSeatWritesNoLegalityRecord() throws IOException {
         Game game = gameWithRandomSeatA(PhaseType.COMBAT_DECLARE_BLOCKERS, 1.0, 3L);
         Player a = game.getPlayers().get(0);
         Player b = game.getPlayers().get(1);
@@ -423,13 +419,7 @@ class RandomSeatControllerTest {
         assertTrue(blockedOnce && heldBackOnce, "no block and a block are both drawn");
         List<String> records = readShard(path).stream()
                 .filter(l -> l.contains("\"subkind\":\"blockers\"")).toList();
-        assertFalse(records.isEmpty());
-        for (String record : records) {
-            assertTrue(record.contains("\"what_if\":false"), record);
-            assertTrue(record.contains("\"random_seat\":true"), record);
-            assertTrue(record.contains("\"actor_player\":\"" + SnapshotBuilder.playerId(a) + "\""),
-                    record);
-        }
+        assertEquals(List.of(), records, "the engine's declaration hook records blocks, not the seat");
     }
 
     // ── the match-level draw ────────────────────────────────────────────

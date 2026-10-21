@@ -31,6 +31,8 @@ public final class PatchHooks {
     static final String ABILITY_UTILS = "forge.game.ability.AbilityUtils";
     static final String EFFECT_RECORD_OUTCOMES = "forge.game.ability.EffectRecordOutcomes";
     static final String AI_CONTROLLER = "forge.ai.AiController";
+    static final String COMBAT_LEGALITY_OBSERVER =
+            "forge.game.combat.CombatLegalityObserver";
     static final String ABILITY_MANA_PART =
             "forge.game.spellability.AbilityManaPart";
     static final String CANT_ATTACK_BLOCK =
@@ -106,7 +108,7 @@ public final class PatchHooks {
                     "the events an effect API describes but the bus never announces"),
             new Hook(AI_CONTROLLER, "setEffectRecordPlayabilityListener",
                     "playability records, the decision subkind"),
-            new Hook(AI_CONTROLLER, "setEffectRecordCombatListener",
+            new Hook(COMBAT_LEGALITY_OBSERVER, "setEffectRecordCombatListener",
                     "the playability record's attackers and blockers subkinds"),
             new Hook(CANT_ATTACK_BLOCK, "cantAttackStatic",
                     "each forbidden attacker's responsible_static"),
