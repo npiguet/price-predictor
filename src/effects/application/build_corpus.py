@@ -1372,9 +1372,9 @@ class WriteResult:
         self.quality_dropped[defect] += 1
         self.refused_by_class[klass] += 1
         if defect == NO_ACTING_TEXT:
-            self.textless_scripts[record.ability[0].script_file] += 1
+            self.textless_scripts[acting_keys(record)[0].script_file] += 1
         elif defect == UNJOINABLE_KEY:
-            self.unjoinable_scripts[record.ability[0].script_file] += 1
+            self.unjoinable_scripts[acting_keys(record)[0].script_file] += 1
 
     def note_written(self, stratum: Stratum, key: str | None, count: int = 1) -> None:
         self.stratum[stratum] += count
