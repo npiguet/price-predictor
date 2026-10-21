@@ -374,7 +374,9 @@ def _readout(target: str, outputs, verdict, slot: int, row: int, *,
 
     Read through :class:`HeadReading`, gated as gate 2 and the sweeps read it:
     a field head trains only where an entity was affected, so its answer is
-    scaled by the gate's.
+    scaled by the gate's. ``damage_taken`` is the exception: every one of its
+    items took damage, so the gate's doubt would scale the amount by noise, and
+    the amount is read alone.
 
     NaN where the head this target reads was never trained, which
     :func:`ladder_inputs` turns into an unavailable rung 3 rather than a score.
@@ -393,7 +395,7 @@ def _readout(target: str, outputs, verdict, slot: int, row: int, *,
     elif target == "dies":
         value = reading.p_zone("died")
     elif target == "damage_taken":
-        value = reading.expected("damage_taken")
+        value = reading.expected("damage_taken", conditional=True)
     elif target == "pt_until_end_of_turn":
         value = reading.p_class("pt_duration", "end_of_turn")
     elif target == "may_block":
