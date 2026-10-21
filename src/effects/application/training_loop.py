@@ -707,9 +707,9 @@ class TrainingLoop(StepPreparation):
         """One planned batch's losses, or ``None`` when it is empty.
 
         ``report_parts`` reads each field's term back as a float, which is one
-        device synchronization per active field. Passed only on the batch a
-        progress line is about to report, so the cost lands a few times a
-        minute rather than on all five thousand steps of an epoch.
+        device synchronization per active field. Training passes it only on
+        a shard's last step, whose line reports the breakdown, so the cost
+        lands once per shard rather than on every step of an epoch.
 
         ``fields`` is the epoch's own field set (FR-082): every batch of an
         epoch scores the same objective, and validation scores that same one,
@@ -1590,16 +1590,10 @@ class TrainingLoop(StepPreparation):
     ) -> float:
         """Mean loss over the stratum, batched the way training batches.
 
-        One batch per game is what this did, and a game is not a batch. Eight
-        games is eight numbers, and one of them blowing up moves the mean by a
-        factor of twenty-eight. Worse, a batch's class composition decides which
-        fields carry loss at all — ``active_fields`` keeps a field only while
-        some class in the batch supervises it — so a batch holding one game's
-        natural proportions scores a different set of fields than a training
-        batch does, and the two numbers printed side by side were never
-        measuring the same thing.
-
-        Fixed-size batches over a shuffled sample fix both, and ``fields`` is
+        Fixed-size batches over the sample (shuffled when the corpus was
+        built), not one batch per game: a game is a handful of numbers, one of
+        which blowing up moves a per-game mean many times over, and its class
+        composition would decide which fields carry loss at all. ``fields`` is
         the epoch's own set rather than each batch's, so the validation number
         and the training number beside it score the same objective even where a
         batch happens to hold no record of some class. ``parts`` collects the

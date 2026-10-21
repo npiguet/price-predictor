@@ -956,9 +956,8 @@ def api_loss(
 ) -> torch.Tensor:
     """Script-API classification from ``e``: the API type and its parameter keys.
 
-    This is not stage-four work. Through stage three the encoder reads prose
-    only, and this head is what stands in for the script structure prose does
-    not spell out — so the MVP needs it.
+    It teaches ``e`` the script structure the prose surface does not spell
+    out; on the script surface it reinforces what the encoder reads directly.
     """
     total = None
     if type_logits is not None and type_targets is not None:
