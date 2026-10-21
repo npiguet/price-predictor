@@ -5,7 +5,8 @@ writes down — damage, a pump, counters, cards drawn, and the line's own cost �
 so the amounts a text states have to survive the bottleneck rather than being
 recoverable only from the board the trunk sees beside them.
 
-Everything is read from the encoding text itself, which is why the targets are
+Everything is read from the line's script text, whatever surface encodes the
+line — the prose has no ``$`` parameters to read — which is why the targets are
 a pure function of it and are cached per text: a chained text (gen-2) is split
 on ``[SEG]`` and summed over its segments, and a one-segment text (gen-1's
 sidecars, read by the stage-0 noise pilot) is simply one segment.

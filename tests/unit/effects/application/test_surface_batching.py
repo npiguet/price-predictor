@@ -505,3 +505,31 @@ def test_the_identity_batch_reads_each_texts_own_row():
     rows, matrix = batcher.encode_texts({text: None for text in texts}, encoder=None)
     for text, row in rows.items():
         assert torch.equal(matrix[row], table(table.rows([text]))[0])
+
+
+# ── the prose surface (FR-069) ───────────────────────────────────────────
+
+
+def test_a_prose_text_is_encoded_with_its_lines_role_spans():
+    from effects.domain.ability_encoder import role_index
+    from effects.domain.ability_tokenizer import AbilityTokenizer
+    from effects.domain.provenance import RoleSpan
+
+    prose = "{T}: draw a card."
+    line = SidecarLine(
+        line_index=0, line_kind="activated", provenance=(_ACT,),
+        script_text="AB$ Draw | Cost$ T",
+        role_spans=(RoleSpan(0, 4, "cost"), RoleSpan(5, len(prose), "effect")),
+    )
+    batcher = SurfaceBatcher(
+        tokenizer=AbilityTokenizer({"[PAD]": 0, "[UNK]": 1, "[CLS]": 2, "[MASK]": 3}),
+        sidecars=_Sidecars(), masks=VariantMasks(), surface="prose", e_dim=4,
+        widths={}, device=torch.device("cpu"),
+    )
+    (encoded,) = batcher.prepare_texts([prose], {prose: line})
+    assert encoded.role_ids[1] == role_index("cost")
+    assert encoded.role_ids[-1] == role_index("effect")
+    # The script surface's spans would index the wrong text; a script fallback
+    # on the prose surface reads none.
+    (fallback,) = batcher.prepare_texts([line.script_text], {line.script_text: line})
+    assert set(fallback.role_ids) == {0}

@@ -400,6 +400,22 @@ class TestTheRealEncoder:
         assert "truncated" not in caplog.text
 
 
+class TestProseOfAVariant:
+    def test_a_variants_source_script_is_not_read_as_prose(self, tmp_path):
+        """The trainer encodes a variant from its script; the cache must too."""
+        from effects.application.encode_abilities import prose_of
+
+        source = tmp_path / "variant_bolt.txt"
+        source.write_text(
+            "Name:Variant Bolt\nA:SP$ DealDamage | NumDmg$ 4\n", encoding="utf-8",
+        )
+        variant = _sidecar("variant-scripts/variant_bolt.txt")
+        card = _sidecar("cardsfolder/v/variant_bolt.txt")
+        sidecar_path = tmp_path / "variant_bolt.provenance.json"
+        assert prose_of(variant, sidecar_path) == []
+        assert prose_of(card, sidecar_path) == source.read_text(encoding="utf-8").splitlines()
+
+
 class TestTheWithheldKeyword:
     """The cache reads a withheld keyword the way training did: its definition
     with the token dropped, never a token training never updated (FR-070)."""

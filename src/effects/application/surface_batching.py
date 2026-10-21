@@ -15,9 +15,9 @@ baseline, and gate 1 is decided by comparing the two.
 from __future__ import annotations
 
 import random
-from collections.abc import Iterable, Iterator
+from collections.abc import Iterable, Iterator, Mapping
 from contextlib import contextmanager
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 import numpy as np
 import torch
@@ -28,6 +28,7 @@ from effects.domain.ability_encoder import (
     AbilityEncoder,
     TruncationLog,
     collate_lines,
+    encoding_role_spans,
     prepare_line,
 )
 from effects.domain.ability_tokenizer import AbilityTokenizer
@@ -427,14 +428,26 @@ class SurfaceBatcher:
         """The sidecar line one ability key resolves to, or None."""
         return self._resolve(key)[1]
 
-    def stand_in(self, key, text: str, like) -> None:
+    def stand_in(
+        self, key, text: str, like, *, script: str | None = None,
+        role_spans: tuple | None = None,
+    ) -> None:
         """Make ``key`` read ``text`` for this batcher's life, with ``like``'s line.
 
         A counterfactual copy's acting key names no sidecar (FR-063e): its text
         is the real line's with the amount edited, and everything read off the
-        line itself, such as the API type, is the real line's.
+        line itself, such as the API type, is the real line's — except its
+        ``script`` and ``role_spans`` where the copy edited those too, which
+        the value head's targets and the prose's roles read.
         """
-        self._staged[key] = (text, self.line_of(like))
+        line = self.line_of(like)
+        if line is not None and (script is not None or role_spans is not None):
+            line = replace(
+                line,
+                script_text=line.script_text if script is None else script,
+                role_spans=line.role_spans if role_spans is None else role_spans,
+            )
+        self._staged[key] = (text, line)
 
     @contextmanager
     def reading_as(self, key, text: str) -> Iterator[None]:
@@ -534,7 +547,7 @@ class SurfaceBatcher:
             return rows, [], None, None
         if self.masks.taxonomy_embedding:
             return rows, [], None, self._taxonomy_vectors(ordered, texts)
-        prepared = self.prepare_texts(ordered)
+        prepared = self.prepare_texts(ordered, texts)
         return rows, prepared, collate_lines(prepared, self.tokenizer.pad_id), None
 
     def _encode_staged(
@@ -561,18 +574,23 @@ class SurfaceBatcher:
         vectors, _hidden = encode_by_length(encoder, inputs, self.device)
         return vectors
 
-    def prepare_texts(self, ordered: list[str]) -> list:
+    def prepare_texts(
+        self, ordered: list[str], lines_of: Mapping[str, object] | None = None,
+    ) -> list:
         """Each text tokenized and its keywords expanded, the withheld one always.
 
         The withheld keyword's token is dropped wherever it is left, inside an
         expansion too (``AbilityTokenizer.encoding_tokens``), so the model
-        never reads it.
+        never reads it. ``lines_of`` maps a text to its sidecar line, whose
+        role spans a prose text is tokenized with (FR-069).
         """
         withheld = withheld_keyword_tokens(self.withhold_keyword)
+        lines_of = lines_of or {}
         lines = []
         for text in ordered:
             tokens = self.tokenizer.encoding_tokens(
                 text, withheld=withheld,
+                role_spans=encoding_role_spans(lines_of.get(text), text, self.surface),
                 probability=self.keyword_expand_p, rng=self.rng,
             )
             line = prepare_line(self.tokenizer, tokens)

@@ -248,9 +248,11 @@ class AbilityTokenizer:
             self._multi_word_by_first.setdefault(parts[0], []).append(
                 (entry, parts),
             )
-        #: Memoises :meth:`tokenize` for the (overwhelmingly common)
-        #: no-``role_spans`` case. See :meth:`tokenize` for why.
-        self._tokenize_cache: dict[str, tuple[Token, ...]] = {}
+        #: Memoises :meth:`tokenize` by text and role spans. See
+        #: :meth:`tokenize` for why.
+        self._tokenize_cache: dict[
+            tuple[str, tuple[RoleSpan, ...]], tuple[Token, ...]
+        ] = {}
 
     # ── ids ─────────────────────────────────────────────────────────────
 
@@ -291,41 +293,35 @@ class AbilityTokenizer:
         ``role_spans`` are character ranges over this same text, as the sidecar
         records them for the line.
 
-        With no ``role_spans`` the result depends on ``text`` alone, and
+        The result depends on ``text`` and ``role_spans`` alone, and
         :class:`~effects.application.surface_batching.SurfaceBatcher` calls
         this once per unique ability text in *every* batch of every epoch —
         the same tens of thousands of lines, retokenized from scratch each
         time. A profile of a training run put 80% of its wall time in this
-        method for exactly that reason, so the no-``role_spans`` result is
-        cached on the instance (bounded by :attr:`_TOKENIZE_CACHE_CAP`) and a
-        **new list** is always handed back: ``Token`` is frozen, so sharing its
+        method for exactly that reason, so the result is cached on the
+        instance under both (bounded by :attr:`_TOKENIZE_CACHE_CAP`) — the
+        prose surface passes every line's spans, and a cache keyed on the text
+        alone would hand one span set's roles to another's — and a **new
+        list** is always handed back: ``Token`` is frozen, so sharing its
         elements is safe, but a caller (``expand_keywords``) builds its own
         list from what it's given, and must never be handed the cached list
-        itself to build it from. A call carrying ``role_spans`` bypasses the
-        cache: those calls are rare — only the corpus/record-building path
-        attaches spans — and the result depends on the spans too, so keying
-        the cache on the text alone would silently reuse a role assignment
-        from an unrelated span set, and keying it on both text and spans would
-        cache something the hot path never repeats.
+        itself to build it from.
         """
-        if not role_spans:
-            cached = self._tokenize_cache.get(text)
-            if cached is not None:
-                return list(cached)
-            tokens = self._tag_keyword_line(
-                self._merge_multi_word(self._split_with_offsets(text), text), text,
-            )
-            if len(self._tokenize_cache) >= self._TOKENIZE_CACHE_CAP:
-                self._tokenize_cache.clear()
-            self._tokenize_cache[text] = tuple(tokens)
-            return list(tokens)
-        tokens = self._split_with_offsets(text)
-        tokens = self._merge_multi_word(tokens, text)
-        tokens = [
-            replace(token, role=self._role_at(token, role_spans))
-            for token in tokens
-        ]
-        return self._tag_keyword_line(tokens, text)
+        key = (text, tuple(role_spans))
+        cached = self._tokenize_cache.get(key)
+        if cached is not None:
+            return list(cached)
+        tokens = self._merge_multi_word(self._split_with_offsets(text), text)
+        if role_spans:
+            tokens = [
+                replace(token, role=self._role_at(token, role_spans))
+                for token in tokens
+            ]
+        tokens = self._tag_keyword_line(tokens, text)
+        if len(self._tokenize_cache) >= self._TOKENIZE_CACHE_CAP:
+            self._tokenize_cache.clear()
+        self._tokenize_cache[key] = tuple(tokens)
+        return list(tokens)
 
     def _split_with_offsets(self, text: str) -> list[Token]:
         if self.surface == SURFACE_SCRIPT:

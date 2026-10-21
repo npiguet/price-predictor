@@ -255,6 +255,25 @@ class ShardClosed:
     truncated: tuple[tuple[str, tuple], ...] = ()
 
 
+def value_batch(
+    texts: Sequence[str], lines: Mapping[str, object],
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """``(values, mask)`` of the value head's targets, one row per text (FR-058).
+
+    Read from each text's sidecar line's script, whatever the surface encodes:
+    the prose surface's text holds no ``$`` parameter, and read as the script
+    it would state every amount as zero. A text with no line reads itself.
+    """
+    rows = [
+        value_targets(getattr(lines.get(text), "script_text", None) or text)
+        for text in texts
+    ]
+    return (
+        torch.tensor([row.values for row in rows]),
+        torch.tensor([row.mask for row in rows]),
+    )
+
+
 def one_ahead(iterator: Iterator, pool: ThreadPoolExecutor) -> Iterator:
     """``iterator``, each item computed on ``pool`` while the last is used.
 
@@ -446,18 +465,20 @@ class StepPreparation:
             if not record.ability:
                 continue
             key = record.ability[0]
-            qualified = qualify(
-                record, batcher.line_of(key), record_targets, resolver.keywords_of,
-            )
+            line = batcher.line_of(key)
+            qualified = qualify(record, line, record_targets, resolver.keywords_of)
             if qualified is None:
                 continue
             for number in range(self.config.lethality_copies):
                 copy = counterfactual(
-                    record, qualified, record_targets, batcher.text_of(key),
+                    record, qualified, record_targets, line, batcher.text_of(key),
                     batcher.rng, number,
                 )
                 if copy.key is not None:
-                    batcher.stand_in(copy.key, copy.text, key)
+                    batcher.stand_in(
+                        copy.key, copy.text, key,
+                        script=copy.script, role_spans=copy.role_spans,
+                    )
                 copies.append(copy)
         return copies
 
@@ -503,11 +524,7 @@ class StepPreparation:
             return targets
         texts = sorted(batch.rows, key=batch.rows.__getitem__)
         if Head.VALUE in heads:
-            rows = [value_targets(text) for text in texts]
-            targets.value = (
-                torch.tensor([row.values for row in rows]),
-                torch.tensor([row.mask for row in rows]),
-            )
+            targets.value = value_batch(texts, batch.texts)
         if Head.API in heads:
             targets.api = self._api_batch(texts, batch.texts)
         if Head.MLM in heads:

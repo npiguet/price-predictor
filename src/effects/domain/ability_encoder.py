@@ -221,6 +221,21 @@ def encoding_text(line, prose: str | None, surface: str) -> str | None:
     return prose or script
 
 
+def encoding_role_spans(line, text: str | None, surface: str) -> tuple:
+    """The role spans a line's encoding text is tokenized with (FR-069).
+
+    The sidecar's spans index the line's converted prose, so they apply on the
+    prose surface to a text that is that prose, and to nothing else: not the
+    script surface, and not a variant's script, which is what the prose
+    surface falls back to where there is no prose.
+    """
+    if surface != SURFACE_PROSE or line is None or text is None:
+        return ()
+    if text == getattr(line, "script_text", None):
+        return ()
+    return tuple(getattr(line, "role_spans", ()) or ())
+
+
 def role_index(role: str | None) -> int:
     """The embedding row for a role tag; 0 for a token outside every span."""
     if role is None:

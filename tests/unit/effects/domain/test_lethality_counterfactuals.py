@@ -77,8 +77,8 @@ def _shrunk(subject: str, amount: int) -> Event:
                  duration="end_of_turn")
 
 
-def _line(text: str):
-    return SimpleNamespace(script_text=text)
+def _line(text: str, role_spans=()):
+    return SimpleNamespace(script_text=text, role_spans=role_spans)
 
 
 def _no_keywords(entity) -> set[str]:
@@ -170,7 +170,7 @@ class TestCopies:
         rng = random.Random(7)
         outcomes = set()
         for number in range(200):
-            copy = counterfactual(record, qualified, targets, BOLT, rng, number)
+            copy = counterfactual(record, qualified, targets, _line(BOLT), BOLT, rng, number)
             amount = int(copy.text.split("NumDmg$ ")[1].split()[0])
             creature = copy.record.state.entity("E1")
             fields = copy.targets["E1"].fields
@@ -183,7 +183,7 @@ class TestCopies:
 
     def test_a_copy_reads_its_text_under_a_key_of_its_own(self):
         record = _record([_damage("E1", 3), _died("E1")], [_creature("E1", 2)])
-        copy = counterfactual(record, _qualify(record), derive_targets(record), BOLT,
+        copy = counterfactual(record, _qualify(record), derive_targets(record), _line(BOLT), BOLT,
                               random.Random(1), 0)
         assert copy.key.script_file.startswith(f"{COUNTERFACTUAL_TREE}/")
         assert copy.record.ability == (copy.key,)
@@ -194,7 +194,7 @@ class TestCopies:
         record = _record([_damage("E1", 4), _died("E1")], [_creature("E1", 4)], x=4)
         text = BOLT.replace("NumDmg$ 3", "NumDmg$ X")
         qualified = _qualify(record, text)
-        copy = counterfactual(record, qualified, derive_targets(record), text,
+        copy = counterfactual(record, qualified, derive_targets(record), _line(text), text,
                               random.Random(3), 0)
         assert copy.key is None and copy.text is None
         assert copy.targets["E1"].fields["damage_taken"] == copy.record.state.refs.x
@@ -202,7 +202,7 @@ class TestCopies:
     def test_a_player_s_life_follows_the_amount(self):
         life = Event(type=EventType.LIFE_CHANGE, subjects=("P1",), params={"delta": -3})
         record = _record([_damage("E1", 3), _died("E1"), life], [_creature("E1", 2)])
-        copy = counterfactual(record, _qualify(record), derive_targets(record), BOLT,
+        copy = counterfactual(record, _qualify(record), derive_targets(record), _line(BOLT), BOLT,
                               random.Random(5), 0)
         assert copy.targets["P1"].fields["life_delta"] == -copy.targets["E1"].fields[
             "damage_taken"]
@@ -212,6 +212,46 @@ class TestCopies:
             _record([_shrunk("E1", 2), _died("E1")], [_creature("E1", 2)]), SHRINK)
         edited = edit_text(SHRINK, qualified, 5)
         assert "NumAtt$ -5" in edited and "NumDef$ -5" in edited and "-5/-5" in edited
+
+
+class TestTheProseSurface:
+    """On the prose surface the encoded text is the converted prose, which holds
+    no ``NumDmg$``: a copy edits the amount in the prose too, or not at all."""
+
+    PROSE = "cardname deals 3 damage to target creature."
+
+    def test_a_copy_edits_the_amount_in_the_prose_and_the_script_alike(self):
+        record = _record([_damage("E1", 3), _died("E1")], [_creature("E1", 2)])
+        copy = counterfactual(record, _qualify(record), derive_targets(record),
+                              _line(BOLT), self.PROSE, random.Random(1), 0)
+        amount = copy.targets["E1"].fields["damage_taken"]
+        assert copy.text == f"cardname deals {int(amount)} damage to target creature."
+        assert f"NumDmg$ {int(amount)}" in copy.script
+
+    def test_prose_naming_no_amount_keeps_the_amount_and_moves_the_toughness(self):
+        record = _record([_damage("E1", 3), _died("E1")], [_creature("E1", 2)])
+        prose = "cardname deals damage to target creature."
+        copy = counterfactual(record, _qualify(record), derive_targets(record),
+                              _line(BOLT), prose, random.Random(1), 0)
+        assert copy.key is None
+        assert copy.targets["E1"].fields["damage_taken"] == 3.0
+
+    def test_role_spans_move_with_an_edit_that_changes_the_prose_length(self):
+        from effects.domain.provenance import RoleSpan
+
+        record = _record([_damage("E1", 10), _died("E1")], [_creature("E1", 2)])
+        script = BOLT.replace("3", "10")
+        prose = "cardname deals 10 damage to target creature."
+        target = prose.index("target")
+        spans = (RoleSpan(0, target, "effect"), RoleSpan(target, len(prose), "target-spec"))
+        copy = counterfactual(
+            record, _qualify(record, script), derive_targets(record),
+            _line(script, spans), prose, random.Random(1), 0,
+        )
+        moved = copy.text.index("target")
+        assert [(s.start, s.end) for s in copy.role_spans] == [
+            (0, moved), (moved, len(copy.text)),
+        ]
 
 
 class TestStepWiring:
@@ -228,7 +268,9 @@ class TestStepWiring:
         def text_of(self, key):
             return BOLT
 
-        def stand_in(self, key, text, like):
+        surface = "script"
+
+        def stand_in(self, key, text, like, *, script=None, role_spans=None):
             self.staged[key] = (text, like)
 
     def test_each_qualifying_record_gets_its_copies_and_their_texts(self):
