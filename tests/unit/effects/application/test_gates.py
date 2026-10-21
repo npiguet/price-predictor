@@ -13,8 +13,8 @@ import numpy as np
 import pytest
 
 from effects.application.evaluate_effect_model import (
-    STAGE_GATED_CHECKS,
-    skip_unavailable,
+    NOT_IMPLEMENTED_CHECKS,
+    not_implemented,
 )
 from effects.application.evaluation_context import parse_variant_checkpoint
 from effects.application.gate_one import GateOneMetrics, evaluate_gate_one
@@ -32,7 +32,7 @@ from effects.domain.damage_step_keywords import (
     Subject,
 )
 from effects.domain.effect_model import FIELDS_BY_NAME
-from effects.domain.evaluation_report import CheckStatus, EvaluationReport
+from effects.domain.evaluation_report import CheckName, CheckStatus, EvaluationReport
 from effects.domain.gate_metrics import (
     GATE1_MIN_DEVIANCE_REDUCTION,
     GATE1_MIN_GATE_F1_GAIN,
@@ -406,22 +406,31 @@ class TestWardCanary:
         assert math.isnan(cosine_distance(np.zeros(3), np.ones(3)))
 
 
-class TestStageGatedChecks:
-    def test_the_three_later_stage_checks_are_named(self):
-        assert set(STAGE_GATED_CHECKS) == {
-            "matched-real-vs-fork", "probe-diff", "role-polarity",
-        }
+class TestUnimplementedChecks:
+    """FR-116 names three checks that were never built.
 
-    def test_a_check_with_no_records_skips_rather_than_failing(self):
-        """A check that measured nothing is not a failure."""
-        result = skip_unavailable("role-polarity")
-        assert result.status is CheckStatus.SKIPPED
-        assert not result.blocks
-        assert "stage two" in result.detail
+    The corpus holds forks and mana records, so a line blaming missing records
+    would send an operator looking for data that is already there.
+    """
 
-    def test_the_fork_checks_name_stage_three(self):
-        for name in ("matched-real-vs-fork", "probe-diff"):
-            assert "stage three" in skip_unavailable(name).detail
+    def test_each_reports_not_implemented_and_blocks_nothing(self):
+        for name in (
+            CheckName.MATCHED_REAL_VS_FORK, CheckName.PROBE_DIFF,
+            CheckName.ROLE_POLARITY,
+        ):
+            result = not_implemented(name)
+            assert result.status is CheckStatus.NOT_IMPLEMENTED
+            assert not result.blocks
+            assert result.detail.startswith("not implemented")
+
+    def test_none_claims_the_corpus_lacks_its_records(self):
+        for name in NOT_IMPLEMENTED_CHECKS:
+            assert "does not have" not in not_implemented(name).detail
+
+    def test_the_report_marks_them_apart_from_a_skip(self):
+        report = EvaluationReport()
+        report.add(not_implemented(CheckName.PROBE_DIFF))
+        assert report.render().startswith("[todo] probe-diff: not implemented")
 
 
 class TestReport:
@@ -430,7 +439,7 @@ class TestReport:
         report.add(evaluate_gate_one(
             GateOneMetrics(0.70, 0.60, 0.90), GateOneMetrics(0.60, 0.50, 1.00),
         ))
-        report.add(skip_unavailable("role-polarity"))
+        report.add(not_implemented(CheckName.ROLE_POLARITY))
         assert report.ships
 
     def test_a_blocking_gate_stops_it(self):

@@ -22,6 +22,8 @@ class CheckStatus(StrEnum):
     SKIPPED = "skipped"
     #: Reported, gates nothing.
     REPORTED = "reported"
+    #: Specified but never built; the line says what it would measure.
+    NOT_IMPLEMENTED = "not-implemented"
 
     @property
     def marker(self) -> str:
@@ -34,6 +36,7 @@ _MARKERS = {
     CheckStatus.FAIL: "FAIL",
     CheckStatus.SKIPPED: "skip",
     CheckStatus.REPORTED: "----",
+    CheckStatus.NOT_IMPLEMENTED: "todo",
 }
 
 

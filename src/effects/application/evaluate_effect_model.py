@@ -48,22 +48,32 @@ logger = logging.getLogger(__name__)
 CARD_DISJOINT, GAME_DISJOINT = VALIDATION_STRATA
 
 
-# ── checks that wait for later stages (FR-111) ──────────────────────────
+# ── checks FR-116 names that were never built ───────────────────────────
 
-#: What each stage-gated check needs before it can run. Skipping rather than
-#: failing is the contract: a check with no records has measured nothing, and
-#: reporting that as a failure would make a stage-one run look broken.
-STAGE_GATED_CHECKS: dict[CheckName, str] = {
-    CheckName.MATCHED_REAL_VS_FORK: "fork records (stage three)",
-    CheckName.PROBE_DIFF: "damage-step probe records (stage three)",
-    CheckName.ROLE_POLARITY: "mana records (stage two)",
+#: What each unbuilt check would measure. Reported on its own line, so a report
+#: lists every FR-116 check whether or not it ran, and never as a skip: the
+#: corpus holds the fork, probe and mana records these read, so a line blaming
+#: the records would send an operator after data that is already there.
+NOT_IMPLEMENTED_CHECKS: dict[CheckName, str] = {
+    CheckName.MATCHED_REAL_VS_FORK: (
+        "it would compare each fork's observed outcome with the real record "
+        "it mirrors"
+    ),
+    CheckName.PROBE_DIFF: (
+        "it would re-run gate 2's canary over real and probe-fork combat "
+        "pairs joined by mirror_of, for probed keywords only"
+    ),
+    CheckName.ROLE_POLARITY: (
+        "it would compare the predicted mana-pool sign for {R} in cost "
+        "position against effect position"
+    ),
 }
 
 
-def skip_unavailable(name: CheckName) -> CheckResult:
+def not_implemented(name: CheckName) -> CheckResult:
     return CheckResult(
-        name, CheckStatus.SKIPPED,
-        f"needs {STAGE_GATED_CHECKS[name]}, which the corpus does not have yet",
+        name, CheckStatus.NOT_IMPLEMENTED,
+        f"not implemented; {NOT_IMPLEMENTED_CHECKS[name]}",
     )
 
 
@@ -183,7 +193,7 @@ def run(config: EvaluateEffectModelConfig) -> EvaluationReport:
     logger.info("breakdowns: scoring both validation strata")
     report.extend(run_breakdowns(context))
     report.extend(_geometry_checks(context, cached))
-    report.extend(_skipped_checks(context.main))
+    report.extend(_unmeasured_checks(context.main))
     return report
 
 
@@ -248,9 +258,9 @@ def _geometry_checks(context: EvaluationContext, cached) -> list[CheckResult]:
     return checks
 
 
-def _skipped_checks(main) -> list[CheckResult]:
-    """The checks whose records do not exist yet, each named and skipped."""
-    checks = [skip_unavailable(name) for name in STAGE_GATED_CHECKS]
+def _unmeasured_checks(main) -> list[CheckResult]:
+    """The checks this run measured nothing for, each named with why."""
+    checks = [not_implemented(name) for name in NOT_IMPLEMENTED_CHECKS]
     if not main.provenance.withheld_keyword:
         checks.append(CheckResult(
             CheckName.ZERO_SHOT_KEYWORD, CheckStatus.SKIPPED,
