@@ -9,7 +9,7 @@ handed without importing the command that hands it to them.
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -178,6 +178,22 @@ def resolve_corpus_path(
 # ── loading ─────────────────────────────────────────────────────────────
 
 
+def with_corpus_defaults(
+    config: EvaluateEffectModelConfig, manifest: CorpusManifest | None,
+) -> EvaluateEffectModelConfig:
+    """``config`` with what it left unset taken from the corpus's manifest.
+
+    The variant-script tree: the curated corpus holds records of variant cards,
+    whose ability keys name that tree, so a run without it reads every variant
+    ability as no text at all — the same records the trainer read as text.
+    """
+    if config.variant_scripts is not None or manifest is None:
+        return config
+    if not manifest.variant_scripts:
+        return config
+    return replace(config, variant_scripts=Path(manifest.variant_scripts))
+
+
 def load_context(config: EvaluateEffectModelConfig) -> EvaluationContext:
     """The main checkpoint, hash-checked, with its corpus verified (FR-147)."""
     from effects.infrastructure.effect_model_store import load_for_inference
@@ -202,7 +218,7 @@ def load_context(config: EvaluateEffectModelConfig) -> EvaluationContext:
         # actor_player on playability records differently.
         refuse_mixed_generations(iter_shards(Path(corpus_path)))
     return EvaluationContext(
-        config, main, vocab_path, keyword_path,
+        with_corpus_defaults(config, manifest), main, vocab_path, keyword_path,
         corpus_path=corpus_path, manifest=manifest,
     )
 

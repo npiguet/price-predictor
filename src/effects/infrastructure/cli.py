@@ -1553,7 +1553,9 @@ def _evaluate_effect_model_parser(subparsers) -> None:
     )
     parser.add_argument("--records-dir", type=Path, default=DEFAULT_RECORDS_DIR)
     _add_cards_folder(parser)
-    _add_variant_scripts(parser)
+    _add_variant_scripts(parser, without=(
+        "the tree the corpus's manifest records is read, if any"
+    ))
     _add_recorded_tokenizer_paths(parser)
     parser.add_argument(
         "--corpus", type=_optional_path, default=None,
