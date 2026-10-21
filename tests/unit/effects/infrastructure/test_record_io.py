@@ -987,3 +987,27 @@ class TestTheWireFormIsPinned:
             again = record_from_dict(parse_record_line(line))
             assert again == record
             assert format_record_line(again) == line
+
+
+class TestThePayloadCodecs:
+    """One codec per payload type, chosen by the record's ``(kind, discriminator)``."""
+
+    def test_every_payload_type_has_exactly_one_codec(self):
+        from effects.domain.records import PAYLOAD_TYPES
+        from effects.infrastructure.record_io import _PAYLOAD_CODECS
+
+        assert set(_PAYLOAD_CODECS) == set(PAYLOAD_TYPES.values())
+
+    @pytest.mark.parametrize("kind, discriminator", [
+        (RecordKind.RESOLUTION, None),
+        (RecordKind.PLAYABILITY, None),
+        (RecordKind.REWRITE, Moment.RESOLUTION),
+        (RecordKind.COMBAT, PlayabilitySubkind.BLOCKERS),
+    ])
+    def test_a_pair_no_payload_is_defined_for_is_refused(self, kind, discriminator):
+        # The decoder used to read anything it did not recognise as a
+        # blockers payload; an unknown pair is now refused by name.
+        from effects.infrastructure.record_io import _payload_from_json
+
+        with pytest.raises(ValueError, match="no payload is defined"):
+            _payload_from_json({"anchor_attacker": "E1"}, kind, discriminator)
