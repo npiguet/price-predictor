@@ -305,24 +305,35 @@ class _EchoEncoder:
         return None, token_ids.unsqueeze(-1).float().repeat(1, 1, 2)
 
 
-def _mlm_batcher(lengths) -> SurfaceBatcher:
+def _mlm_lines(lengths, *, number: float | None = None) -> list:
+    """Prepared lines of ``lengths`` tokens, each token after [CLS] a number
+    when ``number`` is given."""
     from effects.domain.ability_encoder import EncodedLine
 
-    batcher = _batcher()
-    batcher.tokenizer = _MaskTokens()
-    batcher._prepared = [
+    return [
         EncodedLine(
             token_ids=[2] + list(range(10, 10 + n - 1)), role_ids=[0] * n,
-            numbers=[0.0] * n, number_mask=[0] * n,
+            numbers=[0.0] + [number or 0.0] * (n - 1),
+            number_mask=[0] + [int(number is not None)] * (n - 1),
         )
         for n in lengths
     ]
+
+
+def _mlm_batcher() -> SurfaceBatcher:
+    batcher = _batcher()
+    batcher.tokenizer = _MaskTokens()
     return batcher
 
 
+def _mlm_pass(batcher, lines, mask_prob):
+    masked = batcher.draw_mlm_mask(lines, mask_prob)
+    return None if masked is None else batcher.mlm_forward(_EchoEncoder(), masked)
+
+
 def test_the_mlm_pass_returns_only_the_masked_positions():
-    batcher = _mlm_batcher([6, 3, 9])
-    hidden, targets = batcher.mlm_inputs(_EchoEncoder(), 0.5)
+    batcher = _mlm_batcher()
+    hidden, targets = _mlm_pass(batcher, _mlm_lines([6, 3, 9]), 0.5)
     # Every gathered row is a position the pass replaced with [MASK]...
     assert torch.all(hidden[:, 0] == _MaskTokens.mask_id)
     # ...and its target is the token that stood there: never [CLS] (id 2),
@@ -332,7 +343,20 @@ def test_the_mlm_pass_returns_only_the_masked_positions():
 
 
 def test_the_mlm_pass_masks_nothing_at_probability_zero():
-    assert _mlm_batcher([5, 5]).mlm_inputs(_EchoEncoder(), 0.0) is None
+    assert _mlm_pass(_mlm_batcher(), _mlm_lines([5, 5]), 0.0) is None
+
+
+def test_a_masked_number_carries_no_value():
+    """The number embedding would otherwise hand the masked token's value back."""
+    masked = _mlm_batcher().draw_mlm_mask(_mlm_lines([6, 4], number=3.0), 0.5)
+    picks = masked.inputs["token_ids"] == _MaskTokens.mask_id
+    assert picks.any()
+    assert torch.all(masked.inputs["numbers"][picks] == 0.0)
+    assert torch.all(masked.inputs["number_mask"][picks] == 0)
+    # An unmasked number keeps its value.
+    kept = (masked.inputs["attention_mask"] == 1) & ~picks
+    kept[:, 0] = False
+    assert torch.all(masked.inputs["numbers"][kept] == 3.0)
 
 
 def test_a_stand_in_key_reads_its_text_with_the_real_line():

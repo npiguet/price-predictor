@@ -603,6 +603,10 @@ class SurfaceBatcher:
             return None
         targets = ids.flatten().index_select(0, positions)
         batch["token_ids"] = ids.masked_fill(picks, self.tokenizer.mask_id)
+        # A masked number's value goes too: the encoder adds the number
+        # embedding beside the token's, and it would hand the answer back.
+        batch["numbers"] = batch["numbers"].masked_fill(picks, 0.0)
+        batch["number_mask"] = batch["number_mask"].masked_fill(picks, 0)
         return MaskedTokens(inputs=batch, positions=positions, targets=targets)
 
     def mlm_forward(self, encoder: AbilityEncoder, masked: MaskedTokens):
