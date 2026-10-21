@@ -1904,7 +1904,116 @@ class PatchedCollectorTest {
         EffectEvent written = collectors.lastClauseEvent();
         assertEquals("vote_taken", written.type());
         assertEquals(Map.of("beast", 2), written.params().get("tally"));
-        assertEquals(List.of(SnapshotBuilder.entityId(sa.getHostCard())), written.subjects());
+    }
+
+    /**
+     * An outcome that names no subjects has none: a coin flip or a token
+     * made is not something done to the card whose ability did it, so the
+     * acting host is not a default.
+     */
+    @Test
+    void anOutcomeNamingNoSubjectsHasNone() throws Throwable {
+        SpellAbility sa = TestCards.scriptedAbility("Alchemist's Gambit", "AddTurn");
+        PatchedCollectors collectors = recording();
+
+        collectors.outcomeHandler().invoke(null,
+                methodNamed(OutcomeListenerShape.class, "onOutcome"),
+                new Object[]{sa, "coin_flipped", Map.of("won", true)});
+
+        EffectEvent written = collectors.lastClauseEvent();
+        assertEquals("coin_flipped", written.type());
+        assertEquals(List.of(), written.subjects(),
+                "the acting host is not a subject: " + written.toJson());
+    }
+
+    /**
+     * A {@code token_created} note hands over a sample token, which becomes
+     * the token's script id and characteristics as the board would render
+     * that token -- keywords included, spelled the way an entity's are --
+     * and never reaches the event itself.
+     */
+    @Test
+    void aTokenSampleBecomesItsScriptIdAndCharacteristics() throws Throwable {
+        Card bat = TestCards.token("b_1_1_bat_flying");
+        SpellAbility sa = TestCards.scriptedAbility("Alchemist's Gambit", "AddTurn");
+        PatchedCollectors collectors = recording();
+
+        collectors.outcomeHandler().invoke(null,
+                methodNamed(OutcomeListenerShape.class, "onOutcome"),
+                new Object[]{sa, "token_created", Map.of("sample", bat, "count", 2)});
+
+        EffectEvent written = collectors.lastClauseEvent();
+        assertEquals("token_created", written.type());
+        assertEquals(Set.of("token_script_id", "characteristics", "count"),
+                written.params().keySet(), written.toJson());
+        assertEquals("b_1_1_bat_flying", written.params().get("token_script_id"));
+        assertEquals(SnapshotBuilder.tokenScriptIdOf(bat), written.params().get("token_script_id"));
+        assertEquals(2, written.params().get("count"));
+        @SuppressWarnings("unchecked")
+        Map<String, Object> traits = (Map<String, Object>) written.params().get("characteristics");
+        assertEquals(1, traits.get("power"));
+        assertEquals(1, traits.get("toughness"));
+        assertEquals(bat.getType().toString(), traits.get("types"));
+        assertEquals(List.of("flying"), traits.get("keywords"));
+        assertEquals(SnapshotBuilder.keywordNames(bat.getKeywords()), traits.get("keywords"));
+        assertFalse(written.toJson().contains("sample"), written.toJson());
+        assertEquals(List.of(), written.subjects());
+    }
+
+    /**
+     * {@code damage_prevented} names who the damage would have been dealt
+     * to, a player or a creature, as the event's subject.
+     */
+    @Test
+    void damagePreventedNamesItsRecipient() throws Throwable {
+        Card creature = TestCards.build("Grizzly Bears");
+        Player player = new Player("recipient", TestCards.game(), 93201);
+        PatchedCollectors collectors = recording();
+        Method onOutcome = methodNamed(OutcomeListenerShape.class, "onOutcome");
+
+        collectors.outcomeHandler().invoke(null, onOutcome,
+                new Object[]{null, "damage_prevented",
+                        Map.of("amount", 2, "subjects", List.of(creature))});
+        assertEquals(List.of(SnapshotBuilder.entityId(creature)),
+                collectors.lastClauseEvent().subjects());
+        assertNull(collectors.lastClauseEvent().params().get("subjects"));
+
+        collectors.outcomeHandler().invoke(null, onOutcome,
+                new Object[]{null, "damage_prevented",
+                        Map.of("amount", 2, "subjects", List.of(player))});
+        assertEquals(List.of(SnapshotBuilder.playerId(player)),
+                collectors.lastClauseEvent().subjects());
+
+        collectors.outcomeHandler().invoke(null, onOutcome,
+                new Object[]{null, "damage_prevented",
+                        Map.of("amount", 2, "subjects", List.of())});
+        assertEquals(List.of(), collectors.lastClauseEvent().subjects());
+    }
+
+    /**
+     * A reveal from a library names the players it came from; any other
+     * reveal arrives with an empty list and names nobody.
+     */
+    @Test
+    void cardRevealedNamesTheLibrariesItCameFrom() throws Throwable {
+        Player first = new Player("first", TestCards.game(), 93202);
+        Player second = new Player("second", TestCards.game(), 93203);
+        PatchedCollectors collectors = recording();
+        Method onOutcome = methodNamed(OutcomeListenerShape.class, "onOutcome");
+
+        collectors.outcomeHandler().invoke(null, onOutcome,
+                new Object[]{null, "card_revealed",
+                        Map.of("count", 2, "from_zone", "Library",
+                                "subjects", List.of(first, second))});
+        EffectEvent fromLibraries = collectors.lastClauseEvent();
+        assertEquals(List.of(SnapshotBuilder.playerId(first), SnapshotBuilder.playerId(second)),
+                fromLibraries.subjects());
+        assertEquals(Set.of("count", "from_zone"), fromLibraries.params().keySet());
+
+        collectors.outcomeHandler().invoke(null, onOutcome,
+                new Object[]{null, "card_revealed",
+                        Map.of("count", 1, "from_zone", "Hand", "subjects", List.of())});
+        assertEquals(List.of(), collectors.lastClauseEvent().subjects());
     }
 
     /**
@@ -1920,11 +2029,9 @@ class PatchedCollectorTest {
      *
      * <p>Exact match, not {@code containsAll}: {@code restriction_change}'s
      * acting card (the host, "Alchemist's Gambit" here) must not appear in
-     * the subject list alongside the two cards actually goaded --
-     * {@code outcomeHandler} skips the default host-subject when an effect
-     * supplies its own {@code "subjects"}, and an earlier version of this
-     * test used {@code containsAll}, which cannot tell "exactly these two"
-     * from "these two, plus an extra false one".
+     * the subject list alongside the two cards actually goaded, and
+     * {@code containsAll} cannot tell "exactly these two" from "these two,
+     * plus an extra false one".
      */
     @Test
     void restrictionChangeSubjectsBecomeEventSubjectsNotAParam() throws Throwable {

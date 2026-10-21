@@ -482,7 +482,7 @@ public final class SnapshotBuilder {
      * the printed name when no script can be named (an engine-built token with
      * no image key), so a token is never reported as a non-token.
      */
-    private static String tokenScriptIdOf(Card card) {
+    static String tokenScriptIdOf(Card card) {
         if (!card.isToken()) {
             return null;
         }
@@ -569,16 +569,26 @@ public final class SnapshotBuilder {
     }
 
     private String grantedTemporaryJson(Card card, Suppressed without) {
-        StringJoiner keywords = new StringJoiner(",", "[", "]");
-        for (KeywordInterface keyword
-                : without == null ? card.getKeywords() : without.keywords()) {
+        return "{\"keywords\":" + Json.stringArray(keywordNames(
+                        without == null ? card.getKeywords() : without.keywords()))
+                + ",\"abilities\":" + keyJson(grantedTemporaryAbilities(card)) + "}";
+    }
+
+    /**
+     * An entity's keywords as the snapshot spells them: each keyword's
+     * original text, lower-cased, skipping the ones with none.
+     *
+     * <p>Shared with the {@code token_created} outcome, whose description of
+     * a token has to read the same as that token's entry on the board.
+     */
+    static List<String> keywordNames(Iterable<KeywordInterface> keywords) {
+        List<String> names = new ArrayList<>();
+        for (KeywordInterface keyword : keywords) {
             if (!keyword.getOriginal().isEmpty()) {
-                keywords.add(Json.string(
-                        keyword.getOriginal().toLowerCase(java.util.Locale.ROOT)));
+                names.add(keyword.getOriginal().toLowerCase(java.util.Locale.ROOT));
             }
         }
-        return "{\"keywords\":" + keywords
-                + ",\"abilities\":" + keyJson(grantedTemporaryAbilities(card)) + "}";
+        return names;
     }
 
     /**

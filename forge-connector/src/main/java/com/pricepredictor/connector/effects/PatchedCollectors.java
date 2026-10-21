@@ -1911,26 +1911,34 @@ public final class PatchedCollectors implements AutoCloseable {
      * consumes it" -- checked against {@link #KNOWN_OUTCOME_TYPES}, the real
      * vocabulary.
      *
-     * <p>Two params entries are not generic parameters:
+     * <p>The event's subjects are exactly what the effect names under
+     * {@code "subjects"}, and an outcome that names none has none. The acting
+     * ability's host is never a default: a coin flip or a token made is not
+     * something done to the card whose ability did it, and Detain's host is
+     * the spell that cast the restriction, not one of the cards it landed on.
+     *
+     * <p>Three params entries are not generic parameters:
      * <ul>
-     *   <li>{@code "subjects"}, carrying the raw Card/Player list a
-     *   restriction-change loop walked (Detain, Goad, MustBlock), is pulled
-     *   out and converted to refs on {@link EffectEvent#subject} instead --
-     *   the schema's {@code restriction_change} row normalizes only
-     *   {@code restriction} and {@code value}, so a raw {@code subjects}
-     *   entry left in {@code params} would fail the per-type allow-list in
-     *   the Python {@code EventRecord}'s own construction. Its presence also
-     *   means the acting ability's own host is <em>not</em> added as a
-     *   default subject below: Detain/Goad/MustBlock's host is the spell or
-     *   permanent that cast the restriction, not one of the cards it landed
-     *   on, and stating otherwise would double it into a subject list a
-     *   reader counts against.
+     *   <li>{@code "subjects"}, carrying the raw Card/Player list of who the
+     *   outcome happened to (the cards a restriction landed on, the players
+     *   whose library a reveal came from, the player or creature prevented
+     *   damage would have been dealt to), is pulled out and converted to refs
+     *   on {@link EffectEvent#subject} instead -- the schema's per-type rows
+     *   do not list it, so a raw {@code subjects} entry left in {@code params}
+     *   would fail the per-type allow-list in the Python {@code EventRecord}'s
+     *   own construction.
      *   <li>{@code "source"} (currently only {@code damage_prevented}),
      *   carrying a raw Card, is converted to an entity ref the same way --
      *   every other producer of a {@code source} key ({@code damage_dealt},
      *   and the trigger-derived {@code damage_prevented}) renders one, and a
      *   display name here would silently fail a join against those refs and
      *   collide two sources sharing a name.
+     *   <li>{@code "sample"} ({@code token_created} only), one token standing
+     *   for its batch, becomes {@code token_script_id} and
+     *   {@code characteristics}, rendered by {@link SnapshotBuilder}'s own
+     *   rules so the description reads the same as the token's entry on the
+     *   board: the same script id, and keywords spelled the way an entity's
+     *   are. The token itself never reaches the event.
      * </ul>
      *
      * <p>Package-private rather than private, the same reason
@@ -1950,16 +1958,7 @@ public final class PatchedCollectors implements AutoCloseable {
                 reportUnknownOutcomeType(type);
                 return null;
             }
-            // An effect that supplies its own "subjects" is authoritative
-            // about who this outcome happened to; the host is a fallback
-            // default for the effects that supply nothing, not an addition
-            // on top of an explicit list (see the "subjects" bullet above).
-            boolean explicitSubjects = args[2] instanceof Map<?, ?> paramsMap
-                    && paramsMap.containsKey("subjects");
             EffectEvent event = new EffectEvent(type);
-            if (!explicitSubjects && args[0] instanceof SpellAbility sa && sa.getHostCard() != null) {
-                event.subject(SnapshotBuilder.entityId(sa.getHostCard()));
-            }
             if (args[2] instanceof Map<?, ?> params) {
                 for (Map.Entry<?, ?> entry : params.entrySet()) {
                     if ("subjects".equals(entry.getKey())) {
@@ -1968,6 +1967,13 @@ public final class PatchedCollectors implements AutoCloseable {
                     }
                     if ("source".equals(entry.getKey())) {
                         event.param("source", outcomeRefOf(entry.getValue()));
+                        continue;
+                    }
+                    if ("sample".equals(entry.getKey())) {
+                        if (entry.getValue() instanceof Card token) {
+                            event.param("token_script_id", SnapshotBuilder.tokenScriptIdOf(token));
+                            event.param("characteristics", tokenCharacteristics(token));
+                        }
                         continue;
                     }
                     event.param(String.valueOf(entry.getKey()), entry.getValue());
@@ -2000,6 +2006,20 @@ public final class PatchedCollectors implements AutoCloseable {
                 event.subject(SnapshotBuilder.playerId(player));
             }
         }
+    }
+
+    /**
+     * What a made token is, for a {@code token_created} event: its base
+     * power and toughness, its type line and its keywords — see
+     * {@link #outcomeHandler()} for why these are rendered here.
+     */
+    private static Map<String, Object> tokenCharacteristics(Card token) {
+        Map<String, Object> traits = new LinkedHashMap<>();
+        traits.put("power", token.getBasePower());
+        traits.put("toughness", token.getBaseToughness());
+        traits.put("types", token.getType().toString());
+        traits.put("keywords", SnapshotBuilder.keywordNames(token.getKeywords()));
+        return traits;
     }
 
     /**
