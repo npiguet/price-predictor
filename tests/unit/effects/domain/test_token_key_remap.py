@@ -10,10 +10,10 @@ from effects.domain.token_key_remap import (
     RemapCounts,
     TokenKeyRemapper,
     TokenScriptFacts,
-    load_token_script_facts,
     parse_token_script,
     remap_record_dict,
 )
+from effects.infrastructure.token_script_io import load_token_script_facts
 
 GOBLIN = (
     "Name:Goblin Token\nManaCost:no cost\nColors:red\nTypes:Creature Goblin\nPT:1/1\nOracle:\n"
@@ -335,3 +335,20 @@ def test_counts_merge():
     b.ambiguous["x"] += 2
     a.merge(b)
     assert a.remapped == 5 and a.ambiguous == {"x": 3}
+
+
+def test_counts_reset_to_zero_and_never_share_a_counter():
+    a, b = RemapCounts(), RemapCounts()
+    a.remapped = 4
+    a.ambiguous["x"] += 1
+    assert not b.ambiguous
+    a.reset()
+    assert a.remapped == 0 and not a.ambiguous
+
+
+def test_a_key_written_twice_keeps_the_last_name_and_pt_and_every_colour():
+    text = "Name:First\nName:Goblin Token\nColors:red\nColors:white\nPT:1/1\nPT:2/2\n"
+    facts = parse_token_script("x", text)
+    assert facts.name == "goblin token"
+    assert facts.colors == frozenset({"R", "W"})
+    assert facts.pt == ("2", "2")

@@ -1477,8 +1477,7 @@ def write_shard_pass(relative: str) -> WriteResult:
     ):
         if _write_record(record, config, out, outputs, sidecars, resolver):
             out.remap.merge(pending)
-        pending.remapped = 0
-        pending.ambiguous.clear()
+        pending.reset()
 
     shard_name = _output_name(relative)
     # Only where there is something to write. A source shard contributes to one
@@ -1705,7 +1704,7 @@ def _token_key_remapper(
     if not config.remap_token_keys:
         return None
 
-    from effects.domain.token_key_remap import load_token_script_facts
+    from effects.infrastructure.token_script_io import load_token_script_facts
 
     forge_tokens = Path(config.forge_tokenscripts) if config.forge_tokenscripts else None
     if forge_tokens is None or not forge_tokens.is_dir():
