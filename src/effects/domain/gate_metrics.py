@@ -87,27 +87,33 @@ def mean_pairwise_cosine(
         return float("nan")
     norms = np.linalg.norm(vectors, axis=1, keepdims=True)
     unit = vectors / np.clip(norms, 1e-12, None)
+    # The pairs are drawn one at a time from the same generator as ever, so a
+    # seed picks the same pairs it always has; only the dot products are taken
+    # in one pass rather than one call per pair.
     rng = random.Random(seed)
-    total = 0.0
-    for _ in range(pairs):
+    first = np.empty(pairs, dtype=np.intp)
+    second = np.empty(pairs, dtype=np.intp)
+    for k in range(pairs):
         i = rng.randrange(count)
         j = rng.randrange(count - 1)
-        if j >= i:
-            j += 1
-        total += float(np.dot(unit[i], unit[j]))
-    return total / pairs
+        first[k], second[k] = i, (j + 1 if j >= i else j)
+    dots = np.einsum("ij,ij->i", unit[first], unit[second])
+    return float(dots.astype(np.float64).sum()) / pairs
 
 
 def top_component_share(vectors: np.ndarray) -> float:
     """Fraction of total variance the largest principal component explains."""
     if vectors.shape[0] < 2:
         return float("nan")
-    centred = vectors - vectors.mean(axis=0, keepdims=True)
-    singular = np.linalg.svd(centred, compute_uv=False)
-    variance = singular ** 2
+    centred = (vectors - vectors.mean(axis=0, keepdims=True)).astype(np.float64)
+    # The eigenvalues of the small (dim × dim) scatter matrix are the squared
+    # singular values of the tall centred matrix, at a fraction of an SVD's
+    # cost over ~38k texts. Clamped at zero: rounding can leave a null
+    # direction a hair negative.
+    variance = np.clip(np.linalg.eigvalsh(centred.T @ centred), 0.0, None)
     total = float(variance.sum())
     # No variance at all is every vector on one point: the whole collapse.
-    return float(variance[0] / total) if total > 0 else 1.0
+    return float(variance[-1] / total) if total > 0 else 1.0
 
 
 def cosine_distance(a: np.ndarray, b: np.ndarray) -> float:
