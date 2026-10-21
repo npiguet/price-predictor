@@ -372,6 +372,10 @@ def _readout(target: str, outputs, verdict, slot: int, row: int, *,
              verdict_trained: bool = True) -> float:
     """Rung 3: the head's own prediction for one item.
 
+    Read through :class:`HeadReading`, gated as gate 2 and the sweeps read it:
+    a field head trains only where an entity was affected, so its answer is
+    scaled by the gate's.
+
     NaN where the head this target reads was never trained, which
     :func:`ladder_inputs` turns into an unavailable rung 3 rather than a score.
     """
@@ -379,41 +383,27 @@ def _readout(target: str, outputs, verdict, slot: int, row: int, *,
         return float("nan")
     import torch
 
-    from effects.domain.effect_model import (
-        DURATIONS,
-        FIELD_SLICES,
-        GATE_INDEX,
-        VERDICT_BITS,
-        ZONE_OUTCOMES,
-    )
+    from effects.domain.effect_model import FIELD_SLICES, VERDICT_BITS
+    from effects.domain.head_decoding import HeadReading
 
-    vector = outputs[row, slot]
-    gate = torch.sigmoid(vector[GATE_INDEX])
-
-    def field(name):
-        start, end = FIELD_SLICES[name]
-        return vector[start:end]
+    reading = HeadReading(outputs[row, slot])
 
     if target == "affected":
-        value = gate
+        value = reading.p_affected
     elif target == "dies":
-        value = gate * torch.softmax(field("zone_outcome"), -1)[ZONE_OUTCOMES.index("died")]
+        value = reading.p_zone("died")
     elif target == "damage_taken":
-        # The amount alone, not gate × amount: every damage item took damage, so
-        # the question is how much given the creature was hit, and the gate's
-        # doubt about whether it was hit would scale the answer by noise the probe
-        # on the trunk is never asked to carry.
-        value = torch.exp(field("damage_taken")[0])
+        value = reading.expected("damage_taken")
     elif target == "pt_until_end_of_turn":
-        value = torch.softmax(field("pt_duration"), -1)[DURATIONS.index("end_of_turn")]
+        value = reading.p_class("pt_duration", "end_of_turn")
     elif target == "may_block":
-        value = torch.sigmoid(field("blocker_legal")[0])
+        value = torch.sigmoid(outputs[row, slot, FIELD_SLICES["blocker_legal"][0]])
     elif target in ("legal_target", "legal_target_protected"):
         # The gate, not the `target_legal` field: training sets that field only
         # on legal targets, always to 1, so on an illegal entity its output was
         # never supervised and ranks nothing. Legality is learned through the
         # gate, which a decision record raises exactly on its legal targets.
-        value = gate
+        value = reading.p_affected
     elif target == "affordable":
         value = torch.sigmoid(verdict[row, VERDICT_BITS.index("affordable")])
     elif target == "fires":

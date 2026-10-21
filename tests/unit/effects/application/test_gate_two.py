@@ -346,14 +346,22 @@ def _vector(**values: float) -> torch.Tensor:
     return out
 
 
+def _affected(vector: torch.Tensor) -> torch.Tensor:
+    """``vector`` with the gate certain the entity was affected."""
+    from effects.domain.effect_model import GATE_INDEX
+
+    vector[GATE_INDEX] = 20.0
+    return vector
+
+
 class TestReadField:
     def test_a_count_field_reads_as_its_rate(self):
-        vector = _vector(damage_taken=math.log(3.0))
+        vector = _affected(_vector(damage_taken=math.log(3.0)))
         value = read_field(vector, FIELDS_BY_NAME["damage_taken"], None)
         assert value == pytest.approx(3.0)
 
     def test_a_categorical_field_reads_as_the_classs_probability(self):
-        vector = torch.zeros(PER_ENTITY_WIDTH)
+        vector = _affected(torch.zeros(PER_ENTITY_WIDTH))
         start, end = FIELD_SLICES["zone_outcome"]
         vector[start:end] = -20.0
         vector[start + ZONE_OUTCOMES.index("died")] = 20.0
@@ -362,7 +370,7 @@ class TestReadField:
 
     def test_a_signed_delta_reads_as_its_expected_signed_value(self):
         """Direction and magnitude are separate heads; one number needs both."""
-        vector = torch.zeros(PER_ENTITY_WIDTH)
+        vector = _affected(torch.zeros(PER_ENTITY_WIDTH))
         start, _end = FIELD_SLICES["life_delta"]
         vector[start] = -20.0       # negative
         vector[start + 1] = -20.0   # zero
@@ -372,7 +380,7 @@ class TestReadField:
         assert value == pytest.approx(4.0, abs=1e-4)
 
     def test_a_negative_signed_delta_reads_negative(self):
-        vector = torch.zeros(PER_ENTITY_WIDTH)
+        vector = _affected(torch.zeros(PER_ENTITY_WIDTH))
         start, _end = FIELD_SLICES["life_delta"]
         vector[start] = 20.0
         vector[start + 1] = -20.0
@@ -380,6 +388,12 @@ class TestReadField:
         vector[start + 3] = math.log(4.0)
         value = read_field(vector, FIELDS_BY_NAME["life_delta"], None)
         assert value == pytest.approx(-4.0, abs=1e-4)
+
+    def test_every_reading_is_scaled_by_the_affected_gate(self):
+        """The field heads train only where an entity was affected."""
+        vector = _vector(damage_taken=math.log(3.0))  # gate logit 0: P = 0.5
+        value = read_field(vector, FIELDS_BY_NAME["damage_taken"], None)
+        assert value == pytest.approx(1.5)
 
     def test_a_field_type_the_table_should_never_name_raises(self):
         spec = next(s for s in PER_ENTITY_FIELDS if s.name == "tap_state")
@@ -428,6 +442,30 @@ class TestScoreObservation:
         """A model that ignored the keyword is not a model that got it right."""
         agreed, _per_effect = self._first_strike(2.0, 2.0)
         assert not agreed
+
+    def test_a_move_in_the_affected_gate_alone_agrees(self):
+        """Stripped of first strike, the blocker takes nothing in this step.
+
+        The head says so through the gate, while the damage head — supervised
+        only where an entity was affected — still reads how much a hit would
+        deal. A reading of the field head alone sees no change and calls the
+        keyword ignored.
+        """
+        from effects.domain.effect_model import GATE_INDEX
+
+        record = _printed_board()
+        participant = _participant(record, "A")
+        hit = _vector(damage_taken=math.log(3.0))
+        hit[GATE_INDEX] = 4.0
+        untouched = _vector(damage_taken=math.log(3.0))
+        untouched[GATE_INDEX] = -4.0
+        agreed, per_effect = score_observation(
+            _only(KEYWORDS_BY_NAME["first_strike"], "damage_taken"), participant,
+            {"B0": hit}, {"B0": untouched},
+            fields=_FIELDS, keywords_of=_overlay_keywords,
+        )
+        assert agreed
+        assert per_effect == {"opponent.damage_taken": True}
 
     def test_every_effect_must_agree(self):
         record = _printed_board()

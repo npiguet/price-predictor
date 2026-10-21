@@ -21,7 +21,8 @@ from) and reports four things:
 2. **Where a moved card goes, by the zone it starts in.** Every card the
    resolution moved is an item, grouped by its zone before the move (battlefield,
    graveyard, hand, exile, stack) and the outcome it got. The model's answer is
-   its zone-outcome distribution at that card's slot; the table gives the mean
+   its zone-outcome distribution at that card's slot, times the affected gate as
+   every count here is; the table gives the mean
    probability of the right outcome and how often it is the most probable outcome
    other than ``stayed``. The outcome vocabulary is the head's: a card put into a
    graveyard from anywhere is ``died``, and one put onto the battlefield is
@@ -135,24 +136,23 @@ def qualifying_records(directories, count: int, shards: int, per_game: int, side
 
 
 def _read(outputs, surface, row) -> dict:
-    """``{"players": {id: {field: count}}, "cards": {id: (gate, outcome probs)}}``."""
-    import torch
+    """``{"players": {id: {field: count}}, "cards": {id: outcome probabilities}}``.
 
-    from effects.domain.effect_model import FIELD_SLICES, GATE_INDEX
+    Both gated (:class:`HeadReading`): a count is the gate times the predicted
+    rate, and each outcome's probability the gate times the class's, so the
+    ``stayed``-or-unaffected mass is ``1 - sum`` of the moved outcomes.
+    """
+    from effects.domain.head_decoding import HeadReading
 
     players, cards = {}, {}
-    zone = slice(*FIELD_SLICES["zone_outcome"])
     for index, slot in enumerate(surface.slots):
-        vector = outputs[row, index]
-        gate = torch.sigmoid(vector[GATE_INDEX])
+        reading = HeadReading(outputs[row, index])
         if slot.kind.name == "PLAYER":
             players[slot.player_id] = {
-                field: float(gate * torch.exp(vector[FIELD_SLICES[field][0]]))
-                for field in COUNT_FIELDS.values()
+                field: float(reading.expected(field)) for field in COUNT_FIELDS.values()
             }
         elif slot.kind.name == "CARD" and slot.entity_id is not None:
-            cards[slot.entity_id] = (float(gate),
-                                     torch.softmax(vector[zone].float(), -1).cpu().numpy())
+            cards[slot.entity_id] = reading.zone_probabilities().cpu().numpy()
     return {"players": players, "cards": cards}
 
 
@@ -218,12 +218,12 @@ def report_zones(chosen, readings) -> None:
         for entity in record.state.entities:
             if entity.id not in reading["cards"]:
                 continue
-            gate, probs = reading["cards"][entity.id]
+            probs = reading["cards"][entity.id]
             entry = targets.get(entity.id)
             outcome = entry.fields.get("zone_outcome") if entry is not None else None
             went = outcome is not None and outcome != stayed
             moved[entity.zone][0].append(went)
-            moved[entity.zone][1].append(gate * (1.0 - probs[stayed]))
+            moved[entity.zone][1].append(float(probs.sum() - probs[stayed]))
             if not went:
                 continue
             others = probs.copy()

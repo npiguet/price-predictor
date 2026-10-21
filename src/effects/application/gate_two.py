@@ -48,23 +48,14 @@ from effects.domain.damage_step_keywords import (
     qualifying_observations,
     subject_id,
 )
-from effects.domain.effect_model import (
-    FIELDS_BY_NAME,
-    ZONE_OUTCOMES,
-    FieldSpec,
-    FieldType,
-)
+from effects.domain.effect_model import FIELDS_BY_NAME, FieldSpec, FieldType
 from effects.domain.evaluation_report import (
     CheckName,
     CheckResult,
     CheckStatus,
     KeywordVerdict,
 )
-from effects.domain.head_decoding import (
-    direction_balance,
-    expected_magnitude,
-    field_outputs,
-)
+from effects.domain.head_decoding import HeadReading
 
 if TYPE_CHECKING:
     from effects.infrastructure.model_runner import Runnable
@@ -137,32 +128,26 @@ def read_field(
 ) -> float:
     """One field's prediction as a single scalar, on the field's own scale.
 
-    Each head has a layout of its own and none of them is a bare value: a count
-    predicts a log rate, a signed delta predicts three direction logits and a
-    magnitude, and a categorical predicts logits over classes. The scalar has to
-    be comparable between the two builds and nothing more, so each type is
-    decoded into the quantity the rules talk about — expected damage, expected
-    signed life change, probability of dying.
+    Each head has a layout of its own and none of them is a bare value, so each
+    type is decoded into the quantity the rules talk about — expected damage,
+    expected signed life change, probability of dying — through
+    :class:`HeadReading`, **gated**: ``P(affected)`` times the field's value.
+    The field heads train only where an entity was affected, so they cannot
+    say that an entity was not; removing first strike from an attacker leaves
+    its blocker unaffected in the first-strike step, and that move is in the
+    gate alone.
 
     Any other type raises rather than guessing: the table pins every effect to a
     real head, and a row naming a field this cannot read is a table bug.
     """
-    slice_ = field_outputs(vector, spec)
+    reading = HeadReading(vector)
     match spec.type:
-        case FieldType.COUNT:
-            return float(expected_magnitude(spec, slice_))
-        case FieldType.SIGNED_DELTA:
-            sign = float(direction_balance(spec, slice_))
-            return sign * float(expected_magnitude(spec, slice_))
+        case FieldType.COUNT | FieldType.SIGNED_DELTA:
+            return float(reading.expected(spec.name))
         case FieldType.CATEGORICAL:
-            if spec.name != "zone_outcome" or category is None:
-                raise ValueError(
-                    f"gate 2 can only read a class of zone_outcome, not "
-                    f"{spec.name}"
-                )
-            return float(torch.softmax(slice_, dim=-1)[
-                ZONE_OUTCOMES.index(category)
-            ])
+            if category is None:
+                raise ValueError(f"gate 2 reads a class of {spec.name}, and names none")
+            return float(reading.p_class(spec.name, category))
     raise ValueError(
         f"gate 2 cannot read {spec.name}: no rule for a {spec.type} field"
     )

@@ -366,16 +366,12 @@ def _predict(probe_model, records, read) -> list[float]:
 
 
 def _death(outputs, surface, row, entity_id) -> float:
-    import torch
-
-    from effects.domain.effect_model import FIELD_SLICES, GATE_INDEX, ZONE_OUTCOMES
+    """One card's predicted death, gated (:class:`HeadReading`); NaN off the board."""
+    from effects.domain.head_decoding import HeadReading
 
     for index, slot in enumerate(surface.slots):
         if slot.entity_id == entity_id and slot.kind.name == "CARD":
-            vector = outputs[row, index]
-            start, end = FIELD_SLICES["zone_outcome"]
-            died = torch.softmax(vector[start:end], -1)[ZONE_OUTCOMES.index("died")]
-            return float(torch.sigmoid(vector[GATE_INDEX]) * died)
+            return float(HeadReading(outputs[row, index]).p_zone("died"))
     return float("nan")
 
 
