@@ -328,8 +328,7 @@ def _mlm_batcher(lengths) -> SurfaceBatcher:
 
 def test_the_mlm_pass_returns_only_the_masked_positions():
     batcher = _mlm_batcher([6, 3, 9])
-    hidden, targets, mask = batcher.mlm_inputs(_EchoEncoder(), 0.5)
-    assert mask is None
+    hidden, targets = batcher.mlm_inputs(_EchoEncoder(), 0.5)
     # Every gathered row is a position the pass replaced with [MASK]...
     assert torch.all(hidden[:, 0] == _MaskTokens.mask_id)
     # ...and its target is the token that stood there: never [CLS] (id 2),

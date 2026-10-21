@@ -906,21 +906,14 @@ def value_loss(
     return total / rows
 
 
-def mlm_loss(
-    logits: torch.Tensor, targets: torch.Tensor, mask: torch.Tensor | None,
-) -> torch.Tensor:
-    """Cross-entropy at the masked positions only.
+def mlm_loss(logits: torch.Tensor, targets: torch.Tensor) -> torch.Tensor:
+    """Cross-entropy at the masked positions, which are the rows given.
 
     Training-only: it teaches the encoder the language of card text, which the
     effect objective alone would only reach through whichever words happened to
-    change an outcome. ``mask`` None means the rows are already the masked
-    positions, which is how the batcher hands them over.
+    change an outcome.
     """
-    if mask is None:
-        return functional.cross_entropy(logits, targets)
-    if not mask.any():
-        return logits.new_zeros(())
-    return functional.cross_entropy(logits[mask], targets[mask])
+    return functional.cross_entropy(logits, targets)
 
 
 def api_loss(

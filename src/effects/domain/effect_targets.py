@@ -29,7 +29,6 @@ from effects.domain.effect_model import (
     VERDICT_BITS,
     VERDICT_WIDTH,
     ZONE_OUTCOMES,
-    FieldSpec,
 )
 from effects.domain.event_schema import Event, EventType
 from effects.domain.keyword_names import overlay_keyword
@@ -332,7 +331,7 @@ def _split_contribution(tokens: tuple[str, ...]) -> tuple[list[str], list[str]]:
     record: the snapshot beside it is the board after the static applied, so
     reading the entity's current types back would name what it still has, not
     what it lost. Leaving the field unset says "this record does not say",
-    which is the one honest answer -- ``target_for`` skips an unset field
+    which is the one honest answer -- the loss skips an unset field
     rather than scoring it as an empty set.
 
     Tokens naming a whole class of type -- ``all-creature-types`` and the
@@ -350,13 +349,6 @@ def _split_contribution(tokens: tuple[str, ...]) -> tuple[list[str], list[str]]:
         else:
             gained.append(token)
     return gained, lost
-
-
-def target_for(
-    targets: EntityTargets, spec: FieldSpec,
-) -> float | int | list[float] | None:
-    """One field's target, or None where the record says nothing about it."""
-    return targets.fields.get(spec.name)
 
 
 # ── the [ACT] and [GLOBAL] heads (FR-060a) ──────────────────────────────

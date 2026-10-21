@@ -1023,50 +1023,6 @@ class EarlyStopper:
         return self.patience > 0 and self.since_best >= self.patience
 
 
-class ContextCache:
-    """Stop-gradient momentum cache for context ability vectors (FR-084).
-
-    The documented fallback when live context re-encoding exceeds the 8 GB GPU
-    budget: context abilities read a cached ``e`` refreshed every
-    ``--cache-refresh`` batches instead of being re-encoded with gradient. The
-    acting ability is always live — it is the one under study.
-
-    Momentum rather than a hard overwrite so a refresh moves the cache toward
-    the current encoder rather than snapping to one batch's view of it.
-    """
-
-    def __init__(self, refresh_every: int = 500, momentum: float = 0.9) -> None:
-        self.refresh_every = refresh_every
-        self.momentum = momentum
-        self._vectors: dict[str, tuple[float, ...]] = {}
-        self._batches_since_refresh = 0
-
-    def get(self, text: str) -> tuple[float, ...] | None:
-        return self._vectors.get(text)
-
-    def due_for_refresh(self) -> bool:
-        return self._batches_since_refresh >= self.refresh_every
-
-    def note_batch(self) -> None:
-        self._batches_since_refresh += 1
-
-    def refresh(self, fresh: dict[str, tuple[float, ...]]) -> None:
-        """Blend freshly-encoded vectors into the cache and reset the counter."""
-        for text, vector in fresh.items():
-            previous = self._vectors.get(text)
-            if previous is None:
-                self._vectors[text] = vector
-            else:
-                self._vectors[text] = tuple(
-                    self.momentum * old + (1.0 - self.momentum) * new
-                    for old, new in zip(previous, vector)
-                )
-        self._batches_since_refresh = 0
-
-    def __len__(self) -> int:
-        return len(self._vectors)
-
-
 # ── the run ─────────────────────────────────────────────────────────────
 
 

@@ -103,11 +103,9 @@ class _Batcher:
         return "masked"
 
     def mlm_forward(self, encoder, masked):
-        hidden = torch.randn(len(self.encoded.texts), 3, 8)
-        targets = torch.zeros(len(self.encoded.texts), 3, dtype=torch.long)
-        mask = torch.zeros(len(self.encoded.texts), 3, dtype=torch.bool)
-        mask[:, 1] = True
-        return hidden, targets, mask
+        hidden = torch.randn(len(self.encoded.texts), 8)
+        targets = torch.zeros(len(self.encoded.texts), dtype=torch.long)
+        return hidden, targets
 
 
 def _terms(loop, records, batcher, model, hidden, *, training):

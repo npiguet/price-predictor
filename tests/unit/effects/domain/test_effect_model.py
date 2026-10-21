@@ -456,13 +456,12 @@ class TestLosses:
         scored = verdict_loss(prediction, target, torch.ones(2, dtype=torch.bool))
         assert float(scored) > 0.0
 
-    def test_mlm_loss_scores_only_the_masked_positions(self):
-        logits = torch.randn(2, 5, 32)
-        targets = torch.randint(0, 32, (2, 5))
-        mask = torch.zeros(2, 5, dtype=torch.bool)
-        assert float(mlm_loss(logits, targets, mask)) == 0.0
-        mask[0, 0] = True
-        assert float(mlm_loss(logits, targets, mask)) > 0.0
+    def test_mlm_loss_is_low_where_the_logits_name_the_target(self):
+        targets = torch.tensor([3, 7])
+        right = torch.full((2, 32), -10.0)
+        right[0, 3] = right[1, 7] = 10.0
+        assert float(mlm_loss(right, targets)) < 1e-3
+        assert float(mlm_loss(torch.zeros(2, 32), targets)) > 1.0
 
     def test_api_loss_accepts_either_target_alone(self):
         types = api_loss(torch.randn(2, 5), torch.tensor([0, 1]), None, None)

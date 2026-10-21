@@ -16,7 +16,6 @@ from effects.application.train_effect_model import (
     MAX_GRAD_NORM,
     VARIANT_FULL,
     VARIANTS,
-    ContextCache,
     EarlyStopper,
     MissingSplitError,
     TrainEffectModelConfig,
@@ -220,37 +219,6 @@ class TestEarlyStopping:
         stopper.update(0.5)
         assert not stopper.update(0.6)
         assert stopper.best == 0.5
-
-
-class TestContextCache:
-    def test_it_starts_empty_and_due_only_after_enough_batches(self):
-        cache = ContextCache(refresh_every=3)
-        assert len(cache) == 0
-        assert not cache.due_for_refresh()
-        for _ in range(3):
-            cache.note_batch()
-        assert cache.due_for_refresh()
-
-    def test_a_refresh_seeds_unseen_texts_outright(self):
-        cache = ContextCache()
-        cache.refresh({"bolt": (1.0, 2.0)})
-        assert cache.get("bolt") == (1.0, 2.0)
-
-    def test_a_refresh_blends_a_seen_text_rather_than_snapping(self):
-        cache = ContextCache(momentum=0.5)
-        cache.refresh({"bolt": (0.0, 0.0)})
-        cache.refresh({"bolt": (2.0, 4.0)})
-        assert cache.get("bolt") == (1.0, 2.0)
-
-    def test_a_refresh_resets_the_counter(self):
-        cache = ContextCache(refresh_every=1)
-        cache.note_batch()
-        assert cache.due_for_refresh()
-        cache.refresh({})
-        assert not cache.due_for_refresh()
-
-    def test_an_unseen_text_reads_as_absent(self):
-        assert ContextCache().get("never encoded") is None
 
 
 class TestWithheldKeyword:

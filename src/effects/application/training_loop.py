@@ -40,7 +40,6 @@ import time
 from collections import Counter, defaultdict
 from collections.abc import Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import asdict
 from pathlib import Path
 
 import torch
@@ -66,7 +65,6 @@ from effects.application.train_effect_model import (
     LEARNING_RATE,
     MAX_GRAD_NORM,
     WEIGHT_DECAY,
-    ContextCache,
     CorpusSplit,
     EarlyStopper,
     EpochResult,
@@ -443,9 +441,6 @@ class TrainingLoop(StepPreparation):
         #: the value logged at startup and the value every batch runs under
         #: are the same one.
         self.autocast: bool = autocast_enabled(self.device)
-        self.context_cache = (
-            ContextCache(config.cache_refresh) if config.context_cache else None
-        )
         #: What each card-disjoint field term is scaled against, recomputed
         #: when the curriculum changes the field set and not otherwise.
         self.floor = FloorCache()
@@ -733,12 +728,8 @@ class TrainingLoop(StepPreparation):
         with torch.autocast(
             device_type="cuda", dtype=torch.bfloat16, enabled=self.autocast,
         ):
-            token_hidden, token_targets, token_mask = batcher.mlm_forward(
-                encoder, masked,
-            )
-            term = mlm_loss(
-                model.mlm_head(token_hidden).float(), token_targets, token_mask,
-            )
+            token_hidden, token_targets = batcher.mlm_forward(encoder, masked)
+            term = mlm_loss(model.mlm_head(token_hidden).float(), token_targets)
         (self.config.mlm_weight * term / self.config.grad_accum).backward()
         self._last_terms = {**self._last_terms, "mlm": term.detach()}
 
@@ -1520,8 +1511,6 @@ class TrainingLoop(StepPreparation):
                 taken += 1
                 if batch_parts:
                     parts = batch_parts
-                if self.context_cache is not None:
-                    self.context_cache.note_batch()
         finally:
             # Including on the way out of an exception, where a thread may
             # still be preparing a step nobody will take.
@@ -1654,8 +1643,3 @@ class TrainingLoop(StepPreparation):
             # Resolved from the manifest at startup when the flag was absent.
             holdout_unit=self.config.holdout_unit or "text",
         )
-
-
-def config_summary(config: TrainEffectModelConfig) -> dict:
-    """The run's settings, for the log line and the checkpoint's extras."""
-    return {k: str(v) for k, v in asdict(config).items()}

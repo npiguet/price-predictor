@@ -28,9 +28,8 @@ from effects.domain.effect_head_input import (
     SlotKind,
     _multi_hot,
     _one_hot,
-    _scalar,
+    _push_scalar,
     act_features,
-    anchored_attacker,
     build_effect_head_input,
     card_features,
     continuous_masked_keywords,
@@ -341,16 +340,22 @@ class TestControllerTags:
 
 
 class TestNumericEncoding:
+    @staticmethod
+    def _scalar(value: float) -> list[float]:
+        out: list[float] = []
+        _push_scalar(out, value)
+        return out
+
     def test_a_scalar_enters_raw_plus_log1p(self):
-        assert _scalar(3) == pytest.approx([3.0, math.log1p(3)])
+        assert self._scalar(3) == pytest.approx([3.0, math.log1p(3)])
 
     def test_the_log_copy_is_signed_so_it_stays_monotone_across_zero(self):
-        assert _scalar(-3)[1] == pytest.approx(-math.log1p(3))
-        assert _scalar(-3)[1] < _scalar(0)[1] < _scalar(3)[1]
+        assert self._scalar(-3)[1] == pytest.approx(-math.log1p(3))
+        assert self._scalar(-3)[1] < self._scalar(0)[1] < self._scalar(3)[1]
 
     def test_nothing_is_binned(self):
         """Two nearby values give two different feature vectors."""
-        assert _scalar(3) != _scalar(4)
+        assert self._scalar(3) != self._scalar(4)
 
     def test_a_players_life_reaches_the_features_unbinned(self):
         record = _record()
@@ -398,17 +403,6 @@ class TestPerKindVariations:
         for keyword in ("first_strike", "double_strike", "deathtouch", "lifelink",
                         "trample", "indestructible", "wither", "infect"):
             assert keyword in OVERLAY_KEYWORDS
-
-    def test_a_blockers_record_names_its_anchored_attacker(self):
-        record = _record(
-            kind=RecordKind.PLAYABILITY, moment=None, ability=None,
-            subkind=PlayabilitySubkind.BLOCKERS,
-            payload=PlayabilityBlockersPayload(anchor_attacker="E2"),
-        )
-        assert anchored_attacker(record) == "E2"
-
-    def test_a_non_blockers_record_has_no_anchor(self):
-        assert anchored_attacker(_record()) is None
 
     def test_a_combat_record_carries_its_damage_assignment_choices(self):
         entity = _entity("E1", combat=CombatStatus(attacking="P1"))
@@ -757,7 +751,9 @@ class TestFeatureEquivalence:
                     present, vocabulary
                 )
         for value in (0, -0.0, 3, -3, 2.5, -2.5, 1e6, -1e6):
-            assert _scalar(value) == self._ref_scalar(value)
+            pushed: list[float] = []
+            _push_scalar(pushed, value)
+            assert pushed == self._ref_scalar(value)
 
 
 class TestOptionRows:

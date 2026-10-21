@@ -578,7 +578,7 @@ class SurfaceBatcher:
         the corruption shapes only what the encoder's token outputs must
         recover.
 
-        Returns ``(hidden, targets, None)`` on the device, already reduced to the
+        Returns ``(hidden, targets)`` on the device, already reduced to the
         masked positions, or None when nothing was masked. The mask is drawn and
         the positions picked on the host, so the device never has to report
         which they were; and the vocabulary projection then runs over the
@@ -621,7 +621,7 @@ class SurfaceBatcher:
         selected = hidden.reshape(-1, hidden.shape[-1]).index_select(
             0, masked.positions.to(self.device, non_blocking=True),
         )
-        return selected, masked.targets.to(self.device, non_blocking=True), None
+        return selected, masked.targets.to(self.device, non_blocking=True)
 
     def _taxonomy_vectors(
         self, ordered: list[str], lines: dict[str, object],

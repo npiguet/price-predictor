@@ -38,7 +38,6 @@ from effects.domain.records import (
     CombatPayload,
     EffectRecord,
     Moment,
-    PlayabilityBlockersPayload,
     PlayabilityDecisionPayload,
     PlayabilitySubkind,
     RecordKind,
@@ -200,26 +199,14 @@ def _one_hot(value: str | None, vocabulary: tuple[str, ...]) -> list[float]:
     return out
 
 
-def _scalar(value: float) -> list[float]:
-    """A scalar as raw plus ``log1p``. Nothing is binned (FR-074).
+def _push_scalar(out: list[float], value: float) -> None:
+    """A scalar as raw plus ``log1p``, onto the caller's list. Nothing is binned (FR-074).
 
     ``log1p`` of a negative value is undefined, so the copy is signed:
     ``sign(v) * log1p(|v|)``, which keeps the transform monotone across zero.
-
-    The feature builders below call :func:`_push_scalar` instead, which is the
-    same two numbers without the throwaway list.
-    """
-    magnitude = math.log1p(abs(float(value)))
-    return [float(value), math.copysign(magnitude, value)]
-
-
-def _push_scalar(out: list[float], value: float) -> None:
-    """:func:`_scalar` straight onto the caller's list.
-
-    Every caller extends a list it already has, so the two-element list
-    ``_scalar`` returned was built and discarded immediately — twenty-eight
-    times per entity and nearly seven million times over a four-shard run,
-    which made the allocation, not the arithmetic, the cost of a scalar.
+    Appended rather than returned, because a two-element list per scalar —
+    twenty-eight per entity, millions per run — made the allocation, not the
+    arithmetic, the cost of a scalar.
     """
     raw = float(value)
     out.append(raw)
@@ -278,10 +265,6 @@ class Slot:
     #: through). A row index is not a vector of one element: the two are told
     #: apart by type, never by length.
     e: tuple[float, ...] | int | None = None
-    #: ``CARD`` slots: token ids of the entity's subtypes, mean-pooled by the
-    #: model. Subtypes are an open vocabulary (every set adds creature types),
-    #: so they enter through the shared token embedding rather than a one-hot.
-    subtype_tokens: tuple[int, ...] = ()
     entity_id: str | None = None
     player_id: str | None = None
     #: ``ABILITY`` slots read from a charm mode's ``option`` line (FR-063a).
@@ -557,7 +540,6 @@ def build_effect_head_input(
     e_dim: int,
     has_line=None,
     candidate_index: int | None = None,
-    subtype_tokens_for=None,
     context_dropout: float = 0.0,
     rng: random.Random | None = None,
     masked_keywords: dict[str, frozenset[str]] | None = None,
@@ -586,7 +568,6 @@ def build_effect_head_input(
         candidate_index: a ``playability``/``decision`` record trains as one
             example per candidate; this selects which candidate's ``e`` sits in
             ``[ACT]``.
-        subtype_tokens_for: ``EntityState -> tuple[int, ...]``, optional.
         context_dropout: probability of dropping each *context* ability token
             during training. The acting entity's tokens are never dropped —
             dropping the ability under study would make the record unanswerable.
@@ -656,9 +637,6 @@ def build_effect_head_input(
                 entity, record,
                 masked_keywords=masked.get(entity.id, frozenset()) | gone,
                 layout=layout,
-            ),
-            subtype_tokens=(
-                subtype_tokens_for(entity) if subtype_tokens_for else ()
             ),
             entity_id=entity.id,
         ))
@@ -742,18 +720,6 @@ def _first_vector(keys, e_for, zero: tuple[float, ...]):
         if vector is not None:
             return vector
     return zero
-
-
-def anchored_attacker(record: EffectRecord) -> str | None:
-    """The attacker a ``blockers`` record is anchored to (FR-071).
-
-    It is carried by the source flag on that entity's ``[CARD]`` slot rather
-    than in ``[ACT]``, which is empty for this subkind. ``min_blockers`` is read
-    at this entity by the per-entity head.
-    """
-    if isinstance(record.payload, PlayabilityBlockersPayload):
-        return record.payload.anchor_attacker
-    return None
 
 
 def continuous_masked_keywords(record: EffectRecord) -> dict[str, frozenset[str]]:
