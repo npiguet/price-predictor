@@ -1581,13 +1581,17 @@ def run_write_pass(
     return total
 
 
-def _repack_outputs(store: CorpusStore, *, shard_records: int) -> None:
-    """Stream each stratum's parts into uniform shards, then drop the parts.
+def _repack_outputs(
+    store: CorpusStore, written: WriteResult, *, shard_records: int, seed: int,
+) -> None:
+    """Deal each stratum's parts into uniform, mixed shards, then drop the parts.
 
     The write pass writes one part per source shard, so an output's shard
     sizes mirror the raw corpus's -- hundreds of tiny files beside a handful
-    of huge ones. The trainer reads a shard at a time and takes that shard's
-    share of an epoch's steps, so uneven shards make the step budget uneven.
+    of huge ones -- and each part is one collection run's lifetime. The
+    trainer reads a shard at a time and takes that shard's share of an
+    epoch's steps, so uneven shards make the step budget uneven, and a shard
+    of one run's games makes its batches correlated by run.
     """
     import shutil
 
@@ -1597,6 +1601,7 @@ def _repack_outputs(store: CorpusStore, *, shard_records: int) -> None:
         parts = iter_shards(store.parts_dir_for(stratum))
         paths = repack_shards(
             parts, store.output_dir(stratum), shard_records=shard_records,
+            seed=seed, records=written.stratum.get(stratum, 0),
         )
         logger.info(
             "%-22s %d part(s) repacked into %d shard(s)",
@@ -1876,7 +1881,7 @@ def build(config: BuildCorpusConfig) -> int:
         workers=config.workers,
     )
     _report_write_pass(survey, written, remapper)
-    _repack_outputs(store, shard_records=config.shard_records)
+    _repack_outputs(store, written, shard_records=config.shard_records, seed=config.seed)
     _write_validation_samples(config, store, decisions)
 
     manifest = _manifest(
