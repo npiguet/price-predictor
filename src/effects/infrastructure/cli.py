@@ -1303,14 +1303,6 @@ def _add_training_inputs(parser: argparse.ArgumentParser) -> None:
     _add_cards_folder(parser)
     _add_holdout_unit(parser, default=None)
     _add_variant_scripts(parser)
-    parser.add_argument(
-        "--split-from", type=_optional_path, default=None,
-        help=(
-            "Accepted for compatibility with older invocations of a --variant "
-            "run; nothing is read from this path. The manifest of --corpus is "
-            "authoritative for the split."
-        ),
-    )
     parser.add_argument("--vocab-path", type=Path, default=DEFAULT_VOCAB_PATH)
     parser.add_argument(
         "--keyword-definitions", type=Path, default=DEFAULT_KEYWORD_DEFINITIONS,
@@ -1373,16 +1365,6 @@ def _add_training_schedule(parser: argparse.ArgumentParser) -> None:
     """Batches, epochs, stopping and resuming."""
     parser.add_argument("--batch-size", type=int, default=32)
     parser.add_argument("--grad-accum", type=int, default=1)
-    parser.add_argument(
-        "--context-cache", action="store_true",
-        help=(
-            "Accepted and ignored (not implemented): the stop-gradient "
-            "momentum cache is specified as the fallback for when live "
-            "re-encoding exceeds the GPU budget, but the trainer's batcher "
-            "has no cache and re-encodes context abilities live"
-        ),
-    )
-    parser.add_argument("--cache-refresh", type=int, default=500)
     parser.add_argument("--steps-per-epoch", type=int, default=5000)
     parser.add_argument(
         "--shards-per-epoch", type=int, default=DEFAULT_SHARDS_PER_EPOCH,

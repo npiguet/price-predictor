@@ -76,6 +76,7 @@ from effects.domain.ability_encoder import (  # noqa: E402
 from effects.domain.ability_tokenizer import (  # noqa: E402
     HOST_BODIED_KEYWORDS,
     AbilityTokenizer,
+    keyword_token,
     tokenizer_surface,
 )
 from effects.infrastructure.effect_model_store import (  # noqa: E402
@@ -339,7 +340,7 @@ def report(paths: ProbePaths) -> None:  # noqa: C901, PLR0912, PLR0915 — one l
     # ── 1. the definition table against the vocabulary ────────────────
     def_rows = []
     for name, definition in definitions.items():
-        token = tok._keyword_token(name)  # noqa: SLF001 — the tokenizer's own key
+        token = keyword_token(name)
         template = definition.reminder_template or ""
         expanded = tok._instantiate(template, None)  # noqa: SLF001
         parts = tok.tokenize(expanded)

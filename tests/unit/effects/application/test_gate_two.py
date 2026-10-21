@@ -35,10 +35,7 @@ from effects.application.gate_two import (
     score_observation,
     subject_id,
 )
-from effects.application.surface_batching import (
-    IDENTITY_TABLE_SIZE,
-    SurfaceBatcher,
-)
+from effects.application.surface_batching import IdentityTable, SurfaceBatcher
 from effects.domain.damage_step_keywords import (
     KEYWORDS_BY_NAME,
     Subject,
@@ -49,7 +46,7 @@ from effects.domain.effect_head_input import (
     THERMOMETER_STEPS,
     SlotKind,
 )
-from effects.domain.effect_model import (
+from effects.domain.effect_head_layout import (
     FIELD_SLICES,
     FIELDS_BY_NAME,
     PER_ENTITY_FIELDS,
@@ -69,6 +66,7 @@ from effects.domain.state_snapshot import (
 )
 from effects.domain.variants import VariantMasks
 from effects.infrastructure.model_runner import Runnable
+from tests.unit.effects.builders import make_batcher, slots_of_kind
 
 # ── a board: one first-striking attacker, one blocker ────────────────────
 
@@ -188,11 +186,13 @@ def _batcher() -> SurfaceBatcher:
     tokenizer and no encoder: what these tests are about is the surface, and an
     encoder would only be a second thing that could fail.
     """
-    return SurfaceBatcher(
+    return make_batcher(
         tokenizer=None, sidecars=_Sidecars(),
         masks=VariantMasks(identity_embedding=True),
         surface="script", e_dim=4, widths={}, device=torch.device("cpu"),
-        identity_table=torch.nn.Embedding(IDENTITY_TABLE_SIZE, 4),
+        identity_table=IdentityTable(
+            [line.script_text for line in _LINES.values()], 4,
+        ),
     )
 
 
@@ -225,7 +225,7 @@ class TestStrippingTheAbilityChannel:
             record, rows, strip_keywords={"A": frozenset({"first_strike"})},
         )
         kept = [
-            slot.e for slot in stripped.of_kind(SlotKind.ABILITY)
+            slot.e for slot in slots_of_kind(stripped, SlotKind.ABILITY)
             if slot.entity_id == "A"
         ]
         assert kept == [rows["W: this creature gets +1/+0"]]
@@ -259,14 +259,14 @@ class TestStrippingTheAbilityChannel:
         )
         assert all(
             slot.e != (0.0,) * 4
-            for slot in stripped.of_kind(SlotKind.ABILITY)
+            for slot in slots_of_kind(stripped, SlotKind.ABILITY)
         )
 
 
 class TestStrippingTheOverlayChannel:
     def _overlay_bit(self, surface, entity_id: str) -> float:
         slot = next(
-            s for s in surface.of_kind(SlotKind.CARD) if s.entity_id == entity_id
+            s for s in slots_of_kind(surface, SlotKind.CARD) if s.entity_id == entity_id
         )
         # The multi-hot sits at a fixed offset from the end of the card block;
         # find it by the one value the base board sets.
@@ -288,7 +288,7 @@ class TestBatchThreading:
     def test_the_unperturbed_record_in_the_same_batch_is_unchanged(self):
         record = _printed_board()
         batcher = _batcher()
-        _batch, surfaces = batcher.build(
+        _batch, surfaces, _encoded = batcher.build(
             [record, record], _NoEncoder(),
             strip_per_record=[None, {"A": frozenset({"first_strike"})}],
         )
@@ -298,13 +298,13 @@ class TestBatchThreading:
     def test_no_strip_list_builds_exactly_as_before(self):
         record = _printed_board()
         batcher = _batcher()
-        _batch, surfaces = batcher.build([record], _NoEncoder())
+        _batch, surfaces, _encoded = batcher.build([record], _NoEncoder())
         assert _ability_count(surfaces[0], "A") == 2
 
 
 def _ability_count(surface, entity_id: str) -> int:
     return sum(
-        1 for slot in surface.of_kind(SlotKind.ABILITY)
+        1 for slot in slots_of_kind(surface, SlotKind.ABILITY)
         if slot.entity_id == entity_id
     )
 
@@ -351,7 +351,7 @@ def _vector(**values: float) -> torch.Tensor:
 
 def _affected(vector: torch.Tensor) -> torch.Tensor:
     """``vector`` with the gate certain the entity was affected."""
-    from effects.domain.effect_model import GATE_INDEX
+    from effects.domain.effect_head_layout import GATE_INDEX
 
     vector[GATE_INDEX] = 20.0
     return vector
@@ -454,7 +454,7 @@ class TestScoreObservation:
         deal. A reading of the field head alone sees no change and calls the
         keyword ignored.
         """
-        from effects.domain.effect_model import GATE_INDEX
+        from effects.domain.effect_head_layout import GATE_INDEX
 
         record = _printed_board()
         participant = _participant(record, "A")

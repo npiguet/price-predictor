@@ -124,7 +124,7 @@ def capped(value: float) -> float:
     −9999 toughness, The Millennium Calendar's 1000 life — and a few items that
     far out dominate an R² taken over thousands.
     """
-    from effects.domain.effect_model import MAGNITUDE_CAP
+    from effects.domain.effect_head_input import MAGNITUDE_CAP
 
     return max(-MAGNITUDE_CAP, min(MAGNITUDE_CAP, float(value)))
 
@@ -341,7 +341,7 @@ def effect_profile(record) -> np.ndarray | None:
 
     None for a record that is not an effect half.
     """
-    from effects.domain.effect_model import ZONE_OUTCOMES
+    from effects.domain.effect_head_layout import ZONE_OUTCOMES
     from effects.domain.effect_targets import derive_targets
     from effects.domain.records import Moment, RecordKind
 
@@ -594,7 +594,7 @@ def record_items(record, sidecars, join: JoinResult, acting_text) -> list[Record
     ``acting_text`` is ``key -> text or None``, the checkpoint-independent text
     the fold groups key on.
     """
-    from effects.domain.effect_model import DURATIONS, ZONE_OUTCOMES
+    from effects.domain.effect_head_layout import DURATIONS, ZONE_OUTCOMES
     from effects.domain.effect_targets import derive_targets
     from effects.domain.records import (
         Moment,

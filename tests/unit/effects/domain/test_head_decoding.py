@@ -7,7 +7,7 @@ import math
 import pytest
 import torch
 
-from effects.domain.effect_model import FIELDS_BY_NAME, PER_ENTITY_WIDTH
+from effects.domain.effect_head_layout import FIELDS_BY_NAME, PER_ENTITY_WIDTH
 from effects.domain.head_decoding import (
     direction_balance,
     expected_magnitude,
@@ -55,7 +55,7 @@ def test_a_field_without_a_magnitude_is_refused():
 
 
 def _outputs(gate_logit: float, **columns: float) -> torch.Tensor:
-    from effects.domain.effect_model import FIELD_SLICES, GATE_INDEX
+    from effects.domain.effect_head_layout import FIELD_SLICES, GATE_INDEX
 
     vector = torch.zeros(PER_ENTITY_WIDTH)
     vector[GATE_INDEX] = gate_logit
@@ -82,7 +82,7 @@ class TestHeadReading:
         )
 
     def test_an_expected_signed_delta_carries_its_direction_and_the_gate(self):
-        from effects.domain.effect_model import FIELD_SLICES
+        from effects.domain.effect_head_layout import FIELD_SLICES
         from effects.domain.head_decoding import HeadReading
 
         vector = _outputs(20.0)
@@ -93,7 +93,7 @@ class TestHeadReading:
         )
 
     def test_a_class_probability_is_gated_unless_asked_conditional(self):
-        from effects.domain.effect_model import FIELD_SLICES, ZONE_OUTCOMES
+        from effects.domain.effect_head_layout import FIELD_SLICES, ZONE_OUTCOMES
         from effects.domain.head_decoding import HeadReading
 
         vector = _outputs(0.0)

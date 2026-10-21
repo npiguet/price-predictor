@@ -11,8 +11,11 @@ Three embeddings are added to each token, not one:
 - **token** — the word itself;
 - **position** — where it sits in the line;
 - **role** — ``cost`` / ``effect`` / ``trigger-condition`` / ``target-spec``, read
-  from the sidecar's spans. Without it ``{R}`` in a cost and ``{R}`` in an effect
-  are the same input, and they mean opposite things.
+  from the sidecar's spans over the converted prose (FR-069). Without it ``{R}``
+  in a cost and ``{R}`` in an effect are the same input, and they mean opposite
+  things. The spans index the prose, so only a prose text carries roles; the
+  script surface spells the difference in its own keys (``Cost$``) and every
+  token there reads "no role".
 
 Numbers get a fourth: a **monotone numeric embedding**, a shared learned base
 vector plus ``log1p(n)`` times a learned direction. A number's magnitude is
@@ -32,7 +35,12 @@ from dataclasses import dataclass
 import torch
 import torch.nn as nn
 
-from effects.domain.ability_tokenizer import AbilityTokenizer, Token
+from effects.domain.ability_tokenizer import (
+    SURFACE_PROSE,
+    SURFACE_SCRIPT,
+    AbilityTokenizer,
+    Token,
+)
 
 #: Role vocabulary, in a fixed order so an embedding row means the same thing
 #: across checkpoints. Index 0 is "no role" — the token sat outside every span.
@@ -186,9 +194,6 @@ class AbilityEncoder(nn.Module):
 
 # ── surfaces (FR-062, stage four) ───────────────────────────────────────
 
-SURFACE_PROSE = "prose"
-SURFACE_SCRIPT = "script"
-
 
 def surface_of(vocab_path) -> str:
     """Which surface a vocabulary path implies.
@@ -219,6 +224,21 @@ def encoding_text(line, prose: str | None, surface: str) -> str | None:
     if surface == SURFACE_SCRIPT:
         return script or prose
     return prose or script
+
+
+def encoding_role_spans(line, text: str | None, surface: str) -> tuple:
+    """The role spans a line's encoding text is tokenized with (FR-069).
+
+    The sidecar's spans index the line's converted prose, so they apply on the
+    prose surface to a text that is that prose, and to nothing else: not the
+    script surface, and not a variant's script, which is what the prose
+    surface falls back to where there is no prose.
+    """
+    if surface != SURFACE_PROSE or line is None or text is None:
+        return ()
+    if text == getattr(line, "script_text", None):
+        return ()
+    return tuple(getattr(line, "role_spans", ()) or ())
 
 
 def role_index(role: str | None) -> int:

@@ -10,10 +10,17 @@ while every number it reports still moves.
 from __future__ import annotations
 
 from collections import defaultdict
+from collections.abc import Mapping
+from pathlib import Path
 
 from effects.domain.ability_encoder import encoding_text
 from effects.domain.records import EffectRecord, acting_keys
-from effects.infrastructure.sidecar_io import UnconfiguredTree
+from effects.infrastructure.sidecar_io import (
+    SIDECAR_SUFFIX,
+    SidecarCache,
+    UnconfiguredTree,
+    converted_text_path,
+)
 
 
 def resolve_key(key, sidecars, surface: str) -> tuple[str | None, object]:
@@ -58,6 +65,27 @@ def ability_text_of(
         if text is not None:
             return text
     return None
+
+
+def known_texts(roots: Mapping[str, Path], surface: str) -> list[str]:
+    """Every distinct text a line under ``roots`` encodes as on ``surface``, sorted.
+
+    Each line resolved through :func:`resolve_key` by its own first key, so a
+    text is spelled exactly as every training batch will look it up. ``roots``
+    maps a tree name to its folder, as ``sidecar_roots`` builds it.
+    """
+    sidecars = SidecarCache(roots)
+    texts: set[str] = set()
+    for tree, root in roots.items():
+        root = Path(root)
+        for path in sorted(root.rglob(f"*{SIDECAR_SUFFIX}")):
+            relative = converted_text_path(path).relative_to(root).as_posix()
+            for line in sidecars.get(f"{tree}/{relative}").lines:
+                if line.provenance:
+                    text = resolve_key(line.provenance[0], sidecars, surface)[0]
+                    if text is not None:
+                        texts.add(text)
+    return sorted(texts)
 
 
 class KeyResolver:

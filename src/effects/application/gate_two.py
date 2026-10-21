@@ -53,7 +53,7 @@ from effects.domain.damage_step_keywords import (
     qualifying_observations,
     subject_id,
 )
-from effects.domain.effect_model import FIELDS_BY_NAME, FieldSpec, FieldType
+from effects.domain.effect_head_layout import FIELDS_BY_NAME, FieldSpec, FieldType
 from effects.domain.evaluation_report import (
     CheckName,
     CheckResult,
@@ -305,7 +305,7 @@ def _score_chunk(
         {participant.carrier.id: frozenset({row.keyword})}
         for _record, row, participant in chunk
     ]
-    batch, surfaces = batcher.build(built, encoder, strips)
+    batch, surfaces, _encoded = batcher.build(built, encoder, strips)
     outputs = model.per_entity(model(**batch)).cpu()
 
     for offset, (record, row, participant) in enumerate(chunk):

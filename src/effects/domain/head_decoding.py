@@ -8,9 +8,10 @@ layout, and doing it in one place is what keeps gate 1's deviance, gate 2's
 direction test and the knowledge probes reading the same column.
 
 And no field head stands alone. Each is supervised only on entities the gate's
-target marks affected, so it answers "*if* this entity is affected, how much"
-and says nothing about whether it is. :class:`HeadReading` is the one place
-that combines the two.
+target marks affected and whose record supervises the field
+(``effect_head_layout``: a written value, or the field's silent value), so it
+answers "*if* this entity is affected, how much" and says nothing about whether
+it is. :class:`HeadReading` is the one place that combines the two.
 """
 
 from __future__ import annotations
@@ -19,7 +20,7 @@ from dataclasses import dataclass
 
 import torch
 
-from effects.domain.effect_model import (
+from effects.domain.effect_head_layout import (
     DURATIONS,
     FIELD_SLICES,
     FIELDS_BY_NAME,
@@ -84,6 +85,13 @@ class HeadReading:
     the damage head, which never trained on an unaffected entity, still reads
     how much a hit would deal. ``conditional=True`` reads the field head alone,
     for a question already restricted to affected entities.
+
+    For a field with a silent value — zone, damage, counters, P/T, the player
+    fields — every affected entity of a supervising record is scored, so the
+    gated product is the unconditional expectation. A field only a written
+    value supervises — the tap state, both durations, the legality bits —
+    reads conditional on the record having written it as well, and its gated
+    product inherits that condition.
     """
 
     outputs: torch.Tensor

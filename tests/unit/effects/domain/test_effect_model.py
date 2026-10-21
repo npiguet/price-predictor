@@ -16,14 +16,12 @@ import torch
 import torch.nn.functional as functional
 
 from effects.domain.effect_head_input import (
-    CARD_TYPES,
     COUNTER_TYPES,
-    OVERLAY_KEYWORDS,
     EffectHeadInput,
     Slot,
     SlotKind,
 )
-from effects.domain.effect_model import (
+from effects.domain.effect_head_layout import (
     CREATED_OBJECT_SLOTS,
     CREATED_OBJECTS_WIDTH,
     CREATED_SLOT_WIDTH,
@@ -33,27 +31,28 @@ from effects.domain.effect_model import (
     GATE_INDEX,
     PER_ENTITY_FIELDS,
     PER_ENTITY_WIDTH,
-    VERDICT_BITS,
     VERDICT_WIDTH,
     ZONE_OUTCOMES,
-    EffectModel,
-    EffectModelConfig,
-    EntityTargetBatch,
+    EntityFieldTargets,
     FieldGroup,
     FieldScope,
     FieldSpec,
     FieldType,
     active_fields,
+)
+from effects.domain.effect_losses import (
     api_loss,
-    collate_surfaces,
-    constant_predictor_floor,
-    constant_predictor_outputs,
     created_objects_loss,
     field_loss,
     mlm_loss,
     per_entity_loss,
-    scatter_e_rows,
     verdict_loss,
+)
+from effects.domain.effect_model import EffectModel, EffectModelConfig
+from effects.domain.loss_floor import (
+    EntityTargetBatch,
+    constant_predictor_floor,
+    constant_predictor_outputs,
 )
 from effects.domain.records import CombatPayload, RecordKind
 from effects.domain.sampling import (
@@ -64,6 +63,7 @@ from effects.domain.sampling import (
     SAMPLING_CLASSES,
 )
 from effects.domain.state_snapshot import COLORS
+from effects.domain.surface_collation import collate_surfaces, scatter_e_rows
 
 _CONFIG = EffectModelConfig(
     global_features=8, act_features=6, player_features=10, card_features=12,
@@ -103,10 +103,6 @@ def _surface(batch: int = 2, slots: int = 6):
 
 
 class TestFieldLayout:
-    def test_the_gate_is_the_first_output(self):
-        assert GATE_INDEX == 0
-        assert min(start for start, _ in FIELD_SLICES.values()) == 1
-
     def test_field_slices_tile_the_head_without_gaps_or_overlap(self):
         ordered = sorted(FIELD_SLICES.values())
         assert ordered[0][0] == 1
@@ -229,20 +225,6 @@ class TestTrunkAndHeads:
         hidden = model(**_surface())
         assert model.verdict(hidden).shape == (2, VERDICT_WIDTH)
 
-    def test_created_object_slots_are_uniform_with_one_overflow_flag(self):
-        assert CREATED_OBJECTS_WIDTH == (
-            CREATED_OBJECT_SLOTS * CREATED_SLOT_WIDTH + 1
-        )
-        assert CREATED_OBJECT_SLOTS == 4
-
-    def test_a_created_object_slot_carries_script_id_and_characteristics(self):
-        # present + scripted + count, then P/T and the characteristic flags.
-        assert CREATED_SLOT_WIDTH == 3 + 2 + len(CARD_TYPES) + len(OVERLAY_KEYWORDS)
-
-    def test_the_verdict_head_carries_bits_cost_and_the_trigger_flag(self):
-        assert VERDICT_WIDTH == len(VERDICT_BITS) + len(COLORS) + 1
-
-
 class TestTrainingOnlyHeads:
     def test_the_auxiliaries_exist_when_configured(self, model):
         assert model.mlm_head is not None
@@ -275,7 +257,7 @@ class TestLosses:
     def test_a_conditional_field_contributes_nothing_where_the_gate_is_off(self):
         outputs = self._outputs()
         entity_mask = torch.ones(2, 3)
-        targets = {"damage_taken": torch.zeros(2, 3)}
+        targets = EntityFieldTargets.everywhere({"damage_taken": torch.zeros(2, 3)})
         fields = (FIELDS_BY_NAME["damage_taken"],)
         off = per_entity_loss(
             outputs, torch.zeros(2, 3), targets, entity_mask, fields=fields,
@@ -342,7 +324,7 @@ class TestLosses:
         count, so a two-record batch printed fields summing to twice its loss.
         """
         outputs = self._outputs()
-        targets = {"damage_taken": torch.ones(2, 3)}
+        targets = EntityFieldTargets.everywhere({"damage_taken": torch.ones(2, 3)})
         fields = (FIELDS_BY_NAME["damage_taken"],)
         total, parts = per_entity_loss(
             outputs, torch.ones(2, 3), targets, torch.ones(2, 3),
@@ -382,7 +364,7 @@ class TestLosses:
     def test_the_count_loss_is_nonnegative_at_its_optimum(self):
         """`full=True` adds the Stirling term, so a perfect prediction scores ~0
         instead of k - k ln k, which is -306 for a target of 88 (FR-081)."""
-        from effects.domain.effect_model import _poisson
+        from effects.domain.effect_losses import _poisson
         target = torch.tensor([88.0, 3.0, 1.0])
         loss = _poisson(torch.log(target), target)
         assert loss.item() >= 0.0
@@ -462,8 +444,8 @@ class TestLosses:
         targets = torch.tensor([3, 7])
         right = torch.full((2, 32), -10.0)
         right[0, 3] = right[1, 7] = 10.0
-        assert float(mlm_loss(right, targets)) < 1e-3
-        assert float(mlm_loss(torch.zeros(2, 32), targets)) > 1.0
+        assert float(mlm_loss(right, targets, rows=1)) < 1e-3
+        assert float(mlm_loss(torch.zeros(2, 32), targets, rows=1)) > 1.0
 
     def test_api_loss_accepts_either_target_alone(self):
         types = api_loss(torch.randn(2, 5), torch.tensor([0, 1]), None, None)
@@ -545,10 +527,10 @@ class TestConstantPredictorFloor:
         gate = torch.tensor(gate, dtype=torch.float32)
         return EntityTargetBatch(
             gate=gate,
-            fields={
+            fields=EntityFieldTargets.everywhere({
                 name: torch.tensor(value, dtype=torch.float32)
                 for name, value in fields.items()
-            },
+            }),
             mask=torch.ones_like(gate) if mask is None
             else torch.tensor(mask, dtype=torch.float32),
         )
@@ -655,10 +637,10 @@ class TestDegenerateFields:
         gate = torch.tensor(gate, dtype=torch.float32)
         return EntityTargetBatch(
             gate=gate,
-            fields={
+            fields=EntityFieldTargets.everywhere({
                 name: torch.tensor(value, dtype=torch.float32)
                 for name, value in fields.items()
-            },
+            }),
             mask=torch.ones_like(gate),
         )
 
@@ -823,10 +805,7 @@ class TestCollateSurfaces:
                 slots.append(Slot(
                     kind=kind, position=position, features=features, e=e,
                 ))
-            surfaces.append(EffectHeadInput(
-                slots=tuple(slots), record_kind=RecordKind.RESOLUTION,
-                actor_player="P0",
-            ))
+            surfaces.append(EffectHeadInput(slots=tuple(slots)))
         self._assert_same(surfaces, e_dim=e_dim, widths=widths)
 
     def test_an_empty_batch_keeps_its_shapes(self):
@@ -837,7 +816,7 @@ class TestGen2Heads:
     """The value head, the option-kind embedding, and the wired losses."""
 
     def test_the_value_head_reads_e_and_is_training_only(self, model):
-        from effects.domain.effect_model import VALUE_WIDTH
+        from effects.domain.effect_head_layout import VALUE_WIDTH
 
         assert model.value_head(torch.randn(3, _CONFIG.e_dim)).shape == (3, VALUE_WIDTH)
         assert "value_head" in EffectModel.TRAINING_ONLY_HEADS
@@ -880,7 +859,8 @@ class TestGen2Heads:
         )
 
     def test_the_value_loss_skips_masked_targets(self):
-        from effects.domain.effect_model import VALUE_WIDTH, value_loss
+        from effects.domain.effect_head_layout import VALUE_WIDTH
+        from effects.domain.effect_losses import value_loss
         from effects.domain.value_targets import VALUE_TARGETS
 
         prediction = torch.zeros(2, VALUE_WIDTH)
@@ -890,7 +870,8 @@ class TestGen2Heads:
         assert float(value_loss(prediction, target, ~none)) > 0.0
 
     def test_at_least_bits_read_the_magnitude(self):
-        from effects.domain.effect_model import AT_LEAST_STEPS, at_least_targets
+        from effects.domain.effect_head_layout import AT_LEAST_STEPS
+        from effects.domain.effect_losses import at_least_targets
 
         bits = at_least_targets(torch.tensor([0.0, 3.0, -2.0, 45.0]))
         assert bits.shape == (4, AT_LEAST_STEPS)
@@ -902,13 +883,13 @@ class TestGen2Heads:
     def test_the_at_least_steps_the_thermometer_and_the_cap_agree(self):
         # One scale on both sides of a comparison: the board's thermometer, the
         # value head's at-least bits and the magnitude every amount is scored at.
-        from effects.domain.effect_head_input import THERMOMETER_STEPS
-        from effects.domain.effect_model import AT_LEAST_STEPS, MAGNITUDE_CAP
+        from effects.domain.effect_head_input import MAGNITUDE_CAP, THERMOMETER_STEPS
+        from effects.domain.effect_head_layout import AT_LEAST_STEPS
 
         assert THERMOMETER_STEPS == AT_LEAST_STEPS == MAGNITUDE_CAP
 
     def test_every_amount_has_an_at_least_block_and_no_cost_flag_does(self):
-        from effects.domain.effect_model import (
+        from effects.domain.effect_head_layout import (
             AT_LEAST_SLICES,
             AT_LEAST_STEPS,
             VALUE_SLICES,
@@ -924,12 +905,8 @@ class TestGen2Heads:
         assert VALUE_WIDTH == first + len(amounts) * AT_LEAST_STEPS
 
     def test_the_value_loss_scores_the_at_least_bits(self):
-        from effects.domain.effect_model import (
-            AT_LEAST_SLICES,
-            VALUE_WIDTH,
-            at_least_targets,
-            value_loss,
-        )
+        from effects.domain.effect_head_layout import AT_LEAST_SLICES, VALUE_WIDTH
+        from effects.domain.effect_losses import at_least_targets, value_loss
         from effects.domain.value_targets import VALUE_TARGET_NAMES
 
         damage = VALUE_TARGET_NAMES.index("damage")
@@ -998,7 +975,7 @@ class TestHostPickedRowsMatchBooleanMasks:
     be exactly the loss the boolean-mask selection gave."""
 
     def _targets(self, generator, batch, entities):
-        from effects.domain.effect_model import FIELD_SLICES, PER_ENTITY_FIELDS, FieldType
+        from effects.domain.effect_head_layout import FIELD_SLICES, PER_ENTITY_FIELDS, FieldType
 
         out = {}
         for spec in PER_ENTITY_FIELDS:
@@ -1017,10 +994,11 @@ class TestHostPickedRowsMatchBooleanMasks:
                 case FieldType.CATEGORICAL:
                     out[spec.name] = torch.randint(
                         0, spec.arity, (batch, entities), generator=generator)
-        return PER_ENTITY_FIELDS, out
+        return PER_ENTITY_FIELDS, EntityFieldTargets.everywhere(out)
 
     def _reference(self, outputs, gate_target, field_targets, entity_mask, fields):
-        from effects.domain.effect_model import FIELD_SLICES, GATE_INDEX, field_loss
+        from effects.domain.effect_head_layout import FIELD_SLICES
+        from effects.domain.effect_losses import field_loss
 
         mask = entity_mask.bool()
         total = torch.nn.functional.binary_cross_entropy_with_logits(
@@ -1032,7 +1010,7 @@ class TestHostPickedRowsMatchBooleanMasks:
             if affected.any():
                 total = total + field_loss(
                     spec, outputs[..., start:end][affected],
-                    field_targets[spec.name][affected],
+                    field_targets.values[spec.name][affected],
                 )
         return total / outputs.shape[0]
 
@@ -1057,12 +1035,8 @@ class TestHostPickedRowsMatchBooleanMasks:
         assert torch.allclose(got, expected)
 
     def test_created_objects_and_verdict_losses_are_unchanged(self):
-        from effects.domain.effect_model import (
-            CREATED_OBJECTS_WIDTH,
-            VERDICT_WIDTH,
-            created_objects_loss,
-            verdict_loss,
-        )
+        from effects.domain.effect_head_layout import CREATED_OBJECTS_WIDTH, VERDICT_WIDTH
+        from effects.domain.effect_losses import created_objects_loss, verdict_loss
 
         generator = torch.Generator().manual_seed(13)
         prediction = torch.randn(5, CREATED_OBJECTS_WIDTH, generator=generator)
@@ -1093,14 +1067,14 @@ class TestMagnitudeCap:
     """
 
     def test_a_count_above_the_cap_scores_as_the_cap(self):
-        from effects.domain.effect_model import MAGNITUDE_CAP
+        from effects.domain.effect_head_input import MAGNITUDE_CAP
         spec = FIELDS_BY_NAME["damage_taken"]
         prediction = torch.zeros(1, 1)
         assert field_loss(spec, prediction, torch.tensor([2_000_000.0])) == \
             field_loss(spec, prediction, torch.tensor([MAGNITUDE_CAP]))
 
     def test_a_signed_delta_keeps_its_direction_and_caps_its_size(self):
-        from effects.domain.effect_model import MAGNITUDE_CAP
+        from effects.domain.effect_head_input import MAGNITUDE_CAP
         spec = FIELDS_BY_NAME["power_delta"]
         prediction = torch.zeros(1, 4)
         for sign in (1.0, -1.0):
@@ -1108,12 +1082,14 @@ class TestMagnitudeCap:
                 field_loss(spec, prediction, torch.tensor([sign * MAGNITUDE_CAP]))
 
     def test_the_floor_is_computed_over_capped_targets(self):
-        from effects.domain.effect_model import MAGNITUDE_CAP
+        from effects.domain.effect_head_input import MAGNITUDE_CAP
 
         def floor(value):
             batch = EntityTargetBatch(
                 gate=torch.ones(1, 2),
-                fields={"damage_taken": torch.tensor([[2.0, value]])},
+                fields=EntityFieldTargets.everywhere(
+                    {"damage_taken": torch.tensor([[2.0, value]])},
+                ),
                 mask=torch.ones(1, 2),
             )
             return constant_predictor_outputs(
@@ -1125,8 +1101,67 @@ class TestMagnitudeCap:
     def test_the_evaluation_deviance_caps_the_observed_amount(self):
         import numpy as np
 
-        from effects.domain.effect_model import MAGNITUDE_CAP
+        from effects.domain.effect_head_input import MAGNITUDE_CAP
         from effects.domain.gate_metrics import poisson_deviance
         predicted = np.array([3.0, 5.0])
         assert poisson_deviance(predicted, np.array([1.0, 2_000_000.0])) == \
             poisson_deviance(predicted, np.array([1.0, MAGNITUDE_CAP]))
+
+
+class TestCountTargetsAreNonnegative:
+    """A count below zero has no Poisson likelihood (FR-080, FR-081).
+
+    ``damage_taken`` is decremented by a healing event, so a heal with no
+    damage before it is a negative count, and a negative target makes the
+    Poisson NLL unbounded below: the head could lower the loss without limit by
+    raising its rate.
+    """
+
+    def test_a_negative_count_scores_as_zero(self):
+        spec = FIELDS_BY_NAME["damage_taken"]
+        for log_rate in (-2.0, 0.0, 3.0):
+            prediction = torch.full((1, 1), log_rate)
+            assert field_loss(spec, prediction, torch.tensor([-3.0])) == \
+                field_loss(spec, prediction, torch.tensor([0.0]))
+
+    def test_the_floor_reads_a_negative_count_as_zero(self):
+        def floor(value):
+            batch = EntityTargetBatch(
+                gate=torch.ones(1, 2),
+                fields=EntityFieldTargets.everywhere(
+                    {"damage_taken": torch.tensor([[2.0, value]])},
+                ),
+                mask=torch.ones(1, 2),
+            )
+            return constant_predictor_outputs(
+                [batch], fields=(FIELDS_BY_NAME["damage_taken"],),
+            )
+
+        assert torch.equal(floor(-5.0), floor(0.0))
+
+
+class TestOneReductionPolicy:
+    """Every head's term sums each row's targets and averages over rows.
+
+    A row is the head's unit — a record for the per-entity, created-objects and
+    verdict heads, an encoded text for the value, script-API and MLM heads — so
+    a head's weight flag scales the same kind of number whichever head it is.
+    """
+
+    def test_the_mlm_term_sums_a_texts_masked_tokens_and_averages_over_texts(self):
+        logits = torch.zeros(6, 32)
+        targets = torch.zeros(6, dtype=torch.long)
+        per_token = math.log(32)
+        # Six masked tokens over three texts: two tokens' loss per text.
+        assert float(mlm_loss(logits, targets, rows=3)) == pytest.approx(2 * per_token)
+
+    def test_the_api_keys_term_sums_a_texts_keys(self):
+        keys = 1245
+        loss = api_loss(None, None, torch.zeros(4, keys), torch.zeros(4, keys))
+        assert float(loss) == pytest.approx(keys * math.log(2), rel=1e-5)
+
+    def test_the_api_types_term_averages_over_every_text(self):
+        """A text with no API type is a row with nothing to score, not one left out."""
+        logits = torch.zeros(4, 5)
+        loss = api_loss(logits, torch.tensor([0, -1, -1, -1]), None, None)
+        assert float(loss) == pytest.approx(math.log(5) / 4, rel=1e-5)

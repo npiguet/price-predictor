@@ -158,16 +158,13 @@ def _phase_in(phase: str | None, layout: str | None) -> str | None:
 def _positions(vocabulary: tuple[str, ...]) -> dict[str, int]:
     """``normalized member -> its slot``, built once per vocabulary.
 
-    The one-hots used to lower every member of the vocabulary on every call,
-    and the multi-hot lowered them twice — a vocabulary scan per feature,
-    twenty-seven of them for the overlay keywords alone, a million times over
-    a four-shard run. The vocabularies are checked-in constants, so the scan
-    is done once here and every call is a dict lookup per value present.
+    The vocabularies are checked-in constants, so normalizing them is done once
+    here and every feature is a dict lookup per value present, rather than a
+    scan of the vocabulary per feature — twenty-seven of them for the overlay
+    keywords alone, on every slot of every step.
 
-    First occurrence wins, which is what :func:`_one_hot` did when it returned
-    at its first match; no vocabulary has two members that lower to the same
-    string, and one that did would have meant different things to the two
-    helpers before this as well.
+    First occurrence wins; no vocabulary has two members that normalize to the
+    same string.
     """
     positions: dict[str, int] = {}
     for index, member in enumerate(vocabulary):
@@ -269,18 +266,8 @@ class EffectHeadInput:
     """The full token surface for one record."""
 
     slots: tuple[Slot, ...]
-    record_kind: RecordKind
-    actor_player: str
-    #: Index into ``slots`` of the ``[ACT]`` token, always 1.
-    act_index: int = 1
     #: Slot indices of the per-entity head's targets: every CARD and PLAYER.
     entity_slots: tuple[int, ...] = field(default_factory=tuple)
-
-    def positions(self) -> tuple[int, ...]:
-        return tuple(slot.position for slot in self.slots)
-
-    def of_kind(self, kind: SlotKind) -> tuple[Slot, ...]:
-        return tuple(slot for slot in self.slots if slot.kind is kind)
 
 
 # ── feature builders ────────────────────────────────────────────────────
@@ -317,6 +304,15 @@ def global_features(
         _PLAYABILITY_SUBKINDS,
     )
     return tuple(out)
+
+
+#: Width of the record-kind flags that end every ``[GLOBAL]`` slot: the kind,
+#: moment and subkind one-hots, each with its trailing "other/absent" slot.
+#: The ``no-state`` baseline keeps exactly these (FR-094).
+KIND_FLAG_WIDTH = len(_RECORD_KINDS) + len(_MOMENTS) + len(_PLAYABILITY_SUBKINDS) + 3
+
+#: The ``[ACT]`` slot's index in every surface: ``[GLOBAL]`` is first, then it.
+ACT_SLOT = 1
 
 
 def act_features(record: EffectRecord) -> tuple[float, ...]:
@@ -643,12 +639,7 @@ def build_effect_head_input(
             ),
         )
 
-    return EffectHeadInput(
-        slots=tuple(slots),
-        record_kind=record.kind,
-        actor_player=record.actor_player,
-        entity_slots=tuple(entity_slots),
-    )
+    return EffectHeadInput(slots=tuple(slots), entity_slots=tuple(entity_slots))
 
 
 def _entity_block(

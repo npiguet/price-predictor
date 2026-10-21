@@ -157,7 +157,7 @@ def single_block(record, keywords_of) -> tuple[str, str] | None:
     (``KeywordResolver.keywords_of``), so a printed keyword disqualifies as well as a
     granted one.
     """
-    from effects.domain.effect_model import ZONE_OUTCOMES
+    from effects.domain.effect_head_layout import ZONE_OUTCOMES
     from effects.domain.effect_targets import derive_targets
     from effects.domain.records import CombatPayload, RecordKind
 

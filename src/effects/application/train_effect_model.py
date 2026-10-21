@@ -17,9 +17,9 @@ enumerates that split; this module reads it.
 **Rarity weighting counts games, not records.** One long game can produce
 hundreds of records of one ability; weighting by records would make that ability
 look well-observed when it has been seen in one board state. The weights feed a
-weighted shuffle *without replacement* over the resident shard (FR-086): the
-per-batch class draw is gone, because a sixteen-record shard resampled with
-replacement was replayed 640 times.
+weighted shuffle *without replacement* over the resident shard (FR-086) rather
+than a per-batch class draw with replacement, which replays a small shard's few
+records many times over within one epoch.
 """
 
 from __future__ import annotations
@@ -61,12 +61,9 @@ RANDOM_SEED = 42
 #: many different shards those steps are spread across. Raising it costs only
 #: the per-shard load — about a third of a second against a 45-minute epoch —
 #: so the ceiling is how thinly a shard can be sampled and still be worth
-#: opening, not time.
-#:
-#: The previous value of 18 was correct for the corpus it was written against
-#: (701 raw shards, covered once by 40 epochs) and silently wrong for the one
-#: ``build-corpus`` writes, which is 3,194. Eighteen an epoch reads 0.6% of
-#: that, and a run that early-stops at epoch 9 has seen 5% of it.
+#: opening, not time. It scales with the shard count ``build-corpus`` writes:
+#: an epoch that reads a sliver of the corpus, and a run that early-stops having
+#: seen a few percent of it, measures one corner of the data.
 DEFAULT_SHARDS_PER_EPOCH = 256
 
 #: Worker processes preparing training steps (``--prefetch-workers``). Three,
@@ -135,7 +132,10 @@ def epoch_shards(
 
 
 def steps_per_shard(total: int, count: int) -> list[int]:
-    """``total`` optimizer steps divided as evenly as possible over ``count``.
+    """``total`` training steps divided as evenly as possible over ``count``.
+
+    A step is one batch's forward and backward; under ``--grad-accum`` several
+    of them make one optimizer step.
 
     Spread rather than piled onto the last shard: every shard in the epoch
     should contribute comparably, whatever the remainder.
@@ -192,10 +192,6 @@ def load_first_printings(printings_path: Path) -> dict[str, str]:
     return earliest
 
 
-class MissingSplitError(RuntimeError):
-    """A variant run was started without ``--split-from``."""
-
-
 class EmptyHoldoutError(RuntimeError):
     """The card-disjoint stratum holds no records."""
 
@@ -242,31 +238,6 @@ def check_holdout(
     return None
 
 
-def require_split_from(
-    variant: str, split_from: Path | None, *, corpus: str | None = None,
-) -> None:
-    """A variant run must inherit the split it is a baseline for (FR-091).
-
-    Without it the run would silently compute its own split and the comparison
-    would be between two models that saw different games — which looks like a
-    result and is not one. A shared ``--corpus`` satisfies this at least as
-    firmly as ``--split-from``: the manifest enumerates the split directly, so
-    every run reading the same curated dataset trains against the same games
-    (FR-146). ``--corpus`` is required on every run, so ``--split-from`` is
-    accepted alongside it only for a variant run's compatibility with an
-    older invocation; the split it would have computed is never read.
-    """
-    if variant != Variant.FULL and split_from is None and corpus is None:
-        raise MissingSplitError(
-            f"--variant {variant} requires --split-from PATH or --corpus DIR: "
-            "a baseline must inherit the split, vocabulary and "
-            "keyword-definition paths of the full run it baselines (via "
-            "--split-from), or read the same curated dataset (via --corpus) — "
-            "otherwise the comparison is between two models that saw "
-            "different games."
-        )
-
-
 # ── configuration ───────────────────────────────────────────────────────
 
 
@@ -282,7 +253,6 @@ class TrainEffectModelConfig:
         Path("output/cardsfolder/"), Path("output/tokenscripts/"),
     )
     variant_scripts: Path | None = None
-    split_from: Path | None = None
     #: ``--holdout-unit``: None takes the manifest's recorded unit (FR-041).
     holdout_unit: str | None = None
     vocab_path: Path = field(default_factory=lambda: Path("models/effects/vocab.txt"))
@@ -325,14 +295,12 @@ class TrainEffectModelConfig:
     api_weight: float = 0.05
     #: The epoch whose first step enables the sparse field group (FR-082).
     #: An epoch rather than a step so validation before and after the switch
-    #: scores different field sets at an epoch boundary, never inside one:
-    #: the first run enabled the group at shard 244 of epoch 2 and validated
-    #: twenty-five untrained heads at that epoch's end, a 134-loss spike.
+    #: scores different field sets at an epoch boundary, never inside one: a
+    #: switch mid-epoch validates the new fields' untrained heads at the
+    #: epoch's end, which reads as a loss spike.
     curriculum_epoch: int = 3
     batch_size: int = 32
     grad_accum: int = 1
-    context_cache: bool = False
-    cache_refresh: int = 500
     steps_per_epoch: int = 5_000
     shards_per_epoch: int = DEFAULT_SHARDS_PER_EPOCH
     #: Worker processes preparing each step's host half (``--prefetch-workers``);
@@ -419,7 +387,7 @@ def warmup_steps(*, epochs: int, steps_per_epoch: int) -> int:
 
 def fields_for_epoch(config: TrainEffectModelConfig, *, present: frozenset[str], epoch: int):
     """The field set every step of ``epoch`` trains with, and validation scores."""
-    from effects.domain.effect_model import active_fields
+    from effects.domain.effect_head_layout import active_fields
 
     return active_fields(
         present_classes=present,
@@ -603,19 +571,6 @@ def run(config: TrainEffectModelConfig) -> int:
     never loaded whole: the shard list is read here and the records behind it
     one shard at a time, inside the loop.
     """
-    require_split_from(config.variant, config.split_from, corpus=config.corpus)
-    if config.split_from is not None:
-        logger.warning(
-            "--split-from %s is accepted for compatibility with an older "
-            "invocation, but nothing is read from this path: the manifest of "
-            "--corpus is authoritative for the split.", config.split_from,
-        )
-    if config.context_cache:
-        logger.warning(
-            "--context-cache is accepted but not wired into the batcher in "
-            "this trainer; context abilities are re-encoded live."
-        )
-
     if config.corpus is None:
         logger.error(
             "train-effect-model reads a curated corpus: pass --corpus DIR, built "

@@ -267,7 +267,7 @@ def load_probe_model(
     return ProbeModel(
         checkpoint=checkpoint, encoder=runnable.encoder, model=runnable.model,
         batcher=runnable.batcher, fields=runnable.fields,
-        device=runnable.batcher.device, surface=surface_of(vocab),
+        device=runnable.batcher.materializer.device, surface=surface_of(vocab),
         e_dim=checkpoint.encoder_config.e_dim,
     )
 

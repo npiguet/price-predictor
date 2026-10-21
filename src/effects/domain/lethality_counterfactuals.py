@@ -33,10 +33,10 @@ from collections.abc import Callable
 from dataclasses import dataclass, replace
 from enum import Enum, StrEnum, auto
 
-from effects.domain.effect_model import ZONE_OUTCOMES
+from effects.domain.effect_head_layout import ZONE_OUTCOMES
 from effects.domain.effect_targets import EntityTargets
 from effects.domain.provenance import ProvenanceKey
-from effects.domain.value_targets import params, segments
+from effects.domain.value_targets import api_of, params, segments
 
 #: The tree a copy's acting key names, so its edited text never shares a key
 #: with the real line's.
@@ -88,6 +88,16 @@ def _shrink_lethal(toughness: int, damage: int, amount: int) -> bool:
     return left <= 0 or (damage > 0 and damage >= left)
 
 
+def _prose_damage(n: int, amount: int, symmetric: bool) -> list[tuple[str, str]]:
+    return [(rf"\b{n} damage\b", f"{amount} damage")]
+
+
+def _prose_shrink(n: int, amount: int, symmetric: bool) -> list[tuple[str, str]]:
+    if symmetric:
+        return [(rf"-{n}/-{n}\b", f"-{amount}/-{amount}")]
+    return [(rf"/-{n}\b", f"/-{amount}")]
+
+
 def _edit_damage(text: str, n: int, amount: int, symmetric: bool) -> str | None:
     edited, count = re.subn(rf"(NumDmg\$\s*){n}\b", rf"\g<1>{amount}", text)
     if not count:
@@ -120,18 +130,21 @@ class _KindRules:
     lethal: Callable[[int, int, int], bool]
     #: ``(text, old amount, new amount, symmetric) -> edited text or None``.
     edit: Callable[[str, int, int, bool], str | None]
+    #: ``(old amount, new amount, symmetric) -> (pattern, replacement)`` pairs
+    #: that edit the amount where the converted prose states it.
+    prose: Callable[[int, int, bool], list[tuple[str, str]]]
 
 
 _RULES: dict[EffectKind, _KindRules] = {
     EffectKind.DAMAGE: _KindRules(
         field="damage_taken", sign=1,
         hit_fields=frozenset({"damage_taken", "zone_outcome"}),
-        lethal=_damage_lethal, edit=_edit_damage,
+        lethal=_damage_lethal, edit=_edit_damage, prose=_prose_damage,
     ),
     EffectKind.SHRINK: _KindRules(
         field="toughness_delta", sign=-1,
         hit_fields=frozenset({"toughness_delta", "power_delta", "pt_duration", "zone_outcome"}),
-        lethal=_shrink_lethal, edit=_edit_shrink,
+        lethal=_shrink_lethal, edit=_edit_shrink, prose=_prose_shrink,
     ),
 }
 
@@ -153,11 +166,15 @@ class Counterfactual:
     """One copy: the edited record, its acting text, and its relabelled targets."""
 
     record: object
-    #: The copy's acting key and its edited text, which the batcher's memo
-    #: carries for this step; None where the text is the real line's.
+    #: The copy's acting key and its edited encoding text, which the batcher's
+    #: memo carries for this step; None where the text is the real line's.
     key: ProvenanceKey | None
     text: str | None
     targets: dict[str, EntityTargets]
+    #: The edited script, which the value head's targets read whatever the
+    #: surface encodes, and the prose's role spans moved with its edit.
+    script: str | None = None
+    role_spans: tuple = ()
 
 
 def lethal(kind: str, amount: int, entity) -> bool:
@@ -176,11 +193,6 @@ def _blocked(found: dict[str, str]) -> bool:
 
 def _literal(value: str | None) -> int | None:
     return int(value) if value is not None and _INT.match(value) else None
-
-
-def _api_of(found: dict[str, str]) -> str | None:
-    """The segment's effect API, whichever of the three heads names it."""
-    return found.get("SP") or found.get("AB") or found.get("DB")
 
 
 def _kind_of(api: str | None) -> EffectKind | None:
@@ -227,7 +239,7 @@ def _the_one_amount(line, record) -> _Amount | None:
         found = params(segment)
         if _blocked(found):
             return None
-        kind = _kind_of(_api_of(found))
+        kind = _kind_of(api_of(found))
         if kind is not None:
             found_amounts.append(_amount(kind, found, record.state.refs.x))
     if len(found_amounts) != 1 or found_amounts[0] is None:
@@ -324,8 +336,41 @@ def _subjects_hit(state, targets: dict[str, EntityTargets], found: _Amount, keyw
 
 
 def edit_text(text: str, qualified: Qualified, amount: int) -> str | None:
-    """The acting text with its literal amount set to ``amount``; None where it has none."""
+    """The acting script with its literal amount set to ``amount``; None where it has none."""
     return _RULES[qualified.kind].edit(text, qualified.amount, amount, qualified.symmetric)
+
+
+def edit_prose(prose: str, spans: tuple, qualified: Qualified, amount: int
+               ) -> tuple[str, tuple] | None:
+    """The converted prose with its amount set to ``amount``, and its role spans
+    moved with any edit that changed its length; None where the prose does not
+    state the amount, which leaves a copy with nothing it can edit.
+    """
+    edits: list[tuple[int, int, str]] = []
+    for pattern, replacement in _RULES[qualified.kind].prose(
+        qualified.amount, amount, qualified.symmetric,
+    ):
+        edits += [(m.start(), m.end(), replacement) for m in re.finditer(pattern, prose)]
+    if not edits:
+        return None
+    edits.sort()
+    parts, cursor = [], 0
+    for start, end, replacement in edits:
+        parts += [prose[cursor:start], replacement]
+        cursor = end
+    edited = "".join(parts) + prose[cursor:]
+
+    def moved(position: int, *, opening: bool) -> int:
+        return position + sum(
+            len(replacement) - (end - start) for start, end, replacement in edits
+            if (end <= position if opening else start < position)
+        )
+
+    return edited, tuple(
+        replace(span, start=moved(span.start, opening=True),
+                end=moved(span.end, opening=False))
+        for span in spans
+    )
 
 
 def _relabel(entry: EntityTargets, qualified: Qualified, amount: int, dies: bool
@@ -339,33 +384,45 @@ def _relabel(entry: EntityTargets, qualified: Qualified, amount: int, dies: bool
         fields["zone_outcome"] = _DIED
     else:
         fields.pop("zone_outcome", None)
-    return EntityTargets(affected=True, fields=fields)
+    return replace(entry, affected=True, fields=fields)
 
 
 def counterfactual(record, qualified: Qualified, targets: dict[str, EntityTargets],
-                   text: str | None, rng: random.Random, copy: int) -> Counterfactual:
+                   line, text: str | None, rng: random.Random, copy: int,
+                   ) -> Counterfactual:
     """One copy of ``record``: a new amount, a new toughness on one hit creature,
     and every creature and player the amount hit relabelled by the rule.
 
-    A literal amount is edited in the text, which then needs a key of its own; a
-    paid X is edited in the references, and where the text names neither the
-    amount stays as it was and only the toughness moves.
+    ``line`` is the acting sidecar line and ``text`` what the run encodes it
+    from: its script, or on the prose surface its converted prose. A literal
+    amount is edited in the script and in that text alike, which then needs a
+    key of its own; a paid X is edited in the references; and where the script
+    or the encoded text names neither, the amount stays as it was and only the
+    toughness moves.
     """
     low, high = DRAW_RANGE
     drawn = rng.randint(low, high)
     chosen = rng.choice(qualified.hit)
     toughness = rng.randint(low, high)
-    amount, key, edited = qualified.amount, None, None
+    amount, key, edited, script, spans = qualified.amount, None, None, None, ()
     refs = record.state.refs
     if qualified.stated is Stated.X:
         amount, refs = drawn, replace(refs, x=drawn)
     elif text:
-        edited = edit_text(text, qualified, drawn)
-        if edited is not None:
+        script = edit_text(line.script_text, qualified, drawn)
+        if text == line.script_text:
+            edited = script
+        else:
+            found = edit_prose(text, tuple(getattr(line, "role_spans", ())),
+                               qualified, drawn)
+            edited, spans = found if found is not None else (None, ())
+        if script is not None and edited is not None:
             amount = drawn
             original = record.ability[0]
             key = replace(original, script_file=(
                 f"{COUNTERFACTUAL_TREE}/{amount}/{original.script_file}"))
+        else:
+            edited, script, spans = None, None, ()
     entities = []
     for entity in record.state.entities:
         if entity.id == chosen:
@@ -388,5 +445,6 @@ def counterfactual(record, qualified: Qualified, targets: dict[str, EntityTarget
     for subject in qualified.players:
         fields = dict(targets[subject].fields)
         fields["life_delta"] = float(-amount)
-        relabelled[subject] = EntityTargets(affected=True, fields=fields)
-    return Counterfactual(record=copied, key=key, text=edited, targets=relabelled)
+        relabelled[subject] = replace(targets[subject], fields=fields)
+    return Counterfactual(record=copied, key=key, text=edited, targets=relabelled,
+                          script=script, role_spans=spans)

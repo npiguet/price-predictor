@@ -163,7 +163,7 @@ def qualifying_records(directories, count: int, shards: int, per_game: int, side
 def _gates(outputs, surface, row) -> dict[str, float]:
     import torch
 
-    from effects.domain.effect_model import GATE_INDEX
+    from effects.domain.effect_head_layout import GATE_INDEX
 
     return {slot.entity_id: float(torch.sigmoid(outputs[row, index, GATE_INDEX]))
             for index, slot in enumerate(surface.slots)

@@ -313,12 +313,12 @@ class TestLineLabels:
     ])
     def test_an_amount_is_capped_where_the_model_s_targets_are(
             self, script, line_kind, api, target, sign):
-        from effects.domain.effect_model import MAGNITUDE_CAP
+        from effects.domain.effect_head_input import MAGNITUDE_CAP
 
         assert labels.line_labels(script, line_kind, api)[target] == sign * MAGNITUDE_CAP
 
     def test_damage_per_mana_is_read_off_the_capped_damage(self):
-        from effects.domain.effect_model import MAGNITUDE_CAP
+        from effects.domain.effect_head_input import MAGNITUDE_CAP
 
         found = labels.line_labels(
             "AB$ DealDamage | Cost$ 2 R T | NumDmg$ 100 | ValidTgts$ Any", "activated",
@@ -327,7 +327,7 @@ class TestLineLabels:
         assert found["damage_per_mana"] == pytest.approx(MAGNITUDE_CAP / 3)
 
     def test_every_amount_label_is_within_the_cap_and_no_flag_moves(self):
-        from effects.domain.effect_model import MAGNITUDE_CAP
+        from effects.domain.effect_head_input import MAGNITUDE_CAP
 
         for line in _fixture_lines("gen1-sidecars"):
             found = labels.line_labels(line.script_text, line.line_kind,
@@ -393,7 +393,7 @@ class TestRecordLabels:
     def test_damage_taken_is_capped_where_the_model_s_targets_are(self, records, sidecars):
         from dataclasses import replace
 
-        from effects.domain.effect_model import MAGNITUDE_CAP
+        from effects.domain.effect_head_input import MAGNITUDE_CAP
         from effects.domain.event_schema import Event, EventType
         from effects.domain.records import Moment
 
@@ -442,7 +442,7 @@ class TestRecordLabels:
             self._producing(records, {"G": 1}, {"G": 1}, {"U": 3})) == 5.0
 
     def test_observed_mana_is_capped_where_the_model_s_targets_are(self, records):
-        from effects.domain.effect_model import MAGNITUDE_CAP
+        from effects.domain.effect_head_input import MAGNITUDE_CAP
 
         produced = self._producing(records, *({"G": 1},) * (int(MAGNITUDE_CAP) + 10))
         assert labels.mana_observed(produced) == MAGNITUDE_CAP
@@ -1008,7 +1008,7 @@ class TestRung3ReadsTheRightOutput:
     def _outputs(self, gate_logit: float, legal_logit: float):
         import torch
 
-        from effects.domain.effect_model import FIELD_SLICES, GATE_INDEX, PER_ENTITY_WIDTH
+        from effects.domain.effect_head_layout import FIELD_SLICES, GATE_INDEX, PER_ENTITY_WIDTH
 
         vector = torch.zeros(1, 1, PER_ENTITY_WIDTH)
         vector[0, 0, GATE_INDEX] = gate_logit
@@ -1030,7 +1030,7 @@ class TestRung3ReadsTheRightOutput:
         whether the creature was hit must not scale the head's amount."""
         import math
 
-        from effects.domain.effect_model import FIELD_SLICES
+        from effects.domain.effect_head_layout import FIELD_SLICES
 
         outputs = self._outputs(gate_logit=-3.0, legal_logit=0.0)
         outputs[0, 0, FIELD_SLICES["damage_taken"][0]] = math.log(3.0)
@@ -1142,7 +1142,7 @@ class TestCombatGrid:
         self, records, monkeypatch,
     ):
         import effects.domain.effect_targets as effect_targets
-        from effects.domain.effect_model import ZONE_OUTCOMES
+        from effects.domain.effect_head_layout import ZONE_OUTCOMES
 
         record, attacker, blocker = _one_on_one(records)
         a, _ = combat_grid.side_of(record, attacker)
@@ -1220,7 +1220,7 @@ class TestCombatGrid:
 
     def test_a_first_strike_step_record_never_qualifies(self, records, monkeypatch):
         import effects.domain.effect_targets as effect_targets
-        from effects.domain.effect_model import ZONE_OUTCOMES
+        from effects.domain.effect_head_layout import ZONE_OUTCOMES
 
         record, attacker, blocker = _one_on_one(records)
         a, _ = combat_grid.side_of(record, attacker)
@@ -1237,7 +1237,7 @@ class TestCombatGrid:
         self, records, monkeypatch,
     ):
         import effects.domain.effect_targets as effect_targets
-        from effects.domain.effect_model import ZONE_OUTCOMES
+        from effects.domain.effect_head_layout import ZONE_OUTCOMES
 
         record, attacker, blocker = _one_on_one(records)
         power = record.state.entity(attacker).pt.total[0]

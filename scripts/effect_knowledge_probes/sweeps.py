@@ -341,7 +341,7 @@ def run_sweep(name: str, probe_model, record, row: dict) -> list[dict]:
     """``[{value, prediction}]`` for one record of one sweep."""
     import torch
 
-    from effects.domain.effect_model import VERDICT_BITS
+    from effects.domain.effect_head_layout import VERDICT_BITS
 
     if name == "toughness":
         values = TOUGHNESS_VALUES

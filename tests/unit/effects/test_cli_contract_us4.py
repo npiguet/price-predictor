@@ -14,9 +14,9 @@ import pytest
 from effects.application.build_vocab import (
     DEFAULT_SCRIPT_VOCAB_PATH,
     DEFAULT_VOCAB_PATH,
-    SURFACE_SCRIPT,
     BuildVocabConfig,
 )
+from effects.domain.ability_tokenizer import SURFACE_SCRIPT
 from effects.infrastructure.cli import build_parser
 
 
@@ -108,19 +108,16 @@ class TestSurfaceFollowsTheVocabulary:
     def test_a_script_vocabulary_path_selects_the_script_surface(self):
         """The surface follows the loaded --vocab-path rather than a flag of
         its own, so the two cannot disagree."""
-        from effects.domain.ability_encoder import (
-            SURFACE_PROSE,
-            surface_of,
-        )
-        from effects.domain.ability_encoder import (
-            SURFACE_SCRIPT as ENCODER_SCRIPT,
-        )
+        from effects.domain.ability_encoder import surface_of
+        from effects.domain.ability_tokenizer import SURFACE_PROSE
+        from effects.domain.ability_tokenizer import SURFACE_SCRIPT as ENCODER_SCRIPT
 
         assert surface_of("models/effects/vocab-script.txt") == ENCODER_SCRIPT
         assert surface_of("models/effects/vocab.txt") == SURFACE_PROSE
 
     def test_an_unrecognised_path_reads_as_prose(self):
-        from effects.domain.ability_encoder import SURFACE_PROSE, surface_of
+        from effects.domain.ability_encoder import surface_of
+        from effects.domain.ability_tokenizer import SURFACE_PROSE
 
         assert surface_of("models/effects/anything.txt") == SURFACE_PROSE
 

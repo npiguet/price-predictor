@@ -191,3 +191,35 @@ def test_a_decisions_acting_text_is_its_candidates():
     )
 
     assert ability_text_of(record, sidecars, "script") == "DealDamage"
+
+
+def test_every_line_on_disk_is_a_known_text_spelled_as_the_join_spells_it(tmp_path):
+    """The identity baseline's index is built from these, so a text it looks
+    up at training time must be spelled exactly as ``resolve_key`` spells it."""
+    from effects.application.ability_text import known_texts, text_for_key
+    from effects.infrastructure.sidecar_io import sidecar_path_for
+
+    script = "cardsfolder/s/shock.txt"
+    txt = tmp_path / "cardsfolder" / "s" / "shock.txt"
+    txt.parent.mkdir(parents=True)
+    txt.write_text("name: shock\nspell[0]: deals 2 damage to any target.\n", encoding="utf-8")
+    keys = (ProvenanceKey(script, 0, "spell", 0), ProvenanceKey(script, 0, "static", 0))
+    write_sidecar(
+        ProvenanceSidecar(
+            card="shock", script_file=script,
+            lines=(
+                SidecarLine(line_index=1, line_kind="spell", provenance=(keys[0],),
+                            script_text="SP$ DealDamage | NumDmg$ 2"),
+                SidecarLine(line_index=1, line_kind="static", provenance=(keys[1],),
+                            script_text="SP$ DealDamage | NumDmg$ 2"),
+            ),
+        ),
+        sidecar_path_for(txt),
+    )
+    roots = {"cardsfolder": tmp_path / "cardsfolder"}
+    sidecars = SidecarCache(roots)
+
+    for surface in ("script", "prose"):
+        texts = known_texts(roots, surface)
+        assert texts == sorted(set(texts))
+        assert texts == sorted({text_for_key(key, sidecars, surface) for key in keys})

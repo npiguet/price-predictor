@@ -394,11 +394,8 @@ class TestVolumeCap:
 class TestPairingLoss:
     def test_a_variant_has_only_the_script_surface(self):
         """So it contributes no pairing term: there is no prose to pair with."""
-        from effects.domain.ability_encoder import (
-            SURFACE_PROSE,
-            SURFACE_SCRIPT,
-            encoding_text,
-        )
+        from effects.domain.ability_encoder import encoding_text
+        from effects.domain.ability_tokenizer import SURFACE_PROSE, SURFACE_SCRIPT
 
         class _Line:
             script_text = "NumDmg$ 7"
@@ -410,11 +407,8 @@ class TestPairingLoss:
         assert encoding_text(line, None, SURFACE_PROSE) == "NumDmg$ 7"
 
     def test_a_real_card_has_both_surfaces_and_can_pair(self):
-        from effects.domain.ability_encoder import (
-            SURFACE_PROSE,
-            SURFACE_SCRIPT,
-            encoding_text,
-        )
+        from effects.domain.ability_encoder import encoding_text
+        from effects.domain.ability_tokenizer import SURFACE_PROSE, SURFACE_SCRIPT
 
         class _Line:
             script_text = "NumDmg$ 3"

@@ -157,7 +157,7 @@ def outcome_signature(record) -> frozenset[tuple[str, bool]]:
     The import is local because ``effect_targets`` reads the head's field
     layout, which pulls in torch; this module is otherwise torch-free.
     """
-    from effects.domain.effect_model import ZONE_OUTCOMES
+    from effects.domain.effect_head_layout import ZONE_OUTCOMES
     from effects.domain.effect_targets import derive_targets
 
     pairs = set()

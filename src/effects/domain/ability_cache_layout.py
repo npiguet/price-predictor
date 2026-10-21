@@ -1,4 +1,4 @@
-"""The ability cache's on-disk layout and the card representation it feeds.
+"""The ability cache's on-disk layout.
 
 The cache is one ``float32`` array of shape ``(n_lines, e_dim)`` per source
 file, **row-aligned with that source's sidecar**: row *i* is the vector for
@@ -19,8 +19,6 @@ every ``.npz`` under ``output/cardsfolder/`` and would take this one with it.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from enum import IntEnum
 from pathlib import Path
 
 import numpy as np
@@ -47,6 +45,25 @@ def cache_path_for(
     stem = relative.stem
     suffix = CACHE_SUFFIX if variant == "full" else f".{variant}{CACHE_SUFFIX}"
     return Path(root) / relative.parent / f"{stem}{suffix}"
+
+
+def variant_of_cache_file(path: Path) -> str | None:
+    """The variant a cache file belongs to, as :func:`cache_path_for` named it.
+
+    ``<name>.{variant}.npz`` for a variant the store knows, ``<name>.npz`` for
+    ``full`` — whatever dots the source's own name holds — and None for a file
+    that is not a cache file at all.
+    """
+    from effects.domain.variants import VARIANTS
+
+    name = Path(path).name
+    if not name.endswith(CACHE_SUFFIX):
+        return None
+    stem = name[: -len(CACHE_SUFFIX)]
+    for variant in VARIANTS:
+        if variant != "full" and stem.endswith(f".{variant}"):
+            return variant
+    return "full"
 
 
 def validate_alignment(matrix: np.ndarray, sidecar: ProvenanceSidecar) -> None:
@@ -82,80 +99,3 @@ def pooled_card_vector(matrix: np.ndarray) -> np.ndarray:
     return np.concatenate(
         [matrix.mean(axis=0), matrix.max(axis=0)],
     ).astype(np.float32)
-
-
-# ── the downstream card representation (FR-105) ─────────────────────────
-
-
-class CardSlotKind(IntEnum):
-    """Slot kinds in a card's token representation."""
-
-    CARD = 0
-    ABILITY = 1
-    ALTERNATE = 2
-
-
-@dataclass(frozen=True, slots=True)
-class CardSlot:
-    """One token of a card's representation."""
-
-    kind: CardSlotKind
-    position: int
-    #: ``ABILITY`` slots: the cache row this vector came from.
-    row: int | None = None
-    face: int = 0
-    #: ``ALTERNATE`` slots: the value of the converted ``layout:`` line.
-    layout: str | None = None
-
-
-def card_slots(
-    lines_per_face: list[int], *, layout: str | None = None,
-) -> tuple[CardSlot, ...]:
-    """A card as ``[CARD] e e … [ALTERNATE] [CARD] e …``.
-
-    Args:
-        lines_per_face: how many ability rows each face contributes, in face
-            order.
-        layout: the converted ``layout:`` line's value, which is the authority
-            on the layout vocabulary — the separator carries it so a consumer
-            can tell a transform from a split from an adventure.
-
-    Position ids reset at each ``[CARD]`` and **continue across**
-    ``[ALTERNATE]``: only a card token restarts them, so a face boundary is a
-    tagged separator rather than a second card.
-    """
-    slots: list[CardSlot] = []
-    row = 0
-    position = 0
-    for face, count in enumerate(lines_per_face):
-        if face > 0:
-            slots.append(CardSlot(
-                kind=CardSlotKind.ALTERNATE, position=position, face=face,
-                layout=layout,
-            ))
-            position += 1
-        slots.append(CardSlot(kind=CardSlotKind.CARD, position=0, face=face))
-        position = 1
-        for _ in range(count):
-            slots.append(CardSlot(
-                kind=CardSlotKind.ABILITY, position=position, row=row, face=face,
-            ))
-            row += 1
-            position += 1
-    return tuple(slots)
-
-
-def read_layout_line(converted_text: str) -> str | None:
-    """The value of a converted file's ``layout:`` line, or None.
-
-    Single-faced cards have no such line, which is how a consumer tells one face
-    from many without counting.
-    """
-    for line in converted_text.splitlines():
-        if line.startswith("layout: "):
-            return line[len("layout: "):].strip()
-        if line.startswith("name: "):
-            # The layout line is the file's first, so a name line means there
-            # is none.
-            return None
-    return None

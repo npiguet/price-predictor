@@ -155,28 +155,29 @@ class TestPerRecordLosses:
 
         from effects.application.breakdowns import TOTAL
         from effects.application.gate_one import _record_losses
-        from effects.domain.effect_model import (
+        from effects.domain.effect_head_layout import (
             PER_ENTITY_FIELDS,
             PER_ENTITY_WIDTH,
+            EntityFieldTargets,
             FieldType,
-            per_entity_loss,
         )
+        from effects.domain.effect_losses import per_entity_loss
 
         torch.manual_seed(0)
         fields = PER_ENTITY_FIELDS
         outputs = torch.randn(2, 3, PER_ENTITY_WIDTH)
         gate = torch.tensor([[1.0, 0.0, 1.0], [0.0, 0.0, 0.0]])
         mask = torch.tensor([[1.0, 1.0, 1.0], [1.0, 1.0, 0.0]])
-        targets = {
+        targets = EntityFieldTargets.everywhere({
             spec.name: torch.zeros(
                 (2, 3, spec.arity) if spec.type is FieldType.MULTI_BINARY else (2, 3)
             )
             for spec in fields
-        }
+        })
         for row in range(2):
             expected, _ = per_entity_loss(
                 outputs[row : row + 1], gate[row : row + 1],
-                {k: v[row : row + 1] for k, v in targets.items()},
+                targets.select(slice(row, row + 1)),
                 mask[row : row + 1], fields=fields,
             )
             losses = _record_losses(row, outputs, gate, targets, mask, fields)
@@ -187,11 +188,16 @@ class TestPerRecordLosses:
 
         from effects.application.breakdowns import TOTAL
         from effects.application.gate_one import _record_losses
-        from effects.domain.effect_model import PER_ENTITY_FIELDS, PER_ENTITY_WIDTH
+        from effects.domain.effect_head_layout import (
+            PER_ENTITY_FIELDS,
+            PER_ENTITY_WIDTH,
+            EntityFieldTargets,
+        )
 
         outputs = torch.zeros(1, 2, PER_ENTITY_WIDTH)
         losses = _record_losses(
-            0, outputs, torch.zeros(1, 2), {}, torch.ones(1, 2), PER_ENTITY_FIELDS,
+            0, outputs, torch.zeros(1, 2), EntityFieldTargets({}, {}), torch.ones(1, 2),
+            PER_ENTITY_FIELDS,
         )
         assert set(losses) == {"gate", TOTAL}
 
@@ -204,14 +210,15 @@ class TestPerRecordLosses:
 
         from effects.application.breakdowns import TOTAL
         from effects.application.gate_one import _record_losses
-        from effects.domain.effect_model import (
+        from effects.domain.effect_head_layout import (
             FIELD_SLICES,
             GATE_INDEX,
             PER_ENTITY_FIELDS,
             PER_ENTITY_WIDTH,
+            EntityFieldTargets,
             FieldType,
-            field_loss,
         )
+        from effects.domain.effect_losses import field_loss
 
         generator = torch.Generator().manual_seed(3)
         fields = PER_ENTITY_FIELDS
@@ -235,7 +242,8 @@ class TestPerRecordLosses:
                     return torch.randint(0, 5, (3, 4), generator=generator)
             return torch.randint(0, 2, (3, 4), generator=generator)
 
-        targets = {spec.name: target(spec).float() for spec in fields}
+        values = {spec.name: target(spec).float() for spec in fields}
+        targets = EntityFieldTargets.everywhere(values)
         for row in range(3):
             real = mask[row].bool()
             affected = real & gate[row].bool()
@@ -247,7 +255,7 @@ class TestPerRecordLosses:
                     start, end = FIELD_SLICES[spec.name]
                     expected[spec.name] = float(field_loss(
                         spec, outputs[row, :, start:end][affected],
-                        targets[spec.name][row][affected],
+                        values[spec.name][row][affected],
                     ))
             losses = _record_losses(row, outputs, gate, targets, mask, fields)
             assert set(losses) == {*expected, TOTAL}
@@ -262,11 +270,12 @@ class TestMarginAccumulator:
     def _chunk(self, affected_damage: float):
         import torch
 
-        from effects.domain.effect_model import (
+        from effects.domain.effect_head_layout import (
             FIELD_SLICES,
             GATE_INDEX,
             PER_ENTITY_WIDTH,
             ZONE_OUTCOMES,
+            EntityFieldTargets,
         )
 
         gathered = torch.zeros(1, 2, PER_ENTITY_WIDTH)
@@ -276,17 +285,17 @@ class TestMarginAccumulator:
         gathered[0, 0, start + ZONE_OUTCOMES.index("died")] = 5.0
         damage, _ = FIELD_SLICES["damage_taken"]
         gathered[0, 0, damage] = torch.log(torch.tensor(affected_damage))
-        targets = {
+        targets = EntityFieldTargets.everywhere({
             "zone_outcome": torch.tensor(
                 [[float(ZONE_OUTCOMES.index("died")), 0.0]],
             ),
             "damage_taken": torch.tensor([[2.0, 0.0]]),
-        }
+        })
         return gathered, torch.tensor([[1.0, 0.0]]), targets, torch.ones(1, 2)
 
     def test_a_perfect_chunk_scores_perfectly(self):
         from effects.application.gate_one import MarginAccumulator
-        from effects.domain.effect_model import FIELDS_BY_NAME
+        from effects.domain.effect_head_layout import FIELDS_BY_NAME
 
         margins = MarginAccumulator(
             (FIELDS_BY_NAME["zone_outcome"], FIELDS_BY_NAME["damage_taken"]),

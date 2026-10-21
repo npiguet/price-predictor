@@ -159,3 +159,51 @@ def test_cryptic_commands_root_masks_amounts_and_its_draw_mode_reads_one():
     assert value_targets(root).get("damage") is None
     assert value_targets(modes[3]).get("cards_drawn") == 1
     assert value_targets(modes[0]).get("cards_drawn") == 0
+
+
+class TestStaticAndCounterAmounts:
+    """The parameters Forge actually writes, read the way Forge reads them (FR-058)."""
+
+    def test_an_anthem_reads_its_add_power_and_add_toughness(self):
+        """Glorious Anthem: a static's pump is AddPower$/AddToughness$, never NumAtt$."""
+        targets = value_targets(
+            "Mode$ Continuous | Affected$ Creature.YouCtrl | AddPower$ 1 | "
+            "AddToughness$ 1 | Description$ Creatures you control get +1/+1."
+        )
+        assert targets.get("power_change") == 1.0
+        assert targets.get("toughness_change") == 1.0
+
+    def test_a_variable_static_pump_is_masked(self):
+        targets = value_targets("Mode$ Continuous | Affected$ Creature | AddPower$ X")
+        assert targets.get("power_change") is None
+
+    def test_a_put_counter_reads_placed_and_a_remove_counter_reads_removed(self):
+        put = value_targets("AB$ PutCounter | Cost$ T | CounterType$ P1P1 | CounterNum$ 2")
+        remove = value_targets(
+            "AB$ RemoveCounter | Cost$ T | CounterType$ CHARGE | CounterNum$ 3"
+        )
+        assert put.get("counters_placed") == 2.0
+        assert put.get("counters_removed") == 0.0
+        assert remove.get("counters_placed") == 0.0
+        assert remove.get("counters_removed") == 3.0
+
+    def test_a_counter_api_without_a_count_moves_one_as_forge_does(self):
+        targets = value_targets("AB$ PutCounter | Cost$ T | CounterType$ P1P1")
+        assert targets.get("counters_placed") == 1.0
+
+    def test_a_draw_without_a_count_draws_one_as_forge_does(self):
+        assert value_targets("SP$ Draw | Defined$ You").get("cards_drawn") == 1.0
+
+    def test_moving_or_choosing_counters_masks_both_counter_targets(self):
+        for api in ("MoveCounter", "AddOrRemoveCounter"):
+            targets = value_targets(f"AB$ {api} | Cost$ T | CounterType$ P1P1 | CounterNum$ 1")
+            assert targets.get("counters_placed") is None, api
+            assert targets.get("counters_removed") is None, api
+
+    def test_a_count_on_another_api_is_not_a_counter_placed(self):
+        targets = value_targets("SP$ DealDamage | NumDmg$ 2 | CounterNum$ 4")
+        assert targets.get("counters_placed") == 0.0
+
+    def test_a_non_numeric_count_is_masked(self):
+        targets = value_targets("AB$ RemoveCounter | Cost$ T | CounterType$ Any | CounterNum$ All")
+        assert targets.get("counters_removed") is None

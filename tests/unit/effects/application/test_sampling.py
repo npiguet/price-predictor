@@ -185,20 +185,20 @@ class TestSampleWeightsRarityTable:
 
 
 class TestWeightsKeyByAbilityText:
-    """``TrainingLoop._weighted`` must key rarity by ability text, not record id.
+    """``StepPreparer._weighted`` must key rarity by ability text, not record id.
 
     A ``record_id`` is unique per record, so keying on it gives
     ``effective_games`` a count of exactly 1 for every key and every record in
     a pool the same weight — rarity weighting silently does nothing.
     """
 
-    def test_a_single_game_ability_outweighs_a_many_game_one(self):
-        from effects.application.train_effect_model import TrainEffectModelConfig
-        from effects.application.training_loop import TrainingLoop
+    def test_a_single_game_ability_outweighs_a_many_game_one(self, tmp_path):
+        from effects.application.ability_text import KeyResolver
         from effects.domain.provenance import ProvenanceKey, SidecarLine
         from tests.unit.effects.application.test_ability_text import (
             FakeSidecarCache,
         )
+        from tests.unit.effects.builders import make_preparer
 
         common_key = ProvenanceKey("cardsfolder/c/common.txt", 0, "keyword", 0)
         rare_key = ProvenanceKey("cardsfolder/r/rare.txt", 0, "keyword", 0)
@@ -221,13 +221,11 @@ class TestWeightsKeyByAbilityText:
         rare_records = [
             make_record(RecordKind.RESOLUTION, game_id="g-rare", ability=(rare_key,)),
         ]
-        loop = TrainingLoop(
-            TrainEffectModelConfig(),
-            split=CorpusSplit(), training_shards=[], validation_samples={},
-            holdout_permille=20, holdout_max_carriers=8,
-        )
+        preparer = make_preparer(tmp_path)
+        preparer.rarity = None
+        preparer.resolver = KeyResolver(sidecars, preparer.surface)
 
-        weights = loop._weighted([*common_records, *rare_records], sidecars)
+        weights = preparer._weighted([*common_records, *rare_records])
 
         assert weights[-1] > weights[0]
 

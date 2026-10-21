@@ -42,6 +42,18 @@ _MODEL_CONFIG = EffectModelConfig(
 )
 
 
+class _Cache:
+    """What ``encode-abilities`` wrote for one variant, read back as a consumer reads it."""
+
+    def __init__(self, root, variant: str) -> None:
+        self.root, self.variant = root, variant
+
+    def read(self, script_file: str) -> np.ndarray:
+        path = cache_path_for(script_file, root=self.root, variant=self.variant)
+        with np.load(path) as data:
+            return data[ARRAY_KEY]
+
+
 def _sidecar(script_file: str, n_lines: int = 2) -> ProvenanceSidecar:
     return ProvenanceSidecar(
         card=script_file.rsplit("/", 1)[-1].removesuffix(".txt"),
@@ -115,40 +127,15 @@ class TestRowAlignment:
     def test_a_source_gets_one_row_per_sidecar_line(self, corpus, tmp_path):
         config = _config(corpus, tmp_path)
         run(config)
-        store = AbilityCacheStore(config.output_root, variant="taxonomy")
+        store = _Cache(config.output_root, "taxonomy")
         assert store.read("cardsfolder/s/serra_angel.txt").shape == (3, E_DIM)
         assert store.read("tokenscripts/soldier.txt").shape == (1, E_DIM)
-
-    def test_a_row_resolves_from_its_provenance_key(self, corpus, tmp_path):
-        config = _config(corpus, tmp_path)
-        run(config)
-        store = AbilityCacheStore(config.output_root, variant="taxonomy")
-        sidecar = _sidecar("cardsfolder/s/serra_angel.txt", 3)
-        key = ProvenanceKey("cardsfolder/s/serra_angel.txt", 0, "static", 1)
-        vector = store.vector_for(key, sidecar)
-        np.testing.assert_allclose(
-            vector, store.read("cardsfolder/s/serra_angel.txt")[1],
-        )
 
     def test_rows_are_float32(self, corpus, tmp_path):
         config = _config(corpus, tmp_path)
         run(config)
-        store = AbilityCacheStore(config.output_root, variant="taxonomy")
+        store = _Cache(config.output_root, "taxonomy")
         assert store.read("cardsfolder/s/serra_angel.txt").dtype == np.float32
-
-    def test_a_dropped_key_resolves_to_no_vector(self, corpus, tmp_path):
-        config = _config(corpus, tmp_path)
-        run(config)
-        store = AbilityCacheStore(config.output_root, variant="taxonomy")
-        script = "cardsfolder/s/serra_angel.txt"
-        sidecar = ProvenanceSidecar(
-            card="x", script_file=script,
-            lines=_sidecar(script, 3).lines,
-            dropped_keys=(ProvenanceKey(script, 0, "spell", 0),),
-        )
-        assert store.vector_for(
-            ProvenanceKey(script, 0, "spell", 0), sidecar,
-        ) is None
 
 
 class TestTreeSubtrees:
@@ -232,12 +219,10 @@ class TestIdempotence:
     def test_a_second_run_produces_the_same_rows(self, corpus, tmp_path):
         config = _config(corpus, tmp_path)
         run(config)
-        store = AbilityCacheStore(config.output_root, variant="taxonomy")
+        store = _Cache(config.output_root, "taxonomy")
         first = store.read("cardsfolder/s/serra_angel.txt").copy()
         run(config)
-        second = AbilityCacheStore(
-            config.output_root, variant="taxonomy",
-        ).read("cardsfolder/s/serra_angel.txt")
+        second = _Cache(config.output_root, "taxonomy").read("cardsfolder/s/serra_angel.txt")
         np.testing.assert_array_equal(first, second)
 
     def test_the_summary_counts_what_it_wrote(self, corpus, tmp_path):
@@ -353,14 +338,14 @@ class TestTheRealEncoder:
         summary = run(trained)
         assert summary.sources == 1
         assert summary.rows == 3
-        store = AbilityCacheStore(trained.output_root, variant="full")
+        store = _Cache(trained.output_root, "full")
         assert store.read("cardsfolder/s/serra_angel.txt").shape == (3, E_DIM)
 
     def test_the_rows_are_not_all_the_same(self, trained):
         """A cache of one repeated vector would pass every shape check and
         carry no information."""
         run(trained)
-        rows = AbilityCacheStore(trained.output_root, variant="full").read(
+        rows = _Cache(trained.output_root, "full").read(
             "cardsfolder/s/serra_angel.txt"
         )
         assert not np.allclose(rows[0], rows[1]) or not np.allclose(
@@ -372,13 +357,9 @@ class TestTheRealEncoder:
         built without eval() would differ run to run and every consumer reads
         the cache rather than the model."""
         run(trained)
-        first = AbilityCacheStore(
-            trained.output_root, variant="full",
-        ).read("cardsfolder/s/serra_angel.txt").copy()
+        first = _Cache(trained.output_root, "full").read("cardsfolder/s/serra_angel.txt").copy()
         run(trained)
-        second = AbilityCacheStore(
-            trained.output_root, variant="full",
-        ).read("cardsfolder/s/serra_angel.txt")
+        second = _Cache(trained.output_root, "full").read("cardsfolder/s/serra_angel.txt")
         np.testing.assert_array_equal(first, second)
 
     def test_a_line_past_the_window_is_reported_by_its_key(self, trained, caplog):
@@ -398,6 +379,63 @@ class TestTheRealEncoder:
         with caplog.at_level("WARNING"):
             run(trained)
         assert "truncated" not in caplog.text
+
+
+class TestProseOfAVariant:
+    def test_a_variants_source_script_is_not_read_as_prose(self, tmp_path):
+        """The trainer encodes a variant from its script; the cache must too."""
+        from effects.application.encode_abilities import prose_of
+
+        source = tmp_path / "variant_bolt.txt"
+        source.write_text(
+            "Name:Variant Bolt\nA:SP$ DealDamage | NumDmg$ 4\n", encoding="utf-8",
+        )
+        variant = _sidecar("variant-scripts/variant_bolt.txt")
+        card = _sidecar("cardsfolder/v/variant_bolt.txt")
+        sidecar_path = tmp_path / "variant_bolt.provenance.json"
+        assert prose_of(variant, sidecar_path) == []
+        assert prose_of(card, sidecar_path) == source.read_text(encoding="utf-8").splitlines()
+
+
+class TestTheWithheldKeyword:
+    """The cache reads a withheld keyword the way training did: its definition
+    with the token dropped, never a token training never updated (FR-070)."""
+
+    def test_the_runner_encodes_the_keyword_as_its_expansion(self):
+        from effects.application.extract_keyword_definitions import KeywordDefinition
+        from effects.domain.ability_encoder import AbilityEncoder
+        from effects.domain.ability_tokenizer import AbilityTokenizer
+        from effects.infrastructure.ability_encoder_runner import AbilityEncoderRunner
+
+        words = ["[PAD]", "[UNK]", "cardname", "[MASK]", "[CLS]", "flying", "reach",
+                 "cant", "be", "blocked", "except", "by", "creatures", "with", "or"]
+        tokenizer = AbilityTokenizer(
+            {word: index for index, word in enumerate(words)},
+            {"Flying": KeywordDefinition(
+                keyword="Flying",
+                reminder_template="cant be blocked except by creatures with flying or reach",
+            )},
+        )
+        torch.manual_seed(0)
+        config = AbilityEncoderConfig(
+            vocab_size=len(words), e_dim=E_DIM, d_model=16, n_layers=1, n_heads=2,
+            ff_dim=32,
+        )
+        state = AbilityEncoder(config).state_dict()
+
+        def runner(withheld):
+            return AbilityEncoderRunner(
+                config, state, tokenizer, surface="prose",
+                device=torch.device("cpu"), withheld_keyword=withheld,
+            )
+
+        withheld = runner("Flying").encode_texts(["flying"])
+        expansion = runner(None).encode_texts(
+            ["cant be blocked except by creatures with or reach"],
+        )
+        token = runner(None).encode_texts(["flying"])
+        assert np.allclose(withheld, expansion, atol=1e-6)
+        assert not np.allclose(withheld, token, atol=1e-6)
 
 
 class TestTruncation:
@@ -425,15 +463,15 @@ class TestTruncation:
 
     def test_training_batchers_sharing_a_log_report_a_text_once(self, tokenizer):
         """The trainer hands one log to every per-batch batcher."""
-        from effects.application.surface_batching import SurfaceBatcher
         from effects.domain.ability_encoder import TruncationLog
         from effects.domain.variants import VariantMasks
+        from tests.unit.effects.builders import make_batcher
 
         reported = []
         log = TruncationLog(lambda text, keys: reported.append(text))
         long_text = " ".join(["x"] * 600)
         for _batch in range(3):
-            batcher = SurfaceBatcher(
+            batcher = make_batcher(
                 tokenizer=tokenizer, sidecars=None, masks=VariantMasks(),
                 surface="script", e_dim=4, widths={},
                 device=torch.device("cpu"), truncations=log,

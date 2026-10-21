@@ -13,6 +13,7 @@ import pytest
 import torch
 
 from effects.application import training_loop as loop_module
+from effects.application.step_preparation import StepPreparer
 from effects.application.train_effect_model import (
     EarlyStopper,
     TrainEffectModelConfig,
@@ -21,7 +22,6 @@ from effects.application.training_loop import StepLoss, TrainingLoop
 from effects.domain.records import CombatPayload, RecordKind
 from effects.domain.split import CorpusSplit
 from effects.infrastructure.record_io import write_shard
-from effects.infrastructure.sidecar_io import SidecarCache
 from tests.unit.effects.domain.conftest import (  # noqa: F401
     ability_key,
     make_record,
@@ -62,19 +62,18 @@ def run(tmp_path, make_record, monkeypatch):  # noqa: F811
     monkeypatch.setattr(loop_module, "AbilityEncoder", lambda config: encoder)
     monkeypatch.setattr(loop_module, "EffectModel", lambda config: model)
     monkeypatch.setattr(
-        TrainingLoop, "_build_tokenizer",
+        StepPreparer, "_build_tokenizer",
         lambda self: type("T", (), {"vocab_size": 8})(),
     )
-    monkeypatch.setattr(TrainingLoop, "_build_sidecars", lambda self: SidecarCache({}))
     # The script-API vocabulary is read off every real sidecar; none here.
     monkeypatch.setattr(TrainingLoop, "_script_vocabularies", lambda self: ([], []))
     monkeypatch.setattr(
-        TrainingLoop, "_feature_widths",
-        lambda self, records: dict.fromkeys(loop_module.SlotKind, 4),
+        loop_module, "feature_widths",
+        lambda records: dict.fromkeys(loop_module.SlotKind, 4),
     )
 
-    def loss_for(self, plan, *args, fields=None, **kwargs):
-        events.append(("loss", id(fields), model.training))
+    def device_loss(self, prepared, *args, **kwargs):
+        events.append(("loss", id(prepared["fields"]), model.training))
         loss = model.p.sum()
         return StepLoss(total=loss, shipped=loss, parts={}, terms={})
 
@@ -83,18 +82,20 @@ def run(tmp_path, make_record, monkeypatch):  # noqa: F811
         return 1.0
 
     def measure(records, enc, mdl, batcher, *, fields):
-        events.append(("measure", id(fields), batcher.keyword_expand_p))
+        events.append(("measure", id(fields), batcher.stager.keyword_expand_p))
         # The real one scores in eval mode and never switches back, which is
         # what the next epoch's first step has to survive.
         enc.eval()
         mdl.eval()
         return _Metrics()
 
-    monkeypatch.setattr(TrainingLoop, "_loss_for", loss_for)
-    # The step's host half reads real surfaces off real records; the plan
-    # stands in for what it would have prepared.
-    monkeypatch.setattr(TrainingLoop, "_training_heads", lambda self, model: frozenset())
-    monkeypatch.setattr(TrainingLoop, "_prepare_step", lambda self, plan, *a, **k: plan)
+    monkeypatch.setattr(TrainingLoop, "_device_loss", device_loss)
+    # The step's host half reads real surfaces off real records; what it is
+    # handed stands in for what it would have prepared.
+    monkeypatch.setattr(
+        StepPreparer, "prepare_step",
+        lambda self, plan, *a, fields=None, **k: {"fields": fields},
+    )
     monkeypatch.setattr(TrainingLoop, "_validate", validate)
     monkeypatch.setattr(loop_module, "measure", measure)
 

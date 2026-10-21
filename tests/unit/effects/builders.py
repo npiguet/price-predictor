@@ -160,3 +160,64 @@ class RawShardWriter:
 
     def close(self) -> None:
         self._flush()
+
+
+def slots_of_kind(surface, kind) -> tuple:
+    """A token surface's slots of one ``SlotKind``, in surface order."""
+    return tuple(slot for slot in surface.slots if slot.kind is kind)
+
+
+def make_preparer(
+    directory, *, seed: int = 0, api_types=(), param_keys=(), rarity=None, **config,
+):
+    """A ``StepPreparer`` over a vocabulary of the specials alone, for tests
+    about how it builds batchers rather than about what they read."""
+    from effects.application.step_preparation import PreparerSettings, StepPreparer
+    from effects.application.train_effect_model import TrainEffectModelConfig
+    from effects.domain.ability_tokenizer import SPECIAL_TOKENS
+    from effects.domain.split import CorpusSplit
+    from price_predictor.infrastructure.tokenizer_store import save_vocabulary
+
+    vocab = directory / "vocab-script.txt"
+    save_vocabulary({token: index for index, token in enumerate(SPECIAL_TOKENS)}, vocab)
+    settings = dict(
+        corpus="unused", vocab_path=vocab,
+        keyword_definitions=directory / "no-keyword-definitions.json",
+        cards_folders=(directory / "cardsfolder",),
+    )
+    settings.update(config)
+    return StepPreparer(PreparerSettings(
+        config=TrainEffectModelConfig(**settings), seed=seed, split=CorpusSplit(),
+        rarity={} if rarity is None else rarity, api_types=tuple(api_types),
+        param_keys=tuple(param_keys), widths={}, heads=frozenset(),
+    ))
+
+
+def make_batcher(
+    *, tokenizer=None, sidecars=None, masks=None, surface: str = "script",
+    e_dim: int = 4, widths=None, device=None, withhold_keyword=None,
+    keyword_expand_p: float = 0.0, context_dropout: float = 0.0, rng=None,
+    identity_table=None, noise=None, truncations=None, input_layout="gen-2",
+    resolver=None,
+):
+    """A ``SurfaceBatcher`` and its collaborators from one flat set of settings."""
+    import torch
+
+    from effects.application.ability_text import KeyResolver
+    from effects.application.surface_batching import Materializer, SurfaceBatcher
+    from effects.application.text_staging import TextStager
+    from effects.domain.variants import VariantMasks
+
+    masks = masks or VariantMasks()
+    return SurfaceBatcher(
+        stager=TextStager(
+            tokenizer=tokenizer, surface=surface, withhold_keyword=withhold_keyword,
+            keyword_expand_p=keyword_expand_p, truncations=truncations,
+        ),
+        resolver=resolver or KeyResolver(sidecars, surface),
+        masks=masks, e_dim=e_dim, widths=widths or {},
+        materializer=Materializer(
+            device or torch.device("cpu"), masks, identity_table, noise,
+        ),
+        context_dropout=context_dropout, rng=rng, input_layout=input_layout,
+    )

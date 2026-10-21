@@ -152,7 +152,7 @@ def qualifying_records(directories, count: int, shards: int, per_game: int, side
 def _affordable(outputs, verdict, surface, row) -> float:
     import torch
 
-    from effects.domain.effect_model import VERDICT_BITS
+    from effects.domain.effect_head_layout import VERDICT_BITS
 
     return float(torch.sigmoid(verdict[row, VERDICT_BITS.index("affordable")]))
 

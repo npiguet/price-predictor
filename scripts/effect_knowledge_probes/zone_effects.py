@@ -185,7 +185,7 @@ def report_counts(chosen, readings) -> None:
 
 
 def report_zones(chosen, readings) -> None:
-    from effects.domain.effect_model import ZONE_OUTCOMES
+    from effects.domain.effect_head_layout import ZONE_OUTCOMES
 
     stayed = ZONE_OUTCOMES.index("stayed")
     rows = defaultdict(lambda: {"right": [], "top": [], "instead": defaultdict(int)})

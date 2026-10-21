@@ -34,13 +34,8 @@ import torch
 from effects.application.breakdowns import TOTAL, RecordResult
 from effects.application.surface_batching import SurfaceBatcher
 from effects.domain.damage_step_keywords import KeywordResolver, keyword_of_line
-from effects.domain.effect_model import (
-    FIELDS_BY_NAME,
-    GATE_INDEX,
-    entity_target_tensors,
-    gather_entities,
-    per_entity_loss,
-)
+from effects.domain.effect_head_layout import FIELDS_BY_NAME, GATE_INDEX, EntityFieldTargets
+from effects.domain.effect_losses import per_entity_loss
 from effects.domain.effect_targets import derive_targets
 from effects.domain.evaluation_report import (
     CheckName,
@@ -65,6 +60,7 @@ from effects.domain.head_decoding import (
 from effects.domain.keyword_names import normalize_keyword
 from effects.domain.records import RecordKind, acting_keys
 from effects.domain.rule_families import rule_family
+from effects.domain.surface_collation import entity_target_tensors, gather_entities
 
 if TYPE_CHECKING:
     from effects.application.evaluation_context import EvaluationContext
@@ -223,7 +219,7 @@ def _forward(chunk, encoder, model, batcher: SurfaceBatcher, fields):
     ``gathered`` is the per-entity head's output at each target entity's slot,
     aligned column for column with the targets ``entity_target_tensors`` built.
     """
-    batch, surfaces = batcher.build(chunk, encoder)
+    batch, surfaces, _encoded = batcher.build(chunk, encoder)
     outputs = model.per_entity(model(**batch))
     targets = [derive_targets(record) for record in chunk]
     gate, field_targets, mask, index = entity_target_tensors(
@@ -253,13 +249,13 @@ class MarginAccumulator:
 
     def add(
         self, gathered: torch.Tensor, gate: torch.Tensor,
-        field_targets: dict[str, torch.Tensor], mask: torch.Tensor,
+        field_targets: EntityFieldTargets, mask: torch.Tensor,
     ) -> None:
         """Fold one chunk's gathered outputs and targets in.
 
         The gate is read over every real entity; zone and magnitude only over
-        the entities the gate's *target* marks affected, the ones those fields
-        are supervised on.
+        the entities the gate's *target* marks affected and whose record
+        supervises the field, the ones those fields are trained on.
         """
         real = mask.bool()
         self._gate_pred.append(
@@ -269,19 +265,21 @@ class MarginAccumulator:
 
         affected = real & gate.bool()
         if ZONE_OUTCOME in field_targets:
-            logits = field_outputs(gathered, FIELDS_BY_NAME[ZONE_OUTCOME])[affected]
+            scored = affected & field_targets.present[ZONE_OUTCOME]
+            logits = field_outputs(gathered, FIELDS_BY_NAME[ZONE_OUTCOME])[scored]
             if logits.numel():
                 self._zone_pred.append(logits.argmax(-1).numpy())
-                self._zone_true.append(field_targets[ZONE_OUTCOME][affected].numpy())
+                self._zone_true.append(field_targets.values[ZONE_OUTCOME][scored].numpy())
         for spec in self._magnitude_specs:
-            target = field_targets.get(spec.name)
+            target = field_targets.values.get(spec.name)
             if target is None:
                 continue
-            slice_ = field_outputs(gathered, spec)[affected]
+            scored = affected & field_targets.present[spec.name]
+            slice_ = field_outputs(gathered, spec)[scored]
             if not slice_.numel():
                 continue
             self._count_pred.append(expected_magnitude(spec, slice_).numpy())
-            self._count_true.append(np.abs(target[affected].numpy()))
+            self._count_true.append(np.abs(target[scored].numpy()))
 
     def metrics(self) -> GateOneMetrics:
         """The three margins over everything added; NaN where nothing was."""
@@ -296,22 +294,21 @@ class MarginAccumulator:
 
 def _record_losses(
     row: int, gathered: torch.Tensor, gate: torch.Tensor,
-    field_targets: dict[str, torch.Tensor], mask: torch.Tensor, fields,
+    field_targets: EntityFieldTargets, mask: torch.Tensor, fields,
 ) -> dict[str, float]:
     """One record's per-entity loss by field: ``per_entity_loss`` on it alone.
 
     The trainer's own loss over a batch of one, so the breakdowns cannot drift
     from what training minimized: the gate over every real entity, then each
-    field over the entities the gate's *target* marks affected. A field with no
-    affected entity is not supervised and is left out rather than reported as
-    zero. One record means the per-record normalization divides by one, so each
+    field over the affected entities its record supervises. A field with no
+    such entity is left out rather than reported as zero. One record means the per-record normalization divides by one, so each
     part is that record's raw sum. Read on the host, where the batch already
     is, so scoring a record costs no device synchronization.
     """
     rows = slice(row, row + 1)
     _total, losses = per_entity_loss(
         gathered[rows], gate[rows],
-        {name: target[rows] for name, target in field_targets.items()},
+        field_targets.select(rows),
         mask[rows], fields=fields, report_parts=True,
     )
     losses[TOTAL] = sum(losses.values())

@@ -25,10 +25,13 @@ from pathlib import Path
 
 import torch
 
+from effects.application.ability_text import KeyResolver
 from effects.application.surface_batching import (
-    IDENTITY_TABLE_SIZE,
+    IdentityTable,
+    Materializer,
     SurfaceBatcher,
 )
+from effects.application.text_staging import TextStager
 from effects.application.train_effect_model import RANDOM_SEED
 from effects.domain.ability_encoder import (
     AbilityEncoder,
@@ -45,7 +48,8 @@ from effects.domain.effect_head_input import (
     INPUT_LAYOUT_KEY,
     feature_widths,
 )
-from effects.domain.effect_model import EffectModel, FieldSpec, active_fields
+from effects.domain.effect_head_layout import FieldSpec, active_fields
+from effects.domain.effect_model import EffectModel
 from effects.domain.sampling import sampling_class
 from effects.domain.variants import variant_masks
 from effects.infrastructure.sidecar_io import SidecarCache, sidecar_roots
@@ -131,7 +135,7 @@ class LoadedModel:
     encoder: AbilityEncoder
     model: EffectModel
     tokenizer: AbilityTokenizer
-    identity_table: torch.nn.Embedding | None
+    identity_table: IdentityTable | None
     surface: str
     device: torch.device
     sidecars: SidecarCache
@@ -149,22 +153,24 @@ class LoadedModel:
         # arm trained before the layout was recorded, reads the earlier layout
         # bit for bit (FR-063c).
         layout = input_layout_of(checkpoint)
+        masks = variant_masks(checkpoint.variant)
         return SurfaceBatcher(
-            tokenizer=self.tokenizer,
-            sidecars=self.sidecars,
-            masks=variant_masks(checkpoint.variant),
-            surface=self.surface,
+            stager=TextStager(
+                tokenizer=self.tokenizer,
+                surface=self.surface,
+                withhold_keyword=checkpoint.provenance.withheld_keyword,
+                # Both are training-time augmentations. Sampling them at
+                # evaluation would make the gate's numbers depend on a coin flip.
+                keyword_expand_p=INFERENCE_KEYWORD_EXPAND_P,
+                truncations=TruncationLog(log_truncation(logger, "evaluation")),
+            ),
+            resolver=KeyResolver(self.sidecars, self.surface),
+            masks=masks,
             e_dim=checkpoint.encoder_config.e_dim,
             widths=feature_widths(records, layout=layout),
-            device=self.device,
-            withhold_keyword=checkpoint.provenance.withheld_keyword,
-            # Both are training-time augmentations. Sampling them at evaluation
-            # would make the gate's numbers depend on a coin flip.
-            keyword_expand_p=INFERENCE_KEYWORD_EXPAND_P,
+            materializer=Materializer(self.device, masks, self.identity_table),
             context_dropout=0.0,
             rng=random.Random(RANDOM_SEED),
-            identity_table=self.identity_table,
-            truncations=TruncationLog(log_truncation(logger, "evaluation")),
             input_layout=layout,
         )
 
@@ -230,25 +236,21 @@ def _load_weights(checkpoint, device) -> tuple[AbilityEncoder, EffectModel]:
     return encoder.eval(), model.eval()
 
 
-def _identity_table(checkpoint, device) -> torch.nn.Embedding | None:
+def _identity_table(checkpoint, device) -> IdentityTable | None:
     """The identity baseline's learned ``e`` table; None for any other variant."""
     if not variant_masks(checkpoint.variant).identity_embedding:
         return None
-    table = torch.nn.Embedding(
-        IDENTITY_TABLE_SIZE, checkpoint.encoder_config.e_dim,
-    ).to(device)
     saved = checkpoint.extra.get(IDENTITY_TABLE_KEY)
     if saved is not None:
-        table.load_state_dict(saved)
-    else:
-        logger.warning(
-            "The identity baseline at %s carries no embedding table, so "
-            "its e vectors are random rather than the ones it trained. "
-            "Gate 1's margin against it is not meaningful — retrain the "
-            "baseline with a build that saves the table.",
-            checkpoint.variant,
-        )
-    return table
+        return IdentityTable.from_state(saved).to(device)
+    logger.warning(
+        "The identity baseline at %s carries no embedding table, so "
+        "its e vectors are random rather than the ones it trained. "
+        "Gate 1's margin against it is not meaningful — retrain the "
+        "baseline with a build that saves the table.",
+        checkpoint.variant,
+    )
+    return IdentityTable((), checkpoint.encoder_config.e_dim).to(device)
 
 
 def evaluation_fields(records) -> tuple[FieldSpec, ...]:
