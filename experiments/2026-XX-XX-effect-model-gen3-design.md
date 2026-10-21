@@ -502,6 +502,14 @@ Gen-2's evasion grid becomes the measure: its protection rows extend to the othe
 
 The combat grid measures the result on blocks from the validation strata, which copies never touch.
 
+## The withheld keyword reaches training as its definition, so gen-3's zero-shot slice is the first that tests reading one
+
+**Every gen-2 arm deleted cascade from its input rather than expanding it.** `--withhold-keyword` is meant to keep the keyword's token out of training and replace each occurrence with its reminder text. The batcher removed the token before keyword expansion ran, and the flag that should have forced the expansion was never read. A cascade keyword line therefore reached the encoder as its `[CLS]` token alone. Evaluation builds its batches the same way, so the model never read cascade in any form.
+
+**Gen-2's zero-shot slice measured a keyword with no text, not a keyword read through its definition.** The slice compares the effect head's per-field results on records where cascade acts or sits on the board with the same fields for keywords that trained. With cascade's line empty, those records differ from the others by a missing ability rather than by an unfamiliar one. The slice says nothing about how a new set's keyword would be read, and it is not a baseline for gen-3's.
+
+**Gen-3 runs force-expand the withheld keyword wherever it appears.** The tokenizer's keyword expansion takes a set of keywords that always expand, as a keyword unknown to the vocabulary does, and the batcher passes it the withheld keyword in training and in evaluation (commit `a69231b`). The token survives only where the keyword has no definition to expand to, and the batcher drops it there. A run without `--withhold-keyword` takes exactly the draws it took before, so every other result stays comparable with gen-2's.
+
 ## Outcome
 
 To be filled in once gen-3 is designed and run.
