@@ -228,7 +228,7 @@ def score_keywords(
 
     encoder.eval()
     model.eval()
-    with torch.no_grad():
+    with torch.inference_mode():
         observations = _qualifying(records, rows, resolver, progress)
         for chunk in batched(observations, BATCH_OBSERVATIONS):
             _score_chunk(

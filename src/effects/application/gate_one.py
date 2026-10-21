@@ -129,7 +129,7 @@ def measure(
 
     encoder.eval()
     model.eval()
-    with torch.no_grad():
+    with torch.inference_mode():
         for start in range(0, len(records), BATCH_RECORDS):
             chunk = records[start : start + BATCH_RECORDS]
             gathered, gate, field_targets, mask = _forward(
