@@ -26,7 +26,6 @@ from dataclasses import dataclass
 
 import numpy as np
 import torch
-from torch.nn import functional
 
 from effects.application.breakdowns import TOTAL, RecordResult
 from effects.application.surface_batching import SurfaceBatcher
@@ -37,7 +36,7 @@ from effects.domain.effect_model import (
     GATE_INDEX,
     FieldType,
     entity_target_tensors,
-    field_loss,
+    per_entity_loss,
 )
 from effects.domain.effect_targets import derive_targets
 from effects.domain.gate_metrics import balanced_accuracy, f1_score, poisson_deviance
@@ -199,29 +198,22 @@ def _record_losses(
     row: int, gathered: torch.Tensor, gate: torch.Tensor,
     field_targets: dict[str, torch.Tensor], mask: torch.Tensor, fields,
 ) -> dict[str, float]:
-    """One record's per-entity loss by field, as ``per_entity_loss`` sums it.
+    """One record's per-entity loss by field: ``per_entity_loss`` on it alone.
 
-    The same terms the trainer's loss adds for this record alone: the gate over
-    every real entity, then each field over the entities the gate's *target*
-    marks affected. A field with no affected entity is not supervised here and
-    is left out rather than reported as zero. Read on the host, where the batch
-    already is, so scoring a record costs no device synchronization.
+    The trainer's own loss over a batch of one, so the breakdowns cannot drift
+    from what training minimized: the gate over every real entity, then each
+    field over the entities the gate's *target* marks affected. A field with no
+    affected entity is not supervised and is left out rather than reported as
+    zero. One record means the per-record normalization divides by one, so each
+    part is that record's raw sum. Read on the host, where the batch already
+    is, so scoring a record costs no device synchronization.
     """
-    real = mask[row].bool()
-    gate_loss = functional.binary_cross_entropy_with_logits(
-        gathered[row, :, GATE_INDEX][real], gate[row][real].float(), reduction="sum",
+    rows = slice(row, row + 1)
+    _total, losses = per_entity_loss(
+        gathered[rows], gate[rows],
+        {name: target[rows] for name, target in field_targets.items()},
+        mask[rows], fields=fields, report_parts=True,
     )
-    losses = {"gate": float(gate_loss)}
-    affected = real & gate[row].bool()
-    if bool(affected.any()):
-        for spec in fields:
-            target = field_targets.get(spec.name)
-            if target is None:
-                continue
-            start, end = FIELD_SLICES[spec.name]
-            losses[spec.name] = float(field_loss(
-                spec, gathered[row, :, start:end][affected], target[row][affected],
-            ))
     losses[TOTAL] = sum(losses.values())
     return losses
 
