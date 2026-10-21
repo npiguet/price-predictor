@@ -33,7 +33,7 @@ from __future__ import annotations
 
 import re
 from collections import Counter
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -159,7 +159,7 @@ class TokenKeyRemapper:
         return stem if stem in self.token_sidecars else None
 
     def resolve(
-        self, name: str, *, entity=None, printed_keys: Iterable[Mapping] = (),
+        self, name: str, *, entity=None,
     ) -> str | None:
         """The one stem ``name`` can mean here, or None when ambiguous or unknown.
 
@@ -170,9 +170,6 @@ class TokenKeyRemapper:
         scripts of one name that differ by a keyword (``r_1_1_goblin`` against
         ``r_1_1_goblin_haste``) or by an ability look identical from here and
         must refuse rather than pick one.
-
-        ``printed_keys`` is accepted and unused, so a caller that has the
-        entity's keys to hand needs no second call shape.
         """
         candidates = list(self.facts_by_name.get(name, ()))
         resolved = self._settle(candidates)
@@ -285,7 +282,7 @@ def remap_record_dict(data: dict, remapper: TokenKeyRemapper, counts: RemapCount
                 return None
             if script_file not in entity_cache:
                 entity_cache[script_file] = remapper.resolve(
-                    name, entity=entity, printed_keys=entity.get("printed") or (),
+                    name, entity=entity,
                 )
             return entity_cache[script_file]
 

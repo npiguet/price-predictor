@@ -1477,15 +1477,7 @@ def run_train_effect_model(args: argparse.Namespace) -> int:
     from effects.application.train_effect_model import (
         EmptyHoldoutError,
         SurfaceMismatchError,
-        require_split_from,
     )
-
-    split_from = Path(args.split_from) if args.split_from else None
-    # --corpus is required at the parser, so require_split_from's
-    # corpus-is-None branch can never fire from here; kept as a defensive
-    # pre-flight check rather than caught, since it cannot raise.
-    require_split_from(args.variant, split_from, corpus=args.corpus)
-
     from effects.domain.ability_encoder import ENCODER_N_HEADS
 
     # Refused here, before anything is read (FR-062): the encoder's attention

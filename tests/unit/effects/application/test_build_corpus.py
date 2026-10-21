@@ -1805,7 +1805,7 @@ class TestLegalityFamilies:
 
         return Survey(
             shards=(), records=sum(keyless.values()), key_games={}, key_records=Counter(),
-            class_records=Counter(), cell_key_records=Counter(), cell_key_heaps={},
+            cell_key_records=Counter(), cell_key_heaps={},
             cell_keyless=Counter(keyless), keyword_combat_games=frozenset(),
             held_out_text_games={}, held_out_games=frozenset(), games=frozenset(),
         )

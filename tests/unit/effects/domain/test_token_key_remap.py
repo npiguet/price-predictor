@@ -154,7 +154,7 @@ def test_colors_types_and_pt_narrow_the_candidates(remapper):
     soldier = {
         "colors": ["W"], "types": ["creature"], "subtypes": ["soldier"], "pt": {"base": [1, 1]},
     }
-    resolved = remapper.resolve("soldier token", entity=soldier, printed_keys=[_key()])
+    resolved = remapper.resolve("soldier token", entity=soldier)
     assert resolved == "w_1_1_soldier"
 
 
@@ -164,9 +164,9 @@ def test_a_supertype_the_entity_lacks_rules_a_script_out(remapper):
         "colors": ["W"], "types": ["creature"], "subtypes": ["angel"], "pt": {"base": [4, 4]},
     }
     legendary = dict(plain, supertypes=["legendary"])
-    assert remapper.resolve("angel token", entity=plain, printed_keys=[_key()]) == "w_4_4_angel"
+    assert remapper.resolve("angel token", entity=plain) == "w_4_4_angel"
     assert remapper.resolve(
-        "angel token", entity=legendary, printed_keys=[_key()],
+        "angel token", entity=legendary,
     ) == "w_4_4_angel_legendary"
 
 
@@ -176,7 +176,7 @@ def test_same_stat_scripts_differing_by_a_keyword_refuse(remapper_with_hasty_gob
         "colors": ["R"], "types": ["creature"], "subtypes": ["goblin"], "pt": {"base": [1, 1]},
     }
     resolved = remapper_with_hasty_goblin.resolve(
-        "goblin token", entity=goblin, printed_keys=[_key()],
+        "goblin token", entity=goblin,
     )
     assert resolved is None
 
@@ -186,7 +186,7 @@ def test_a_star_pt_script_matches_any_size_and_keeps_the_name_ambiguous(remapper
     spirit = {
         "colors": ["W"], "types": ["creature"], "subtypes": ["spirit"], "pt": {"base": [1, 1]},
     }
-    assert remapper.resolve("spirit token", entity=spirit, printed_keys=[_key()]) is None
+    assert remapper.resolve("spirit token", entity=spirit) is None
 
 
 def test_a_stem_without_a_converted_sidecar_is_never_chosen(remapper):
@@ -195,12 +195,12 @@ def test_a_stem_without_a_converted_sidecar_is_never_chosen(remapper):
     }
     # w_2_2_soldier is the only candidate left, and this fixture holds no
     # sidecar for it, so the one survivor is unusable.
-    assert remapper.resolve("soldier token", entity=soldier, printed_keys=[_key()]) is None
+    assert remapper.resolve("soldier token", entity=soldier) is None
 
 
 def test_a_mismatching_entity_resolves_nothing(remapper):
     elf = {"colors": ["G"], "types": ["creature"], "subtypes": ["elf"], "pt": {"base": [1, 1]}}
-    assert remapper.resolve("goblin token", entity=elf, printed_keys=[_key()]) is None
+    assert remapper.resolve("goblin token", entity=elf) is None
 
 
 def _prov_key(script_file: str, kind: str = "spell", index: int = 0) -> dict:

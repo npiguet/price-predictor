@@ -271,7 +271,6 @@ class ShardSurvey:
     records: int
     key_games: dict[str, set[int]] = field(default_factory=dict)
     key_records: Counter[str] = field(default_factory=Counter)
-    class_records: Counter[str] = field(default_factory=Counter)
     #: ``(cell, rendered key) -> records``: what one text can supply to one
     #: cell, once the main process has folded keys to texts (FR-049).
     cell_key_records: Counter[tuple[Cell, str]] = field(default_factory=Counter)
@@ -294,10 +293,6 @@ class ShardSurvey:
     #: rather than silently skipped: a corpus that is a third junk should say
     #: so in the manifest rather than in nothing.
     quality_dropped: Counter[str] = field(default_factory=Counter)
-    #: The ``no-acting-text`` refusals alone, by the acting key's script file.
-    #: Per script, so a converter regression that drops a whole card family's
-    #: keys shows up in the build output rather than as one larger number.
-    textless_scripts: Counter[str] = field(default_factory=Counter)
     #: Old token keys this shard's read rewrote, and the ones it refused to
     #: guess at (FR-151).
     remap: RemapCounts = field(default_factory=RemapCounts)
@@ -311,7 +306,6 @@ class Survey:
     records: int
     key_games: dict[str, set[int]]
     key_records: Counter[str]
-    class_records: Counter[str]
     cell_key_records: Counter[tuple[Cell, str]]
     cell_key_heaps: dict[tuple[Cell, str], CapHeap]
     cell_keyless: Counter[Cell]
@@ -320,9 +314,6 @@ class Survey:
     held_out_games: frozenset[str]
     games: frozenset[str]
     quality_dropped: Counter[str] = field(default_factory=Counter)
-    #: The survey's ``no-acting-text`` refusals by acting script file. The
-    #: write pass keeps its own, and the manifest records that one.
-    textless_scripts: Counter[str] = field(default_factory=Counter)
     #: Distinct games per top-level source directory, and how many of those
     #: name a held-out card. What FR-149's report is computed from: a
     #: directory of depleted shards whose held-out count is not zero is a leak
@@ -469,12 +460,9 @@ def survey_shard(relative: str) -> ShardSurvey:
         )
         if defect is not None:
             out.quality_dropped[defect] += 1
-            if defect == NO_ACTING_TEXT:
-                out.textless_scripts[record.ability[0].script_file] += 1
             continue
         out.games.add(record.game_id)
         cell = cell_of(record, sidecars, resolver)
-        out.class_records[cell.klass] += 1
         key = ability_key(record)
         if key is None:
             out.cell_keyless[cell] += 1
@@ -569,7 +557,6 @@ def merge_surveys(parts: Iterable[ShardSurvey]) -> Survey:
     records = 0
     key_games: dict[str, set[int]] = defaultdict(set)
     key_records: Counter[str] = Counter()
-    class_records: Counter[str] = Counter()
     cell_key_records: Counter[tuple[Cell, str]] = Counter()
     cell_key_heaps: dict[tuple[Cell, str], CapHeap] = {}
     cell_keyless: Counter[Cell] = Counter()
@@ -579,7 +566,6 @@ def merge_surveys(parts: Iterable[ShardSurvey]) -> Survey:
 
     held_out_text_games: dict[str, set[str]] = defaultdict(set)
     quality_dropped: Counter[str] = Counter()
-    textless_scripts: Counter[str] = Counter()
     games_by_source: dict[str, set[str]] = defaultdict(set)
     held_by_source: dict[str, set[str]] = defaultdict(set)
     remap = RemapCounts()
@@ -588,14 +574,12 @@ def merge_surveys(parts: Iterable[ShardSurvey]) -> Survey:
         shards.append(SourceShard(name=part.name, size=part.size))
         records += part.records
         key_records.update(part.key_records)
-        class_records.update(part.class_records)
         cell_key_records.update(part.cell_key_records)
         cell_keyless.update(part.cell_keyless)
         keyword_combat_games |= part.keyword_combat_games
         held_out_games |= part.held_out_games
         games |= part.games
         quality_dropped.update(part.quality_dropped)
-        textless_scripts.update(part.textless_scripts)
         remap.merge(part.remap)
         source = source_of(part.name)
         games_by_source[source] |= part.games
@@ -616,7 +600,6 @@ def merge_surveys(parts: Iterable[ShardSurvey]) -> Survey:
         records=records,
         key_games=dict(key_games),
         key_records=key_records,
-        class_records=class_records,
         cell_key_records=cell_key_records,
         cell_key_heaps=cell_key_heaps,
         cell_keyless=cell_keyless,
@@ -625,7 +608,6 @@ def merge_surveys(parts: Iterable[ShardSurvey]) -> Survey:
         held_out_games=frozenset(held_out_games),
         games=frozenset(games),
         quality_dropped=quality_dropped,
-        textless_scripts=textless_scripts,
         games_by_source={s: len(g) for s, g in games_by_source.items()},
         held_out_games_by_source={s: len(g) for s, g in held_by_source.items()},
         remap=remap,

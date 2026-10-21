@@ -34,7 +34,7 @@ import logging
 import os
 import random
 from collections import Counter, defaultdict
-from collections.abc import Collection, Iterable
+from collections.abc import Collection
 from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass, field, replace
 from pathlib import Path
@@ -179,14 +179,6 @@ def qualifying_cards(record) -> set[str]:
             if subject in by_id:
                 names.add(by_id[subject])
     return names
-
-
-def count_coverage(records: Iterable) -> Counter[str]:
-    """How many qualifying records each card has across the whole corpus."""
-    counts: Counter[str] = Counter()
-    for record in records:
-        counts.update(qualifying_cards(record))
-    return counts
 
 
 def count_shard(shard: Path) -> Counter[str]:
@@ -691,14 +683,6 @@ def consult_castability(
             "castable, which only slows the run down", exc,
         )
         return {}
-
-
-def group_by_verdict(verdicts: dict[str, str]) -> dict[str, list[str]]:
-    """Cards per consult verdict, for the residue report."""
-    grouped: dict[str, list[str]] = defaultdict(list)
-    for name, verdict in verdicts.items():
-        grouped[verdict].append(name)
-    return {verdict: sorted(names) for verdict, names in grouped.items()}
 
 
 # ── the held-out coverage round (FR-035–FR-038) ─────────────────────────

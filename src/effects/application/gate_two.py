@@ -75,37 +75,6 @@ class KeywordScore:
     per_field: dict[str, tuple[int, int]] = field(default_factory=dict)
 
 
-def count_qualifying_all(
-    records, rows: tuple[DamageStepKeyword, ...], sidecars=None,
-) -> dict[str, int]:
-    """Every row's qualifying count, in one pass over the corpus.
-
-    One pass rather than one per keyword: each entity's keyword set is resolved
-    once and checked against all eight, which is the difference between an
-    evaluation that finishes and one that does not.
-
-    The unit is a ``(record, carrier)`` observation, not a record: two creatures
-    with lifelink in one combat are two independent perturbations, and the
-    scorer scores them separately.
-    """
-    resolver = KeywordResolver(sidecars)
-    counts = {row.keyword: 0 for row in rows}
-    for record in records:
-        for row, _participant in qualifying_observations(record, rows, resolver):
-            counts[row.keyword] += 1
-    return counts
-
-
-def count_qualifying(records, row: DamageStepKeyword, sidecars=None) -> int:
-    """One row's qualifying count.
-
-    Without ``sidecars`` only the overlay channel is visible, and the count then
-    describes a different population than the gate's table does — printed first
-    strike is most first strike.
-    """
-    return count_qualifying_all(records, (row,), sidecars)[row.keyword]
-
-
 # ── decoding a head into one comparable number ──────────────────────────
 
 

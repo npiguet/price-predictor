@@ -218,8 +218,6 @@ def test_survey_counts_records_classes_and_games(tmp_path):
     )
 
     assert survey.records == 3
-    assert survey.class_records["rewrite"] == 2
-    assert survey.class_records["combat"] == 1
     assert survey.games == frozenset({"g1", "g2"})
     assert survey.held_out_games == frozenset()
 
@@ -356,7 +354,6 @@ def test_a_defective_record_is_counted_and_otherwise_ignored(tmp_path):
     assert out.quality_dropped == {NO_ABILITY: 1}
     assert out.records == 2
     assert out.games == {"g1"}
-    assert sum(out.class_records.values()) == 1
 
 
 class TestProgressSaysWhetherToWait:

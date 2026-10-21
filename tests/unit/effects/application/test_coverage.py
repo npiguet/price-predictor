@@ -19,7 +19,6 @@ from effects.application.collect_coverage import (
     CardCoverage,
     CollectCoverageConfig,
     ConsultVerdict,
-    count_coverage,
     deck_weights,
     is_complete,
     qualifying_cards,
@@ -107,7 +106,7 @@ class TestSatisfactionCounting:
         records = [
             _record([_entity("E1", "Shock")], source="E1") for _ in range(3)
         ]
-        assert count_coverage(records)["Shock"] == 3
+        assert sum("Shock" in qualifying_cards(r) for r in records) == 3
 
 
 class TestConsultRanksButNeverDrops:

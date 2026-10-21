@@ -29,8 +29,6 @@ import torch
 from effects.application.gate_two import (
     KeywordResolver,
     KeywordScore,
-    count_qualifying,
-    count_qualifying_all,
     qualifying_observations,
     read_field,
     score_keywords,
@@ -694,6 +692,16 @@ class TestQualifyingObservations:
         assert sorted(p.carrier.id for _row, p in found) == ["A", "B0"]
 
 
+def count_qualifying_all(records, rows, sidecars=None) -> dict[str, int]:
+    """Every row's qualifying ``(record, carrier)`` observations."""
+    resolver = KeywordResolver(sidecars)
+    counts = {row.keyword: 0 for row in rows}
+    for record in records:
+        for row, _participant in qualifying_observations(record, rows, resolver):
+            counts[row.keyword] += 1
+    return counts
+
+
 class TestCounting:
     def test_it_counts_the_population_the_scorer_scores(self):
         records = [_printed_board(), _overlay_board()]
@@ -718,16 +726,8 @@ class TestCounting:
         assert counts["first_strike"] == 0
 
     def test_without_sidecars_a_printed_keyword_is_invisible(self):
-        assert count_qualifying(
-            [_printed_board()], KEYWORDS_BY_NAME["first_strike"], None,
-        ) == 0
-
-    def test_one_row_at_a_time_matches_the_one_pass_count(self):
-        records = [_printed_board(), _overlay_board()]
         row = KEYWORDS_BY_NAME["first_strike"]
-        assert count_qualifying(records, row, _Sidecars()) == (
-            count_qualifying_all(records, (row,), _Sidecars())[row.keyword]
-        )
+        assert count_qualifying_all([_printed_board()], (row,), None)[row.keyword] == 0
 
 
 # ── the whole scorer, against a model that reacts to the strip ───────────

@@ -19,7 +19,7 @@ from __future__ import annotations
 import hashlib
 import heapq
 import zlib
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
 #: uint64, which is the width the threshold comparison is over.
@@ -233,21 +233,6 @@ def rate_plan(distinct: int, quota: int) -> CopyPlan:
     if not extra:
         return CopyPlan(base=base)
     return CopyPlan(base=base, threshold=int(extra / distinct * 2**64) - 1)
-
-
-def copies_for_text(
-    record_hashes: Iterable[int], quota: int, text_cap: int, reuse_cap: int,
-) -> dict[int, int]:
-    """``record hash -> copies`` for one text's records in one cell (FR-049).
-
-    The quota is first bounded by the text's capacity. Over the cap, the cap
-    smallest hashes are written once each; otherwise the quota is spread
-    evenly, the extra copies going to the smallest hashes.
-    """
-    hashes = sorted(set(record_hashes))
-    capacity = text_capacity(len(hashes), text_cap=text_cap, reuse_cap=reuse_cap)
-    plan = copy_plan(hashes, len(hashes), min(quota, capacity))
-    return {value: plan.copies(value) for value in hashes}
 
 
 def game_disjoint_draw(game_id: str) -> float:

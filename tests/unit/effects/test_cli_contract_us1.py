@@ -126,24 +126,12 @@ class TestTrainEffectModel:
 
 
 class TestVariantAcceptsCorpusAtThePreflightCheck:
-    """Task 7 fix round 1, Finding 2's CLI-layer gap.
+    """A baseline variant with ``--corpus`` and no ``--split-from`` reaches the
+    trainer: the curated dataset's manifest is the split it inherits.
 
-    ``require_split_from`` was fixed to accept ``--corpus`` as an alternative
-    to ``--split-from`` for a non-``full`` variant, but ``cli.py``'s own
-    ``run_train_effect_model`` calls it a second time, earlier, as a
-    pre-flight check, before ``train_config_from``/``run`` ever run. That call
-    was not updated alongside the library fix, so ``python -m effects
-    train-effect-model --variant identity --corpus DIR`` was still rejected at
-    the door — a gap the existing ``require_split_from`` unit tests cannot
-    see, because they call the function directly and never touch this second
-    call site. ``--corpus`` is required at the parser now, so this pre-flight
-    call can never raise ``MissingSplitError`` from here — it is a defensive
-    assertion, not a caught failure mode.
-
-    The real trainer entry point (``train_effect_model.run``) is
-    monkeypatched out in the accepted case, so getting past the pre-flight
-    check is what these tests prove — not a full training run — and neither
-    case imports torch or reads a real corpus off disk.
+    The real trainer entry point (``train_effect_model.run``) is monkeypatched
+    out, so getting past the CLI is what these tests prove, not a full training
+    run, and neither case imports torch or reads a real corpus off disk.
     """
 
     def test_a_variant_with_corpus_gets_past_the_preflight_check(self, monkeypatch):

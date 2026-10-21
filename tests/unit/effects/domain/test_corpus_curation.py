@@ -8,7 +8,6 @@ from effects.domain.corpus_curation import (
     CapHeap,
     CopyPlan,
     class_targets,
-    copies_for_text,
     copy_plan,
     game_disjoint_draw,
     in_game_disjoint_stratum,
@@ -18,6 +17,15 @@ from effects.domain.corpus_curation import (
     signature_label,
     text_capacity,
 )
+
+
+def copies_for_text(record_hashes, quota, text_cap, reuse_cap) -> dict[int, int]:
+    """``record hash -> copies`` for one text in one cell: the quota bounded by
+    the text's capacity, then placed by the copy plan, as the write pass does."""
+    hashes = sorted(set(record_hashes))
+    capacity = text_capacity(len(hashes), text_cap=text_cap, reuse_cap=reuse_cap)
+    plan = copy_plan(hashes, len(hashes), min(quota, capacity))
+    return {value: plan.copies(value) for value in hashes}
 
 
 def test_record_hash_is_stable_and_seed_dependent():

@@ -123,18 +123,11 @@ def a_survey(
     }
     for key in key_games:
         key_records.setdefault(key, 0)
-    class_records = Counter()
-    for (cell, _), count in cell_key_records.items():
-        class_records[cell.klass] += count
-    for cell, count in keyless.items():
-        class_records[cell.klass] += count
-
     base = dict(
         shards=(),
-        records=sum(class_records.values()),
+        records=sum(cell_key_records.values()) + sum(keyless.values()),
         key_games=key_games,
         key_records=key_records,
-        class_records=class_records,
         cell_key_records=cell_key_records,
         cell_key_heaps=heaps,
         cell_keyless=keyless,

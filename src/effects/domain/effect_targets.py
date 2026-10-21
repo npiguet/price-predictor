@@ -403,9 +403,7 @@ def supervises_created_objects(record: EffectRecord) -> bool:
     if record.kind is RecordKind.RESOLUTION:
         return record.moment is Moment.RESOLUTION
     if record.kind is RecordKind.REWRITE:
-        return isinstance(record.payload, RewritePayload) and (
-            record.payload.outgoing is not None
-        )
+        return isinstance(record.payload, RewritePayload) and record.payload.rewritten
     return False
 
 
