@@ -41,11 +41,7 @@ from effects.domain.ability_tokenizer import (
 )
 from effects.domain.effect_head_input import (
     INPUT_LAYOUT_KEY,
-    SlotKind,
-    act_features,
-    card_features,
-    global_features,
-    player_features,
+    feature_widths,
 )
 from effects.domain.effect_model import EffectModel, FieldSpec, active_fields
 from effects.domain.sampling import sampling_class
@@ -77,29 +73,6 @@ def build_sidecars(config) -> SidecarCache:
 def input_layout_of(checkpoint) -> str | None:
     """The input layout a checkpoint trained on; None for one that recorded none (FR-063c)."""
     return (checkpoint.training_settings or {}).get(INPUT_LAYOUT_KEY)
-
-
-def feature_widths(records, layout: str | None) -> dict[SlotKind, int]:
-    """Measure each slot kind's width from real records, as training does."""
-    probe = records[0]
-    widths = {
-        SlotKind.GLOBAL: len(global_features(probe, layout=layout)),
-        SlotKind.ACT: len(act_features(probe)),
-        SlotKind.PLAYER: 0,
-        SlotKind.CARD: 0,
-    }
-    for record in records:
-        if record.state.players:
-            widths[SlotKind.PLAYER] = len(
-                player_features(record.state.players[0], record, layout=layout)
-            )
-        if record.state.entities:
-            widths[SlotKind.CARD] = len(
-                card_features(record.state.entities[0], record, layout=layout)
-            )
-        if widths[SlotKind.PLAYER] and widths[SlotKind.CARD]:
-            break
-    return widths
 
 
 def tokenizer_for(checkpoint, vocab_path: Path, keyword_path: Path) -> AbilityTokenizer:
@@ -180,7 +153,7 @@ class LoadedModel:
             masks=variant_masks(checkpoint.variant),
             surface=self.surface,
             e_dim=checkpoint.encoder_config.e_dim,
-            widths=feature_widths(records, layout),
+            widths=feature_widths(records, layout=layout),
             device=self.device,
             withhold_keyword=checkpoint.provenance.withheld_keyword,
             # Both are training-time augmentations. Sampling them at evaluation

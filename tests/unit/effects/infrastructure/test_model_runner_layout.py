@@ -14,8 +14,9 @@ from effects.domain.effect_head_input import (
     INPUT_LAYOUT,
     THERMOMETER_STEPS,
     SlotKind,
+    feature_widths,
 )
-from effects.infrastructure.model_runner import feature_widths, input_layout_of
+from effects.infrastructure.model_runner import input_layout_of
 from tests.unit.effects.domain.test_effect_head_input import _record
 
 
@@ -31,8 +32,8 @@ def test_a_checkpoint_recording_the_layout_reads_it():
 
 def test_the_widths_follow_the_layout():
     records = [_record()]
-    earlier = feature_widths(records, EARLIER_LAYOUT)
-    gen2 = feature_widths(records, INPUT_LAYOUT)
+    earlier = feature_widths(records, layout=EARLIER_LAYOUT)
+    gen2 = feature_widths(records, layout=INPUT_LAYOUT)
     assert gen2[SlotKind.GLOBAL] == earlier[SlotKind.GLOBAL]
     assert gen2[SlotKind.PLAYER] == earlier[SlotKind.PLAYER] + THERMOMETER_STEPS
     assert gen2[SlotKind.CARD] == earlier[SlotKind.CARD] + 3 * THERMOMETER_STEPS + 1

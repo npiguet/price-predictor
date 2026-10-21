@@ -57,13 +57,11 @@ from effects.domain.records import (
     Costs,
     EffectRecord,
     Moment,
-    PlayabilityAttackersPayload,
-    PlayabilityBlockersPayload,
-    PlayabilityDecisionPayload,
     RecordKind,
     ResolutionPayload,
     RewritePayload,
     TriggerPayload,
+    key_sites,
 )
 from effects.infrastructure.sidecar_io import UnconfiguredTree
 
@@ -344,9 +342,8 @@ def read_window(
     given, is filled from each raw line before it is parsed.
     """
     from effects.infrastructure.record_io import (
-        iter_shard_lines,
+        iter_record_dicts,
         iter_shards,
-        parse_record_line,
         record_from_dict,
     )
 
@@ -354,11 +351,7 @@ def read_window(
     seen = 0
     for shard in iter_shards(root):
         name = shard.relative_to(root).as_posix() if shard.is_relative_to(root) else str(shard)
-        for line in iter_shard_lines(shard):
-            stripped = line.strip()
-            if not stripped:
-                continue
-            data = parse_record_line(stripped)
+        for data in iter_record_dicts(shard):
             if presence is not None:
                 presence.observe(name, data)
             yield record_from_dict(data)
@@ -486,32 +479,6 @@ def _event_type_coverage_finding(seen: set[str]) -> Finding:
         ),
         detail=unseen,
     )
-
-
-def _provenance_keys(record: EffectRecord) -> Iterator[ProvenanceKey]:
-    """Every printed-line key a record names, except emblems.
-
-    Emblems are excluded deliberately rather than by oversight: an emblem's
-    traits are built by the engine and key to a script path that exists in no
-    converted tree, so joining them would report a mismatch on every healthy
-    corpus that happens to resolve a planeswalker ultimate.
-    """
-    if record.ability:
-        yield from record.ability
-    for entity in record.state.entities:
-        yield from entity.printed
-        yield from entity.granted_attached
-        yield from entity.granted_temporary.abilities
-    payload = record.payload
-    if isinstance(payload, PlayabilityDecisionPayload):
-        for candidate in payload.candidates:
-            yield from candidate.ability
-            yield from candidate.responsible_static
-    elif isinstance(
-        payload, (PlayabilityAttackersPayload, PlayabilityBlockersPayload)
-    ):
-        for forbidden in payload.forbidden:
-            yield from forbidden.responsible_static
 
 
 def _is_deferred_mana_record(record: EffectRecord) -> bool:
@@ -911,7 +878,7 @@ class _KeyJoins:
         self.keys: set[ProvenanceKey] = set()
 
     def add(self, record: EffectRecord) -> None:
-        self.keys.update(_provenance_keys(record))
+        self.keys.update(key_sites(record))
 
     def findings(self, limits: Thresholds) -> Iterator[Finding]:
         if self.sidecars is None:

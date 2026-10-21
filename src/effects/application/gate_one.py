@@ -34,6 +34,7 @@ from effects.domain.effect_model import (
     FIELDS_BY_NAME,
     GATE_INDEX,
     entity_target_tensors,
+    gather_entities,
     per_entity_loss,
 )
 from effects.domain.effect_targets import derive_targets
@@ -157,10 +158,7 @@ def _forward(chunk, encoder, model, batcher: SurfaceBatcher, fields):
     gate, field_targets, mask, index = entity_target_tensors(
         surfaces, targets, fields,
     )
-    index = index.to(outputs.device)
-    gathered = outputs.gather(
-        1, index.unsqueeze(-1).expand(-1, -1, outputs.shape[-1]),
-    ).float().cpu()
+    gathered = gather_entities(outputs, index.to(outputs.device)).float().cpu()
     return gathered, gate, field_targets, mask
 
 

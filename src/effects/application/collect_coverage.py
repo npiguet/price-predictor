@@ -369,10 +369,9 @@ def load_held_out(split_from: Path | None) -> frozenset[str]:
     """
     if split_from is None:
         return frozenset()
-    from effects.infrastructure.effect_model_store import EffectModelStore
+    from effects.infrastructure.effect_model_store import load_effect_checkpoint
 
-    path = Path(split_from)
-    provenance = EffectModelStore(path.parent).load(path).provenance
+    provenance = load_effect_checkpoint(Path(split_from)).provenance
     return frozenset(provenance.held_out_cards)
 
 
