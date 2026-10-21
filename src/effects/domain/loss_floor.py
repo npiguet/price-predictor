@@ -20,7 +20,7 @@ from effects.domain.effect_head_layout import (
     FieldSpec,
     FieldType,
 )
-from effects.domain.effect_losses import capped, per_entity_loss
+from effects.domain.effect_losses import capped, counted, per_entity_loss
 
 #: A guard on the division, not the detector: a field whose targets never vary
 #: is given a floor of exactly zero by :func:`constant_predictor_floor`, and
@@ -131,7 +131,7 @@ def constant_predictor_outputs(
                 vector[start:end] = _logit(target.mean(dim=0))
             case FieldType.COUNT:
                 vector[start:end] = torch.log(
-                    _mean(capped(target)).clamp(min=_RATE_FLOOR)
+                    _mean(counted(target)).clamp(min=_RATE_FLOOR)
                 )
             case FieldType.SIGNED_DELTA:
                 target = capped(target)

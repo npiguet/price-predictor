@@ -1130,3 +1130,35 @@ class TestMagnitudeCap:
         predicted = np.array([3.0, 5.0])
         assert poisson_deviance(predicted, np.array([1.0, 2_000_000.0])) == \
             poisson_deviance(predicted, np.array([1.0, MAGNITUDE_CAP]))
+
+
+class TestCountTargetsAreNonnegative:
+    """A count below zero has no Poisson likelihood (FR-080, FR-081).
+
+    ``damage_taken`` is decremented by a healing event, so a heal with no
+    damage before it is a negative count, and a negative target makes the
+    Poisson NLL unbounded below: the head could lower the loss without limit by
+    raising its rate.
+    """
+
+    def test_a_negative_count_scores_as_zero(self):
+        spec = FIELDS_BY_NAME["damage_taken"]
+        for log_rate in (-2.0, 0.0, 3.0):
+            prediction = torch.full((1, 1), log_rate)
+            assert field_loss(spec, prediction, torch.tensor([-3.0])) == \
+                field_loss(spec, prediction, torch.tensor([0.0]))
+
+    def test_the_floor_reads_a_negative_count_as_zero(self):
+        def floor(value):
+            batch = EntityTargetBatch(
+                gate=torch.ones(1, 2),
+                fields=EntityFieldTargets.everywhere(
+                    {"damage_taken": torch.tensor([[2.0, value]])},
+                ),
+                mask=torch.ones(1, 2),
+            )
+            return constant_predictor_outputs(
+                [batch], fields=(FIELDS_BY_NAME["damage_taken"],),
+            )
+
+        assert torch.equal(floor(-5.0), floor(0.0))

@@ -42,6 +42,17 @@ def capped(target: torch.Tensor) -> torch.Tensor:
     return target.clamp(min=-MAGNITUDE_CAP, max=MAGNITUDE_CAP)
 
 
+def counted(target: torch.Tensor) -> torch.Tensor:
+    """A count target as the Poisson loss scores it: from zero to the cap.
+
+    A count below zero has no likelihood, and a negative target makes the
+    Poisson NLL unbounded below. ``damage_taken`` nets healing against damage,
+    so a heal on an undamaged creature reaches here as one; the creature
+    ended with no damage marked, which is what zero says.
+    """
+    return target.clamp(min=0.0, max=MAGNITUDE_CAP)
+
+
 def _poisson(prediction: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
     """Poisson NLL on a log-rate prediction, summed.
 
@@ -87,7 +98,7 @@ def field_loss(
                 prediction, target.float(), reduction="sum",
             )
         case FieldType.COUNT:
-            return _poisson(prediction.squeeze(-1), capped(target.float()))
+            return _poisson(prediction.squeeze(-1), counted(target.float()))
         case FieldType.SIGNED_DELTA:
             return _signed_delta_loss(prediction, capped(target.float()))
         case FieldType.CATEGORICAL:
