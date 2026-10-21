@@ -237,8 +237,11 @@ def damage_grid_files(ck: Checkpoint) -> list[tuple[str, Path]]:
     """``(record set, file)`` for a checkpoint's damage grids that exist on disk."""
     run_dir = RUNS / ck.run.directory
     if ck.run.parent:
-        name = "grid-best-epoch.txt" if ck.role == "best" else "grid-last-epoch.txt"
-        return [("probe set", run_dir / name)]
+        # A run that kept its starting checkpoint probes its own lowest epoch in "-best";
+        # the run directory's best-epoch grid is the starting checkpoint's.
+        if ck.role == "best":
+            return [("probe set", ck.path / "grid-best-epoch.txt")]
+        return [("probe set", run_dir / "grid-last-epoch.txt")]
     return [("probe set", run_dir / "grid-probe.txt"),
             ("training records", run_dir / "grid-training.txt")]
 

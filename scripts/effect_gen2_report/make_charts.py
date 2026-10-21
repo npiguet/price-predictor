@@ -1084,7 +1084,7 @@ def ladder() -> None:
                 sax.text(1.24, y - 0.44, note, ha="right", va="bottom", fontsize=7.2,
                          color="#8a6a00", style="italic")
             else:
-                sax.text(0.42, y, "no share: the model scores below the board alone",
+                sax.text(0.42, y, "no share: the model scores no better than the board alone",
                          ha="center", va="center", fontsize=8, color=INK_SOFT, style="italic")
         ax.set_yticks(range(len(targets)), [LADDER_TARGETS[x] for x in targets][::-1])
         ax.set_ylim(-0.55, len(targets) - 0.45)
@@ -1115,8 +1115,8 @@ def ladder() -> None:
                        label="(b) the share a random vector of e's width closes, median"),
                 Line2D([], [], marker="D", ls="none", ms=7, mfc="white", mec=PURPLE, mew=1.4,
                        label="(b) the share the oracle rung closes, median"),
-                Patch(color="#fbf3dc", label=f"oracle closes under {ORACLE_FLOOR:.0%} of the "
-                                             "gap: by the record's rule, share not read")]
+                Patch(color="#fbf3dc", label=f"share under 0.9 and the oracle closes under "
+                                             f"{ORACLE_FLOOR:.0%} of the gap: share not read")]
     fig.legend(handles=handles, loc="lower left", ncol=3, bbox_to_anchor=(0.03, -0.045),
                fontsize=8)
     fig.legend(handles=checkpoint_handles(names), loc="lower left", ncol=6,
