@@ -50,6 +50,7 @@ from effects.domain.records import (
     KINDS_WITHOUT_ACTING_ABILITY,
     REWRITE_RESULTS_RUNNING_AN_ABILITY,
     REWRITE_RESULTS_WITHOUT_ABILITY,
+    WHAT_IF_SUBKINDS,
     ActivationPayload,
     CollectionMode,
     CombatPayload,
@@ -231,7 +232,6 @@ def validate_corpus(
 
 
 #: The legality subkinds that must carry ``what_if`` on a gen-2 shard.
-_WHAT_IF_SUBKINDS = frozenset({"attackers", "blockers"})
 
 
 @dataclass
@@ -252,7 +252,7 @@ class FieldPresence:
         counts = self.shards.setdefault(shard, [0, 0, 0, 0, 0])
         counts[0] += 1
         counts[1] += "random_seat" in data
-        legality = data.get("kind") == "playability" and data.get("subkind") in _WHAT_IF_SUBKINDS
+        legality = data.get("kind") == "playability" and data.get("subkind") in WHAT_IF_SUBKINDS
         if legality:
             counts[2] += 1
             counts[3] += "what_if" in data

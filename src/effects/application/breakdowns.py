@@ -28,15 +28,12 @@ from dataclasses import dataclass, field
 
 from effects.domain.keyword_names import normalize_keyword
 from effects.domain.rarity import RARITY_BUCKETS, rarity_bucket
+from effects.domain.records import WHAT_IF_SUBKINDS, LegalityDecision
 
 #: The loss key every scored record carries: the per-entity loss summed over
 #: the gate and every supervised field, as the trainer's validation reads it.
 TOTAL = "total"
 
-#: The legality subkinds a ``what_if`` classes (FR-031).
-LEGALITY_SUBKINDS = frozenset({"attackers", "blockers"})
-
-REAL, WHAT_IF, UNKNOWN = "real", "what-if", "unknown"
 ON_POLICY, OFF_POLICY = "on", "off"
 WITHHELD, TRAINED = "withheld", "trained"
 
@@ -209,16 +206,11 @@ def policy_slice(results: Iterable[RecordResult]) -> dict[str, GroupResult]:
 
 
 def decision_slice(results: Iterable[RecordResult]) -> dict[str, GroupResult]:
-    """Legality records, real declarations apart from what-if queries (FR-067).
-
-    ``unknown`` is a gen-1 record, which never counts as real.
-    """
+    """Legality records, real declarations apart from what-if queries (FR-067)."""
     def kind(result: RecordResult) -> str | None:
-        if result.subkind not in LEGALITY_SUBKINDS:
+        if result.subkind not in WHAT_IF_SUBKINDS:
             return None
-        if result.what_if is None:
-            return UNKNOWN
-        return WHAT_IF if result.what_if else REAL
+        return LegalityDecision.of(result)
 
     return _group(results, kind)
 

@@ -42,6 +42,7 @@ from effects.domain.damage_step_keywords import (
     DamageStepKeyword,
 )
 from effects.domain.line_query import LineQuery
+from effects.domain.records import LegalityDecision
 
 if TYPE_CHECKING:
     from effects.infrastructure.effect_model_store import SplitProvenance
@@ -1099,7 +1100,7 @@ def breakdown_checks(
                 "no record in this stratum was acted by the random seat",
             ))
         decisions = bd.decision_slice(rows)
-        if bd.REAL in decisions:
+        if LegalityDecision.REAL in decisions:
             for name, group in decisions.items():
                 checks.append(_group_check(f"{stratum} legality {name}", group))
         else:

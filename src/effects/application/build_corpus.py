@@ -49,7 +49,12 @@ from effects.domain.record_quality import (
     quality_defect,
     unjoinable_key_defect,
 )
-from effects.domain.records import EffectRecord, RecordKind, acting_keys
+from effects.domain.records import (
+    EffectRecord,
+    LegalityDecision,
+    RecordKind,
+    acting_keys,
+)
 from effects.domain.token_key_remap import RemapCounts, TokenKeyRemapper, remap_record_dict
 
 if TYPE_CHECKING:
@@ -197,18 +202,19 @@ class Cell:
     signature: str = ""
 
 
-#: The two halves of the legality class (FR-049 step 3). A gen-1 record, whose
-#: ``what_if`` is unknown, is never a real decision (FR-033).
-REAL, WHAT_IF = "real", "what-if"
-
-
 def selection_half(record: EffectRecord, klass: str) -> str:
-    """``real`` / ``what-if`` on a legality record, empty on every other."""
+    """``real`` / ``what-if`` on a legality record, empty on every other.
+
+    The two halves of the legality class (FR-049 step 3): a gen-1 record,
+    whose decision is unknown, selects as a what-if.
+    """
     from effects.domain.effect_model import CLASS_PLAYABILITY_LEGALITY
 
     if klass != CLASS_PLAYABILITY_LEGALITY:
         return ""
-    return REAL if record.what_if is False else WHAT_IF
+    if LegalityDecision.of(record) is LegalityDecision.REAL:
+        return LegalityDecision.REAL
+    return LegalityDecision.WHAT_IF
 
 
 #: Joins a legality record's modes into its survey-time family, the set the
@@ -1535,11 +1541,8 @@ def write_shard_pass(relative: str) -> WriteResult:
             out.signature_written[name, label, cell.signature] += copies
             out.policy[name, "off_policy" if record.random_seat else "on_policy"] += copies
             if cell.half:
-                decision = (
-                    "unknown" if record.what_if is None
-                    else "what_if" if record.what_if else "real"
-                )
-                out.legality[record.subkind.value, decision] += copies
+                decision = LegalityDecision.of(record)
+                out.legality[record.subkind.value, decision.value] += copies
             if key is not None:
                 out.kept_keys.setdefault(name, set()).add(key)
                 out.stratum_keys.setdefault("training", set()).add(key)
@@ -2251,7 +2254,8 @@ def build(config: BuildCorpusConfig) -> int:
     for subkind, counts in sorted(manifest.legality_counts.items()):
         logger.info(
             "%-22s real %9d  what-if %9d  unknown %9d",
-            f"legality {subkind}", counts.get("real", 0), counts.get("what_if", 0),
+            f"legality {subkind}", counts.get(LegalityDecision.REAL, 0),
+            counts.get(LegalityDecision.WHAT_IF, 0),
             counts.get("unknown", 0),
         )
     logger.info(

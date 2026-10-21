@@ -147,6 +147,26 @@ COLLECTION_METADATA_FIELDS: frozenset[str] = frozenset({
 #: is always a real evaluation of a real candidate, so the question never arises.
 WHAT_IF_SUBKINDS: frozenset[str] = frozenset({"attackers", "blockers"})
 
+
+class LegalityDecision(StrEnum):
+    """Whether a legality record is the declaration actually made (FR-033).
+
+    ``unknown`` is a gen-1 record, collected before ``what_if`` existed; it is
+    never a real decision. One spelling for curation, the manifest and the
+    evaluation slices alike.
+    """
+
+    REAL = "real"
+    WHAT_IF = "what-if"
+    UNKNOWN = "unknown"
+
+    @classmethod
+    def of(cls, record) -> LegalityDecision:
+        """``record`` is anything carrying ``what_if``: a record or a result row."""
+        if record.what_if is None:
+            return cls.UNKNOWN
+        return cls.WHAT_IF if record.what_if else cls.REAL
+
 #: Why a record that does name an acting line carries no key for it. A closed
 #: vocabulary, because the point of the field is to separate "no printed line
 #: exists" from "the resolver failed": an engine-built card (the Monarch, a

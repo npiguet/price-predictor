@@ -1792,7 +1792,7 @@ def test_a_short_family_is_repeated_up_to_the_reuse_cap(tmp_path, a_corpus):
     # Records with no acting text are sampled by hash rate: 14 in expectation.
     what_if = families["what-if:none"]["written"]
     assert 8 <= what_if <= 20
-    assert manifest.legality_counts["blockers"] == {"real": 8, "what_if": what_if}
+    assert manifest.legality_counts["blockers"] == {"real": 8, "what-if": what_if}
 
 
 class TestLegalityFamilies:
