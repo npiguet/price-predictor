@@ -192,10 +192,6 @@ def load_first_printings(printings_path: Path) -> dict[str, str]:
     return earliest
 
 
-class MissingSplitError(RuntimeError):
-    """A variant run was started without ``--split-from``."""
-
-
 class EmptyHoldoutError(RuntimeError):
     """The card-disjoint stratum holds no records."""
 
@@ -242,31 +238,6 @@ def check_holdout(
     return None
 
 
-def require_split_from(
-    variant: str, split_from: Path | None, *, corpus: str | None = None,
-) -> None:
-    """A variant run must inherit the split it is a baseline for (FR-091).
-
-    Without it the run would silently compute its own split and the comparison
-    would be between two models that saw different games — which looks like a
-    result and is not one. A shared ``--corpus`` satisfies this at least as
-    firmly as ``--split-from``: the manifest enumerates the split directly, so
-    every run reading the same curated dataset trains against the same games
-    (FR-146). ``--corpus`` is required on every run, so ``--split-from`` is
-    accepted alongside it only for a variant run's compatibility with an
-    older invocation; the split it would have computed is never read.
-    """
-    if variant != Variant.FULL and split_from is None and corpus is None:
-        raise MissingSplitError(
-            f"--variant {variant} requires --split-from PATH or --corpus DIR: "
-            "a baseline must inherit the split, vocabulary and "
-            "keyword-definition paths of the full run it baselines (via "
-            "--split-from), or read the same curated dataset (via --corpus) — "
-            "otherwise the comparison is between two models that saw "
-            "different games."
-        )
-
-
 # ── configuration ───────────────────────────────────────────────────────
 
 
@@ -282,7 +253,6 @@ class TrainEffectModelConfig:
         Path("output/cardsfolder/"), Path("output/tokenscripts/"),
     )
     variant_scripts: Path | None = None
-    split_from: Path | None = None
     #: ``--holdout-unit``: None takes the manifest's recorded unit (FR-041).
     holdout_unit: str | None = None
     vocab_path: Path = field(default_factory=lambda: Path("models/effects/vocab.txt"))
@@ -331,8 +301,6 @@ class TrainEffectModelConfig:
     curriculum_epoch: int = 3
     batch_size: int = 32
     grad_accum: int = 1
-    context_cache: bool = False
-    cache_refresh: int = 500
     steps_per_epoch: int = 5_000
     shards_per_epoch: int = DEFAULT_SHARDS_PER_EPOCH
     #: Worker processes preparing each step's host half (``--prefetch-workers``);
@@ -602,19 +570,6 @@ def run(config: TrainEffectModelConfig) -> int:
     never loaded whole: the shard list is read here and the records behind it
     one shard at a time, inside the loop.
     """
-    require_split_from(config.variant, config.split_from, corpus=config.corpus)
-    if config.split_from is not None:
-        logger.warning(
-            "--split-from %s is accepted for compatibility with an older "
-            "invocation, but nothing is read from this path: the manifest of "
-            "--corpus is authoritative for the split.", config.split_from,
-        )
-    if config.context_cache:
-        logger.warning(
-            "--context-cache is accepted but not wired into the batcher in "
-            "this trainer; context abilities are re-encoded live."
-        )
-
     if config.corpus is None:
         logger.error(
             "train-effect-model reads a curated corpus: pass --corpus DIR, built "

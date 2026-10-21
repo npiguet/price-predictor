@@ -316,13 +316,13 @@ def require_same_split(
 
     A baseline compared against a model that saw different games is not a
     baseline. The error names both checkpoints, because the operator's next
-    move is to retrain one of them with ``--split-from``.
+    move is to retrain one of them on the other's ``--corpus``.
     """
     if not main.provenance.describes_same_split(variant.provenance):
         raise SplitMismatchError(
             f"{variant_path} records a different split than {main_path}. "
-            f"Retrain it with --split-from {main_path}: a baseline that saw "
-            "different games is not a baseline."
+            f"Retrain it on the --corpus {main_path} trained on: a baseline "
+            "that saw different games is not a baseline."
         )
     for label, recorded, actual in (
         ("vocabulary", main.provenance.vocab_hash, variant.provenance.vocab_hash),

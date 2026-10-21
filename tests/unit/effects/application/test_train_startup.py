@@ -1,10 +1,7 @@
 """What ``train-effect-model`` says before it starts stepping (FR-088b, FR-146).
 
-Three of these cover flags whose help text promised something the trainer does
-not do: ``--split-from`` inherits nothing now that ``--corpus`` is required, and
-``--context-cache`` is constructed but never read. The fourth covers the
-startup line, which sized the holdout by cards while the split is keyed on
-ability texts.
+The startup line sizes the holdout by ability texts, which the split is keyed
+on, as well as by the cards that carry them.
 """
 
 from __future__ import annotations
@@ -106,33 +103,6 @@ def _no_training(monkeypatch):
     monkeypatch.setattr(
         training_loop.TrainingLoop, "execute", lambda self: 0,
     )
-
-
-def test_split_from_is_reported_as_read_by_nothing(config, caplog):
-    config.split_from = "models/effects/effect-model/latest.pt"
-
-    with caplog.at_level(logging.WARNING):
-        assert run(config) == 0
-
-    assert "--split-from" in caplog.text
-    assert "nothing is read" in caplog.text
-
-
-def test_no_split_from_warning_when_the_flag_is_absent(config, caplog):
-    with caplog.at_level(logging.WARNING):
-        assert run(config) == 0
-
-    assert "--split-from" not in caplog.text
-
-
-def test_context_cache_is_reported_as_not_wired_in(config, caplog):
-    config.context_cache = True
-
-    with caplog.at_level(logging.WARNING):
-        assert run(config) == 0
-
-    assert "--context-cache" in caplog.text
-    assert "re-encoded live" in caplog.text
 
 
 def test_the_startup_line_counts_held_out_texts_not_only_cards(config, caplog):

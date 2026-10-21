@@ -15,18 +15,14 @@ from effects.application.train_effect_model import (
     LEARNING_RATE,
     MAX_GRAD_NORM,
     EarlyStopper,
-    MissingSplitError,
     TrainEffectModelConfig,
     learning_rate_at,
-    require_split_from,
     warmup_steps,
     withheld_keyword_tokens,
 )
 from effects.domain.ability_encoder import AbilityEncoderConfig
 from effects.domain.effect_model import EffectModelConfig
 from effects.domain.variants import (
-    VARIANTS,
-    Variant,
     variant_masks,
 )
 from effects.infrastructure.effect_model_store import (
@@ -50,35 +46,6 @@ def _checkpoint(provenance: SplitProvenance) -> EffectCheckpoint:
         encoder_config=_ENCODER_CONFIG, model_config=_MODEL_CONFIG,
         encoder_state={}, model_state={}, provenance=provenance,
     )
-
-
-class TestVariantRequiresASplit:
-    def test_a_variant_run_without_split_from_fails_fast(self):
-        for variant in VARIANTS:
-            if variant == Variant.FULL:
-                continue
-            with pytest.raises(MissingSplitError, match="--split-from"):
-                require_split_from(variant, None)
-
-    def test_the_error_says_why_the_comparison_would_be_meaningless(self):
-        with pytest.raises(MissingSplitError) as excinfo:
-            require_split_from("identity", None)
-        assert "saw different games" in str(excinfo.value)
-
-    def test_a_full_run_computes_its_own_split(self):
-        require_split_from(Variant.FULL, None)
-
-    def test_a_variant_run_with_split_from_is_accepted(self):
-        require_split_from("identity", Path("models/effects/effect-model/latest.pt"))
-
-    def test_a_variant_run_with_corpus_instead_is_accepted(self):
-        """A shared curated dataset is as firm a baseline as a checkpoint's
-        split (FR-146): its manifest enumerates the games directly."""
-        require_split_from("identity", None, corpus="output/effects/corpus")
-
-    def test_a_variant_run_with_neither_route_still_fails_fast(self):
-        with pytest.raises(MissingSplitError, match="--corpus"):
-            require_split_from("identity", None)
 
 
 class TestVariantCheckpointDisagreement:
@@ -251,8 +218,6 @@ class TestConfigDefaults:
         assert (config.steps_per_epoch, config.epochs, config.patience) == (
             5_000, 40, 5
         )
-        assert config.cache_refresh == 500
-        assert config.context_cache is False
         assert config.withhold_keyword is None
 
     def test_the_cards_folders_default_to_both_converted_trees(self):
@@ -260,10 +225,8 @@ class TestConfigDefaults:
             Path("output/cardsfolder/"), Path("output/tokenscripts/"),
         )
 
-    def test_variant_scripts_and_split_from_default_to_absent(self):
-        config = TrainEffectModelConfig()
-        assert config.variant_scripts is None
-        assert config.split_from is None
+    def test_variant_scripts_default_to_absent(self):
+        assert TrainEffectModelConfig().variant_scripts is None
 
     def test_full_writes_to_the_shipping_directory(self):
         assert TrainEffectModelConfig().resolved_model_output() == (
@@ -528,7 +491,7 @@ class TestEmptyHoldoutIsAnExitCodeNotATraceback:
         monkeypatch.setattr(train_effect_model, "run", refuse)
         monkeypatch.setattr(cli, "train_config_from", lambda args: None)
         args = argparse.Namespace(
-            split_from=None, variant="full", corpus="x",
+            variant="full", corpus="x",
             encoder_d_model=256, encoder_layers=4,
         )
 
