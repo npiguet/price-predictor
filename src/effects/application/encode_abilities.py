@@ -161,9 +161,14 @@ def run(config: EncodeAbilitiesConfig, *, encode_lines=None) -> EncodeSummary:
     if encode_lines is None and config.variant != Baseline.TAXONOMY:
         encode_lines = build_encode_lines(loaded)
 
-    folders = [Path(f) for f in config.cards_folders if Path(f).is_dir()]
-    if config.variant_scripts and Path(config.variant_scripts).is_dir():
+    folders = [Path(f) for f in config.cards_folders]
+    if config.variant_scripts:
         folders.append(Path(config.variant_scripts))
+    # A relative default resolved from another directory names nothing, and
+    # skipping it would write a cache missing whole trees and report success.
+    missing = [str(f) for f in folders if not f.is_dir()]
+    if missing:
+        raise FileNotFoundError(f"no source tree at {', '.join(missing)}")
 
     sources = rows = skipped = 0
     for folder in folders:

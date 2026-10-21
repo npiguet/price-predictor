@@ -164,6 +164,14 @@ class TestTreeSubtrees:
     def test_tree_of_reads_the_folder_name(self, tmp_path):
         assert tree_of(tmp_path / "tokenscripts") == "tokenscripts"
 
+    def test_a_missing_source_tree_is_refused_rather_than_skipped(self, corpus, tmp_path):
+        """A relative default resolved from the wrong directory would otherwise
+        encode no card at all and still report success."""
+        cards, _tokens, _checkpoint, _vocab = corpus
+        config = _config(corpus, tmp_path, cards_folders=(cards, tmp_path / "absent"))
+        with pytest.raises(FileNotFoundError, match="absent"):
+            run(config)
+
     def test_sidecars_are_found_recursively(self, corpus, tmp_path):
         cards, _tokens, _checkpoint, _vocab = corpus
         assert len(iter_sidecars(cards)) == 1
