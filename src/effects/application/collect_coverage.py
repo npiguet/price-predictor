@@ -34,28 +34,34 @@ import logging
 import os
 import random
 from collections import Counter, defaultdict
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterator, Mapping
 from concurrent.futures import ProcessPoolExecutor
+from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
 from functools import partial
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from effects.domain.collection_caps import CollectionCaps
 from effects.domain.coverage import (
     CardCoverage,
     ConsultVerdict,
+    CoverageUnit,
     DeckCandidate,
     TextCoverage,
+    awaited_texts,
     deck_weights,
     held_out_texts_of,
     is_complete,
     is_deckable,
-    is_text_round_complete,
     qualifying_cards,
     rank_by_consult,
     retire_stalled,
     text_deck_weights,
 )
+
+if TYPE_CHECKING:
+    from effects.infrastructure.collector_connector import CollectorSupervisor
 
 logger = logging.getLogger(__name__)
 
@@ -386,24 +392,154 @@ def build_coverage_units(
     }
 
 
+def read_converted_texts(
+    cards_folder: Path, card_files: Mapping[str, str],
+) -> dict[str, str]:
+    """``name -> converted text`` for every card whose file exists."""
+    return {
+        name: (cards_folder.parent / script).read_text(encoding="utf-8")
+        for name, script in card_files.items()
+        if (cards_folder.parent / script).exists()
+    }
+
+
+def non_deck_names(texts: Mapping[str, str]) -> set[str]:
+    """The cards whose converted text names a type no deck holds."""
+    return {name for name, text in texts.items() if not is_deckable(text)}
+
+
+@contextmanager
+def collector_supervisor(
+    *,
+    workers: int,
+    effect_records: Path,
+    caps: CollectionCaps,
+    variant_scripts: Path | None = None,
+) -> Iterator[CollectorSupervisor]:
+    """A records-only supervisor that is stopped however its rounds end.
+
+    ``stop()`` closes the worker log files and shuts the pool down. Without it
+    the latched effect-record failure reporters (``ApiEvents.
+    reportEmitterFailure`` and its siblings) never surface: their handles stay
+    open, unflushed and unclosed, until the interpreter exits on its own -- a
+    collection run that gets killed or piped never sees them at all.
+    """
+    from effects.infrastructure.collector_connector import CollectorSupervisor
+
+    supervisor = CollectorSupervisor(
+        worker_count=workers, effect_records=effect_records, caps=caps,
+        variant_scripts=variant_scripts,
+    )
+    try:
+        yield supervisor
+    finally:
+        supervisor.stop()
+
+
+def play_decks(
+    supervisor: CollectorSupervisor,
+    decks: list[list[str]],
+    decks_file: Path,
+    *,
+    label: str,
+    matches: int,
+) -> None:
+    """Play one round of ``decks``, which a records-only round reads from a file."""
+    from effects.infrastructure.deck_file import COVERAGE_SET_CODE, write_deck_file
+
+    write_deck_file(decks, decks_file, label=label, set_code=COVERAGE_SET_CODE)
+    supervisor.play_round(decks_file, matches=matches)
+
+
+@dataclass(frozen=True)
+class CoverageRounds:
+    """What the round loop needs from one kind of coverage unit.
+
+    The card run and the held-out round differ in what a unit is, how its
+    cards are weighted and which units have to finish; a round itself -- deck,
+    play, count, retire, stop on Ctrl-C -- is the same for both.
+    """
+
+    units: Mapping[str, CoverageUnit]
+    #: The units whose completion ends the run: every card, but only the
+    #: held-out texts some castable card carries (FR-037).
+    awaited: Mapping[str, CoverageUnit]
+    target: int
+    candidates: Mapping[str, DeckCandidate]
+    #: The next round's per-card deck weights, the consult applied.
+    weights: Callable[[], dict[str, float]]
+    #: The units a round attempted, from the cards its decks held.
+    units_decked: Callable[[set[str]], set[str]]
+    #: Counts the shards the last round wrote into ``units``; returns how many.
+    count_new_shards: Callable[[], int]
+    #: Logged when the weighted cards yield no deck at all.
+    no_decks: str
+
+
 def round_summary(
-    round_number: int, coverage: dict[str, CardCoverage], target: int,
-    retired: list[str],
+    round_number: int, rounds: CoverageRounds, retired: list[str],
 ) -> str:
-    satisfied = sum(1 for c in coverage.values() if c.satisfied(target))
-    remaining = sum(1 for c in coverage.values() if not c.done(target))
+    satisfied = sum(
+        1 for unit in rounds.units.values() if unit.satisfied(rounds.target)
+    )
+    remaining = sum(
+        1 for unit in rounds.awaited.values() if not unit.done(rounds.target)
+    )
     return (
         f"round {round_number}: {satisfied} satisfied, {remaining} remaining, "
         f"{len(retired)} retired this round"
     )
 
 
+def play_rounds(
+    rounds: CoverageRounds,
+    supervisor: CollectorSupervisor,
+    config: CollectCoverageConfig,
+) -> bool:
+    """Play rounds until every awaited unit is done. True when Ctrl-C ended them."""
+    decks_file = Path(config.effect_records) / "coverage-decks.txt"
+    rng = random.Random(RANDOM_SEED)
+    round_number = 0
+    while not is_complete(rounds.awaited, rounds.target):
+        round_number += 1
+        previous = {key: unit.records for key, unit in rounds.units.items()}
+        weights = rounds.weights()
+        if not weights:
+            break
+        decks = build_coverage_decks(
+            weights, rounds.candidates, config.decks_per_round, rng=rng,
+        )
+        if not decks:
+            logger.error("%s", rounds.no_decks)
+            break
+        decked = rounds.units_decked({name for deck in decks for name in deck})
+        play_decks(
+            supervisor, decks, decks_file,
+            label="coverage", matches=config.decks_per_round,
+        )
+        read = rounds.count_new_shards()
+        logger.info("Counted %d new shard(s) from round %d", read, round_number)
+        retired = retire_stalled(
+            rounds.units, previous, no_progress_rounds=config.no_progress_rounds,
+            decked=decked,
+        )
+        logger.info("%s", round_summary(round_number, rounds, retired))
+        if supervisor.interrupted:
+            # ForgeWorkerPool swallows SIGINT -- it sets its own event and
+            # returns normally -- so without this the loop builds a fresh
+            # pool and Ctrl-C means "skip this round, start another".
+            logger.warning(
+                "Interrupted after round %d; stopping instead of starting "
+                "another round", round_number,
+            )
+            return True
+    return False
+
+
 def run(config: CollectCoverageConfig) -> int:
     """Play rounds until every card is satisfied or retired."""
     if config.only_cards is not None:
         return run_text_coverage(config)
-    from effects.infrastructure.collector_connector import CollectorSupervisor
-    from effects.infrastructure.deck_file import COVERAGE_SET_CODE, write_deck_file
 
     cards_folder = config.coverage_folder()
     if not cards_folder.is_dir():
@@ -419,16 +555,12 @@ def run(config: CollectCoverageConfig) -> int:
     from effects.application.train_effect_model import load_card_files
 
     card_files = load_card_files(cards_folder)
-    texts = {
-        name: (cards_folder.parent / script).read_text(encoding="utf-8")
-        for name, script in card_files.items()
-        if (cards_folder.parent / script).exists()
-    }
-    non_deck = {name for name, text in texts.items() if not is_deckable(text)}
-    card_files = {
-        name: script for name, script in card_files.items() if name not in non_deck
-    }
-    coverage = build_coverage_units(card_files, held_out)
+    texts = read_converted_texts(cards_folder, card_files)
+    non_deck = non_deck_names(texts)
+    coverage = build_coverage_units(
+        {name: script for name, script in card_files.items() if name not in non_deck},
+        held_out,
+    )
     if not coverage:
         logger.error("No deckable cards under %s", cards_folder)
         return 1
@@ -441,8 +573,9 @@ def run(config: CollectCoverageConfig) -> int:
     # The existing corpus is counted once, here, rather than again after every
     # round. On 1,502 shards that is the difference between paying ~66 minutes
     # once and paying it per round.
+    records_dir = Path(config.effect_records)
     counter = CoverageCounter()
-    seeded = counter.update(coverage, Path(config.effect_records))
+    seeded = counter.update(coverage, records_dir)
     logger.info(
         "Counted %d existing shard(s); %d of %d cards already at target",
         seeded,
@@ -455,69 +588,26 @@ def run(config: CollectCoverageConfig) -> int:
         if name in coverage:
             coverage[name].verdict = verdict
 
-    candidates = {
-        name: DeckCandidate.from_converted_text(name, text)
-        for name, text in texts.items()
-    }
-    decks_file = Path(config.effect_records) / "coverage-decks.txt"
-    rng = random.Random(RANDOM_SEED)
-
-    supervisor = CollectorSupervisor(
-        worker_count=config.workers, effect_records=config.effect_records,
-        caps=config.caps,
+    rounds = CoverageRounds(
+        units=coverage,
+        awaited=coverage,
+        target=config.target_records,
+        candidates={
+            name: DeckCandidate.from_converted_text(name, text)
+            for name, text in texts.items()
+        },
+        weights=lambda: rank_by_consult(
+            deck_weights(coverage, config.target_records), verdicts,
+        ),
+        units_decked=lambda cards: cards,
+        count_new_shards=lambda: counter.update(coverage, records_dir),
+        no_decks="No card with a weight has converted text; nothing to deck.",
     )
-    interrupted = False
-    try:
-        round_number = 0
-        while not is_complete(coverage, config.target_records):
-            round_number += 1
-            previous = {name: card.records for name, card in coverage.items()}
-            weights = rank_by_consult(
-                deck_weights(coverage, config.target_records), verdicts,
-            )
-            if not weights:
-                break
-            decks = build_coverage_decks(
-                weights, candidates, config.decks_per_round, rng=rng,
-            )
-            if not decks:
-                logger.error(
-                    "No card with a weight has converted text; nothing to deck."
-                )
-                break
-            write_deck_file(
-                decks, decks_file,
-                label="coverage", set_code=COVERAGE_SET_CODE,
-            )
-            decked = {name for deck in decks for name in deck}
-            supervisor.play_round(decks_file, matches=config.decks_per_round)
-            read = counter.update(coverage, Path(config.effect_records))
-            logger.info("Counted %d new shard(s) from round %d", read, round_number)
-            retired = retire_stalled(
-                coverage, previous, no_progress_rounds=config.no_progress_rounds,
-                decked=decked,
-            )
-            logger.info("%s", round_summary(
-                round_number, coverage, config.target_records, retired,
-            ))
-            if supervisor.interrupted:
-                # ForgeWorkerPool swallows SIGINT -- it sets its own event and
-                # returns normally -- so without this the loop builds a fresh
-                # pool and Ctrl-C means "skip this round, start another".
-                interrupted = True
-                logger.warning(
-                    "Interrupted after round %d; stopping instead of starting "
-                    "another round", round_number,
-                )
-                break
-    finally:
-        # Closes the worker log files and shuts the pool down (final-fix-3.md
-        # item 5). Without this, the only latched effect-record failure
-        # reporters this run has (ApiEvents.reportEmitterFailure and its
-        # siblings, F4) never surface: their handles stay open, unflushed
-        # and unclosed, until the interpreter exits on its own -- a
-        # collection run that gets killed or piped never sees them at all.
-        supervisor.stop()
+    with collector_supervisor(
+        workers=config.workers, effect_records=config.effect_records,
+        caps=config.caps,
+    ) as supervisor:
+        interrupted = play_rounds(rounds, supervisor, config)
 
     report = residues(coverage, config.target_records)
     logger.info("%s", report.render(config.target_records))
@@ -659,8 +749,6 @@ def run_text_coverage(config: CollectCoverageConfig) -> int:
         load_card_texts,
     )
     from effects.domain.card_names import fold_card_name
-    from effects.infrastructure.collector_connector import CollectorSupervisor
-    from effects.infrastructure.deck_file import COVERAGE_SET_CODE, write_deck_file
     from effects.infrastructure.sidecar_io import SidecarCache, sidecar_roots
 
     cards_folder = config.coverage_folder()
@@ -675,18 +763,14 @@ def run_text_coverage(config: CollectCoverageConfig) -> int:
         name: script for name, script in card_files.items()
         if fold_card_name(name) in listed
     }
-    texts = {
-        name: (cards_folder.parent / script).read_text(encoding="utf-8")
-        for name, script in listed_files.items()
-        if (cards_folder.parent / script).exists()
-    }
+    texts = read_converted_texts(cards_folder, listed_files)
     # Which texts are held out is decided over every listed card, non-deck
     # ones included: left out of ``listed``, they would read as unlisted
     # carriers and take the texts they share out of the round. Only then do
     # they leave as carriers, since no deck can hold one, and a text no
     # deckable card carries leaves the unit rather than retiring after rounds
     # of decks that never load.
-    non_deck = {name for name, text in texts.items() if not is_deckable(text)}
+    non_deck = non_deck_names(texts)
     present = frozenset(name for name in listed_files if name not in non_deck)
     carriers = {
         text: cards - non_deck
@@ -716,8 +800,9 @@ def run_text_coverage(config: CollectCoverageConfig) -> int:
         for text, cards in carriers.items()
     }
     floor = config.min_text_games
+    records_dir = Path(config.effect_records)
     counter = TextCoverageCounter({tree: str(root) for tree, root in roots.items()})
-    counter.update(coverage, Path(config.effect_records))
+    counter.update(coverage, records_dir)
     logger.info(
         "Held-out round: %d text(s) on %d card(s); %d already at %d games; %d "
         "with no castable carrier",
@@ -726,54 +811,28 @@ def run_text_coverage(config: CollectCoverageConfig) -> int:
         sum(1 for unit in coverage.values() if not unit.castable),
     )
 
-    candidates = {
-        name: DeckCandidate.from_converted_text(name, text)
-        for name, text in texts.items() if name in present
-    }
-    decks_file = Path(config.effect_records) / "coverage-decks.txt"
-    rng = random.Random(RANDOM_SEED)
-    caps = held_out_round_caps(config.caps)
-    supervisor = CollectorSupervisor(
-        worker_count=config.workers, effect_records=config.effect_records, caps=caps,
+    rounds = CoverageRounds(
+        units=coverage,
+        awaited=awaited_texts(coverage),
+        target=floor,
+        candidates={
+            name: DeckCandidate.from_converted_text(name, text)
+            for name, text in texts.items() if name in present
+        },
+        weights=lambda: rank_by_consult(
+            text_deck_weights(coverage, carriers, floor), verdicts,
+        ),
+        units_decked=lambda cards: {
+            text for text, carrying in carriers.items() if carrying & cards
+        },
+        count_new_shards=lambda: counter.update(coverage, records_dir),
+        no_decks="No unfinished held-out text has a card with converted text.",
     )
-    interrupted = False
-    try:
-        round_number = 0
-        while not is_text_round_complete(coverage, floor):
-            round_number += 1
-            previous = {text: len(unit.games) for text, unit in coverage.items()}
-            weights = rank_by_consult(text_deck_weights(coverage, carriers, floor), verdicts)
-            decks = build_coverage_decks(
-                weights, candidates, config.decks_per_round, rng=rng,
-            )
-            if not decks:
-                logger.error("No unfinished held-out text has a card with converted text.")
-                break
-            write_deck_file(decks, decks_file, label="coverage", set_code=COVERAGE_SET_CODE)
-            decked_cards = {name for deck in decks for name in deck}
-            decked = {
-                text for text, cards in carriers.items() if cards & decked_cards
-            }
-            supervisor.play_round(decks_file, matches=config.decks_per_round)
-            counter.update(coverage, Path(config.effect_records))
-            retired = retire_stalled(
-                coverage, previous, no_progress_rounds=config.no_progress_rounds,
-                decked=decked,
-            )
-            logger.info(
-                "round %d: %d satisfied, %d remaining, %d retired this round",
-                round_number,
-                sum(1 for unit in coverage.values() if unit.satisfied(floor)),
-                sum(1 for unit in coverage.values()
-                    if unit.castable and not unit.done(floor)),
-                len(retired),
-            )
-            if supervisor.interrupted:
-                interrupted = True
-                logger.warning("Interrupted after round %d.", round_number)
-                break
-    finally:
-        supervisor.stop()
+    with collector_supervisor(
+        workers=config.workers, effect_records=config.effect_records,
+        caps=held_out_round_caps(config.caps),
+    ) as supervisor:
+        interrupted = play_rounds(rounds, supervisor, config)
 
     logger.info("%s", text_residues(coverage, floor).render(floor))
     return 130 if interrupted else 0

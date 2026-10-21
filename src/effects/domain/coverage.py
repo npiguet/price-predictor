@@ -292,11 +292,6 @@ def is_complete(coverage: Mapping[str, CoverageUnit], target: int) -> bool:
     return all(unit.done(target) for unit in coverage.values())
 
 
-def is_text_round_complete(coverage: Mapping[str, TextCoverage], floor: int) -> bool:
-    """Every held-out text with a castable carrier satisfied or retired (FR-037)."""
-    return is_complete(awaited_texts(coverage), floor)
-
-
 def awaited_texts(coverage: Mapping[str, TextCoverage]) -> dict[str, TextCoverage]:
     """The held-out texts whose completion ends the round (FR-037).
 

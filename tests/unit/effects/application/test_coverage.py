@@ -1090,14 +1090,15 @@ class TestHeldOutTextUnit:
     def test_the_round_ends_without_waiting_on_uncastable_texts(self):
         """FR-037 / spec Story 2 scenario 6."""
         from effects.application.collect_coverage import text_residues
-        from effects.domain.coverage import TextCoverage, is_text_round_complete
+        from effects.domain.coverage import TextCoverage, awaited_texts, is_complete
 
         coverage = {
             "done": TextCoverage(text="done", games={f"g{i}" for i in range(5)}),
             "retired": TextCoverage(text="retired", games={"g1"}, retired=True),
             "stuck": TextCoverage(text="stuck", castable=False),
         }
-        assert is_text_round_complete(coverage, 5)
+        assert set(awaited_texts(coverage)) == {"done", "retired"}
+        assert is_complete(awaited_texts(coverage), 5)
         residues = text_residues(coverage, 5)
         assert residues.under_floor == {"retired": 1}
         assert residues.uncastable == ("stuck",)
