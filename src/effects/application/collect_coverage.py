@@ -461,6 +461,14 @@ def residues(
     return CoverageResidues(tuple(uncastable), tuple(short))
 
 
+TWO_HOLDOUT_SOURCES = (
+    "pass one source of held-out cards, not both: --exclude-cards "
+    "names the list this corpus is being depleted against, "
+    "--split-from inherits a checkpoint's recorded split, and a "
+    "disagreement between them is silent"
+)
+
+
 def load_exclusions(
     *, split_from: Path | None, exclude_cards: Path | None,
 ) -> frozenset[str]:
@@ -479,12 +487,7 @@ def load_exclusions(
     from effects.domain.card_names import fold_card_name
 
     if split_from is not None and exclude_cards is not None:
-        raise ValueError(
-            "pass one source of held-out cards, not both: --exclude-cards "
-            "names the list this corpus is being depleted against, "
-            "--split-from inherits a checkpoint's recorded split, and a "
-            "disagreement between them is silent"
-        )
+        raise ValueError(TWO_HOLDOUT_SOURCES)
     if exclude_cards is not None:
         return frozenset(
             fold_card_name(line.strip())

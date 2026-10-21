@@ -190,6 +190,35 @@ class TestTheRandomSeatOnTheCollectors:
         assert "--random-seat-probability" in capsys.readouterr().out
 
 
+class TestOneHoldoutSource:
+    @pytest.mark.parametrize(("command", "module"), [
+        ("collect-coverage", "effects.application.collect_coverage.run"),
+        ("collect-variants", "effects.application.collect_variants.run"),
+    ])
+    def test_two_holdout_sources_are_refused_before_any_worker(
+        self, command, module, capsys,
+    ):
+        """``--split-from`` beside ``--exclude-cards`` names one holdout twice;
+        both collectors say so as a message, never a traceback."""
+        from unittest.mock import patch
+
+        from effects.infrastructure.cli import (
+            run_collect_coverage,
+            run_collect_variants,
+        )
+
+        runner = {
+            "collect-coverage": run_collect_coverage,
+            "collect-variants": run_collect_variants,
+        }[command]
+        with patch(module) as collect:
+            assert runner(parse(
+                command, "--split-from", "latest.pt", "--exclude-cards", "h.txt",
+            )) == 1
+        collect.assert_not_called()
+        assert "one source of held-out cards" in capsys.readouterr().out
+
+
 class TestSubcommandTable:
     def test_collect_coverage_is_registered(self):
         parser = build_parser()

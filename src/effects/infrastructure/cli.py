@@ -392,6 +392,25 @@ def _collect_coverage_parser(subparsers) -> None:
 HOLDOUT_LIST_NAME = "holdout-cards.txt"
 
 
+def holdout_source(args: argparse.Namespace) -> tuple[Path, Path | None]:
+    """:func:`resolve_training_corpus`, refusing a second source beside it.
+
+    Checked here, before any worker starts, so a collector refuses
+    ``--split-from`` beside a depletion list as a message rather than as a
+    traceback out of its first round.
+
+    Raises:
+        ValueError: As :func:`resolve_training_corpus`, or when ``--split-from``
+            names a holdout the depletion list already names.
+    """
+    from effects.application.collect_coverage import TWO_HOLDOUT_SOURCES
+
+    records, listed = resolve_training_corpus(args)
+    if args.split_from and listed is not None:
+        raise ValueError(TWO_HOLDOUT_SOURCES)
+    return records, listed
+
+
 def resolve_training_corpus(args: argparse.Namespace) -> tuple[Path, Path | None]:
     """``(records dir, depletion list)`` from ``--training-corpus`` or the pair.
 
@@ -452,7 +471,7 @@ def coverage_config_from(args: argparse.Namespace):
                 f"--only-cards decks the held-out cards; {', '.join(clashing)} "
                 "keeps a holdout out of every deck. Pass one or the other."
             )
-    records, listed = resolve_training_corpus(args)
+    records, listed = holdout_source(args)
     return CollectCoverageConfig(
         only_cards=Path(only_cards) if only_cards else None,
         min_text_games=getattr(args, "min_text_games", 5),
@@ -1266,8 +1285,12 @@ def run_collect_variants(args: argparse.Namespace) -> int:
     if error is not None:
         print(f"collect-variants: {error}")
         return 1
+    try:
+        records, listed = holdout_source(args)
+    except ValueError as exc:
+        print(f"collect-variants: {exc}")
+        return 1
     print(announce_probe_state(args.probe_keywords, args.probes_per_game))
-    records, listed = resolve_training_corpus(args)
     return collect(CollectVariantsConfig(
         effect_records=records,
         forge_cards_path=Path(args.forge_cards_path),
