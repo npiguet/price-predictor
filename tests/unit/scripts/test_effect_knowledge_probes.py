@@ -655,6 +655,24 @@ class TestAffordabilityEdit:
 # ── the probe set's digest ──────────────────────────────────────────────
 
 
+def _probe_set(corpus_digest: str):
+    """A small sealed set, every field filled the way a freeze fills it."""
+    return probe_set.ProbeSet(
+        corpus="corpus", corpus_digest=corpus_digest, surface="script",
+        games={"card-disjoint": ["g1"]}, sources={"card-disjoint": ["s.jsonl.gz"]},
+        items=[probe_set.FrozenLineItem({"script_file": "cardsfolder/s/shock.txt"},
+                                        {"amount": 2.0}, {"spread": 0.5})],
+        pairs=[{"a": {}, "b": {}, "label": 1.0, "source": "mined"}],
+        record_items=[probe_set.FrozenRecordItem(
+            record_id="g1.1", stratum="card-disjoint", family="magnitudes",
+            target="dies", label=1.0, entity="E1", group="cardsfolder/s/shock.txt")],
+        sweeps={"toughness": [{"record_id": "g1.1", "entity": "E1"}]},
+        join_rate=0.25, join={"fired": 4, "fired_joined": 1},
+        settings={"games_per_stratum": 300},
+    ).sealed()
+
+
+
 class TestDigest:
     def test_it_is_stable_across_key_order(self):
         a = {"items": [1, 2], "games": {"x": ["g1"]}, "corpus_digest": "c"}
@@ -671,13 +689,26 @@ class TestDigest:
         assert digest({"items": [1]}) != digest({"items": [2]})
 
     def test_a_probing_run_refuses_a_set_frozen_for_another_corpus(self, tmp_path):
-        payload = {"corpus_digest": "aaa", "items": []}
-        payload["digest"] = probe_set.canonical_digest(payload)
+        frozen = _probe_set(corpus_digest="aaa")
         path = tmp_path / "set.json"
-        path.write_text(json.dumps(payload), encoding="utf-8")
+        path.write_text(json.dumps(frozen.to_json()), encoding="utf-8")
         with pytest.raises(SystemExit, match="frozen against corpus digest"):
             probe_set.load_probe_set(path, "bbb")
-        assert probe_set.load_probe_set(path, "aaa")["digest"] == payload["digest"]
+        assert probe_set.load_probe_set(path, "aaa").digest == frozen.digest
+
+    def test_an_edited_set_is_refused(self, tmp_path):
+        payload = _probe_set(corpus_digest="aaa").to_json()
+        payload["join_rate"] = 0.5
+        path = tmp_path / "set.json"
+        path.write_text(json.dumps(payload), encoding="utf-8")
+        with pytest.raises(SystemExit, match="does not match its own digest"):
+            probe_set.load_probe_set(path, "aaa")
+
+    def test_the_json_round_trips_to_the_same_digest(self):
+        frozen = _probe_set(corpus_digest="aaa")
+        again = probe_set.ProbeSet.from_json(json.loads(json.dumps(frozen.to_json())))
+        assert again.sealed().digest == frozen.digest
+        assert again.record_items == frozen.record_items
 
     def test_a_probing_run_refuses_without_a_set(self, tmp_path):
         with pytest.raises(SystemExit, match="--freeze-probe-set"):
@@ -702,8 +733,8 @@ class TestDigest:
 # ── compare ─────────────────────────────────────────────────────────────
 
 
-def _card(name: str, one: float, width: float, digest: str = "d") -> dict:
-    return {
+def _card(name: str, one: float, width: float, digest: str = "d"):
+    return _scorecard({
         "checkpoint": f"models/effects/runs/{name}/latest.pt",
         "probe_set_digest": digest,
         "families": {"magnitudes": {"targets": {"dies": {
@@ -715,7 +746,13 @@ def _card(name: str, one: float, width: float, digest: str = "d") -> dict:
                 "3": {"model": 0.9},
             }}},
         }}}},
-    }
+    })
+
+
+def _scorecard(data: dict):
+    from effect_knowledge_probes.scorecard import Scorecard
+
+    return Scorecard.from_json(data)
 
 
 class TestCompare:
@@ -729,7 +766,7 @@ class TestCompare:
         let a large R² swing on one amount decide the ranking."""
         def card(name, auc_gain, r2_gain):
             body = _card(name, 0.6 + auc_gain, 0.6)
-            body["families"]["magnitudes"]["targets"]["damage_taken"] = {
+            body.families["magnitudes"]["targets"]["damage_taken"] = {
                 "scope": "entity", "kind": "amount",
                 "strata": {"card-disjoint": {"n": 100, "rungs": {
                     "1": {"linear": 0.2 + r2_gain, "mlp": 0.2 + r2_gain},
@@ -751,7 +788,7 @@ class TestCompare:
         paths = []
         for name in ("a", "b"):
             path = tmp_path / f"{name}.json"
-            path.write_text(json.dumps(_card(name, 0.7, 0.6)), encoding="utf-8")
+            path.write_text(json.dumps(_card(name, 0.7, 0.6).to_json()), encoding="utf-8")
             paths.append(path)
         out = tmp_path / "compare.md"
         assert compare.main([str(p) for p in paths] + ["--output", str(out)]) == 0
@@ -761,7 +798,7 @@ class TestCompare:
 
     def test_the_table_prints_to_a_cp1252_stdout(self, tmp_path, monkeypatch):
         path = tmp_path / "a.json"
-        path.write_text(json.dumps(_card("a", 0.7, 0.6)), encoding="utf-8")
+        path.write_text(json.dumps(_card("a", 0.7, 0.6).to_json()), encoding="utf-8")
         stdout = io.TextIOWrapper(io.BytesIO(), encoding="cp1252")
         monkeypatch.setattr(sys, "stdout", stdout)
         assert compare.main([str(path)]) == 0

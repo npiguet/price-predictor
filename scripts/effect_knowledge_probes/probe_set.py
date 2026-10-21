@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 
@@ -28,17 +29,153 @@ def probe_set_path(directory: Path, corpus_digest: str) -> Path:
     return Path(directory) / f"knowledge-probes-set-{corpus_digest[:12]}.json"
 
 
-def load_probe_set(path: Path, corpus_digest: str) -> dict:
-    """The frozen set for this corpus; refuses a missing or mismatched one."""
+def load_probe_set(path: Path, corpus_digest: str) -> ProbeSet:
+    """The frozen set for this corpus; refuses a missing or mismatched one.
+
+    The digest is checked over what :class:`ProbeSet` reads back, so a field it
+    would drop fails here rather than vanishing from the next set written.
+    """
     if not path.exists():
         raise SystemExit(
             f"no frozen probe set at {path}: run with --freeze-probe-set first "
             "(once per curated corpus)")
-    probe_set = json.loads(path.read_text(encoding="utf-8"))
-    if probe_set.get("corpus_digest") != corpus_digest:
+    data = json.loads(path.read_text(encoding="utf-8"))
+    if data.get("corpus_digest") != corpus_digest:
         raise SystemExit(
             f"{path} was frozen against corpus digest "
-            f"{probe_set.get('corpus_digest')}, not this corpus's {corpus_digest}")
-    if probe_set.get("digest") != canonical_digest(probe_set):
+            f"{data.get('corpus_digest')}, not this corpus's {corpus_digest}")
+    probe_set = ProbeSet.from_json(data)
+    if data.get("digest") != canonical_digest(probe_set.to_json()):
         raise SystemExit(f"{path} does not match its own digest; it was edited")
     return probe_set
+
+
+# ── the set's items ─────────────────────────────────────────────────────
+
+
+@dataclass(frozen=True, slots=True)
+class FrozenLineItem:
+    """One ability line's labels, keyed by the provenance of its first carrier.
+
+    ``weights`` holds a per-label weight where a label is an estimate over few
+    records (the state-dependence spread); absent from the JSON when empty.
+    """
+
+    key: dict
+    labels: dict[str, float]
+    weights: dict[str, float] = field(default_factory=dict)
+
+    def to_json(self) -> dict:
+        out = {"key": self.key, "labels": self.labels}
+        if self.weights:
+            out["weights"] = self.weights
+        return out
+
+    @classmethod
+    def from_json(cls, data: dict) -> FrozenLineItem:
+        return cls(key=data["key"], labels=data["labels"], weights=data.get("weights", {}))
+
+    def provenance_key(self):
+        from effects.domain.provenance import ProvenanceKey
+
+        return ProvenanceKey.from_dict(self.key)
+
+
+@dataclass(frozen=True, slots=True)
+class FrozenRecordItem:
+    """One board-dependent item: a record of a probe game, its target and label."""
+
+    record_id: str
+    stratum: str
+    family: str
+    target: str
+    label: float
+    entity: str | None = None
+    #: A trigger's cause, as the acting key's dict; filled in once the join ran.
+    partner: dict | None = None
+    partner_entity: str | None = None
+    group: str = ""
+
+    def to_json(self) -> dict:
+        return {
+            "record_id": self.record_id, "stratum": self.stratum,
+            "family": self.family, "target": self.target, "label": self.label,
+            "entity": self.entity, "partner": self.partner,
+            "partner_entity": self.partner_entity, "group": self.group,
+        }
+
+    @classmethod
+    def from_json(cls, data: dict) -> FrozenRecordItem:
+        return cls(**{name: data[name] for name in _RECORD_ITEM_FIELDS})
+
+    def record_item(self):
+        """The item as ``labels.RecordItem``, its partner a provenance key again."""
+        from effect_knowledge_probes.labels import RecordItem
+        from effects.domain.provenance import ProvenanceKey
+
+        partner = None if self.partner is None else ProvenanceKey.from_dict(self.partner)
+        return RecordItem(
+            record_id=self.record_id, target=self.target, label=self.label,
+            entity=self.entity, partner=partner, partner_entity=self.partner_entity,
+            group=self.group,
+        )
+
+
+_RECORD_ITEM_FIELDS = (
+    "record_id", "stratum", "family", "target", "label", "entity", "partner",
+    "partner_entity", "group",
+)
+
+
+@dataclass
+class ProbeSet:
+    """Everything one corpus's probing runs read, frozen with its digest."""
+
+    corpus: str
+    corpus_digest: str
+    surface: str
+    #: ``stratum -> probe game ids``, and the shards they were read from.
+    games: dict[str, list[str]]
+    sources: dict[str, list[str]]
+    items: list[FrozenLineItem]
+    #: ``{a, b, label, source}``: a trigger line's key, its cause's, and
+    #: whether the cause fired it.
+    pairs: list[dict]
+    record_items: list[FrozenRecordItem]
+    #: ``sweep -> [{record_id, ...}]``, the records each board sweep edits.
+    sweeps: dict[str, list[dict]]
+    join_rate: float
+    join: dict[str, int]
+    settings: dict
+    digest: str = ""
+
+    def to_json(self) -> dict:
+        """The set as it is written; ``digest`` only once it has one."""
+        out = {
+            "corpus": self.corpus, "corpus_digest": self.corpus_digest,
+            "surface": self.surface, "games": self.games, "sources": self.sources,
+            "items": [item.to_json() for item in self.items],
+            "pairs": self.pairs,
+            "record_items": [item.to_json() for item in self.record_items],
+            "sweeps": self.sweeps, "join_rate": self.join_rate, "join": self.join,
+            "settings": self.settings,
+        }
+        if self.digest:
+            out["digest"] = self.digest
+        return out
+
+    @classmethod
+    def from_json(cls, data: dict) -> ProbeSet:
+        return cls(
+            corpus=data["corpus"], corpus_digest=data["corpus_digest"],
+            surface=data["surface"], games=data["games"], sources=data["sources"],
+            items=[FrozenLineItem.from_json(item) for item in data["items"]],
+            pairs=data["pairs"],
+            record_items=[FrozenRecordItem.from_json(item) for item in data["record_items"]],
+            sweeps=data["sweeps"], join_rate=data["join_rate"], join=data["join"],
+            settings=data["settings"], digest=data.get("digest", ""),
+        )
+
+    def sealed(self) -> ProbeSet:
+        """The set with its digest computed over everything else."""
+        return replace(self, digest=canonical_digest(self.to_json()))

@@ -26,18 +26,20 @@ if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from effect_knowledge_probes.common import fmt  # noqa: E402
+from effect_knowledge_probes.scorecard import Scorecard  # noqa: E402
 
 PROBE_TYPES = ("linear", "mlp")
 #: The score each target kind is read by, which names its ranking.
 METRICS = {"binary": "AUC", "amount": "R²"}
 
 
-def load(paths: list[Path]) -> list[dict]:
-    return [json.loads(Path(p).read_text(encoding="utf-8")) for p in paths]
+def load(paths: list[Path]) -> list[Scorecard]:
+    return [Scorecard.from_json(json.loads(Path(p).read_text(encoding="utf-8")))
+            for p in paths]
 
 
-def digest_warning(cards: list[dict]) -> str | None:
-    digests = {card.get("probe_set_digest") for card in cards}
+def digest_warning(cards: list[Scorecard]) -> str | None:
+    digests = {card.probe_set_digest for card in cards}
     if len(digests) > 1:
         return ("WARNING: the scorecards record different probe-set digests "
                 f"({', '.join(sorted(str(d)[:12] for d in digests))}); their "
@@ -45,9 +47,9 @@ def digest_warning(cards: list[dict]) -> str | None:
     return None
 
 
-def _cells(card: dict):
+def _cells(card: Scorecard):
     """``(family, target, stratum, rung, probe_type) -> score`` of one card."""
-    for family, body in card.get("families", {}).items():
+    for family, body in card.families.items():
         for target, entry in body.get("targets", {}).items():
             for stratum, result in entry.get("strata", {}).items():
                 for rung, scores in result.get("rungs", {}).items():
@@ -55,13 +57,13 @@ def _cells(card: dict):
                         yield (family, target, stratum, rung, probe_type), value
 
 
-def width_gain(card: dict, probe_type: str, kind: str) -> float:
+def width_gain(card: Scorecard, probe_type: str, kind: str) -> float:
     """Mean of rung 1 − rung 1w over the card's board-dependent ``kind`` results.
 
     One kind at a time: a gain in AUC and a gain in R² are not on one scale.
     """
     gains = []
-    for family, body in card.get("families", {}).items():
+    for family, body in card.families.items():
         for entry in body.get("targets", {}).values():
             if entry.get("scope") not in ("act", "entity") or entry.get("kind") != kind:
                 continue
@@ -75,21 +77,21 @@ def width_gain(card: dict, probe_type: str, kind: str) -> float:
     return sum(gains) / len(gains) if gains else float("nan")
 
 
-def ranking(cards: list[dict]) -> dict[str, list[tuple[str, float]]]:
+def ranking(cards: list[Scorecard]) -> dict[str, list[tuple[str, float]]]:
     """Per probe type and score (``mlp AUC``, ``linear R²``), the checkpoints
     from largest width gain to smallest."""
     out = {}
     for probe_type in PROBE_TYPES:
         for kind, metric in METRICS.items():
-            scored = [(card.get("checkpoint", f"#{i}"), width_gain(card, probe_type, kind))
+            scored = [(card.checkpoint or f"#{i}", width_gain(card, probe_type, kind))
                       for i, card in enumerate(cards)]
             out[f"{probe_type} {metric}"] = sorted(
                 scored, key=lambda kv: -kv[1] if not math.isnan(kv[1]) else math.inf)
     return out
 
 
-def render(cards: list[dict]) -> str:
-    names = [Path(card.get("checkpoint", f"#{i}")).parent.name or card.get("checkpoint", "")
+def render(cards: list[Scorecard]) -> str:
+    names = [Path(card.checkpoint or f"#{i}").parent.name or card.checkpoint
              for i, card in enumerate(cards)]
     lines = ["# Knowledge-probe comparison", ""]
     warning = digest_warning(cards)

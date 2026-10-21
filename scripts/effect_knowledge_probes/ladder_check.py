@@ -27,6 +27,7 @@ from __future__ import annotations
 import argparse
 import sys
 from collections import Counter, defaultdict
+from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
@@ -114,16 +115,15 @@ def main() -> None:
     probe_set = context.load_probe_set(args.probe_set_dir)
     kinds = {s.name: s.kind for s in labels.TARGETS}
     items_by_stratum: dict[str, dict[str, list]] = defaultdict(lambda: defaultdict(list))
-    for row in probe_set["record_items"]:
-        if row["target"] not in targets:
+    for frozen in probe_set.record_items:
+        if frozen.target not in targets:
             continue
-        items_by_stratum[row["stratum"]][row["record_id"]].append(labels.RecordItem(
-            record_id=row["record_id"], target=row["target"], label=row["label"],
-            entity=row["entity"], partner=None, partner_entity=row["partner_entity"],
-            group=row["group"]))
+        # No partner: none of the targets checked here reads one.
+        items_by_stratum[frozen.stratum][frozen.record_id].append(
+            replace(frozen, partner=None).record_item())
     records_by_stratum = {}
-    for stratum, game_ids in probe_set["games"].items():
-        shards = context.source_shards(probe_set["sources"].get(stratum, []))
+    for stratum, game_ids in probe_set.games.items():
+        shards = context.source_shards(probe_set.sources.get(stratum, []))
         wanted = set(items_by_stratum[stratum])
         records_by_stratum[stratum] = [
             record for _, record in common.read_games(shards, set(game_ids), wanted)]

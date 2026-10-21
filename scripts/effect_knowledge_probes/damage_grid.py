@@ -29,13 +29,13 @@ from effect_knowledge_probes.board_edits import BoardEdit  # noqa: E402
 VALUES = range(1, 9)
 
 
-def probe_records(context, probe_set: dict, host: str) -> list[tuple[object, str]]:
+def probe_records(context, probe_set, host: str) -> list[tuple[object, str]]:
     """The frozen probe set's damage-sweep records on ``host``, with their targets."""
-    rows = [r for r in probe_set["sweeps"]["damage"] if r["host"] == host]
+    rows = [r for r in probe_set.sweeps["damage"] if r["host"] == host]
     ids = {r["record_id"] for r in rows}
     found = {}
-    for stratum, games in probe_set["games"].items():
-        shards = context.source_shards(probe_set["sources"][stratum])
+    for stratum, games in probe_set.games.items():
+        shards = context.source_shards(probe_set.sources[stratum])
         for _, rec in common.read_games(shards, set(games), ids):
             found[rec.record_id] = rec
     return [(found[r["record_id"]], r["entity"]) for r in rows]
