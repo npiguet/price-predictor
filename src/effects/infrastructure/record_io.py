@@ -760,9 +760,9 @@ def repack_shards(
     """Deal ``parts``' games into shards of about ``shard_records`` records each.
 
     Whole games are dealt by a seeded hash of ``game_id`` modulo the shard
-    count, so a game never spans two shards -- the trainer filters a shard
-    by game and a stratum keeps a probe beside the record its ``mirror_of``
-    names -- and each shard holds games from across the whole stratum rather
+    count, so a game never spans two shards -- the split is by game, and the
+    trainer filters a shard by game -- and each shard holds games from across
+    the whole stratum rather
     than a run of consecutive parts. A part is one source shard, one JVM
     lifetime of one collection run, so cutting the parts in order filled
     each shard with a handful of lifetimes of one run; the trainer draws

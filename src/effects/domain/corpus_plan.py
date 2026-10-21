@@ -456,9 +456,9 @@ def admit_card_disjoint(
 ) -> frozenset[str]:
     """Held-out games admitted while every held-out text they resolve is under cap.
 
-    Games rather than records (FR-142, FR-136): a stratum built by dropping
-    records inside a game would separate a probe from the combat record its
-    ``mirror_of`` names, and a stratum holding half a pair scores nothing.
+    Games rather than records (FR-142, FR-136): a stratum holds whole games,
+    the unit the split is decided in, so the cap admits or declines a game
+    rather than trimming records inside one.
 
     ``text_games`` maps each held-out text to the games holding a
     **resolution** record acting through it: gate 1 and the gate-one slice
