@@ -37,6 +37,7 @@ from collections import Counter, defaultdict
 from collections.abc import Collection
 from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass, field, replace
+from enum import StrEnum
 from pathlib import Path
 
 from effects.domain.collection_caps import CollectionCaps
@@ -127,12 +128,32 @@ class CollectCoverageConfig:
         return Path(self.cards_folders[0])
 
 
-class ConsultVerdict:
+class ConsultVerdict(StrEnum):
     """What the castability consult said about a card."""
 
     CASTABLE = "castable"
     UNCASTABLE = "uncastable"
     UNKNOWN = "unknown"
+
+    @classmethod
+    def parse(cls, raw: str) -> ConsultVerdict:
+        """The worker's verdict string, ``unknown`` when it is neither.
+
+        ``unknown`` rather than an error, because an unrecognised verdict was
+        always read as "not uncastable" and so ranked as castable -- the safe
+        direction, since the consult only ranks.
+        """
+        try:
+            return cls(raw)
+        except ValueError:
+            return cls.UNKNOWN
+
+
+#: An uncastable card's share of a castable card's deck weight. Above zero,
+#: because being in a game is the precondition an intervention forks from;
+#: below one, because a slot holding a card the AI cannot cast mostly produces
+#: no record toward any target, so castable cards should fill most slots.
+UNCASTABLE_RANK_MULTIPLIER = 0.25
 
 
 @dataclass
@@ -143,7 +164,7 @@ class CardCoverage:
     records: int = 0
     rounds_without_progress: int = 0
     retired: bool = False
-    verdict: str = ConsultVerdict.UNKNOWN
+    verdict: ConsultVerdict = ConsultVerdict.UNKNOWN
 
     def satisfied(self, target: int) -> bool:
         return self.records >= target
@@ -300,7 +321,7 @@ def deck_weights(
 
 
 def rank_by_consult(
-    weights: dict[str, float], verdicts: dict[str, str],
+    weights: dict[str, float], verdicts: dict[str, ConsultVerdict],
 ) -> dict[str, float]:
     """Apply the consult as a **ranking** input, never as a filter (FR-047).
 
@@ -311,7 +332,10 @@ def rank_by_consult(
     ranked: dict[str, float] = {}
     for name, weight in weights.items():
         verdict = verdicts.get(name, ConsultVerdict.UNKNOWN)
-        multiplier = 0.25 if verdict == ConsultVerdict.UNCASTABLE else 1.0
+        multiplier = (
+            UNCASTABLE_RANK_MULTIPLIER if verdict == ConsultVerdict.UNCASTABLE
+            else 1.0
+        )
         ranked[name] = weight * multiplier
     return ranked
 
@@ -666,7 +690,7 @@ def run(config: CollectCoverageConfig) -> int:
 
 def consult_castability(
     names: list[str], cards_folder: Path,
-) -> dict[str, str]:
+) -> dict[str, ConsultVerdict]:
     """Ask a live Forge whether each card can be cast at all (FR-047).
 
     Needs a game, so it runs in the JVM. A failure to consult leaves every card
@@ -676,13 +700,14 @@ def consult_castability(
     from effects.infrastructure.castability_connector import CastabilityConnector
 
     try:
-        return CastabilityConnector().consult(names, cards_folder)
+        verdicts = CastabilityConnector().consult(names, cards_folder)
     except (FileNotFoundError, OSError) as exc:
         logger.warning(
             "Castability consult unavailable (%s); every card ranks as "
             "castable, which only slows the run down", exc,
         )
         return {}
+    return {name: ConsultVerdict.parse(raw) for name, raw in verdicts.items()}
 
 
 # ── the held-out coverage round (FR-035–FR-038) ─────────────────────────
