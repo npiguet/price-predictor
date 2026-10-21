@@ -678,6 +678,12 @@ class TrainingLoop(StepPreparation):
 
     # ── stepping ────────────────────────────────────────────────────────
 
+    def _autocast(self):
+        """bf16 autocast on CUDA (FR-095); a no-op context elsewhere."""
+        return torch.autocast(
+            device_type="cuda", dtype=torch.bfloat16, enabled=self.autocast,
+        )
+
     def _training_heads(self, model) -> frozenset[str]:
         """The training-only heads a step computes; a zero weight computes none."""
         heads = set()
@@ -749,9 +755,7 @@ class TrainingLoop(StepPreparation):
         # inside `.materialize(...)` (`SurfaceBatcher._encode_staged` calls
         # `encoder(**batch)`), which is why the context has to enclose the
         # batch's device half and not just `model(**batch)`.
-        with torch.autocast(
-            device_type="cuda", dtype=torch.bfloat16, enabled=self.autocast,
-        ):
+        with self._autocast():
             if prepared.batcher is not None:
                 batcher = prepared.batcher
             batch, _surfaces = batcher.materialize(prepared.batch, encoder)
@@ -843,9 +847,7 @@ class TrainingLoop(StepPreparation):
         if loss.pending_mlm is None:
             return
         (masked, batcher), loss.pending_mlm = loss.pending_mlm, None
-        with torch.autocast(
-            device_type="cuda", dtype=torch.bfloat16, enabled=self.autocast,
-        ):
+        with self._autocast():
             token_hidden, token_targets = batcher.mlm_forward(encoder, masked)
             term = mlm_loss(model.mlm_head(token_hidden).float(), token_targets)
         (self.config.mlm_weight * term / self.config.grad_accum).backward()

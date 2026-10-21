@@ -42,6 +42,7 @@ from effects.domain.corpus_manifest import SourceShard
 from effects.domain.keyword_names import normalize_keyword
 from effects.domain.provenance import ProvenanceKey, parse_keys, render_keys
 from effects.domain.record_quality import (
+    MAX_EVENTS_PER_RECORD,
     NO_ACTING_TEXT,
     UNJOINABLE_KEY,
     acting_text_defect,
@@ -60,7 +61,7 @@ from effects.domain.sampling import (
     DEFAULT_KIND_MIX,
     sampling_class,
 )
-from effects.domain.split import HeldOutCards
+from effects.domain.split import HOLDOUT_MAX_CARRIERS, HOLDOUT_PERMILLE, HeldOutCards
 from effects.domain.strata import OUTPUT_STRATA, Stratum
 from effects.domain.token_key_remap import RemapCounts, TokenKeyRemapper, remap_record_dict
 
@@ -679,8 +680,8 @@ class BuildCorpusConfig:
     remap_token_keys: bool = True
     vocab_path: str = "models/effects/vocab.txt"
     variant_scripts: str | None = None
-    holdout_permille: int = 20
-    holdout_max_carriers: int = 8
+    holdout_permille: int = HOLDOUT_PERMILLE
+    holdout_max_carriers: int = HOLDOUT_MAX_CARRIERS
     #: ``template`` (gen-2) or ``text`` (feature 023's rule, FR-041).
     holdout_unit: str = "template"
     #: Most written records per ability text **per cell**, repeats included.
@@ -701,7 +702,7 @@ class BuildCorpusConfig:
     keyword_definitions: Path | None = Path("output/effects/keyword-definitions.json")
     card_disjoint_text_cap: int = 50
     shard_records: int = 2000
-    max_events: int = 64
+    max_events: int = MAX_EVENTS_PER_RECORD
     validation_sample: int = 2048
     seed: int = 42
     workers: int | None = None
