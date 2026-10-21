@@ -1,0 +1,7 @@
+edit,e64-lethality,B64 last,e256-lethality,B256 last
+as collected,0.42,0.56,0.61,0.96
+moved to the first main phase,0.43,0.59,0.63,0.95
+source untapped,0.51,0.63,0.58,0.96
+"read as a spell: AB$ to SP$, cost dropped",0.6,0.91,0.46,0.98
+'any target' read as 'target creature',0.97,0.93,0.92,0.98
+a healer's 'prevent the next 1 damage' text in its place,0,0,0.02,0.01

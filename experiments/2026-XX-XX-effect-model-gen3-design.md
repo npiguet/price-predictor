@@ -14,7 +14,9 @@ One goal is set: gen-3 rebalances its training examples rule by rule, so that no
 ability counts as rare in what the model trains on. Three sections below are its means. The rules
 index counts how many records show each rule of the game. Adaptive sampling draws more of the
 records a weak output field needs. The turn-rule section balances each condition between met and
-unmet. Beyond the schema and that goal, nothing here is decided yet.
+unmet. The rare-wording section shows that a rule's cells have to reach down to the kind of ability
+that exercises it, since an activated ping is rare where a damage spell is not. Beyond the schema and
+that goal, nothing here is decided yet.
 
 A few terms recur. A record is one observed game event: an ability resolving, a combat, a trigger, a
 legality decision. A resolution record comes in two halves joined by a link, the cost half and the
@@ -221,6 +223,39 @@ instead, with methods such as GradNorm and uncertainty weighting.
   stays flat to collection.
 - **Validation stays out of the loop.** The controller reads training loss. If the card-disjoint
   validation steered training, it would stop being an unbiased measure.
+
+## A rare wording of a common effect needs examples of its own, and field weighting cannot see it
+
+**Gen-2's arms doubt that an activated ping's target is affected, because training holds few such
+pings.** Prodigal Sorcerer's "{T}: deal 1 damage to any target" and its relatives resolve about 70
+times in gen-2's whole training corpus, about 45 of them at a creature. "Any target" damage spells
+resolve about seven times as often. On arm `e64-lethality`, run B64's last epoch and arm
+`e256-lethality`, the gate at the pinged creature sits near an even chance; the gate is the model's
+predicted chance that a card is affected at all. Reading the same records with "target creature" in
+place of "any target" lifts it above nine in ten. The model therefore knows the effect and has not
+tied this wording to its target. The last epochs of runs B128 and B256 learn it, so whether a
+checkpoint does is the luck of its fit ([the gen-2
+record](2026-09-18-effect-model-gen2-improvements-design.md#where-the-model-doubts-that-a-hit-creature-is-affected-the-text-leaves-the-victim-open-or-is-rare-in-training)).
+
+**Field weighting does not reach it.** The gate removes about three quarters of its constant
+prediction's loss over the whole corpus and stays level after epoch 20, so a controller watching
+each field's loss has no reason to raise it. The weak spot is one wording in
+one situation, an activated "any target" ability whose target is a creature, and the field's loss
+averages it away. Three parts of gen-3 could supply it:
+
+- **Per-rule rebalancing, with cells that cross a rule with the kind of ability exercising it.** Rule
+  115, targets, crossed with activated abilities would give these pings a quota of their own.
+- **Retargeting copies.** Gen-2's lethality copies already copy most qualifying pings, but each copy
+  keeps its record's board and target, so the gate sees the same 45 boards over and over. A copy that
+  hands the ping to another creature on the board, and labels the new target's damage and death by
+  the rule, would show the gate new boards from the same records.
+- **Collection aimed at the wording.** A coverage round over cards with an activated "any target"
+  damage ability would add creature targets beyond what the AI's own choices supply.
+
+**The measure is gen-2's toughness sweep.** Its activated damage records should give the same gate
+read with "any target" and with "target creature". Probes that pick training records should also drop
+repeated rows: the curated corpus writes a rare text's records several times, and gen-2's boundary
+chart counted three Suffocating Blast resolutions as twelve of its 40 rows.
 
 ## The Comprehensive Rules could index what the corpus covers, rule by rule
 
@@ -487,6 +522,8 @@ The acting-player bits stay. Every row but the owner rows is an input-layout cha
 ## The board input should say which attacker each blocker blocks
 
 **A card slot says that a creature is blocking, not which attacker it blocks.** The snapshot records the pairing in each creature's combat status, `blocking` and `blocked_by`, but the card features keep only a blocking bit and a count of blockers. With two blocked attackers on the board, the model cannot tell which blocker deals damage to which attacker, so a combat's deaths depend on a pairing it has to guess. Gen-2's combat grid reads only combats with one blocked attacker for this reason.
+
+**The gap reaches abilities as well as combat damage.** Skewer Slinger deals 1 damage to the creature it blocks or is blocked by. Both of gen-2's probe records for it have several creatures in combat, and run B256's last epoch gives the damaged creature a gate of 0.13 and 0.02 ([the gen-2 record](2026-09-18-effect-model-gen2-improvements-design.md#where-the-model-doubts-that-a-hit-creature-is-affected-the-text-leaves-the-victim-open-or-is-rare-in-training)).
 
 **The pairing belongs in the trunk's input.** Two forms would carry it: each card slot gains the board position of the attacker it blocks, or the trunk's attention gains a bias between a blocker and its attacker, as it could between an aura and the permanent it enchants. Either needs no new collection, since the snapshot already holds the pairing.
 

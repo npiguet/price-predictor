@@ -32,6 +32,9 @@ A **run** is one training run: an arm (`e64`, `e128`, `e64-lethality`, ...) or a
 | `sweeps.csv` | checkpoint, sweep and edited value: mean prediction over the sweep's records | `scorecard.json` |
 | `sweep_records.csv` | checkpoint, sweep, record and edited value: that record's prediction | `scorecard.json` |
 | `toughness_sweep_records.csv` | toughness-sweep record: the ability's damage and kind (spell, activated, triggered) | the frozen probe set, transcribed |
+| `ping_gate_edits.csv` | edit to the toughness sweep's activated damage records: mean P(affected) at the targeted creature, per checkpoint | scratch reads of four checkpoints, transcribed |
+| `damage_targets_in_training.csv` | kind of damage line: its training resolutions, who they target, and how often a creature target is marked affected | scratch scan of 150 training shards, transcribed |
+| `boundary_records_gate.csv` | kind of acting line among the boundary chart's 40 training rows: rows whose P(affected) at the hit creature is below one half, per checkpoint | scratch reads of five checkpoints, transcribed |
 | `ablation.csv` | checkpoint, field, replacement and scope: loss increase when `e` is replaced | `scorecard.json` |
 | `board_abilities.csv` | checkpoint, board-abilities subset and field: loss, and its increase under card-slot noise | `scorecard.json`, or `reports/board-run/` for arm `e64` |
 | `embedding_probes.csv` | checkpoint and line property: the linear embedding probe's score | the embedding probes' `probes_script.csv`; gen-1 transcribed |

@@ -124,6 +124,39 @@ TABLES = {
          ["e64, field terms", 3.89, 3.72, 3.47, 3.53, 3.27]]),
     "toughness_sweep_records.csv": (
         ["record", "damage", "kind"], TOUGHNESS_SWEEP_RECORDS),
+    # The toughness sweep's five activated damage records, unedited toughness: the mean
+    # P(affected) at the targeted creature after one edit to the record or its text.
+    # Scratch scripts ping_counterfactual.py and ping_variants.py, 2026-10-21.
+    "ping_gate_edits.csv": (
+        ["edit", "e64-lethality", "B64 last", "e256-lethality", "B256 last"],
+        [["as collected", 0.42, 0.56, 0.61, 0.96],
+         ["moved to the first main phase", 0.43, 0.59, 0.63, 0.95],
+         ["source untapped", 0.51, 0.63, 0.58, 0.96],
+         ["read as a spell: AB$ to SP$, cost dropped", 0.60, 0.91, 0.46, 0.98],
+         ["'any target' read as 'target creature'", 0.97, 0.93, 0.92, 0.98],
+         ["a healer's 'prevent the next 1 damage' text in its place", 0.00, 0.00, 0.02, 0.01]]),
+    # Training resolutions whose acting line's first segment is SP$/AB$ DealDamage, in the
+    # first 150 of the 444 curated training shards (repeats included), by kind and
+    # ValidTgts$. Scratch script ping_targets.py, 2026-10-21.
+    "damage_targets_in_training.csv": (
+        ["acting line", "resolutions", "targets that are players", "targets that are creatures",
+         "creature targets", "creature targets marked affected"],
+        [["spell, any target", 182, 0.21, 0.79, 115, 1.00],
+         ["spell, target creature", 178, 0.01, 0.99, 168, 0.98],
+         ["activated, any target, tap in its cost", 24, 0.35, 0.65, 15, 0.87],
+         ["activated, any target, other cost", 16, 0.43, 0.50, 7, 0.86],
+         ["activated, target creature, tap in its cost", 10, 0.00, 1.00, 10, 0.80],
+         ["activated, target creature, other cost", 13, 0.00, 1.00, 13, 0.92]]),
+    # P(affected) at the hit creature on the boundary chart's 40 training records, rows
+    # below an even chance per checkpoint. Scratch script ping_gate.py, 2026-10-21.
+    "boundary_records_gate.csv": (
+        ["acting line", "rows", "e64-lethality", "e256-lethality", "B64 last", "B128 last",
+         "B256 last"],
+        [["spell", 23, 8, 4, 0, 1, 0],
+         ["activated", 8, 1, 1, 0, 1, 0],
+         ["mode of a modal spell", 4, 0, 0, 0, 0, 0],
+         ["triggered", 5, 5, 5, 4, 1, 3],
+         ["all rows", 40, 14, 10, 4, 3, 3]]),
 }
 
 DAMAGE_GRIDS = [

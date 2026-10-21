@@ -122,8 +122,8 @@ With the copies, nearly every line falls at or within one point of its own damag
 Three faults remain, and the grids show all of them:
 
 - **The boundary is soft.** Where the damage exactly equals the toughness, the prediction sits between two fifths and four fifths rather than near one.
-- **The lethal side tops out near 0.8.** That ceiling comes from the gate rather than from the death: on clearly lethal hits the predicted death given that the creature was affected is 0.99, and in a quarter of the records the model doubts that the targeted creature is affected at all.
-- **Activated pings for 1 damage**, abilities like Prodigal Sorcerer's that a permanent uses by paying a cost, are predicted to spare a toughness-1 creature by the 64-wide checkpoints and arm `e256-lethality`; the 128-wide checkpoints and run A256 get them right, as the toughness chart shows. The 256-wide line loses the fault between its arm and its continuation, so it is a property of each checkpoint rather than of the width.
+- **The lethal side tops out near 0.8 on the arms.** That ceiling comes from the gate rather than from the death: on clearly lethal hits the predicted death given that the creature was affected is 0.99, and on a quarter to a third of the training records the arms doubt that the hit creature is affected at all ([the gate](#where-the-model-doubts-that-a-hit-creature-is-affected-the-text-leaves-the-victim-open-or-is-rare-in-training)).
+- **Activated pings for 1 damage**, abilities like Prodigal Sorcerer's that a permanent uses by paying a cost, are predicted to spare a toughness-1 creature by the 64-wide checkpoints and arm `e256-lethality`; the 128-wide checkpoints and run A256 get them right, as the toughness chart shows. The 256-wide line loses the fault between its arm and its continuation, so it is a property of each checkpoint rather than of the width. Much of the fault is in the gate, because training holds few activated "any target" pings ([the gate](#where-the-model-doubts-that-a-hit-creature-is-affected-the-text-leaves-the-victim-open-or-is-rare-in-training)).
 
 The damage sweep reads the same rule from the other side: it fixes a toughness-4 target and re-encodes one spell's script with `NumDmg$` from 1 to 8. The rule puts the step between 3 and 4. Arm `e64` barely rises with the damage. With copies, every checkpoint rises steeply, and where it crosses one half moves from checkpoint to checkpoint, which the next section explains.
 
@@ -144,6 +144,52 @@ In run A128 a hit short by one point is predicted to kill anywhere from one time
 At a tenth of the learning rate the position settles. Run B128 started from run A128's misplaced epoch 30, pulled the boundary back within a few epochs, and then held it. The gap between "lethal by one" and "short by one" holds near six tenths in runs B64 and B256 and near a half in run B128, and in all three B runs the error against the rule falls slowly. On the probe set's grids, run B256's last epoch has the lowest error against the rule of any checkpoint, and run B128's last epoch the next lowest, level with run A256's checkpoint; the training-records chart and the probe-set grids agree.
 
 Dropping to a tenth of the rate is therefore what places the boundary. More epochs at the full rate do not. On the damage sweep, all six checkpoints of the B runs, lowest-loss and last, keep every point on the rule's side of an even chance. Of the full-rate checkpoints trained with lethality copies, only arm `e64-lethality`, by a hundredth at 4 damage, and run A256's single checkpoint do. Run A256's boundary moved between epochs as much as run A128's, and its last epoch is the one where it happened to sit near the rule.
+
+### Where the model doubts that a hit creature is affected, the text leaves the victim open or is rare in training
+
+On the arms, a quarter to a third of the boundary chart's 40 training rows put the gate below an even chance at the hit creature, though the creature was hit in every one. The gate is the model's predicted chance that a card is affected at all. The B runs keep three or four such rows, and in runs B64 and B256 every one is a text that leaves its victim to a choice. The doubt falls on three kinds of text.
+
+| acting line | rows | `e64-lethality` | `e256-lethality` | run B64, last | run B128, last | run B256, last |
+|---|---:|---:|---:|---:|---:|---:|
+| spell | 23 | 8 | 4 | 0 | 1 | 0 |
+| activated ability | 8 | 1 | 1 | 0 | 1 | 0 |
+| mode of a modal spell | 4 | 0 | 0 | 0 | 0 | 0 |
+| triggered ability | 5 | 5 | 5 | 4 | 1 | 3 |
+| all rows | 40 | 14 | 10 | 4 | 3 | 3 |
+
+*Rows whose gate at the hit creature is below one half, per checkpoint. The 40 rows hold 31 distinct records. The curated corpus writes a rare text's records several times, and the probe takes the rows as it finds them, so three Suffocating Blast resolutions fill twelve rows. Data: `boundary_records_gate.csv`.*
+
+- **A victim left to a choice.** Purging Scythe deals 2 damage to the creature with the least toughness, and its controller picks among ties. When several creatures share the least toughness, doubting each of them is the right answer.
+- **A spell with two targets.** Suffocating Blast counters a spell and deals 3 damage to a creature. Arm `e64-lethality` puts the creature's gate between a third and two fifths, and run B256's last epoch near certainty.
+- **Activated "any target" damage abilities**, such as Prodigal Sorcerer's "{T}: deal 1 damage to any target". The checkpoints that miss the pings in the toughness sweep doubt their target.
+
+The pings' doubt comes from their wording, not from the board. The probe set's toughness sweep holds five activated damage records, four of them 1-damage pings. Each was read again after one edit to the record or to the acting text. Moving the record to the main phase or untapping the source moves the gate by a tenth at most. Replacing "any target" with "target creature" lifts it above nine in ten on every checkpoint. Reading the line as a spell lifts it on run B64's last epoch but not on arm `e256-lethality`. A healer's "prevent the next 1 damage" text in the ping's place puts the gate at zero, as it should, since a prevention shield changes nothing on the board.
+
+| edit, mean over the five records | `e64-lethality` | run B64, last | `e256-lethality` | run B256, last |
+|---|---:|---:|---:|---:|
+| as collected | 0.42 | 0.56 | 0.61 | 0.96 |
+| moved to the first main phase | 0.43 | 0.59 | 0.63 | 0.95 |
+| source untapped | 0.51 | 0.63 | 0.58 | 0.96 |
+| read as a spell: `AB$` to `SP$`, cost dropped | 0.60 | 0.91 | 0.46 | 0.98 |
+| "any target" read as "target creature" | 0.97 | 0.93 | 0.92 | 0.98 |
+| a healer's "prevent the next 1 damage" text in its place | 0.00 | 0.00 | 0.02 | 0.01 |
+
+*The gate at the targeted creature, at the record's own toughness. Data: `ping_gate_edits.csv`.*
+
+The input and the labels are not the cause. Every one of these records lists the hit creature as the ability's target, and training marks the creature targets of resolved activated damage abilities affected eight to nine times in ten. What training lacks is volume. The first 150 of the 444 training shards hold 24 resolved "any target" damage abilities with a tap in their cost, so the whole corpus holds about 70, about 45 of them at a creature. That count already includes the curated corpus's repeats of rare texts. "Any target" damage spells resolve about seven times as often, and their creature targets are always marked affected. With so few examples, whether a checkpoint ties the targeted creature to the gate for this wording comes down to its fit, which is why the fault comes and goes between checkpoints of one width.
+
+| acting line, 150 training shards | resolutions | targets that are players | targets that are creatures | creature targets | marked affected |
+|---|---:|---:|---:|---:|---:|
+| spell, any target | 182 | 21% | 79% | 115 | 100% |
+| spell, target creature | 178 | 1% | 99% | 168 | 98% |
+| activated, any target, tap in its cost | 24 | 35% | 65% | 15 | 87% |
+| activated, any target, other cost | 16 | 43% | 50% | 7 | 86% |
+| activated, target creature, tap in its cost | 10 | 0% | 100% | 10 | 80% |
+| activated, target creature, other cost | 13 | 0% | 100% | 13 | 92% |
+
+*Data: `damage_targets_in_training.csv`.*
+
+The probe set's triggered damage records add a fourth kind, where the input cannot identify the victim. Skewer Slinger deals 1 damage to the creature it blocks or is blocked by. Both of its records have several creatures in combat, and the card features say that a creature blocks and how many creatures block it, not which attacker each blocker blocks. Run B256's last epoch gives the two victims a gate of 0.13 and 0.02. The gen-3 draft puts the pairing in the input ([gen-3 draft](2026-XX-XX-effect-model-gen3-design.md#the-board-input-should-say-which-attacker-each-blocker-blocks)), and gives rare wordings like the pings examples of their own ([gen-3 draft](2026-XX-XX-effect-model-gen3-design.md#a-rare-wording-of-a-common-effect-needs-examples-of-its-own-and-field-weighting-cannot-see-it)).
 
 ### In combat the model applies power against toughness softly, learns indestructible and deathtouch, and not first strike
 
