@@ -58,7 +58,7 @@ final line — a JVM crash mid-write is expected, not exceptional.
 | `ability` | absent where no single line acts (`combat`, `playability`); on a patched modal resolution the cost half names the charm's root key and each effect half the chosen mode's key, root key plus `option` (feature 024, FR-029a); a degraded worker's single effect half names the root (FR-029e); several keys where the rendered line merged several traits |
 | `actor_player` | on `playability` records of a **gen-2** shard, the deciding player: the candidate attackers' controller (`attackers`), the candidate blockers' controller (`blockers`), the candidate ability's controller (`decision`). A gen-1 shard keeps feature 023's meaning: the active player (`attackers`, `decision`) or the anchored attacker's controller (`blockers`). The one named exception to compatibility rule 1 (feature 024, FR-030a), versioned by shard generation |
 | `random_seat` | every gen-2 record; `true` when `actor_player` is the random seat (feature 024, FR-030). Absent on a gen-1 record, read as `false` |
-| `what_if` | gen-2 `playability` records of subkind `attackers` or `blockers` only, after `random_seat`: `false` for a real decision, `true` for a what-if query (FR-027, FR-031). Absent on a gen-1 record, read as unknown, which never counts as a real decision |
+| `what_if` | gen-2 `playability` records of subkind `attackers` or `blockers` only, after `random_seat`: `false` for a real decision, `true` for a what-if query (FR-027, FR-031). A collector that records legality at Forge's declare steps writes only `false`. Absent on a gen-1 record, read as unknown, which never counts as a real decision |
 | `ability_unresolved` | set only where `ability` is an empty array on a kind that does name a line; a closed vocabulary (`engine_effect` \| `no_card_state` \| `unknown_kind` \| `unindexable`) saying why no printed line was found. An empty `ability` alone cannot separate "the Monarch has no printed line in any tree" from "the resolver regressed", which is the ambiguity that hid a broken resolver for a whole collection run |
 | `mode`, `interventional`, `fork`, `synthetic`, `ability_unresolved`, `random_seat`, `what_if` | **collection metadata; never model inputs** |
 
@@ -83,14 +83,24 @@ both generations before reading a record.
 
 ### Real decisions and what-ifs
 
-| Subkind | `what_if = false` when |
-|---|---|
-| `attackers` | snapshot phase `combat_declare_attackers` and `actor_player` is the active player, or written by the random seat for its own declaration |
-| `blockers` | snapshot phase `combat_declare_blockers` and the anchored attacker is attacking, or written by the random seat for its own declaration |
+Legality is recorded by Forge's two declare steps (`CombatLegalityObserver`), before the deciding
+player declares, the same for every kind of controller:
 
-Every other legality record is a what-if. The legality de-duplication key is
-`(subkind, payload, snapshot)`; `--legality-rate` samples what-ifs only, and every real decision is
-written.
+| Subkind | Written | Candidates | Legal |
+|---|---|---|---|
+| `attackers` | once per defender, before attackers are declared | every creature the attacking player controls | `CombatUtil.canAttack(creature, defender)` |
+| `blockers` | once per attacker, before the defending player declares blockers, with no block in the combat yet | every creature the defending player controls | `CombatUtil.canBlock(attacker, creature, combat)` |
+
+Every such record is a real decision, `what_if = false`, with the deciding player as `actor_player`.
+A tapped, summoning-sick or "can't block" creature is a candidate listed as forbidden.
+
+Shards collected through the earlier, AI-internal hook (gen-2) hold what-ifs as well, classed by the
+snapshot: an `attackers` record is real when its phase is `combat_declare_attackers` and
+`actor_player` is the active player, a `blockers` record when its phase is `combat_declare_blockers`
+and the anchored attacker is attacking, and every other legality record is a what-if. Their
+forbidden blockers include creatures the AI had already planned to block another attacker with.
+The legality de-duplication key is `(subkind, payload, snapshot)`; `--legality-rate` samples
+what-ifs only, and every real decision is written.
 
 ### Modal resolutions
 
@@ -313,16 +323,13 @@ to-do:
 - `token_created` — `EffectRecordOutcomes.note` from `TokenEffectBase.makeTokenTable(TokenCreateTable, …)`,
   the method shared by all six token-making effects (`Amass`, `Endure`, `Incubate`, `Investigate`,
   `Recruit`, `Token` itself, and `CopyPermanent`'s token copies) rather than `TokenEffect` alone — script
-  id and characteristics are read off the created `Card` itself, the same site `SnapshotBuilder.entityToJson`
-  reads from. Since 2026-09-17 that site's `token_script_id` is the token's script stem
-  (`c_a_food_sac`), falling back to the printed name only for a token whose script cannot be named
-  (`card.isToken() ? tokenScriptIdOf(card) : null`, not the plain printed-name lookup this contract
-  used to quote); a snapshot taken before that date carries the printed name instead. `token_created`'s
-  own `token_script_id` payload field is emitted by a different, Forge-side site
-  (`TokenEffectBase.makeTokenTable`) and may still read the printed name until that emitter is updated
-  to the same convention — this contract does not claim it already has been. It
-  is in scope at that one shared site for every caller, not "one frame away" the way it would be from
-  any single effect. `count` is `allTokens.size()`, the engine's own tally of what actually entered play —
+  one note per kind of token made. The note hands the connector a sample token, and the connector writes
+  `token_script_id` and `characteristics` (`power`, `toughness`, `types`, `keywords`) with
+  `SnapshotBuilder`'s own code, so the id is the one the snapshot gives the same token: its script stem
+  (`c_a_food_sac`), falling back to the printed name only for a token whose script cannot be named. A
+  shard collected before the sample existed carries the printed name, no `keywords`, and the first
+  token's description for every kind the clause made. The note is in scope at that one shared site for
+  every caller, not "one frame away" the way it would be from any single effect. `count` is `allTokens.size()`, the engine's own tally of what actually entered play —
   a `CreateToken` replacement (Doubling Season) can change it from what was requested, the same
   `cards.size()` vs `madeCards.size()` shape Task 7 shipped once already.
 - `dice_rolled` — `EffectRecordOutcomes.note` from `RollDiceEffect.rollDiceForPlayer()`, once `resultsList`
@@ -396,21 +403,20 @@ destination fails, which is a real question and not this task's to answer alone;
 of a corpus with these 21 cards in it knows the undercount exists, rather than assuming `spell_countered` is
 exhaustive.
 
-### `card_made`, `permanent_copied` and `token_created` describe only the first object a clause makes
+### `card_made`, `permanent_copied` and `token_created` are written once per kind of object a clause makes
 
-All three follow the same convention when one clause creates several objects at once: `card_made.card_name`
-(`MakeCardEffect.java`), `permanent_copied.copy_source` (`CopyPermanentEffect.java`) and
-`token_created.token_script_id`/`characteristics` (`TokenEffectBase.java`) are all read off the *first*
-created object, while `count` totals every one the engine actually made. A clause that creates more than one
-*distinct* kind in a single resolution — `MakeCard` naming several `Name$` values, `CopyPermanent` copying
-several different permanents, or `Token` with a multi-valued `TokenScript$` (26 real cards, e.g.
-`bestial_menace`: Snake + Wolf + Elephant) — reports the true total count alongside characteristics that
-describe only the one sampled, not all of them.
+When one clause creates several objects at once, each kind gets its own event, with its own name or
+characteristics and the `count` of that kind the engine actually made:
 
-This is schema-forced, not an oversight: `EVENT_PARAMS` gives each of these a scalar name/characteristics
-field, not a per-kind breakdown, so a clause making three distinct things cannot be described exactly without
-widening the schema. Kept as-is (fix round 1, M2) — a reader counting distinct token or card *kinds* from
-these fields, rather than the total `count`, will undercount whenever a clause makes more than one kind.
+| Event | One event per |
+|---|---|
+| `card_made` | card name (`MakeCard` naming several `Name$` values) |
+| `permanent_copied` | permanent copied (`CopyPermanent` copying several different permanents) |
+| `token_created` | kind of token: script, name, base P/T and type line (`Token` with a multi-valued `TokenScript$`, 26 real cards, e.g. `bestial_menace`: Snake + Wolf + Elephant) |
+
+`EVENT_PARAMS` keeps a scalar name or characteristics field per event, so the per-kind breakdown is
+carried by the number of events rather than by a wider field. Shards collected before this split carry
+one event per clause, described by its first object, with `count` totalling every kind.
 
 ### `initiative_taken` can miss a redirect through a target who has lost but is still `isInGame()`
 
@@ -550,7 +556,21 @@ and not an oversight: `revealTo` has other real callers (`ChooseCardEffect`'s `S
 `Player.java:1166` and `:3891`) that are look-at-shaped rather than reveal-shaped, and recording one of
 those as a `card_revealed` would misreport it worse than omitting it does. Clash's own use is the one
 `revealTo` call this corpus can say, without qualification, is a genuine reveal — always from the
-library, always to everyone.
+library, always to everyone. Its subjects are both clashing players.
+
+### An outcome note names only the entities it happened to
+
+| Event | `subjects` |
+|---|---|
+| `card_revealed` | the owners of the revealed cards, for a reveal from a library made while a clause resolves; nobody for a reveal from any other zone or one made while paying a cost |
+| `damage_prevented` | the creature or player the damage would have been dealt to |
+| `restriction_change`, `spell_countered`, `dice_rolled`, `piles_made`, `turn_ended`, `text_change` | as their own sections and rows above say |
+| every other outcome type | nobody |
+
+An outcome without subjects marks no entity affected. A coin flip, a token made or a spell copied is
+not something done to the card whose ability did it, so the acting card is never a default subject.
+Shards collected before this rule name the acting ability's card as the subject of every outcome that
+names none, and carry `card_revealed` and `damage_prevented` without subjects.
 
 ### The two lobby seats never run simulated, and forks that do are kept out of real records
 
