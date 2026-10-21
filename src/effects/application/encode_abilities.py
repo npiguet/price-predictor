@@ -22,15 +22,15 @@ from pathlib import Path
 import numpy as np
 
 from effects.domain.ability_cache_layout import DEFAULT_CACHE_ROOT
+from effects.domain.baselines import Baseline
 from effects.domain.provenance import ProvenanceSidecar, SidecarLine
-from effects.domain.variants import Variant
 from effects.infrastructure.ability_cache_store import AbilityCacheStore
 from effects.infrastructure.effect_model_store import (
     InferenceCheckpoint,
     load_for_inference,
     model_output_for,
 )
-from effects.infrastructure.sidecar_io import SIDECAR_SUFFIX, prose_for, read_sidecar
+from effects.infrastructure.sidecar_io import SIDECAR_SUFFIX, read_sidecar
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +41,7 @@ DEFAULT_CARDS_FOLDERS: tuple[Path, ...] = (
 
 @dataclass
 class EncodeAbilitiesConfig:
-    variant: str = Variant.FULL
+    variant: str = Baseline.FULL
     checkpoint: Path | None = None
     cards_folders: tuple[Path, ...] = DEFAULT_CARDS_FOLDERS
     variant_scripts: Path | None = None
@@ -125,12 +125,12 @@ def encode_sidecar(
     """
     if not sidecar.lines:
         return np.zeros((0, e_dim), dtype=np.float32)
-    if variant == Variant.TAXONOMY:
+    if variant == Baseline.TAXONOMY:
         rows = [taxonomy_vector(line, e_dim) for line in sidecar.lines]
         return np.stack(rows).astype(np.float32)
     if encode_lines is None:
         raise ValueError(
-            f"--variant {variant} needs an encoder; only {Variant.TAXONOMY} "
+            f"--variant {variant} needs an encoder; only {Baseline.TAXONOMY} "
             "can be emitted without one"
         )
     return encode_lines(sidecar, sidecar_path).astype(np.float32)
@@ -158,12 +158,17 @@ def run(config: EncodeAbilitiesConfig, *, encode_lines=None) -> EncodeSummary:
     )
     e_dim = loaded.checkpoint.encoder_config.e_dim
     provenance = loaded.checkpoint.provenance
-    if encode_lines is None and config.variant != Variant.TAXONOMY:
+    if encode_lines is None and config.variant != Baseline.TAXONOMY:
         encode_lines = build_encode_lines(loaded)
 
-    folders = [Path(f) for f in config.cards_folders if Path(f).is_dir()]
-    if config.variant_scripts and Path(config.variant_scripts).is_dir():
+    folders = [Path(f) for f in config.cards_folders]
+    if config.variant_scripts:
         folders.append(Path(config.variant_scripts))
+    # A relative default resolved from another directory names nothing, and
+    # skipping it would write a cache missing whole trees and report success.
+    missing = [str(f) for f in folders if not f.is_dir()]
+    if missing:
+        raise FileNotFoundError(f"no source tree at {', '.join(missing)}")
 
     sources = rows = skipped = 0
     for folder in folders:
@@ -190,27 +195,37 @@ def run(config: EncodeAbilitiesConfig, *, encode_lines=None) -> EncodeSummary:
 
 
 def truncated_lines(
-    tokenizer, sidecar: ProvenanceSidecar, prose: list[str], surface: str,
+    runner, sidecar: ProvenanceSidecar, prose: list[str],
 ) -> list[tuple[SidecarLine, str]]:
     """The lines of one source the encoder's window cuts short, with their text.
 
-    Tokenized exactly as the cache encodes them: the line's encoding text on
-    this surface, keywords expanded at the inference probability (FR-006).
+    Measured through the runner's own ``unit_of`` and ``prepare``, so a line
+    is tokenized exactly as the cache encodes it (FR-006).
     """
-    from effects.domain.ability_encoder import encoding_text, prepare_line
-    from effects.domain.ability_tokenizer import INFERENCE_KEYWORD_EXPAND_P
-
     cut: list[tuple[SidecarLine, str]] = []
     for line in sidecar.lines:
-        text = encoding_text(line, prose_for(line, prose), surface)
-        if not text:
-            continue
-        tokens = tokenizer.expand_keywords(
-            tokenizer.tokenize(text), probability=INFERENCE_KEYWORD_EXPAND_P,
-        )
-        if prepare_line(tokenizer, tokens).truncated:
+        text, spans = runner.unit_of(line, prose)
+        if text and runner.prepare(text, spans).truncated:
             cut.append((line, text))
     return cut
+
+
+def prose_of(sidecar: ProvenanceSidecar, sidecar_path: Path) -> list[str]:
+    """The converted prose lines beside a sidecar, as the trainer's join reads them.
+
+    A variant has none: the ``.txt`` beside its sidecar is the Forge source
+    script, and read as prose it would encode a script line as card text where
+    the trainer (``SidecarCache.prose_for``) encodes the variant's script.
+    """
+    from effects.infrastructure.sidecar_io import (
+        VARIANT_SCRIPTS_TREE,
+        converted_text_path,
+        prose_lines,
+    )
+
+    if sidecar.script_file.startswith(f"{VARIANT_SCRIPTS_TREE}/"):
+        return []
+    return prose_lines(converted_text_path(sidecar_path))
 
 
 def build_encode_lines(loaded: InferenceCheckpoint):
@@ -219,22 +234,13 @@ def build_encode_lines(loaded: InferenceCheckpoint):
     Built once for the whole run: moving the weights to the device is the
     expensive part, and doing it per card would dominate the encode.
     """
-    from effects.domain.ability_encoder import (
-        TruncationLog,
-        log_truncation,
-        surface_of,
-    )
+    from effects.domain.ability_encoder import TruncationLog, log_truncation
     from effects.infrastructure.ability_encoder_runner import (
         AbilityEncoderRunner,
     )
     from effects.infrastructure.model_runner import tokenizer_for
-    from effects.infrastructure.sidecar_io import (
-        converted_text_path,
-        prose_lines,
-    )
 
     checkpoint, vocab_path, keyword_path = loaded
-    surface = surface_of(vocab_path)
     tokenizer = tokenizer_for(checkpoint, vocab_path, keyword_path)
     runner = AbilityEncoderRunner.from_checkpoint(
         checkpoint, tokenizer, vocab_path=vocab_path,
@@ -242,10 +248,8 @@ def build_encode_lines(loaded: InferenceCheckpoint):
     truncations = TruncationLog(log_truncation(logger, "encode-abilities"))
 
     def encode_lines(sidecar: ProvenanceSidecar, sidecar_path: Path) -> np.ndarray:
-        # The prose surface reads the converted .txt beside the sidecar; the
-        # script surface does not, and a variant tree has no prose at all.
-        prose = prose_lines(converted_text_path(sidecar_path))
-        for line, text in truncated_lines(tokenizer, sidecar, prose, surface):
+        prose = prose_of(sidecar, sidecar_path)
+        for line, text in truncated_lines(runner, sidecar, prose):
             truncations.note(text, line.provenance)
         return runner.encode_sidecar_lines(sidecar, prose)
 

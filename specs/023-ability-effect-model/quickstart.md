@@ -590,10 +590,9 @@ step 3b was skipped or was too short, so there are no full-strength games to val
 every other field trains from step zero. Validation scores the field set the epoch trained with, and
 the early stopper resets at that boundary.
 
-On an 8 GB card, `--context-cache` is the documented fallback: it swaps live context re-encoding for a
-stop-gradient momentum cache refreshed every `--cache-refresh` batches. **It is not implemented in the
-trainer today** — the flag is accepted, warns at startup and changes nothing, and context abilities are
-re-encoded live whatever it is set to.
+Context abilities are always re-encoded live; the trainer has no `--context-cache` or
+`--cache-refresh`. On an 8 GB card a step's texts are encoded in length-sorted groups, each padded to
+its own longest, which is what keeps live re-encoding inside the budget.
 
 Every reported check runs against one of the four baselines: gate 1 compares against `identity`,
 every record kind reports `state-only` as its floor, the average-effect control is `no-state`, and

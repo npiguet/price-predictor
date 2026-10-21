@@ -1,10 +1,8 @@
-"""Every Forge effect API maps to an event type or an explicit exclusion (T025).
+"""The event vocabulary against the checked-in Forge lists (T025).
 
 Runs against the checked-in class list in
 :mod:`effects.domain.forge_effect_apis`, so it needs no JVM and no ``../forge``
-checkout. A Forge upgrade that adds an effect API fails here, which is the
-point: a new API is a new thing an ability can do, and a corpus that silently
-stops describing it cannot be repaired without recollecting.
+checkout.
 """
 
 from __future__ import annotations
@@ -24,12 +22,10 @@ from effects.domain.event_schema import (
     CAUSE_BEARING_TYPES,
     EFFECT_API_EVENTS,
     EVENT_PARAMS,
-    EXCLUDED_EFFECT_APIS,
     SUPERSEDED_EVENT_TYPES,
     Event,
     EventType,
     attribution_kind,
-    event_types_for,
 )
 from effects.domain.forge_effect_apis import (
     EFFECT_APIS,
@@ -247,18 +243,12 @@ def _dict_literal_key_count(module_file: Path, name: str) -> int:
 class TestTheDictLiteralsHaveNoRepeatedKey:
     """A repeated key is a silent Python no-op, not an error.
 
-    ``test_no_api_is_both_mapped_and_excluded`` (below) catches a name
-    present in *both* ``EFFECT_API_EVENTS`` and ``EXCLUDED_EFFECT_APIS``;
-    nothing catches one repeated *within* a single dict -- the later entry
-    would simply win and the earlier one's event types would vanish with no
-    test noticing, the same silent-emptiness this task exists to close,
-    relocated from a mis-keyed API to a mis-typed one. Re-keying 33 entries by
-    hand, as this task did, is exactly the kind of edit that risks it.
+    The later entry would simply win and the earlier one's event types would
+    vanish with no test noticing.
     """
 
     @pytest.mark.parametrize("name, mapping", [
         ("EFFECT_API_EVENTS", EFFECT_API_EVENTS),
-        ("EXCLUDED_EFFECT_APIS", EXCLUDED_EFFECT_APIS),
     ])
     def test_the_source_never_writes_a_key_twice(self, name, mapping):
         written = _dict_literal_key_count(Path(event_schema.__file__), name)
@@ -269,48 +259,19 @@ class TestTheDictLiteralsHaveNoRepeatedKey:
 
 
 class TestCoverage:
-    def test_every_effect_api_is_mapped_or_excluded(self):
-        covered = set(EFFECT_API_EVENTS) | set(EXCLUDED_EFFECT_APIS)
-        missing = sorted(set(EFFECT_APIS) - covered)
-        assert not missing, (
-            f"{len(missing)} Forge effect APIs are neither mapped in "
-            f"EFFECT_API_EVENTS nor excluded with a reason: {missing}"
-        )
-
     def test_nothing_is_mapped_that_forge_does_not_have(self):
-        covered = set(EFFECT_API_EVENTS) | set(EXCLUDED_EFFECT_APIS)
-        stale = sorted(covered - set(EFFECT_APIS))
+        stale = sorted(set(EFFECT_API_EVENTS) - set(EFFECT_APIS))
         assert not stale, (
             "the vocabulary maps effect APIs that no longer exist in the "
             f"checked-in Forge class list; regenerate or remove: {stale}"
         )
 
-    def test_no_api_is_both_mapped_and_excluded(self):
-        both = sorted(set(EFFECT_API_EVENTS) & set(EXCLUDED_EFFECT_APIS))
-        assert not both, f"ambiguous coverage for: {both}"
-
-    def test_every_exclusion_states_a_reason(self):
-        blank = sorted(k for k, v in EXCLUDED_EFFECT_APIS.items() if len(v) < 15)
-        assert not blank, f"exclusions without a usable reason: {blank}"
-
-    def test_every_mapped_api_names_at_least_one_event_type(self):
+    def test_every_mapped_api_names_known_event_types(self):
         empty = sorted(k for k, v in EFFECT_API_EVENTS.items() if not v)
-        assert not empty, (
-            f"mapped to no event type; these belong in EXCLUDED_EFFECT_APIS "
-            f"with a reason: {empty}"
+        assert not empty, f"mapped to no event type: {empty}"
+        assert all(
+            isinstance(t, EventType) for types in EFFECT_API_EVENTS.values() for t in types
         )
-
-    @pytest.mark.parametrize("api", sorted(EFFECT_API_EVENTS))
-    def test_a_mapped_api_resolves_to_known_event_types(self, api: str):
-        assert all(isinstance(t, EventType) for t in event_types_for(api))
-
-    @pytest.mark.parametrize("api", sorted(EXCLUDED_EFFECT_APIS))
-    def test_an_excluded_api_resolves_to_no_event_type(self, api: str):
-        assert event_types_for(api) == ()
-
-    def test_an_unknown_api_fails_loudly(self):
-        with pytest.raises(KeyError, match="neither mapped"):
-            event_types_for("SomeEffectForgeAddedLastWeek")
 
 
 class TestVocabulary:

@@ -135,28 +135,28 @@ class TestProgressFormatting:
     """The within-shard progress line's two optional sections."""
 
     def test_gradient_norms_render_per_group(self):
-        from effects.application.training_loop import _format_norms
+        from effects.application.training_log import format_norms
 
-        line = _format_norms({"encoder": 0.8412, "head": 1.9733})
+        line = format_norms({"encoder": 0.8412, "head": 1.9733})
         assert "encoder 0.84" in line
         assert "head 1.97" in line
 
     def test_no_gradient_section_before_the_first_clip(self):
-        from effects.application.training_loop import _format_norms
+        from effects.application.training_log import format_norms
 
-        assert _format_norms({}) == ""
+        assert format_norms({}) == ""
 
     def test_field_terms_are_ordered_largest_first(self):
         """A blow-up is one field carrying the loss; name order buries it."""
-        from effects.application.training_loop import _format_parts
+        from effects.application.training_log import format_parts
 
-        line = _format_parts({"gate": 0.41, "zone": 0.63, "pt": 0.28})
+        line = format_parts({"gate": 0.41, "zone": 0.63, "pt": 0.28})
         assert line.index("zone") < line.index("gate") < line.index("pt")
 
     def test_no_field_section_when_the_batch_reported_none(self):
-        from effects.application.training_loop import _format_parts
+        from effects.application.training_log import format_parts
 
-        assert _format_parts({}) == ""
+        assert format_parts({}) == ""
 
 
 class TestWhenAStepReportsItsNumbers:

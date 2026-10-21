@@ -20,6 +20,8 @@ DEFAULT_SCRIPT_VOCAB_PATH = "models/effects/vocab-script.txt"
 DEFAULT_VARIANT_SCRIPTS = "output/effects/variant-scripts/"
 DEFAULT_ABILITIES_ROOT = "output/effects/abilities/"
 DEFAULT_CHECKPOINT = "models/effects/effect-model/latest.pt"
+#: Where the probe scripts write their report directories and probe sets.
+DEFAULT_REPORTS_DIR = "output/effects/reports/"
 
 #: Kept apart from DEFAULT_RECORDS_DIR: this is the *curated dataset*
 #: directory build-corpus writes to, not the raw shard root it reads from
@@ -41,3 +43,10 @@ DEFAULT_FORGE_TOKENSCRIPTS = "../forge/forge-gui/res/tokenscripts"
 #: is absent rather than failing: the labels are an operator's training data,
 #: not a repository artifact.
 DEFAULT_WIN_RATES = "output/sealed/cards-win-rates.txt"
+
+#: The sealed pipeline's own artifacts the scorer smoke test reads: the encoder
+#: whose vectors pooled ``e`` is concatenated with, and the match outcomes
+#: Phase A trains on. Restated here rather than imported, because ``effects``
+#: never imports ``sealed.application``.
+DEFAULT_SEALED_ENCODER = "models/sealed/encoder/latest.pt"
+DEFAULT_MATCH_OUTCOMES = "output/sealed/match-outcomes.txt"

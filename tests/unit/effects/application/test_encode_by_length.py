@@ -12,8 +12,8 @@ import random
 import pytest
 import torch
 
-from effects.application import surface_batching
-from effects.application.surface_batching import encode_by_length
+from effects.application import text_staging
+from effects.application.text_staging import encode_by_length
 from effects.domain.ability_encoder import (
     AbilityEncoder,
     AbilityEncoderConfig,
@@ -49,7 +49,7 @@ def encoder() -> AbilityEncoder:
 
 @pytest.fixture
 def small_chunks(monkeypatch):
-    monkeypatch.setattr(surface_batching, "ENCODE_CHUNK", 2)
+    monkeypatch.setattr(text_staging, "ENCODE_CHUNK", 2)
 
 
 # Shuffled lengths, so the groups reorder rows and the inverse has work to do.
@@ -92,6 +92,6 @@ def test_gradient_matches_one_padded_batch(encoder, small_chunks):
 
 def test_each_group_is_padded_to_its_own_longest(small_chunks):
     inputs = collate_lines(_lines(_LENGTHS), _PAD)
-    chunks = surface_batching._length_chunks(inputs["attention_mask"])
+    chunks = text_staging._length_chunks(inputs["attention_mask"])
     assert [width for _, width in chunks] == [3, 5, 12, 30]
     assert sorted(torch.cat([rows for rows, _ in chunks]).tolist()) == list(range(8))

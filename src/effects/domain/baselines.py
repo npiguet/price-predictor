@@ -1,7 +1,7 @@
 """The evaluation baselines, as masks over one pipeline (FR-094).
 
 Torch-free, so the CLI can offer the names as choices and the checkpoint store
-can file a variant under its name without loading the model.
+can file a baseline under its name without loading the model.
 """
 
 from __future__ import annotations
@@ -11,17 +11,20 @@ from enum import StrEnum
 
 
 @dataclass(frozen=True, slots=True)
-class VariantMasks:
-    """Which parts of the input a variant zeroes.
+class BaselineMasks:
+    """Which parts of the input a baseline zeroes.
 
     Expressed as masks rather than as four training paths, so every baseline
     runs the identical pipeline and a difference in the numbers is a difference
     in the inputs rather than in the code (FR-094).
     """
 
-    #: Zero the acting line's and every entity ability token's ``e``.
-    zero_e: bool = False
-    #: Zero the ``[PLAYER]`` and ``[CARD]`` features and their ability tokens.
+    #: Zero the ``[ACT]`` slot's ``e``: the acting line, or a decision's candidate.
+    zero_act_e: bool = False
+    #: Zero every entity ability token's ``e``: the board's own abilities.
+    zero_context_e: bool = False
+    #: Zero the ``[PLAYER]`` and ``[CARD]`` features, and every ``[GLOBAL]``
+    #: feature but the record-kind flags.
     zero_state: bool = False
     #: Replace the encoder with a free per-text embedding table.
     identity_embedding: bool = False
@@ -29,10 +32,10 @@ class VariantMasks:
     taxonomy_embedding: bool = False
 
 
-class Variant(StrEnum):
+class Baseline(StrEnum):
     """The shipping model and its four baselines.
 
-    ``full`` ships; every other variant writes under its own name, so a
+    ``full`` ships; every other baseline writes under its own name, so a
     baseline run can never overwrite the checkpoint the cache was built from.
     Gate 1 is defined against ``identity``, so what each removes is contract
     rather than commentary.
@@ -52,30 +55,31 @@ class Variant(StrEnum):
     TAXONOMY = "taxonomy"
 
     @property
-    def masks(self) -> VariantMasks:
+    def masks(self) -> BaselineMasks:
         return _MASKS[self]
 
 
 #: ``no-state`` zeroes the entity ability ``e`` tokens as well as the state
 #: features. Leaving them live would let it read the board through the abilities
-#: on it, and it would no longer be the average-effect control.
-_MASKS: dict[Variant, VariantMasks] = {
-    Variant.FULL: VariantMasks(),
-    Variant.IDENTITY: VariantMasks(identity_embedding=True),
-    Variant.STATE_ONLY: VariantMasks(zero_e=True),
-    Variant.NO_STATE: VariantMasks(zero_state=True, zero_e=True),
-    Variant.TAXONOMY: VariantMasks(taxonomy_embedding=True),
+#: on it, and it would no longer be the average-effect control. It keeps the
+#: acting line's ``e``: the average effect is the average *of that ability*.
+_MASKS: dict[Baseline, BaselineMasks] = {
+    Baseline.FULL: BaselineMasks(),
+    Baseline.IDENTITY: BaselineMasks(identity_embedding=True),
+    Baseline.STATE_ONLY: BaselineMasks(zero_act_e=True, zero_context_e=True),
+    Baseline.NO_STATE: BaselineMasks(zero_state=True, zero_context_e=True),
+    Baseline.TAXONOMY: BaselineMasks(taxonomy_embedding=True),
 }
 
 #: The names, in the order the CLI offers them.
-VARIANTS: tuple[str, ...] = tuple(Variant)
+BASELINES: tuple[str, ...] = tuple(Baseline)
 
 
-def variant_masks(variant: str) -> VariantMasks:
-    """The masks the variant named ``variant`` applies."""
+def baseline_masks(name: str) -> BaselineMasks:
+    """The masks the baseline named ``name`` applies."""
     try:
-        return Variant(variant).masks
+        return Baseline(name).masks
     except ValueError:
         raise ValueError(
-            f"unknown --variant {variant!r}; known: {list(VARIANTS)}"
+            f"unknown --variant {name!r}; known: {list(BASELINES)}"
         ) from None

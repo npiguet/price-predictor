@@ -169,7 +169,7 @@ The price is paid and accepted: a handful of GC crashes per overnight run, and a
 - `--variant-volume` (default 0.2): the cap on how many variant scripts are generated, as a fraction of the real records in `--corpus-records` (default `--effect-records`). Variants written to a directory of their own need `--corpus-records` pointed at the corpus, or the cap is measured against an empty destination and allows nothing.
 - Perturbed scripts are written to `output/effects/variant-scripts/` and loaded from there as custom cards; they never enter `output/cardsfolder/` or Forge's own tree.
 - A variant exists on the script surface only. Converted prose is a script's hand-written description, so a perturbed script's description still describes the original — editing `NumDmg$ 3` leaves the prose saying three. Variants are therefore never converted, carry no prose surface, and are excluded from the paired-encoding loss; their records train the script side alone. The provenance key of a variant line is the perturbed script's own, so `collect-variants` writes a sidecar per variant script and needs no converted tree.
-- Variant records carry `synthetic = true` and `variant_of` — corpus metadata, never model inputs. No variant is generated from a card carrying a held-out text: perturbing a parameter produces a text that is not itself held out, so the variant would train the model on the held-out card's mechanics under an edit the split cannot see.
+- Variant records carry `synthetic = true` and `variant_of` — corpus metadata, never model inputs. No variant is generated from a card carrying a held-out text: perturbing a parameter produces a text that is not itself held out, so the variant would train the model on the held-out card's mechanics under an edit the split cannot see. Once the variants' sidecars exist, every variant whose lines print a held-out text, or under `--holdout-unit template` a held-out template, is deleted before it is decked, under the holdout `build-corpus` chooses.
 - Variant cards are decked and scheduled as coverage decks are (§ Coverage collector), over the variant set rather than the converted corpus, with the same `--decks-per-round`. One invocation plays one round: coverage re-weights each round by how far a card is from its target, while every variant is weighted equally, so there is no shortfall to converge on. `--seed` (default 42) seeds both the perturbation and the deck build, and a repeat run needs it changed or it regenerates the same scripts and decks.
 - Variant matches write effect records only — never `match-outcomes.txt` or `cards-played.txt`. Games played with perturbed cards are not sealed self-play and must not feed the scorer or encoder corpora.
 
@@ -229,15 +229,19 @@ Output layout under `--output` (default `output/effects/corpus/`):
 | `validation/game-disjoint/*.jsonl.gz` | whole games naming no held-out card, withheld from training |
 | `manifest.json` | the split, the rarity table, the caps and flags, the seed, the source shard list, and per-class counts |
 
-- **Selection unit.** Training is selected per record; both validation strata are selected per game. Whole-game selection keeps every intra-game join intact, including the `mirror_of` pairing `evaluate-effect-model` reads for gate 2 — a stratum missing a probe's partner scores nothing and reports the keyword as under-sampled.
-- **Split.** The holdout rule is the trainer's (§ Training, Splits) under the same `--holdout-permille` and `--holdout-max-carriers`, which the manifest records. A game with a record naming a held-out card goes to the card-disjoint stratum; `--game-disjoint-games` of the remaining games go to the game-disjoint stratum; the rest are training candidates.
+- **Selection unit.** Training is selected per record; both validation strata are selected per game, the unit the split is decided in. No evaluator resolves `mirror_of` within a stratum.
+- **Split.** The holdout rule is the trainer's (§ Training, Splits) under the same `--holdout-permille` and `--holdout-max-carriers`, which the manifest records. A game with a record naming a held-out card, or a token script carrying a held-out text, goes to the card-disjoint stratum; `--game-disjoint-games` of the remaining games go to the game-disjoint stratum; the rest are training candidates.
+- **Survey routing.** The survey routes each game once, at the end of its shard: held out, else the game-disjoint draw, else training. The write pass applies the game sets the survey built. Only the records of training games size the class, family and text quotas and the copy plans; the rarity table and the held-out texts' game counts are counted over the whole raw corpus.
+- **Held-out texts in training games.** A record of a training game acting through a held-out text — a token or variant script carrying it, or its template under `--holdout-unit template` — is not written. The manifest counts it under the `dropped-held-out-text` stratum; the rest of its game trains.
 - **Per-text cap.** The training corpus holds at most `--text-cap` records per unique ability text, records beyond the cap dropped at random under `--seed`. The cap is a ceiling and never a floor: a text below it keeps every record it has, so the tail the coverage collector exists to fill survives curation whole.
-- **Class mixture.** `--class-mix` sets the on-disk proportions over the eight sampling classes, defaulting to the training mixture. A class the raw corpus cannot supply at its share is written in full, and the manifest records the shortfall per class. The manifest also records the proportions actually delivered beside the requested ones, counted from what was written.
+- **Class mixture.** `--class-mix` sets the on-disk proportions over the eight sampling classes, defaulting to the training mixture. What a class can supply is counted over training games' records. A class the raw corpus cannot supply at its share is written in full, and the manifest records the shortfall per class. The manifest also records each class's target (`class_targets`) and the proportions actually delivered beside the requested ones, counted from what was written; the run warns on a class delivered short of its target.
 - **Size ceiling.** `--training-records`, when non-zero, subsamples the capped result within each class to that total.
 - **Rarity table.** The manifest records effective games per unique ability text, counted over the whole raw corpus, keyed on the encoding surface `--vocab-path` selects. A `--corpus` training run reads that table instead of counting the resident shard, and refuses a `--vocab-path` on the other surface: a table built on one surface keys every text differently while looking exactly as valid. Coverage and variant shards are built dense in scarce texts, so a per-shard count reads those texts as common and down-weights them.
-- **Card-disjoint sampling.** At most `--card-disjoint-text-cap` games per held-out ability text, so each held-out text weighs comparably in gate 1's averages and in the best-checkpoint metric. Games are the selection unit, so a held-out game is admitted only while every held-out text it carries is under the cap. A held-out game carrying no held-out text is dropped rather than trained on.
+- **Card-disjoint sampling.** At most `--card-disjoint-text-cap` games per held-out ability text, so each held-out text weighs comparably in gate 1's averages and in the best-checkpoint metric. A game counts toward a held-out text only through a resolution record acting through it. Games are the selection unit, so a held-out game is admitted only while every held-out text it resolves is under the cap. A held-out game resolving no held-out text is dropped rather than trained on.
+- **Shards.** Each output stratum is repacked into about `ceil(records / --shard-records)` shards: whole games are dealt by a hash of `game_id` seeded by `--seed`, and each shard's records are shuffled under `--seed`. A game never spans two shards.
+- **Generation.** A written record keeps its source's generation: `random_seat` is written only where the source record carried it.
 - **Determinism.** The dataset is a function of the raw corpus, the flags, and `--seed`, all three recorded in the manifest along with the source shard names and byte sizes.
-- **Rebuilds.** A grown raw corpus is rebuilt whole, never extended in place: a build clears the three output directories before writing them, so no shard of an earlier build survives into a dataset the manifest does not describe. The manifest's source list is what says whether the corpus has grown; `--verify` reports the difference and writes nothing.
+- **Rebuilds.** A grown raw corpus is rebuilt whole, never extended in place: a build clears the three output directories before writing them, so no shard of an earlier build survives into a dataset the manifest does not describe. Before clearing them it moves `manifest.json` to `manifest.previous.json`; the new manifest is written atomically, last, so a failed build leaves no manifest describing the cleared strata. The manifest's source list is what says whether the corpus has grown; `--verify` reports the difference and writes nothing.
 - **Reporting.** The run reports, per class and per stratum, the records read, the records kept, and the records the cap dropped; the number of unique ability texts in each output, which is what says whether curation preserved the tail; and the delivered class proportions against the requested ones.
 - **Refusals.** A build that would produce a dataset gate 1 cannot be scored on writes nothing and exits non-zero: an empty holdout, reported before the survey runs and naming each `--cards-folder` path tried; and an empty card-disjoint stratum, reported after it.
 
@@ -249,7 +253,7 @@ Flags:
 | `--output` | `output/effects/corpus/` | curated dataset directory |
 | `--cards-folder` | `output/cardsfolder/`, `output/tokenscripts/` | converted text and sidecars, for the holdout rule; repeatable |
 | `--vocab-path` | `models/effects/vocab.txt` | decides the encoding surface the rarity table's text keys are built on |
-| `--variant-scripts` | _(none)_ | the perturbed-script tree; without it a variant line resolves to no ability text, so it gets neither a rarity-table entry nor a per-text cap |
+| `--variant-scripts` | _(none)_ | the perturbed-script tree; without it a variant line resolves to no ability text, and a resolution record acting through one is refused as `no-acting-text` |
 | `--holdout-permille` | 20 | holdout share of eligible ability texts |
 | `--holdout-max-carriers` | 8 | cards a text may be on and stay eligible |
 | `--text-cap` | 200 | max training records per unique ability text |
@@ -257,7 +261,8 @@ Flags:
 | `--training-records` | 0 (no ceiling) | total training records after capping |
 | `--game-disjoint-games` | 1000 | games withheld for the game-disjoint stratum |
 | `--card-disjoint-text-cap` | 50 | max card-disjoint games per held-out ability text |
-| `--seed` | 42 | selection seed |
+| `--shard-records` | 2000 | target records per output shard; 0 keeps one output shard per source shard, unshuffled |
+| `--seed` | 42 | selection, shard and shuffle seed |
 | `--workers` | CPU count | shard readers |
 | `--verify` | _(off)_ | report drift against an existing manifest and write nothing |
 
@@ -272,14 +277,15 @@ Two transformers trained jointly; training-only auxiliaries are filtered out of 
 - **Tokenization.** Whole-token only: words outside the vocabulary map to `[UNK]`, with no subword fallback; unknown keywords are covered by forced expansion, unknown subtypes and token names by the next vocabulary rebuild.
 - **Script-surface tokenization.** `build-vocab --surface script` adds the sidecars' script lines to the scan and writes `models/effects/vocab-script.txt`, a path of its own so the rebuild never overwrites the prose vocabulary a prose-surface checkpoint records. The script tokenizer splits compound selectors compositionally (`Creature.nonDragon+OppCtrl` → `Creature`, `nonDragon`, `OppCtrl`).
 - **Number tokens.** A monotone numeric embedding: a shared learned base vector plus log1p(n) times a learned direction.
-- **Prose tokens.** Each token adds a role embedding (`cost` \| `effect` \| `trigger-condition` \| `target-spec`) looked up from the sidecar's role spans.
+- **Prose tokens.** Each token adds a role embedding (`cost` \| `effect` \| `trigger-condition` \| `target-spec`) looked up from the sidecar's role spans. The spans reach the encoder on the prose surface, for a text that is the line's converted prose; a script text carries none.
+- **Withheld keyword.** Under `--withhold-keyword`, every encoding — training, validation, evaluation and `encode-abilities` — force-expands the withheld keyword wherever it occurs and then drops its token everywhere, inside other keywords' expansions included. `encode-abilities` reads the keyword from the checkpoint.
 - **Keyword-expansion dropout.**
   - With probability `--keyword-expand-p` a keyword token is replaced by its definition text; keywords unknown to the vocabulary are always expanded. On both surfaces the definition is the reminder template. The captured script is recorded in the definitions file but is not a definition.
   - Parameterized keywords instantiate the template with the instance's own values; a keyword referenced without an instance (inside another definition) expands with the template's generic wording.
   - Keywords whose body lives on the host card (saga chapters, class levels) never expand.
   - Keywords inside an expansion stay tokens, themselves subject to dropout on other samples.
 - **Pooling.** A `[CLS]` aggregation token pools to the bottleneck `e` (`--e-dim`), with additive Gaussian noise during training (`--e-noise`).
-- **Training-only heads.** MLM over masked tokens (`--mlm-weight`, `--mlm-mask-prob`) and a script-API classification head from `e` (API type plus parameter-key set; `--api-weight`). The paired-encoding loss — asymmetric, stop-gradient on the script side — runs over the lines that have both surfaces; synthetic variants have only the script surface and contribute no pairing term.
+- **Training-only heads.** MLM over masked tokens (`--mlm-weight`, `--mlm-mask-prob`); a masked position's numeric value and number flag are zeroed with its token. A script-API classification head from `e` (API type plus parameter-key set, read from the line's script text on both surfaces; `--api-weight`). The paired-encoding loss — asymmetric, stop-gradient on the script side — runs over the lines that have both surfaces; synthetic variants have only the script surface and contribute no pairing term.
 
 ## Effect head input
 
@@ -318,8 +324,8 @@ Each record kind is an input variant of this one surface:
 | `resolution` / `activation` (cost half) | the outcome flag on `[ACT]` | per-entity cost outcomes (mana delta, tap state, life, zone outcomes); the verdict head's cost paid |
 | `resolution` / `resolution` (effect half) | targets, modes, announced values and the outcome flag on `[ACT]`; the targeted flags | per-entity fields; created-objects slots |
 | `rewrite` | pending-event overlay on the affected entities | per-entity fields and created-objects slots, **derived from `outgoing` and therefore only where `outgoing` is non-null** — an in-place parameter edit. The substitution outcomes (`prevented`, `skipped`, most `replaced`) and every `not_replaced` carry a null `outgoing` and so supervise nothing here; the substituted ability's own effects arrive as its `resolution` record. `result` is the natural label for those records and **is not wired to a head** — see below |
-| `continuous` | the acting static's own layer-channel contributions masked from the entity inputs, structured features included (§ State snapshot) | per-entity contribution fields |
-| `trigger` | pending-event overlay | the verdict head's trigger-fired bit |
+| `continuous` | the acting static's own layer-channel contributions masked from the entity inputs, structured features included (§ State snapshot) | per-entity contribution fields: P/T change, keywords, types and colours gained and lost. A `=` contribution marks the matching `*_lost` field unknown |
+| `trigger` | pending-event overlay | the verdict head's trigger-fired bit. The payload's event is what caused the trigger, not its outcome, so the record derives no per-entity field targets; the affected gate trains on its entities as negatives |
 | `playability` / `decision` | the candidate's `e` in `[ACT]` | the verdict head; per-entity target-legality bits |
 | `playability` / `attackers`, `blockers` | `[ACT]` empty; the anchored attacker via the source flag (`blockers`) | per-entity legality bits: attacker-legal, or blocker-legal with `min_blockers` at the anchored attacker |
 | `combat` | declared combat and the damage-assignment choices in the overlays, `[ACT]` empty | per-entity damage-step outcomes |
@@ -336,20 +342,35 @@ change. Until it is taken, `result` is corpus content the validator judges and t
 ## Losses
 
 - Counts and open-ended magnitudes (damage, counters, life, draws, mana) use Poisson-family count regression. Signed delta fields decompose into a direction (negative, zero, positive — categorical) and a nonnegative magnitude under the count loss; gate 1's deviance (§ Evaluation) is computed over the magnitudes. Closed vocabularies (zone outcome, token-script id) are categorical. Gates and bits are binary.
-- Loss is normalized per record over entity count. The affected gate trains on every entity; conditional fields train only where the gate's target fires.
-- Field curriculum: the sparse group — keywords gained/lost, control change, attached-to, the duration on every delta that carries one, type/color delta, and counters delta by type — enables at `--curriculum-step` training steps. Every other field trains from step zero, as do all three heads' remaining outputs.
+- Count fields are scored on targets clamped to [0, 40]: a count is never scored below zero.
+- Reduction. Every head's loss is summed over a row's targets, then averaged over the batch's rows. A row is a record for the per-entity, created-objects and verdict heads, and an encoded text for the value, script-API and MLM heads. Every row counts in the average, including one with nothing to score.
+- The affected gate trains on every entity, players included. A field trains on an entity only where the gate's target fires and the field is present.
+- A field is present on an entity when the record writes the field, or when all three of these hold: the field has a silent value, the record's sampling class supervises the field, and the entity is of the field's scope (player or permanent). A field the record declares unknown is absent.
+
+  | Field | Silent value |
+  |---|---|
+  | zone outcome | stayed |
+  | damage taken, counters delta, P/T change | 0 |
+  | types, colours and keywords gained or lost | none |
+  | control change, attached-to change | 0 |
+  | life, cards drawn / discarded / milled, library events, poison, mana | 0 |
+  | tap state, P/T duration, type/colour duration, legality bits, `min_blockers` | no silent value: present only where an event or the payload sets it |
+
+- The effectful classes (`resolution-effect`, `resolution-cost`, `rewrite`, `combat`) supervise every non-legality field; `continuous` also supervises P/T change, keywords, types and colours, with their durations. The legality bits are supervised by the `playability` classes that write them.
+- The constant-predictor floor that validation reports each field against scores the same presence.
+- Field curriculum: the sparse group — keywords gained/lost, control change, attached-to, the duration on every delta that carries one, type/color delta, and counters delta by type — enables at the first step of epoch `--curriculum-epoch`. Every other field trains from step zero, as do all three heads' remaining outputs.
 
 # Training
 
 `python -m effects train-effect-model` — joint, end to end, from random init.
 
-- **Corpus.** `--corpus DIR` reads a curated dataset (§ Curated corpus) and is what a hyperparameter or architecture sweep passes: the split, the rarity table, the caps and the record selection all come from its manifest, so runs differ only in the flags under test. It refuses `--records-dir`, `--reserved-shards`, `--split-from` and the two holdout flags, each of which names a decision the manifest already records, and a `--vocab-path` whose encoding surface is not the one the dataset's rarity table was keyed on. Without it a run reads the raw corpus and decides those itself.
-- **Batches.** Each batch (`--batch-size` records, stretched by `--grad-accum`) mixes several games, groups each game's records together, and encodes each unique ability text once. Context gradient is live re-encoding by default; `--context-cache` switches to the stop-gradient momentum cache (refreshed every `--cache-refresh` batches) when the 8 GB GPU budget requires it.
+- **Corpus.** `--corpus DIR` reads a curated dataset (§ Curated corpus) and is what a hyperparameter or architecture sweep passes: the split, the rarity table, the caps and the record selection all come from its manifest, so runs differ only in the flags under test. It refuses a `--vocab-path` whose encoding surface is not the one the dataset's rarity table was keyed on.
+- **Batches.** Each batch (`--batch-size` records, stretched by `--grad-accum`) mixes several games, groups each game's records together, and encodes each unique ability text once. Context abilities are re-encoded live, so their gradient reaches the encoder. Gradient accumulation counts micro-steps within the epoch; a partial accumulation at an epoch's end is dropped.
 - **Schedule.** An epoch is `--steps-per-epoch` optimizer steps with validation between epochs; `--epochs` bounds the run; early stopping after `--patience` epochs without a new card-disjoint validation best. Those steps are spread over `--shards-per-epoch` training shards, one resident at a time, drawn at random across the whole shard list rather than taken as a contiguous run of it — the list is in path order, so a contiguous block holds one collection run's consecutive worker lifetimes and never leaves the family that sorts first. The draw is a function of `--seed` and the epoch number alone.
-- **Seed.** `--seed` seeds weight initialization, batch planning and the shard draw. Omitted, it is drawn from the OS, reported at startup and recorded on the checkpoint: runs differ by default, and any one of them repeats by passing its seed back.
+- **Seed.** `--seed` seeds weight initialization, batch planning and the shard draw. Omitted, it is drawn from the OS and reported at startup. The seed in use is recorded in the checkpoint's training settings: runs differ by default, and any one of them repeats by passing its seed back.
 - **Validation.** Captured once from the reserved shards and reused every epoch, sampled to the **training** mixture rather than to the proportions the stratum holds on disk, and drawn from shards taken across the stratum rather than off the front of its list. Scored in `--batch-size` batches over the shuffled sample: a batch's class composition decides which fields carry loss, so a whole-game batch measures a different objective than the training batch printed beside it.
 - **Progress.** Each shard's line carries its mean training loss, the loss decomposed by field, each module's pre-clip gradient norm, the learning rate and the step rate. One step per shard — the last — reads those back, since each read is a device synchronization. The three-way training / card-disjoint / game-disjoint comparison stays at the close of each epoch, with the card-disjoint loss broken down by field.
-- **Sampling mixture.** Per batch, set by `--kind-mix` and renormalized over the classes present in the corpus:
+- **Sampling mixture.** Fixed on disk by `build-corpus --class-mix`, whose default is this mixture renormalized over the classes present in the corpus; the trainer samples what the corpus holds:
 
   | Class | Share | Records |
   |---|---:|---|
@@ -364,49 +385,51 @@ change. Until it is taken, `result` is corpus content the validator judges and t
 
 - **Rarity weighting.** Within a class, records weight ∝ effective_games^(−0.5), capped at 20× the weight of the most-observed ability text. Effective games is the count of distinct games contributing a record of that unique ability text — games, not raw records. A `--corpus` run reads the count from the manifest, over the whole corpus; otherwise it counts the resident shard, which under-weights a text that is rare corpus-wide and common in one shard.
 - **Records with no acting text.** `combat` and `playability-legality` sample uniformly within their class; a `decision` record's per-candidate examples key on the candidate's text.
-- **Splits.** The held-out unit is the ability text, not the card. A text is eligible for holdout when at most `--holdout-max-carriers` (default 8) cards carry it, and an eligible text is held out when `crc32` of its normalized script text modulo 1000 is below `--holdout-permille` (default 20). Membership depends on the text's own bytes alone, so a Forge upgrade never reassigns an existing text. A card is a held-out card when any of its lines carries a held-out text; token scripts and variant scripts are not in the denominator. Every game with a record naming a held-out card is excluded from training and forms the card-disjoint stratum, which in a depleted corpus is the full-strength validation run (§ Depleted collection). Game-disjoint validation: the games of the reserved shards that name no held-out card. A `--corpus` run takes both strata from the manifest as built directories rather than reserving shards. Best checkpoint by card-disjoint validation loss.
+- **Splits.** The held-out unit is the ability text, not the card. A text is eligible for holdout when at most `--holdout-max-carriers` (default 8) cards carry it, and an eligible text is held out when `crc32` of its normalized script text modulo 1000 is below `--holdout-permille` (default 20). Membership depends on the text's own bytes alone, so a Forge upgrade never reassigns an existing text. A card is a held-out card when any of its lines carries a held-out text. Token scripts are carriers too, counted toward `--holdout-max-carriers`, and a token script carrying a held-out text is held out by its script file, so a game holding that token is a held-out game. Variant scripts are not in the denominator. Every game with a record naming a held-out card is excluded from training and forms the card-disjoint stratum, which in a depleted corpus is the full-strength validation run (§ Depleted collection). Game-disjoint validation: the games of the reserved shards that name no held-out card. A `--corpus` run takes both strata from the manifest as built directories rather than reserving shards. Best checkpoint by card-disjoint validation loss.
 - **Holdout reporting.** `train-effect-model` reports, before its first epoch, the held-out text count, the share of cards under `output/cardsfolder/` those texts remove, and the three strata's record counts.
 - **Split guard.** `train-effect-model` fails before its first epoch when the card-disjoint stratum is empty, and warns when the stratum holds fewer than `--min-holdout-records` (default 2000) resolution records whose acting text appears on no training card. The message names the depleted and full-strength collection runs as the fix.
-- **Split provenance.** The checkpoint records the split it trained against — the holdout flags, the held-out card list they produced, and the `game_id` set enumerating every held-out game across both strata — and `evaluate-effect-model` reads the split from the checkpoint instead of recomputing it. The corpus is append-only and grows between runs, so a recomputed split would not be the trained-against one and the gates would score partly on trained-on games. For the same reason `--split-from PATH` makes a run inherit another checkpoint's split, vocabulary, and keyword-definition paths: every variant run inherits from the `full` run it is a baseline for, and `evaluate-effect-model` fails fast when a `--variant-checkpoint` records a different split than `--checkpoint`.
+- **Split provenance.** The checkpoint records the split it trained against — the holdout flags, the held-out card list they produced, and the `game_id` set enumerating every held-out game across both strata — and `evaluate-effect-model` reads the split from the checkpoint instead of recomputing it. The corpus is append-only and grows between runs, so a recomputed split would not be the trained-against one and the gates would score partly on trained-on games. A variant run shares the `full` run's split by training on the same `--corpus`, and `evaluate-effect-model` fails fast when a `--variant-checkpoint` records a different split than `--checkpoint`.
 - **Corpus provenance.** A `--corpus` checkpoint records the manifest's digest and path alongside its split, and `evaluate-effect-model` fails fast when the dataset it is given hashes differently — the same guard the vocabulary already has, for the same reason: a rebuilt dataset scores the gates on records the model may have trained on.
 - **Records outside the recorded split.** Every reported check scores only the recorded `game_id`s, so games appended after a training run are ignored rather than re-derived into a stratum.
 - **Vocabulary drift.** The checkpoint also records a hash of the vocabulary and keyword-definition files it trained with. The inference commands hash the files they actually use — the recorded paths, or an explicit override — and fail fast on a mismatch, and `evaluate-effect-model` compares those hashes across `--checkpoint` and every `--variant-checkpoint` alongside the split. `build-vocab` overwrites its target in place, so a rebuild between training and encoding would otherwise silently re-index the embedding table.
-- **Checkpoints.** Saved under `--model-output`, which defaults to `models/effects/effect-model/` for `--variant full` and `models/effects/effect-model/{variant}/` otherwise, as `{timestamp}.pt` plus `latest.pt`, so variant runs never overwrite the shipping checkpoint. Each checkpoint records the `--vocab-path` and `--keyword-definitions` it trained with, plus its split, and the inference commands default to those. The saved artifact keeps the encoder, the effect-head trunk, and the per-entity, created-objects, and verdict heads; the MLM, script-API, and pairing heads are filtered at save time.
-- **Variants.** Trained on the identical pipeline as evaluation baselines (`--variant`): `identity` (a free embedding per unique text replaces the encoder), `state-only` (all `e` inputs zeroed), `no-state` (every input zeroed except `[ACT]` and the record-kind flag; the entity ability `e` tokens are zeroed too — the average-effect control), `taxonomy` (`e` replaced by an embedding of the sidecar's API type and parameter keys).
+- **Checkpoints.** Saved under `--model-output`, which defaults to `models/effects/effect-model/` for `--variant full` and `models/effects/effect-model/{variant}/` otherwise, as `{timestamp}.pt` plus `latest.pt`, so variant runs never overwrite the shipping checkpoint. Each checkpoint records the `--vocab-path` and `--keyword-definitions` it trained with, plus its split, and the inference commands default to those. The saved artifact keeps the encoder, the effect-head trunk, and the per-entity, created-objects, and verdict heads; the MLM, script-API, and pairing heads are filtered at save time. Loading is strict: a model state missing any key other than the training-only heads' and the option-kind embedding's, or carrying an unexpected key, is refused. Loaded modules are in evaluation mode.
+- **Variants.** Trained on the identical pipeline as evaluation baselines (`--variant`). A variant zeroes inputs rather than dropping slots, so the per-entity targets keep their shape.
+  - `identity`: a free embedding per text replaces the encoder. The table indexes texts exactly: one row per text the run's sidecars encode to, plus one shared row for every other text. Its texts are saved in the checkpoint.
+  - `state-only`: every `e` zeroed, `[ACT]`'s included.
+  - `no-state`: the context abilities' `e` zeroed and `[ACT]`'s kept; every card and player feature zeroed; every `[GLOBAL]` input zeroed except the record-kind, moment and subkind one-hots. This is the average-effect control.
+  - `taxonomy`: `e` replaced by an embedding of the sidecar's API type and parameter keys.
 
 Flags:
 
 | Flag | Default | Meaning |
 |---|---|---|
-| `--corpus` | _(none; read `--records-dir`)_ | a curated dataset; refuses `--records-dir`, `--reserved-shards`, `--split-from` and the holdout flags |
-| `--records-dir` | `output/effects/records/` | raw corpus shard directory |
+| `--corpus` | _(required)_ | a curated dataset; the trainer's only input |
 | `--cards-folder` | `output/cardsfolder/`, `output/tokenscripts/` | converted text and provenance sidecars; repeatable |
+| `--holdout-unit` | the manifest's | `template` \| `text`; a value differing from the manifest's is refused |
 | `--variant-scripts` | _(none; `output/effects/variant-scripts/` once variants are collected)_ | the perturbed-script tree and its sidecars |
-| `--split-from` | _(none; compute the split)_ | inherit another checkpoint's split, vocabulary, and keyword-definition paths |
 | `--vocab-path` | `models/effects/vocab.txt` | tokenizer vocabulary; a script-surface run points it at `models/effects/vocab-script.txt` |
 | `--keyword-definitions` | `output/effects/keyword-definitions.json` | keyword definitions for expansion dropout |
 | `--model-output` | per variant (above) | checkpoint directory |
 | `--variant` | `full` | `full` \| `identity` \| `state-only` \| `no-state` \| `taxonomy` |
 | `--e-dim` | 64 | width of the bottleneck `e` |
-| `--e-noise` | 0.05 | σ of the train-time additive Gaussian noise on `e` |
+| `--e-noise` | 0.1 | noise ratio on `e` ([gen-2 spec](2026-10-06-ability-effect-model-gen2.md) § 9) |
 | `--keyword-expand-p` | 0.25 | keyword-to-definition expansion probability |
 | `--context-dropout` | 0.15 | drop probability per context ability token |
 | `--mlm-weight` | 0.1 | MLM auxiliary loss weight |
 | `--mlm-mask-prob` | 0.15 | MLM masking probability |
-| `--api-weight` | 0.05 | script-API auxiliary loss weight |
-| `--curriculum-step` | 10000 | step at which the sparse field group enables |
+| `--api-weight` | 0.003 | script-API auxiliary loss weight |
+| `--curriculum-epoch` | 3 | epoch whose first step enables the sparse field group |
 | `--batch-size` | 32 | records per batch |
-| `--grad-accum` | 1 | gradient-accumulation factor |
-| `--kind-mix` | the listed mixture | per-batch quotas over the eight sampling classes (`resolution-cost`, `resolution-effect`, `combat`, `playability-decision`, `playability-legality`, `continuous`, `trigger`, `rewrite`), `class=share` pairs |
-| `--context-cache` | _(off)_ | stop-gradient momentum cache for context `e` |
-| `--cache-refresh` | 500 | batches between momentum-cache refreshes |
+| `--grad-accum` | 1 | gradient-accumulation factor, counted within the epoch |
 | `--steps-per-epoch` | 5000 | optimizer steps per epoch |
 | `--shards-per-epoch` | 256 | training shards an epoch draws, one resident at a time |
 | `--prefetch-workers` | 3 | processes preparing each step's host half; 0 prepares it in the training process. Changes speed only, never results |
-| `--seed` | _(drawn from the OS)_ | weight init, batch planning and the shard draw |
-| `--workers` | _(CPU count)_ | processes the pre-training validation sweep reads shards across |
+| `--seed` | _(drawn from the OS)_ | weight init, batch planning and the shard draw; recorded in the checkpoint |
 | `--epochs` | 40 | epoch bound |
 | `--patience` | 5 | epochs without a card-disjoint validation best before stopping |
+| `--withhold-keyword` | _(none)_ | one implemented keyword withheld from training (§ Ability encoder) |
+
+The gen-2 spec § 9 adds the value head's, encoder-size, lethality-copy and resume flags.
 
 Hardcoded (mirroring the sealed encoder's conventions):
 
@@ -441,7 +464,7 @@ Downstream card representation:
 
 # Evaluation
 
-`python -m effects evaluate-effect-model` (`--checkpoint`, default `models/effects/effect-model/latest.pt`; `--variant-checkpoint NAME=PATH`, repeatable; `--records-dir`, `--cards-folder`, and `--variant-scripts` with the trainer's defaults; `--vocab-path` and `--keyword-definitions` from `--checkpoint`'s recorded training paths) runs the battery over the trained variants and reports per record kind and per stratum. Splits come from `--checkpoint`'s recorded split, never recomputed.
+`python -m effects evaluate-effect-model` (`--checkpoint`, default `models/effects/effect-model/latest.pt`; `--variant-checkpoint NAME=PATH`, repeatable; `--records-dir` and `--cards-folder` with the trainer's defaults; `--variant-scripts` defaulting to the tree the corpus manifest records; `--vocab-path` and `--keyword-definitions` from `--checkpoint`'s recorded training paths) runs the battery over the trained variants and reports per record kind and per stratum. Splits come from `--checkpoint`'s recorded split, never recomputed.
 
 Prediction checks run the loaded checkpoints against records from `--records-dir`. Checks over `e` geometry (gate 3, the decodability battery, the ward canary, the scorer smoke test) read the `output/effects/abilities/` caches, so `encode-abilities` runs first for every variant they cover. Held-out strata: unique-text (line texts appearing on no training card), shared-text (texts also on training cards), novel combinations of seen sub-abilities, numeric extrapolation (seen effect, unseen magnitude). Metrics condition on affected entities and are reported per field, class-balanced within each categorical field; every kind also reports the `state-only` variant as its floor.
 
@@ -449,26 +472,31 @@ Prediction checks run the loaded checkpoints against records from `--records-dir
 
 - nearest-neighbor inspection and UMAP colored by effect category
 - ward canary: ward's `e` closer in cosine distance to each functional twin's `e` than the median of ward's distances to all bare single-keyword `e` vectors; the twins are a checked-in list of corpus lines that spell out ward's behavior without the keyword (`src/effects/domain/ward_twins.py`), each named by its converted prose and pinned to a card where that prose compiles to more than one script; an entry that resolves to no line is named in the report
-- zero-shot keyword: one implemented keyword withheld from training, its occurrences always expanded
-- role-polarity probe: predicted mana-pool sign for `{R}` in cost vs effect position (the effect-position half needs mana records, so the probe needs the engine patch)
+- zero-shot keyword: one implemented keyword withheld from training, its occurrences always expanded and its token never encoded
+- role-polarity probe: predicted mana-pool sign for `{R}` in cost vs effect position — not implemented
 - scaling calibration: predicted sweeper deaths as a function of board size
-- matched real-vs-fork prediction agreement: pairs are the same ability resolved for real and forked in the same game, joined by `mirror_of`
+- matched real-vs-fork prediction agreement: pairs are the same ability resolved for real and forked in the same game, joined by `mirror_of` — not implemented
 - the `identity` variant on the game-disjoint split: the in-distribution memorization ceiling
 - linear-decodability battery on pooled per-card `e` (concatenated mean and max over the card's ability rows), validated on the checkpoint's held-out cards (ridge harness from [`experiments/2026-08-28-encoder-preferences.md`](../experiments/2026-08-28-encoder-preferences.md))
 - pooled-`e` scorer smoke test: the same pooled `e` concatenated with the vector of the sealed encoder at `models/sealed/encoder/latest.pt`, written into a scratch copy of the cards folder — never `output/cardsfolder/`, which the sealed pipeline ships from — and `train-scorer` Phase A re-run against it; informational
 - `taxonomy` variant comparison: what the full encoding surfaces add over the script API taxonomy alone, on held-out effect prediction and the decodability battery
 - average-effect control: the `no-state` variant compared on the decodability battery, the scorer smoke test, the ward canary, and scaling calibration
-- probe-diff re-check (probed keywords only): gate 2's canary re-run over the real-and-fork combat pairs joined by `mirror_of`
+- probe-diff re-check (probed keywords only): gate 2's canary re-run over the real-and-fork combat pairs joined by `mirror_of` — not implemented
+
+The three checks marked not implemented report `NOT_IMPLEMENTED`, printed `[todo]` with what each would measure, on every run. They are not reported as skipped: the corpus holds the fork, probe and mana records they read.
 
 The damage-step canary covers the damage-step family only; evasion keywords are not part of any canary gate, since their supervision arrives with playability records and so needs the engine patch.
 
 **Gates** (numeric). Gates 1 and 3 are pass/fail verdicts on the model and the cache; `evaluate-effect-model` reports them and exits 0 either way. Gate 2 is a per-keyword routing decision whose failure is what schedules that keyword's probe.
 
 1. **Identity-baseline gate** — card-disjoint split, unique-text stratum, resolution records: the `full` model beats the `identity` variant by ≥ 0.05 absolute affected-gate F1, ≥ 0.05 absolute zone-outcome accuracy on affected entities, and ≥ 5% relative reduction in mean Poisson deviance over the count-valued fields. All three must hold.
+   - The unique-text stratum: the card-disjoint stratum's resolution records, streamed from the curated corpus, whose acting text no record of the curated `training/` stratum acts with.
+   - Gate 1 needs a curated corpus. A checkpoint that records none reports gate 1 as skipped, with the reason.
 2. **Damage-step keyword canary**, run per keyword over first strike, double strike, deathtouch, lifelink, trample, indestructible, wither, and infect; it decides whether that keyword gets a probe.
-   - Qualifying records: combat records from the game-disjoint validation split in which the keyword's presence changes the damage-step outcome. At least 200 are required.
+   - Qualifying records: real combat records from the game-disjoint validation split in which the keyword's presence changes the damage-step outcome; probe forks and interventional records never qualify. A curated corpus supplies them from `validation/game-disjoint`. At least 200 distinct `record_id`s are required.
    - Perturbation: remove the keyword from the carrying participant — its ability token where the keyword is printed or attachment-granted, and the overlay's temporarily-granted-keywords channel where it is not.
-   - Pass: the affected fields move in the keyword's rules direction in ≥ 70% of qualifying records.
+   - Pass: the affected fields move in the keyword's rules direction in ≥ 70% of the observations, one per (qualifying record, carrier).
+   - Fields are read unconditionally: the gate's probability times the field's expected value for counts and deltas, and times the class probability for categoricals.
    - The qualifying predicate and the rules direction are one row per keyword in a checked-in table (`src/effects/domain/damage_step_keywords.py`), alongside the fields each keyword affects.
    - A keyword that fails the threshold, or has fewer than 200 qualifying records, gets the probe.
 3. **Collapse canaries** — over the `full` cache's card and token trees (variant scripts excluded), one vector per unique ability text on the checkpoint's encoding surface: mean pairwise cosine similarity over 10,000 random pairs ≤ 0.5, and the top principal component explains ≤ 30% of total variance.
@@ -524,6 +552,7 @@ python -m effects build-corpus
     [--training-records N]       default 0 (no ceiling)
     [--game-disjoint-games N]    default 1000
     [--card-disjoint-text-cap N] default 50
+    [--shard-records N]          default 2000; 0 keeps one output shard per source shard
     [--seed N]                   default 42
     [--workers N]                default: CPU count
     [--verify]                   report drift against an existing manifest; write nothing
@@ -554,8 +583,7 @@ python -m effects collect-variants
     [cap/budget flags]           § Collection caps and budgets
 
 python -m effects train-effect-model
-    [--corpus DIR]               a curated dataset; refuses --records-dir and the split flags
-    [--split-from PATH]          inherit a checkpoint's split; required for variant runs
+    --corpus DIR                 a curated dataset; the trainer's only input
     [other flags]                § Training
 
 python -m effects encode-abilities
@@ -573,7 +601,7 @@ python -m effects evaluate-effect-model
     [--corpus DIR]               default: the dataset the checkpoint records, if any
     [--records-dir DIR]          default output/effects/records/
     [--cards-folder PATH ...]    default output/cardsfolder/ + output/tokenscripts/
-    [--variant-scripts PATH]     the perturbed-script tree
+    [--variant-scripts PATH]     default: the tree the corpus manifest records
     [--vocab-path PATH]          default: the path the checkpoint trained with
     [--keyword-definitions PATH] default: the path the checkpoint trained with
 ```

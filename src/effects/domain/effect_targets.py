@@ -11,9 +11,13 @@ Two rules run through it:
   and nothing else. It is deliberately not "some field changed": a spell that
   targets a creature and deals 0 damage to it still affected it, and a model
   that learns otherwise will predict "nothing happens" for every fizzle.
-- **A field with no event is absent, not zero.** ``None`` means "this record
-  says nothing about that field", and the loss skips it. Writing 0 instead would
-  teach the head that every unmentioned counter type went to zero.
+- **A field with no event is absent, not zero, unless silence is itself the
+  answer.** An entity's ``fields`` hold only what the record wrote, and
+  :meth:`EntityTargets.supervised` decides what the head is scored on: a written
+  value, else the field's silent value where the layout gives one for this
+  record's class and this kind of entity (:mod:`effect_head_layout`), else
+  nothing. Writing 0 for every unmentioned field would teach the head that a
+  destroyed creature was untapped and a player's zone did not change.
 """
 
 from __future__ import annotations
@@ -21,7 +25,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from effects.domain.effect_head_input import CARD_TYPES, COUNTER_TYPES, OVERLAY_KEYWORDS
-from effects.domain.effect_model import (
+from effects.domain.effect_head_layout import (
     CREATED_OBJECT_SLOTS,
     CREATED_OBJECTS_WIDTH,
     CREATED_SLOT_WIDTH,
@@ -31,6 +35,8 @@ from effects.domain.effect_model import (
     VERDICT_WIDTH,
     ZONE_OUTCOMES,
     CreatedSlot,
+    FieldScope,
+    FieldSpec,
 )
 from effects.domain.event_schema import Event, EventType
 from effects.domain.keyword_names import overlay_keyword
@@ -47,6 +53,7 @@ from effects.domain.records import (
     TriggerPayload,
     events_of,
 )
+from effects.domain.sampling import sampling_class
 from effects.domain.state_snapshot import COLORS
 
 #: Event types that move an entity out of where it was, and the zone outcome
@@ -93,13 +100,24 @@ def overlay_index(raw: str) -> int | None:
 class EntityTargets:
     """One entity's targets for this record.
 
-    ``affected`` is the gate. Every other field is ``None`` until an event says
-    otherwise, which is what lets the loss skip what the record does not
-    mention.
+    ``affected`` is the gate. ``fields`` holds what the record wrote and
+    nothing else; ``unknown`` the fields it declares it cannot say. The record's
+    sampling class and the entity's kind decide which silent values apply
+    (:meth:`supervised`); without them only written values are scored.
     """
 
     affected: bool = False
     fields: dict[str, float | int | list[float]] = field(default_factory=dict)
+    record_class: str | None = None
+    scope: FieldScope | None = None
+    unknown: set[str] = field(default_factory=set)
+
+    def supervised(self, spec: FieldSpec):
+        """The target ``spec`` is scored on for this entity, or None where absent."""
+        return spec.supervised_value(
+            self.fields, self.unknown,
+            record_class=self.record_class, scope=self.scope,
+        )
 
     def set(self, name: str, value) -> None:
         self.fields[name] = value
@@ -120,11 +138,19 @@ class EntityTargets:
 def derive_targets(record: EffectRecord) -> dict[str, EntityTargets]:
     """``entity or player id -> EntityTargets`` for one record."""
     targets: dict[str, EntityTargets] = {}
+    record_class = sampling_class(record)
+    players = {player.id for player in record.state.players}
 
     def slot(subject: str) -> EntityTargets:
-        return targets.setdefault(subject, EntityTargets())
+        entry = targets.get(subject)
+        if entry is None:
+            entry = targets[subject] = EntityTargets(
+                record_class=record_class,
+                scope=FieldScope.PLAYER if subject in players else FieldScope.PERMANENT,
+            )
+        return entry
 
-    for event in events_of(record):
+    for event in _outcome_events(record):
         for subject in event.subjects:
             entry = slot(subject)
             entry.affected = True
@@ -133,6 +159,19 @@ def derive_targets(record: EffectRecord) -> dict[str, EntityTargets]:
     _apply_playability(record, slot)
     _apply_continuous(record, slot)
     return targets
+
+
+def _outcome_events(record: EffectRecord) -> tuple[Event, ...]:
+    """The events that are this record's outcome, which is not every event it carries.
+
+    A fired trigger's event is what caused it, read as the pending-event overlay
+    on its input; what the trigger then does arrives as the resolution record
+    of the ability it put on the stack. A trigger record supervises the verdict
+    head's fired bit alone (base spec, record-kind table).
+    """
+    if isinstance(record.payload, TriggerPayload):
+        return ()
+    return events_of(record)
 
 
 def _apply_event(entry: EntityTargets, event: Event) -> None:
@@ -299,12 +338,15 @@ def _apply_continuous(record: EffectRecord, slot) -> None:
                 entry, "keywords_lost" if lost else "keywords_gained",
                 keyword.lstrip("-"),
             )
-        gained, lost = _split_contribution(contribution.types)
-        _apply_multi(entry, "types_gained", gained, _TYPE_SLOTS)
-        _apply_multi(entry, "types_lost", lost, _TYPE_SLOTS)
-        gained, lost = _split_contribution(contribution.colors)
-        _apply_multi(entry, "colors_gained", gained, _COLOR_SLOTS)
-        _apply_multi(entry, "colors_lost", lost, _COLOR_SLOTS)
+        for channel, slots, name in (
+            (contribution.types, _TYPE_SLOTS, "types"),
+            (contribution.colors, _COLOR_SLOTS, "colors"),
+        ):
+            gained, lost = _split_contribution(channel)
+            _apply_multi(entry, f"{name}_gained", gained, slots)
+            _apply_multi(entry, f"{name}_lost", lost, slots)
+            if "=" in channel and f"{name}_lost" not in entry.fields:
+                entry.unknown.add(f"{name}_lost")
 
 
 def _split_contribution(tokens: tuple[str, ...]) -> tuple[list[str], list[str]]:
@@ -317,9 +359,8 @@ def _split_contribution(tokens: tuple[str, ...]) -> tuple[list[str], list[str]]:
     A replacement reports only what it sets. What it displaced is not in the
     record: the snapshot beside it is the board after the static applied, so
     reading the entity's current types back would name what it still has, not
-    what it lost. Leaving the field unset says "this record does not say",
-    which is the one honest answer -- the loss skips an unset field
-    rather than scoring it as an empty set.
+    what it lost. The caller marks the lost field unknown, which is the one
+    honest answer: the loss skips it rather than scoring it as an empty set.
 
     Tokens naming a whole class of type -- ``all-creature-types`` and the
     ``-all-*`` removals -- match nothing in ``CARD_TYPES`` and drop here. They

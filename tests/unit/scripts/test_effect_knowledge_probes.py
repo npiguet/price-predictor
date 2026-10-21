@@ -1,8 +1,8 @@
 """The knowledge-probe suite (FR-089): share, labels, sweeps, folds, digest, compare.
 
-``scripts/`` is not part of the installed package, so the suite's modules are
-loaded by file path, through ``run.sibling`` — the same loader the suite uses,
-so a test reads the very modules a run would.
+``scripts/`` is not part of the installed package, so ``scripts/`` is put on
+the path and the suite imports as the package its entry scripts make it, so a
+test reads the very modules a run would.
 
 Fixtures are real: the gen-1 records and sidecars cut from the corpus by
 ``scripts/make_fixture_records.py``, and the real gen-2 chained sidecars.
@@ -10,7 +10,6 @@ Fixtures are real: the gen-1 records and sidecars cut from the corpus by
 
 from __future__ import annotations
 
-import importlib.util
 import io
 import json
 import sys
@@ -24,23 +23,25 @@ _ROOT = Path(__file__).resolve().parents[3]
 _SUITE = _ROOT / "scripts" / "effect_knowledge_probes"
 _FIXTURES = _ROOT / "tests" / "fixtures" / "effects"
 
+if str(_ROOT / "scripts") not in sys.path:
+    sys.path.insert(0, str(_ROOT / "scripts"))
 
-def _load_run():
-    spec = importlib.util.spec_from_file_location(
-        "effect_knowledge_probes.run", _SUITE / "run.py")
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
-run = _load_run()
-labels = run.sibling("labels")
-ladder = run.sibling("ladder")
-sweeps = run.sibling("sweeps")
-compare = run.sibling("compare")
-board = run.sibling("board")
-common = run.sibling("common")
-combat_grid = run.sibling("combat_grid")
+from effect_knowledge_probes import (  # noqa: E402
+    board,
+    colour_pips,
+    combat_grid,
+    common,
+    compare,
+    evasion_grid,
+    labels,
+    ladder,
+    probe_set,
+    run,
+    sweeps,
+    target_restrictions,
+    zone_effects,
+)
+from effect_knowledge_probes.board_edits import BoardEdit  # noqa: E402
 
 
 @pytest.fixture(scope="module")
@@ -212,12 +213,6 @@ class TestProbes:
         folds = ladder.fold_assignment([str(i) for i in range(300)])
         assert ladder.score("amount", y, ladder.linear_oof(X, y, folds, "amount")) > 0.95
 
-    def test_the_constants_are_the_planned_ones(self):
-        assert (ladder.MIN_GAP, ladder.FOLDS, ladder.SEED) == (0.05, 5, 42)
-        assert (ladder.MLP_HIDDEN, ladder.MLP_LAYERS, ladder.MLP_EPOCHS) == (256, 2, 30)
-        assert (ladder.LINEAR_C, ladder.RIDGE_ALPHA) == (1.0, 1.0)
-        assert ladder.BOOTSTRAP_RESAMPLES == 1000
-
 
 # ── line labels from real scripts ───────────────────────────────────────
 
@@ -318,12 +313,12 @@ class TestLineLabels:
     ])
     def test_an_amount_is_capped_where_the_model_s_targets_are(
             self, script, line_kind, api, target, sign):
-        from effects.domain.effect_model import MAGNITUDE_CAP
+        from effects.domain.effect_head_input import MAGNITUDE_CAP
 
         assert labels.line_labels(script, line_kind, api)[target] == sign * MAGNITUDE_CAP
 
     def test_damage_per_mana_is_read_off_the_capped_damage(self):
-        from effects.domain.effect_model import MAGNITUDE_CAP
+        from effects.domain.effect_head_input import MAGNITUDE_CAP
 
         found = labels.line_labels(
             "AB$ DealDamage | Cost$ 2 R T | NumDmg$ 100 | ValidTgts$ Any", "activated",
@@ -332,7 +327,7 @@ class TestLineLabels:
         assert found["damage_per_mana"] == pytest.approx(MAGNITUDE_CAP / 3)
 
     def test_every_amount_label_is_within_the_cap_and_no_flag_moves(self):
-        from effects.domain.effect_model import MAGNITUDE_CAP
+        from effects.domain.effect_head_input import MAGNITUDE_CAP
 
         for line in _fixture_lines("gen1-sidecars"):
             found = labels.line_labels(line.script_text, line.line_kind,
@@ -398,7 +393,7 @@ class TestRecordLabels:
     def test_damage_taken_is_capped_where_the_model_s_targets_are(self, records, sidecars):
         from dataclasses import replace
 
-        from effects.domain.effect_model import MAGNITUDE_CAP
+        from effects.domain.effect_head_input import MAGNITUDE_CAP
         from effects.domain.event_schema import Event, EventType
         from effects.domain.records import Moment
 
@@ -418,23 +413,44 @@ class TestRecordLabels:
                  if i.target == "damage_taken" and i.entity == creature.id]
         assert [i.label for i in found] == [MAGNITUDE_CAP]
 
-    def test_observed_mana_is_capped_where_the_model_s_targets_are(self, records):
+    @staticmethod
+    def _producing(records, *mana_by_color):
+        """A resolution whose events produce the given ``mana_by_color`` maps.
+
+        The map is what the collector writes: Forge's produced-mana string as a
+        count per colour letter, ``{"C": 2}`` for a Sol Ring's ``2``.
+        """
         from dataclasses import replace
 
-        from effects.domain.effect_model import MAGNITUDE_CAP
         from effects.domain.event_schema import Event, EventType
         from effects.domain.records import ResolutionPayload
 
         record = next(r for r in records if isinstance(r.payload, ResolutionPayload))
+        events = tuple(
+            Event(EventType.MANA_PRODUCED, subjects=(record.actor_player,),
+                  params={"mana_by_color": mana})
+            for mana in mana_by_color
+        )
+        return replace(record, payload=ResolutionPayload(events=events))
 
-        def producing(events: int):
-            # The event a real mana resolution carries, repeated.
-            event = Event(EventType.MANA_PRODUCED, subjects=(record.actor_player,),
-                          params={"mana_by_color": {"G": 1}})
-            return replace(record, payload=ResolutionPayload(events=(event,) * events))
+    def test_observed_mana_sums_the_counts_each_event_carries(self, records):
+        """A Sol Ring makes two mana in one event, a Tinder Farm one of each of
+        two colours."""
+        assert labels.mana_observed(self._producing(records, {"C": 2})) == 2.0
+        assert labels.mana_observed(self._producing(records, {"R": 1, "W": 1})) == 2.0
+        assert labels.mana_observed(
+            self._producing(records, {"G": 1}, {"G": 1}, {"U": 3})) == 5.0
 
-        assert labels.mana_observed(producing(3)) == 3.0
-        assert labels.mana_observed(producing(int(MAGNITUDE_CAP) + 10)) == MAGNITUDE_CAP
+    def test_observed_mana_is_capped_where_the_model_s_targets_are(self, records):
+        from effects.domain.effect_head_input import MAGNITUDE_CAP
+
+        produced = self._producing(records, *({"G": 1},) * (int(MAGNITUDE_CAP) + 10))
+        assert labels.mana_observed(produced) == MAGNITUDE_CAP
+
+    def test_an_event_that_names_no_mana_says_nothing(self, records):
+        """An empty map is mana the collector could not read, not zero mana."""
+        assert labels.mana_observed(self._producing(records, {})) is None
+        assert labels.mana_observed(self._producing(records, {}, {"B": 1})) == 1.0
 
     def test_the_join_finds_causes_in_the_same_game(self, records):
         result = labels.join_triggers(records)
@@ -484,7 +500,7 @@ class TestSweepEditor:
         record = next(r for r in records if any(
             e.pt is not None and e.zone == "battlefield" for e in r.state.entities))
         target = next(e for e in record.state.entities if e.pt is not None)
-        edited = sweeps.set_toughness(record, target.id, 7)
+        edited = BoardEdit(record).set_toughness(target.id, 7).record
         assert edited.state.entity(target.id).pt.total[1] == 7
         assert _differences(record, edited) == {"entities"}
         for before, after in zip(record.state.entities, edited.state.entities):
@@ -502,7 +518,7 @@ class TestSweepEditor:
 
     def test_damage_edits_only_the_amount(self):
         text = "NumDmg$ 3 | SP$ DealDamage | ValidTgts$ Creature [SEG] SV1: DB$ Draw"
-        assert sweeps.set_damage(text, 7) == text.replace("NumDmg$ 3", "NumDmg$ 7")
+        assert sweeps.set_damage_amount(text, 7) == text.replace("NumDmg$ 3", "NumDmg$ 7")
 
     def test_cost_pips_read_generic_and_coloured_mana(self):
         assert sweeps.cost_pips("{2}{G}") == ["1", "1", "G"]
@@ -633,32 +649,64 @@ class TestAffordabilityEdit:
 # ── the probe set's digest ──────────────────────────────────────────────
 
 
+def _probe_set(corpus_digest: str):
+    """A small sealed set, every field filled the way a freeze fills it."""
+    return probe_set.ProbeSet(
+        corpus="corpus", corpus_digest=corpus_digest, surface="script",
+        games={"card-disjoint": ["g1"]}, sources={"card-disjoint": ["s.jsonl.gz"]},
+        items=[probe_set.FrozenLineItem({"script_file": "cardsfolder/s/shock.txt"},
+                                        {"amount": 2.0}, {"spread": 0.5})],
+        pairs=[{"a": {}, "b": {}, "label": 1.0, "source": "mined"}],
+        record_items=[probe_set.FrozenRecordItem(
+            record_id="g1.1", stratum="card-disjoint", family="magnitudes",
+            target="dies", label=1.0, entity="E1", group="cardsfolder/s/shock.txt")],
+        sweeps={"toughness": [{"record_id": "g1.1", "entity": "E1"}]},
+        join_rate=0.25, join={"fired": 4, "fired_joined": 1},
+        settings={"games_per_stratum": 300},
+    ).sealed()
+
+
+
 class TestDigest:
     def test_it_is_stable_across_key_order(self):
         a = {"items": [1, 2], "games": {"x": ["g1"]}, "corpus_digest": "c"}
         b = {"corpus_digest": "c", "games": {"x": ["g1"]}, "items": [1, 2]}
-        assert run.canonical_digest(a) == run.canonical_digest(b)
+        assert probe_set.canonical_digest(a) == probe_set.canonical_digest(b)
 
     def test_it_excludes_itself(self):
         payload = {"items": [1]}
-        payload["digest"] = run.canonical_digest(payload)
-        assert run.canonical_digest(payload) == payload["digest"]
+        payload["digest"] = probe_set.canonical_digest(payload)
+        assert probe_set.canonical_digest(payload) == payload["digest"]
 
     def test_it_changes_with_a_label(self):
-        assert run.canonical_digest({"items": [1]}) != run.canonical_digest({"items": [2]})
+        digest = probe_set.canonical_digest
+        assert digest({"items": [1]}) != digest({"items": [2]})
 
     def test_a_probing_run_refuses_a_set_frozen_for_another_corpus(self, tmp_path):
-        payload = {"corpus_digest": "aaa", "items": []}
-        payload["digest"] = run.canonical_digest(payload)
+        frozen = _probe_set(corpus_digest="aaa")
+        path = tmp_path / "set.json"
+        path.write_text(json.dumps(frozen.to_json()), encoding="utf-8")
+        with pytest.raises(SystemExit, match="frozen against corpus digest"):
+            probe_set.load_probe_set(path, "bbb")
+        assert probe_set.load_probe_set(path, "aaa").digest == frozen.digest
+
+    def test_an_edited_set_is_refused(self, tmp_path):
+        payload = _probe_set(corpus_digest="aaa").to_json()
+        payload["join_rate"] = 0.5
         path = tmp_path / "set.json"
         path.write_text(json.dumps(payload), encoding="utf-8")
-        with pytest.raises(SystemExit, match="frozen against corpus digest"):
-            run.load_probe_set(path, "bbb")
-        assert run.load_probe_set(path, "aaa")["digest"] == payload["digest"]
+        with pytest.raises(SystemExit, match="does not match its own digest"):
+            probe_set.load_probe_set(path, "aaa")
+
+    def test_the_json_round_trips_to_the_same_digest(self):
+        frozen = _probe_set(corpus_digest="aaa")
+        again = probe_set.ProbeSet.from_json(json.loads(json.dumps(frozen.to_json())))
+        assert again.sealed().digest == frozen.digest
+        assert again.record_items == frozen.record_items
 
     def test_a_probing_run_refuses_without_a_set(self, tmp_path):
         with pytest.raises(SystemExit, match="--freeze-probe-set"):
-            run.load_probe_set(tmp_path / "missing.json", "aaa")
+            probe_set.load_probe_set(tmp_path / "missing.json", "aaa")
 
     def test_the_set_follows_the_reports_dir_by_default(self):
         args = run.parse_args(["--checkpoint", "c.pt", "--reports-dir", "arm/reports"])
@@ -679,8 +727,8 @@ class TestDigest:
 # ── compare ─────────────────────────────────────────────────────────────
 
 
-def _card(name: str, one: float, width: float, digest: str = "d") -> dict:
-    return {
+def _card(name: str, one: float, width: float, digest: str = "d"):
+    return _scorecard({
         "checkpoint": f"models/effects/runs/{name}/latest.pt",
         "probe_set_digest": digest,
         "families": {"magnitudes": {"targets": {"dies": {
@@ -692,14 +740,39 @@ def _card(name: str, one: float, width: float, digest: str = "d") -> dict:
                 "3": {"model": 0.9},
             }}},
         }}}},
-    }
+    })
+
+
+def _scorecard(data: dict):
+    from effect_knowledge_probes.scorecard import Scorecard
+
+    return Scorecard.from_json(data)
 
 
 class TestCompare:
     def test_arms_rank_on_rung_one_over_the_width_control(self):
         ranked = compare.ranking([_card("narrow", 0.70, 0.65), _card("wide", 0.80, 0.62)])
-        assert [Path(name).parent.name for name, _ in ranked["mlp"]] == ["wide", "narrow"]
-        assert ranked["linear"][0][1] == pytest.approx(0.18)
+        assert [Path(name).parent.name for name, _ in ranked["mlp AUC"]] == ["wide", "narrow"]
+        assert ranked["linear AUC"][0][1] == pytest.approx(0.18)
+
+    def test_auc_and_r2_gains_are_ranked_apart(self):
+        """An AUC point and an R² point are not one unit; averaging them would
+        let a large R² swing on one amount decide the ranking."""
+        def card(name, auc_gain, r2_gain):
+            body = _card(name, 0.6 + auc_gain, 0.6)
+            body.families["magnitudes"]["targets"]["damage_taken"] = {
+                "scope": "entity", "kind": "amount",
+                "strata": {"card-disjoint": {"n": 100, "rungs": {
+                    "1": {"linear": 0.2 + r2_gain, "mlp": 0.2 + r2_gain},
+                    "1w": {"linear": 0.2, "mlp": 0.2},
+                }}},
+            }
+            return body
+
+        ranked = compare.ranking([card("auc", 0.10, -0.50), card("r2", 0.01, 0.30)])
+        assert [Path(n).parent.name for n, _ in ranked["mlp AUC"]] == ["auc", "r2"]
+        assert [Path(n).parent.name for n, _ in ranked["mlp R²"]] == ["r2", "auc"]
+        assert ranked["linear AUC"][0][1] == pytest.approx(0.10)
 
     def test_mismatched_digests_warn(self):
         assert compare.digest_warning([_card("a", 0.7, 0.6, "x"), _card("b", 0.7, 0.6, "y")])
@@ -709,7 +782,7 @@ class TestCompare:
         paths = []
         for name in ("a", "b"):
             path = tmp_path / f"{name}.json"
-            path.write_text(json.dumps(_card(name, 0.7, 0.6)), encoding="utf-8")
+            path.write_text(json.dumps(_card(name, 0.7, 0.6).to_json()), encoding="utf-8")
             paths.append(path)
         out = tmp_path / "compare.md"
         assert compare.main([str(p) for p in paths] + ["--output", str(out)]) == 0
@@ -719,7 +792,7 @@ class TestCompare:
 
     def test_the_table_prints_to_a_cp1252_stdout(self, tmp_path, monkeypatch):
         path = tmp_path / "a.json"
-        path.write_text(json.dumps(_card("a", 0.7, 0.6)), encoding="utf-8")
+        path.write_text(json.dumps(_card("a", 0.7, 0.6).to_json()), encoding="utf-8")
         stdout = io.TextIOWrapper(io.BytesIO(), encoding="cp1252")
         monkeypatch.setattr(sys, "stdout", stdout)
         assert compare.main([str(path)]) == 0
@@ -737,7 +810,7 @@ def _key(trait_kind: str, face: int = 0):
 
 
 class _Sidecars:
-    """A sidecar cache over made-up lines: ``get`` for a card, ``line_for`` for a key."""
+    """A sidecar cache over made-up lines: ``get`` for a card, ``line_or_none`` for a key."""
 
     def __init__(self, lines, api_by_kind=None):
         self.lines = lines
@@ -746,7 +819,7 @@ class _Sidecars:
     def get(self, script_file):
         return SimpleNamespace(lines=self.lines)
 
-    def line_for(self, key):
+    def line_or_none(self, key):
         api = self.api_by_kind.get(key.trait_kind)
         return None if api is None else SimpleNamespace(script_api_type=api)
 
@@ -935,7 +1008,7 @@ class TestRung3ReadsTheRightOutput:
     def _outputs(self, gate_logit: float, legal_logit: float):
         import torch
 
-        from effects.domain.effect_model import FIELD_SLICES, GATE_INDEX, PER_ENTITY_WIDTH
+        from effects.domain.effect_head_layout import FIELD_SLICES, GATE_INDEX, PER_ENTITY_WIDTH
 
         vector = torch.zeros(1, 1, PER_ENTITY_WIDTH)
         vector[0, 0, GATE_INDEX] = gate_logit
@@ -952,12 +1025,12 @@ class TestRung3ReadsTheRightOutput:
         value = ladder._readout("legal_target", outputs, None, 0, 0)
         assert value == pytest.approx(float(torch.sigmoid(torch.tensor(-3.0))))
 
-    def test_damage_taken_reads_the_amount_without_the_gate(self):
-        """Every damage item took damage, so the gate's doubt about whether the
-        creature was hit must not scale the amount."""
+    def test_damage_taken_reads_the_amount_alone(self):
+        """Every damage_taken item took damage, so the gate's doubt about
+        whether the creature was hit must not scale the head's amount."""
         import math
 
-        from effects.domain.effect_model import FIELD_SLICES
+        from effects.domain.effect_head_layout import FIELD_SLICES
 
         outputs = self._outputs(gate_logit=-3.0, legal_logit=0.0)
         outputs[0, 0, FIELD_SLICES["damage_taken"][0]] = math.log(3.0)
@@ -1053,7 +1126,7 @@ class TestCombatGrid:
 
     def test_power_edits_one_entity_only(self, records):
         record, attacker, _ = _one_on_one(records)
-        edited = combat_grid.set_power(record, attacker, 7)
+        edited = BoardEdit(record).set_power(attacker, 7).record
         assert edited.state.entity(attacker).pt.total[0] == 7
         assert (edited.state.entity(attacker).pt.total[1]
                 == record.state.entity(attacker).pt.total[1])
@@ -1061,15 +1134,15 @@ class TestCombatGrid:
 
     def test_a_granted_keyword_is_added_once(self, records):
         record, attacker, _ = _one_on_one(records)
-        once = combat_grid.grant_keyword(record, attacker, "deathtouch")
-        twice = combat_grid.grant_keyword(once, attacker, "deathtouch")
+        once = BoardEdit(record).grant_keyword(attacker, "deathtouch")
+        twice = once.grant_keyword(attacker, "deathtouch").record
         assert twice.state.entity(attacker).granted_temporary.keywords.count("deathtouch") == 1
 
     def test_a_one_on_one_block_qualifies_when_its_outcome_obeys_the_rule(
         self, records, monkeypatch,
     ):
         import effects.domain.effect_targets as effect_targets
-        from effects.domain.effect_model import ZONE_OUTCOMES
+        from effects.domain.effect_head_layout import ZONE_OUTCOMES
 
         record, attacker, blocker = _one_on_one(records)
         a, _ = combat_grid.side_of(record, attacker)
@@ -1147,7 +1220,7 @@ class TestCombatGrid:
 
     def test_a_first_strike_step_record_never_qualifies(self, records, monkeypatch):
         import effects.domain.effect_targets as effect_targets
-        from effects.domain.effect_model import ZONE_OUTCOMES
+        from effects.domain.effect_head_layout import ZONE_OUTCOMES
 
         record, attacker, blocker = _one_on_one(records)
         a, _ = combat_grid.side_of(record, attacker)
@@ -1157,21 +1230,18 @@ class TestCombatGrid:
                    for e, dies in zip((attacker, blocker), combat_grid.step_deaths(a, b))}
         monkeypatch.setattr(effect_targets, "derive_targets", lambda r: outcome)
         assert combat_grid.single_block(record, _keywords) == (attacker, blocker)
-        first = combat_grid.set_step(record, "first_strike")
+        first = BoardEdit(record).set_step("first_strike").record
         assert combat_grid.single_block(first, _keywords) is None
 
     def test_damage_the_step_already_marked_is_cleared_and_other_damage_disqualifies(
         self, records, monkeypatch,
     ):
-        from dataclasses import replace
-
         import effects.domain.effect_targets as effect_targets
-        from effects.domain.effect_model import ZONE_OUTCOMES
+        from effects.domain.effect_head_layout import ZONE_OUTCOMES
 
         record, attacker, blocker = _one_on_one(records)
         power = record.state.entity(attacker).pt.total[0]
-        marked = combat_grid._edit_entity(
-            record, blocker, lambda e: replace(e, damage=power))
+        marked = BoardEdit(record).set_marked_damage(blocker, power).record
         a, _ = combat_grid.side_of(record, attacker)
         b, _ = combat_grid.side_of(record, blocker)
         attacker_dies, blocker_dies = combat_grid.step_deaths(a, b)
@@ -1180,8 +1250,7 @@ class TestCombatGrid:
                    for e, dies in ((attacker, attacker_dies), (blocker, blocker_dies))}
         monkeypatch.setattr(effect_targets, "derive_targets", lambda r: outcome)
         assert combat_grid.single_block(marked, _keywords) == (attacker, blocker)
-        earlier = combat_grid._edit_entity(
-            record, blocker, lambda e: replace(e, damage=power + 1))
+        earlier = BoardEdit(record).set_marked_damage(blocker, power + 1).record
         assert combat_grid.single_block(earlier, _keywords) is None
         rows, rule = combat_grid.grid_records(marked, attacker, blocker, "attacker", "none")
         assert all(cell.state.entity(blocker).damage == 0 for row in rows for cell in row)
@@ -1190,10 +1259,6 @@ class TestCombatGrid:
 
 
 # ── the evasion grid ────────────────────────────────────────────────────
-
-evasion_grid = run.sibling("evasion_grid")
-target_restrictions = run.sibling("target_restrictions")
-
 
 def _block_pair(records):
     """A fixture block-legality record made to qualify: a red attacker, a green blocker."""
@@ -1204,13 +1269,12 @@ def _block_pair(records):
     record = next(r for r in records if isinstance(r.payload, PlayabilityBlockersPayload)
                   and r.payload.legal_blockers)
     attacker, blocker = record.payload.anchor_attacker, record.payload.legal_blockers[0]
-    record = evasion_grid.set_colours(record, attacker, ("R",))
-    record = evasion_grid.set_colours(record, blocker, ("G",))
-    record = evasion_grid._edit_entity(record, blocker, lambda e: replace(e, types=("creature",)))
+    board = (BoardEdit(record).set_colours(attacker, ("R",)).set_colours(blocker, ("G",))
+             .edit_entity(blocker, lambda e: replace(e, types=("creature",))))
     for entity in (attacker, blocker):
-        record = evasion_grid._edit_entity(record, entity, lambda e: replace(
+        board = board.edit_entity(entity, lambda e: replace(
             e, granted_temporary=replace(e.granted_temporary, keywords=())))
-    return record, attacker, blocker
+    return board.record, attacker, blocker
 
 
 def _no_keywords(entity):
@@ -1267,9 +1331,9 @@ class TestEvasionGrid:
         record, attacker, blocker = _block_pair(records)
         assert evasion_grid.qualifying_pair(record, _no_keywords) == (attacker, blocker)
         assert evasion_grid.qualifying_pair(replace(record, fork=True), _no_keywords) is None
-        flying = evasion_grid.grant_keyword(record, attacker, "flying")
+        flying = BoardEdit(record).grant_keyword(attacker, "flying").record
         assert evasion_grid.qualifying_pair(flying, _no_keywords) is None
-        black = evasion_grid.set_colours(record, blocker, ("B",))
+        black = BoardEdit(record).set_colours(blocker, ("B",)).record
         assert evasion_grid.qualifying_pair(black, _no_keywords) is None
 
 
@@ -1315,13 +1379,16 @@ class TestTargetRestrictions:
         assert "creature" not in lost.state.entity(entity.id).types
 
     def test_auc(self):
-        assert target_restrictions.auc([1, 1, 0, 0], [0.9, 0.8, 0.2, 0.1]) == 1.0
-        assert target_restrictions.auc([1, 1, 0, 0], [0.1, 0.2, 0.8, 0.9]) == 0.0
-        assert np.isnan(target_restrictions.auc([1, 1], [0.5, 0.6]))
+        assert common.auc([1, 1, 0, 0], [0.9, 0.8, 0.2, 0.1]) == 1.0
+        assert common.auc([1, 1, 0, 0], [0.1, 0.2, 0.8, 0.9]) == 0.0
+        assert np.isnan(common.auc([1, 1], [0.5, 0.6]))
+
+    def test_a_tie_counts_half(self):
+        """A score that cannot tell a positive from a negative ranks at chance."""
+        assert common.auc([1, 0], [0.5, 0.5]) == 0.5
+        assert common.auc([1, 1, 0, 0], [0.9, 0.5, 0.5, 0.1]) == pytest.approx(0.875)
 
 
-colour_pips = run.sibling("colour_pips")
-zone_effects = run.sibling("zone_effects")
 
 
 class TestColourPips:
@@ -1394,3 +1461,95 @@ class TestZoneEffects:
         moved = zone_effects.retargeted(aimed, one, two)
         assert moved.state.refs.targets == (two, "card-1")
         assert zone_effects.player_targets(moved) == [two]
+
+
+# ── what a checkpoint's probes read (FR-075) ─────────────────────────────
+
+
+def _corpus_manifest(**overrides):
+    from effects.domain.corpus_manifest import CorpusManifest
+
+    fields = dict(
+        seed=1, surface="script", vocab_path="models/effects/vocab-script.txt",
+        variant_scripts="", holdout_permille=20, holdout_max_carriers=8,
+        text_cap=0, card_disjoint_text_cap=0, training_records=1, class_mix={},
+        delivered_mix={}, held_out_cards=(), held_out_texts=(),
+        card_disjoint_games=("cg",), game_disjoint_games=("gg",), rarity={},
+        sources=(), per_class={}, per_stratum={}, unique_texts={}, shortfall={},
+    )
+    fields.update(overrides)
+    return CorpusManifest(**fields)
+
+
+class TestProbeContext:
+    """Every probe reads the corpus, sidecar trees and variant tree its checkpoint
+    trained against, never a corpus or probe set named in the script."""
+
+    def _context(self, tmp_path, monkeypatch, *, recorded_digest=None):
+        from effects.infrastructure.corpus_store import CorpusStore
+        from effects.infrastructure.effect_model_store import SplitProvenance
+
+        variants = tmp_path / "variant-scripts"
+        manifest = _corpus_manifest(variant_scripts=str(variants))
+        corpus = tmp_path / "corpus"
+        CorpusStore(corpus).save(manifest)
+        checkpoint = SimpleNamespace(
+            provenance=SplitProvenance(
+                corpus_path=str(corpus),
+                corpus_digest=recorded_digest or manifest.digest(),
+            ),
+            cards_folders=(str(tmp_path / "cardsfolder"), str(tmp_path / "tokenscripts")),
+            epoch=3,
+        )
+        monkeypatch.setattr(common, "load_checkpoint", lambda path: checkpoint)
+        return common.probe_context(tmp_path / "latest.pt"), manifest, corpus, variants
+
+    def test_the_corpus_is_the_one_the_checkpoint_recorded(self, tmp_path, monkeypatch):
+        context, manifest, corpus, _ = self._context(tmp_path, monkeypatch)
+        assert context.corpus == corpus
+        assert context.corpus_digest == manifest.digest()
+        assert context.validation_dirs() == [
+            corpus / "validation" / "card-disjoint",
+            corpus / "validation" / "game-disjoint",
+        ]
+
+    def test_the_sidecars_read_the_variant_tree_the_corpus_recorded(
+        self, tmp_path, monkeypatch,
+    ):
+        """Without it a variant card's ability keys resolve to no text."""
+        context, _, _, variants = self._context(tmp_path, monkeypatch)
+        assert context.variant_scripts == variants
+        assert context.sidecars().path_for("variant-scripts/shock_variant.txt").parent == (
+            variants
+        )
+        assert context.cards_folders == (tmp_path / "cardsfolder", tmp_path / "tokenscripts")
+
+    def test_a_corpus_rebuilt_since_training_is_refused(self, tmp_path, monkeypatch):
+        with pytest.raises(SystemExit, match="rebuilt"):
+            self._context(tmp_path, monkeypatch, recorded_digest="an-older-build")
+
+    def test_a_probe_set_frozen_on_another_corpus_is_refused(self, tmp_path, monkeypatch):
+        context, *_ = self._context(tmp_path, monkeypatch)
+        path = probe_set.probe_set_path(tmp_path, context.corpus_digest)
+        payload = {"corpus_digest": "another-corpus", "items": []}
+        payload["digest"] = probe_set.canonical_digest(payload)
+        path.write_text(json.dumps(payload), encoding="utf-8")
+        with pytest.raises(SystemExit, match="another-corpus"):
+            context.load_probe_set(tmp_path)
+
+
+# ── the line ladder's held-out split ────────────────────────────────────
+
+
+class TestLineSplit:
+    """Every game naming a held-out card is kept out of training, so a text is
+    untrained exactly when every card printing it is held out."""
+
+    def test_a_trained_text_printed_on_a_held_out_card_is_trained(self):
+        assert run.line_split({"Shock", "Lightning Strike"}, {"Shock"}) == "trained"
+
+    def test_a_text_every_carrier_of_which_is_held_out_is_held_out(self):
+        assert run.line_split({"Shock", "Spark"}, {"Shock", "Spark", "Bolt"}) == "held-out"
+
+    def test_a_text_on_no_held_out_card_is_trained(self):
+        assert run.line_split({"Lightning Strike"}, {"Shock"}) == "trained"

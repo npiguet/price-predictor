@@ -40,20 +40,17 @@ altogether (``{1}{R}`` given no Mountain: it only has to see the colour).
 from __future__ import annotations
 
 import argparse
-import importlib.util
-from collections import defaultdict
+import sys
 from pathlib import Path
 
 import numpy as np
 
-spec = importlib.util.spec_from_file_location(
-    "effect_knowledge_probes.run", Path(__file__).resolve().parent / "run.py")
-run = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(run)
-common = run.sibling("common")
-sweeps = run.sibling("sweeps")
+if __package__ in (None, ""):
+    # Run by path: put scripts/ on the path so the suite imports as a package.
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-CORPUS = Path("output/effects/corpus-gen2")
+from effect_knowledge_probes import common, record_walk, sweeps  # noqa: E402
+
 WUBRG = ("W", "U", "B", "R", "G")
 CONFIGURATIONS = ("exact", "surplus", "one short", "pip missing", "pip missing, +2",
                   "all off colour")
@@ -134,25 +131,19 @@ def missing_colour_present(cost: str) -> bool:
 
 def qualifying_records(directories, count: int, shards: int, per_game: int, sidecars):
     from effects.domain.records import PlayabilityDecisionPayload
-    from effects.infrastructure.record_io import iter_shards, read_shard
 
-    chosen, per = [], defaultdict(int)
-    for directory in directories:
-        for shard in iter_shards(directory)[:shards]:
-            for record in read_shard(shard):
-                if (not isinstance(record.payload, PlayabilityDecisionPayload)
-                        or record.fork or per[record.game_id] >= per_game):
-                    continue
-                if not sweeps.affordability_ready(record, sidecars):
-                    continue
-                coloured, _ = parse_cost(sweeps.candidate_mana(record))
-                if len({c for pip in coloured for c in pip}) >= len(WUBRG):
-                    continue
-                per[record.game_id] += 1
-                chosen.append(record)
-                if len(chosen) >= count:
-                    return chosen
-    return chosen
+    def choose(record):
+        if not isinstance(record.payload, PlayabilityDecisionPayload) or record.fork:
+            return None
+        if not sweeps.affordability_ready(record, sidecars):
+            return None
+        coloured, _ = parse_cost(sweeps.candidate_mana(record))
+        if len({c for pip in coloured for c in pip}) >= len(WUBRG):
+            return None
+        return record
+
+    return record_walk.qualifying(
+        directories, choose, count, per_game=per_game, shards=shards)
 
 
 # ── reading the model ───────────────────────────────────────────────────
@@ -161,13 +152,9 @@ def qualifying_records(directories, count: int, shards: int, per_game: int, side
 def _affordable(outputs, verdict, surface, row) -> float:
     import torch
 
-    from effects.domain.effect_model import VERDICT_BITS
+    from effects.domain.effect_head_layout import VERDICT_BITS
 
     return float(torch.sigmoid(verdict[row, VERDICT_BITS.index("affordable")]))
-
-
-def _fmt(values) -> str:
-    return f"{np.mean(values):.3f}" if len(values) else "n/a"
 
 
 def main() -> None:
@@ -178,15 +165,11 @@ def main() -> None:
     parser.add_argument("--per-game", type=int, default=2)
     args = parser.parse_args()
 
-    sidecars = common.sidecar_cache(common.DEFAULT_CARDS_FOLDERS)
-    directories = [CORPUS / "validation" / "card-disjoint",
-                   CORPUS / "validation" / "game-disjoint"]
-    records = qualifying_records(directories, args.records, args.shards, args.per_game,
-                                 sidecars)
-    checkpoint = common.load_checkpoint(args.checkpoint)
-    probe_model = common.load_probe_model(
-        args.checkpoint, list(common.DEFAULT_CARDS_FOLDERS), records, checkpoint=checkpoint)
-    print(f"{args.checkpoint.parent.name} ({checkpoint.epoch}), {len(records)} validation "
+    context = common.probe_context(args.checkpoint)
+    records = qualifying_records(context.validation_dirs(), args.records, args.shards,
+                                 args.per_game, context.sidecars())
+    probe_model = context.model(records)
+    print(f"{args.checkpoint.parent.name} ({context.checkpoint.epoch}), {len(records)} validation "
           f"decisions with a land-payable cost", flush=True)
 
     # predicted[name][i], rule[name][i] for record i
@@ -204,8 +187,8 @@ def main() -> None:
                 edited.append(sweeps.set_untapped_lands(
                     record, record.actor_player, list(lands), len(lands)))
                 answers.append((name, answer))
-        for (name, answer), p in zip(answers, sweeps._predict(probe_model, edited,
-                                                              _affordable)):
+        for (name, answer), p in zip(answers, common.predict(probe_model, edited,
+                                                             _affordable)):
             predicted[name].append(p)
             rule[name].append(answer)
     predicted = {k: np.asarray(v) for k, v in predicted.items()}
@@ -220,9 +203,10 @@ def main() -> None:
     for name in CONFIGURATIONS:
         drop = exact - predicted[name]
         print(f"| {name} | {len(drop)} | {rule[name].mean():.2f} | "
-              f"{_fmt(predicted[name])} | {_fmt(drop)} | {(drop > 0).mean():.2f} |")
+              f"{common.fmt_mean(predicted[name])} | {common.fmt_mean(drop)} | "
+              f"{(drop > 0).mean():.2f} |")
 
-    auc = run.sibling("target_restrictions").auc
+    auc = common.auc
     print("\nranking: rule-affordable configurations against unaffordable ones")
     print("| items | AUC |")
     print("|---|---:|")
@@ -247,7 +231,7 @@ def main() -> None:
     for title, mask in groups:
         if not mask.any():
             continue
-        cells = [_fmt((exact - predicted[n])[mask & ~rule[n]])
+        cells = [common.fmt_mean((exact - predicted[n])[mask & ~rule[n]])
                  for n in ("pip missing", "one short", "pip missing, +2", "all off colour")]
         print(f"| {title} | {int(mask.sum())} | " + " | ".join(cells) + " |", flush=True)
 

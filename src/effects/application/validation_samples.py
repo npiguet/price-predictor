@@ -22,7 +22,7 @@ from __future__ import annotations
 import heapq
 import logging
 import random
-from collections.abc import Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from pathlib import Path
 
 from effects.domain.corpus_curation import record_hash
@@ -71,7 +71,7 @@ def round_robin(by_text: Mapping[str, list[int]], quota: int,
 
 def _gate_one_round_robin(
     directory: Path, quota: Mapping[str, int], *, seed: int,
-    text_of_key: Mapping[str, str],
+    held_out_text_of: Callable[[EffectRecord], str | None],
 ) -> dict[str, list[EffectRecord]]:
     """Each gate-one class's records, chosen round-robin over held-out texts.
 
@@ -79,7 +79,6 @@ def _gate_one_round_robin(
     quota per text, which bounds memory by the quota rather than by the
     slice; the second collects the chosen records.
     """
-    from effects.application.build_corpus import ability_key
     from effects.domain.sampling import sampling_class
     from effects.infrastructure.record_io import read_records
 
@@ -90,7 +89,7 @@ def _gate_one_round_robin(
         name = sampling_class(record)
         if name not in per_text:
             continue
-        text = text_of_key.get(ability_key(record) or "")
+        text = held_out_text_of(record)
         if text is None:
             continue
         value = record_hash(record.record_id, seed=seed + SAMPLE_SEED_OFFSET)
@@ -173,16 +172,17 @@ def _collect(
 def draw_samples(
     *, card_disjoint: Path, game_disjoint: Path, gate_one: Path,
     mix: Mapping[str, float], size: int, seed: int,
-    held_out_text_of_key: Mapping[str, str] | None = None,
+    held_out_text_of: Callable[[EffectRecord], str | None] | None = None,
 ) -> dict[str, list[EffectRecord]]:
     """One mixture-matched sample per stratum, seeded and shuffled.
 
     ``size <= 0`` means no fixed validation sample at all: nothing is read
     and both strata come back empty (``--validation-sample 0``).
 
-    ``held_out_text_of_key`` (rendered provenance key → held-out text) turns
-    on FR-051's round-robin for the card-disjoint resolution slots; without
-    it the gate-one slice is drawn by smallest hash alone, as feature 023 did.
+    ``held_out_text_of`` (record → the held-out text it acts through, or
+    None) turns on FR-051's round-robin for the card-disjoint resolution
+    slots; without it the gate-one slice is drawn by smallest hash alone, as
+    feature 023 did.
     """
     if size <= 0:
         return {stratum: [] for stratum in VALIDATION_STRATA}
@@ -190,9 +190,9 @@ def draw_samples(
     quota = class_quota(mix, size)
     out: dict[str, list[EffectRecord]] = {}
 
-    if held_out_text_of_key:
+    if held_out_text_of is not None:
         gate_records = _gate_one_round_robin(
-            gate_one, quota, seed=seed, text_of_key=held_out_text_of_key,
+            gate_one, quota, seed=seed, held_out_text_of=held_out_text_of,
         )
     else:
         gate = _collect(gate_one, quota, seed=seed, only=GATE_ONE_CLASSES)

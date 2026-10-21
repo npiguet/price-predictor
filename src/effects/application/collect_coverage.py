@@ -551,7 +551,7 @@ def run(config: CollectCoverageConfig) -> int:
     held_out = load_exclusions(
         split_from=config.split_from, exclude_cards=config.exclude_cards,
     )
-    from effects.application.train_effect_model import load_card_files
+    from effects.infrastructure.card_sources import load_card_files
 
     card_files = load_card_files(cards_folder)
     texts = read_converted_texts(cards_folder, card_files)
@@ -740,11 +740,11 @@ def held_out_round_caps(caps: CollectionCaps) -> CollectionCaps:
 def run_text_coverage(config: CollectCoverageConfig) -> int:
     """The held-out coverage round: listed cards only, keyed by held-out text."""
 
-    from effects.application.train_effect_model import (
+    from effects.domain.card_names import fold_card_name
+    from effects.infrastructure.card_sources import (
         load_card_files,
         load_card_texts,
     )
-    from effects.domain.card_names import fold_card_name
     from effects.infrastructure.sidecar_io import SidecarCache, sidecar_roots
 
     cards_folder = config.coverage_folder()

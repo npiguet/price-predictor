@@ -143,10 +143,14 @@ _TORCH_FREE = (
     "effects.domain.corpus_curation",
     "effects.domain.sampling",
     "effects.domain.split",
-    "effects.domain.variants",
+    "effects.domain.baselines",
     "effects.domain.coverage",
     "effects.domain.canonical_digest",
     "effects.domain.strata",
+    "effects.domain.corpus_plan",
+    "effects.application.corpus_survey",
+    "effects.application.corpus_write",
+    "effects.application.corpus_report",
     "effects.application.build_corpus",
 )
 

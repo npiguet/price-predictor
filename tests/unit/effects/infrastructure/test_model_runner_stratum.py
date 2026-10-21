@@ -1,64 +1,91 @@
-"""``stratum_records``: gate 1's held-out records and what training contained."""
+"""Gate 1's population: card-disjoint resolutions whose text training never acted with.
+
+Both halves come from the curated corpus the checkpoint trained on. The raw
+shards are the wrong source for either: every game outside the recorded
+validation sets is not a training game — curation dropped millions of held-out
+records and the corpus keeps growing after a build — and reading those as
+training put held-out texts in the "seen" set, draining the stratum.
+"""
 
 from __future__ import annotations
 
-from types import SimpleNamespace
-
+from effects.application.gate_one import unique_text_stratum
 from effects.domain.provenance import ProvenanceKey
-from effects.domain.records import EffectRecord
-from effects.domain.state_snapshot import GlobalState, StateSnapshot
-from effects.infrastructure.effect_model_store import SplitProvenance
-from effects.infrastructure.model_runner import stratum_records
+from effects.domain.records import EffectRecord, RecordKind
+from effects.infrastructure.corpus_store import CorpusStore
+from effects.infrastructure.model_runner import (
+    card_disjoint_resolutions,
+    training_acting_keys,
+)
 from effects.infrastructure.record_io import write_shard
 from tests.unit.effects.builders import make_record
-
-_SNAPSHOT = StateSnapshot(
-    global_=GlobalState(turn=1, phase="main1", active="P0", priority="P0", stack_size=0),
-    players=(), entities=(),
-)
 
 
 def _key(name: str) -> ProvenanceKey:
     return ProvenanceKey(f"cardsfolder/x/{name}.txt", 0, "spell", 0)
 
 
-def _record(game: str, number: int, ability) -> EffectRecord:
+def _record(
+    game: str, number: int, ability, kind: RecordKind = RecordKind.RESOLUTION,
+) -> EffectRecord:
     return make_record(
-        record_id=f"{game}.{number}", run_id="r", game_id=game, ability=ability,
+        kind, record_id=f"{game}.{number}", run_id="r", game_id=game,
+        ability=ability,
     )
 
 
-def _checkpoint(card_disjoint, game_disjoint) -> SimpleNamespace:
-    return SimpleNamespace(provenance=SplitProvenance(
-        held_out_cards=(), card_disjoint_games=tuple(card_disjoint),
-        game_disjoint_games=tuple(game_disjoint),
-    ))
+class _Texts:
+    """A key's text is the card it names."""
+
+    def text_of(self, key):
+        return key.script_file.rsplit("/", 1)[-1].removesuffix(".txt")
 
 
-def test_the_split_sorts_held_out_records_from_training_acting_lines(tmp_path):
-    held = _record("held", 1, (_key("bolt"),))
-    write_shard(tmp_path / "s.jsonl.gz", [
-        held,
-        _record("train", 1, (_key("shock"),)),
-        _record("train", 2, (_key("shock"),)),
-        _record("train", 3, None),
-        _record("game-disjoint", 1, (_key("growth"),)),
-    ])
-    config = SimpleNamespace(records_dir=tmp_path)
+def _corpus(tmp_path, *, training, card_disjoint):
+    store = CorpusStore(tmp_path / "corpus")
+    write_shard(store.training_dir / "shard-00001.jsonl.gz", training)
+    write_shard(store.card_disjoint_dir / "shard-00001.jsonl.gz", card_disjoint)
+    return store
 
-    card_disjoint, training_acting, why_not = stratum_records(
-        config, _checkpoint(["held"], ["game-disjoint"]),
+
+def test_training_acting_keys_reads_the_curated_training_stratum(tmp_path):
+    shock = _record("train", 1, (_key("shock"),))
+    store = _corpus(
+        tmp_path,
+        # A curated record written twice, as --reuse-cap copies are.
+        training=[shock, shock, _record("train", 2, None, RecordKind.COMBAT)],
+        card_disjoint=[_record("held", 1, (_key("bolt"),))],
     )
-
-    assert why_not == ""
-    assert [r.record_id for r in card_disjoint] == ["held.1"]
-    assert training_acting == {(_key("shock"),)}
+    assert training_acting_keys(store.training_dir) == {(_key("shock"),)}
 
 
-def test_no_card_disjoint_games_says_why(tmp_path):
-    write_shard(tmp_path / "s.jsonl.gz", [_record("train", 1, (_key("shock"),))])
-    card_disjoint, training_acting, why_not = stratum_records(
-        SimpleNamespace(records_dir=tmp_path), _checkpoint(["absent"], []),
+def test_card_disjoint_resolutions_streams_the_stratum_s_resolutions_only(tmp_path):
+    store = _corpus(
+        tmp_path, training=[],
+        card_disjoint=[
+            _record("held", 1, (_key("bolt"),)),
+            _record("held", 2, None, RecordKind.COMBAT),
+            _record("other", 1, (_key("growth"),)),
+        ],
     )
-    assert card_disjoint == [] and training_acting == set()
-    assert "none of the checkpoint's 1 card-disjoint games" in why_not
+    found = card_disjoint_resolutions(store.directory, frozenset({"held"}))
+    assert [r.record_id for r in found] == ["held.1"]
+
+
+def test_a_text_seen_only_outside_the_training_stratum_stays_unique(tmp_path):
+    """Raw shards outside the build (dropped held-out games, later runs) are
+    not training: a held-out text they act with is still unseen."""
+    store = _corpus(
+        tmp_path,
+        training=[_record("train", 1, (_key("shock"),))],
+        card_disjoint=[
+            _record("held", 1, (_key("bolt"),)),
+            _record("held", 2, (_key("shock"),)),
+        ],
+    )
+    raw = tmp_path / "records"
+    write_shard(raw / "dropped.jsonl.gz", [_record("dropped", 1, (_key("bolt"),))])
+
+    stratum = unique_text_stratum(store.directory, frozenset({"held"}), _Texts())
+
+    assert [r.record_id for r in stratum] == ["held.1"]

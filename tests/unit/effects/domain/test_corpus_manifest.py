@@ -213,7 +213,7 @@ def test_the_gen1_corpus_still_matches_the_digest_its_checkpoint_recorded():
 
 
 def test_gen2_fields_are_left_out_at_their_gen1_values(manifest_dict):
-    assert len(_GEN1_DEFAULTS) == 14
+    assert len(_GEN1_DEFAULTS) == 15
     for name in _GEN1_DEFAULTS:
         if name != "game_disjoint_target":
             assert name not in manifest_dict
@@ -248,3 +248,12 @@ def test_the_gen2_fields_round_trip_and_move_the_digest():
     assert restored == gen2
     assert gen2.digest() == "24b7724862c3ad8fad0add0976dd10c1"
     assert gen2.digest() != manifest(game_disjoint_target=None).digest()
+
+
+def test_class_targets_round_trip_beside_what_was_delivered():
+    """G4: a class written short of its target shows in the manifest."""
+    original = manifest(class_targets={"rewrite": 5})
+    data = original.as_dict()
+    assert data["class_targets"] == {"rewrite": 5}
+    assert CorpusManifest.from_dict(data) == original
+    assert original.digest() != manifest().digest()

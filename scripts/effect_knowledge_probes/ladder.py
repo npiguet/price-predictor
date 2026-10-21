@@ -372,6 +372,12 @@ def _readout(target: str, outputs, verdict, slot: int, row: int, *,
              verdict_trained: bool = True) -> float:
     """Rung 3: the head's own prediction for one item.
 
+    Read through :class:`HeadReading`, gated as gate 2 and the sweeps read it:
+    a field head trains only where an entity was affected, so its answer is
+    scaled by the gate's. ``damage_taken`` is the exception: every one of its
+    items took damage, so the gate's doubt would scale the amount by noise, and
+    the amount is read alone.
+
     NaN where the head this target reads was never trained, which
     :func:`ladder_inputs` turns into an unavailable rung 3 rather than a score.
     """
@@ -379,41 +385,27 @@ def _readout(target: str, outputs, verdict, slot: int, row: int, *,
         return float("nan")
     import torch
 
-    from effects.domain.effect_model import (
-        DURATIONS,
-        FIELD_SLICES,
-        GATE_INDEX,
-        VERDICT_BITS,
-        ZONE_OUTCOMES,
-    )
+    from effects.domain.effect_head_layout import FIELD_SLICES, VERDICT_BITS
+    from effects.domain.head_decoding import HeadReading
 
-    vector = outputs[row, slot]
-    gate = torch.sigmoid(vector[GATE_INDEX])
-
-    def field(name):
-        start, end = FIELD_SLICES[name]
-        return vector[start:end]
+    reading = HeadReading(outputs[row, slot])
 
     if target == "affected":
-        value = gate
+        value = reading.p_affected
     elif target == "dies":
-        value = gate * torch.softmax(field("zone_outcome"), -1)[ZONE_OUTCOMES.index("died")]
+        value = reading.p_zone("died")
     elif target == "damage_taken":
-        # The amount alone, not gate × amount: every damage item took damage, so
-        # the question is how much given the creature was hit, and the gate's
-        # doubt about whether it was hit would scale the answer by noise the probe
-        # on the trunk is never asked to carry.
-        value = torch.exp(field("damage_taken")[0])
+        value = reading.expected("damage_taken", conditional=True)
     elif target == "pt_until_end_of_turn":
-        value = torch.softmax(field("pt_duration"), -1)[DURATIONS.index("end_of_turn")]
+        value = reading.p_class("pt_duration", "end_of_turn")
     elif target == "may_block":
-        value = torch.sigmoid(field("blocker_legal")[0])
+        value = torch.sigmoid(outputs[row, slot, FIELD_SLICES["blocker_legal"][0]])
     elif target in ("legal_target", "legal_target_protected"):
         # The gate, not the `target_legal` field: training sets that field only
         # on legal targets, always to 1, so on an illegal entity its output was
         # never supervised and ranks nothing. Legality is learned through the
         # gate, which a decision record raises exactly on its legal targets.
-        value = gate
+        value = reading.p_affected
     elif target == "affordable":
         value = torch.sigmoid(verdict[row, VERDICT_BITS.index("affordable")])
     elif target == "fires":
@@ -449,6 +441,152 @@ def _value_vector(text: str | None) -> np.ndarray:
         np.float32)
 
 
+@dataclass
+class BatchOutputs:
+    """One forward pass over a chunk, on the host: what every rung reads."""
+
+    #: ``(batch, slots, width)`` of the slots' raw input features, every kind.
+    slot_features: np.ndarray
+    #: The trunk's output per slot.
+    hidden: np.ndarray
+    #: The batch's encoded ability matrix, one row per text; None when empty.
+    e_matrix: np.ndarray | None
+    texts: list
+    #: The partners' ``e`` by text, encoded beside the batch.
+    partner_e: dict
+
+
+class ItemFeatureBuilder:
+    """The rung features of the items of one record of a batch (FR-080).
+
+    Built once per record from its surface, then asked once per item:
+    :meth:`rung0` the trunk's raw inputs with every ``e`` zeroed, :meth:`rung1`
+    those plus the acting, own and partner ``e``, :meth:`rung1w` the same with
+    each ``e`` a fixed random vector per text, :meth:`rung1o` rung 0 plus the
+    script values the item depends on.
+    """
+
+    def __init__(self, record, surface, row: int, outputs: BatchOutputs, batcher,
+                 e_dim: int) -> None:
+        from effects.domain.effect_head_input import SlotKind
+
+        self.record = record
+        self.row = row
+        self.outputs = outputs
+        self.batcher = batcher
+        self.e_dim = e_dim
+        self.zero_e = np.zeros(e_dim, dtype=np.float32)
+        self.card_slot: dict[str, int] = {}
+        self.player_slot: dict[str, int] = {}
+        self.rows_of: dict[str, list[int]] = defaultdict(list)
+        for index, slot in enumerate(surface.slots):
+            if slot.kind is SlotKind.CARD:
+                self.card_slot[slot.entity_id] = index
+            elif slot.kind is SlotKind.PLAYER:
+                self.player_slot[slot.player_id] = index
+            elif slot.kind is SlotKind.ABILITY and isinstance(slot.e, int):
+                self.rows_of[slot.entity_id].append(slot.e)
+        self.act = surface.slots[1].e
+        self.act_text = outputs.texts[self.act] if isinstance(self.act, int) else None
+        self._base = self._board()
+
+    # ── what every item shares ──────────────────────────────────────────
+
+    def _raw(self, index: int | None) -> np.ndarray:
+        if index is None:
+            return np.zeros(self.outputs.slot_features.shape[-1], dtype=np.float32)
+        return self.outputs.slot_features[self.row, index]
+
+    def _mean_raw(self, indices: list[int]) -> np.ndarray:
+        if not indices:
+            return np.zeros(self.outputs.slot_features.shape[-1], dtype=np.float32)
+        return self.outputs.slot_features[self.row, indices].mean(axis=0)
+
+    def _board(self) -> np.ndarray:
+        """The global and ``[ACT]`` slots, both players and both sides' mean card."""
+        owner = self.record.actor_player
+        actor_cards = [i for e, i in self.card_slot.items()
+                       if _controller(self.record, e) == owner]
+        other_cards = [i for e, i in self.card_slot.items()
+                       if _controller(self.record, e) != owner]
+        players = [self.player_slot.get(owner)] + [
+            i for p, i in self.player_slot.items() if p != owner][:1]
+        return np.concatenate([
+            self._raw(0), self._raw(1), self._raw(players[0]),
+            self._raw(players[1] if len(players) > 1 else None),
+            self._mean_raw(actor_cards), self._mean_raw(other_cards),
+        ])
+
+    def _e(self, row: int) -> np.ndarray:
+        matrix = self.outputs.e_matrix
+        return matrix[row] if matrix is not None else self.zero_e
+
+    def _pooled(self, entity_id: str, *, width: bool = False) -> np.ndarray:
+        rows = self.rows_of.get(entity_id, [])
+        if not rows:
+            return self.zero_e
+        if width:
+            return np.mean([width_vector(self.outputs.texts[r], self.e_dim) for r in rows],
+                           axis=0)
+        return np.mean([self._e(r) for r in rows], axis=0)
+
+    def _partner_text(self, item) -> str | None:
+        return self.batcher.text_of(item.partner) if item.partner is not None else None
+
+    # ── per item ────────────────────────────────────────────────────────
+
+    def slot(self, item) -> int | None:
+        """The slot an item is read at: its entity's card, or ``[ACT]``."""
+        return self.card_slot.get(item.entity) if item.entity else 1
+
+    def rung0(self, item) -> np.ndarray:
+        own = self._raw(self.slot(item) if item.entity else None)
+        return np.concatenate([self._base, own])
+
+    def _partner(self, item, *, width: bool) -> np.ndarray:
+        text = self._partner_text(item)
+        if text is not None:
+            return (width_vector(text, self.e_dim) if width
+                    else self.outputs.partner_e.get(text, self.zero_e))
+        if item.partner_entity is not None:
+            return self._pooled(item.partner_entity, width=width)
+        return self.zero_e
+
+    def rung1(self, item) -> np.ndarray:
+        acting = self._e(self.act) if isinstance(self.act, int) else self.zero_e
+        own = self._pooled(item.entity) if item.entity else self.zero_e
+        return np.concatenate([self.rung0(item), acting, own,
+                               self._partner(item, width=False)])
+
+    def rung1w(self, item) -> np.ndarray:
+        acting = width_vector(self.act_text, self.e_dim) if self.act_text else self.zero_e
+        own = self._pooled(item.entity, width=True) if item.entity else self.zero_e
+        return np.concatenate([self.rung0(item), acting, own,
+                               self._partner(item, width=True)])
+
+    def rung1o(self, item) -> np.ndarray:
+        return np.concatenate([self.rung0(item), _value_vector(self.act_text),
+                               _value_vector(self._partner_text(item))])
+
+
+def _partner_e(batcher, encoder, chunk, items_by_record) -> dict:
+    """The ``e`` of every partner the chunk's items name, encoded beside the batch."""
+    partner_lines = {}
+    for record in chunk:
+        for item in items_by_record.get(record.record_id, ()):
+            if item.partner is not None:
+                text = batcher.text_of(item.partner)
+                if text and text not in partner_lines:
+                    partner_lines[text] = batcher.sidecars.line_or_none(item.partner)
+    if not partner_lines:
+        return {}
+    rows, extra = batcher.encode_texts(partner_lines, encoder)
+    if extra is None:
+        return {}
+    extra = extra.float().cpu().numpy()
+    return {text: extra[row] for text, row in rows.items()}
+
+
 def extract_features(probe_model, records: list, items_by_record: dict, *,
                      batch_size: int = 32, per_layer: bool = False,
                      act_hidden: dict | None = None) -> list[ExtractedItem]:
@@ -460,11 +598,7 @@ def extract_features(probe_model, records: list, items_by_record: dict, *,
     """
     import torch
 
-    from effects.domain.effect_head_input import SlotKind
-
     model, encoder, batcher = probe_model.model, probe_model.encoder, probe_model.batcher
-    e_dim = probe_model.e_dim
-    zero_e = np.zeros(e_dim, dtype=np.float32)
     verdict_trained = verdict_head_trained(probe_model.checkpoint)
     captured: list = []
     hooks = []
@@ -478,118 +612,38 @@ def extract_features(probe_model, records: list, items_by_record: dict, *,
             for start in range(0, len(records), batch_size):
                 chunk = records[start : start + batch_size]
                 captured.clear()
-                batch, surfaces = batcher.build(chunk, encoder)
+                batch, surfaces, encoded = batcher.build(chunk, encoder)
                 hidden = model(**batch)
                 outputs = model.per_entity(hidden)
                 verdict = model.verdict(hidden)
-                encoded = batcher.encoded
-                matrix = (encoded.matrix.float().cpu().numpy()
-                          if encoded.matrix is not None else None)
-                texts = encoded.texts
-                slot_feats = torch.cat(
-                    [batch["slot_features"][k] for k in sorted(batch["slot_features"])],
-                    dim=-1,
-                ).float().cpu().numpy()
-                hidden_np = hidden.float().cpu().numpy()
+                host = BatchOutputs(
+                    slot_features=torch.cat(
+                        [batch["slot_features"][k] for k in sorted(batch["slot_features"])],
+                        dim=-1,
+                    ).float().cpu().numpy(),
+                    hidden=hidden.float().cpu().numpy(),
+                    e_matrix=(encoded.matrix.float().cpu().numpy()
+                              if encoded.matrix is not None else None),
+                    texts=encoded.texts,
+                    partner_e=_partner_e(batcher, encoder, chunk, items_by_record),
+                )
                 layer_np = [c.float().cpu().numpy() for c in captured]
 
-                partner_texts = {}
-                for record in chunk:
-                    for item in items_by_record.get(record.record_id, ()):
-                        if item.partner is not None:
-                            text = batcher.text_of(item.partner)
-                            if text and text not in partner_texts:
-                                partner_texts[text] = batcher.sidecars.line_for(
-                                    item.partner)
-                partner_e = {}
-                if partner_texts:
-                    rows, extra = batcher.encode_texts(partner_texts, encoder)
-                    if extra is not None:
-                        extra = extra.float().cpu().numpy()
-                        partner_e = {t: extra[r] for t, r in rows.items()}
-
                 for b, (record, surface) in enumerate(zip(chunk, surfaces)):
-                    items = items_by_record.get(record.record_id, ())
-                    slots = surface.slots
-                    card_slot, rows_of = {}, defaultdict(list)
-                    player_slot = {}
-                    for index, slot in enumerate(slots):
-                        if slot.kind is SlotKind.CARD:
-                            card_slot[slot.entity_id] = index
-                        elif slot.kind is SlotKind.PLAYER:
-                            player_slot[slot.player_id] = index
-                        elif slot.kind is SlotKind.ABILITY and isinstance(slot.e, int):
-                            rows_of[slot.entity_id].append(slot.e)
-                    act = slots[1].e
-                    act_text = texts[act] if isinstance(act, int) else None
-                    if act_hidden is not None and act_text is not None:
-                        act_hidden.setdefault(act_text, []).append(hidden_np[b, 1])
-                    if not items:
-                        continue
-
-                    def e_of(row):
-                        return matrix[row] if matrix is not None else zero_e
-
-                    def pooled(entity_id, width=False):
-                        rows = rows_of.get(entity_id, [])
-                        if not rows:
-                            return zero_e
-                        if width:
-                            return np.mean([width_vector(texts[r], e_dim) for r in rows],
-                                           axis=0)
-                        return np.mean([e_of(r) for r in rows], axis=0)
-
-                    owner = record.actor_player
-                    actor_cards = [i for e, i in card_slot.items()
-                                   if _controller(record, e) == owner]
-                    other_cards = [i for e, i in card_slot.items()
-                                   if _controller(record, e) != owner]
-                    players = [player_slot.get(owner)] + [
-                        i for p, i in player_slot.items() if p != owner][:1]
-                    feature_width = slot_feats.shape[-1]
-
-                    def raw(index):
-                        if index is None:
-                            return np.zeros(feature_width, dtype=np.float32)
-                        return slot_feats[b, index]
-
-                    def mean_raw(indices):
-                        if not indices:
-                            return np.zeros(feature_width, dtype=np.float32)
-                        return slot_feats[b, indices].mean(axis=0)
-
-                    base = np.concatenate([
-                        raw(0), raw(1), raw(players[0]),
-                        raw(players[1] if len(players) > 1 else None),
-                        mean_raw(actor_cards), mean_raw(other_cards),
-                    ])
-                    acting_e = e_of(act) if isinstance(act, int) else zero_e
-                    acting_w = width_vector(act_text, e_dim) if act_text else zero_e
-                    for item in items:
-                        slot = card_slot.get(item.entity) if item.entity else 1
+                    builder = ItemFeatureBuilder(
+                        record, surface, b, host, batcher, probe_model.e_dim)
+                    if act_hidden is not None and builder.act_text is not None:
+                        act_hidden.setdefault(builder.act_text, []).append(host.hidden[b, 1])
+                    for item in items_by_record.get(record.record_id, ()):
+                        slot = builder.slot(item)
                         if slot is None:
                             continue
-                        entity_raw = raw(slot if item.entity else None)
-                        rung0 = np.concatenate([base, entity_raw])
-                        partner_text = (batcher.text_of(item.partner)
-                                        if item.partner is not None else None)
-                        if partner_text is not None:
-                            p_e = partner_e.get(partner_text, zero_e)
-                            p_w = width_vector(partner_text, e_dim)
-                        elif item.partner_entity is not None:
-                            p_e = pooled(item.partner_entity)
-                            p_w = pooled(item.partner_entity, width=True)
-                        else:
-                            p_e = p_w = zero_e
-                        own_e = pooled(item.entity) if item.entity else zero_e
-                        own_w = pooled(item.entity, width=True) if item.entity else zero_e
                         features = {
-                            "0": rung0,
-                            "1": np.concatenate([rung0, acting_e, own_e, p_e]),
-                            "1w": np.concatenate([rung0, acting_w, own_w, p_w]),
-                            "1o": np.concatenate([rung0, _value_vector(act_text),
-                                                  _value_vector(partner_text)]),
-                            "2": hidden_np[b, slot],
+                            "0": builder.rung0(item),
+                            "1": builder.rung1(item),
+                            "1w": builder.rung1w(item),
+                            "1o": builder.rung1o(item),
+                            "2": host.hidden[b, slot],
                         }
                         extracted.append(ExtractedItem(
                             target=item.target, label=item.label, group=item.group,

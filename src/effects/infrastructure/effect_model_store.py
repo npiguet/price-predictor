@@ -33,8 +33,8 @@ from pathlib import Path
 from typing import Any, NamedTuple
 
 from effects.domain.ability_encoder import AbilityEncoderConfig
+from effects.domain.baselines import Baseline
 from effects.domain.effect_model import EffectModel, EffectModelConfig
-from effects.domain.variants import Variant
 from price_predictor.infrastructure.torch_checkpoint import (
     load_checkpoint,
     save_checkpoint,
@@ -50,7 +50,7 @@ LATEST_NAME = "latest.pt"
 def model_output_for(variant: str, root: Path = DEFAULT_MODEL_OUTPUT) -> Path:
     """``models/effects/effect-model/`` for ``full``, a subdirectory otherwise."""
     root = Path(root)
-    return root if variant == Variant.FULL else root / variant
+    return root if variant == Baseline.FULL else root / variant
 
 
 def content_hash(path: Path) -> str:
@@ -183,7 +183,7 @@ class EffectCheckpoint:
     encoder_state: dict[str, Any]
     model_state: dict[str, Any]
     provenance: SplitProvenance
-    variant: str = Variant.FULL
+    variant: str = Baseline.FULL
     best_val_loss: float = float("inf")
     epoch: int = 0
     extra: dict[str, Any] = field(default_factory=dict)
@@ -292,7 +292,7 @@ class EffectModelStore:
             encoder_state=payload["encoder_state_dict"],
             model_state=payload["model_state_dict"],
             provenance=SplitProvenance.from_dict(payload.get("provenance", {})),
-            variant=payload.get("variant", Variant.FULL),
+            variant=payload.get("variant", Baseline.FULL),
             best_val_loss=payload.get("best_val_loss", float("inf")),
             epoch=payload.get("epoch", 0),
             # Whatever a variant needed to save beyond the two state dicts —
@@ -309,32 +309,32 @@ class EffectModelStore:
 
 
 def require_same_split(
-    main: EffectCheckpoint, variant: EffectCheckpoint,
-    *, main_path: Path, variant_path: Path,
+    main: EffectCheckpoint, baseline: EffectCheckpoint,
+    *, main_path: Path, baseline_path: Path,
 ) -> None:
-    """Fail fast when a variant checkpoint's split or hashes differ.
+    """Fail fast when a baseline checkpoint's split or hashes differ.
 
     A baseline compared against a model that saw different games is not a
     baseline. The error names both checkpoints, because the operator's next
-    move is to retrain one of them with ``--split-from``.
+    move is to retrain one of them on the other's ``--corpus``.
     """
-    if not main.provenance.describes_same_split(variant.provenance):
+    if not main.provenance.describes_same_split(baseline.provenance):
         raise SplitMismatchError(
-            f"{variant_path} records a different split than {main_path}. "
-            f"Retrain it with --split-from {main_path}: a baseline that saw "
-            "different games is not a baseline."
+            f"{baseline_path} records a different split than {main_path}. "
+            f"Retrain it on the --corpus {main_path} trained on: a baseline "
+            "that saw different games is not a baseline."
         )
     for label, recorded, actual in (
-        ("vocabulary", main.provenance.vocab_hash, variant.provenance.vocab_hash),
+        ("vocabulary", main.provenance.vocab_hash, baseline.provenance.vocab_hash),
         (
             "keyword definitions",
             main.provenance.keyword_definitions_hash,
-            variant.provenance.keyword_definitions_hash,
+            baseline.provenance.keyword_definitions_hash,
         ),
     ):
         if recorded != actual:
             raise SplitMismatchError(
-                f"{variant_path} recorded a different {label} hash than "
+                f"{baseline_path} recorded a different {label} hash than "
                 f"{main_path} ({actual[:12] or '(none)'}… vs "
                 f"{recorded[:12] or '(none)'}…)."
             )

@@ -124,7 +124,7 @@ def capped(value: float) -> float:
     −9999 toughness, The Millennium Calendar's 1000 life — and a few items that
     far out dominate an R² taken over thousands.
     """
-    from effects.domain.effect_model import MAGNITUDE_CAP
+    from effects.domain.effect_head_input import MAGNITUDE_CAP
 
     return max(-MAGNITUDE_CAP, min(MAGNITUDE_CAP, float(value)))
 
@@ -341,7 +341,7 @@ def effect_profile(record) -> np.ndarray | None:
 
     None for a record that is not an effect half.
     """
-    from effects.domain.effect_model import ZONE_OUTCOMES
+    from effects.domain.effect_head_layout import ZONE_OUTCOMES
     from effects.domain.effect_targets import derive_targets
     from effects.domain.records import Moment, RecordKind
 
@@ -389,21 +389,28 @@ def state_weight(n: int) -> float:
 
 
 def mana_observed(record) -> float | None:
-    """Mana a mana resolution produced, from its ``mana_produced`` events, :func:`capped`."""
+    """Mana a mana resolution produced, :func:`capped`; None where no event says.
+
+    Each ``mana_produced`` event carries ``mana_by_color``, the collector's
+    reading of the mana that actually arrived (Forge's produced-mana string,
+    after any replacement): a count per colour letter, so ``{"C": 2}`` is a Sol
+    Ring's two and ``{"W": 1, "B": 1}`` an Orzhov Basilica's two. A land that
+    taps for one colour of several names the one it made. An empty map is
+    mana the collector could not read, so it counts for nothing, and a record
+    whose every event is empty has no label.
+    """
     from effects.domain.event_schema import EventType
     from effects.domain.records import events_of
 
     total, seen = 0.0, False
     for event in events_of(record):
-        if event.type is EventType.MANA_PRODUCED:
+        if event.type is not EventType.MANA_PRODUCED:
+            continue
+        mana = event.params.get("mana_by_color") or {}
+        counts = [v for v in mana.values() if isinstance(v, int | float)]
+        if counts:
             seen = True
-            amount = event.params.get("amount")
-            if isinstance(amount, int | float):
-                total += amount
-            elif isinstance(amount, dict):
-                total += sum(v for v in amount.values() if isinstance(v, int | float))
-            else:
-                total += 1
+            total += sum(counts)
     return capped(total) if seen else None
 
 
@@ -569,10 +576,7 @@ def _is_protected(entity, sidecars) -> bool:
     if any(k in _PROTECTION for k in entity.granted_temporary.keywords):
         return True
     for key in (*entity.printed, *entity.granted_attached):
-        try:
-            line = sidecars.line_for(key)
-        except KeyError:
-            line = None
+        line = sidecars.line_or_none(key)
         text = (line.script_text or "") if line is not None else ""
         if text.split(":", 1)[0].strip().lower() in _PROTECTION:
             return True
@@ -590,7 +594,7 @@ def record_items(record, sidecars, join: JoinResult, acting_text) -> list[Record
     ``acting_text`` is ``key -> text or None``, the checkpoint-independent text
     the fold groups key on.
     """
-    from effects.domain.effect_model import DURATIONS, ZONE_OUTCOMES
+    from effects.domain.effect_head_layout import DURATIONS, ZONE_OUTCOMES
     from effects.domain.effect_targets import derive_targets
     from effects.domain.records import (
         Moment,

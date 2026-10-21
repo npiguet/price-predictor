@@ -206,7 +206,7 @@ card name per line, every card carrying a held-out ability text.
 | Flag | Default |
 |---|---|
 | `--out` | required — destination file |
-| `--cards-folder` | `output/cardsfolder/` |
+| `--cards-folder` | `output/cardsfolder/`; the converted token tree beside it (`tokenscripts/`) is read too, its scripts counting as carriers as they do in `build-corpus` |
 | `--holdout-permille` / `--holdout-max-carriers` | 20 / 8, matching `build-corpus` |
 
 Reports the held-out text count, the card count, and the share of the corpus those cards are. The
@@ -226,16 +226,17 @@ differing only in hyperparameters read the same records.
 | `--output` | `output/effects/corpus/` |
 | `--cards-folder` | `output/cardsfolder/`, `output/tokenscripts/` |
 | `--vocab-path` | `models/effects/vocab.txt` — `surface_of` reads the encoding surface from it, and the rarity table's text keys are built on that surface |
-| `--variant-scripts` | _(none)_ — the perturbed-script tree. A variant line resolves to no ability text without it, so it gets neither a rarity-table entry nor a per-text cap |
+| `--variant-scripts` | _(none)_ — the perturbed-script tree. A variant line resolves to no ability text without it, and a resolution record acting through one is refused as `no-acting-text` |
 | `--holdout-permille` / `--holdout-max-carriers` | 20 / 8, matching `holdout-cards`; `train-effect-model --corpus` reads both back from the manifest this writes |
 | `--text-cap` | 200 — max training records per unique ability text |
 | `--class-mix` | the training mixture — on-disk proportions, `class=share` pairs |
 | `--training-records` | 0 (no ceiling beyond `--text-cap`) |
 | `--game-disjoint-games` | 1000 |
-| `--card-disjoint-text-cap` | 50 — max card-disjoint games per held-out ability text |
+| `--card-disjoint-text-cap` | 50 — max card-disjoint games per held-out ability text, a game counting toward a text only through a resolution record acting through it |
+| `--shard-records` | 2000 — target records per output shard; whole games are dealt to `ceil(records / N)` shards by a hash of `game_id` seeded by `--seed`, and each shard is shuffled under `--seed`. 0 keeps one output shard per source shard, unshuffled |
 | `--forge-tokenscripts` | `../forge/forge-gui/res/tokenscripts` — Forge's raw token scripts, read to remap the old collector's token keys (FR-151); the build refuses to start when the remap is on and this directory is missing |
 | `--no-remap-token-keys` | off — build without the token-key remap; every key is written exactly as collected |
-| `--seed` | 42 |
+| `--seed` | 42 — selection, shard dealing and shuffle |
 | `--workers` | CPU count |
 | `--verify` | off — report drift against an existing manifest and write nothing |
 
@@ -248,17 +249,27 @@ Output layout under `--output`:
 | `validation/game-disjoint/*.jsonl.gz` | whole games naming no held-out card, withheld from training |
 | `manifest.json` | the split, the rarity table, the caps and flags, the seed, the source shard list, and the per-class and per-stratum counts |
 
-- Training is selected per record; both validation strata are selected per game, so a probe record and
-  the combat record its `mirror_of` names cannot be separated.
+- Training is selected per record; both validation strata are selected per game, the unit the split
+  is decided in. No evaluator resolves `mirror_of` within a stratum.
+- The survey routes each game once, at the end of its shard: held out, else the game-disjoint draw,
+  else training. Only training games' records size the class, family and text quotas and the copy
+  plans; the rarity table stays whole-corpus.
 - Every held-out game is excluded from training, including one the card-disjoint cap declined — that
-  game is dropped rather than trained on.
+  game is dropped rather than trained on, as is a held-out game resolving no held-out text.
+- A training game's record acting through a held-out text (a token or variant script printing it, or
+  its template under `--holdout-unit template`) is not written, and is counted under the
+  `dropped-held-out-text` stratum.
+- A written record keeps its source's generation: `random_seat` is written only where the source
+  carried it.
 - Reports, per class and per stratum: records read, records kept, records the cap dropped, and the
   unique ability texts each output holds.
 - A grown raw corpus is rebuilt whole, never extended in place: the three output directories are
-  cleared before the write pass. `--verify` exits non-zero when the source list has drifted and writes
+  cleared before the write pass, after `manifest.json` is moved to `manifest.previous.json`; the new
+  manifest is written atomically, last. `--verify` exits non-zero when the source list has drifted and writes
   nothing.
 - Reports the delivered class proportions against the requested ones, and records both in the
-  manifest.
+  manifest with each class's target (`class_targets`); warns on a class delivered more than 1% short
+  of its target.
 - Exits non-zero without writing when the holdout is empty (checked before the survey) or when no game
   is admitted to the card-disjoint stratum (checked after it): either dataset cannot score gate 1.
 - `--text-cap`, `--card-disjoint-text-cap`, `--game-disjoint-games` and `--training-records` refuse a
@@ -273,22 +284,23 @@ The full flag table is the root spec's § Training. Contract highlights:
 | `--corpus` | **required** — a curated dataset built by `build-corpus`, and the trainer's only input: its manifest carries the split, both validation strata, the rarity table and the holdout, and a `--vocab-path` whose encoding surface is not the manifest's is refused |
 | `--cards-folder` | `output/cardsfolder/`, `output/tokenscripts/` |
 | `--variant-scripts` | none (`output/effects/variant-scripts/`) |
-| `--split-from` | none. A variant run's split-inheritance requirement is satisfied by `--corpus` alone, which is required on every run; `--split-from` is still accepted on a variant run, but only for compatibility with an older invocation, and the split it would compute is never read — the manifest is authoritative |
 | `--vocab-path` | `models/effects/vocab.txt` |
 | `--keyword-definitions` | `output/effects/keyword-definitions.json` |
 | `--model-output` | `models/effects/effect-model/` for `--variant full`, `models/effects/effect-model/{variant}/` otherwise |
 | `--variant` | `full` (\| `identity` \| `state-only` \| `no-state` \| `taxonomy`) |
-| `--e-dim` / `--e-noise` | 64 / 0.05 |
+| `--e-dim` / `--e-noise` | 64 / 0.1 (a noise ratio, 024 FR-056) |
 | `--keyword-expand-p` / `--context-dropout` | 0.25 / 0.15 |
-| `--mlm-weight` / `--mlm-mask-prob` / `--api-weight` | 0.1 / 0.15 / 0.05 |
+| `--mlm-weight` / `--mlm-mask-prob` / `--api-weight` | 0.1 / 0.15 / 0.003 |
 | `--curriculum-epoch` | 3 — epoch whose first step enables the sparse field group; validation scores the field set the epoch trained with, and the early stopper resets at the boundary |
-| `--batch-size` / `--grad-accum` | 32 / 1 |
-| `--context-cache` / `--cache-refresh` | off / 500. Not implemented in the trainer: the batcher has no cache, so `--context-cache` is accepted, warns at startup and is otherwise ignored, and context abilities are re-encoded live |
+| `--batch-size` / `--grad-accum` | 32 / 1 — accumulation counted within the epoch |
 | `--steps-per-epoch` / `--epochs` / `--patience` | 5000 / 40 / 5 |
 | `--shards-per-epoch` | 256 — training shards an epoch reads, one resident at a time, drawn at random across the whole corpus. `--steps-per-epoch` fixes how long an epoch takes; this fixes how many different shards those steps are spread over |
 | `--prefetch-workers` | 3 — worker processes that read shards and prepare each step's host half (tokenizing, surfaces, targets) while the training process runs the device half; 0 prepares them in the training process on a thread. Each step's draws are seeded by `(seed, epoch, shard position, step)`, so the value changes speed only, never results, and is not recorded on the checkpoint |
-| `--seed` | drawn from the OS — seeds weight init, batch planning and each epoch's shard draw. Reported at startup and recorded on the checkpoint, so a run repeats by passing back the seed it logged |
-| `--withhold-keyword` | none — withholds one implemented keyword's token from training so the zero-shot check has something to measure; its occurrences are always expanded |
+| `--seed` | drawn from the OS — seeds weight init, batch planning and each epoch's shard draw. Reported at startup and recorded in the checkpoint's training settings, so a run repeats by passing back the seed it logged |
+| `--withhold-keyword` | none — withholds one implemented keyword's token from training so the zero-shot check has something to measure; its occurrences are always expanded and its token dropped, inside other keywords' expansions too (FR-117) |
+
+The trainer has no `--split-from`, `--context-cache` or `--cache-refresh`: a variant run shares the
+`full` run's split by reading the same `--corpus`, and context abilities are always re-encoded live.
 
 Best checkpoint is selected by card-disjoint validation loss. The manifest's split holds out ability
 texts by a stable hash of the text, and a card is held out when any of its lines carries one; every
@@ -326,12 +338,17 @@ otherwise, beside rather than replacing the shipping cache.
 |---|---|
 | `--checkpoint` | `models/effects/effect-model/latest.pt` |
 | `--variant-checkpoint NAME=PATH` | repeatable |
-| `--records-dir`, `--cards-folder`, `--variant-scripts` | the trainer's defaults |
+| `--records-dir`, `--cards-folder` | the trainer's defaults |
+| `--variant-scripts` | the tree the corpus manifest records |
 | `--vocab-path`, `--keyword-definitions` | the paths `--checkpoint` recorded |
 | `--corpus` | the dataset `--checkpoint` recorded, if any |
 
 The zero-shot keyword check needs no flag: the withheld keyword is read from `--checkpoint`, which
 records it alongside the split.
+
+Gate 1 reads its stratum from the curated corpus `--checkpoint` records and reports as skipped when it
+records none. Matched real-vs-fork agreement, the probe-diff re-check and the role-polarity probe are
+not implemented and report `NOT_IMPLEMENTED` (`[todo]`) on every run (FR-111).
 
 **Splits are never a flag.** The held-out card list and `game_id` set come from `--checkpoint`. The
 command fails fast when a `--variant-checkpoint` records a different split, or different vocabulary or
@@ -346,7 +363,7 @@ hashes differently than the digest `--checkpoint` recorded — a rebuilt dataset
 | Vocabulary or keyword-definition hash mismatch | fail fast with the recorded vs actual hash |
 | Curated corpus (`--corpus`) digest mismatch | fail fast with the recorded vs actual digest |
 | `--variant-checkpoint` split disagreement | fail fast naming both checkpoints |
-| Variant training run without `--split-from` | fail fast |
+| A model state missing a key other than a training-only head's or `option_kind_embedding`'s, or carrying an unexpected one | fail fast naming both lists |
 | Missing connector JAR | the existing `forge_jvm` error naming the `mvn package` command |
 | Stock (unpatched) Forge | **not** a failure — degrade, stamp `mode = degraded` |
 | Trailing partial line in a shard | **not** a failure — skip it |

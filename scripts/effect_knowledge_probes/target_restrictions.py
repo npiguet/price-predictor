@@ -28,22 +28,20 @@ the model's mean predicted legality before and after.
 from __future__ import annotations
 
 import argparse
-import importlib.util
 import re
+import sys
 from collections import defaultdict
-from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
 
-spec = importlib.util.spec_from_file_location(
-    "effect_knowledge_probes.run", Path(__file__).resolve().parent / "run.py")
-run = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(run)
-common = run.sibling("common")
-sweeps = run.sibling("sweeps")
+if __package__ in (None, ""):
+    # Run by path: put scripts/ on the path so the suite imports as a package.
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-CORPUS = Path("output/effects/corpus-gen2")
+from effect_knowledge_probes import common, record_walk  # noqa: E402
+from effect_knowledge_probes.board_edits import BoardEdit  # noqa: E402
+
 BASE_TYPES = {"Artifact": "artifact", "Creature": "creature", "Enchantment": "enchantment",
               "Land": "land", "Planeswalker": "planeswalker", "Battle": "battle"}
 COLOUR_QUALIFIERS = {"White", "Blue", "Black", "Red", "Green", "nonWhite", "nonBlue",
@@ -93,11 +91,6 @@ def family(restriction: str) -> str:
 # ── the flips ───────────────────────────────────────────────────────────
 
 
-def _edit_entity(record, entity_id: str, edit):
-    entities = tuple(edit(e) if e.id == entity_id else e for e in record.state.entities)
-    return replace(record, state=replace(record.state, entities=entities))
-
-
 def flip_for(restriction: str) -> str | None:
     """The single condition a restriction states that a flip can break, or None."""
     if "," in restriction:
@@ -117,18 +110,16 @@ def flip_for(restriction: str) -> str | None:
 def flipped(record, entity_id: str, flip: str):
     """``record`` with one target changed so the restriction no longer holds."""
     actor = record.actor_player
+    board = BoardEdit(record)
     if flip == "to the acting player":
-        return _edit_entity(record, entity_id, lambda e: replace(e, controller=actor))
+        return board.set_controller(entity_id, actor).record
     if flip == "to the opponent":
         other = next(p.id for p in record.state.players if p.id != actor)
-        return _edit_entity(record, entity_id, lambda e: replace(e, controller=other))
+        return board.set_controller(entity_id, other).record
     if flip == "made legendary":
-        return _edit_entity(record, entity_id, lambda e: replace(
-            e, supertypes=tuple(sorted({*e.supertypes, "legendary"}))))
+        return board.add_supertype(entity_id, "legendary").record
     if flip.startswith("loses "):
-        lost = flip.removeprefix("loses ")
-        return _edit_entity(record, entity_id, lambda e: replace(
-            e, types=tuple(t for t in e.types if t != lost)))
+        return board.remove_type(entity_id, flip.removeprefix("loses ")).record
     raise ValueError(flip)
 
 
@@ -146,10 +137,7 @@ def decision_items(record, sidecars):
     candidate = payload.candidates[0]
     restriction = None
     for key in candidate.ability or ():
-        try:
-            line = sidecars.line_for(key)
-        except Exception:  # an unjoinable or unconverted key carries no text
-            line = None
+        line = sidecars.line_or_none(key)
         restriction = restriction_of(line.script_text if line is not None else None)
         if restriction:
             break
@@ -161,21 +149,12 @@ def decision_items(record, sidecars):
 
 
 def qualifying_records(directories, count: int, shards: int, per_game: int, sidecars):
-    from effects.infrastructure.record_io import iter_shards, read_shard
+    def choose(record):
+        found = decision_items(record, sidecars)
+        return None if found is None else (record, *found)
 
-    chosen, per = [], defaultdict(int)
-    for directory in directories:
-        for shard in iter_shards(directory)[:shards]:
-            for record in read_shard(shard):
-                if per[record.game_id] >= per_game:
-                    continue
-                found = decision_items(record, sidecars)
-                if found is not None:
-                    per[record.game_id] += 1
-                    chosen.append((record, *found))
-                    if len(chosen) >= count:
-                        return chosen
-    return chosen
+    return record_walk.qualifying(
+        directories, choose, count, per_game=per_game, shards=shards)
 
 
 # ── reading the model ───────────────────────────────────────────────────
@@ -184,30 +163,11 @@ def qualifying_records(directories, count: int, shards: int, per_game: int, side
 def _gates(outputs, surface, row) -> dict[str, float]:
     import torch
 
-    from effects.domain.effect_model import GATE_INDEX
+    from effects.domain.effect_head_layout import GATE_INDEX
 
     return {slot.entity_id: float(torch.sigmoid(outputs[row, index, GATE_INDEX]))
             for index, slot in enumerate(surface.slots)
             if slot.kind.name == "CARD" and slot.entity_id is not None}
-
-
-def auc(labels, scores) -> float:
-    """Mann-Whitney AUC; NaN without both labels."""
-    labels, scores = np.asarray(labels, bool), np.asarray(scores, float)
-    pos, neg = scores[labels], scores[~labels]
-    if not len(pos) or not len(neg):
-        return float("nan")
-    ranks = np.argsort(np.argsort(np.concatenate([pos, neg]))) + 1.0
-    return float((ranks[:len(pos)].sum() - len(pos) * (len(pos) + 1) / 2)
-                 / (len(pos) * len(neg)))
-
-
-def predict_all(probe_model, records, chunk: int = 32):
-    out = []
-    for i in range(0, len(records), chunk):
-        out += sweeps._predict(probe_model, records[i:i + chunk],
-                               lambda o, v, s, r: _gates(o, s, r))
-    return out
 
 
 def main() -> None:
@@ -220,18 +180,15 @@ def main() -> None:
                         help="items of each label a restriction row needs")
     args = parser.parse_args()
 
-    sidecars = common.sidecar_cache(common.DEFAULT_CARDS_FOLDERS)
-    directories = [CORPUS / "validation" / "card-disjoint",
-                   CORPUS / "validation" / "game-disjoint"]
-    chosen = qualifying_records(directories, args.records, args.shards, args.per_game, sidecars)
-    checkpoint = common.load_checkpoint(args.checkpoint)
-    probe_model = common.load_probe_model(
-        args.checkpoint, list(common.DEFAULT_CARDS_FOLDERS), [c[0] for c in chosen],
-        checkpoint=checkpoint)
-    print(f"{args.checkpoint.parent.name} ({checkpoint.epoch}), {len(chosen)} validation "
+    context = common.probe_context(args.checkpoint)
+    chosen = qualifying_records(context.validation_dirs(), args.records, args.shards,
+                                args.per_game, context.sidecars())
+    probe_model = context.model([c[0] for c in chosen])
+    print(f"{args.checkpoint.parent.name} ({context.checkpoint.epoch}), {len(chosen)} validation "
           f"targeting decisions", flush=True)
 
-    gates = predict_all(probe_model, [c[0] for c in chosen])
+    gates = common.predict_all(probe_model, [c[0] for c in chosen],
+                               lambda o, v, s, r: _gates(o, s, r))
     by_family, by_restriction = defaultdict(lambda: ([], [])), defaultdict(lambda: ([], []))
     for (record, restriction, items), gate in zip(chosen, gates):
         for entity, legal in items:
@@ -246,7 +203,8 @@ def main() -> None:
     print("| family | items | legal | AUC |")
     print("|---|---:|---:|---:|")
     for key, (labels, scores) in sorted(by_family.items(), key=lambda kv: -len(kv[1][0])):
-        print(f"| {key} | {len(labels)} | {sum(labels)} | {auc(labels, scores):.3f} |")
+        print(f"| {key} | {len(labels)} | {sum(labels)} | "
+              f"{common.auc(labels, scores):.3f} |")
 
     print("\nby restriction")
     print("| restriction | family | items | legal | AUC |")
@@ -256,7 +214,7 @@ def main() -> None:
         if positives < args.min_each or len(labels) - positives < args.min_each:
             continue
         print(f"| `{key}` | {family(key)} | {len(labels)} | {positives} | "
-              f"{auc(labels, scores):.3f} |")
+              f"{common.auc(labels, scores):.3f} |")
 
     flips = defaultdict(lambda: ([], []))
     flip_records, flip_index = [], []
@@ -268,7 +226,8 @@ def main() -> None:
             if legal:
                 flip_records.append(flipped(record, entity, flip))
                 flip_index.append((flip, entity, record))
-    after = predict_all(probe_model, flip_records)
+    after = common.predict_all(probe_model, flip_records,
+                               lambda o, v, s, r: _gates(o, s, r))
     gate_of = {c[0].record_id: gate for c, gate in zip(chosen, gates)}
     before = [gate_of[r.record_id] for _, _, r in flip_index]
     for (flip, entity, _), b, a in zip(flip_index, before, after):

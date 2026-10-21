@@ -9,10 +9,10 @@ rarity buckets and rule families then say *where* in the tail an arm gains or
 loses, and the policy and decision slices separate what the random seat and
 the real legality declarations add (FR-066, FR-067).
 
-Every function here is pure grouping over :class:`RecordResult` rows. Scoring
-a record — running the model, reading its losses — is ``gate_one.measure``'s
-job; nothing here imports torch, so the grouping rules are testable on plain
-rows.
+Every function here is pure grouping over :class:`RecordResult` rows, and the
+rendering of each group as a report line. Scoring a record — running the
+model, reading its losses — is ``gate_one.score_records``'s job; nothing here
+imports torch, so the grouping rules are testable on plain rows.
 
 A field's mean is taken over the records that supervise it, never over all
 records. A field a record does not supervise has no loss for it, and counting
@@ -26,9 +26,11 @@ from collections import defaultdict
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
 
+from effects.domain.evaluation_report import CheckName, CheckResult, CheckStatus
 from effects.domain.keyword_names import normalize_keyword
 from effects.domain.rarity import RARITY_BUCKETS, rarity_bucket
 from effects.domain.records import WHAT_IF_SUBKINDS, LegalityDecision
+from effects.domain.strata import VALIDATION_STRATA
 
 #: The loss key every scored record carries: the per-entity loss summed over
 #: the gate and every supervised field, as the trainer's validation reads it.
@@ -236,3 +238,121 @@ def keyword_slice(
 
     return _group(results, group)
 
+
+
+# ── the report lines ────────────────────────────────────────────────────
+
+CARD_DISJOINT, GAME_DISJOINT = VALIDATION_STRATA
+
+
+def breakdown_checks(
+    scored: dict[str, list],
+    *,
+    games_by_text: dict[str, float],
+    withheld_keyword: str | None,
+) -> list[CheckResult]:
+    """Every breakdown of the scored strata, one report line per group.
+
+    ``scored`` maps a stratum to its :class:`RecordResult` rows, so the
+    report's shape is testable without a model.
+    """
+    card = scored.get(CARD_DISJOINT, [])
+    game = scored.get(GAME_DISJOINT, [])
+    checks = [*_card_disjoint_checks(card, games_by_text)]
+    checks += _memorization_gap_checks(card, game)
+    for stratum, rows in ((CARD_DISJOINT, card), (GAME_DISJOINT, game)):
+        checks += _slice_checks(
+            f"{stratum} policy", policy_slice(rows), present=OFF_POLICY,
+            skipped=f"{stratum} off-policy",
+            why="no record in this stratum was acted by the random seat",
+        )
+        checks += _slice_checks(
+            f"{stratum} legality", decision_slice(rows),
+            present=LegalityDecision.REAL,
+            skipped=f"{stratum} real-decision legality",
+            why="no legality record in this stratum is classed a real decision",
+        )
+    if withheld_keyword:
+        checks += _slice_checks(
+            f"{CheckName.ZERO_SHOT_KEYWORD} {withheld_keyword}",
+            keyword_slice([*card, *game], withheld_keyword),
+            present=WITHHELD, skipped=CheckName.ZERO_SHOT_KEYWORD,
+            why=(
+                f"no validation record carries the withheld keyword "
+                f"{withheld_keyword!r}"
+            ),
+        )
+    return checks
+
+
+def _card_disjoint_checks(card: list, games_by_text: dict[str, float]) -> list[CheckResult]:
+    """The card-disjoint stratum overall, by rarity, by family, and over families."""
+    if not card:
+        return [CheckResult(
+            CARD_DISJOINT, CheckStatus.SKIPPED,
+            "the card-disjoint stratum holds no record to break down",
+        )]
+    checks = [_group_check(CARD_DISJOINT, overall(card))]
+    for bucket, group in by_rarity_bucket(card, games_by_text).items():
+        checks.append(_group_check(f"{CARD_DISJOINT} rarity {bucket}", group))
+    families = by_family(card)
+    for family, group in families.items():
+        checks.append(_group_check(f"{CARD_DISJOINT} family {family}", group))
+    if families:
+        checks.append(_group_check(
+            f"{CARD_DISJOINT} mean over families",
+            mean_over_families(families),
+            detail=f"{len(families)} families, each weighted once",
+        ))
+    return checks
+
+
+def _memorization_gap_checks(card: list, game: list) -> list[CheckResult]:
+    """Per family, how much worse the unseen cards score than the seen ones."""
+    gaps = memorization_gap(by_family(game), by_family(card))
+    if not gaps:
+        return [CheckResult(
+            CheckName.MEMORIZATION_GAP, CheckStatus.SKIPPED,
+            "no family has records in both validation strata",
+        )]
+    return [
+        CheckResult(
+            f"{CheckName.MEMORIZATION_GAP} {family}", CheckStatus.REPORTED,
+            "game-disjoint minus card-disjoint loss, per field", values,
+        )
+        for family, values in gaps.items()
+    ]
+
+
+def _slice_checks(
+    prefix: str, groups: dict, *, present, skipped: str, why: str,
+) -> list[CheckResult]:
+    """Every group of one slice as a line, or one skip naming why it is absent.
+
+    ``present`` is the group whose absence means the slice measured nothing —
+    the off-policy rows, the real decisions, the withheld keyword — so the
+    other groups alone would be a comparison with one side missing.
+    """
+    if present not in groups:
+        return [CheckResult(skipped, CheckStatus.SKIPPED, why)]
+    return [
+        _group_check(f"{prefix} {name}", group) for name, group in groups.items()
+    ]
+
+
+def _group_check(name: str, group: GroupResult, *, detail: str | None = None) -> CheckResult:
+    """One group's report line: per-record field means, then per-text ones.
+
+    Per-text means are prefixed ``text:``; the detail carries both counts, so a
+    mean over three records reads as one. A mean of group means passes its own
+    ``detail``, since its counts are groups rather than records.
+    """
+    values = {
+        **group.per_record.means,
+        **{f"text:{key}": value for key, value in group.per_text.means.items()},
+    }
+    texts = group.per_text.counts.get(TOTAL, 0)
+    return CheckResult(
+        name, CheckStatus.REPORTED,
+        detail or f"{group.per_record.records} records, {texts} texts", values,
+    )

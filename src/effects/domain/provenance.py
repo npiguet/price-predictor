@@ -16,7 +16,6 @@ therefore names different things on the two sides. Printed provenance is stable.
 
 from __future__ import annotations
 
-import functools
 from dataclasses import dataclass, field
 from enum import StrEnum
 
@@ -34,12 +33,6 @@ ROLES: tuple[str, ...] = ("cost", "effect", "trigger-condition", "target-spec")
 KEY_DICT_FIELDS: frozenset[str] = frozenset({
     "script_file", "face", "trait_kind", "index_within_kind",
 })
-
-# The one-string form's separators: between a key's fields, and between the
-# keys of a tuple.
-_KEY_FIELD_SEPARATOR = "|"
-_KEY_SEPARATOR = ";"
-
 
 class KeyResolution(StrEnum):
     """What a provenance key resolves to at the join.
@@ -115,32 +108,6 @@ class ProvenanceKey:
         del out["script_file"]
         return out
 
-    def render(self) -> str:
-        """The key as one string: ``script_file|face|trait_kind|index[|option]``.
-
-        The spelling a build manifest and the corpus survey key on, so it is
-        as frozen as the record's JSON form. ``|`` cannot occur in a script
-        path, and ``option`` is written only when set, as in :meth:`as_dict`.
-        """
-        fields = [
-            self.script_file, str(self.face), self.trait_kind,
-            str(self.index_within_kind),
-        ]
-        if self.option is not None:
-            fields.append(str(self.option))
-        return _KEY_FIELD_SEPARATOR.join(fields)
-
-    @classmethod
-    def parse(cls, rendered: str) -> ProvenanceKey:
-        """The inverse of :meth:`render`."""
-        script_file, face, trait_kind, index, *option = rendered.split(
-            _KEY_FIELD_SEPARATOR,
-        )
-        return cls(
-            script_file, int(face), trait_kind, int(index),
-            int(option[0]) if option else None,
-        )
-
     @classmethod
     def from_dict(cls, data: dict, *, script_file: str | None = None) -> ProvenanceKey:
         """Parse a key, taking ``script_file`` from the sidecar's header.
@@ -161,23 +128,6 @@ class ProvenanceKey:
             index_within_kind=int(data["index_within_kind"]),
             option=None if data.get("option") is None else int(data["option"]),
         )
-
-
-def render_keys(keys: tuple[ProvenanceKey, ...]) -> str:
-    """A whole key tuple as one hashable string, keys joined by ``;``."""
-    return _KEY_SEPARATOR.join(key.render() for key in keys)
-
-
-@functools.lru_cache(maxsize=None)
-def parse_keys(rendered: str) -> tuple[ProvenanceKey, ...]:
-    """The inverse of :func:`render_keys`.
-
-    Cached because a build's decision pass parses each rendered key several
-    times over, and the distinct keys are bounded by the card pool's traits
-    rather than by the corpus. Safe to share: the tuple and its keys are
-    immutable.
-    """
-    return tuple(ProvenanceKey.parse(part) for part in rendered.split(_KEY_SEPARATOR))
 
 
 @dataclass(frozen=True, slots=True)
@@ -275,6 +225,10 @@ class ProvenanceSidecar:
     _declared_max: dict[tuple[int, str], int] = field(
         default_factory=dict, init=False, repr=False, compare=False,
     )
+    # ``dropped_keys`` as a set, for the membership test every join makes.
+    _dropped: frozenset[ProvenanceKey] = field(
+        default=frozenset(), init=False, repr=False, compare=False,
+    )
 
     def __post_init__(self) -> None:
         index: dict[ProvenanceKey, int] = {}
@@ -287,6 +241,7 @@ class ProvenanceSidecar:
             _note_declared(declared, key)
         object.__setattr__(self, "_row_by_key", index)
         object.__setattr__(self, "_declared_max", declared)
+        object.__setattr__(self, "_dropped", frozenset(self.dropped_keys))
 
     def is_runtime_only(self, key: ProvenanceKey) -> bool:
         """Is this a trait Forge attached to a live card rather than one parsed?
@@ -316,7 +271,7 @@ class ProvenanceSidecar:
         row = self._row_by_key.get(key)
         if row is not None:
             return row
-        if key in self.dropped_keys or self.is_runtime_only(key):
+        if key in self._dropped or self.is_runtime_only(key):
             return None
         raise KeyError(self._mismatch_message(key))
 
@@ -330,7 +285,7 @@ class ProvenanceSidecar:
         """
         if key in self._row_by_key:
             return KeyResolution.LINE
-        if key in self.dropped_keys:
+        if key in self._dropped:
             return KeyResolution.DROPPED
         if self.is_runtime_only(key):
             return KeyResolution.RUNTIME_ONLY

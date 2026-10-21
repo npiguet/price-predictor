@@ -74,7 +74,6 @@ class TestTrainEffectModel:
         assert args.vocab_path == Path("models/effects/vocab.txt")
         assert args.keyword_definitions == Path("output/effects/keyword-definitions.json")
         assert args.model_output is None  # resolved from --variant
-        assert args.split_from is None
         assert args.variant_scripts is None
 
     def test_the_architecture_defaults_are_the_contracts(self):
@@ -88,7 +87,7 @@ class TestTrainEffectModel:
         args = parse(*TRAIN)
         assert args.mlm_weight == 0.1
         assert args.mlm_mask_prob == 0.15
-        assert args.api_weight == 0.05
+        assert args.api_weight == 0.003
 
     def test_the_schedule_defaults_are_the_contracts(self):
         args = parse(*TRAIN)
@@ -99,12 +98,12 @@ class TestTrainEffectModel:
         assert args.epochs == 40
         assert args.patience == 5
 
-    def test_the_context_cache_is_off_by_default(self):
-        """It is a documented fallback for the GPU budget, not the default."""
-        args = parse(*TRAIN)
-        assert args.context_cache is False
-        assert args.cache_refresh == 500
-        assert parse(*TRAIN, "--context-cache").context_cache
+    def test_the_vestigial_flags_are_gone(self):
+        """``--split-from`` inherited nothing once ``--corpus`` was required, and
+        ``--context-cache`` was never wired into the batcher."""
+        for flag in ("--split-from", "--context-cache", "--cache-refresh"):
+            with pytest.raises(SystemExit):
+                parse(*TRAIN, flag, "x")
 
     def test_the_corpus_is_required(self):
         """FR-125 withdrawn: raw shards are no longer a training input."""
@@ -128,7 +127,7 @@ class TestTrainEffectModel:
 
 
 class TestVariantAcceptsCorpusAtThePreflightCheck:
-    """A baseline variant with ``--corpus`` and no ``--split-from`` reaches the
+    """A baseline variant with ``--corpus`` reaches the
     trainer: the curated dataset's manifest is the split it inherits.
 
     The real trainer entry point (``train_effect_model.run``) is monkeypatched
@@ -230,7 +229,7 @@ class TestEvaluateEffectModel:
         args = parse("evaluate-effect-model")
         assert args.checkpoint == Path("models/effects/effect-model/latest.pt")
         assert args.records_dir == Path("output/effects/records/")
-        assert args.variant_checkpoints is None
+        assert args.baseline_checkpoints is None
         assert not hasattr(args, "sealed_encoder_checkpoint")
 
     def test_variant_checkpoint_is_repeatable(self):
@@ -239,7 +238,7 @@ class TestEvaluateEffectModel:
             "--variant-checkpoint", "identity=a.pt",
             "--variant-checkpoint", "no-state=b.pt",
         )
-        assert args.variant_checkpoints == ["identity=a.pt", "no-state=b.pt"]
+        assert args.baseline_checkpoints == ["identity=a.pt", "no-state=b.pt"]
 
     def test_there_is_no_split_flag(self):
         """Splits come from the checkpoint — never a flag, never recomputed."""

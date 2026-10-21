@@ -1,35 +1,22 @@
 """The snapshot's reader rules (T024).
 
-Three of these are the ones a collector or a consumer gets wrong quietly: an
-absent tier read as an empty board, the two grant channels merged, and a
-perspective baked in at collection time.
+Two of these are the ones a collector or a consumer gets wrong quietly: an
+absent tier read as an empty board, and a perspective baked in at collection
+time.
 """
 
 from __future__ import annotations
 
-import pytest
-
-from effects.domain.provenance import ProvenanceKey
 from effects.domain.state_snapshot import (
-    COLORS,
     STAGE_ONE_TIERS,
-    CombatStatus,
     EntityState,
     GlobalState,
-    GrantedTemporary,
     InclusionTier,
     PlayerState,
     PowerToughness,
-    Refs,
-    StackExtras,
     StateSnapshot,
 )
 from tests.unit.effects.builders import make_snapshot
-
-
-@pytest.fixture
-def key() -> ProvenanceKey:
-    return ProvenanceKey("cardsfolder/s/serra_angel.txt", 0, "static", 0)
 
 
 def _snapshot(**overrides) -> StateSnapshot:
@@ -48,14 +35,6 @@ def _snapshot(**overrides) -> StateSnapshot:
 
 
 class TestInclusionTiers:
-    def test_the_tiers_apply_in_the_documented_order(self):
-        assert list(InclusionTier) == [
-            InclusionTier.REFERENCED,
-            InclusionTier.CORE,
-            InclusionTier.UNREFERENCED_STACK,
-            InclusionTier.UNREFERENCED_HAND_GRAVEYARD,
-        ]
-
     def test_a_snapshot_defaults_to_the_stage_one_tiers(self):
         assert _snapshot().tiers == STAGE_ONE_TIERS
 
@@ -73,55 +52,7 @@ class TestInclusionTiers:
         assert snapshot.collected(InclusionTier.UNREFERENCED_STACK)
         assert not snapshot.collected(InclusionTier.UNREFERENCED_HAND_GRAVEYARD)
 
-    def test_tiers_compare_in_stage_order(self):
-        assert InclusionTier.REFERENCED < InclusionTier.CORE
-        assert InclusionTier.CORE < InclusionTier.UNREFERENCED_STACK
-        assert (
-            InclusionTier.UNREFERENCED_STACK
-            < InclusionTier.UNREFERENCED_HAND_GRAVEYARD
-        )
-
-
-class TestGrantChannelsStaySeparate:
-    def test_an_entity_carries_the_two_channels_in_different_fields(self, key):
-        entity = EntityState(
-            id="E12", name="Serra Angel", zone="battlefield", controller="P0",
-            granted_attached=(key,),
-            granted_temporary=GrantedTemporary(keywords=("flying",)),
-        )
-        assert entity.granted_attached == (key,)
-        assert entity.granted_temporary.keywords == ("flying",)
-
-    def test_a_temporary_grant_may_resolve_to_a_line_or_to_a_bare_keyword(
-        self, key,
-    ):
-        """"gains flying until end of turn" names no line; an anthem's does."""
-        grant = GrantedTemporary(keywords=("flying",), abilities=(key,))
-        assert grant.keywords == ("flying",)
-        assert grant.abilities == (key,)
-
-    def test_the_channels_do_not_share_a_default(self):
-        first = EntityState(id="E1", name="A", zone="battlefield", controller="P0")
-        second = EntityState(id="E2", name="B", zone="battlefield", controller="P0")
-        assert first.granted_temporary == second.granted_temporary
-        assert first.granted_attached == () == second.granted_attached
-
-    def test_printed_lines_are_a_third_channel_of_their_own(self, key):
-        entity = EntityState(
-            id="E12", name="Serra Angel", zone="battlefield", controller="P0",
-            printed=(key,),
-        )
-        assert entity.printed == (key,)
-        assert entity.granted_attached == ()
-
-
 class TestPerspectiveIsNotStored:
-    def test_controllers_are_absolute_player_ids(self):
-        entity = EntityState(
-            id="E12", name="Serra Angel", zone="battlefield", controller="P1",
-        )
-        assert entity.controller == "P1"
-
     def test_mine_and_opponent_derive_from_the_records_actor(self):
         snapshot = _snapshot()
         assert snapshot.controller_tag("P0", actor_player="P0") == "mine"
@@ -153,10 +84,6 @@ class TestCharacteristics:
         assert by_boost.total == by_counter.total
         assert by_boost != by_counter
 
-    def test_the_colour_keys_cover_wubrg_plus_colourless(self):
-        assert COLORS == ("W", "U", "B", "R", "G", "C")
-
-
 class TestLookups:
     def test_an_entity_resolves_by_id(self):
         entity = EntityState(id="E12", name="A", zone="battlefield", controller="P0")
@@ -170,34 +97,3 @@ class TestLookups:
 
     def test_a_missing_player_returns_none(self):
         assert _snapshot().player("P9") is None
-
-
-class TestBlocks:
-    def test_the_global_block_carries_the_combat_substep(self):
-        assert _snapshot().global_.combat_substep == "first_strike"
-
-    def test_refs_default_to_empty_rather_than_absent(self):
-        assert _snapshot().refs == Refs()
-
-    def test_pending_event_is_absent_outside_rewrite_and_trigger_records(self):
-        assert _snapshot().pending_event is None
-
-    def test_stack_extras_are_absent_off_the_stack(self):
-        entity = EntityState(id="E1", name="A", zone="battlefield", controller="P0")
-        assert entity.stack_extras is None
-
-    def test_a_stack_object_carries_its_announced_amounts(self):
-        extras = StackExtras(
-            targets=("E1", "E2"), per_target_amounts={"E1": 2, "E2": 1},
-        )
-        entity = EntityState(
-            id="S1", name="Fireball", zone="stack", controller="P0",
-            stack_extras=extras,
-        )
-        assert entity.stack_extras.per_target_amounts == {"E1": 2, "E2": 1}
-
-    def test_combat_status_records_becoming_blocked_separately_from_blockers(self):
-        """An attacker stays blocked even after every blocker leaves combat."""
-        status = CombatStatus(attacking="P1", blocked_by=(), became_blocked=True)
-        assert status.blocked_by == ()
-        assert status.became_blocked

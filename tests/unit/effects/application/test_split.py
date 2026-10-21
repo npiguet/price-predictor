@@ -17,10 +17,6 @@ from __future__ import annotations
 
 import json
 
-from effects.application.train_effect_model import (
-    load_card_files,
-    load_first_printings,
-)
 from effects.domain.provenance import ProvenanceKey
 from effects.domain.records import (
     EffectRecord,
@@ -30,6 +26,10 @@ from effects.domain.split import (
     record_names_held_out_card,
 )
 from effects.domain.state_snapshot import EntityState
+from effects.infrastructure.card_sources import (
+    load_card_files,
+    load_first_printings,
+)
 from tests.unit.effects.builders import make_entity, make_record, make_snapshot
 
 
@@ -208,3 +208,90 @@ class TestTheConvertedToRuntimeNameBoundary:
         record = _record("g1", entities=(_entity("Lim-Dûl's Vault"),))
 
         assert record_names_held_out_card(record, held) is True
+
+
+class TestTokenScriptsCarryHeldOutTexts:
+    """A token script is a carrier like a card (G14).
+
+    Counted out, a token printing a held-out text trains on it: no holdout
+    test ever names its script, so its records and every game it appears in
+    reach the training stratum.
+    """
+
+    _TEXT = "SP$ DealDamage | NumDmg$ 3"
+
+    def test_a_token_carrying_a_held_out_text_is_held_out_by_script_file(self):
+        from effects.domain.split import text_keyed_holdout
+
+        held = text_keyed_holdout(
+            {"Alpha": "cardsfolder/a/alpha.txt"},
+            {"Alpha": [self._TEXT]},
+            permille=1000, max_carriers=8,
+            token_texts={"tokenscripts/r_1_1_goblin_shock.txt": [self._TEXT]},
+        )
+        assert "tokenscripts/r_1_1_goblin_shock.txt" in held.script_files
+        assert held.names == frozenset({"alpha"})
+
+    def test_a_token_counts_toward_the_carrier_ceiling(self):
+        from effects.domain.split import text_keyed_holdout
+
+        held = text_keyed_holdout(
+            {"Alpha": "cardsfolder/a/alpha.txt"},
+            {"Alpha": [self._TEXT]},
+            permille=1000, max_carriers=1,
+            token_texts={"tokenscripts/goblin.txt": [self._TEXT]},
+        )
+        assert not held.texts
+
+    def test_a_text_only_a_token_carries_can_be_held_out(self):
+        from effects.domain.split import text_keyed_holdout
+
+        held = text_keyed_holdout(
+            {"Alpha": "cardsfolder/a/alpha.txt"}, {"Alpha": ["SP$ Draw"]},
+            permille=1000, max_carriers=8,
+            token_texts={"tokenscripts/goblin.txt": [self._TEXT]},
+        )
+        assert self._TEXT in held.texts
+        assert held.script_files == frozenset({
+            "cardsfolder/a/alpha.txt", "tokenscripts/goblin.txt",
+        })
+
+
+class TestHeldOutTextMatching:
+    """Whether a text is held out, under the unit the holdout was chosen by."""
+
+    def test_a_template_unit_holds_out_every_text_sharing_the_template(self):
+        from effects.domain.split import text_keyed_holdout
+
+        held = text_keyed_holdout(
+            {"Alpha": "cardsfolder/a/alpha.txt"},
+            {"Alpha": ["SP$ DealDamage | NumDmg$ 3"]},
+            permille=1000, max_carriers=8, unit="template",
+        )
+        assert held.holds_text("SP$ DealDamage | NumDmg$ 7")
+        assert not held.holds_text("SP$ Draw | NumCards$ 1")
+
+    def test_a_text_unit_holds_out_the_text_alone(self):
+        from effects.domain.split import text_keyed_holdout
+
+        held = text_keyed_holdout(
+            {"Alpha": "cardsfolder/a/alpha.txt"},
+            {"Alpha": ["SP$ DealDamage | NumDmg$ 3"]},
+            permille=1000, max_carriers=8, unit="text",
+        )
+        assert held.holds_text("SP$  DealDamage |  NumDmg$ 3")
+        assert not held.holds_text("SP$ DealDamage | NumDmg$ 7")
+
+
+def test_a_held_out_token_on_the_board_names_its_game_held_out():
+    from effects.domain.provenance import ProvenanceKey
+    from tests.unit.effects.builders import make_entity, make_record, make_snapshot
+
+    token = ProvenanceKey("tokenscripts/goblin.txt", 0, "spell", 1)
+    record = make_record(state=make_snapshot(entities=(
+        make_entity("E1", "Goblin Token", printed=(token,)),
+    )))
+    held = HeldOutCards(
+        names=frozenset(), script_files=frozenset({"tokenscripts/goblin.txt"}),
+    )
+    assert record_names_held_out_card(record, held)

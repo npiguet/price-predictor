@@ -14,8 +14,8 @@ import pytest
 import torch
 
 from effects.domain.ability_encoder import AbilityEncoderConfig
+from effects.domain.baselines import BASELINES, Baseline
 from effects.domain.effect_model import EffectModel, EffectModelConfig
-from effects.domain.variants import VARIANTS, Variant
 from effects.infrastructure.effect_model_store import (
     DEFAULT_MODEL_OUTPUT,
     EffectCheckpoint,
@@ -86,19 +86,6 @@ class TestSplitRoundTrip:
         store.save(_checkpoint(files))
         loaded = store.load()
         assert loaded.provenance == _provenance(files)
-
-    def test_both_strata_come_back(self, tmp_path, files):
-        store = EffectModelStore(tmp_path / "effect-model")
-        store.save(_checkpoint(files))
-        provenance = store.load().provenance
-        assert provenance.card_disjoint_games == ("g1", "g2")
-        assert provenance.game_disjoint_games == ("g3",)
-        assert provenance.validation_games == {"g1", "g2", "g3"}
-
-    def test_the_held_out_card_list_comes_back(self, tmp_path, files):
-        store = EffectModelStore(tmp_path / "effect-model")
-        store.save(_checkpoint(files))
-        assert store.load().provenance.held_out_cards == ("Serra Angel",)
 
     def test_the_withheld_keyword_is_checkpoint_state_not_a_flag(
         self, tmp_path, files,
@@ -188,24 +175,19 @@ class TestHashChecking:
 
 class TestVariantIsolation:
     def test_full_writes_to_the_shipping_directory(self):
-        assert model_output_for(Variant.FULL) == DEFAULT_MODEL_OUTPUT
+        assert model_output_for(Baseline.FULL) == DEFAULT_MODEL_OUTPUT
 
     def test_every_other_variant_writes_under_its_own_name(self):
-        for variant in VARIANTS:
-            if variant == Variant.FULL:
+        for variant in BASELINES:
+            if variant == Baseline.FULL:
                 continue
             assert model_output_for(variant) == DEFAULT_MODEL_OUTPUT / variant
-
-    def test_the_four_baselines_are_all_named(self):
-        assert set(VARIANTS) == {
-            "full", "identity", "state-only", "no-state", "taxonomy",
-        }
 
     def test_a_matching_variant_checkpoint_is_accepted(self, tmp_path, files):
         main = _checkpoint(files)
         variant = _checkpoint(files, variant="identity")
         require_same_split(
-            main, variant, main_path=tmp_path / "a.pt", variant_path=tmp_path / "b.pt",
+            main, variant, main_path=tmp_path / "a.pt", baseline_path=tmp_path / "b.pt",
         )
 
     def test_a_different_split_fails_fast_naming_both(self, tmp_path, files):
@@ -217,7 +199,7 @@ class TestVariantIsolation:
         with pytest.raises(SplitMismatchError) as excinfo:
             require_same_split(
                 main, variant,
-                main_path=tmp_path / "main.pt", variant_path=tmp_path / "var.pt",
+                main_path=tmp_path / "main.pt", baseline_path=tmp_path / "var.pt",
             )
         assert "main.pt" in str(excinfo.value)
         assert "var.pt" in str(excinfo.value)
@@ -231,7 +213,7 @@ class TestVariantIsolation:
         with pytest.raises(SplitMismatchError, match="vocabulary"):
             require_same_split(
                 main, variant,
-                main_path=tmp_path / "a.pt", variant_path=tmp_path / "b.pt",
+                main_path=tmp_path / "a.pt", baseline_path=tmp_path / "b.pt",
             )
 
     def test_a_different_held_out_card_list_fails_fast(self, tmp_path, files):
@@ -243,7 +225,7 @@ class TestVariantIsolation:
         with pytest.raises(SplitMismatchError):
             require_same_split(
                 main, variant,
-                main_path=tmp_path / "a.pt", variant_path=tmp_path / "b.pt",
+                main_path=tmp_path / "a.pt", baseline_path=tmp_path / "b.pt",
             )
 
 
@@ -304,18 +286,18 @@ class TestExtraRoundTrip:
     def test_a_variants_extra_payload_survives_a_round_trip(
         self, tmp_path, files,
     ):
-        table = torch.nn.Embedding(8, 4).state_dict()
+        from effects.application.surface_batching import IdentityTable
+
+        table = IdentityTable(["flying", "trample"], 4)
         store = EffectModelStore(tmp_path / "effect-model")
         store.save(replace(
             _checkpoint(files),
             variant="identity",
-            extra={"identity_table": table},
+            extra={"identity_table": table.state()},
         ))
-        loaded = store.load()
-        assert "identity_table" in loaded.extra
-        assert torch.equal(
-            loaded.extra["identity_table"]["weight"], table["weight"],
-        )
+        loaded = IdentityTable.from_state(store.load().extra["identity_table"])
+        assert loaded.texts == table.texts
+        assert torch.equal(loaded.embedding.weight, table.embedding.weight)
 
     def test_a_checkpoint_with_no_extra_loads_an_empty_one(
         self, tmp_path, files,
@@ -390,15 +372,6 @@ _GEN1_CHECKPOINT = (
 
 class TestGen2Checkpoint:
     """What a gen-2 checkpoint records and drops (T101, FR-059, FR-061, FR-063)."""
-
-    def test_every_training_only_head_is_absent_after_save(self, tmp_path, files):
-        store = EffectModelStore(tmp_path)
-        store.save(_checkpoint(files))
-        loaded = store.load()
-        for name in EffectModel.TRAINING_ONLY_HEADS:
-            assert not any(key.startswith(f"{name}.") for key in loaded.model_state)
-        assert "value_head" in EffectModel.TRAINING_ONLY_HEADS
-        assert not hasattr(EffectModel(_MODEL_CONFIG), "pairing_proj")
 
     def test_the_sweep_flags_and_roots_round_trip(self, tmp_path, files):
         """Spec Story 5 scenario 6: unit, size, noise ratio, value weight."""

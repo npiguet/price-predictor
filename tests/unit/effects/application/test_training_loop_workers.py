@@ -26,14 +26,13 @@ import torch
 
 from effects.application import training_loop as loop_module
 from effects.application.extract_keyword_definitions import load_keyword_definitions
+from effects.application.resume_state import ResumeState
 from effects.application.step_preparation import (
-    PreparerSettings,
     ShardOpened,
     ShardTask,
     StepPreparer,
     StepReady,
 )
-from effects.application.surface_batching import SurfaceBatcher
 from effects.application.train_effect_model import (
     TrainEffectModelConfig,
     fields_for_epoch,
@@ -41,16 +40,18 @@ from effects.application.train_effect_model import (
 from effects.application.training_loop import TrainingLoop
 from effects.domain.ability_encoder import AbilityEncoder
 from effects.domain.ability_tokenizer import SPECIAL_TOKENS, AbilityTokenizer
+from effects.domain.baselines import baseline_masks
+from effects.domain.effect_head_input import feature_widths
 from effects.domain.effect_model import EffectModel
 from effects.domain.sampling import sampling_class
 from effects.domain.split import (
     CorpusSplit,
 )
-from effects.domain.variants import variant_masks
 from effects.infrastructure.record_io import read_shard, write_shard
 from effects.infrastructure.sidecar_io import SidecarCache
 from effects.infrastructure.step_workers import pack, unpack
 from price_predictor.infrastructure.tokenizer_store import save_vocabulary
+from tests.unit.effects.builders import make_batcher
 
 _FIXTURES = Path(__file__).parents[3] / "fixtures" / "effects"
 _CARDS = (
@@ -90,8 +91,8 @@ def corpus(tmp_path_factory, records):
     definitions = load_keyword_definitions(_DEFINITIONS)
     base = {token: index for index, token in enumerate(SPECIAL_TOKENS)}
     bare = AbilityTokenizer(base, definitions, surface="script")
-    batcher = SurfaceBatcher(
-        tokenizer=bare, sidecars=sidecars, masks=variant_masks("full"),
+    batcher = make_batcher(
+        tokenizer=bare, sidecars=sidecars, masks=baseline_masks("full"),
         surface="script", e_dim=16, widths={}, device=torch.device("cpu"),
     )
     texts = [*batcher.batch_texts(records)]
@@ -138,18 +139,18 @@ def _run(
     """
     monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
     if interrupt_after is not None:
-        real_save = TrainingLoop._save_resume
+        real_save = ResumeState.save
 
         def save_then_stop(self, epoch, *args, **kwargs):
             real_save(self, epoch, *args, **kwargs)
             if epoch == interrupt_after:
                 raise _Interrupted
 
-        monkeypatch.setattr(TrainingLoop, "_save_resume", save_then_stop)
+        monkeypatch.setattr(ResumeState, "save", save_then_stop)
     built: dict[str, torch.nn.Module] = {}
     initial: dict[str, torch.Tensor] = {}
     losses: list[float] = []
-    real_loss = TrainingLoop._loss_for
+    real_loss = TrainingLoop._device_loss
 
     def encoder(config):
         built["encoder"] = AbilityEncoder(config)
@@ -167,15 +168,14 @@ def _run(
         })
         return built["model"]
 
-    def loss_for(self, *args, **kwargs):
+    def device_loss(self, *args, **kwargs):
         computed = real_loss(self, *args, **kwargs)
-        if computed is not None:
-            losses.append(float(computed.total.detach()))
+        losses.append(float(computed.total.detach()))
         return computed
 
     monkeypatch.setattr(loop_module, "AbilityEncoder", encoder)
     monkeypatch.setattr(loop_module, "EffectModel", model)
-    monkeypatch.setattr(TrainingLoop, "_loss_for", loss_for)
+    monkeypatch.setattr(TrainingLoop, "_device_loss", device_loss)
     caplog.clear()
     with caplog.at_level(logging.INFO, logger="effects.application.training_loop"):
         loop = TrainingLoop(
@@ -458,25 +458,19 @@ def test_a_step_prepared_as_a_worker_prepares_it_equals_one_prepared_here(
         config, split=CorpusSplit(), training_shards=[], validation_samples={},
         holdout_permille=20, holdout_max_carriers=8, rarity={"x": 3},
     )
-    tokenizer = loop._build_tokenizer()
-    sidecars = loop._build_sidecars()
-    widths = loop._feature_widths(records)
     loop.api_types, loop.param_keys = loop._script_vocabularies()
-    heads = frozenset({"value", "api", "mlm"})
+    settings = loop._preparer_settings(feature_widths(records))
+    assert settings.heads == frozenset({"value", "api", "mlm"})
     fields = fields_for_epoch(
         config, present=frozenset(sampling_class(r) for r in records), epoch=1,
     )
     task = ShardTask(
         shard=Path("fixture"), epoch=1, position=2, budget=5, fields=fields,
     )
-    here = list(loop.shard_steps(
-        task, records, tokenizer, sidecars, widths, heads=heads,
+    here = list(StepPreparer(settings, truncations=loop.truncations).shard_steps(
+        task, records,
     ))
-    worker = StepPreparer(PreparerSettings(
-        config=config, seed=loop.seed, split=loop.split,
-        rarity={"x": 3}, api_types=tuple(loop.api_types),
-        param_keys=tuple(loop.param_keys), widths=widths, heads=heads,
-    ))
+    worker = StepPreparer(settings)
     there = [
         unpack(pack(m)) if isinstance(m, StepReady) else m
         for m in worker.steps(task, records)
@@ -530,7 +524,7 @@ def test_an_interrupt_mid_shard_leaves_no_process_behind(
     monkeypatch, corpus, tmp_path, caplog,
 ):
     """Ctrl+C lands in the training loop with workers blocked on full queues."""
-    real_loss = TrainingLoop._loss_for
+    real_loss = TrainingLoop._device_loss
     calls = []
 
     def interrupted(self, *args, **kwargs):
@@ -539,7 +533,7 @@ def test_an_interrupt_mid_shard_leaves_no_process_behind(
             raise KeyboardInterrupt
         return real_loss(self, *args, **kwargs)
 
-    monkeypatch.setattr(TrainingLoop, "_loss_for", interrupted)
+    monkeypatch.setattr(TrainingLoop, "_device_loss", interrupted)
     with pytest.raises(KeyboardInterrupt):
         _run(monkeypatch, corpus, tmp_path / "out", caplog, workers=2)
     assert not multiprocessing.active_children()

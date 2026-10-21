@@ -1723,6 +1723,109 @@ One `damage_prevented` event in fifteen prevented nothing. A shield that prevent
 | `damage_prevented` events | 4,030 |
 | … of amount 0 | 262 |
 
+### Fifteen defects in the corpus build, the training targets, the evaluator and the probes shaped gen-2's results, and gen-3 is built without them
+
+A review of `src/effects` and the probe scripts after the gen-2 runs found fifteen places where the corpus, the model's targets or a reported figure differs from what the design says. Each defect was confirmed against the code and, where it leaves a trace, counted on the gen-2 corpus and the arms' logs. Four of them change what every gen-2 arm learned: zero-filled targets, triggers supervising their cause, the value head's misread amounts, and the corpus build's short training set. The rest change a probe, a gate's population or a single cache row. None of them flips a gate verdict. Gen-3 trains and is scored without any of them ([gen-3 design](2026-XX-XX-effect-model-gen3-design.md#the-corpus-build-the-targets-and-the-probes-were-reviewed-and-gen-3-trains-without-the-defects-found)).
+
+#### Every affected entity was scored on every output field, and a field with no event was taught as 0
+
+Gen-2 trained the model to predict 0 for any output field an affected entity had no event for. The effect head's fields are conditional: each is meant to train only on entities its record actually says something about. The loss instead scored every field on every entity whose affected gate fires, and filled the fields the record left unset with 0. The constant-prediction floor, against which every field's explained deviance is reported, was computed on the same filled targets, so the deviance numbers never showed it.
+
+The zeros mean something false for five groups of fields:
+
+- `tap_state` wrote 0 for an untap event and 0 for no tap event at all, so an untap effect could not be told from nothing happening.
+- `pt_duration` and `type_color_duration` read an unset duration as class 0, `instant`. Every anthem's continuous boost and every continuous record trained as instant.
+- `target_legal` is set only on a decision's legal targets, always to 1. Its only negatives were the zeros filled in on entities of other record kinds, so it learned which records are decisions, not which targets are legal.
+- `attacker_legal`, `blocker_legal` and `min_blockers` were filled with 0 on every resolution, combat and continuous entity.
+- Player slots trained zone and tap fields at 0, and permanents trained life and mana fields at 0.
+
+Fields whose 0 does mean "nothing changed", such as damage, counters and keywords gained, are unaffected. Two probes read the distorted fields: the probe ladder's `pt_until_end_of_turn` target reads the `pt_duration` head, and its `may_block` target reads `blocker_legal`. The ladder reads target legality through the gate rather than the `target_legal` field, so that target is unaffected.
+
+#### Trigger records taught the model to predict the event that fired the trigger
+
+Every gen-2 arm learned, on trigger records, to predict the triggering event as the trigger's own effect. A trigger record's input already carries the event that fired it, and the design supervises only the verdict head's fired bit there. The target derivation instead read the triggering event as the record's outcome. A "whenever a creature dies, draw a card" trigger was therefore trained to predict that a creature died. A trigger that did not fire carries no event, so on trigger records the affected gate learned that an entity is affected exactly when the trigger fired. Gate F1 and explained deviance on trigger records include these targets.
+
+#### The value head never saw a static power boost and counted removed counters as placed
+
+The value head, the training-only head that reads from `e` the amounts a script states, was taught that every anthem, aura and equipment grants no power or toughness. It looked for the parameters `PowerBonus` and `ToughnessBonus`, which no Forge script uses. Static boosts are written `AddPower$` and `AddToughness$`. A line naming neither is read as stating a change of 0, which is trained rather than masked. Separately, the counters target summed `CounterNum` for every API, so a script removing or moving counters was taught as placing them.
+
+| converted lines | count |
+|---|---:|
+| lines with `AddPower$`, trained as stating a power change of 0 | 1,928 |
+| lines with `AddToughness$`, trained as stating a toughness change of 0 | 1,521 |
+| `RemoveCounter` lines trained as placing counters | 171 |
+
+The value head's weight is 0.05, so the push on `e` is small, but it falls systematically on one large family of cards. The probe ladder's value-vector rung reads the same targets.
+
+#### The corpus build planned the training set over records it then sent to validation, and delivered 82% of it
+
+The gen-2 training set holds a fifth fewer records than its plan, and its class mix is not the one asked for. `build-corpus` counts the records available for each class, family and text before it decides which games go to validation. It then sizes every quota on those counts. The write pass sends held-out, card-disjoint and game-disjoint games away, and every quota slot their records held goes unwritten. No step reports the gap, because the manifest's `shortfall` measures only the `--training-records` ceiling, which gen-2 left unset.
+
+| class | share of planned records written |
+|---|---:|
+| all classes, 892,205 of 1,089,699 | 82% |
+| `playability-decision`, 67,527 of 109,028 | 62% |
+| `combat` | 78% |
+| `continuous` | 84% |
+| other classes | 85–87% |
+
+Decisions lost most because the held-out coverage games, which all go to validation, are rich in decisions. They make up 7.6% of the written mix against 10% asked, and combat 19.0% against 20%. Each text's copies fall about 15% below their quota, and more for texts concentrated in the full-strength runs, where a third of the games were held out. The per-family `available` and `shortfall` columns of the manifest count the same records and are inflated by them.
+
+#### Each training shard came from a single collection run, so every batch did
+
+Every gen-2 batch was drawn from the few hundred games of one collection run. `build-corpus` repacked the training stratum into 2,000-record shards by concatenating its inputs in order. Each shard therefore holds three to six consecutive worker lifetimes of one run and one source, with a record's copies side by side. The trainer draws whole shards at random but shuffles only within the shard it holds, so a shard's correlation reaches every batch drawn from it, and two copies of one record can share a batch.
+
+#### The masked-language-model term could read a masked number off its own input
+
+The masked-language-model term, which trains the encoder to restore hidden tokens, taught nothing about reading an amount from its context. Masking replaced a digit's token, but the encoder's separate numeric input still carried the hidden value. Restoring a masked `3` in `NumDmg$ 3` therefore meant copying it. The term's weight is 0.1, so the loss of signal is small.
+
+#### Cascade's line in every gen-2 cache was encoded from a token training never updated
+
+The cached `e` of the withheld keyword is close to an arbitrary vector in every gen-2 arm. Training and evaluation force-expand cascade and drop its token, so the token's embedding never received a gradient. `encode-abilities`, which writes the cache, did neither, and encoded the Cascade line from that token. Every reader of the cache sees this row: the nearest-neighbour and UMAP checks, the decodability battery and the embedding probes. The evaluator's zero-shot slice builds its inputs as training does and is unaffected.
+
+#### Gate 2 read the effect fields without the affected gate, over a population up to a third larger than its distinct records
+
+Gate 2's per-field agreement for first strike and double strike is biased low. The field heads train only on affected entities, so each reads "if affected, how much". Gate 2 compared those conditional values between the real board and the board with the keyword removed. When first strike is removed in the first-strike step, the defending player is no longer hit in that step at all. What moves is the affected gate, which gate 2 never read. On `B256 best` the reported agreement on `opponent.damage_taken` was 48% for first strike and 16% for double strike. Double strike passed at 71.4%, just above the 70% bar, so a gated reading would most likely have raised it.
+
+Gate 2's counts are also inflated, in three ways. It kept the probe forks, which copy a real combat with one other keyword stripped, so their remaining carriers are counted a second time. It counted every carrier in a combat as one qualifying record. And it read the raw shards rather than the curated stratum, so it also scored the 216 first-strike records the first-strike repair dropped as unrepairable. No count crosses the 200-record threshold either way.
+
+| keyword | observations | from probe forks | distinct records, forks excluded |
+|---|---:|---:|---:|
+| first strike | 2,079 | 326 | 1,645 |
+| double strike | 250 | 33 | 211 |
+| indestructible | 334 | 62 | 248 |
+| wither | 139 | 17 | 104 |
+
+The observations are counted on the curated game-disjoint stratum, so the first-strike figure leaves out the repair's 216 dropped records.
+
+#### The knowledge probes filed trained texts as held-out lines
+
+The line ladder's held-out stratum is about one-eighth trained texts, so every gen-2 scorecard overstates the held-out line scores and understates the gap to trained lines. The probe filed a text as held-out when any card carrying it is held out. A held-out card also prints ordinary lines such as Flying and Trample, which train on every other card that carries them. Of 1,363 labelled texts filed held-out, 175 are also printed on cards that trained.
+
+#### The embedding probes counted each curated copy as a separate record
+
+The embedding probes' per-text record counts include `build-corpus`'s copies, and so overweight rare texts. The effect profiles are read from the training stratum, where a record appears up to four times as separate lines with one `record_id`. The counts feed the `n/(n+5)` weights of the profile probes, so a text with a single record copied four times weighs 0.44 instead of 0.17. Rare texts are also the noisiest, which likely lowers the weighted R² of the profile tables.
+
+#### The knowledge probes scored variant cards without their text
+
+The knowledge probes and grids built their model without the variant-script tree that training read, so a variant card's abilities resolved to no text in them. Nine of the 300 game-disjoint probe games come from the variants run, and 463 of 16,698 game-disjoint record items, 2.8%, were scored on an input training never showed. The evaluator was given the tree on every arm and is unaffected.
+
+#### The observed-mana probe target counted mana events rather than mana
+
+The knowledge probes' observed-mana target counts every mana event as one mana. It read a field the collector never writes. A multi-mana producer is therefore labelled as making one mana, and the target loses the variance it exists to measure. On the first arm the target scored no rung, so no gen-2 conclusion rests on it.
+
+#### The card-disjoint cap admitted held-out games that resolve no held-out text
+
+One held-out game in eight admitted to the card-disjoint stratum gives gate 1 no record. The cap allows 50 games per held-out text, and it counted a game whenever any record acted through the text, including a decision that only considered casting it. Gate 1 scores resolutions alone. Of 4,814 admitted games, 616 held no resolution of a held-out text, and each took a slot a scorable game could have used. Gen-2 trains no identity baseline and never ran gate 1, but these games are part of the card-disjoint loss that chooses each arm's checkpoint.
+
+#### Two held-out templates reached training through a token and a variant script
+
+The holdout keeps every game naming a held-out card out of training, and a held-out card is found in `cardsfolder` alone. A token script and a variant script carrying a held-out template therefore trained like any other text. Sixteen training records of 889,773 act through them: eleven through the Illusion token `u_0_2_illusion_mesmerize`, and five through the variant `act_of_treason_variant_12052`, whose target swap reads as a held-out template.
+
+#### The evaluator gave a false reason for three checks it never ran
+
+The evaluator's reports on every gen-2 arm say that three checks need fork records the corpus does not have yet. The checks, the matched real-versus-fork comparison, the probe-diff re-check and the role-polarity probe, were never implemented. The game-disjoint stratum holds 6,818 combat forks. No number depends on them.
+
 ## Data and charts
 
 Every file below is in [`2026-09-18-effect-model-gen2/`](2026-09-18-effect-model-gen2/README.md), whose README gives each file's columns and source in full. `scripts/effect_gen2_report/build_data.py` writes the data from the run directories, and `scripts/effect_gen2_report/make_charts.py` draws the charts from the data alone.

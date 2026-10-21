@@ -30,6 +30,7 @@ from effects.application.train_effect_model import (
     DEFAULT_SHARDS_PER_EPOCH,
 )
 from effects.application.validate_corpus import Thresholds
+from effects.domain.baselines import BASELINES, Baseline
 from effects.domain.collection_caps import (
     DEFAULT_INTERVENTIONS_PER_GAME,
     DEFAULT_LEGALITY_RATE,
@@ -41,7 +42,6 @@ from effects.domain.collection_caps import (
     CollectionCaps,
 )
 from effects.domain.split import HOLDOUT_MAX_CARRIERS, HOLDOUT_PERMILLE
-from effects.domain.variants import VARIANTS, Variant
 from effects.infrastructure.default_paths import (
     DEFAULT_ABILITIES_ROOT,
     DEFAULT_CARDS_FOLDERS,
@@ -50,8 +50,10 @@ from effects.infrastructure.default_paths import (
     DEFAULT_FORGE_CARDS_PATH,
     DEFAULT_FORGE_TOKENSCRIPTS,
     DEFAULT_KEYWORD_DEFINITIONS,
+    DEFAULT_MATCH_OUTCOMES,
     DEFAULT_RECORDS_DIR,
     DEFAULT_SCRIPT_VOCAB_PATH,
+    DEFAULT_SEALED_ENCODER,
     DEFAULT_VARIANT_SCRIPTS,
     DEFAULT_VOCAB_PATH,
     DEFAULT_WIN_RATES,
@@ -220,7 +222,7 @@ def _add_holdout_unit(parser: argparse.ArgumentParser, *, default: str | None) -
 def _add_variant(parser: argparse.ArgumentParser, *, help_text: str | None = None) -> None:
     """``--variant``: the shipping model or one of its baselines."""
     parser.add_argument(
-        "--variant", choices=VARIANTS, default=Variant.FULL.value, help=help_text,
+        "--variant", choices=BASELINES, default=Baseline.FULL.value, help=help_text,
     )
 
 
@@ -653,8 +655,9 @@ def _build_corpus_parser(subparsers) -> None:
     parser.add_argument(
         "--shard-records", type=int, default=2000,
         help=(
-            "Records per output shard after repacking, cut at game boundaries; "
-            "0 keeps one output shard per source shard (default: 2000)"
+            "Records per output shard after repacking, about this many each: whole "
+            "games are dealt to shards by a seeded hash of their game id and each "
+            "shard is shuffled; 0 keeps one output shard per source shard (default: 2000)"
         ),
     )
     parser.add_argument(
@@ -875,12 +878,12 @@ def run_holdout_cards(args: argparse.Namespace) -> int:
         holdout_report,
         write_depletion_list,
     )
-    from effects.application.train_effect_model import (
+    from effects.infrastructure.card_sources import (
         load_card_files,
         load_card_texts,
         load_first_printings,
     )
-    from effects.infrastructure.sidecar_io import SidecarCache
+    from effects.infrastructure.sidecar_io import SidecarCache, load_tree_texts
 
     cards_folder = Path(args.cards_folder)
     if not cards_folder.is_dir():
@@ -908,6 +911,8 @@ def run_holdout_cards(args: argparse.Namespace) -> int:
         max_carriers=args.holdout_max_carriers,
         unit=args.holdout_unit,
         canonical_names=canonical,
+        # The converted token tree beside the card tree, as build-corpus reads it.
+        token_texts=load_tree_texts(cards_folder.parent / "tokenscripts"),
     )
     written = write_depletion_list(report.names, Path(args.out))
     if report.unit == "template":
@@ -1299,14 +1304,6 @@ def _add_training_inputs(parser: argparse.ArgumentParser) -> None:
     _add_cards_folder(parser)
     _add_holdout_unit(parser, default=None)
     _add_variant_scripts(parser)
-    parser.add_argument(
-        "--split-from", type=_optional_path, default=None,
-        help=(
-            "Accepted for compatibility with older invocations of a --variant "
-            "run; nothing is read from this path. The manifest of --corpus is "
-            "authoritative for the split."
-        ),
-    )
     parser.add_argument("--vocab-path", type=Path, default=DEFAULT_VOCAB_PATH)
     parser.add_argument(
         "--keyword-definitions", type=Path, default=DEFAULT_KEYWORD_DEFINITIONS,
@@ -1358,7 +1355,7 @@ def _add_model_shape(parser: argparse.ArgumentParser) -> None:
     )
     parser.add_argument("--mlm-weight", type=float, default=0.1)
     parser.add_argument("--mlm-mask-prob", type=float, default=0.15)
-    parser.add_argument("--api-weight", type=float, default=0.05)
+    parser.add_argument("--api-weight", type=float, default=0.003)
     parser.add_argument(
         "--curriculum-epoch", type=int, default=3,
         help="Epoch whose first step enables the sparse field group (default: 3)",
@@ -1369,16 +1366,6 @@ def _add_training_schedule(parser: argparse.ArgumentParser) -> None:
     """Batches, epochs, stopping and resuming."""
     parser.add_argument("--batch-size", type=int, default=32)
     parser.add_argument("--grad-accum", type=int, default=1)
-    parser.add_argument(
-        "--context-cache", action="store_true",
-        help=(
-            "Accepted and ignored (not implemented): the stop-gradient "
-            "momentum cache is specified as the fallback for when live "
-            "re-encoding exceeds the GPU budget, but the trainer's batcher "
-            "has no cache and re-encodes context abilities live"
-        ),
-    )
-    parser.add_argument("--cache-refresh", type=int, default=500)
     parser.add_argument("--steps-per-epoch", type=int, default=5000)
     parser.add_argument(
         "--shards-per-epoch", type=int, default=DEFAULT_SHARDS_PER_EPOCH,
@@ -1545,13 +1532,15 @@ def _evaluate_effect_model_parser(subparsers) -> None:
     parser.set_defaults(func=run_evaluate_effect_model)
     parser.add_argument("--checkpoint", type=Path, default=DEFAULT_CHECKPOINT)
     parser.add_argument(
-        "--variant-checkpoint", action="append", dest="variant_checkpoints",
+        "--variant-checkpoint", action="append", dest="baseline_checkpoints",
         default=None, metavar="NAME=PATH",
         help="Baseline checkpoint to compare against; repeatable",
     )
     parser.add_argument("--records-dir", type=Path, default=DEFAULT_RECORDS_DIR)
     _add_cards_folder(parser)
-    _add_variant_scripts(parser)
+    _add_variant_scripts(parser, without=(
+        "the tree the corpus's manifest records is read, if any"
+    ))
     _add_recorded_tokenizer_paths(parser)
     parser.add_argument(
         "--corpus", type=_optional_path, default=None,
@@ -1569,12 +1558,12 @@ def _evaluate_effect_model_parser(subparsers) -> None:
 
 
 def run_evaluate_effect_model(args: argparse.Namespace) -> int:
-    from effects.application.evaluate_effect_model import (
+    from effects.application.evaluate_effect_model import run as evaluate
+    from effects.application.evaluation_context import (
         CorpusMismatchError,
         EvaluateEffectModelConfig,
-        parse_variant_checkpoint,
+        parse_baseline_checkpoint,
     )
-    from effects.application.evaluate_effect_model import run as evaluate
     from effects.infrastructure.effect_model_store import (
         HashMismatchError,
         SplitMismatchError,
@@ -1582,8 +1571,8 @@ def run_evaluate_effect_model(args: argparse.Namespace) -> int:
 
     try:
         variants = dict(
-            parse_variant_checkpoint(value)
-            for value in (args.variant_checkpoints or [])
+            parse_baseline_checkpoint(value)
+            for value in (args.baseline_checkpoints or [])
         )
     except ValueError as exc:
         logger.error("%s", exc)
@@ -1591,7 +1580,7 @@ def run_evaluate_effect_model(args: argparse.Namespace) -> int:
 
     config = config_from_args(
         EvaluateEffectModelConfig, args,
-        variant_checkpoints=variants,
+        baseline_checkpoints=variants,
         cards_folders=resolve_cards_folders(args.cards_folders),
     )
     try:
@@ -1626,7 +1615,7 @@ def _scorer_smoke_test_parser(subparsers) -> None:
     )
     parser.add_argument(
         "--sealed-encoder-checkpoint", type=Path,
-        default="models/sealed/encoder/latest.pt",
+        default=DEFAULT_SEALED_ENCODER,
         help="Sealed encoder whose vectors pooled e is concatenated with",
     )
     parser.add_argument(
@@ -1637,8 +1626,8 @@ def _scorer_smoke_test_parser(subparsers) -> None:
         ),
     )
     parser.add_argument(
-        "--outcomes-path", type=Path, default="output/sealed/match-outcomes.txt",
-        help="Match outcomes Phase A trains on (default: output/sealed/match-outcomes.txt)",
+        "--outcomes-path", type=Path, default=DEFAULT_MATCH_OUTCOMES,
+        help=f"Match outcomes Phase A trains on (default: {DEFAULT_MATCH_OUTCOMES})",
     )
     parser.add_argument(
         "--scratch-dir", type=Path, required=True,

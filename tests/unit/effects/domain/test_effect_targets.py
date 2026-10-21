@@ -12,7 +12,7 @@ from __future__ import annotations
 import pytest
 
 from effects.domain.effect_head_input import CARD_TYPES, OVERLAY_KEYWORDS
-from effects.domain.effect_model import LIBRARY_EVENTS, ZONE_OUTCOMES
+from effects.domain.effect_head_layout import LIBRARY_EVENTS, ZONE_OUTCOMES
 from effects.domain.effect_targets import derive_targets, events_of
 from effects.domain.event_schema import Event, EventType
 from effects.domain.records import (
@@ -319,7 +319,9 @@ class TestPayloadKinds:
         )
         assert derive_targets(record)["E1"].fields["damage_taken"] == 0.0
 
-    def test_a_fired_trigger_reads_its_event(self):
+    def test_a_fired_trigger_supervises_no_entity_with_the_event_that_caused_it(self):
+        """The event is the trigger's input overlay; its own effects arrive as the
+        resolution record of the ability it put on the stack."""
         record = _record(
             TriggerPayload(
                 event=Event(type=EventType.LIFE_CHANGE, subjects=("P0",),
@@ -328,7 +330,7 @@ class TestPayloadKinds:
             ),
             kind=RecordKind.TRIGGER, moment=None,
         )
-        assert derive_targets(record)["P0"].fields["life_delta"] == 3.0
+        assert derive_targets(record) == {}
 
     def test_an_unfired_trigger_produces_no_entity_targets(self):
         record = _record(
@@ -487,7 +489,7 @@ class TestLegalityBits:
 
 class TestFieldNames:
     def test_every_produced_field_is_a_real_head_output(self):
-        from effects.domain.effect_model import FIELDS_BY_NAME
+        from effects.domain.effect_head_layout import FIELDS_BY_NAME
 
         record = _resolution(
             Event(type=EventType.DAMAGE_DEALT, subjects=("E1",),
@@ -505,7 +507,7 @@ class TestFieldNames:
 
     @pytest.mark.parametrize("counter", ["P1P1", "M1M1", "LOYALTY"])
     def test_every_tracked_counter_type_names_a_real_field(self, counter):
-        from effects.domain.effect_model import FIELDS_BY_NAME
+        from effects.domain.effect_head_layout import FIELDS_BY_NAME
 
         targets = derive_targets(_resolution(
             Event(type=EventType.COUNTER_CHANGE, subjects=("E1",),

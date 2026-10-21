@@ -24,8 +24,8 @@ import pytest
 import torch
 
 from effects.application.extract_keyword_definitions import load_keyword_definitions
-from effects.application.step_preparation import ShardTask
-from effects.application.surface_batching import SurfaceBatcher
+from effects.application.step_preparation import ShardTask, StepPreparer
+from effects.application.surface_batching import Materializer
 from effects.application.train_effect_model import (
     TrainEffectModelConfig,
     fields_for_epoch,
@@ -39,13 +39,15 @@ from effects.application.training_loop import (
 )
 from effects.domain.ability_encoder import AbilityEncoder, AbilityEncoderConfig
 from effects.domain.ability_tokenizer import SPECIAL_TOKENS, AbilityTokenizer
-from effects.domain.effect_head_input import SlotKind
+from effects.domain.baselines import baseline_masks
+from effects.domain.effect_head_input import SlotKind, feature_widths
 from effects.domain.effect_model import EffectModel, EffectModelConfig
 from effects.domain.sampling import sampling_class
 from effects.domain.split import CorpusSplit
-from effects.domain.variants import variant_masks
 from effects.infrastructure.record_io import read_shard
 from effects.infrastructure.sidecar_io import SidecarCache, script_vocabularies
+from price_predictor.infrastructure.tokenizer_store import save_vocabulary
+from tests.unit.effects.builders import make_batcher, make_preparer
 
 _FIXTURES = Path(__file__).parents[3] / "fixtures" / "effects"
 _SIDECAR_ROOTS = {
@@ -70,17 +72,15 @@ def records():
 def definitions():
     return load_keyword_definitions(_FIXTURES / "keyword-definitions.json")
 
-def _run(encoder, model, tokenizer, sidecars, widths, optimizer) -> RunContext:
+def _run(encoder, model, optimizer) -> RunContext:
     """The run a shard trains in, with no configs: nothing here saves."""
     return RunContext(
         encoder_config=None, model_config=None, encoder=encoder, model=model,
-        tokenizer=tokenizer, sidecars=sidecars, widths=widths,
         optimizer=optimizer, warmup=1,
     )
 
 
-
-def _config(**overrides) -> TrainEffectModelConfig:
+def _config(directory: Path, **overrides) -> TrainEffectModelConfig:
     settings = dict(
         corpus="unused", seed=SEED, batch_size=BATCH, steps_per_epoch=STEPS,
         epochs=1, curriculum_epoch=1, e_dim=16, encoder_layers=1,
@@ -89,16 +89,18 @@ def _config(**overrides) -> TrainEffectModelConfig:
         keyword_expand_p=0.5, context_dropout=0.2, mlm_weight=0.1,
         mlm_mask_prob=0.3, value_weight=0.05, api_weight=0.05, e_noise=0.1,
         # The script surface, which the fixture sidecars carry.
-        vocab_path=Path("vocab-script.txt"),
+        vocab_path=directory / "vocab-script.txt",
+        keyword_definitions=_FIXTURES / "keyword-definitions.json",
+        cards_folders=tuple(_SIDECAR_ROOTS.values()),
     )
     settings.update(overrides)
     return TrainEffectModelConfig(**settings)
 
 
-def _loop(monkeypatch, *, prefetch: bool, **overrides) -> TrainingLoop:
+def _loop(monkeypatch, directory: Path, *, prefetch: bool, **overrides) -> TrainingLoop:
     monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
     return TrainingLoop(
-        _config(**overrides),
+        _config(directory, **overrides),
         split=CorpusSplit(), training_shards=[], validation_samples={},
         holdout_permille=20, holdout_max_carriers=8,
         gate_one_records=0, rarity={}, corpus_digest="",
@@ -106,25 +108,13 @@ def _loop(monkeypatch, *, prefetch: bool, **overrides) -> TrainingLoop:
     )
 
 
-def _shard(loop, records, tokenizer, sidecars, widths, budget, fields, *, heads):
-    """One shard's prepared steps, in this process, and the task they are for."""
-    task = ShardTask(
-        shard=Path("gen1-records.jsonl.gz"), epoch=1, position=1,
-        budget=budget, fields=fields,
-    )
-    return task, loop._local_steps(
-        task, records, tokenizer, sidecars, widths, heads=heads,
-    )
-
-
-def _tokenizer(loop, records, sidecars, definitions) -> AbilityTokenizer:
+def _vocabulary(directory: Path, records, definitions) -> None:
     """A vocabulary covering every text the fixture encodes and expands to."""
     base = {token: index for index, token in enumerate(SPECIAL_TOKENS)}
-    bare = AbilityTokenizer(base, definitions, surface=loop.surface)
-    batcher = SurfaceBatcher(
-        tokenizer=bare, sidecars=sidecars, masks=variant_masks("full"),
-        surface=loop.surface, e_dim=loop.config.e_dim, widths={},
-        device=torch.device("cpu"),
+    bare = AbilityTokenizer(base, definitions, surface="script")
+    batcher = make_batcher(
+        tokenizer=bare, sidecars=SidecarCache(dict(_SIDECAR_ROOTS)),
+        masks=baseline_masks("full"), surface="script", e_dim=16,
     )
     texts = [*batcher.batch_texts(records)]
     texts += [d.reminder_template for d in definitions.values() if d.reminder_template]
@@ -132,17 +122,34 @@ def _tokenizer(loop, records, sidecars, definitions) -> AbilityTokenizer:
     for text in texts:
         for token in bare.tokenize(text):
             vocab.setdefault(token.text, len(vocab))
-    return AbilityTokenizer(vocab, definitions, surface=loop.surface)
+    save_vocabulary(vocab, directory / "vocab-script.txt")
 
 
-def _train(monkeypatch, records, definitions, *, prefetch: bool):
-    """``STEPS`` real steps on the fixture shard; what they computed, and where."""
-    loop = _loop(monkeypatch, prefetch=prefetch)
-    sidecars = SidecarCache(dict(_SIDECAR_ROOTS))
-    tokenizer = _tokenizer(loop, records, sidecars, definitions)
-    widths = loop._feature_widths(records)
+def _prepared_loop(loop: TrainingLoop, records) -> None:
+    """The loop's host half and device half, as ``execute`` would build them."""
     loop.api_types, loop.param_keys = script_vocabularies(list(_SIDECAR_ROOTS.values()))
     assert loop.api_types, "the fixture should exercise the script-API head"
+    loop.preparer = StepPreparer(
+        loop._preparer_settings(feature_widths(records)), truncations=loop.truncations,
+    )
+    loop._training = Materializer(loop.device, loop.masks, noise=loop.noise)
+
+
+def _shard(loop, records, budget, fields):
+    """One shard's prepared steps, in this process, and the task they are for."""
+    task = ShardTask(
+        shard=Path("gen1-records.jsonl.gz"), epoch=1, position=1,
+        budget=budget, fields=fields,
+    )
+    return task, loop._local_steps(task, records)
+
+
+def _train(monkeypatch, directory, records, definitions, *, prefetch: bool):
+    """``STEPS`` real steps on the fixture shard; what they computed, and where."""
+    _vocabulary(directory, records, definitions)
+    loop = _loop(monkeypatch, directory, prefetch=prefetch)
+    _prepared_loop(loop, records)
+    tokenizer, widths = loop.preparer.tokenizer, loop.preparer.widths
 
     torch.manual_seed(SEED)
     encoder = AbilityEncoder(AbilityEncoderConfig(
@@ -164,15 +171,15 @@ def _train(monkeypatch, records, definitions, *, prefetch: bool):
     losses: list[tuple[float, float]] = []
     terms: list[dict[str, float]] = []
     threads: list[str] = []
-    real_prepare = TrainingLoop._prepare_step
-    real_loss = TrainingLoop._loss_for
+    real_prepare = StepPreparer.prepare_step
+    real_loss = TrainingLoop._device_loss
     real_mlm = TrainingLoop._mlm_backward
 
     def prepare(self, *args, **kwargs):
         threads.append(threading.current_thread().name)
         return real_prepare(self, *args, **kwargs)
 
-    def loss_for(self, *args, **kwargs):
+    def device_loss(self, *args, **kwargs):
         computed = real_loss(self, *args, **kwargs)
         losses.append((float(computed.total.detach()), float(computed.shipped.detach())))
         return computed
@@ -185,17 +192,14 @@ def _train(monkeypatch, records, definitions, *, prefetch: bool):
             name: float(value.detach()) for name, value in loss.terms.items()
         })
 
-    monkeypatch.setattr(TrainingLoop, "_prepare_step", prepare)
-    monkeypatch.setattr(TrainingLoop, "_loss_for", loss_for)
+    monkeypatch.setattr(StepPreparer, "prepare_step", prepare)
+    monkeypatch.setattr(TrainingLoop, "_device_loss", device_loss)
     monkeypatch.setattr(TrainingLoop, "_mlm_backward", mlm_backward)
     fields = fields_for_epoch(
         loop.config, present=frozenset(sampling_class(r) for r in records), epoch=1,
     )
-    task, steps = _shard(
-        loop, records, tokenizer, sidecars, widths, STEPS, fields,
-        heads=loop._training_heads(model),
-    )
-    run = _run(encoder, model, tokenizer, sidecars, widths, optimizer)
+    task, steps = _shard(loop, records, STEPS, fields)
+    run = _run(encoder, model, optimizer)
     tally = EpochTally(running=torch.zeros(()))
     loop._train_on_shard(task, steps, 0.0, run, tally, of=1)
     monkeypatch.undo()
@@ -212,10 +216,10 @@ def _train(monkeypatch, records, definitions, *, prefetch: bool):
 
 
 def test_the_prefetch_trains_exactly_what_the_serial_loop_trains(
-    monkeypatch, records, definitions,
+    monkeypatch, records, definitions, tmp_path,
 ):
-    serial = _train(monkeypatch, records, definitions, prefetch=False)
-    ahead = _train(monkeypatch, records, definitions, prefetch=True)
+    serial = _train(monkeypatch, tmp_path, records, definitions, prefetch=False)
+    ahead = _train(monkeypatch, tmp_path, records, definitions, prefetch=True)
 
     # The host half really did move: off the main thread with the prefetch,
     # on it without.
@@ -245,7 +249,7 @@ class _Stub(torch.nn.Module):
         self.p = torch.nn.Parameter(torch.ones(2))
 
 
-def _stubbed(monkeypatch, records, *, failing_at: int | None = None):
+def _stubbed(monkeypatch, directory, records, *, failing_at: int | None = None):
     """Run a shard with sleeping halves; what each half did, and when."""
     marks: list[tuple[str, int, str, float]] = []
     prepared: list[int] = []
@@ -264,22 +268,19 @@ def _stubbed(monkeypatch, records, *, failing_at: int | None = None):
         mark("prepare", which, "finish")
         return which
 
-    def loss_for(self, plan, *args, prepared=None, **kwargs):
+    def device_loss(self, prepared, *args, **kwargs):
         mark("train", prepared, "start")
         time.sleep(PAUSE)
         mark("train", prepared, "finish")
         loss = model.p.sum()
         return StepLoss(total=loss, shipped=loss, parts={}, terms={})
 
-    monkeypatch.setattr(TrainingLoop, "_prepare_step", prepare)
-    monkeypatch.setattr(TrainingLoop, "_loss_for", loss_for)
-    loop = _loop(monkeypatch, prefetch=True)
-    sidecars = SidecarCache(dict(_SIDECAR_ROOTS))
-    task, steps = _shard(loop, records, None, sidecars, {}, 4, (), heads=frozenset())
-    run = _run(
-        _Stub(), model, None, sidecars, {},
-        torch.optim.SGD(model.parameters(), lr=0.1),
-    )
+    monkeypatch.setattr(StepPreparer, "prepare_step", prepare)
+    monkeypatch.setattr(TrainingLoop, "_device_loss", device_loss)
+    loop = _loop(monkeypatch, directory, prefetch=True)
+    loop.preparer = make_preparer(directory, cards_folders=tuple(_SIDECAR_ROOTS.values()))
+    task, steps = _shard(loop, records, 4, ())
+    run = _run(_Stub(), model, torch.optim.SGD(model.parameters(), lr=0.1))
     loop._train_on_shard(
         task, steps, 0.0, run, EpochTally(running=torch.zeros(())), of=1,
     )
@@ -291,8 +292,8 @@ def _at(marks, what: str, which: int, phase: str) -> float:
                 if kind == what and index == which and stage == phase)
 
 
-def test_each_step_is_prepared_while_its_predecessor_trains(monkeypatch, records):
-    marks, prepared = _stubbed(monkeypatch, records)
+def test_each_step_is_prepared_while_its_predecessor_trains(monkeypatch, records, tmp_path):
+    marks, prepared = _stubbed(monkeypatch, tmp_path, records)
     assert prepared == [0, 1, 2, 3]
     for current in range(3):
         assert _at(marks, "prepare", current + 1, "start") < _at(
@@ -303,16 +304,16 @@ def test_each_step_is_prepared_while_its_predecessor_trains(monkeypatch, records
             if kind == "train" and phase == "start"] == [0, 1, 2, 3]
 
 
-def test_a_failing_preparation_surfaces_at_its_own_step(monkeypatch, records):
+def test_a_failing_preparation_surfaces_at_its_own_step(monkeypatch, records, tmp_path):
     """Raised on the main thread when step 2's turn comes, with the pool gone."""
     with pytest.raises(RuntimeError, match="step 2"):
-        _stubbed(monkeypatch, records, failing_at=2)
+        _stubbed(monkeypatch, tmp_path, records, failing_at=2)
     assert not any(
         thread.name.startswith("batch-prefetch") for thread in threading.enumerate()
     )
 
 
-def test_the_shard_line_reports_the_batch_wait(monkeypatch, records, caplog):
+def test_the_shard_line_reports_the_batch_wait(monkeypatch, records, caplog, tmp_path):
     with caplog.at_level(logging.INFO, logger="effects.application.training_loop"):
-        _stubbed(monkeypatch, records)
+        _stubbed(monkeypatch, tmp_path, records)
     assert any("batch wait" in message for message in caplog.messages)

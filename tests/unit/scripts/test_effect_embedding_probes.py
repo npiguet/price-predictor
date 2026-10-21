@@ -235,3 +235,44 @@ class TestCheckpointLabel:
 
     def test_a_timestamped_checkpoint_keeps_its_stem(self):
         assert common.checkpoint_label(Path("runs/a/20261008-1200.pt")) == "20261008-1200"
+
+
+# ── effect profiles ─────────────────────────────────────────────────────
+
+
+class TestEffectProfiles:
+    """A curated training stratum writes one record up to ``--reuse-cap`` times."""
+
+    @staticmethod
+    def _record(record_id: str, game: str = "g1") -> dict:
+        return {
+            "record_id": record_id, "game_id": game, "kind": "resolution",
+            "moment": "resolution", "actor_player": "P0",
+            "ability": [{"script_file": "cardsfolder/d/divination.txt", "face": 0,
+                         "trait_kind": "spell", "index_within_kind": 0}],
+            "state": {"entities": []},
+            "payload": {"events": [{"type": "card_drawn", "subjects": ["P0"],
+                                    "params": {"count": 2}}]},
+        }
+
+    def test_a_record_written_several_times_is_profiled_once(self, tmp_path):
+        import gzip
+        import json
+
+        profiles = _load("effect_profiles", common_module=common)
+        profiles._KEYMAP = {("cardsfolder/d/divination.txt", 0, "spell", 0, None): "draw two"}
+        shard = tmp_path / "shard-00001.jsonl.gz"
+        with gzip.open(shard, "wt", encoding="utf-8") as handle:
+            for record in [self._record("r.1")] * 4 + [self._record("r.2", "g2")]:
+                handle.write(json.dumps(record) + "\n")
+
+        totals = profiles.ProfileTotals()
+        for row in profiles.fold_shard(str(shard)):
+            totals.add(*row)
+        frame = totals.frame()
+
+        row = frame.set_index("text").loc["draw two"]
+        assert row["n_records"] == 2
+        assert row["res_n"] == 2
+        assert row["n_games"] == 2
+        assert row["mean_card_drawn_own"] == 2.0

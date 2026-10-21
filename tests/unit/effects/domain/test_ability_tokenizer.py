@@ -318,7 +318,9 @@ class TestTokenizeCache:
         assert second[-1].text != "extra"
         assert len(second) == 3
 
-    def test_role_spans_bypass_the_cache(self, tokenizer, monkeypatch):
+    def test_the_cache_keys_on_the_spans_as_well_as_the_text(self, tokenizer, monkeypatch):
+        """The prose surface tokenizes with spans on every step (FR-069), so
+        they are cached too, and never mistaken for another span set's."""
         calls = []
         original = AbilityTokenizer._split_with_offsets
 
@@ -327,15 +329,17 @@ class TestTokenizeCache:
             return original(self, text)
 
         monkeypatch.setattr(AbilityTokenizer, "_split_with_offsets", counting)
+        spans = (RoleSpan(0, 4, "cost"),)
 
         tokenizer.tokenize("draw a card")
         tokenizer.tokenize("draw a card")
         assert calls == ["draw a card"]
 
-        tokenizer.tokenize("draw a card", (RoleSpan(0, 4, "cost"),))
+        assert tokenizer.tokenize("draw a card", spans)[0].role == "cost"
+        assert tokenizer.tokenize("draw a card", spans)[0].role == "cost"
         assert calls == ["draw a card", "draw a card"]
 
-        tokenizer.tokenize("draw a card")
+        assert tokenizer.tokenize("draw a card")[0].role is None
         assert calls == ["draw a card", "draw a card"]
 
     def test_the_cache_is_capped(self, tokenizer, monkeypatch):

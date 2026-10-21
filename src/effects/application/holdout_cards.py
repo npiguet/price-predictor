@@ -46,6 +46,7 @@ def holdout_report(
     max_carriers: int,
     unit: str = "text",
     canonical_names: Mapping[str, object] | None = None,
+    token_texts: Mapping[str, Iterable[str]] | None = None,
 ) -> HoldoutReport:
     """The depletion list with its held-out template, text and card counts.
 
@@ -55,6 +56,8 @@ def holdout_report(
             lowercase spelling back to the one Forge prints. A name it does not
             know keeps the converted spelling; every comparison folds case, so
             an unresolved name still depletes.
+        token_texts: the converted token tree's texts, which count as carriers
+            exactly as they do for ``build-corpus`` and the trainer (FR-041).
 
     The list is in printed case because this file crosses into another package
     and into Forge: an operator reads it, and ``getName()`` is what it is
@@ -68,6 +71,7 @@ def holdout_report(
     held = text_keyed_holdout(
         dict(card_files), texts_by_card,
         permille=permille, max_carriers=max_carriers, unit=unit,
+        token_texts=token_texts,
     )
     printed = {
         fold_card_name(name): name for name in (canonical_names or {})
@@ -89,11 +93,12 @@ def depletion_list(
     max_carriers: int,
     unit: str = "text",
     canonical_names: Mapping[str, object] | None = None,
+    token_texts: Mapping[str, Iterable[str]] | None = None,
 ) -> list[str]:
     """Every card carrying a held-out ability text, in printed case, sorted."""
     return holdout_report(
         card_files, texts_by_card, permille=permille, max_carriers=max_carriers,
-        unit=unit, canonical_names=canonical_names,
+        unit=unit, canonical_names=canonical_names, token_texts=token_texts,
     ).names
 
 
