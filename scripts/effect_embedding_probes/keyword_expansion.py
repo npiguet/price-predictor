@@ -79,7 +79,8 @@ from effects.domain.ability_tokenizer import (  # noqa: E402
     tokenizer_surface,
 )
 from effects.infrastructure.effect_model_store import (  # noqa: E402
-    EffectModelStore,
+    load_effect_checkpoint,
+    verified_inference_paths,
 )
 from effects.infrastructure.sidecar_io import tree_of_folder  # noqa: E402
 from price_predictor.infrastructure.tokenizer_store import (  # noqa: E402
@@ -191,11 +192,15 @@ SHOWCASE = (
 def load_encoder(checkpoint_path: Path):
     """The checkpoint's encoder, at the size it recorded, its vocabulary, and
     the training settings that name the tokenization rules it read."""
-    checkpoint = EffectModelStore(checkpoint_path.parent).load(checkpoint_path)
+    checkpoint = load_effect_checkpoint(checkpoint_path)
     provenance = checkpoint.provenance
-    vocab_path = ROOT / provenance.vocab_path
-    keyword_path = ROOT / provenance.keyword_definitions_path
-    provenance.verify_hashes(vocab_path=vocab_path, keyword_path=keyword_path)
+    # The recorded paths are repository-relative and this script may run from
+    # anywhere, so they are anchored at the repository root.
+    vocab_path, keyword_path = verified_inference_paths(
+        checkpoint,
+        vocab_path=ROOT / provenance.vocab_path,
+        keyword_path=ROOT / provenance.keyword_definitions_path,
+    )
     encoder = AbilityEncoder(checkpoint.encoder_config)
     encoder.load_state_dict(checkpoint.encoder_state)
     encoder.eval()

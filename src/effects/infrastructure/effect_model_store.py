@@ -30,7 +30,7 @@ import logging
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 
 from effects.domain.ability_encoder import AbilityEncoderConfig
 from effects.domain.effect_model import EffectModel, EffectModelConfig
@@ -358,6 +358,53 @@ def resolve_inference_paths(
         else Path(provenance.keyword_definitions_path)
     )
     return resolved_vocab, resolved_keyword
+
+
+def load_effect_checkpoint(path: Path) -> EffectCheckpoint:
+    """The checkpoint at ``path``, read through the store of its own directory."""
+    path = Path(path)
+    return EffectModelStore(path.parent).load(path)
+
+
+def verified_inference_paths(
+    checkpoint: EffectCheckpoint,
+    *,
+    vocab_path: Path | None = None,
+    keyword_path: Path | None = None,
+) -> tuple[Path, Path]:
+    """:func:`resolve_inference_paths`, then the hash check on what it resolved.
+
+    One step rather than two, because every inference command needs both and
+    a caller that resolved without verifying encoded against whatever
+    vocabulary sat at the recorded path.
+    """
+    vocab, keywords = resolve_inference_paths(
+        checkpoint.provenance, vocab_path=vocab_path, keyword_path=keyword_path,
+    )
+    checkpoint.provenance.verify_hashes(vocab_path=vocab, keyword_path=keywords)
+    return vocab, keywords
+
+
+class InferenceCheckpoint(NamedTuple):
+    """A checkpoint with the vocabulary and keyword files it verified against."""
+
+    checkpoint: EffectCheckpoint
+    vocab_path: Path
+    keyword_path: Path
+
+
+def load_for_inference(
+    path: Path,
+    *,
+    vocab_path: Path | None = None,
+    keyword_path: Path | None = None,
+) -> InferenceCheckpoint:
+    """Load ``path`` and resolve and hash-check its inference files (FR-097)."""
+    checkpoint = load_effect_checkpoint(path)
+    vocab, keywords = verified_inference_paths(
+        checkpoint, vocab_path=vocab_path, keyword_path=keyword_path,
+    )
+    return InferenceCheckpoint(checkpoint, vocab, keywords)
 
 
 # ── resuming an interrupted run ─────────────────────────────────────────────

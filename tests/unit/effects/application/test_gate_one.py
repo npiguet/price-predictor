@@ -203,3 +203,114 @@ class TestPerRecordLosses:
             0, outputs, torch.zeros(1, 2), {}, torch.ones(1, 2), PER_ENTITY_FIELDS,
         )
         assert set(losses) == {"gate", TOTAL}
+
+    def test_every_term_equals_the_masked_sum_over_that_record(self):
+        """Each reported term, not only the total, is the gate BCE over the real
+        entities plus each field's loss over the target-affected ones — the
+        same numbers a hand-masked sum gives, on targets that are not all zero."""
+        import torch
+        from torch.nn import functional
+
+        from effects.application.breakdowns import TOTAL
+        from effects.application.gate_one import _record_losses
+        from effects.domain.effect_model import (
+            FIELD_SLICES,
+            GATE_INDEX,
+            PER_ENTITY_FIELDS,
+            PER_ENTITY_WIDTH,
+            FieldType,
+            field_loss,
+        )
+
+        generator = torch.Generator().manual_seed(3)
+        fields = PER_ENTITY_FIELDS
+        outputs = torch.randn(3, 4, PER_ENTITY_WIDTH, generator=generator)
+        gate = torch.tensor([
+            [1.0, 0.0, 1.0, 1.0], [0.0, 0.0, 0.0, 0.0], [0.0, 1.0, 0.0, 0.0],
+        ])
+        mask = torch.tensor([
+            [1.0, 1.0, 1.0, 0.0], [1.0, 1.0, 0.0, 0.0], [1.0, 1.0, 1.0, 1.0],
+        ])
+
+        def target(spec):
+            match spec.type:
+                case FieldType.MULTI_BINARY:
+                    return torch.randint(0, 2, (3, 4, spec.arity), generator=generator)
+                case FieldType.CATEGORICAL:
+                    return torch.randint(0, spec.arity, (3, 4), generator=generator)
+                case FieldType.SIGNED_DELTA:
+                    return torch.randint(-3, 4, (3, 4), generator=generator)
+                case FieldType.COUNT:
+                    return torch.randint(0, 5, (3, 4), generator=generator)
+            return torch.randint(0, 2, (3, 4), generator=generator)
+
+        targets = {spec.name: target(spec).float() for spec in fields}
+        for row in range(3):
+            real = mask[row].bool()
+            affected = real & gate[row].bool()
+            expected = {"gate": float(functional.binary_cross_entropy_with_logits(
+                outputs[row, :, GATE_INDEX][real], gate[row][real], reduction="sum",
+            ))}
+            if bool(affected.any()):
+                for spec in fields:
+                    start, end = FIELD_SLICES[spec.name]
+                    expected[spec.name] = float(field_loss(
+                        spec, outputs[row, :, start:end][affected],
+                        targets[spec.name][row][affected],
+                    ))
+            losses = _record_losses(row, outputs, gate, targets, mask, fields)
+            assert set(losses) == {*expected, TOTAL}
+            for name, value in expected.items():
+                assert losses[name] == pytest.approx(value, rel=1e-6, abs=1e-6), name
+            assert losses[TOTAL] == pytest.approx(sum(expected.values()), rel=1e-6)
+
+
+class TestMarginAccumulator:
+    """The three margins pool every chunk's entities, then reduce once."""
+
+    def _chunk(self, affected_damage: float):
+        import torch
+
+        from effects.domain.effect_model import (
+            FIELD_SLICES,
+            GATE_INDEX,
+            PER_ENTITY_WIDTH,
+            ZONE_OUTCOMES,
+        )
+
+        gathered = torch.zeros(1, 2, PER_ENTITY_WIDTH)
+        gathered[0, 0, GATE_INDEX] = 3.0   # predicted affected
+        gathered[0, 1, GATE_INDEX] = -3.0  # predicted unaffected
+        start, _ = FIELD_SLICES["zone_outcome"]
+        gathered[0, 0, start + ZONE_OUTCOMES.index("died")] = 5.0
+        damage, _ = FIELD_SLICES["damage_taken"]
+        gathered[0, 0, damage] = torch.log(torch.tensor(affected_damage))
+        targets = {
+            "zone_outcome": torch.tensor(
+                [[float(ZONE_OUTCOMES.index("died")), 0.0]],
+            ),
+            "damage_taken": torch.tensor([[2.0, 0.0]]),
+        }
+        return gathered, torch.tensor([[1.0, 0.0]]), targets, torch.ones(1, 2)
+
+    def test_a_perfect_chunk_scores_perfectly(self):
+        from effects.application.gate_one import MarginAccumulator
+        from effects.domain.effect_model import FIELDS_BY_NAME
+
+        margins = MarginAccumulator(
+            (FIELDS_BY_NAME["zone_outcome"], FIELDS_BY_NAME["damage_taken"]),
+        )
+        margins.add(*self._chunk(2.0))
+        metrics = margins.metrics()
+        assert metrics.affected_gate_f1 == pytest.approx(1.0)
+        assert metrics.zone_outcome_accuracy == pytest.approx(1.0)
+        assert metrics.mean_poisson_deviance == pytest.approx(0.0, abs=1e-6)
+
+    def test_nothing_added_is_unmeasured_rather_than_perfect(self):
+        import math
+
+        from effects.application.gate_one import MarginAccumulator
+
+        metrics = MarginAccumulator(()).metrics()
+        assert math.isnan(metrics.affected_gate_f1)
+        assert math.isnan(metrics.mean_poisson_deviance)
