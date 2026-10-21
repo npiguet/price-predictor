@@ -513,3 +513,32 @@ class TestSidecarRoots:
         api_types, keys = script_vocabularies([tmp_path / "cardsfolder"])
         assert api_types == ["Draw"]
         assert {"DB", "NumAtt", "NumCards", "SP", "SubAbility"} <= set(keys)
+
+
+class TestLoadTreeTexts:
+    """The holdout's token carriers, read straight off a converted tree."""
+
+    def test_each_script_file_maps_to_its_lines_script_texts(self, tmp_path):
+        from effects.infrastructure.sidecar_io import load_tree_texts
+
+        key = ProvenanceKey("tokenscripts/goblin.txt", 0, "spell", 1)
+        write_sidecar(
+            ProvenanceSidecar(
+                card="goblin", script_file="tokenscripts/goblin.txt",
+                lines=(
+                    SidecarLine(line_index=0, line_kind="spell", provenance=(key,),
+                                script_text="SP$ DealDamage | NumDmg$ 1"),
+                    SidecarLine(line_index=1, line_kind="keyword", provenance=()),
+                ),
+            ),
+            sidecar_path_for(tmp_path / "tokenscripts" / "goblin.txt"),
+        )
+        assert load_tree_texts(tmp_path / "tokenscripts") == {
+            "tokenscripts/goblin.txt": ["SP$ DealDamage | NumDmg$ 1"],
+        }
+
+    def test_a_missing_tree_is_empty(self, tmp_path):
+        from effects.infrastructure.sidecar_io import load_tree_texts
+
+        assert load_tree_texts(tmp_path / "absent") == {}
+        assert load_tree_texts(None) == {}

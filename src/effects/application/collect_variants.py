@@ -15,6 +15,9 @@ Three rules:
 - **A variant of a held-out card is held out with it** (FR-057). Otherwise a
   variant would put a held-out card's mechanics in front of the model under a
   different name, and the card-disjoint split would stop meaning what it says.
+  Nor may a variant of any other card print a held-out text, or under
+  ``--holdout-unit template`` its template: the perturbation can land on one,
+  and once its sidecar exists such a variant is deleted before it is decked.
 - **A variant lives on the script surface only** and is never converted to
   prose. There is no oracle text for a card nobody printed, and writing one
   would put text in the corpus no card has. It still gets a sidecar — that is
@@ -47,6 +50,7 @@ from effects.domain.script_variants import (
     script_card_name,
     variant_name,
 )
+from effects.domain.split import HOLDOUT_MAX_CARRIERS, HOLDOUT_PERMILLE, HeldOutCards
 from effects.infrastructure.variant_sidecar_connector import VariantSidecarConnector
 from price_predictor.infrastructure.card_filenames import sanitize_card_name
 
@@ -92,6 +96,13 @@ class CollectVariantsConfig:
     exclude_cards: Path | None = None
     workers: int = 12
     caps: CollectionCaps = field(default_factory=CollectionCaps)
+    #: The converted trees and the rule the holdout is chosen by, so a variant
+    #: printing a held-out text or template is dropped. The same as
+    #: ``build-corpus``'s, which must agree for the drop to mean anything.
+    cards_folders: tuple[str, ...] = ("output/cardsfolder", "output/tokenscripts")
+    holdout_permille: int = HOLDOUT_PERMILLE
+    holdout_max_carriers: int = HOLDOUT_MAX_CARRIERS
+    holdout_unit: str = "template"
 
     def volume_source(self) -> Path:
         """The directory the volume cap counts records in."""
@@ -315,6 +326,9 @@ def run(config: CollectVariantsConfig) -> int:
     variants = _keep_loadable(variants, Path(config.variant_scripts))
     if not variants:
         return 1
+    variants = _keep_unheld(config, variants)
+    if not variants:
+        return 1
     return _play_and_check_growth(config, variants, budget)
 
 
@@ -400,6 +414,73 @@ def _keep_loadable(
             "nothing to deck.", len(variants),
         )
     return deckable
+
+
+def drop_held_out_variants(
+    variants: list[GeneratedVariant], held_out: HeldOutCards,
+) -> list[GeneratedVariant]:
+    """The variants whose sidecar prints no held-out text, deleting the rest.
+
+    Read off the sidecar ``VariantSidecarMain`` just wrote, because the
+    chained text the holdout is keyed on exists only there. A dropped
+    variant's script and sidecar are deleted, so the tree holds no held-out
+    text for a later round to stage. A variant with no sidecar is kept: Forge
+    did not load it, and the loadable filter has already decided its fate.
+    """
+    from effects.infrastructure.sidecar_io import read_sidecar, sidecar_path_for
+
+    kept: list[GeneratedVariant] = []
+    for variant in variants:
+        sidecar_path = sidecar_path_for(variant.path)
+        try:
+            sidecar = read_sidecar(sidecar_path)
+        except FileNotFoundError:
+            kept.append(variant)
+            continue
+        if any(
+            line.script_text and held_out.holds_text(line.script_text)
+            for line in sidecar.lines
+        ):
+            variant.path.unlink(missing_ok=True)
+            sidecar_path.unlink(missing_ok=True)
+            continue
+        kept.append(variant)
+    return kept
+
+
+def _keep_unheld(
+    config: CollectVariantsConfig, variants: list[GeneratedVariant],
+) -> list[GeneratedVariant]:
+    """:func:`drop_held_out_variants` under the holdout ``build-corpus`` chooses."""
+    from effects.application.train_effect_model import load_card_files, load_card_texts
+    from effects.domain.split import text_keyed_holdout
+    from effects.infrastructure.sidecar_io import SidecarCache, load_tree_texts, sidecar_roots
+
+    roots = sidecar_roots(config.cards_folders)
+    cards_folder = roots.get("cardsfolder")
+    if cards_folder is None or not cards_folder.is_dir():
+        logger.warning(
+            "No converted card tree among %s, so no variant is checked against "
+            "the held-out texts; build-corpus drops a training record acting "
+            "through one, but the variant still reaches training games' boards.",
+            ", ".join(config.cards_folders),
+        )
+        return variants
+    card_files = load_card_files(cards_folder)
+    held_out = text_keyed_holdout(
+        card_files, load_card_texts(card_files, SidecarCache(roots)),
+        permille=config.holdout_permille, max_carriers=config.holdout_max_carriers,
+        unit=config.holdout_unit, token_texts=load_tree_texts(roots.get("tokenscripts")),
+    )
+    kept = drop_held_out_variants(variants, held_out)
+    if len(kept) < len(variants):
+        logger.info(
+            "Dropped %d of %d variant(s) printing a held-out %s.",
+            len(variants) - len(kept), len(variants), config.holdout_unit,
+        )
+    if not kept:
+        logger.error("Every variant printed a held-out text; there is nothing to deck.")
+    return kept
 
 
 def _play_and_check_growth(

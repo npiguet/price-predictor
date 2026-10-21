@@ -256,6 +256,25 @@ def write_sidecar(sidecar: ProvenanceSidecar, path: Path) -> None:
     )
 
 
+def load_tree_texts(root: Path | None) -> dict[str, list[str]]:
+    """``script file -> its sidecar's script texts`` over one converted tree.
+
+    The holdout's token carriers (``text_keyed_holdout(token_texts=...)``):
+    every converted token script, keyed by the script file its sidecar names,
+    which is what a record's provenance key and ``HeldOutCards.script_files``
+    both spell. An absent or missing root is an empty tree.
+    """
+    if root is None or not Path(root).is_dir():
+        return {}
+    out: dict[str, list[str]] = {}
+    for path in sorted(Path(root).rglob(f"*{SIDECAR_SUFFIX}")):
+        sidecar = read_sidecar(path)
+        texts = [line.script_text for line in sidecar.lines if line.script_text]
+        if texts:
+            out[sidecar.script_file] = texts
+    return out
+
+
 def converted_text_path(sidecar_path: Path) -> Path:
     """The converted ``.txt`` beside a sidecar."""
     sidecar_path = Path(sidecar_path)

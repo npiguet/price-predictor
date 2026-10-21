@@ -1971,6 +1971,7 @@ def _select_holdout(config: BuildCorpusConfig, sources: _Sources) -> HeldOutCard
     """The trainer's own holdout rule over the converted trees; refuses an empty one."""
     from effects.application.train_effect_model import load_card_texts
     from effects.domain.split import text_keyed_holdout
+    from effects.infrastructure.sidecar_io import load_tree_texts
 
     held_out = text_keyed_holdout(
         sources.card_files,
@@ -1978,6 +1979,7 @@ def _select_holdout(config: BuildCorpusConfig, sources: _Sources) -> HeldOutCard
         permille=config.holdout_permille,
         max_carriers=config.holdout_max_carriers,
         unit=config.holdout_unit,
+        token_texts=load_tree_texts(sources.folders.get("tokenscripts")),
     )
     if not held_out.names:
         tried = ", ".join(
