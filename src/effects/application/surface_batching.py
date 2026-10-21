@@ -156,6 +156,22 @@ class NoiseState:
         self._factor: torch.Tensor | None = None
         self._draws_since_factor = 0
 
+    def state_dict(self) -> dict:
+        """Everything a resumed run needs to draw the noise the next step would."""
+        return {
+            "sigma": self.sigma, "step": self.step,
+            "factor": self._factor, "draws_since_factor": self._draws_since_factor,
+        }
+
+    def load_state_dict(self, state: dict, device: torch.device) -> None:
+        def on(tensor):
+            return tensor.to(device) if tensor is not None else None
+
+        self.sigma = on(state["sigma"])
+        self.step = state["step"]
+        self._factor = on(state["factor"])
+        self._draws_since_factor = state["draws_since_factor"]
+
     def scale(self) -> float:
         """``r`` at the current step."""
         return self.ratio * min(1.0, self.step / self.ramp_steps)

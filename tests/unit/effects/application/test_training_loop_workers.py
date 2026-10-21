@@ -170,7 +170,7 @@ def _run(
     def loss_for(self, *args, **kwargs):
         computed = real_loss(self, *args, **kwargs)
         if computed is not None:
-            losses.append(float(computed[0].detach()))
+            losses.append(float(computed.total.detach()))
         return computed
 
     monkeypatch.setattr(loop_module, "AbilityEncoder", encoder)

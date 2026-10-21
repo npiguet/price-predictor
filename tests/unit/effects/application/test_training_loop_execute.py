@@ -17,7 +17,7 @@ from effects.application.train_effect_model import (
     EarlyStopper,
     TrainEffectModelConfig,
 )
-from effects.application.training_loop import TrainingLoop
+from effects.application.training_loop import StepLoss, TrainingLoop
 from effects.domain.records import CombatPayload, RecordKind
 from effects.domain.split import CorpusSplit
 from effects.infrastructure.record_io import write_shard
@@ -75,7 +75,8 @@ def run(tmp_path, make_record, monkeypatch):  # noqa: F811
 
     def loss_for(self, plan, *args, fields=None, **kwargs):
         events.append(("loss", id(fields), model.training))
-        return model.p.sum(), {}
+        loss = model.p.sum()
+        return StepLoss(total=loss, shipped=loss, parts={}, terms={})
 
     def validate(self, records, *args, parts=None, fields=None, **kwargs):
         events.append(("validate", id(fields), model.training))

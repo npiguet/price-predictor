@@ -14,7 +14,7 @@ import torch
 
 from effects.application import training_loop as loop_module
 from effects.application.train_effect_model import TrainEffectModelConfig
-from effects.application.training_loop import TrainingLoop, autocast_enabled
+from effects.application.training_loop import StepLoss, TrainingLoop, autocast_enabled
 from effects.domain.records import CombatPayload, RecordKind
 from effects.domain.split import CorpusSplit
 from effects.infrastructure.record_io import write_shard
@@ -106,7 +106,7 @@ def _run_loss_for(monkeypatch, loop, *, autocast: bool):
         loop_module, "per_entity_loss",
         lambda *a, **k: (torch.tensor(0.0), {}),
     )
-    monkeypatch.setattr(TrainingLoop, "_head_terms", lambda self, *a, **k: {})
+    monkeypatch.setattr(TrainingLoop, "_head_terms", lambda self, *a, **k: ({}, None))
 
     class _Batcher:
         def materialize(self, prepared, encoder):
@@ -200,7 +200,9 @@ def _run_execute(monkeypatch, tmp_path, make_record, *, cuda: bool):  # noqa: F8
     )
     monkeypatch.setattr(
         TrainingLoop, "_loss_for",
-        lambda self, plan, *a, **k: (model.p.sum(), {}),
+        lambda self, plan, *a, **k: StepLoss(
+            total=model.p.sum(), shipped=model.p.sum(), parts={}, terms={},
+        ),
     )
     # The step's host half would pin its tensors on this fake device; the plan
     # stands in for what it would have prepared.

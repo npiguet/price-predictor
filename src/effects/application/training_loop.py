@@ -40,6 +40,7 @@ import time
 from collections import Counter, defaultdict
 from collections.abc import Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass
 from pathlib import Path
 
 import torch
@@ -47,6 +48,9 @@ import torch
 from effects.application.gate_one import measure
 from effects.application.step_preparation import (
     NO_TEXT_BUCKET,
+    SHIPPED_HEADS,
+    TRAINING_HEADS,
+    Head,
     HeadTargets,
     PreparedStep,
     PreparerSettings,
@@ -282,8 +286,6 @@ def _format_floor(floor: Mapping[str, float]) -> str:
 #: The loss terms beside the per-entity loss (FR-060a, FR-058, FR-060b). The
 #: first two are shipped heads and enter the validation loss; the last three
 #: are training-only and enter the training loss at their flags' weights.
-SHIPPED_TERMS: tuple[str, ...] = ("verdict", "created_objects")
-TRAINING_TERMS: tuple[str, ...] = ("value", "mlm", "api")
 
 
 def format_shares(counts: Mapping[str, int], order: Sequence[str] = ()) -> str:
@@ -306,6 +308,44 @@ def _format_terms(terms: Mapping[str, float]) -> str:
         return ""
     body = ", ".join(f"{name} {value:.3f}" for name, value in terms.items())
     return f"\n  heads: {body}"
+
+
+@dataclass
+class StepLoss:
+    """One batch's losses, on the device."""
+
+    #: What backward runs on: ``shipped`` plus the weighted training-only heads.
+    total: torch.Tensor
+    #: The objective validation scores: the per-entity loss and the shipped
+    #: heads, so the train and validation numbers printed side by side measure
+    #: one objective.
+    shipped: torch.Tensor
+    #: The per-entity loss by field, as floats, when the step asked for them.
+    parts: dict[str, float]
+    #: Every head's own term, by head.
+    terms: dict[str, torch.Tensor]
+    #: The MLM pass, left for after the main backward: ``(masked, batcher)``.
+    pending_mlm: tuple | None = None
+
+
+def combine_terms(
+    loss: torch.Tensor, terms: Mapping[str, torch.Tensor],
+    weights: Mapping[Head, float],
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """``(total, shipped)`` from the per-entity loss and the head terms (FR-060a).
+
+    The shipped heads join the per-entity loss at unit weight; the
+    training-only heads are added at their own weights for backward alone.
+    """
+    shipped = loss
+    for head in SHIPPED_HEADS:
+        if head in terms:
+            shipped = shipped + terms[head]
+    total = shipped
+    for head in TRAINING_HEADS:
+        if head in terms:
+            total = total + weights[head] * terms[head]
+    return total, shipped
 
 
 class FloorCache:
@@ -450,10 +490,6 @@ class TrainingLoop(StepPreparation):
         self.api_types: list[str] = []
         self.param_keys: list[str] = []
         self._init_preparation()
-        #: The last ``_loss_for``'s head terms, as device tensors.
-        self._last_terms: dict[str, torch.Tensor] = {}
-        #: The step's masked tokens and batcher, for `_mlm_backward`.
-        self._pending_mlm = None
         #: This epoch's head terms, summed on the device and read once.
         self._epoch_terms: dict[str, torch.Tensor] = {}
         self._epoch_term_steps = 0
@@ -547,12 +583,20 @@ class TrainingLoop(StepPreparation):
         """The training-only heads a step computes; a zero weight computes none."""
         heads = set()
         if self.config.value_weight > 0.0:
-            heads.add("value")
+            heads.add(Head.VALUE)
         if self.config.api_weight > 0.0 and model.api_type_head is not None:
-            heads.add("api")
+            heads.add(Head.API)
         if self.config.mlm_weight > 0.0 and model.mlm_head is not None:
-            heads.add("mlm")
+            heads.add(Head.MLM)
         return frozenset(heads)
+
+    def _head_weights(self) -> dict[Head, float]:
+        """The training-only heads' weights in the backward pass."""
+        return {
+            Head.VALUE: self.config.value_weight,
+            Head.MLM: self.config.mlm_weight,
+            Head.API: self.config.api_weight,
+        }
 
     def _loss_for(
         self, plan, encoder, model, tokenizer, sidecars, widths, step,
@@ -560,8 +604,8 @@ class TrainingLoop(StepPreparation):
         collect: list[EntityTargetBatch] | None = None,
         prepared: PreparedStep | None = None,
         batcher: SurfaceBatcher | None = None,
-    ):
-        """``(loss, parts)`` for one planned batch, or ``None`` when empty.
+    ) -> StepLoss | None:
+        """One planned batch's losses, or ``None`` when it is empty.
 
         ``report_parts`` reads each field's term back as a float, which is one
         device synchronization per active field. Passed only on the batch a
@@ -633,33 +677,20 @@ class TrainingLoop(StepPreparation):
                 prepared.mask, fields=prepared.fields,
                 report_parts=report_parts,
             )
-            terms = self._head_terms(
+            terms, pending_mlm = self._head_terms(
                 prepared.heads, batcher, encoder, model, hidden,
             )
-        self._last_terms = terms
-        # The shipped heads join the per-entity loss at unit weight (FR-060a)
-        # and are what validation scores; the training-only heads are added
-        # for the backward pass alone, so the train and validation numbers
-        # printed side by side measure one objective.
-        shipped = loss
-        for name in SHIPPED_TERMS:
-            if name in terms:
-                shipped = shipped + terms[name]
-        total = shipped
-        weights = {
-            "value": self.config.value_weight,
-            "mlm": self.config.mlm_weight,
-            "api": self.config.api_weight,
-        }
-        for name in TRAINING_TERMS:
-            if name in terms:
-                total = total + weights[name] * terms[name]
-        return total, parts, shipped
+        total, shipped = combine_terms(loss, terms, self._head_weights())
+        return StepLoss(
+            total=total, shipped=shipped, parts=parts, terms=terms,
+            pending_mlm=pending_mlm,
+        )
 
     def _head_terms(
         self, targets: HeadTargets, batcher, encoder, model, hidden,
-    ) -> dict[str, torch.Tensor]:
-        """Every loss term beside the per-entity one, as device tensors.
+    ) -> tuple[dict[str, torch.Tensor], tuple | None]:
+        """Every loss term beside the per-entity one, as device tensors, and
+        the MLM pass left for after the main backward (or None).
 
         Scores what ``_head_targets`` prepared: a head with no targets there is
         not computed at all, which is how a zero weight and a scoring pass both
@@ -668,23 +699,29 @@ class TrainingLoop(StepPreparation):
         terms: dict[str, torch.Tensor] = {}
         if targets.verdict is not None:
             target, mask = targets.verdict
-            terms["verdict"] = verdict_loss(
+            terms[Head.VERDICT] = verdict_loss(
                 model.verdict(hidden).float(),
                 target.to(self.device, non_blocking=True), mask,
             )
         if targets.created is not None:
             target, mask = targets.created
-            terms["created_objects"] = created_objects_loss(
+            terms[Head.CREATED_OBJECTS] = created_objects_loss(
                 model.created_objects(hidden).float(),
                 target.to(self.device, non_blocking=True), mask,
             )
+        # The MLM pass is a second encoder forward over the batch's texts. It is
+        # left for `_mlm_backward`, which runs it after the main loss's backward
+        # has freed the first pass's activations: run here, both passes' graphs
+        # were alive at once and a batch of long texts overflowed 8 GB. The
+        # gradient is the same sum either way.
+        pending_mlm = (targets.mlm, batcher) if targets.mlm is not None else None
         encoded = getattr(batcher, "encoded", None)
         if encoded is None or encoded.matrix is None:
-            return terms
+            return terms, pending_mlm
         matrix = encoded.matrix
         if targets.value is not None:
             values, mask = targets.value
-            terms["value"] = value_loss(
+            terms[Head.VALUE] = value_loss(
                 model.value_head(matrix).float(),
                 values.to(self.device, non_blocking=True),
                 # Kept on the host: the loss decides which rows it scores there.
@@ -692,41 +729,32 @@ class TrainingLoop(StepPreparation):
             )
         if targets.api is not None:
             types, keys = targets.api
-            terms["api"] = api_loss(
+            terms[Head.API] = api_loss(
                 model.api_type_head(matrix).float(), types,
                 model.param_key_head(matrix).float()
                 if model.param_key_head is not None else None,
                 keys.to(self.device, non_blocking=True)
                 if model.param_key_head is not None else None,
             )
-        # The MLM pass is a second encoder forward over the batch's texts. It is
-        # left for `_mlm_backward`, which runs it after the main loss's backward
-        # has freed the first pass's activations: run here, both passes' graphs
-        # were alive at once and a batch of long texts overflowed 8 GB. The
-        # gradient is the same sum either way.
-        self._pending_mlm = (
-            (targets.mlm, batcher) if targets.mlm is not None else None
-        )
-        return terms
+        return terms, pending_mlm
 
-    def _mlm_backward(self, encoder, model) -> None:
+    def _mlm_backward(self, loss: StepLoss, encoder, model) -> None:
         """The MLM term's forward and backward, after the main loss's backward.
 
         Its weighted gradient adds to the one already accumulated, which is the
         gradient of the summed objective; the term is recorded with the step's
         other heads for the epoch line.
         """
-        pending, self._pending_mlm = self._pending_mlm, None
-        if pending is None:
+        if loss.pending_mlm is None:
             return
-        masked, batcher = pending
+        (masked, batcher), loss.pending_mlm = loss.pending_mlm, None
         with torch.autocast(
             device_type="cuda", dtype=torch.bfloat16, enabled=self.autocast,
         ):
             token_hidden, token_targets = batcher.mlm_forward(encoder, masked)
             term = mlm_loss(model.mlm_head(token_hidden).float(), token_targets)
         (self.config.mlm_weight * term / self.config.grad_accum).backward()
-        self._last_terms = {**self._last_terms, "mlm": term.detach()}
+        loss.terms[Head.MLM] = term.detach()
 
     def _training_settings(self) -> dict:
         """The flags a sweep arm differs by, and the script-API vocabularies (FR-063).
@@ -1130,7 +1158,6 @@ class TrainingLoop(StepPreparation):
         with the optimizer's moments, the noise's running covariance and the
         random generators, which dropout and the noise draw read on the device.
         """
-        noise = self.noise
         save_resume_state(self.config.resolved_model_output(), {
             "epoch": epoch,
             "step": step,
@@ -1143,13 +1170,8 @@ class TrainingLoop(StepPreparation):
                 if self.identity_table is not None else None
             ),
             "optimizer": optimizer.state_dict(),
-            "stopper": {"best": stopper.best, "since_best": stopper.since_best},
-            "noise": {
-                "sigma": noise.sigma,
-                "step": noise.step,
-                "factor": noise._factor,
-                "draws_since_factor": noise._draws_since_factor,
-            },
+            "stopper": stopper.state_dict(),
+            "noise": self.noise.state_dict(),
             "rng": {
                 "cpu": torch.get_rng_state(),
                 "cuda": (
@@ -1183,17 +1205,8 @@ class TrainingLoop(StepPreparation):
         if self.identity_table is not None and state["identity_table"] is not None:
             self.identity_table.load_state_dict(state["identity_table"])
         optimizer.load_state_dict(state["optimizer"])
-        stopper.best = state["stopper"]["best"]
-        stopper.since_best = state["stopper"]["since_best"]
-        noise = state["noise"]
-        self.noise.sigma = (
-            noise["sigma"].to(self.device) if noise["sigma"] is not None else None
-        )
-        self.noise.step = noise["step"]
-        self.noise._factor = (
-            noise["factor"].to(self.device) if noise["factor"] is not None else None
-        )
-        self.noise._draws_since_factor = noise["draws_since_factor"]
+        stopper.load_state_dict(state["stopper"])
+        self.noise.load_state_dict(state["noise"], self.device)
         torch.set_rng_state(state["rng"]["cpu"])
         if state["rng"]["cuda"] is not None and torch.cuda.is_available():
             torch.cuda.set_rng_state_all(state["rng"]["cuda"])
@@ -1469,12 +1482,11 @@ class TrainingLoop(StepPreparation):
                 )
                 if computed is None:
                     continue
-                loss, batch_parts, *rest = computed
-                # The objective validation scores; `loss` adds the
-                # training-only heads on top for the backward pass.
-                shipped = rest[0] if rest else loss
-                (loss / self.config.grad_accum).backward()
-                self._mlm_backward(encoder, model)
+                # `total` adds the training-only heads to the objective
+                # validation scores, `shipped`, for the backward pass.
+                (computed.total / self.config.grad_accum).backward()
+                self._mlm_backward(computed, encoder, model)
+                shipped, batch_parts = computed.shipped, computed.parts
                 if (step + 1) % self.config.grad_accum == 0:
                     # Read back only on the step that logs them: each read
                     # stalls the step until the GPU drains.
@@ -1489,7 +1501,7 @@ class TrainingLoop(StepPreparation):
                     optimizer.zero_grad(set_to_none=True)
                 running += shipped.detach()
                 shard_loss += shipped.detach()
-                for term, value in self._last_terms.items():
+                for term, value in computed.terms.items():
                     held = self._epoch_terms.get(term)
                     self._epoch_terms[term] = (
                         value.detach() if held is None else held + value.detach()
@@ -1498,7 +1510,7 @@ class TrainingLoop(StepPreparation):
                 if due:
                     heads = {
                         term: float(value.detach())
-                        for term, value in self._last_terms.items()
+                        for term, value in computed.terms.items()
                     }
                 shard_steps += 1
                 step += 1
@@ -1589,9 +1601,9 @@ class TrainingLoop(StepPreparation):
                 if computed is None:
                     continue
                 # Accumulated on the device; read once below.
-                total += computed[0]
+                total += computed.total
                 batches += 1
-                for name, value in computed[1].items():
+                for name, value in computed.parts.items():
                     summed[name] += value
                     counted[name] += 1
         encoder.train()

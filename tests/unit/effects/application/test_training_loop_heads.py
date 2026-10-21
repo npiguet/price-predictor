@@ -18,6 +18,7 @@ from effects.application.surface_batching import EncodedBatch, PreparedBatch
 from effects.application.train_effect_model import TrainEffectModelConfig
 from effects.application.training_loop import (
     NO_TEXT_BUCKET,
+    StepLoss,
     TrainingLoop,
     format_shares,
 )
@@ -118,9 +119,13 @@ def _terms(loop, records, batcher, model, hidden, *, training):
         records, batcher, batcher.prepared(), training=training,
         heads=loop._training_heads(model) if training else frozenset(),
     )
-    loop._last_terms = loop._head_terms(targets, batcher, None, model, hidden)
-    loop._mlm_backward(None, model)
-    return loop._last_terms
+    terms, pending = loop._head_terms(targets, batcher, None, model, hidden)
+    loss = StepLoss(
+        total=torch.zeros(()), shipped=torch.zeros(()), parts={}, terms=terms,
+        pending_mlm=pending,
+    )
+    loop._mlm_backward(loss, None, model)
+    return loss.terms
 
 
 def _kinds(records):

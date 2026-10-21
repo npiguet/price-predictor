@@ -489,6 +489,13 @@ class EarlyStopper:
         self.since_best += 1
         return False
 
+    def state_dict(self) -> dict:
+        return {"best": self.best, "since_best": self.since_best}
+
+    def load_state_dict(self, state: dict) -> None:
+        self.best = state["best"]
+        self.since_best = state["since_best"]
+
     def reset(self) -> None:
         """Forget the best: the objective changed, so no earlier number compares."""
         self.best = float("inf")

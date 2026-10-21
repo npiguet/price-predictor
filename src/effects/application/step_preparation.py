@@ -23,6 +23,7 @@ from collections import Counter
 from collections.abc import Iterator, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
+from enum import StrEnum
 from pathlib import Path
 
 import torch
@@ -179,6 +180,24 @@ class PreparedStep:
         self.field_targets = pinned(self.field_targets)
         self.index = self.index.pin_memory()
         self.heads.pin()
+
+
+
+class Head(StrEnum):
+    """The heads beside the per-entity one, by the loss term each adds."""
+
+    #: Shipped: they join the per-entity loss at unit weight and are what
+    #: validation scores (FR-060a).
+    VERDICT = "verdict"
+    CREATED_OBJECTS = "created_objects"
+    #: Training-only: added for the backward pass at their own weights.
+    VALUE = "value"
+    MLM = "mlm"
+    API = "api"
+
+
+SHIPPED_HEADS: tuple[Head, ...] = (Head.VERDICT, Head.CREATED_OBJECTS)
+TRAINING_HEADS: tuple[Head, ...] = (Head.VALUE, Head.MLM, Head.API)
 
 
 @dataclass(frozen=True)
@@ -480,15 +499,15 @@ class StepPreparation:
         if not training or not batch.rows:
             return targets
         texts = sorted(batch.rows, key=batch.rows.__getitem__)
-        if "value" in heads:
+        if Head.VALUE in heads:
             rows = [value_targets(text) for text in texts]
             targets.value = (
                 torch.tensor([row.values for row in rows]),
                 torch.tensor([row.mask for row in rows]),
             )
-        if "api" in heads:
+        if Head.API in heads:
             targets.api = self._api_batch(texts, batch.texts)
-        if "mlm" in heads:
+        if Head.MLM in heads:
             targets.mlm = batcher.draw_mlm_mask(
                 batch.prepared, self.config.mlm_mask_prob,
             )

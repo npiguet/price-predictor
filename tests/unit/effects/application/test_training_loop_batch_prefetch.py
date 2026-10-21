@@ -30,7 +30,7 @@ from effects.application.train_effect_model import (
     TrainEffectModelConfig,
     fields_for_epoch,
 )
-from effects.application.training_loop import TrainingLoop, parameter_groups
+from effects.application.training_loop import StepLoss, TrainingLoop, parameter_groups
 from effects.domain.ability_encoder import AbilityEncoder, AbilityEncoderConfig
 from effects.domain.ability_tokenizer import SPECIAL_TOKENS, AbilityTokenizer
 from effects.domain.effect_head_input import SlotKind
@@ -158,16 +158,16 @@ def _train(monkeypatch, records, definitions, *, prefetch: bool):
         return real_prepare(self, *args, **kwargs)
 
     def loss_for(self, *args, **kwargs):
-        total, parts, shipped = real_loss(self, *args, **kwargs)
-        losses.append((float(total.detach()), float(shipped.detach())))
-        return total, parts, shipped
+        computed = real_loss(self, *args, **kwargs)
+        losses.append((float(computed.total.detach()), float(computed.shipped.detach())))
+        return computed
 
-    def mlm_backward(self, *args, **kwargs):
+    def mlm_backward(self, loss, *args, **kwargs):
         # Captured after the MLM pass, which runs after the main backward, so
         # the step's terms include it.
-        real_mlm(self, *args, **kwargs)
+        real_mlm(self, loss, *args, **kwargs)
         terms.append({
-            name: float(value.detach()) for name, value in self._last_terms.items()
+            name: float(value.detach()) for name, value in loss.terms.items()
         })
 
     monkeypatch.setattr(TrainingLoop, "_prepare_step", prepare)
@@ -258,7 +258,7 @@ def _stubbed(monkeypatch, records, *, failing_at: int | None = None):
         time.sleep(PAUSE)
         mark("train", prepared, "finish")
         loss = model.p.sum()
-        return loss, {}, loss
+        return StepLoss(total=loss, shipped=loss, parts={}, terms={})
 
     monkeypatch.setattr(TrainingLoop, "_prepare_step", prepare)
     monkeypatch.setattr(TrainingLoop, "_loss_for", loss_for)
