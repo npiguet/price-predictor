@@ -1885,7 +1885,7 @@ def build(config: BuildCorpusConfig) -> int:
         config, surface, held_out, survey, decisions, written, mode_counts, remapper,
     )
     store.save(manifest)
-    _log_report(config, manifest, survey, decisions, written)
+    _log_report(manifest, survey, decisions, written)
     logger.info(
         "Wrote %d training record(s) to %s (digest %s).",
         sum(written.kept.values()), store.directory, manifest.digest(),
@@ -2235,8 +2235,7 @@ _LEAK_SHARE = 0.05
 
 
 def _log_report(
-    config: BuildCorpusConfig, manifest, survey: Survey, decisions: Decisions,
-    written: WriteResult,
+    manifest, survey: Survey, decisions: Decisions, written: WriteResult,
 ) -> None:
     """The operator's report, read off the manifest the build just wrote."""
     _log_counts(manifest)

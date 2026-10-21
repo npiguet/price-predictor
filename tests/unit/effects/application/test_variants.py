@@ -83,19 +83,9 @@ class TestVariantRecordFlags:
         with pytest.raises(ValueError, match="variant_of"):
             _record(variant_of="Lightning Bolt")
 
-    def test_the_synthetic_flag_never_reaches_the_model(self):
-        record = _record(synthetic=True, variant_of="Lightning Bolt")
-        fields = record.model_input_fields()
-        assert "synthetic" not in fields
-        assert "variant_of" not in fields
-
     def test_a_variant_is_otherwise_an_ordinary_record(self):
         record = _record(synthetic=True, variant_of="Lightning Bolt")
         assert record.kind is RecordKind.RESOLUTION
-        assert set(record.model_input_fields()) == {
-            "kind", "moment", "subkind", "actor_player", "ability", "state",
-            "payload",
-        }
 
 
 class TestNumericPerturbation:

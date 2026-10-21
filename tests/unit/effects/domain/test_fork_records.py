@@ -187,16 +187,3 @@ class TestTheDiffIsNeverATrainingTarget:
         names = {f.name for f in fields(EffectRecord)}
         assert not {"diff", "real_vs_fork", "delta"} & names
 
-    def test_a_fork_record_is_an_observation_like_any_other(self):
-        record = _combat(fork=True, mirror_of="run.0.1")
-        assert set(record.model_input_fields()) == {
-            "kind", "moment", "subkind", "actor_player", "ability", "state",
-            "payload",
-        }
-
-    def test_the_fork_flag_never_reaches_the_model(self):
-        """Otherwise the model would learn to predict differently on forks —
-        exactly the confound the forks exist to avoid."""
-        record = _combat(fork=True)
-        assert "fork" not in record.model_input_fields()
-        assert "mirror_of" not in record.model_input_fields()

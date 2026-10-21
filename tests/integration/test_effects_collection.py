@@ -112,7 +112,7 @@ def test_collection_writes_records_under_one_attribution_mode(
     ids = [record.record_id for record in records]
     assert len(ids) == len(set(ids))
     assert all(record.worker == "0" for record in records)
-    lifetimes = {record.lifetime for record in records}
+    lifetimes = {record.record_id.split(".")[-2].partition("-")[2] for record in records}
     assert len(lifetimes) == 1, lifetimes
     assert lifetimes != {""}, "ids carry no lifetime segment"
 

@@ -1,7 +1,9 @@
 """JSONL shard IO for the effect-record corpus.
 
-One ``{run_id}.{worker}-{lifetime}.jsonl`` shard per worker JVM, all read as a
-directory. One shard per worker rather than one shared file because records are
+One ``{run_id}.{worker}-{lifetime}.jsonl.gz`` shard per worker JVM, all read as a
+directory. The Java collector writes raw shards; Python only reads them, and
+writes the curated shards ``build-corpus`` produces (:func:`write_shard`).
+One shard per worker rather than one shared file because records are
 far larger than a match-outcome row, so cross-process appends would interleave
 mid-record; and line-oriented rather than columnar because the writers are Forge
 JVMs that are expected to crash mid-write, which is exactly what a line format
@@ -720,62 +722,9 @@ def format_record_line(record: EffectRecord) -> str:
     return json.dumps(record_to_dict(record), separators=_JSON_SEPARATORS)
 
 
-def append_record(out: IO[str], record: EffectRecord) -> None:
-    """Append one record to an open text handle and flush.
-
-    The caller owns the handle (opened in append mode) so a long collection run
-    keeps one open per worker across many games.
-    """
-    _write_line(out, record)
-    out.flush()
-
-
 def _write_line(handle: IO[str], record: EffectRecord) -> None:
     handle.write(format_record_line(record))
     handle.write("\n")
-
-
-def shard_path(directory: Path, run_id: str, worker: int, lifetime: str) -> Path:
-    """``{run_id}.{worker}-{lifetime}.jsonl`` under ``directory``.
-
-    ``lifetime`` is required rather than defaulted: a caller that does not say
-    which JVM lifetime it is writing would reopen a previous one's shard and
-    reissue ids it already used, which is the defect the segment exists to
-    prevent.
-    """
-    return Path(directory) / f"{run_id}.{worker}-{lifetime}.jsonl"
-
-
-class ShardWriter:
-    """Append-only writer for one worker's shard.
-
-    Used as a context manager so the handle closes on a clean shutdown; a crash
-    leaves at most a trailing partial line, which every reader here skips.
-    """
-
-    def __init__(
-        self, directory: Path, run_id: str, worker: int, lifetime: str,
-    ) -> None:
-        self.path = shard_path(directory, run_id, worker, lifetime)
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        self._handle: IO[str] | None = None
-
-    def __enter__(self) -> ShardWriter:
-        self._handle = self.path.open("a", encoding="utf-8")
-        return self
-
-    def __exit__(self, *exc_info) -> None:
-        self.close()
-
-    def write(self, record: EffectRecord) -> None:
-        if self._handle is None:
-            self._handle = self.path.open("a", encoding="utf-8")
-        append_record(self._handle, record)
-
-    def close(self) -> None:
-        if self._handle is not None:
-            self._handle.close()
-            self._handle = None
 
 
 def write_shard(path: Path, records: Iterable[EffectRecord]) -> int:
@@ -890,20 +839,14 @@ def iter_shard_lines(path: Path) -> Iterator[str]:
     import gzip
     import zlib
 
-    pending = ""
     try:
         with gzip.open(path, "rt", encoding="utf-8") as handle:
             for line in handle:
+                # The reader runs on across member boundaries, so a line
+                # without its newline can only be the stream's last: a member
+                # cut short. Dropped, because half a record parses as nothing.
                 if line.endswith("\n"):
-                    if pending:
-                        line = pending + line
-                        pending = ""
                     yield line
-                else:
-                    # No newline: either the file ends here or the member was
-                    # cut short. Held back rather than yielded, because half a
-                    # record parses as nothing.
-                    pending = line
     except (EOFError, gzip.BadGzipFile, zlib.error):
         # The final member was truncated by a killed worker. Everything before
         # it has already been yielded.

@@ -43,8 +43,7 @@ MAX_NUMERIC_SHIFT = 3
 #: script that fails to load rather than a card that plays differently.
 NUMERIC_PARAM_KEYS: frozenset[str] = frozenset({
     "NumDmg", "NumCards", "LifeAmount", "CounterNum", "NumAtt", "NumDef",
-    "Amount", "Num", "NumCounters", "NumTimes", "TgtPrompt", "PowerBonus",
-    "ToughnessBonus",
+    "Amount", "Num", "NumCounters", "NumTimes", "PowerBonus", "ToughnessBonus",
 })
 
 _PARAM_RE = re.compile(r"(\w+)\$\s*([^|]+?)(?=\s*\||\s*$)")

@@ -71,9 +71,6 @@ class CorpusSplit:
     def validation_games(self) -> frozenset[str]:
         return self.card_disjoint_games | self.game_disjoint_games
 
-    def is_training_game(self, game_id: str) -> bool:
-        return game_id not in self.validation_games
-
 
 def text_keyed_holdout(
     card_files: dict[str, str],

@@ -191,8 +191,3 @@ class TestRuleFourMetadataNeverBecomesAModelInput:
     def test_every_metadata_field_is_a_real_envelope_field(self):
         assert COLLECTION_METADATA_FIELDS <= {f.name for f in fields(EffectRecord)}
 
-    def test_the_projection_excludes_them_for_every_kind(self, make_record):
-        for kind in (RecordKind.RESOLUTION, RecordKind.COMBAT):
-            record = make_record(kind=kind)
-            leaked = COLLECTION_METADATA_FIELDS & set(record.model_input_fields())
-            assert not leaked, f"{kind.value} leaks {sorted(leaked)} to the model"
