@@ -57,6 +57,10 @@ from effects.infrastructure.default_paths import (
 
 logger = logging.getLogger(__name__)
 
+
+# ── flags several commands share ────────────────────────────────────────
+
+
 def _add_cards_folder(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--cards-folder", action="append", dest="cards_folders", default=None,
@@ -65,6 +69,162 @@ def _add_cards_folder(parser: argparse.ArgumentParser) -> None:
             f"{' and '.join(DEFAULT_CARDS_FOLDERS)}."
         ),
     )
+
+
+def resolve_cards_folders(values: list[str] | None) -> tuple[Path, ...]:
+    """``--cards-folder`` values, or both converted trees."""
+    chosen = values or list(DEFAULT_CARDS_FOLDERS)
+    return tuple(Path(value) for value in chosen)
+
+
+def _add_effect_records(parser: argparse.ArgumentParser, *, help_text: str) -> None:
+    """``--effect-records``, defaulting to the raw shard root on every command."""
+    parser.add_argument(
+        "--effect-records", type=str, default=DEFAULT_RECORDS_DIR, help=help_text,
+    )
+
+
+#: The name a depletion list takes inside the corpus it depleted.
+HOLDOUT_LIST_NAME = "holdout-cards.txt"
+
+
+def _add_holdout_sources(
+    parser: argparse.ArgumentParser, *, excluded: str = "held-out cards",
+) -> None:
+    """The three ways a collector names the cards it keeps out of every deck.
+
+    One definition for both collectors, so neither can accept a source the
+    other refuses: a corpus depleted against one holdout and split against
+    another is a silent corruption. ``excluded`` names what a checkpoint's
+    holdout removes on this command.
+    """
+    parser.add_argument(
+        "--split-from", type=str, default=None,
+        help=(
+            f"A checkpoint whose {excluded} are excluded from every deck. "
+            "Without a holdout source a collection run contaminates the "
+            "card-disjoint split of the model it feeds."
+        ),
+    )
+    parser.add_argument(
+        "--exclude-cards", type=str, default=None,
+        help=(
+            "File of card names, one per line, to keep out of every deck — "
+            "from 'python -m effects holdout-cards'. The ordinary way to name "
+            "the holdout: it needs no trained model, so this command no longer "
+            "waits on a training run that follows it. Mutually exclusive with "
+            "--split-from, which inherits an existing checkpoint's split "
+            "instead."
+        ),
+    )
+    parser.add_argument(
+        "--training-corpus", type=str, default=None,
+        help=(
+            f"Directory holding the training corpus AND the {HOLDOUT_LIST_NAME} "
+            "it was depleted against. Shorthand for --effect-records DIR plus "
+            f"--exclude-cards DIR/{HOLDOUT_LIST_NAME}, which belong together: a "
+            "corpus depleted against one list and split against another is a "
+            "silent corruption. Refused alongside either flag it implies."
+        ),
+    )
+
+
+#: Java worker processes a collector runs, as both collectors' configs default.
+DEFAULT_COLLECTOR_WORKERS = 12
+
+
+def _add_collector_round_flags(
+    parser: argparse.ArgumentParser, *, decks_per_round: int,
+) -> None:
+    """How much a collector plays per round, and on how many workers."""
+    parser.add_argument(
+        "--decks-per-round", type=int, default=decks_per_round,
+        help=f"Decks played as matches per round (default: {decks_per_round})",
+    )
+    parser.add_argument(
+        "--workers", type=int, default=DEFAULT_COLLECTOR_WORKERS,
+        help=(
+            "Parallel Java worker processes (default: "
+            f"{DEFAULT_COLLECTOR_WORKERS})"
+        ),
+    )
+
+
+def _add_holdout_flags(parser: argparse.ArgumentParser) -> None:
+    """The holdout rule, on both commands that compute it.
+
+    ``holdout-cards`` writes the depletion list and ``build-corpus`` splits the
+    corpus; the two must be passed the same values, or pools are depleted
+    against one holdout while the split uses another.
+    """
+    parser.add_argument(
+        "--holdout-permille", type=int, default=HOLDOUT_PERMILLE,
+        help=(
+            "An eligible text (a template, under --holdout-unit template) is "
+            "held out when its crc32 %% 1000 is below this "
+            f"(default: {HOLDOUT_PERMILLE})"
+        ),
+    )
+    parser.add_argument(
+        "--holdout-max-carriers", type=int, default=HOLDOUT_MAX_CARRIERS,
+        help=(
+            "A text (or template) more cards than this carry is never eligible "
+            f"(default: {HOLDOUT_MAX_CARRIERS})"
+        ),
+    )
+    _add_holdout_unit(parser, default="template")
+
+
+def _add_holdout_unit(parser: argparse.ArgumentParser, *, default: str | None) -> None:
+    """``--holdout-unit``, shared by every command that computes the holdout."""
+    parser.add_argument(
+        "--holdout-unit", choices=("template", "text"), default=default,
+        help=(
+            "What the holdout keys on: 'template' holds out every text sharing "
+            "a masked template (digits, CARDNAME and descriptions masked) "
+            "together; 'text' is feature 023's per-text rule"
+            + (f" (default: {default})" if default else
+               " (default: the corpus manifest's recorded unit)")
+        ),
+    )
+
+
+def _add_variant(parser: argparse.ArgumentParser, *, help_text: str | None = None) -> None:
+    """``--variant``: the shipping model or one of its baselines."""
+    parser.add_argument(
+        "--variant", choices=VARIANTS, default=Variant.FULL.value, help=help_text,
+    )
+
+
+def _add_variant_scripts(
+    parser: argparse.ArgumentParser, *, without: str = "no variant tree is read",
+) -> None:
+    """``--variant-scripts`` on a command that reads the stage-four tree.
+
+    ``without`` says what an unset flag costs on this command.
+    """
+    parser.add_argument(
+        "--variant-scripts", type=str, default=None,
+        help=(
+            "Stage four: the perturbed-script tree collect-variants wrote "
+            f"(usually {DEFAULT_VARIANT_SCRIPTS}). Unset by default, and then "
+            f"{without}"
+        ),
+    )
+
+
+def _add_recorded_tokenizer_paths(parser: argparse.ArgumentParser) -> None:
+    """``--vocab-path`` and ``--keyword-definitions`` on a checkpoint reader.
+
+    Both default to None, read as the paths the checkpoint recorded from
+    training (FR-097): a constant would tokenize with a vocabulary the model
+    may never have seen.
+    """
+    for flag in ("--vocab-path", "--keyword-definitions"):
+        parser.add_argument(
+            flag, type=str, default=None,
+            help="Defaults to the path the checkpoint recorded from training",
+        )
 
 
 def _add_cap_flags(parser: argparse.ArgumentParser) -> None:
@@ -182,12 +342,6 @@ def announce_probe_state(probe_keywords: str, probes_per_game: int) -> str:
     )
 
 
-def resolve_cards_folders(values: list[str] | None) -> tuple[Path, ...]:
-    """``--cards-folder`` values, or both converted trees."""
-    chosen = values or list(DEFAULT_CARDS_FOLDERS)
-    return tuple(Path(value) for value in chosen)
-
-
 # ── build-vocab ─────────────────────────────────────────────────────────
 
 
@@ -288,44 +442,13 @@ def _collect_coverage_parser(subparsers) -> None:
         ),
     )
     parser.set_defaults(func=run_collect_coverage)
-    parser.add_argument(
-        "--effect-records", type=str, default=DEFAULT_RECORDS_DIR,
-        help=(
-            "Destination shard directory. Unlike on match-outcomes this has a "
-            f"default ({DEFAULT_RECORDS_DIR}): collection is the whole point "
-            "of this command."
-        ),
-    )
+    _add_effect_records(parser, help_text=(
+        "Destination shard directory. Unlike on match-outcomes this has a "
+        f"default ({DEFAULT_RECORDS_DIR}): collection is the whole point "
+        "of this command."
+    ))
     _add_cards_folder(parser)
-    parser.add_argument(
-        "--split-from", type=str, default=None,
-        help=(
-            "A checkpoint whose held-out cards are excluded from every deck. "
-            "Without it a coverage run would contaminate the card-disjoint "
-            "split of the model it feeds."
-        ),
-    )
-    parser.add_argument(
-        "--exclude-cards", type=str, default=None,
-        help=(
-            "File of card names, one per line, to keep out of every deck — "
-            "from 'python -m effects holdout-cards'. The ordinary way to name "
-            "the holdout: it needs no trained model, so this command no longer "
-            "waits on a training run that follows it. Mutually exclusive with "
-            "--split-from, which inherits an existing checkpoint's split "
-            "instead."
-        ),
-    )
-    parser.add_argument(
-        "--training-corpus", type=str, default=None,
-        help=(
-            "Directory holding the training corpus AND the holdout-cards.txt "
-            "it was depleted against. Shorthand for --effect-records DIR plus "
-            "--exclude-cards DIR/holdout-cards.txt, which belong together: a "
-            "corpus depleted against one list and split against another is a "
-            "silent corruption. Refused alongside either flag it implies."
-        ),
-    )
+    _add_holdout_sources(parser)
     parser.add_argument(
         "--only-cards", type=str, default=None,
         help=(
@@ -352,14 +475,6 @@ def _collect_coverage_parser(subparsers) -> None:
         ),
     )
     parser.add_argument(
-        "--decks-per-round", type=int,
-        default=collect_coverage.DEFAULT_DECKS_PER_ROUND,
-        help=(
-            "Decks played as matches per round (default: "
-            f"{collect_coverage.DEFAULT_DECKS_PER_ROUND})"
-        ),
-    )
-    parser.add_argument(
         "--no-progress-rounds", type=int,
         default=collect_coverage.DEFAULT_NO_PROGRESS_ROUNDS,
         help=(
@@ -368,15 +483,10 @@ def _collect_coverage_parser(subparsers) -> None:
             "This is what makes the run terminate."
         ),
     )
-    parser.add_argument(
-        "--workers", type=int, default=12,
-        help="Parallel Java worker processes (default: 12)",
+    _add_collector_round_flags(
+        parser, decks_per_round=collect_coverage.DEFAULT_DECKS_PER_ROUND,
     )
     _add_cap_flags(parser)
-
-
-#: The name a depletion list takes inside the corpus it depleted.
-HOLDOUT_LIST_NAME = "holdout-cards.txt"
 
 
 def holdout_source(args: argparse.Namespace) -> tuple[Path, Path | None]:
@@ -493,6 +603,7 @@ def run_collect_coverage(args: argparse.Namespace) -> int:
 
 # ── build-corpus ────────────────────────────────────────────────────────
 
+
 def _class_mix(text: str) -> dict[str, float]:
     """``--class-mix`` as argparse wants it: parsed through the trainer's own
     ``parse_kind_mix``, so the two commands cannot disagree about the syntax
@@ -520,6 +631,32 @@ def _build_corpus_parser(subparsers) -> None:
         ),
     )
     parser.set_defaults(func=run_build_corpus)
+    _add_corpus_inputs(parser)
+    _add_holdout_flags(parser)
+    _add_corpus_selection(parser)
+    _add_game_disjoint_stratum(parser)
+    parser.add_argument(
+        "--shard-records", type=int, default=2000,
+        help=(
+            "Records per output shard after repacking, cut at game boundaries; "
+            "0 keeps one output shard per source shard (default: 2000)"
+        ),
+    )
+    parser.add_argument(
+        "--seed", type=int, default=42, help="Selection seed (default: 42)",
+    )
+    parser.add_argument(
+        "--workers", type=int, default=None,
+        help="Parallel shard readers (default: CPU count)",
+    )
+    parser.add_argument(
+        "--verify", action="store_true",
+        help="Report drift against an existing manifest and write nothing",
+    )
+
+
+def _add_corpus_inputs(parser: argparse.ArgumentParser) -> None:
+    """What ``build-corpus`` reads, and where it writes."""
     parser.add_argument(
         "--records-dir", type=str, default=DEFAULT_RECORDS_DIR,
         help=f"Raw corpus root; discovery recurses (default: {DEFAULT_RECORDS_DIR})",
@@ -536,30 +673,40 @@ def _build_corpus_parser(subparsers) -> None:
             f"built on (default: {DEFAULT_VOCAB_PATH})"
         ),
     )
+    _add_variant_scripts(parser, without=(
+        "a variant line resolves to no ability text, so it gets neither a "
+        "rarity-table entry nor a per-text cap while every real ability "
+        "gets both"
+    ))
     parser.add_argument(
-        "--variant-scripts", type=str, default=None,
+        "--keyword-definitions", type=str, default=DEFAULT_KEYWORD_DEFINITIONS,
         help=(
-            "The stage-four variant tree (collect-variants). Without it a "
-            "variant line resolves to no ability text, so it gets neither a "
-            "rarity-table entry nor a per-text cap while every real ability "
-            "gets both"
+            "The keyword table the tokenizer expands with; the build fails when "
+            "a display-name match would expand a non-keyword line "
+            f"(default: {DEFAULT_KEYWORD_DEFINITIONS})"
         ),
     )
     parser.add_argument(
-        "--holdout-permille", type=int, default=HOLDOUT_PERMILLE,
+        "--forge-tokenscripts", type=str, default=DEFAULT_FORGE_TOKENSCRIPTS,
         help=(
-            "Holdout share of eligible ability texts "
-            f"(default: {HOLDOUT_PERMILLE})"
+            "Forge's raw token scripts, read to remap the old collector's "
+            "token keys: a key naming a cardsfolder path no tree holds, whose "
+            "stem is a token's printed name, is rewritten to the token script "
+            f"it meant (default: {DEFAULT_FORGE_TOKENSCRIPTS})"
         ),
     )
     parser.add_argument(
-        "--holdout-max-carriers", type=int, default=HOLDOUT_MAX_CARRIERS,
+        "--no-remap-token-keys", dest="remap_token_keys", action="store_false",
         help=(
-            "A text more cards than this carry stays out of the holdout "
-            f"(default: {HOLDOUT_MAX_CARRIERS})"
+            "Build without the token-key remap, keeping every key exactly as "
+            "collected. Records of a token's abilities then resolve to no "
+            "ability text at all, as they did before the remap existed"
         ),
     )
-    _add_holdout_unit(parser, default="template")
+
+
+def _add_corpus_selection(parser: argparse.ArgumentParser) -> None:
+    """Which records the training corpus and its validation sample keep."""
     parser.add_argument(
         "--text-cap", type=int, default=200,
         help=(
@@ -589,6 +736,33 @@ def _build_corpus_parser(subparsers) -> None:
         ),
     )
     parser.add_argument(
+        "--card-disjoint-text-cap", type=int, default=50,
+        help=(
+            "Max card-disjoint games admitted per held-out ability text; 0 "
+            "means no cap (default: 50)"
+        ),
+    )
+    parser.add_argument(
+        "--max-events-per-record", type=int, default=64,
+        help=(
+            "A record carrying more events than this is refused as a game "
+            "dump rather than an ability; 0 disables the event-flood rule "
+            "(default: 64)"
+        ),
+    )
+    parser.add_argument(
+        "--validation-sample", type=int, default=2048,
+        help=(
+            "Records per stratum in validation/samples/, mixture-matched; the "
+            "card-disjoint resolution classes draw from the gate-one slice; "
+            "0 writes no sample (default: 2048)"
+        ),
+    )
+
+
+def _add_game_disjoint_stratum(parser: argparse.ArgumentParser) -> None:
+    """Which games the game-disjoint validation stratum takes (FR-044, FR-045)."""
+    parser.add_argument(
         "--game-disjoint-share", type=float, default=0.01,
         help=(
             "A game naming no held-out card enters the game-disjoint stratum "
@@ -610,72 +784,6 @@ def _build_corpus_parser(subparsers) -> None:
             "Comma list of damage-step keywords raising a game's threshold "
             f"(default: {','.join(DEFAULT_GAME_DISJOINT_KEYWORDS)})"
         ),
-    )
-    parser.add_argument(
-        "--keyword-definitions", type=str, default=DEFAULT_KEYWORD_DEFINITIONS,
-        help=(
-            "The keyword table the tokenizer expands with; the build fails when "
-            "a display-name match would expand a non-keyword line "
-            f"(default: {DEFAULT_KEYWORD_DEFINITIONS})"
-        ),
-    )
-    parser.add_argument(
-        "--card-disjoint-text-cap", type=int, default=50,
-        help=(
-            "Max card-disjoint games admitted per held-out ability text; 0 "
-            "means no cap (default: 50)"
-        ),
-    )
-    parser.add_argument(
-        "--shard-records", type=int, default=2000,
-        help=(
-            "Records per output shard after repacking, cut at game boundaries; "
-            "0 keeps one output shard per source shard (default: 2000)"
-        ),
-    )
-    parser.add_argument(
-        "--max-events-per-record", type=int, default=64,
-        help=(
-            "A record carrying more events than this is refused as a game "
-            "dump rather than an ability; 0 disables the event-flood rule "
-            "(default: 64)"
-        ),
-    )
-    parser.add_argument(
-        "--validation-sample", type=int, default=2048,
-        help=(
-            "Records per stratum in validation/samples/, mixture-matched; the "
-            "card-disjoint resolution classes draw from the gate-one slice; "
-            "0 writes no sample (default: 2048)"
-        ),
-    )
-    parser.add_argument(
-        "--forge-tokenscripts", type=str, default=DEFAULT_FORGE_TOKENSCRIPTS,
-        help=(
-            "Forge's raw token scripts, read to remap the old collector's "
-            "token keys: a key naming a cardsfolder path no tree holds, whose "
-            "stem is a token's printed name, is rewritten to the token script "
-            f"it meant (default: {DEFAULT_FORGE_TOKENSCRIPTS})"
-        ),
-    )
-    parser.add_argument(
-        "--no-remap-token-keys", dest="remap_token_keys", action="store_false",
-        help=(
-            "Build without the token-key remap, keeping every key exactly as "
-            "collected. Records of a token's abilities then resolve to no "
-            "ability text at all, as they did before the remap existed"
-        ),
-    )
-    parser.add_argument(
-        "--seed", type=int, default=42, help="Selection seed (default: 42)",
-    )
-    parser.add_argument(
-        "--workers", type=int, default=None,
-        help="Parallel shard readers (default: CPU count)",
-    )
-    parser.add_argument(
-        "--verify", action="store_true",
-        help="Report drift against an existing manifest and write nothing",
     )
 
 
@@ -762,35 +870,7 @@ def _holdout_cards_parser(subparsers) -> None:
             "(default: resources/AllPrintings.json)"
         ),
     )
-    parser.add_argument(
-        "--holdout-permille", type=int, default=HOLDOUT_PERMILLE,
-        help=(
-            "An eligible text is held out when crc32(text) %% 1000 is below "
-            f"this (default: {HOLDOUT_PERMILLE})"
-        ),
-    )
-    parser.add_argument(
-        "--holdout-max-carriers", type=int, default=HOLDOUT_MAX_CARRIERS,
-        help=(
-            "A text more cards than this carry is never eligible "
-            f"(default: {HOLDOUT_MAX_CARRIERS})"
-        ),
-    )
-    _add_holdout_unit(parser, default="template")
-
-
-def _add_holdout_unit(parser: argparse.ArgumentParser, *, default: str | None) -> None:
-    """``--holdout-unit``, shared by every command that computes the holdout."""
-    parser.add_argument(
-        "--holdout-unit", choices=("template", "text"), default=default,
-        help=(
-            "What the holdout keys on: 'template' holds out every text sharing "
-            "a masked template (digits, CARDNAME and descriptions masked) "
-            "together; 'text' is feature 023's per-text rule"
-            + (f" (default: {default})" if default else
-               " (default: the corpus manifest's recorded unit)")
-        ),
-    )
+    _add_holdout_flags(parser)
 
 
 def run_holdout_cards(args: argparse.Namespace) -> int:
@@ -866,9 +946,8 @@ def _field_coverage_parser(subparsers) -> None:
         ),
     )
     parser.set_defaults(func=run_field_coverage)
-    parser.add_argument(
-        "--effect-records", type=str, default=DEFAULT_RECORDS_DIR,
-        help=f"Shard directory to read (default: {DEFAULT_RECORDS_DIR})",
+    _add_effect_records(
+        parser, help_text=f"Shard directory to read (default: {DEFAULT_RECORDS_DIR})",
     )
     parser.add_argument(
         "--all", action="store_true",
@@ -1035,9 +1114,8 @@ def _validate_corpus_parser(subparsers) -> None:
         ),
     )
     parser.set_defaults(func=run_validate_corpus)
-    parser.add_argument(
-        "--effect-records", type=str, default=DEFAULT_RECORDS_DIR,
-        help=f"Shard directory to read (default: {DEFAULT_RECORDS_DIR})",
+    _add_effect_records(
+        parser, help_text=f"Shard directory to read (default: {DEFAULT_RECORDS_DIR})",
     )
     parser.add_argument(
         "--limit", type=int, default=0,
@@ -1143,9 +1221,9 @@ def _collect_variants_parser(subparsers) -> None:
         ),
     )
     parser.set_defaults(func=run_collect_variants)
-    parser.add_argument(
-        "--effect-records", type=str, default=DEFAULT_RECORDS_DIR,
-        help=f"Destination shard directory (default: {DEFAULT_RECORDS_DIR})",
+    _add_effect_records(
+        parser,
+        help_text=f"Destination shard directory (default: {DEFAULT_RECORDS_DIR})",
     )
     parser.add_argument(
         "--forge-cards-path", type=str, default=DEFAULT_FORGE_CARDS_PATH,
@@ -1179,48 +1257,19 @@ def _collect_variants_parser(subparsers) -> None:
         ),
     )
     parser.add_argument(
-        "--decks-per-round", type=int,
-        default=collect_variants.DEFAULT_DECKS_PER_ROUND,
-    )
-    parser.add_argument(
         "--seed", type=int, default=collect_variants.RANDOM_SEED,
         help=(
             "Seeds both the perturbation and the deck build (default: "
-            f"{collect_variants.RANDOM_SEED}). A variant round weights every variant "
-            "equally and plays once, so a repeat run with the same seed "
+            f"{collect_variants.RANDOM_SEED}). A variant round weights every "
+            "variant equally and plays once, so a repeat run with the same seed "
             "regenerates the same scripts and decks and collects nothing; "
             "change it to top a corpus up."
         ),
     )
-    parser.add_argument(
-        "--split-from", type=str, default=None,
-        help=(
-            "A checkpoint whose held-out cards, and their variants, are "
-            "excluded"
-        ),
+    _add_holdout_sources(parser, excluded="held-out cards, and their variants,")
+    _add_collector_round_flags(
+        parser, decks_per_round=collect_variants.DEFAULT_DECKS_PER_ROUND,
     )
-    parser.add_argument(
-        "--exclude-cards", type=str, default=None,
-        help=(
-            "File of card names, one per line, to keep out of every deck — "
-            "from 'python -m effects holdout-cards'. The ordinary way to name "
-            "the holdout: it needs no trained model, so this command no longer "
-            "waits on a training run that follows it. Mutually exclusive with "
-            "--split-from, which inherits an existing checkpoint's split "
-            "instead."
-        ),
-    )
-    parser.add_argument(
-        "--training-corpus", type=str, default=None,
-        help=(
-            "Directory holding the training corpus AND the holdout-cards.txt "
-            "it was depleted against. Shorthand for --effect-records DIR plus "
-            "--exclude-cards DIR/holdout-cards.txt, which belong together: a "
-            "corpus depleted against one list and split against another is a "
-            "silent corruption. Refused alongside either flag it implies."
-        ),
-    )
-    parser.add_argument("--workers", type=int, default=12)
     _add_cap_flags(parser)
 
 
@@ -1264,6 +1313,13 @@ def _train_effect_model_parser(subparsers) -> None:
         help="Train the ability encoder and effect head jointly from random init",
     )
     parser.set_defaults(func=run_train_effect_model)
+    _add_training_inputs(parser)
+    _add_model_shape(parser)
+    _add_training_schedule(parser)
+
+
+def _add_training_inputs(parser: argparse.ArgumentParser) -> None:
+    """What the trainer reads, and where its checkpoints go."""
     parser.add_argument(
         "--corpus", type=str, required=True,
         help=(
@@ -1275,14 +1331,7 @@ def _train_effect_model_parser(subparsers) -> None:
     )
     _add_cards_folder(parser)
     _add_holdout_unit(parser, default=None)
-    parser.add_argument(
-        "--variant-scripts", type=str, default=None,
-        help=(
-            "Stage four: the perturbed-script tree collect-variants wrote "
-            f"(usually {DEFAULT_VARIANT_SCRIPTS}). Unset by default, and then "
-            "no variant tree is read"
-        ),
-    )
+    _add_variant_scripts(parser)
     parser.add_argument(
         "--split-from", type=str, default=None,
         help=(
@@ -1302,10 +1351,11 @@ def _train_effect_model_parser(subparsers) -> None:
             "--variant full, models/effects/effect-model/{variant}/ otherwise)"
         ),
     )
-    parser.add_argument(
-        "--variant",
-        choices=VARIANTS, default=Variant.FULL.value,
-    )
+    _add_variant(parser)
+
+
+def _add_model_shape(parser: argparse.ArgumentParser) -> None:
+    """The architecture and the losses it trains under; the checkpoint records them."""
     parser.add_argument("--e-dim", type=int, default=64)
     parser.add_argument(
         "--e-noise", type=float, default=0.1,
@@ -1346,6 +1396,10 @@ def _train_effect_model_parser(subparsers) -> None:
         "--curriculum-epoch", type=int, default=3,
         help="Epoch whose first step enables the sparse field group (default: 3)",
     )
+
+
+def _add_training_schedule(parser: argparse.ArgumentParser) -> None:
+    """Batches, epochs, stopping and resuming."""
     parser.add_argument("--batch-size", type=int, default=32)
     parser.add_argument("--grad-accum", type=int, default=1)
     parser.add_argument(
@@ -1511,25 +1565,16 @@ def _encode_abilities_parser(subparsers) -> None:
         help="Compute the per-ability embedding cache from a trained checkpoint",
     )
     parser.set_defaults(func=run_encode_abilities)
-    parser.add_argument(
-        "--variant",
-        choices=VARIANTS, default=Variant.FULL.value,
-        help="Resolves the checkpoint and the output suffix together",
+    _add_variant(
+        parser, help_text="Resolves the checkpoint and the output suffix together",
     )
     parser.add_argument(
         "--checkpoint", type=str, default=None,
         help="Overrides the checkpoint --variant resolves",
     )
     _add_cards_folder(parser)
-    parser.add_argument("--variant-scripts", type=str, default=None)
-    parser.add_argument(
-        "--vocab-path", type=str, default=None,
-        help="Defaults to the path the checkpoint recorded from training",
-    )
-    parser.add_argument(
-        "--keyword-definitions", type=str, default=None,
-        help="Defaults to the path the checkpoint recorded from training",
-    )
+    _add_variant_scripts(parser)
+    _add_recorded_tokenizer_paths(parser)
     parser.add_argument("--output-root", type=str, default=DEFAULT_ABILITIES_ROOT)
     parser.add_argument(
         "--clean", action="store_true",
@@ -1584,15 +1629,8 @@ def _evaluate_effect_model_parser(subparsers) -> None:
     )
     parser.add_argument("--records-dir", type=str, default=DEFAULT_RECORDS_DIR)
     _add_cards_folder(parser)
-    parser.add_argument("--variant-scripts", type=str, default=None)
-    parser.add_argument(
-        "--vocab-path", type=str, default=None,
-        help="Defaults to the path --checkpoint recorded",
-    )
-    parser.add_argument(
-        "--keyword-definitions", type=str, default=None,
-        help="Defaults to the path --checkpoint recorded",
-    )
+    _add_variant_scripts(parser)
+    _add_recorded_tokenizer_paths(parser)
     parser.add_argument(
         "--corpus", type=str, default=None,
         help=(
