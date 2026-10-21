@@ -231,6 +231,7 @@ The gen-3 draft, [`2026-XX-XX-effect-model-gen3-design.md`](2026-XX-XX-effect-mo
 - **Checkpoints judged by probes and rule scenarios**, from the disagreement between the loss and the probes, with each field's loss divided by its constant prediction's.
 - **The first-strike step collected whole, the combat snapshot taken before damage, and the block pairing in the input**, from the combat results.
 - **Every line of a permanent on the board**, from the board-abilities results in the probes record.
+- **Block legality recorded before anyone declares, and outcome notes that name only what they happened to**, from [the collector defects](#five-collector-defects-shaped-gen-2s-labels-and-gen-3-collects-without-them) found after the runs.
 
 ## Design: what gen-2 changes from gen-1, and why
 
@@ -1200,13 +1201,16 @@ anchor attacker is attacking. The counts are over both validation strata, 6,848 
 | total | 7,343 | 128,022 |
 | real decisions | 4,813 (65.5%) | 5,895 (4.6%) |
 
-The legality answer in a what-if record is still a rules fact about the board in its snapshot. The
-query that produced it is hypothetical, but the verdict of which creatures may attack or block is
-not. No `attackers` record in either stratum lists a tapped or summoning-sick creature as a legal
-attacker, and no `blockers` record lists a tapped creature as a legal blocker. The legality head
-therefore learns nothing false from them. What it learns from is a class dominated by planning
-queries about combats Forge was only considering, and a record gives no way to tell the two kinds
-apart.
+The legal list in a legality record is a rules fact about the board in its snapshot, and the
+forbidden list of a `blockers` record is not. No `attackers` record in either stratum lists a tapped
+or summoning-sick creature as a legal attacker, and no `blockers` record lists a tapped creature as
+a legal blocker. The hook sits inside Forge's AI blocking code, which asks whether a creature may
+block against the block plan it is still building. A creature the AI has already planned to block
+one attacker with therefore reads as forbidden for every attacker it considers next, with no rule
+responsible. The legality head learns from a class dominated by planning queries about combats
+Forge was only considering, a record gives no way to tell the two kinds apart, and in a `blockers`
+record the forbidden side carries the plan as well
+([the gen-2 corpus measures it](#most-block-legality-labels-that-say-a-creature-may-not-block-describe-the-ais-unfinished-block-plan)).
 
 Two further collector rules shrink the real decisions the corpus holds.
 
@@ -1568,6 +1572,43 @@ A power cut stopped the retrained arm at epoch 9. Training now rewrites a resume
 #### The combat grid has to read one damage step at a time (2026-10-19)
 
 The combat grid's first version granted first strike and double strike on regular-step boards and scored them against a rule spanning both steps. A record covers one step, and the model predicts that step alone, so the grid now sets the step marker to match the keyword and reads each step against its own rule. Only regular-step records qualify as the grid's base, which left the same 40 blocks qualifying. The grid also clears the damage a combat snapshot already shows, which the combat results describe.
+
+### Five collector defects shaped gen-2's labels, and gen-3 collects without them
+
+A review of the Forge hooks after the gen-2 runs found five places where the corpus records something other than what happened in the game. Each one reaches a field the model trains on, and the first reaches two probes. The gen-2 corpus is not collected again. Gen-3 collects from scratch with all five fixed ([gen-3 design](2026-XX-XX-effect-model-gen3-design.md#the-forge-hooks-recorded-the-ais-block-plan-as-block-legality-and-four-outcomes-reached-the-wrong-entities)).
+
+#### Most block-legality labels that say a creature may not block describe the AI's unfinished block plan
+
+More than half of the gen-2 corpus's "may not block" labels name a creature the AI had already planned to block with. The `blockers` hook fires inside Forge's AI blocking code, once for every attacker the AI considers while it assigns blocks. Forge tests whether a creature may block against the combat the AI is filling in, and that combat already holds the blocks the AI has planned so far. A creature planned to block one attacker therefore reads as forbidden for every attacker considered after it, and an attacker's own planned blockers read as forbidden when the AI reinforces that block. The collector counts each of these queries as a real decision, because it is asked during the declare-blockers step about an attacking creature. Most attackers therefore anchor more than one real record in a turn, each on a board showing a different stage of the plan. The AI drops creatures that may not block at all, such as tapped ones, before it assigns blocks, so true refusals are a small part of the forbidden list. The `attackers` records are not affected: none was taken after attackers were declared.
+
+| game-disjoint stratum, real decisions | count |
+|---|---:|
+| `blockers` records | 80,306 |
+| … whose snapshot shows blocks the AI had already planned | 47,053 |
+| forbidden blockers listed | 147,584 |
+| … naming no restricting static | 98,946 |
+| … naming a creature the snapshot shows blocking | 83,141 |
+| … naming a tapped creature | 10,952 |
+| attackers anchoring a record, per game and turn | 35,093 |
+| … anchoring more than one real record | 18,793 |
+
+The `blocker_legal` field therefore learns that a creature already assigned to a block may not block, which no rule says. Two probes read these labels. The evasion grid draws its base records from them, and its predictions sit low even where every block is legal. The probe ladder's `may_block` target is read from them directly. The menace case in the hook, a "can't block alone" creature dropped from a double block, is a smaller part of the same defect. Data: `legality_planned_blocks.csv`.
+
+#### A reveal from a library reaches no card and no player
+
+No reveal from a library sets the `reveal` bit of the `library_events` field in the gen-2 corpus. Forge reports a reveal at one engine choke point that knows no acting ability, and the note named no subject. The model's targets fold an event only into the entities it names, so the event reached no target. Clash reveals its cards through a path of its own, and its note named the clash spell's own card rather than a player. The `reveal` bit is therefore trained on clash spells alone, and on the wrong kind of entity. The embedding probes count `card_revealed` events by presence, which this does not change. Their counts of which side an event happened to will differ between gen-2 and gen-3, because gen-3's reveals name a player.
+
+#### Created tokens carry no keywords, and an effect making several kinds of token records them as the first kind
+
+Every keyword flag of the created-objects field is 0 in the gen-2 corpus, so a 1/1 flying Spirit is taught as having no keywords. A token's note described the token by power, toughness and types, and gave no keywords. The note also let the first token stand for the whole batch. Bestial Menace, which makes a Snake, a Wolf and an Elephant, is recorded as three Snakes, and a token copy of several different creatures as copies of the first one. Their counts, power, toughness and types in the created-objects field are wrong. The note's token id was the token's printed name where the board snapshot uses its script name. This changes only the order of a record's created-object slots.
+
+#### Prevented damage names nobody it was prevented for
+
+The affected gate never learns that a prevention shield touches what it protects. A prevention shield's note named the damage's source and not the creature or player it protected, so the protected entity is never marked affected by the prevention.
+
+#### An ability's own card is marked affected by the coins, tokens and copies it produces
+
+The affected gate learns that an ability changes its own card whenever it makes something. When a note named no subject, the collector named the acting ability's card instead. Token creation, made cards, copies, coin flips, clashes, votes, ventures and spell copies all name no subject. Each one therefore marks the card whose ability acted as affected, with no change recorded on it. For a creature whose triggered or activated ability makes tokens, this marking is the only reason the record shows the creature affected.
 
 ## Data and charts
 

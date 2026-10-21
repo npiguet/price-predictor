@@ -78,6 +78,8 @@ The share is (rung 1 − rung 0) / (rung 3 − rung 0): the fraction of the dist
 
 The groups are robust: the lowest share among the first two questions is about twice the highest among the last four, across all twelve checkpoints. The 256-wide arm sorts its questions the same way as the narrower ones, so four times the width of `e` does not move deaths or trigger firing into the vector. The game-disjoint records sort the questions about the same way. A protected target's legality drops to no share there, because `e` adds nothing over the board on those records.
 
+**The board decides blocking partly because gen-2's block labels come from the AI's block plan.** More than half of the corpus's "may not block" labels name a creature the AI had already planned to block another attacker with, and the snapshot shows that planned block on the board ([the gen-2 record](2026-09-18-effect-model-gen2-improvements-design.md#most-block-legality-labels-that-say-a-creature-may-not-block-describe-the-ais-unfinished-block-plan)). A probe on the board alone can read the planned block and predict the label without knowing any rule. The `may_block` rung of the ladder therefore measures partly how well a vector shows the plan. Gen-3 records block legality before anyone declares, from the rules alone.
+
 Gen-1 and gen-2 were probed on different corpora, so they compare by direction only. Gen-1's `e` carried affordability as gen-2's does, and gen-1 could not be asked about deaths at all, because its corpus never recorded a death caused by a resolution.
 
 ### Gen-2's `e` holds a line's costs and timing almost perfectly and most of its amounts
@@ -138,6 +140,8 @@ Every gen-2 checkpoint lowers the predicted chance of a block when the attacker 
 *Each cell averages the predicted chance of a legal block over the same 40 records; red outlines mark the cells the rule allows. Data: `evasion_grid.csv`.*
 
 The absolute level of the prediction is not a probability to read at face value. Even with no keyword and no trait, where every block is legal, arm `e64-lethality` predicts about one in ten and run B64's last epoch about one in three. The `blocker_legal` output ranks blockers better than it calibrates them, so the comparisons below are within each checkpoint: how much a blocker trait lifts the prediction against an attacker with the keyword, against how much it lifts it against an attacker without one.
+
+**The low level fits labels that mark many legal blocks as forbidden.** More than half of the gen-2 corpus's "may not block" labels name a creature the AI had already planned to block another attacker with, not a creature any rule kept out ([the gen-2 record](2026-09-18-effect-model-gen2-improvements-design.md#most-block-legality-labels-that-say-a-creature-may-not-block-describe-the-ais-unfinished-block-plan)). A model trained on them learns to doubt a block a rule allows. The grid's rankings within a row compare edits of one record and are less exposed to this than its absolute level.
 
 | attacker keyword, blocker trait | the trait's lift against that keyword | its lift against no keyword | checkpoints where the first is larger | the rule |
 |---|---:|---:|---:|---|

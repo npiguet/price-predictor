@@ -77,6 +77,22 @@ correctly. The source can be recovered from the payload's `assignment_choices`. 
 is missing, several attackers' identical hits produce byte-identical events, which inflates the
 validator's "repeats an event" check. Gen-1 and gen-2 shards both carry the gap.
 
+## The Forge hooks recorded the AI's block plan as block legality, and four outcomes reached the wrong entities
+
+Gen-3's hooks fix all five defects the gen-2 record describes ([gen-2 record](2026-09-18-effect-model-gen2-improvements-design.md#five-collector-defects-shaped-gen-2s-labels-and-gen-3-collects-without-them)). The fixes are commits on the `effect-record-hooks` branch of `../forge` and in the connector. They change what a record says, so they are in place before gen-3's first collection.
+
+**Block and attack legality are asked by Forge's declare steps, before anyone declares.** The hook lists every creature the player controls as a candidate, and the combat holds no blocks yet when it is asked. A creature planned for one block can no longer read as forbidden for another. A tapped or "can't block" creature is always listed as forbidden. The answer is the same whatever controls the seat, so the random seat no longer writes legality records of its own, and the AI's internal legality queries are no longer hooked. Every legality record is therefore a real declaration, one per defender or attacker per combat. `--legality-rate`, which sampled the AI's what-if queries, now has nothing to sample; removing the flag is left to the gen-3 collection work.
+
+**A reveal from a library during a resolution names the players whose libraries it came from.** A scry already names the player who scried in the same way. A reveal from a hand, a graveyard or any other zone names nobody. So does a reveal made while paying a cost, which happens before the spell it pays for resolves. A clash names both clashing players.
+
+**Each kind of object an effect makes gets its own note, and a token's note carries its keywords.** Bestial Menace now records a Snake, a Wolf and an Elephant. The collector writes a token's script id and keywords with the code that writes every token on the board, so the created-objects field's keyword flags have something to learn from.
+
+**Prevented damage names the creature or player it would have been dealt to.**
+
+**A note that names no subject marks nothing affected.** Coin flips, token creation, copies, votes and ventures no longer mark the acting card as affected.
+
+**Two bits of the `library_events` field are still never set.** The target mapping writes the `scry` bit for both scry and surveil, and nothing writes the `surveil` or `tutor` bit. The mapping is in `src/effects/domain/effect_targets.py` and is left to the gen-3 target work.
+
 ## Some records cannot be joined to the text of the ability that acted
 
 **A charm cast through Flashback is keyed to no line.** The collector keys the chosen mode as the

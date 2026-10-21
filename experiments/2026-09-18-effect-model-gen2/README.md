@@ -49,7 +49,7 @@ A **run** is one training run: an arm (`e64`, `e128`, `e64-lethality`, ...) or a
 | `zone_moves.csv`, `zone_outcomes.csv` | checkpoint and starting zone, or starting zone and outcome: cards, moved cards, AUC; mean probability of the right outcome, share whose top destination is right, the outcome most often predicted instead | `zone-effects.txt` |
 | `zone_amounts.csv` | checkpoint and API: predicted count at the affected player for `NumCards$` 1 to 6 | `zone-effects.txt` |
 | `zone_who.csv` | checkpoint and API: predicted count at the targeted and the other player, before and after the target is handed over | `zone-effects.txt` |
-| `noise_pilot.csv`, `pilot_collections.csv`, `first_strike_repair.csv`, `lethal_hits_in_corpus.csv`, `gen1_vs_e64_field_terms.csv` | the smaller tables of the gen-2 record's details | transcribed |
+| `noise_pilot.csv`, `pilot_collections.csv`, `first_strike_repair.csv`, `lethal_hits_in_corpus.csv`, `gen1_vs_e64_field_terms.csv`, `legality_planned_blocks.csv` | the smaller tables of the gen-2 record's details | transcribed |
 
 Rung names in `probe_ladder.csv` follow the probes record: `0` the board alone, `1` the board plus `e`, `1w` a random vector of the same width, `1o` the true script values, `2` the trunk's output, `3` the model's own prediction (probe `model`).
 

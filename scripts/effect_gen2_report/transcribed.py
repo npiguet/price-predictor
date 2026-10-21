@@ -79,6 +79,19 @@ TABLES = {
          ["card-disjoint stratum", 3626459, 2490, 141],
          ["game-disjoint stratum", 1163084, 1855, 216],
          ["validation samples", 4096, 42, 0]]),
+    # scratch scan of corpus-gen2/validation/game-disjoint, real (what_if false) records, 2026-10-21
+    "legality_planned_blocks.csv": (
+        ["game-disjoint stratum, real decisions", "count"],
+        [["blockers records", 80306],
+         ["  whose snapshot shows blocks the AI had already planned", 47053],
+         ["forbidden blockers listed", 147584],
+         ["  naming no restricting static", 98946],
+         ["  naming a creature the snapshot shows blocking", 83141],
+         ["  naming a tapped creature", 10952],
+         ["attackers anchoring a record, per game and turn", 35093],
+         ["  anchoring more than one real record", 18793],
+         ["attackers records", 51233],
+         ["  taken after attackers were declared", 0]]),
     "lethal_hits_in_corpus.csv": (
         ["damage, 40 training shards", "lethal", "not lethal"],
         [["a spell or ability's damage to a targeted creature", 170, 36],
