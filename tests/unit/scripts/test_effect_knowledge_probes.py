@@ -1133,6 +1133,18 @@ class TestCombatGrid:
         assert np.array_equal(rule, np.array([[float(2 * p >= t) for t in range(1, 9)]
                                               for p in range(1, 9)]))
 
+    def test_the_assignment_follows_the_edited_board(self, records):
+        record, attacker, blocker = _one_on_one(records)
+        rows, _ = combat_grid.grid_records(record, attacker, blocker, "blocker", "none")
+        choices = rows[4][1].payload.assignment_choices
+        assert choices[attacker] == {blocker: 5}
+        assert choices[blocker] == {attacker: rows[4][1].state.entity(blocker).pt.total[0]}
+        rows, _ = combat_grid.grid_records(
+            record, attacker, blocker, "blocker", "attacker-first-strike")
+        choices = rows[2][0].payload.assignment_choices
+        assert choices[attacker] == {blocker: 3}
+        assert blocker not in choices, "the blocker deals nothing in the first-strike step"
+
     def test_a_first_strike_step_record_never_qualifies(self, records, monkeypatch):
         import effects.domain.effect_targets as effect_targets
         from effects.domain.effect_model import ZONE_OUTCOMES

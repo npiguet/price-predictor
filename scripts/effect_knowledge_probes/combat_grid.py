@@ -29,7 +29,8 @@ damaged first already shows that damage as marked. A creature may therefore show
 damage equal to the other creature's power, which is this step's own damage; any other
 marked damage disqualifies the record. Every edited record clears both creatures' marked
 damage, so the grid asks about the board before the damage step, the double striker's
-first hit apart.
+first hit apart. It also sets both creatures' damage assignment to what the edited board
+assigns, because the input carries each creature's assignment beside its power.
 
 ``--source validation`` (the default) reads the card-disjoint and game-disjoint strata,
 ``--source training`` the training shards.
@@ -76,6 +77,17 @@ VARIANTS: dict[str, tuple[str | None, str | None, str, bool]] = {
 # ── the rule ────────────────────────────────────────────────────────────
 
 
+def strikes_in_step(keywords, step: str) -> bool:
+    """Whether a creature with ``keywords`` deals its combat damage in ``step``.
+
+    Rules 510, 702.7 and 702.4: a first or double striker in the first-strike step,
+    a creature without first strike or with double strike in the regular step.
+    """
+    if step == "first_strike":
+        return bool(keywords & {"first_strike", "double_strike"})
+    return "first_strike" not in keywords or "double_strike" in keywords
+
+
 def step_deaths(
     attacker: tuple[int, int, int], blocker: tuple[int, int, int],
     attacker_keywords=frozenset(), blocker_keywords=frozenset(), step: str = "regular",
@@ -96,13 +108,7 @@ def step_deaths(
     deathtouched = {"a": False, "b": False}
     other = {"a": "b", "b": "a"}
 
-    def strikes(side: str) -> bool:
-        k = keywords[side]
-        if step == "first_strike":
-            return bool(k & {"first_strike", "double_strike"})
-        return "first_strike" not in k or "double_strike" in k
-
-    for side in [s for s in ("a", "b") if strikes(s) and power[s] > 0]:
+    for side in [s for s in ("a", "b") if strikes_in_step(keywords[s], step) and power[s] > 0]:
         marked[other[side]] += power[side]
         if "deathtouch" in keywords[side]:
             deathtouched[other[side]] = True
@@ -162,6 +168,26 @@ def set_step(record, step: str):
 def set_damage(record, entity_id: str, damage: int):
     """``record`` with one entity's marked damage set."""
     return _edit_entity(record, entity_id, lambda entity: replace(entity, damage=damage))
+
+
+def assign_step_damage(record, attacker: str, blocker: str):
+    """``record`` with both combatants' damage assignment matching their edited board.
+
+    A combat record's input carries each creature's assignment, the targets it assigns
+    to and the damage it assigns, so an edit to a creature's power or to the step has to
+    move its assignment with it, or the board and the assignment disagree. In a
+    one-on-one block a creature that strikes in this step assigns all its power to the
+    other; one that does not strike, or has no power, assigns nothing.
+    """
+    step = record.state.global_.combat_substep
+    choices = {source: dict(targets)
+               for source, targets in record.payload.assignment_choices.items()
+               if source not in (attacker, blocker)}
+    for source, target in ((attacker, blocker), (blocker, attacker)):
+        (power, _, _), keywords = side_of(record, source)
+        if power > 0 and strikes_in_step(keywords, step):
+            choices[source] = {target: power}
+    return replace(record, payload=replace(record.payload, assignment_choices=choices))
 
 
 def side_of(record, entity_id: str):
@@ -272,6 +298,7 @@ def grid_records(record, attacker: str, blocker: str, which: str, variant: str):
             edited = sweeps.set_toughness(set_power(record, striker, power), struck, toughness)
             if carried:
                 edited = set_damage(edited, blocker, side_of(edited, attacker)[0][0])
+            edited = assign_step_damage(edited, attacker, blocker)
             row.append(edited)
             a, a_kw = side_of(edited, attacker)
             b, b_kw = side_of(edited, blocker)
