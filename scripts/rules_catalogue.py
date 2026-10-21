@@ -29,6 +29,21 @@ OBSERVABILITY = {"direct", "indirect", "needs_new_fields", "none"}
 RECORD_KINDS = {"resolution", "rewrite", "continuous", "combat", "trigger", "playability"}
 SCENARIO_CATEGORIES = {"mechanical", "legality"}
 POLARITIES = {"fires", "does_not_fire", "other"}
+# Heads pass (rules/MODEL-FIELDS.md): what the model reads and is trained on per rule.
+OUTPUT_STATUS = {"trained", "recorded", "missing", "planned"}
+INPUT_STATUS = {"complete", "incomplete"}
+HEAD_OUTPUTS = {
+    "gate", "zone_outcome", "tap_state", "damage_taken", "power_delta", "toughness_delta",
+    "pt_duration", "types_gained", "types_lost", "colors_gained", "colors_lost",
+    "type_color_duration", "keywords_gained", "keywords_lost", "control_change",
+    "attached_to_change", "life_delta", "cards_drawn", "cards_discarded", "cards_milled",
+    "library_events", "poison_delta", "target_legal", "attacker_legal", "blocker_legal",
+    "min_blockers", "can_play", "affordable", "has_legal_target", "mana_paid", "trigger_fired",
+    "created_objects",
+}
+HEAD_OUTPUT_PREFIXES = ("counters_delta_", "mana_delta_")
+OUTPUT_TAGS = ("record:", "new:", "planned:")
+INPUT_TAGS = ("snapshot:", "new:", "planned:")
 
 RULE_RE = re.compile(r"^(\d{3})\.(\d+)([a-z]*)\.? (.*)$")
 SECTION_RE = re.compile(r"^(\d{3})\. (.*)$")
@@ -241,6 +256,46 @@ def load_scenarios(unit):
     return json.loads(p.read_text(encoding="utf-8")) if p.exists() else None
 
 
+def load_heads(unit):
+    p = RULES / "heads" / f"{unit}.jsonl"
+    return read_jsonl(p) if p.exists() else None
+
+
+def wanted_rules(triage):
+    """The rules that need a scenario, and so a heads line too."""
+    return {r["id"] for r in triage if r["category"] in SCENARIO_CATEGORIES and r["observability"] != "none"}
+
+
+def validate_heads(unit, rows, triage):
+    errs = []
+    seen = [r.get("id") for r in rows]
+    for rid in sorted(wanted_rules(triage) - set(seen), key=rule_sort_key):
+        errs.append(f"{rid}: no heads line")
+    for rid in sorted(set(seen) - wanted_rules(triage)):
+        errs.append(f"{rid}: heads line for a rule that needs none")
+    for r in rows:
+        rid = r.get("id")
+        status, outputs = r.get("output"), r.get("outputs") or []
+        if status not in OUTPUT_STATUS:
+            errs.append(f"{rid}: output {status!r}")
+        if not outputs:
+            errs.append(f"{rid}: no outputs named")
+        for o in outputs:
+            if not (o in HEAD_OUTPUTS or o.startswith(HEAD_OUTPUT_PREFIXES + OUTPUT_TAGS)):
+                errs.append(f"{rid}: unknown output {o!r}")
+        if status == "trained" and not any(o in HEAD_OUTPUTS or o.startswith(HEAD_OUTPUT_PREFIXES) for o in outputs):
+            errs.append(f"{rid}: trained but names no existing output")
+        if r.get("input") not in INPUT_STATUS:
+            errs.append(f"{rid}: input {r.get('input')!r}")
+        missing = r.get("inputs_missing") or []
+        if (r.get("input") == "incomplete") != bool(missing):
+            errs.append(f"{rid}: input {r.get('input')!r} disagrees with inputs_missing")
+        for i in missing:
+            if not i.startswith(INPUT_TAGS):
+                errs.append(f"{rid}: untagged missing input {i!r}")
+    return errs
+
+
 def validate_triage(unit, rows, rule_ids):
     errs = []
     seen = [r.get("id") for r in rows]
@@ -315,6 +370,12 @@ def cmd_validate(args):
             e2, w2 = validate_scenarios(unit, doc, tri, all_ids, names if names is not None else _AnyName())
             errs += e2
             warns += w2
+        if args.heads and tri is not None and wanted_rules(tri):
+            try:
+                heads = load_heads(unit)
+            except ValueError as e:
+                heads, errs = None, errs + [str(e)]
+            errs += ["no heads file"] if heads is None else validate_heads(unit, heads, tri)
         for e in errs:
             print(f"ERROR {unit}: {e}")
         if args.warnings:
@@ -382,6 +443,7 @@ def main():
     p.add_argument("units", nargs="*")
     p.add_argument("--no-cards", action="store_true")
     p.add_argument("--warnings", action="store_true")
+    p.add_argument("--heads", action="store_true", help="also check rules/heads/")
     sub.add_parser("status")
     sub.add_parser("premark")
     args = ap.parse_args()

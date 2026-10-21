@@ -262,6 +262,36 @@ evaluation. Collection targeted at a rule would feed training separately.
 record the rules it exercises, which is the same index that sampling by field needs. The two items
 would share the decision between pools, an index and a database.
 
+### A rule is learnable only when the model reads what decides it and an output is trained on its outcome
+
+**A record that shows a rule does not make the model learn it.** Two more things have to hold. The
+model's input has to carry every fact that decides the outcome. One of its outputs has to be
+trained on the outcome. Gen-2 misses one or the other in places the rules care about.
+
+**Some outcomes are recorded and never predicted.** A spell's resolution outcome (resolved,
+fizzled, partially fizzled) is written on the record's cost half. The model receives it as an
+input on the acting ability's slot, and a fizzled spell writes no effect half at all. The model is
+therefore told that Red Elemental Blast fizzled and never asked to predict it. Several event types
+reach no output either: damage prevented, a regeneration, a player losing the game, an extra turn,
+day becoming night. Each still marks the entity as affected, so the model learns that something
+happened to it, not what.
+
+**Some deciding facts are recorded and never read.** The input leaves out subtypes, so "Goblins
+you control get +1/+1" cannot tell a Goblin from an Elf except through the ability text. It
+leaves out the static, triggered and replacement lines of every permanent, as the snapshot section
+below describes. It reads that a permanent is attached to something but not to what, and that a
+creature blocks but not which attacker.
+
+**State that gen-2 does not record needs an input slot and an output as well as a record field.**
+Recording the monarch, day and night or a dungeon's room lets a detector count the rules that use
+them. The model also needs a slot to read each one, and an output to predict when it changes.
+
+**Gen-3 maps every rule to its input and output before changing either.** For each mechanical and
+legality rule the map says whether an existing output is trained on the outcome, whether a record
+carries the outcome with no output trained on it, or whether nothing carries it. It also lists the
+deciding facts the model does not read. The new outputs and input slots then follow from how many
+rules each would serve, and they change together with the record schema.
+
 ### The snapshot should list every line of a permanent, not only its spell and activated abilities
 
 **The model never reads a permanent's statics, triggers or replacements.** `SnapshotBuilder.printedKeys` fills a permanent's card-slot lines from Forge's `getSpellAbilities()`, which holds the cast spell and the activated abilities. Attachment-granted lines come from the same call on each attachment. About a quarter of the permanents on the battlefield carry a line this leaves out, and the knowledge-probes record gives the counts. Keyword lines are unaffected, because the keyword flags carry them.
