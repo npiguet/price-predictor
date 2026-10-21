@@ -184,6 +184,35 @@ def f1_score(predicted: np.ndarray, observed: np.ndarray) -> float:
     return 2 * precision * recall / (precision + recall)
 
 
+def _margin(
+    label: str, value: float, breached: bool, comparison: str,
+) -> str | None:
+    """One margin's failure, or None where it holds.
+
+    A margin that could not be measured fails rather than passes: NaN compares
+    False against every threshold, so without this an empty stratum or an
+    all-zero embedding read as a gate that held.
+    """
+    if math.isnan(value):
+        return f"{label} not measured"
+    return f"{label} {comparison}" if breached else None
+
+
+def _breaches(*margins: str | None) -> list[str]:
+    return [margin for margin in margins if margin is not None]
+
+
+def _relative_reduction(baseline: float, value: float) -> float:
+    """How far ``value`` falls below ``baseline``, as a share of it.
+
+    An unmeasured baseline leaves the reduction unmeasured; a zero one leaves
+    nothing to reduce.
+    """
+    if math.isnan(baseline):
+        return baseline
+    return (baseline - value) / baseline if baseline > 0 else 0.0
+
+
 def evaluate_gate_one(
     model: GateOneMetrics, identity: GateOneMetrics,
 ) -> CheckResult:
@@ -197,32 +226,31 @@ def evaluate_gate_one(
     """
     gate_gain = model.affected_gate_f1 - identity.affected_gate_f1
     zone_gain = model.zone_outcome_accuracy - identity.zone_outcome_accuracy
-    deviance_reduction = (
-        (identity.mean_poisson_deviance - model.mean_poisson_deviance)
-        / identity.mean_poisson_deviance
-        if identity.mean_poisson_deviance > 0
-        else 0.0
+    deviance_reduction = _relative_reduction(
+        identity.mean_poisson_deviance, model.mean_poisson_deviance,
     )
     values = {
         "affected_gate_f1_gain": gate_gain,
         "zone_outcome_accuracy_gain": zone_gain,
         "poisson_deviance_reduction": deviance_reduction,
     }
-    failures = []
-    if gate_gain < GATE1_MIN_GATE_F1_GAIN:
-        failures.append(
-            f"affected-gate F1 gain {gate_gain:+.3f} < {GATE1_MIN_GATE_F1_GAIN}"
-        )
-    if zone_gain < GATE1_MIN_ZONE_ACCURACY_GAIN:
-        failures.append(
-            f"zone-outcome accuracy gain {zone_gain:+.3f} < "
-            f"{GATE1_MIN_ZONE_ACCURACY_GAIN}"
-        )
-    if deviance_reduction < GATE1_MIN_DEVIANCE_REDUCTION:
-        failures.append(
-            f"Poisson deviance reduction {deviance_reduction:+.1%} < "
-            f"{GATE1_MIN_DEVIANCE_REDUCTION:.0%}"
-        )
+    failures = _breaches(
+        _margin(
+            "affected-gate F1 gain", gate_gain,
+            gate_gain < GATE1_MIN_GATE_F1_GAIN,
+            f"{gate_gain:+.3f} < {GATE1_MIN_GATE_F1_GAIN}",
+        ),
+        _margin(
+            "zone-outcome accuracy gain", zone_gain,
+            zone_gain < GATE1_MIN_ZONE_ACCURACY_GAIN,
+            f"{zone_gain:+.3f} < {GATE1_MIN_ZONE_ACCURACY_GAIN}",
+        ),
+        _margin(
+            "Poisson deviance reduction", deviance_reduction,
+            deviance_reduction < GATE1_MIN_DEVIANCE_REDUCTION,
+            f"{deviance_reduction:+.1%} < {GATE1_MIN_DEVIANCE_REDUCTION:.0%}",
+        ),
+    )
     if failures:
         return CheckResult(
             "gate-1", CheckStatus.FAIL,
@@ -365,7 +393,8 @@ def top_component_share(vectors: np.ndarray) -> float:
     singular = np.linalg.svd(centred, compute_uv=False)
     variance = singular ** 2
     total = float(variance.sum())
-    return float(variance[0] / total) if total > 0 else float("nan")
+    # No variance at all is every vector on one point: the whole collapse.
+    return float(variance[0] / total) if total > 0 else 1.0
 
 
 def evaluate_gate_three(vectors: np.ndarray, *, seed: int = 42) -> CheckResult:
@@ -378,16 +407,16 @@ def evaluate_gate_three(vectors: np.ndarray, *, seed: int = 42) -> CheckResult:
     cosine = mean_pairwise_cosine(vectors, seed=seed)
     top = top_component_share(vectors)
     values = {"mean_pairwise_cosine": cosine, "top_component_share": top}
-    failures = []
-    if not math.isnan(cosine) and cosine > GATE3_MAX_MEAN_COSINE:
-        failures.append(
-            f"mean pairwise cosine {cosine:.3f} > {GATE3_MAX_MEAN_COSINE}"
-        )
-    if not math.isnan(top) and top > GATE3_MAX_TOP_COMPONENT:
-        failures.append(
-            f"top principal component explains {top:.1%} > "
-            f"{GATE3_MAX_TOP_COMPONENT:.0%}"
-        )
+    failures = _breaches(
+        _margin(
+            "mean pairwise cosine", cosine, cosine > GATE3_MAX_MEAN_COSINE,
+            f"{cosine:.3f} > {GATE3_MAX_MEAN_COSINE}",
+        ),
+        _margin(
+            "top principal component", top, top > GATE3_MAX_TOP_COMPONENT,
+            f"explains {top:.1%} > {GATE3_MAX_TOP_COMPONENT:.0%}",
+        ),
+    )
     if failures:
         return CheckResult(
             "gate-3", CheckStatus.FAIL,

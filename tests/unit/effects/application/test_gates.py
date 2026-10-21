@@ -111,6 +111,19 @@ class TestGateOne:
         model = GateOneMetrics(0.70, 0.60, 0.094)  # 6% relative
         assert evaluate_gate_one(model, identity).status is CheckStatus.PASS
 
+    def test_a_margin_that_could_not_be_measured_fails(self):
+        """No zone target on the stratum makes the accuracy NaN; a NaN margin
+        compared against its floor is False, which used to read as a pass."""
+        model = GateOneMetrics(0.70, float("nan"), 0.90)
+        result = evaluate_gate_one(model, self._identity())
+        assert result.status is CheckStatus.FAIL
+        assert "zone-outcome accuracy" in result.detail
+        assert "not measured" in result.detail
+
+    def test_an_unmeasured_model_deviance_fails(self):
+        model = GateOneMetrics(0.70, 0.60, float("nan"))
+        assert evaluate_gate_one(model, self._identity()).status is CheckStatus.FAIL
+
 
 class TestGateOneMetrics:
     def test_f1_is_one_for_a_perfect_gate(self):
@@ -297,6 +310,18 @@ class TestGateThree:
     def test_it_blocks_shipping(self):
         vectors = np.ones((100, 8))
         assert evaluate_gate_three(vectors).blocks
+
+    def test_an_all_zero_space_fails(self):
+        """The effect head once trained on an all-zero e: no variance at all is
+        the most collapsed a space can be, not an unmeasurable one."""
+        result = evaluate_gate_three(np.zeros((100, 64)))
+        assert result.status is CheckStatus.FAIL
+        assert "principal component" in result.detail
+
+    def test_too_few_vectors_to_measure_fails(self):
+        result = evaluate_gate_three(np.ones((1, 8)))
+        assert result.status is CheckStatus.FAIL
+        assert "not measured" in result.detail
 
     def test_mean_cosine_is_one_for_identical_vectors(self):
         vectors = np.tile(np.arange(1.0, 9.0), (50, 1))
