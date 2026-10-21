@@ -9,10 +9,10 @@ gates against it would score them partly on games the model trained on.
 
 from __future__ import annotations
 
-import hashlib
-import json
 from dataclasses import asdict, dataclass, field
 from typing import Any
+
+from effects.domain.canonical_digest import canonical_digest
 
 
 @dataclass(frozen=True, slots=True)
@@ -327,8 +327,7 @@ class CorpusManifest:
         for field_name in self._OUTSIDE_THE_DIGEST:
             payload.pop(field_name, None)
         payload["sources"] = sorted(payload["sources"], key=lambda s: s["name"])
-        canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"))
-        return hashlib.blake2b(canonical.encode("utf-8"), digest_size=16).hexdigest()
+        return canonical_digest(payload).hex()
 
     def drift(
         self, current: tuple[SourceShard, ...],

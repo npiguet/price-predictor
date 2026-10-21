@@ -55,6 +55,11 @@ def test_digest_is_stable_across_instances():
     assert manifest().digest() == manifest().digest()
 
 
+def test_digest_is_the_value_checkpoints_already_pinned():
+    """The hash rule is fixed: a checkpoint records this exact string (FR-147)."""
+    assert manifest().digest() == "49b74d299099eb1da3ac0000e5a278eb"
+
+
 def test_digest_changes_when_a_recorded_decision_changes():
     assert manifest().digest() != manifest(text_cap=100).digest()
 
@@ -197,6 +202,7 @@ def test_a_real_gen1_manifest_keeps_its_digest():
     assert loaded.holdout_unit == "text"
     assert loaded.game_disjoint_target == 1000
     assert loaded.digest() == _canonical_digest(raw)
+    assert loaded.digest() == "6a383294af4ac5417044add00dd14492"
     assert set(loaded.as_dict()) == set(raw)
 
 
@@ -239,4 +245,5 @@ def test_the_gen2_fields_round_trip_and_move_the_digest():
     restored = CorpusManifest.from_dict(json.loads(json.dumps(gen2.as_dict())))
 
     assert restored == gen2
+    assert gen2.digest() == "24b7724862c3ad8fad0add0976dd10c1"
     assert gen2.digest() != manifest(game_disjoint_target=None).digest()

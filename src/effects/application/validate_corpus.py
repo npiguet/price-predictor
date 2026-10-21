@@ -32,13 +32,12 @@ held, which is why the window is minutes and why ``--limit`` exists.
 
 from __future__ import annotations
 
-import hashlib
-import json
 from collections import Counter, defaultdict
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 
+from effects.domain.canonical_digest import canonical_digest
 from effects.domain.event_schema import (
     CAUSE_BEARING_TYPES,
     Event,
@@ -359,13 +358,6 @@ def _kind_label(record: EffectRecord) -> str:
     )
 
 
-def _blake(data) -> bytes:
-    return hashlib.blake2b(
-        json.dumps(data, separators=(",", ":"), sort_keys=True).encode("utf-8"),
-        digest_size=16,
-    ).digest()
-
-
 def _digest(record: EffectRecord) -> bytes:
     """A record's content, identity stripped, as 16 bytes.
 
@@ -378,7 +370,7 @@ def _digest(record: EffectRecord) -> bytes:
     data = record_to_dict(record)
     for name in _IDENTITY_FIELDS:
         data.pop(name, None)
-    return _blake(data)
+    return canonical_digest(data)
 
 
 def _own_events(record: EffectRecord) -> tuple[Event, ...]:
@@ -731,7 +723,7 @@ class _Tally:
     def _add_events(self, record: EffectRecord) -> None:
         seen: set[bytes] = set()
         for event in _own_events(record):
-            digest = _blake(event.as_dict())
+            digest = canonical_digest(event.as_dict())
             self.events_seen += 1
             if digest in seen:
                 self.duplicate_events += 1
