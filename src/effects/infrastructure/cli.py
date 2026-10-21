@@ -1354,7 +1354,7 @@ def _add_model_shape(parser: argparse.ArgumentParser) -> None:
     )
     parser.add_argument("--mlm-weight", type=float, default=0.1)
     parser.add_argument("--mlm-mask-prob", type=float, default=0.15)
-    parser.add_argument("--api-weight", type=float, default=0.05)
+    parser.add_argument("--api-weight", type=float, default=0.003)
     parser.add_argument(
         "--curriculum-epoch", type=int, default=3,
         help="Epoch whose first step enables the sparse field group (default: 3)",

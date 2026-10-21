@@ -87,7 +87,7 @@ class TestTrainEffectModel:
         args = parse(*TRAIN)
         assert args.mlm_weight == 0.1
         assert args.mlm_mask_prob == 0.15
-        assert args.api_weight == 0.05
+        assert args.api_weight == 0.003
 
     def test_the_schedule_defaults_are_the_contracts(self):
         args = parse(*TRAIN)

@@ -292,7 +292,11 @@ class TrainEffectModelConfig:
     save_every_epoch: bool = False
     mlm_weight: float = 0.1
     mlm_mask_prob: float = 0.15
-    api_weight: float = 0.05
+    #: The script-API head's weight. Its term sums ~1,245 parameter-key BCEs per
+    #: text (one reduction per row, as every head's), which at initialization is
+    #: two orders of magnitude above the value term; this weight starts it on the
+    #: scale of the value and MLM terms rather than beside the per-entity loss.
+    api_weight: float = 0.003
     #: The epoch whose first step enables the sparse field group (FR-082).
     #: An epoch rather than a step so validation before and after the switch
     #: scores different field sets at an epoch boundary, never inside one: a

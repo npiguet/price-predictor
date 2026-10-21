@@ -211,7 +211,7 @@ class TestConfigDefaults:
         assert config.keyword_expand_p == 0.25
         assert config.context_dropout == 0.15
         assert (config.mlm_weight, config.mlm_mask_prob) == (0.1, 0.15)
-        assert config.api_weight == 0.05
+        assert config.api_weight == 0.003
         assert config.curriculum_step == 10_000
         assert config.curriculum_epoch == 3
         assert (config.batch_size, config.grad_accum) == (32, 1)
