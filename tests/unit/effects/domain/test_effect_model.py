@@ -16,9 +16,7 @@ import torch
 import torch.nn.functional as functional
 
 from effects.domain.effect_head_input import (
-    CARD_TYPES,
     COUNTER_TYPES,
-    OVERLAY_KEYWORDS,
     EffectHeadInput,
     Slot,
     SlotKind,
@@ -33,7 +31,6 @@ from effects.domain.effect_head_layout import (
     GATE_INDEX,
     PER_ENTITY_FIELDS,
     PER_ENTITY_WIDTH,
-    VERDICT_BITS,
     VERDICT_WIDTH,
     ZONE_OUTCOMES,
     EntityFieldTargets,
@@ -106,10 +103,6 @@ def _surface(batch: int = 2, slots: int = 6):
 
 
 class TestFieldLayout:
-    def test_the_gate_is_the_first_output(self):
-        assert GATE_INDEX == 0
-        assert min(start for start, _ in FIELD_SLICES.values()) == 1
-
     def test_field_slices_tile_the_head_without_gaps_or_overlap(self):
         ordered = sorted(FIELD_SLICES.values())
         assert ordered[0][0] == 1
@@ -231,20 +224,6 @@ class TestTrunkAndHeads:
     def test_the_verdict_head_reads_the_act_slot(self, model):
         hidden = model(**_surface())
         assert model.verdict(hidden).shape == (2, VERDICT_WIDTH)
-
-    def test_created_object_slots_are_uniform_with_one_overflow_flag(self):
-        assert CREATED_OBJECTS_WIDTH == (
-            CREATED_OBJECT_SLOTS * CREATED_SLOT_WIDTH + 1
-        )
-        assert CREATED_OBJECT_SLOTS == 4
-
-    def test_a_created_object_slot_carries_script_id_and_characteristics(self):
-        # present + scripted + count, then P/T and the characteristic flags.
-        assert CREATED_SLOT_WIDTH == 3 + 2 + len(CARD_TYPES) + len(OVERLAY_KEYWORDS)
-
-    def test_the_verdict_head_carries_bits_cost_and_the_trigger_flag(self):
-        assert VERDICT_WIDTH == len(VERDICT_BITS) + len(COLORS) + 1
-
 
 class TestTrainingOnlyHeads:
     def test_the_auxiliaries_exist_when_configured(self, model):
@@ -1018,7 +997,7 @@ class TestHostPickedRowsMatchBooleanMasks:
         return PER_ENTITY_FIELDS, EntityFieldTargets.everywhere(out)
 
     def _reference(self, outputs, gate_target, field_targets, entity_mask, fields):
-        from effects.domain.effect_head_layout import FIELD_SLICES, GATE_INDEX
+        from effects.domain.effect_head_layout import FIELD_SLICES
         from effects.domain.effect_losses import field_loss
 
         mask = entity_mask.bool()

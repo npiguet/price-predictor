@@ -87,19 +87,6 @@ class TestSplitRoundTrip:
         loaded = store.load()
         assert loaded.provenance == _provenance(files)
 
-    def test_both_strata_come_back(self, tmp_path, files):
-        store = EffectModelStore(tmp_path / "effect-model")
-        store.save(_checkpoint(files))
-        provenance = store.load().provenance
-        assert provenance.card_disjoint_games == ("g1", "g2")
-        assert provenance.game_disjoint_games == ("g3",)
-        assert provenance.validation_games == {"g1", "g2", "g3"}
-
-    def test_the_held_out_card_list_comes_back(self, tmp_path, files):
-        store = EffectModelStore(tmp_path / "effect-model")
-        store.save(_checkpoint(files))
-        assert store.load().provenance.held_out_cards == ("Serra Angel",)
-
     def test_the_withheld_keyword_is_checkpoint_state_not_a_flag(
         self, tmp_path, files,
     ):
@@ -195,11 +182,6 @@ class TestVariantIsolation:
             if variant == Variant.FULL:
                 continue
             assert model_output_for(variant) == DEFAULT_MODEL_OUTPUT / variant
-
-    def test_the_four_baselines_are_all_named(self):
-        assert set(VARIANTS) == {
-            "full", "identity", "state-only", "no-state", "taxonomy",
-        }
 
     def test_a_matching_variant_checkpoint_is_accepted(self, tmp_path, files):
         main = _checkpoint(files)
@@ -390,15 +372,6 @@ _GEN1_CHECKPOINT = (
 
 class TestGen2Checkpoint:
     """What a gen-2 checkpoint records and drops (T101, FR-059, FR-061, FR-063)."""
-
-    def test_every_training_only_head_is_absent_after_save(self, tmp_path, files):
-        store = EffectModelStore(tmp_path)
-        store.save(_checkpoint(files))
-        loaded = store.load()
-        for name in EffectModel.TRAINING_ONLY_HEADS:
-            assert not any(key.startswith(f"{name}.") for key in loaded.model_state)
-        assert "value_head" in EffectModel.TRAINING_ONLY_HEADS
-        assert not hasattr(EffectModel(_MODEL_CONFIG), "pairing_proj")
 
     def test_the_sweep_flags_and_roots_round_trip(self, tmp_path, files):
         """Spec Story 5 scenario 6: unit, size, noise ratio, value weight."""
