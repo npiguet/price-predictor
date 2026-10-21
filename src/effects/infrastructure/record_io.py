@@ -722,9 +722,13 @@ def append_record(out: IO[str], record: EffectRecord) -> None:
     The caller owns the handle (opened in append mode) so a long collection run
     keeps one open per worker across many games.
     """
-    out.write(format_record_line(record))
-    out.write("\n")
+    _write_line(out, record)
     out.flush()
+
+
+def _write_line(handle: IO[str], record: EffectRecord) -> None:
+    handle.write(format_record_line(record))
+    handle.write("\n")
 
 
 def shard_path(directory: Path, run_id: str, worker: int, lifetime: str) -> Path:
@@ -785,8 +789,7 @@ def write_shard(path: Path, records: Iterable[EffectRecord]) -> int:
     written = 0
     with gzip.open(path, "wt", encoding="utf-8") as handle:
         for record in records:
-            handle.write(format_record_line(record))
-            handle.write("\n")
+            _write_line(handle, record)
             written += 1
     return written
 
@@ -823,8 +826,7 @@ def repack_shards(
         for part in parts:
             with open_next() as handle:
                 for record in read_shard(part):
-                    handle.write(format_record_line(record))
-                    handle.write("\n")
+                    _write_line(handle, record)
         return written
 
     handle = open_next()
@@ -837,8 +839,7 @@ def repack_shards(
                     handle.close()
                     handle = open_next()
                     count = 0
-                handle.write(format_record_line(record))
-                handle.write("\n")
+                _write_line(handle, record)
                 count += 1
                 last_game = record.game_id
     finally:
@@ -905,13 +906,25 @@ def iter_shard_lines(path: Path) -> Iterator[str]:
         return
 
 
-def read_shard(path: Path) -> Iterator[EffectRecord]:
-    """Yield every complete record in one shard; skip a trailing partial line."""
+def iter_record_dicts(path: Path) -> Iterator[dict]:
+    """Every complete record of one shard, as the dict its line parses to.
+
+    The read every record reader shares, for a caller that has to see or edit
+    the raw JSON before a record is built from it: the token-key remap
+    rewrites keys a frozen ``ProvenanceKey`` cannot, and a generation check
+    needs only whether a field is present. Blank lines are skipped, and a
+    trailing partial line never arrives, as :func:`iter_shard_lines` promises.
+    """
     for line in iter_shard_lines(Path(path)):
         stripped = line.strip()
-        if not stripped:
-            continue
-        yield record_from_dict(parse_record_line(stripped))
+        if stripped:
+            yield parse_record_line(stripped)
+
+
+def read_shard(path: Path) -> Iterator[EffectRecord]:
+    """Yield every complete record in one shard; skip a trailing partial line."""
+    for data in iter_record_dicts(path):
+        yield record_from_dict(data)
 
 
 def iter_shards(directory: Path) -> list[Path]:
@@ -1046,11 +1059,8 @@ def shard_generation(path: Path) -> str | None:
     records disagree about carrying the field, so one record speaks for its
     shard. Only the first line is decoded.
     """
-    for line in iter_shard_lines(Path(path)):
-        stripped = line.strip()
-        if not stripped:
-            continue
-        return GEN_2 if "random_seat" in parse_record_line(stripped) else GEN_1
+    for data in iter_record_dicts(path):
+        return GEN_2 if "random_seat" in data else GEN_1
     return None
 
 

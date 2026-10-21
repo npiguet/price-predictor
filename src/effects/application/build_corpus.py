@@ -149,17 +149,9 @@ def read_shard_remapped(
     ``counts`` is then left alone.
     """
 
-    from effects.infrastructure.record_io import (
-        iter_shard_lines,
-        parse_record_line,
-        record_from_dict,
-    )
+    from effects.infrastructure.record_io import iter_record_dicts, record_from_dict
 
-    for line in iter_shard_lines(Path(path)):
-        stripped = line.strip()
-        if not stripped:
-            continue
-        data = parse_record_line(stripped)
+    for data in iter_record_dicts(path):
         if remapper is not None:
             remap_record_dict(data, remapper, counts)
         yield record_from_dict(data)
