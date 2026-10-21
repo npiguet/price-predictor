@@ -23,7 +23,7 @@ from effects.application.train_effect_model import (
     require_split_from,
     variant_masks,
     warmup_steps,
-    withheld_keyword_rules,
+    withheld_keyword_tokens,
 )
 from effects.domain.ability_encoder import AbilityEncoderConfig
 from effects.domain.effect_model import EffectModelConfig
@@ -223,16 +223,10 @@ class TestEarlyStopping:
 
 class TestWithheldKeyword:
     def test_no_withholding_hides_nothing(self):
-        assert withheld_keyword_rules(None) == (frozenset(), False)
-
-    def test_a_withheld_keyword_is_hidden_and_force_expanded(self):
-        hidden, force = withheld_keyword_rules("cascade")
-        assert hidden == {"cascade"}
-        assert force
+        assert withheld_keyword_tokens(None) == frozenset()
 
     def test_the_token_form_matches_the_vocabularys(self):
-        hidden, _ = withheld_keyword_rules("First Strike")
-        assert hidden == {"first_strike"}
+        assert withheld_keyword_tokens("First Strike") == {"first_strike"}
 
 
 class TestConfigDefaults:

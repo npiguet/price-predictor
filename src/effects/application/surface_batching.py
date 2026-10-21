@@ -23,7 +23,7 @@ import torch
 
 from effects.application.train_effect_model import (
     VariantMasks,
-    withheld_keyword_rules,
+    withheld_keyword_tokens,
 )
 from effects.domain.ability_encoder import (
     AbilityEncoder,
@@ -550,15 +550,23 @@ class SurfaceBatcher:
         return vectors
 
     def prepare_texts(self, ordered: list[str]) -> list:
-        """Each text tokenized, withheld keyword hidden, keywords expanded."""
-        hidden_keywords, _force = withheld_keyword_rules(self.withhold_keyword)
+        """Each text tokenized and its keywords expanded, the withheld one always.
+
+        A withheld keyword's token survives only where it has no definition to
+        expand to; there it is dropped, so the model never reads the token.
+        """
+        withheld = withheld_keyword_tokens(self.withhold_keyword)
         lines = []
         for text in ordered:
-            tokens = self.tokenizer.tokenize(text)
-            tokens = [t for t in tokens if t.text not in hidden_keywords]
             tokens = self.tokenizer.expand_keywords(
-                tokens, probability=self.keyword_expand_p, rng=self.rng,
+                self.tokenizer.tokenize(text),
+                probability=self.keyword_expand_p, rng=self.rng, forced=withheld,
             )
+            if withheld:
+                tokens = [
+                    t for t in tokens
+                    if t.expanded_from is not None or t.text not in withheld
+                ]
             line = prepare_line(self.tokenizer, tokens)
             if line.truncated and self.truncations is not None:
                 self.truncations.note(text, self._keys_of(text))

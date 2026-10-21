@@ -349,3 +349,29 @@ def test_a_stand_in_key_reads_its_text_with_the_real_line():
     assert batcher.text_of(stand) == "deals 5 damage to any target"
     assert batcher.line_of(stand) is _LINES[_ACT]
     assert batcher.options_for(stand) == ()
+
+
+def test_a_withheld_keyword_is_read_as_its_definition_never_its_token():
+    """``--withhold-keyword``: the line still says what the keyword does, so the
+    zero-shot check has a definition the model trained on reading."""
+    from effects.application.extract_keyword_definitions import KeywordDefinition
+    from effects.domain.ability_tokenizer import AbilityTokenizer
+
+    words = ["[PAD]", "[UNK]", "cardname", "[MASK]", "[CLS]", "flying", "reach",
+             "cant", "be", "blocked", "except", "by", "creatures", "with", "or"]
+    tokenizer = AbilityTokenizer(
+        {word: index for index, word in enumerate(words)},
+        {"Flying": KeywordDefinition(
+            keyword="Flying",
+            reminder_template="cant be blocked except by creatures with flying or reach",
+        )},
+    )
+    batcher = SurfaceBatcher(
+        tokenizer=tokenizer, sidecars=_Sidecars(), masks=VariantMasks(),
+        surface="prose", e_dim=4, widths={}, device=torch.device("cpu"),
+        withhold_keyword="Flying",
+    )
+    (line,) = batcher.prepare_texts(["flying"])
+    ids = {word: index for index, word in enumerate(words)}
+    # [CLS], then the reminder text in place of the bare token.
+    assert line.token_ids[1:4] == [ids["cant"], ids["be"], ids["blocked"]]

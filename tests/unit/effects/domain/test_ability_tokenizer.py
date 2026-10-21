@@ -164,6 +164,18 @@ class TestKeywordExpansion:
         expanded = tokenizer.expand_keywords(tokens, probability=1.0)
         assert [t.text for t in expanded][:3] == ["cant", "be", "blocked"]
 
+    def test_a_forced_keyword_expands_at_probability_zero(self, tokenizer):
+        """``--withhold-keyword``: the model reads the definition, never the token."""
+        tokens = tokenizer.tokenize("flying")
+        expanded = tokenizer.expand_keywords(tokens, forced=frozenset({"flying"}))
+        assert [t.text for t in expanded][:3] == ["cant", "be", "blocked"]
+        assert all(t.expanded_from == "flying" for t in expanded)
+
+    def test_forcing_one_keyword_leaves_the_others_alone(self, tokenizer):
+        tokens = tokenizer.tokenize("flying")
+        kept = tokenizer.expand_keywords(tokens, forced=frozenset({"vigilance"}))
+        assert [t.text for t in kept] == ["flying"]
+
     def test_an_unknown_keyword_always_expands(self, tokenizer):
         """Forced expansion is what makes a set the vocabulary predates readable."""
         unknown = AbilityTokenizer(_vocab(), _definitions())
@@ -589,6 +601,14 @@ class TestKeywordLines:
         assert texts[-5:] == ["that", "player", "pays", "{2}", "."]
         assert "%" not in texts
         assert texts.count("ward") == 0
+        assert all(t.expanded_from == "ward" for t in expanded)
+
+    def test_a_forced_keyword_line_expands_whole_at_probability_zero(self):
+        tokenizer = _open_tokenizer()
+        expanded = tokenizer.expand_keywords(
+            tokenizer.tokenize("Ward:2"), forced=frozenset({"ward"}),
+        )
+        assert [t.text for t in expanded][-5:] == ["that", "player", "pays", "{2}", "."]
         assert all(t.expanded_from == "ward" for t in expanded)
 
     def test_a_known_keyword_line_stays_tokens_at_inference(self):

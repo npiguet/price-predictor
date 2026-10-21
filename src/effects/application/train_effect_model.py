@@ -32,6 +32,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from effects.domain.ability_tokenizer import keyword_token
 from effects.domain.card_names import fold_card_name
 from effects.domain.effect_model import (
     CLASS_COMBAT,
@@ -964,17 +965,15 @@ def learning_rate_at(step: int, *, warmup: int) -> float:
 # ── keyword withholding (FR-117) ────────────────────────────────────────
 
 
-def withheld_keyword_rules(withheld: str | None) -> tuple[frozenset[str], bool]:
-    """Which keyword tokens to hide, and whether to force their expansion.
+def withheld_keyword_tokens(withheld: str | None) -> frozenset[str]:
+    """The token form of the keyword ``--withhold-keyword`` names, if any.
 
     Withholding is what gives the zero-shot check something to measure: the
-    model never sees the keyword's *token*, only the sentence it stands for, so
-    the check asks whether a keyword it has only ever read as prose lands near
-    the right neighbours.
+    model never sees the keyword's *token*, only the sentence it stands for —
+    the batcher force-expands it to its definition — so the check asks whether
+    a keyword it has only ever read as prose lands near the right neighbours.
     """
-    if not withheld:
-        return frozenset(), False
-    return frozenset({withheld.lower().replace(" ", "_")}), True
+    return frozenset({keyword_token(withheld)}) if withheld else frozenset()
 
 
 # ── the epoch loop ──────────────────────────────────────────────────────
