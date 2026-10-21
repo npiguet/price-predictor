@@ -2,8 +2,10 @@
 
 Mirrors ``draft/infrastructure/cli.py``: ``build_parser`` adds one subparser per
 command with ``set_defaults(func=…)`` dispatch, and ``main`` parses and calls the
-resolved ``func``. Application imports are lazy (inside each ``run_*``) so
-``python -m effects --help`` and the unit suite don't pay the torch import cost.
+resolved ``func``. Each ``run_*`` imports its application module when it runs;
+the parser itself imports only defaults, from modules that load no torch, so
+``python -m effects --help`` never pays the torch import cost.
+``tests/unit/effects/infrastructure/test_cli_parser_imports.py`` pins that.
 
 Every flag and default here is contract, pinned by
 ``specs/023-ability-effect-model/contracts/cli.md`` and asserted by the
@@ -17,6 +19,10 @@ import logging
 import sys
 from pathlib import Path
 
+from effects.application.train_effect_model import (
+    DEFAULT_PREFETCH_WORKERS,
+    DEFAULT_SHARDS_PER_EPOCH,
+)
 from effects.domain.collection_caps import (
     DEFAULT_INTERVENTIONS_PER_GAME,
     DEFAULT_LEGALITY_RATE,
@@ -27,6 +33,7 @@ from effects.domain.collection_caps import (
     DEFAULT_RANDOM_SEAT_SHARE,
     CollectionCaps,
 )
+from effects.domain.split import HOLDOUT_MAX_CARRIERS, HOLDOUT_PERMILLE
 
 logger = logging.getLogger(__name__)
 
@@ -42,10 +49,6 @@ DEFAULT_VARIANT_SCRIPTS = "output/effects/variant-scripts/"
 #: it by tests/unit/effects/application/test_variants.py.
 VARIANT_RANDOM_SEED = 42
 DEFAULT_ABILITIES_ROOT = "output/effects/abilities/"
-#: Restated rather than imported, so `--help` stays free of torch. The
-#: trainer's own constants are the source; `test_holdout_cli.py` pins them.
-HOLDOUT_PERMILLE = 20
-HOLDOUT_MAX_CARRIERS = 8
 DEFAULT_CHECKPOINT = "models/effects/effect-model/latest.pt"
 
 #: Thresholds `validate-corpus` holds a fresh shard directory to. Set from the
@@ -1312,11 +1315,6 @@ def run_collect_variants(args: argparse.Namespace) -> int:
 
 
 def _train_effect_model_parser(subparsers) -> None:
-    from effects.application.train_effect_model import (
-        DEFAULT_PREFETCH_WORKERS,
-        DEFAULT_SHARDS_PER_EPOCH,
-    )
-
     parser = subparsers.add_parser(
         "train-effect-model",
         help="Train the ability encoder and effect head jointly from random init",
@@ -1513,10 +1511,7 @@ def run_train_effect_model(args: argparse.Namespace) -> int:
 
 
 def train_config_from(args: argparse.Namespace):
-    """The trainer's config, assembled from parsed arguments.
-
-    Imported here rather than at module scope so ``--help`` stays free of torch.
-    """
+    """The trainer's config, assembled from parsed arguments."""
     from effects.application.train_effect_model import TrainEffectModelConfig
 
     return TrainEffectModelConfig(
