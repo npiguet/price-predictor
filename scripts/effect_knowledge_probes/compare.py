@@ -4,8 +4,9 @@
 
 One table per family: a row per target, stratum and rung, a column per
 checkpoint and probe type. Below it, the arms ranked on rung 1 minus rung 1w per
-probe type — the comparison that does not depend on each arm's own rung 3, so a
-weaker head cannot buy a larger share. Scorecards frozen against different
+probe type and per score — AUC for yes/no targets, R² for amounts, never
+averaged together — the comparison that does not depend on each arm's own
+rung 3, so a weaker head cannot buy a larger share. Scorecards frozen against different
 probe sets are compared anyway, with a warning: their numbers describe
 different items.
 
@@ -27,6 +28,8 @@ if __package__ in (None, ""):
 from effect_knowledge_probes.common import fmt  # noqa: E402
 
 PROBE_TYPES = ("linear", "mlp")
+#: The score each target kind is read by, which names its ranking.
+METRICS = {"binary": "AUC", "amount": "R²"}
 
 
 def load(paths: list[Path]) -> list[dict]:
@@ -52,12 +55,15 @@ def _cells(card: dict):
                         yield (family, target, stratum, rung, probe_type), value
 
 
-def width_gain(card: dict, probe_type: str) -> float:
-    """Mean of rung 1 − rung 1w over the card's board-dependent results."""
+def width_gain(card: dict, probe_type: str, kind: str) -> float:
+    """Mean of rung 1 − rung 1w over the card's board-dependent ``kind`` results.
+
+    One kind at a time: a gain in AUC and a gain in R² are not on one scale.
+    """
     gains = []
     for family, body in card.get("families", {}).items():
         for entry in body.get("targets", {}).values():
-            if entry.get("scope") not in ("act", "entity"):
+            if entry.get("scope") not in ("act", "entity") or entry.get("kind") != kind:
                 continue
             for result in entry.get("strata", {}).values():
                 rungs = result.get("rungs", {})
@@ -70,13 +76,15 @@ def width_gain(card: dict, probe_type: str) -> float:
 
 
 def ranking(cards: list[dict]) -> dict[str, list[tuple[str, float]]]:
-    """Per probe type, the checkpoints from largest width gain to smallest."""
+    """Per probe type and score (``mlp AUC``, ``linear R²``), the checkpoints
+    from largest width gain to smallest."""
     out = {}
     for probe_type in PROBE_TYPES:
-        scored = [(card.get("checkpoint", f"#{i}"), width_gain(card, probe_type))
-                  for i, card in enumerate(cards)]
-        out[probe_type] = sorted(
-            scored, key=lambda kv: -kv[1] if not math.isnan(kv[1]) else math.inf)
+        for kind, metric in METRICS.items():
+            scored = [(card.get("checkpoint", f"#{i}"), width_gain(card, probe_type, kind))
+                      for i, card in enumerate(cards)]
+            out[f"{probe_type} {metric}"] = sorted(
+                scored, key=lambda kv: -kv[1] if not math.isnan(kv[1]) else math.inf)
     return out
 
 

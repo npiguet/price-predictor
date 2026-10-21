@@ -721,8 +721,27 @@ def _card(name: str, one: float, width: float, digest: str = "d") -> dict:
 class TestCompare:
     def test_arms_rank_on_rung_one_over_the_width_control(self):
         ranked = compare.ranking([_card("narrow", 0.70, 0.65), _card("wide", 0.80, 0.62)])
-        assert [Path(name).parent.name for name, _ in ranked["mlp"]] == ["wide", "narrow"]
-        assert ranked["linear"][0][1] == pytest.approx(0.18)
+        assert [Path(name).parent.name for name, _ in ranked["mlp AUC"]] == ["wide", "narrow"]
+        assert ranked["linear AUC"][0][1] == pytest.approx(0.18)
+
+    def test_auc_and_r2_gains_are_ranked_apart(self):
+        """An AUC point and an R² point are not one unit; averaging them would
+        let a large R² swing on one amount decide the ranking."""
+        def card(name, auc_gain, r2_gain):
+            body = _card(name, 0.6 + auc_gain, 0.6)
+            body["families"]["magnitudes"]["targets"]["damage_taken"] = {
+                "scope": "entity", "kind": "amount",
+                "strata": {"card-disjoint": {"n": 100, "rungs": {
+                    "1": {"linear": 0.2 + r2_gain, "mlp": 0.2 + r2_gain},
+                    "1w": {"linear": 0.2, "mlp": 0.2},
+                }}},
+            }
+            return body
+
+        ranked = compare.ranking([card("auc", 0.10, -0.50), card("r2", 0.01, 0.30)])
+        assert [Path(n).parent.name for n, _ in ranked["mlp AUC"]] == ["auc", "r2"]
+        assert [Path(n).parent.name for n, _ in ranked["mlp R²"]] == ["r2", "auc"]
+        assert ranked["linear AUC"][0][1] == pytest.approx(0.10)
 
     def test_mismatched_digests_warn(self):
         assert compare.digest_warning([_card("a", 0.7, 0.6, "x"), _card("b", 0.7, 0.6, "y")])

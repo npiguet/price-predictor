@@ -157,3 +157,12 @@ class TestResume:
         monkeypatch.setattr(arm, "run_logged", lambda command, log: 1)
         arm.main(["--run-dir", str(tmp_path), "--corpus", "c", "--", "--e-dim", "64"])
         assert "continue with --resume" in (tmp_path / "arm.log").read_text(encoding="utf-8")
+
+    def test_the_arm_log_records_the_arguments_main_was_given(self, tmp_path, monkeypatch):
+        """A caller passing argv (a test, a driver script) is what ran, not sys.argv."""
+        monkeypatch.setattr(arm, "run_logged", lambda command, log: 0)
+        monkeypatch.setattr(sys, "argv", ["pytest", "--something-else"])
+        arm.main(["--run-dir", str(tmp_path), "--corpus", "c", "--", "--e-dim", "64"])
+        first = (tmp_path / "arm.log").read_text(encoding="utf-8").splitlines()[0]
+        assert "--e-dim 64" in first
+        assert "--something-else" not in first
