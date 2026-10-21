@@ -148,7 +148,7 @@ def _forward(chunk, encoder, model, batcher: SurfaceBatcher, fields):
     ``gathered`` is the per-entity head's output at each target entity's slot,
     aligned column for column with the targets ``entity_target_tensors`` built.
     """
-    batch, surfaces = batcher.build(chunk, encoder)
+    batch, surfaces, _encoded = batcher.build(chunk, encoder)
     outputs = model.per_entity(model(**batch))
     targets = [derive_targets(record) for record in chunk]
     gate, field_targets, mask, index = entity_target_tensors(

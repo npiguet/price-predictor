@@ -41,23 +41,18 @@ def test_every_epoch_steps_the_optimizer_on_its_own_accumulation_boundary(monkey
         value = weight * 2.0
         return StepLoss(total=value, shipped=value.detach(), parts={}, terms={})
 
-    monkeypatch.setattr(TrainingLoop, "_loss_for", lambda self, *a, **k: loss())
+    monkeypatch.setattr(TrainingLoop, "_device_loss", lambda self, *a, **k: loss())
     updates: list[tuple[int, int]] = []
     monkeypatch.setattr(
         loop_module, "_optimizer_step",
         lambda optimizer, read: updates.append((epoch, tally.taken)) or {},
     )
-    run = SimpleNamespace(
-        step=0, encoder=None, model=None, optimizer=None,
-        tokenizer=None, sidecars=None, widths=None,
-    )
-    task = SimpleNamespace(fields=())
+    run = SimpleNamespace(step=0, encoder=None, model=None, optimizer=None)
     for epoch in (1, 2):
         tally = EpochTally(running=torch.zeros(()))
         for _ in range(3):
             loop._train_step(
-                object(), task, run, None, tally,
-                ShardStats(loss=torch.zeros(())), False,
+                object(), run, tally, ShardStats(loss=torch.zeros(())), False,
             )
     # Two micro-steps per update in both epochs; the third of each is dropped.
     assert updates == [(1, 1), (2, 1)]

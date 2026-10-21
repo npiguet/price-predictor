@@ -19,6 +19,7 @@ import pytest
 import torch
 
 from effects.application import training_loop as loop_module
+from effects.application.step_preparation import StepPreparer
 from effects.application.train_effect_model import (
     TrainEffectModelConfig,
     epoch_shards,
@@ -27,7 +28,6 @@ from effects.application.training_loop import TrainingLoop
 from effects.domain.records import CombatPayload, RecordKind
 from effects.domain.split import CorpusSplit
 from effects.infrastructure.record_io import write_shard
-from effects.infrastructure.sidecar_io import SidecarCache
 from tests.unit.effects.domain.conftest import (  # noqa: F401
     ability_key,
     make_record,
@@ -131,30 +131,23 @@ def run(tmp_path, make_record, monkeypatch):  # noqa: F811
         monkeypatch.setattr(loop_module, "AbilityEncoder", lambda config: encoder)
         monkeypatch.setattr(loop_module, "EffectModel", lambda config: model)
         monkeypatch.setattr(TrainingLoop, "_train_on_shard", train_on_shard)
-        monkeypatch.setattr(
-            TrainingLoop, "_training_heads", lambda self, model: frozenset(),
-        )
         # The shard's records stand in for the steps they would prepare.
         monkeypatch.setattr(
-            TrainingLoop, "_local_steps",
-            lambda self, task, records, *args, **kwargs: records,
+            TrainingLoop, "_local_steps", lambda self, task, records: records,
         )
         monkeypatch.setattr(
             TrainingLoop, "_validate",
             lambda self, records, *args, **kwargs: 1.0,
         )
         monkeypatch.setattr(
-            TrainingLoop, "_build_tokenizer",
+            StepPreparer, "_build_tokenizer",
             lambda self: type("T", (), {"vocab_size": 8})(),
-        )
-        monkeypatch.setattr(
-            TrainingLoop, "_build_sidecars", lambda self: SidecarCache({}),
         )
         # The script-API vocabulary is read off every real sidecar; none here.
         monkeypatch.setattr(TrainingLoop, "_script_vocabularies", lambda self: ([], []))
         monkeypatch.setattr(
-            TrainingLoop, "_feature_widths",
-            lambda self, records: dict.fromkeys(loop_module.SlotKind, 4),
+            loop_module, "feature_widths",
+            lambda records: dict.fromkeys(loop_module.SlotKind, 4),
         )
         config = TrainEffectModelConfig(
             corpus=str(tmp_path), epochs=1, steps_per_epoch=SHARDS,

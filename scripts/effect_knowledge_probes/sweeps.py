@@ -358,7 +358,7 @@ def _predict(probe_model, records, read) -> list[float]:
 
 
     with torch.no_grad():
-        batch, surfaces = probe_model.batcher.build(records, probe_model.encoder)
+        batch, surfaces, _encoded = probe_model.batcher.build(records, probe_model.encoder)
         hidden = probe_model.model(**batch)
         outputs = probe_model.model.per_entity(hidden)
         verdict = probe_model.model.verdict(hidden)

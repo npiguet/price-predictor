@@ -35,10 +35,7 @@ from effects.application.gate_two import (
     score_observation,
     subject_id,
 )
-from effects.application.surface_batching import (
-    IdentityTable,
-    SurfaceBatcher,
-)
+from effects.application.surface_batching import IdentityTable, SurfaceBatcher
 from effects.domain.damage_step_keywords import (
     KEYWORDS_BY_NAME,
     Subject,
@@ -69,7 +66,7 @@ from effects.domain.state_snapshot import (
 )
 from effects.domain.variants import VariantMasks
 from effects.infrastructure.model_runner import Runnable
-from tests.unit.effects.builders import slots_of_kind
+from tests.unit.effects.builders import make_batcher, slots_of_kind
 
 # ── a board: one first-striking attacker, one blocker ────────────────────
 
@@ -186,7 +183,7 @@ def _batcher() -> SurfaceBatcher:
     tokenizer and no encoder: what these tests are about is the surface, and an
     encoder would only be a second thing that could fail.
     """
-    return SurfaceBatcher(
+    return make_batcher(
         tokenizer=None, sidecars=_Sidecars(),
         masks=VariantMasks(identity_embedding=True),
         surface="script", e_dim=4, widths={}, device=torch.device("cpu"),
@@ -288,7 +285,7 @@ class TestBatchThreading:
     def test_the_unperturbed_record_in_the_same_batch_is_unchanged(self):
         record = _printed_board()
         batcher = _batcher()
-        _batch, surfaces = batcher.build(
+        _batch, surfaces, _encoded = batcher.build(
             [record, record], _NoEncoder(),
             strip_per_record=[None, {"A": frozenset({"first_strike"})}],
         )
@@ -298,7 +295,7 @@ class TestBatchThreading:
     def test_no_strip_list_builds_exactly_as_before(self):
         record = _printed_board()
         batcher = _batcher()
-        _batch, surfaces = batcher.build([record], _NoEncoder())
+        _batch, surfaces, _encoded = batcher.build([record], _NoEncoder())
         assert _ability_count(surfaces[0], "A") == 2
 
 

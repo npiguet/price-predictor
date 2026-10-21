@@ -463,15 +463,15 @@ class TestTruncation:
 
     def test_training_batchers_sharing_a_log_report_a_text_once(self, tokenizer):
         """The trainer hands one log to every per-batch batcher."""
-        from effects.application.surface_batching import SurfaceBatcher
         from effects.domain.ability_encoder import TruncationLog
         from effects.domain.variants import VariantMasks
+        from tests.unit.effects.builders import make_batcher
 
         reported = []
         log = TruncationLog(lambda text, keys: reported.append(text))
         long_text = " ".join(["x"] * 600)
         for _batch in range(3):
-            batcher = SurfaceBatcher(
+            batcher = make_batcher(
                 tokenizer=tokenizer, sidecars=None, masks=VariantMasks(),
                 surface="script", e_dim=4, widths={},
                 device=torch.device("cpu"), truncations=log,

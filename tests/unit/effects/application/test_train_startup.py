@@ -164,9 +164,9 @@ def test_a_kept_aside_tree_resolves_the_keys_of_its_original(tmp_path):
     import shutil
     from pathlib import Path
 
-    from effects.application.training_loop import TrainingLoop
     from effects.domain.provenance import ProvenanceKey
     from effects.infrastructure.model_runner import build_sidecars
+    from tests.unit.effects.builders import make_preparer
 
     fixture = Path(__file__).parents[3] / "fixtures" / "effects" / "gen1-sidecars"
     kept = tmp_path / "gen1-cardsfolder"
@@ -174,9 +174,8 @@ def test_a_kept_aside_tree_resolves_the_keys_of_its_original(tmp_path):
     key = ProvenanceKey("cardsfolder/q/quintessential_katana.txt", 0, "static", 0)
     config = TrainEffectModelConfig(corpus=str(tmp_path), cards_folders=(kept,))
 
-    loop = TrainingLoop.__new__(TrainingLoop)
-    loop.config = config
-    for sidecars in (loop._build_sidecars(), build_sidecars(config)):
+    trainer = make_preparer(tmp_path, cards_folders=(kept,)).sidecars
+    for sidecars in (trainer, build_sidecars(config)):
         assert sidecars.path_for(key.script_file).parent.parent == kept
         sidecars.resolution_of(key)  # neither raises nor reports no tree
 

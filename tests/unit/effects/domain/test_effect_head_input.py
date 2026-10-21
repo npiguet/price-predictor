@@ -794,9 +794,9 @@ class TestOptionRows:
     def test_the_batcher_reads_the_modes_off_the_sidecar(self):
         import torch
 
-        from effects.application.surface_batching import SurfaceBatcher
         from effects.domain.provenance import ProvenanceSidecar, SidecarLine
         from effects.domain.variants import VariantMasks
+        from tests.unit.effects.builders import make_batcher
 
         modes = self._modes()
         sidecar = ProvenanceSidecar(
@@ -819,7 +819,7 @@ class TestOptionRows:
             def prose_for(self, key):
                 return None
 
-        batcher = SurfaceBatcher(
+        batcher = make_batcher(
             tokenizer=None, sidecars=_Sidecars(), masks=VariantMasks(),
             surface="script", e_dim=E_DIM, widths={}, device=torch.device("cpu"),
         )

@@ -15,14 +15,12 @@ from types import SimpleNamespace
 import pytest
 import torch
 
+from effects.application import training_loop as loop_module
+from effects.application.step_preparation import NO_TEXT_BUCKET, training_heads
 from effects.application.surface_batching import EncodedBatch, PreparedBatch
 from effects.application.train_effect_model import TrainEffectModelConfig
-from effects.application.training_loop import (
-    NO_TEXT_BUCKET,
-    StepLoss,
-    TrainingLoop,
-    format_shares,
-)
+from effects.application.training_log import format_shares
+from effects.application.training_loop import StepLoss, TrainingLoop
 from effects.domain.effect_model import EffectModel, EffectModelConfig
 from effects.domain.effect_targets import (
     created_objects_targets,
@@ -42,6 +40,7 @@ from effects.domain.records import (
 from effects.domain.split import CorpusSplit
 from effects.infrastructure.record_io import read_shard
 from effects.infrastructure.sidecar_io import SidecarCache
+from tests.unit.effects.builders import make_preparer
 
 _FIXTURES = Path(__file__).parents[3] / "fixtures" / "effects"
 
@@ -104,26 +103,31 @@ class _Batcher:
         self.mlm_calls += 1
         return SimpleNamespace(rows=len(self.encoded.texts))
 
-    def mlm_forward(self, encoder, masked):
-        hidden = torch.randn(len(self.encoded.texts), 8)
-        targets = torch.zeros(len(self.encoded.texts), dtype=torch.long)
-        return hidden, targets
 
-
-def _terms(loop, records, batcher, model, hidden, *, training):
+def _terms(monkeypatch, preparer, loop, records, batcher, model, hidden, *, training):
     """Both halves of the head terms: targets on the host, losses after.
 
     The MLM term is computed after the main backward in training, so the step
-    is finished here the way the loop finishes it.
+    is finished here the way the loop finishes it; the MLM pass's encoder
+    forward is stood in for by the token outputs it would read.
     """
-    targets = loop._head_targets(
+    targets = preparer._head_targets(
         records, batcher, batcher.prepared(), training=training,
-        heads=loop._training_heads(model) if training else frozenset(),
+        heads=(
+            training_heads(preparer.config, api_types=preparer.api_types)
+            if training else frozenset()
+        ),
     )
-    terms, pending = loop._head_terms(targets, batcher, None, model, hidden)
+    terms = loop._head_terms(targets, batcher.encoded, model, hidden)
+    rows = len(batcher.encoded.texts)
+    monkeypatch.setattr(loop_module.MlmMasker, "forward", staticmethod(
+        lambda encoder, masked, device: (
+            torch.randn(rows, 8), torch.zeros(rows, dtype=torch.long),
+        ),
+    ))
     loss = StepLoss(
         total=torch.zeros(()), shipped=torch.zeros(()), parts={}, terms=terms,
-        pending_mlm=pending,
+        pending_mlm=targets.mlm,
     )
     loop._mlm_backward(loss, None, model)
     return loss.terms
@@ -189,46 +193,63 @@ class TestTheTargets:
 
 
 class TestTheHeadTerms:
-    def test_every_head_contributes_on_a_mixed_batch(self, monkeypatch, records):
+    def test_every_head_contributes_on_a_mixed_batch(self, monkeypatch, records, tmp_path):
         """Spec Story 5 scenario 9: decision, cost half, trigger, effect half."""
         loop = _loop(monkeypatch)
-        loop.api_types, loop.param_keys = ["DealDamage", "Draw", "Pump"], list("ABCDE")
+        preparer = make_preparer(
+            tmp_path, api_types=["DealDamage", "Draw", "Pump"], param_keys=list("ABCDE"),
+        )
         batch = _kinds(records)
         model = _model()
         hidden = torch.randn(len(batch), 6, 8)
         batcher = _Batcher(["NumDmg$ 2 | SP$ DealDamage", "SP$ Draw | NumCards$ 1"], {})
-        terms = _terms(loop, batch, batcher, model, hidden, training=True)
+        terms = _terms(
+            monkeypatch, preparer, loop, batch, batcher, model, hidden, training=True,
+        )
         assert {"verdict", "value", "api", "mlm"} <= set(terms)
         assert all(torch.isfinite(value) for value in terms.values())
         assert terms["verdict"] > 0
 
-    def test_zero_weights_compute_neither_auxiliary(self, monkeypatch, records):
+    def test_zero_weights_compute_neither_auxiliary(self, monkeypatch, records, tmp_path):
         loop = _loop(monkeypatch, mlm_weight=0.0, api_weight=0.0)
+        preparer = make_preparer(
+            tmp_path, mlm_weight=0.0, api_weight=0.0, api_types=["Draw"],
+        )
         batch = _kinds(records)
         batcher = _Batcher(["SP$ Draw | NumCards$ 1"], {})
         terms = _terms(
-            loop, batch, batcher, _model(), torch.randn(len(batch), 6, 8),
-            training=True,
+            monkeypatch, preparer, loop, batch, batcher, _model(),
+            torch.randn(len(batch), 6, 8), training=True,
         )
         assert "mlm" not in terms and "api" not in terms
         assert batcher.mlm_calls == 0
 
-    def test_scoring_computes_only_the_shipped_heads(self, monkeypatch, records):
+    def test_scoring_computes_only_the_shipped_heads(self, monkeypatch, records, tmp_path):
         loop = _loop(monkeypatch)
+        preparer = make_preparer(tmp_path, api_types=["Draw"])
         batch = _kinds(records)
         terms = _terms(
-            loop, batch, _Batcher(["SP$ Draw"], {}), _model(),
+            monkeypatch, preparer, loop, batch, _Batcher(["SP$ Draw"], {}), _model(),
             torch.randn(len(batch), 6, 8), training=False,
         )
         assert set(terms) <= {"verdict", "created_objects"}
 
 
+def _fixture_preparer(directory):
+    """A preparer over the gen-1 fixture's sidecars, on their script surface."""
+    return make_preparer(
+        directory, cards_folders=(
+            _FIXTURES / "gen1-sidecars" / "cardsfolder",
+            _FIXTURES / "gen1-sidecars" / "tokenscripts",
+        ),
+    )
+
+
 class TestEpochShares:
     """FR-055: the share of trained records per rarity bucket and family."""
 
-    def test_every_record_gets_a_bucket_and_a_family(self, monkeypatch, records, sidecars):
-        loop = _loop(monkeypatch, vocab_path=Path("models/effects/vocab-script.txt"))
-        labels = loop._shard_labels(records, sidecars)
+    def test_every_record_gets_a_bucket_and_a_family(self, records, tmp_path):
+        labels = _fixture_preparer(tmp_path)._shard_labels(records)
         assert set(labels) == {r.record_id for r in records}
         buckets = {bucket for bucket, _ in labels.values()}
         assert buckets <= {*RARITY_BUCKETS, NO_TEXT_BUCKET}
@@ -236,16 +257,16 @@ class TestEpochShares:
         combat = next(r for r in records if r.kind is RecordKind.COMBAT)
         assert labels[combat.record_id][0] == NO_TEXT_BUCKET
 
-    def test_a_texts_bucket_reads_the_corpus_wide_table(self, monkeypatch, records, sidecars):
-        loop = _loop(monkeypatch, vocab_path=Path("models/effects/vocab-script.txt"))
+    def test_a_texts_bucket_reads_the_corpus_wide_table(self, records, sidecars, tmp_path):
         from effects.application.ability_text import ability_text_of
 
+        preparer = _fixture_preparer(tmp_path)
         record = next(
             r for r in records if r.moment is Moment.RESOLUTION
-            and ability_text_of(r, sidecars, loop.surface) is not None
+            and ability_text_of(r, sidecars, preparer.surface) is not None
         )
-        loop.rarity = {ability_text_of(record, sidecars, loop.surface): 50}
-        assert loop._shard_labels([record], sidecars)[record.record_id][0] == "20+"
+        preparer.rarity = {ability_text_of(record, sidecars, preparer.surface): 50}
+        assert preparer._shard_labels([record])[record.record_id][0] == "20+"
 
     def test_shares_are_reported_in_bucket_order(self):
         line = format_shares(
@@ -255,17 +276,22 @@ class TestEpochShares:
 
 
 class TestTheBatchersTheLoopBuilds:
-    def test_only_a_training_batcher_carries_noise_and_sampled_expansion(self, monkeypatch):
+    def test_only_a_training_batch_carries_noise_and_sampled_expansion(
+        self, monkeypatch, tmp_path,
+    ):
         """FR-056 (training only) and FR-012 (zero outside training)."""
         from effects.domain.ability_tokenizer import INFERENCE_KEYWORD_EXPAND_P
+        from effects.domain.effect_head_input import SlotKind
 
-        loop = _loop(monkeypatch, e_noise=0.2, keyword_expand_p=0.25)
-        training = loop._batcher(None, SidecarCache({}), {}, training=True)
-        scoring = loop._batcher(None, SidecarCache({}), {}, training=False)
-        assert training.noise is loop.noise and loop.noise.ratio == 0.2
-        assert scoring.noise is None
-        assert training.keyword_expand_p == 0.25
-        assert scoring.keyword_expand_p == INFERENCE_KEYWORD_EXPAND_P == 0.0
+        loop = _loop(monkeypatch, e_noise=0.2, encoder_layers=1, encoder_d_model=8)
+        loop._build_run(8, dict.fromkeys(SlotKind, 4))
+        assert loop._training.noise is loop.noise and loop.noise.ratio == 0.2
+        assert loop._scoring.noise is None
+        preparer = make_preparer(tmp_path, keyword_expand_p=0.25)
+        assert preparer.batcher(training=True).stager.keyword_expand_p == 0.25
+        assert preparer.batcher(training=False).stager.keyword_expand_p == (
+            INFERENCE_KEYWORD_EXPAND_P
+        ) == 0.0
 
     def test_the_noise_ramps_over_one_epoch_of_steps(self, monkeypatch):
         loop = _loop(monkeypatch, steps_per_epoch=40)

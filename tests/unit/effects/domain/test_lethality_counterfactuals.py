@@ -255,7 +255,7 @@ class TestTheProseSurface:
 
 
 class TestStepWiring:
-    """``StepPreparation._counterfactuals``: copies per qualifying record, staged."""
+    """``StepPreparer._counterfactuals``: copies per qualifying record, staged."""
 
     class _Batcher:
         def __init__(self):
@@ -268,24 +268,22 @@ class TestStepWiring:
         def text_of(self, key):
             return BOLT
 
-        surface = "script"
-
         def stand_in(self, key, text, like, *, script=None, role_spans=None):
             self.staged[key] = (text, like)
 
     def test_each_qualifying_record_gets_its_copies_and_their_texts(self):
-        from effects.application.step_preparation import StepPreparation
+        from effects.application.step_preparation import StepPreparer
 
         preparer = SimpleNamespace(
             config=SimpleNamespace(lethality_copies=3),
-            _keyword_resolver=lambda sidecars: SimpleNamespace(keywords_of=_no_keywords),
+            _keywords=SimpleNamespace(keywords_of=_no_keywords),
         )
         lethal_bolt = _record([_damage("E1", 3), _died("E1")], [_creature("E1", 2)])
         contradicted = _record([_damage("E1", 3), _died("E1")], [_creature("E1", 9)])
         records = [lethal_bolt, contradicted]
         batcher = self._Batcher()
-        copies = StepPreparation._counterfactuals(
-            preparer, records, [derive_targets(r) for r in records], batcher, None)
+        copies = StepPreparer._counterfactuals(
+            preparer, records, [derive_targets(r) for r in records], batcher)
         assert len(copies) == 3
         assert {copy.key for copy in copies} == set(batcher.staged)
         assert all(batcher.staged[copy.key] == (copy.text, KEY) for copy in copies)

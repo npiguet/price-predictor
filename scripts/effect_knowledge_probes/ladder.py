@@ -478,11 +478,10 @@ def extract_features(probe_model, records: list, items_by_record: dict, *,
             for start in range(0, len(records), batch_size):
                 chunk = records[start : start + batch_size]
                 captured.clear()
-                batch, surfaces = batcher.build(chunk, encoder)
+                batch, surfaces, encoded = batcher.build(chunk, encoder)
                 hidden = model(**batch)
                 outputs = model.per_entity(hidden)
                 verdict = model.verdict(hidden)
-                encoded = batcher.encoded
                 matrix = (encoded.matrix.float().cpu().numpy()
                           if encoded.matrix is not None else None)
                 texts = encoded.texts

@@ -498,7 +498,7 @@ def method_c(args, probe_model, corpus: Path, eval_records: list) -> dict:
     while steps < args.method_c_steps:
         chunk = [next(records) for _ in range(16)]
         with torch.no_grad():
-            batch, surfaces = batcher.build(chunk, encoder)
+            batch, surfaces, _encoded = batcher.build(chunk, encoder)
         outputs = shallow.per_entity(shallow(**batch))
         gate, targets, mask, index = entity_target_tensors(
             surfaces, [derive_targets(r) for r in chunk], fields)

@@ -12,18 +12,15 @@ from effects.application.train_effect_model import (
     TrainEffectModelConfig,
     run,
 )
-from effects.application.training_loop import (
-    FloorCache,
-    TrainingLoop,
-    _format_floor,
-    _format_parts,
-)
+from effects.application.training_log import format_floor, format_parts
+from effects.application.training_loop import FloorCache, TrainingLoop
 from effects.domain.effect_head_layout import FIELDS_BY_NAME, EntityFieldTargets
 from effects.domain.loss_floor import EntityTargetBatch, constant_predictor_floor
 from effects.domain.records import CombatPayload, RecordKind
 from effects.domain.sampling import SAMPLING_CLASSES
 from effects.domain.split import CorpusSplit
 from effects.infrastructure.record_io import write_shard
+from tests.unit.effects.builders import make_preparer
 from tests.unit.effects.domain.conftest import (  # noqa: F401
     ability_key,
     make_record,
@@ -82,7 +79,7 @@ def test_the_checkpoint_records_the_corpuss_holdout_rule_not_a_constant():
     assert provenance.holdout_max_carriers == 5
 
 
-def test_validation_batches_drop_the_augmentations_but_keep_the_withholding():
+def test_validation_batches_drop_the_augmentations_but_keep_the_withholding(tmp_path):
     """A validation number must not move with the draw (FR-082).
 
     Keyword expansion and context dropout vary what the model sees from one
@@ -91,23 +88,17 @@ def test_validation_batches_drop_the_augmentations_but_keep_the_withholding():
     augmentation but a split, so it stays withheld: handing it back at
     validation would score the one thing training never saw.
     """
-    loop = TrainingLoop(
-        TrainEffectModelConfig(
-            corpus="unused", keyword_expand_p=0.5, context_dropout=0.3,
-            withhold_keyword="lifelink",
-        ),
-        split=CorpusSplit(), training_shards=[], validation_samples={},
-        holdout_permille=20, holdout_max_carriers=8,
-        gate_one_records=0, rarity={}, corpus_digest="",
+    preparer = make_preparer(
+        tmp_path, keyword_expand_p=0.5, context_dropout=0.3, withhold_keyword="lifelink",
     )
 
     stream = random.Random(3)
-    training = loop._batcher(None, None, {}, rng=stream)
-    assert (training.keyword_expand_p, training.context_dropout) == (0.5, 0.3)
+    training = preparer.batcher(rng=stream)
+    assert (training.stager.keyword_expand_p, training.context_dropout) == (0.5, 0.3)
 
-    scoring = loop._batcher(None, None, {}, training=False)
-    assert (scoring.keyword_expand_p, scoring.context_dropout) == (0.0, 0.0)
-    assert scoring.withhold_keyword == "lifelink"
+    scoring = preparer.batcher(training=False)
+    assert (scoring.stager.keyword_expand_p, scoring.context_dropout) == (0.0, 0.0)
+    assert scoring.stager.withhold_keyword == "lifelink"
     # A training batcher draws from the step's own generator, and a scoring
     # one from a stream of its own, so how many validation batches ran
     # cannot change what any training step sees.
@@ -169,33 +160,33 @@ class TestExplainedDeviance:
     """
 
     def test_each_field_carries_its_explained_deviance(self):
-        line = _format_parts(
+        line = format_parts(
             {"gate": 2.878, "damage_taken": 0.761},
             floor={"gate": 3.105, "damage_taken": 1.902},
         )
         assert line == "\n  fields: gate 2.878 (7%), damage_taken 0.761 (60%)"
 
     def test_the_largest_term_still_comes_first(self):
-        line = _format_parts(
+        line = format_parts(
             {"damage_taken": 0.761, "gate": 2.878},
             floor={"gate": 3.105, "damage_taken": 1.902},
         )
         assert line.index("gate") < line.index("damage_taken")
 
     def test_a_head_worse_than_the_constant_reads_negative(self):
-        line = _format_parts({"gate": 4.0}, floor={"gate": 2.0})
+        line = format_parts({"gate": 4.0}, floor={"gate": 2.0})
         assert "gate 4.000 (-100%)" in line
 
     def test_a_field_with_no_deviance_to_explain_reads_not_applicable(self):
         """A field whose targets never vary has nothing for a head to beat."""
-        line = _format_parts({"types_gained": 0.0}, floor={"types_gained": 0.0})
+        line = format_parts({"types_gained": 0.0}, floor={"types_gained": 0.0})
         assert "types_gained 0.000 (n/a)" in line
 
     def test_the_per_shard_training_breakdown_is_unchanged(self):
-        assert _format_parts({"gate": 2.0}) == "\n  fields: gate 2.000"
+        assert format_parts({"gate": 2.0}) == "\n  fields: gate 2.000"
 
     def test_the_floor_is_logged_largest_first(self):
-        assert _format_floor(
+        assert format_floor(
             {"damage_taken": 1.902, "gate": 3.105},
         ) == "gate 3.105, damage_taken 1.902"
 
@@ -242,7 +233,7 @@ def test_a_field_whose_targets_never_vary_reads_not_applicable_end_to_end():
     fields = (FIELDS_BY_NAME["damage_taken"],)
 
     floor = constant_predictor_floor([batch], fields=fields)
-    line = _format_parts({"damage_taken": 0.0067, "gate": 0.5}, floor)
+    line = format_parts({"damage_taken": 0.0067, "gate": 0.5}, floor)
 
     assert floor["damage_taken"] == 0.0
     assert "damage_taken 0.007 (n/a)" in line

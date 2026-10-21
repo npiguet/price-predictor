@@ -1,7 +1,7 @@
 """bf16 autocast and the CUDA reservation cap (FR-095).
 
 The GPU work itself is untestable without a real card, so what is pinned here
-is the *wiring*: which flag `_loss_for` reads to decide whether to enter
+is the *wiring*: which flag `_device_loss` reads to decide whether to enter
 `torch.autocast`, and which of the three CUDA calls `execute` makes and when.
 Every torch.cuda.* function used below is a spy or a stub — nothing here
 touches a real device, matching the rest of this package's CPU-only unit
@@ -10,9 +10,12 @@ suite.
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import torch
 
 from effects.application import training_loop as loop_module
+from effects.application.step_preparation import StepPreparer
 from effects.application.train_effect_model import TrainEffectModelConfig
 from effects.application.training_loop import StepLoss, TrainingLoop, autocast_enabled
 from effects.domain.effect_head_layout import EntityFieldTargets
@@ -42,7 +45,7 @@ class _AutocastSpy:
 
 
 class TestAutocastEnabled:
-    """The pure helper `_loss_for`'s flag is computed from (FR-095)."""
+    """The pure helper the device half's flag is computed from (FR-095)."""
 
     def test_a_cpu_device_is_never_autocast(self):
         assert autocast_enabled(torch.device("cpu")) is False
@@ -72,7 +75,7 @@ class TestAutocastEnabled:
 
 
 def _bare_loop(monkeypatch) -> TrainingLoop:
-    """A loop built with no corpus, sized only for `_loss_for`'s own plumbing.
+    """A loop built with no corpus, sized only for `_device_loss`'s own plumbing.
 
     Forces a real ``cpu`` device regardless of what this machine's
     ``torch.cuda.is_available()`` says: on this box it can read ``True`` even
@@ -89,8 +92,8 @@ def _bare_loop(monkeypatch) -> TrainingLoop:
     )
 
 
-def _run_loss_for(monkeypatch, loop, *, autocast: bool):
-    """Call the real `_loss_for` with every internal step stubbed out.
+def _run_device_loss(monkeypatch, loop, *, autocast: bool):
+    """Call the real `_device_loss` with every internal step stubbed out.
 
     What is under test is only whether the call is wrapped in
     `torch.autocast(dtype=torch.bfloat16, enabled=...)` — not the batching,
@@ -107,16 +110,16 @@ def _run_loss_for(monkeypatch, loop, *, autocast: bool):
         loop_module, "per_entity_loss",
         lambda *a, **k: (torch.tensor(0.0), {}),
     )
-    monkeypatch.setattr(TrainingLoop, "_head_terms", lambda self, *a, **k: ({}, None))
+    monkeypatch.setattr(TrainingLoop, "_head_terms", lambda self, *a, **k: {})
 
-    class _Batcher:
+    class _Materializer:
         def materialize(self, prepared, encoder):
-            return {}, []
+            return {}, [], None
 
     # The host half, as training hands it over: it holds no device work, so
     # whether autocast encloses it is not the question.
     prepared = loop_module.PreparedStep(
-        batcher=_Batcher(), batch=None, fields=("dummy",),
+        batch=None, fields=("dummy",),
         gate=torch.zeros((1, 1)), field_targets=EntityFieldTargets({}, {}),
         mask=torch.zeros((1, 1)),
         index=torch.zeros((1, 1), dtype=torch.long),
@@ -130,21 +133,18 @@ def _run_loss_for(monkeypatch, loop, *, autocast: bool):
         def per_entity(self, hidden):
             return torch.zeros((1, 1, 3))
 
-    result = loop._loss_for(
-        None, encoder=None, model=_Model(), tokenizer=None, sidecars=None,
-        widths={}, step=0, fields=("dummy",), prepared=prepared,
-    )
-    assert result is not None
+    run = SimpleNamespace(encoder=None, model=_Model())
+    assert loop._device_loss(prepared, run, _Materializer()) is not None
     return _AutocastSpy.calls
 
 
-class TestLossForAutocast:
+class TestDeviceLossAutocast:
     def test_disabled_on_a_cpu_loop(self, monkeypatch):
-        calls = _run_loss_for(monkeypatch, _bare_loop(monkeypatch), autocast=False)
+        calls = _run_device_loss(monkeypatch, _bare_loop(monkeypatch), autocast=False)
         assert calls == [{"device_type": "cuda", "dtype": torch.bfloat16, "enabled": False}]
 
     def test_enabled_when_the_loop_says_so(self, monkeypatch):
-        calls = _run_loss_for(monkeypatch, _bare_loop(monkeypatch), autocast=True)
+        calls = _run_device_loss(monkeypatch, _bare_loop(monkeypatch), autocast=True)
         assert calls == [{"device_type": "cuda", "dtype": torch.bfloat16, "enabled": True}]
 
 
@@ -188,28 +188,24 @@ def _run_execute(monkeypatch, tmp_path, make_record, *, cuda: bool):  # noqa: F8
     monkeypatch.setattr(loop_module, "AbilityEncoder", lambda config: encoder)
     monkeypatch.setattr(loop_module, "EffectModel", lambda config: model)
     monkeypatch.setattr(
-        TrainingLoop, "_build_tokenizer",
+        StepPreparer, "_build_tokenizer",
         lambda self: type("T", (), {"vocab_size": 8})(),
     )
-    from effects.infrastructure.sidecar_io import SidecarCache
-
-    monkeypatch.setattr(TrainingLoop, "_build_sidecars", lambda self: SidecarCache({}))
     # The script-API vocabulary is read off every real sidecar; none here.
     monkeypatch.setattr(TrainingLoop, "_script_vocabularies", lambda self: ([], []))
     monkeypatch.setattr(
-        TrainingLoop, "_feature_widths",
-        lambda self, records: dict.fromkeys(loop_module.SlotKind, 4),
+        loop_module, "feature_widths",
+        lambda records: dict.fromkeys(loop_module.SlotKind, 4),
     )
     monkeypatch.setattr(
-        TrainingLoop, "_loss_for",
-        lambda self, plan, *a, **k: StepLoss(
+        TrainingLoop, "_device_loss",
+        lambda self, prepared, *a, **k: StepLoss(
             total=model.p.sum(), shipped=model.p.sum(), parts={}, terms={},
         ),
     )
     # The step's host half would pin its tensors on this fake device; the plan
     # stands in for what it would have prepared.
-    monkeypatch.setattr(TrainingLoop, "_training_heads", lambda self, model: frozenset())
-    monkeypatch.setattr(TrainingLoop, "_prepare_step", lambda self, plan, *a, **k: plan)
+    monkeypatch.setattr(StepPreparer, "prepare_step", lambda self, plan, *a, **k: plan)
     monkeypatch.setattr(
         TrainingLoop, "_validate", lambda self, records, *a, **k: 1.0,
     )

@@ -13,6 +13,7 @@ import pytest
 import torch
 
 from effects.application.surface_batching import NoiseState, SurfaceBatcher
+from effects.application.text_staging import MlmMasker
 from effects.domain.effect_head_input import ACT_SLOT, SlotKind
 from effects.domain.provenance import ProvenanceKey, SidecarLine
 from effects.domain.records import (
@@ -27,6 +28,7 @@ from effects.domain.variants import VariantMasks
 from effects.infrastructure.record_io import read_shard
 from effects.infrastructure.sidecar_io import SidecarCache
 from tests.unit.effects.builders import (
+    make_batcher,
     make_entity,
     make_record,
     make_snapshot,
@@ -66,7 +68,7 @@ def _record() -> EffectRecord:
 
 
 def _batcher(sidecars=None, **masks) -> SurfaceBatcher:
-    return SurfaceBatcher(
+    return make_batcher(
         tokenizer=None, sidecars=sidecars or _Sidecars(), masks=VariantMasks(**masks),
         surface="script", e_dim=4, widths={}, device=torch.device("cpu"),
     )
@@ -85,7 +87,7 @@ def _prepared(variant: str):
     from effects.domain.variants import variant_masks
 
     record = _record()
-    batcher = SurfaceBatcher(
+    batcher = make_batcher(
         tokenizer=AbilityTokenizer({"[PAD]": 0, "[UNK]": 1, "[CLS]": 2, "[MASK]": 3}),
         sidecars=_Sidecars(), masks=variant_masks(variant), surface="script",
         e_dim=4, widths=feature_widths([record]), device=torch.device("cpu"),
@@ -239,9 +241,13 @@ def test_at_step_zero_nothing_is_added():
     assert torch.equal(noise.apply(matrix), matrix)
 
 
-def test_a_scoring_batcher_carries_no_noise():
-    """Validation, evaluation and encoding never perturb e (scenario 4)."""
-    assert _batcher().noise is None
+def test_a_scoring_batcher_carries_no_noise(tmp_path):
+    """Validation, evaluation and encoding never perturb e (scenario 4): the
+    materializer a scoring batch is built with has none unless handed one."""
+    from effects.application.surface_batching import Materializer
+    from effects.domain.variants import variant_masks
+
+    assert Materializer(torch.device("cpu"), variant_masks("full")).noise is None
 
 
 # ── decision records and option rows (FR-060a, FR-063a) ─────────────────
@@ -255,7 +261,7 @@ def _fixture_batcher() -> tuple[SurfaceBatcher, list[EffectRecord]]:
         "cardsfolder": _FIXTURES / "gen1-sidecars" / "cardsfolder",
         "tokenscripts": _FIXTURES / "gen1-sidecars" / "tokenscripts",
     })
-    batcher = SurfaceBatcher(
+    batcher = make_batcher(
         tokenizer=None, sidecars=sidecars, masks=VariantMasks(),
         surface="script", e_dim=4, widths={}, device=torch.device("cpu"),
     )
@@ -293,7 +299,7 @@ def test_a_real_gen2_charm_gets_its_four_mode_rows_after_its_root():
     gen2 = _FIXTURES / "gen2-sidecars"
     sidecars = SidecarCache({"cardsfolder": gen2 / "cardsfolder"})
     root = ProvenanceKey("cardsfolder/c/cryptic_command.txt", 0, "spell", 0)
-    batcher = SurfaceBatcher(
+    batcher = make_batcher(
         tokenizer=None, sidecars=sidecars, masks=VariantMasks(),
         surface="script", e_dim=4, widths={}, device=torch.device("cpu"),
     )
@@ -372,14 +378,14 @@ def _mlm_lines(lengths, *, number: float | None = None) -> list:
 
 
 def _mlm_batcher() -> SurfaceBatcher:
-    batcher = _batcher()
-    batcher.tokenizer = _MaskTokens()
-    return batcher
+    return make_batcher(tokenizer=_MaskTokens(), sidecars=_Sidecars())
 
 
 def _mlm_pass(batcher, lines, mask_prob):
     masked = batcher.draw_mlm_mask(lines, mask_prob)
-    return None if masked is None else batcher.mlm_forward(_EchoEncoder(), masked)
+    if masked is None:
+        return None
+    return MlmMasker.forward(_EchoEncoder(), masked, torch.device("cpu"))
 
 
 def test_the_mlm_pass_returns_only_the_masked_positions():
@@ -435,7 +441,7 @@ def test_a_withheld_keyword_is_read_as_its_definition_never_its_token():
             reminder_template="cant be blocked except by creatures with flying or reach",
         )},
     )
-    batcher = SurfaceBatcher(
+    batcher = make_batcher(
         tokenizer=tokenizer, sidecars=_Sidecars(), masks=VariantMasks(),
         surface="prose", e_dim=4, widths={}, device=torch.device("cpu"),
         withhold_keyword="Flying",
@@ -466,7 +472,7 @@ def test_a_withheld_keywords_token_never_appears_even_inside_an_expansion():
             ),
         },
     )
-    batcher = SurfaceBatcher(
+    batcher = make_batcher(
         tokenizer=tokenizer, sidecars=_Sidecars(), masks=VariantMasks(),
         surface="prose", e_dim=4, widths={}, device=torch.device("cpu"),
         withhold_keyword="Flying", keyword_expand_p=1.0,
@@ -502,7 +508,7 @@ def test_the_identity_batch_reads_each_texts_own_row():
 
     texts = ["creatures you control get +1/+1", "deals 3 damage to any target"]
     table = IdentityTable(texts, e_dim=4)
-    batcher = SurfaceBatcher(
+    batcher = make_batcher(
         tokenizer=None, sidecars=_Sidecars(), masks=VariantMasks(identity_embedding=True),
         surface="script", e_dim=4, widths={}, device=torch.device("cpu"),
         identity_table=table,
@@ -526,7 +532,7 @@ def test_a_prose_text_is_encoded_with_its_lines_role_spans():
         script_text="AB$ Draw | Cost$ T",
         role_spans=(RoleSpan(0, 4, "cost"), RoleSpan(5, len(prose), "effect")),
     )
-    batcher = SurfaceBatcher(
+    batcher = make_batcher(
         tokenizer=AbilityTokenizer({"[PAD]": 0, "[UNK]": 1, "[CLS]": 2, "[MASK]": 3}),
         sidecars=_Sidecars(), masks=VariantMasks(), surface="prose", e_dim=4,
         widths={}, device=torch.device("cpu"),

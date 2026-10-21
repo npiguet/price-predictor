@@ -136,8 +136,7 @@ def run_ablation(probe_model, records: list, stats: CacheStatistics, *,
     with torch.no_grad():
         for start in range(0, len(records), batch_size):
             chunk = records[start : start + batch_size]
-            batch, surfaces = batcher.build(chunk, encoder)
-            encoded = batcher.encoded
+            batch, surfaces, encoded = batcher.build(chunk, encoder)
             targets = [derive_targets(record) for record in chunk]
             base = losses(batch, surfaces, targets, batch["e_vectors"])
             for name, value in base.items():
@@ -194,7 +193,7 @@ def field_losses(model, probe_model, records: list, *, batch_size: int = 32) -> 
     with torch.no_grad():
         for start in range(0, len(records), batch_size):
             chunk = records[start : start + batch_size]
-            batch, surfaces = probe_model.batcher.build(chunk, probe_model.encoder)
+            batch, surfaces, _encoded = probe_model.batcher.build(chunk, probe_model.encoder)
             outputs = model.per_entity(model(**batch))
             targets = [derive_targets(record) for record in chunk]
             gate, field_targets, mask, index = entity_target_tensors(

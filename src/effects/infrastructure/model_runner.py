@@ -23,10 +23,13 @@ from pathlib import Path
 
 import torch
 
+from effects.application.ability_text import KeyResolver
 from effects.application.surface_batching import (
     IdentityTable,
+    Materializer,
     SurfaceBatcher,
 )
+from effects.application.text_staging import TextStager
 from effects.application.train_effect_model import RANDOM_SEED
 from effects.domain.ability_encoder import (
     AbilityEncoder,
@@ -148,22 +151,24 @@ class LoadedModel:
         # arm trained before the layout was recorded, reads the earlier layout
         # bit for bit (FR-063c).
         layout = input_layout_of(checkpoint)
+        masks = variant_masks(checkpoint.variant)
         return SurfaceBatcher(
-            tokenizer=self.tokenizer,
-            sidecars=self.sidecars,
-            masks=variant_masks(checkpoint.variant),
-            surface=self.surface,
+            stager=TextStager(
+                tokenizer=self.tokenizer,
+                surface=self.surface,
+                withhold_keyword=checkpoint.provenance.withheld_keyword,
+                # Both are training-time augmentations. Sampling them at
+                # evaluation would make the gate's numbers depend on a coin flip.
+                keyword_expand_p=INFERENCE_KEYWORD_EXPAND_P,
+                truncations=TruncationLog(log_truncation(logger, "evaluation")),
+            ),
+            resolver=KeyResolver(self.sidecars, self.surface),
+            masks=masks,
             e_dim=checkpoint.encoder_config.e_dim,
             widths=feature_widths(records, layout=layout),
-            device=self.device,
-            withhold_keyword=checkpoint.provenance.withheld_keyword,
-            # Both are training-time augmentations. Sampling them at evaluation
-            # would make the gate's numbers depend on a coin flip.
-            keyword_expand_p=INFERENCE_KEYWORD_EXPAND_P,
+            materializer=Materializer(self.device, masks, self.identity_table),
             context_dropout=0.0,
             rng=random.Random(RANDOM_SEED),
-            identity_table=self.identity_table,
-            truncations=TruncationLog(log_truncation(logger, "evaluation")),
             input_layout=layout,
         )
 
