@@ -47,7 +47,7 @@ def _run(
     try:
         resolve_connector_jar()
     except FileNotFoundError:
-        pytest.skip("forge-connector JAR not built (mvn package -DskipTests)")
+        pytest.skip("forge-connector JAR not built (mvn install -DskipTests)")
 
     process = MatchWorkerConnector().start(
         None,

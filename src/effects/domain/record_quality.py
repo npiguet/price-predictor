@@ -1,6 +1,7 @@
 """Which records a curated corpus refuses on sight (FR-148): four rules.
 
-Three shapes the first corpus held that no model should learn from. A
+Three of them are shapes the first corpus held that no model should learn
+from. A
 resolution record with no acting ability is an outcome with no cause. A
 resolution record whose every acting key maps to no rendered line is the same
 thing one step further in: it *has* a key, so the first rule passes it, and

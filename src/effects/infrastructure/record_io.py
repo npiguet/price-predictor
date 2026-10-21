@@ -885,9 +885,8 @@ def iter_shards(directory: Path) -> list[Path]:
     target the corpus had already met.
 
     Path order rather than name order, so two shards of the same name in
-    different subdirectories keep a stable relative position — the epoch walk
-    and the split's shard-by-shard accumulation both depend on the order not
-    moving between runs.
+    different subdirectories keep a stable relative position, and every
+    reader that walks a corpus walks it in the same order on every run.
     """
     directory = Path(directory)
     if not directory.is_dir():

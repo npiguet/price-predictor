@@ -161,7 +161,7 @@ def loadable_variants(
             f"{listing}: VariantSidecarMain writes the loadable-name list "
             "beside the variant scripts, and without it there is no way to "
             "tell which perturbations Forge accepted. Rebuild the connector "
-            "JAR (cd forge-connector && mvn package -DskipTests)."
+            "JAR (cd forge-connector && mvn install -DskipTests)."
         )
     accepted = {
         line.strip() for line in listing.read_text(encoding="utf-8").splitlines()

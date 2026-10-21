@@ -40,7 +40,7 @@ def _require_jar() -> None:
     try:
         resolve_connector_jar()
     except FileNotFoundError:
-        pytest.skip("forge-connector JAR not built (mvn package -DskipTests)")
+        pytest.skip("forge-connector JAR not built (mvn install -DskipTests)")
 
 
 def _run_worker(records_dir: Path, output_file: Path | None) -> list:

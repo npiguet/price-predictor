@@ -27,7 +27,7 @@ class KeywordDefinitionConnector:
 
         Raises:
             FileNotFoundError: If the connector JAR is missing (the error names
-                the ``mvn package`` command) or java is not on PATH.
+                the build command) or java is not on PATH.
         """
         # KeywordDefinitionMain calls ForgeEnvironmentInitializer.initialize(),
         # which reaches GuiBase / FModel in forge-gui and pulls forge-ai
