@@ -40,6 +40,7 @@ from effects.domain.effect_model import (
     field_loss,
 )
 from effects.domain.effect_targets import derive_targets
+from effects.domain.gate_metrics import balanced_accuracy, f1_score, poisson_deviance
 from effects.domain.keyword_names import normalize_keyword
 from effects.domain.records import RecordKind, acting_keys
 from effects.domain.rule_families import rule_family
@@ -188,7 +189,7 @@ def measure(
 
     return GateOneMetrics(
         affected_gate_f1=_f1(gate_pred, gate_true),
-        zone_outcome_accuracy=_accuracy(zone_pred, zone_true),
+        zone_outcome_accuracy=balanced_accuracy(_cat(zone_pred), _cat(zone_true)),
         mean_poisson_deviance=_deviance(count_pred, count_true),
         records=tuple(results),
     )
@@ -281,21 +282,10 @@ def _cat(chunks: list[np.ndarray]) -> np.ndarray:
 
 
 def _f1(pred: list[np.ndarray], true: list[np.ndarray]) -> float:
-    from effects.application.evaluate_effect_model import f1_score
-
     predicted, observed = _cat(pred), _cat(true)
     return f1_score(predicted, observed) if predicted.size else float("nan")
 
 
-def _accuracy(pred: list[np.ndarray], true: list[np.ndarray]) -> float:
-    predicted, observed = _cat(pred), _cat(true)
-    if not predicted.size:
-        return float("nan")
-    return float(np.mean(predicted == observed))
-
-
 def _deviance(pred: list[np.ndarray], true: list[np.ndarray]) -> float:
-    from effects.application.evaluate_effect_model import poisson_deviance
-
     predicted, observed = _cat(pred), _cat(true)
     return poisson_deviance(predicted, observed) if predicted.size else float("nan")

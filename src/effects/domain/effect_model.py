@@ -39,6 +39,7 @@ from effects.domain.ability_encoder import ENCODER_D_MODEL
 from effects.domain.effect_head_input import (
     CARD_TYPES,
     COUNTER_TYPES,
+    MAGNITUDE_CAP,
     OVERLAY_KEYWORDS,
     SlotKind,
 )
@@ -467,15 +468,6 @@ def active_fields(
         if spec.supervised_by & present_classes
         and (spec.group is FieldGroup.DENSE or step >= curriculum_step)
     )
-
-
-#: The largest magnitude a count or a signed delta is scored at. Above about
-#: forty an amount is the game state compounding — a counter doubling run to two
-#: million in one long game — not what the ability's text says, and one such
-#: target under the Poisson loss pulls a step a million times harder than an
-#: ordinary one. Every consumer of the magnitudes caps them here: the field
-#: losses, the constant-predictor floor and the evaluation's deviance.
-MAGNITUDE_CAP = 40.0
 
 
 def capped(target: torch.Tensor) -> torch.Tensor:

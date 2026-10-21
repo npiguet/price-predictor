@@ -1124,8 +1124,8 @@ class TestMagnitudeCap:
     def test_the_evaluation_deviance_caps_the_observed_amount(self):
         import numpy as np
 
-        from effects.application.evaluate_effect_model import poisson_deviance
         from effects.domain.effect_model import MAGNITUDE_CAP
+        from effects.domain.gate_metrics import poisson_deviance
         predicted = np.array([3.0, 5.0])
         assert poisson_deviance(predicted, np.array([1.0, 2_000_000.0])) == \
             poisson_deviance(predicted, np.array([1.0, MAGNITUDE_CAP]))

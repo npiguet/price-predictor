@@ -122,14 +122,22 @@ COUNTER_ALIASES: dict[str, str] = {"+1/+1": "P1P1", "-1/-1": "M1M1"}
 #: Appended rather than inserted, so every earlier member keeps its slot.
 OVERLAY_KEYWORDS_GEN2: tuple[str, ...] = (*OVERLAY_KEYWORDS, "landwalk")
 
+#: The largest magnitude a count or a signed delta is scored at. Above about
+#: forty an amount is the game state compounding — a counter doubling run to two
+#: million in one long game — not what the ability's text says, and one such
+#: target under the Poisson loss pulls a step a million times harder than an
+#: ordinary one. Every consumer of the magnitudes caps them here: the field
+#: losses, the constant-predictor floor and the evaluation's deviance. Defined
+#: here, torch-free, so the thermometer below and the gate metrics share it.
+MAGNITUDE_CAP = 40.0
+
 #: Positions of a thermometer code. Position k is set when the value is at
 #: least k, so the dot product of an amount's code with a one-hot of t is 1
 #: exactly when the amount is at least t — the comparison "this damage kills
-#: this creature" is one attention score. Forty, the magnitude cap every
-#: amount is scored at (``effect_model.MAGNITUDE_CAP``, which this module cannot
-#: import without a cycle): life often climbs past its starting twenty, and a
-#: larger value sets every position.
-THERMOMETER_STEPS = 40
+#: this creature" is one attention score. As many as the magnitude cap: life
+#: often climbs past its starting twenty, and a larger value sets every
+#: position.
+THERMOMETER_STEPS = int(MAGNITUDE_CAP)
 
 
 def thermometer(value: float) -> list[float]:

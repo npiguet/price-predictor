@@ -23,7 +23,6 @@ from __future__ import annotations
 
 import logging
 import math
-import random
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from enum import StrEnum
@@ -41,6 +40,16 @@ from effects.domain.damage_step_keywords import (
     MIN_QUALIFYING_RECORDS,
     DamageStepKeyword,
 )
+from effects.domain.gate_metrics import (
+    GATE1_MIN_DEVIANCE_REDUCTION,
+    GATE1_MIN_GATE_F1_GAIN,
+    GATE1_MIN_ZONE_ACCURACY_GAIN,
+    GATE3_MAX_MEAN_COSINE,
+    GATE3_MAX_TOP_COMPONENT,
+    cosine_distance,
+    mean_pairwise_cosine,
+    top_component_share,
+)
 from effects.domain.line_query import LineQuery
 from effects.domain.records import LegalityDecision
 
@@ -49,36 +58,10 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-# ── gate thresholds (FR-118, FR-119, FR-123). Contract, not tuning. ──────
-GATE1_MIN_GATE_F1_GAIN = 0.05
-GATE1_MIN_ZONE_ACCURACY_GAIN = 0.05
-GATE1_MIN_DEVIANCE_REDUCTION = 0.05
-GATE3_MAX_MEAN_COSINE = 0.5
-GATE3_COSINE_PAIRS = 10_000
-GATE3_MAX_TOP_COMPONENT = 0.30
-
 #: Records read eagerly before gate 2 loads its checkpoint. The loader measures
 #: each slot kind's width from real records, and every combat record on a board
 #: with a creature and a player answers that identically.
 SLOT_WIDTH_SAMPLE = 8
-
-
-class Stratum(StrEnum):
-    """The four held-out strata (FR-106).
-
-    They separate "has the model seen this exact text" from "has it seen these
-    parts": a model that only memorized texts scores well on ``shared_text``
-    and badly on the other three.
-    """
-
-    #: The line's text appears on no training card.
-    UNIQUE_TEXT = "unique-text"
-    #: The line's text also appears on a training card.
-    SHARED_TEXT = "shared-text"
-    #: Every sub-ability API type appears in training; their combination does not.
-    NOVEL_COMBINATION = "novel-combination"
-    #: A numeric parameter outside the range seen in training.
-    NUMERIC_EXTRAPOLATION = "numeric-extrapolation"
 
 
 class CheckStatus(StrEnum):
@@ -154,39 +137,6 @@ def run_gate_one(
         )
 
     return evaluate_gate_one(scores["model"], scores["identity"])
-
-
-def poisson_deviance(predicted: np.ndarray, observed: np.ndarray) -> float:
-    """Mean Poisson deviance, the count analogue of squared error.
-
-    Gate 1 reads it over the magnitude side of the count-valued fields, which is
-    where "how much damage" and "how many cards" live — the numbers a model that
-    is not reading the text can only predict at the corpus average.
-    """
-    from effects.domain.effect_model import MAGNITUDE_CAP
-
-    predicted = np.asarray(predicted, dtype=np.float64)
-    # Capped as the training loss caps it, so one runaway amount cannot
-    # dominate the mean the model was never asked to fit.
-    observed = np.minimum(np.asarray(observed, dtype=np.float64), MAGNITUDE_CAP)
-    if predicted.size == 0:
-        return float("nan")
-    safe_predicted = np.clip(predicted, 1e-9, None)
-    with np.errstate(divide="ignore", invalid="ignore"):
-        ratio = np.where(observed > 0, observed * np.log(observed / safe_predicted), 0.0)
-    return float(2.0 * np.mean(ratio - (observed - safe_predicted)))
-
-
-def f1_score(predicted: np.ndarray, observed: np.ndarray) -> float:
-    """Binary F1 over the affected/unaffected gate."""
-    predicted = np.asarray(predicted).astype(bool)
-    observed = np.asarray(observed).astype(bool)
-    true_positive = float(np.sum(predicted & observed))
-    if true_positive == 0:
-        return 0.0
-    precision = true_positive / float(np.sum(predicted))
-    recall = true_positive / float(np.sum(observed))
-    return 2 * precision * recall / (precision + recall)
 
 
 def _margin(
@@ -365,43 +315,6 @@ def evaluate_gate_two(verdicts: list[KeywordVerdict]) -> CheckResult:
 # ── gate 3: collapse canaries ───────────────────────────────────────────
 
 
-def mean_pairwise_cosine(
-    vectors: np.ndarray, *, pairs: int = GATE3_COSINE_PAIRS, seed: int = 42,
-) -> float:
-    """Mean cosine similarity over ``pairs`` random distinct pairs.
-
-    Sampled rather than exhaustive because the corpus has ~38k unique texts and
-    the full pairwise matrix is 700 million entries for a number a sample
-    estimates to three decimals.
-    """
-    count = vectors.shape[0]
-    if count < 2:
-        return float("nan")
-    norms = np.linalg.norm(vectors, axis=1, keepdims=True)
-    unit = vectors / np.clip(norms, 1e-12, None)
-    rng = random.Random(seed)
-    total = 0.0
-    for _ in range(pairs):
-        i = rng.randrange(count)
-        j = rng.randrange(count - 1)
-        if j >= i:
-            j += 1
-        total += float(np.dot(unit[i], unit[j]))
-    return total / pairs
-
-
-def top_component_share(vectors: np.ndarray) -> float:
-    """Fraction of total variance the largest principal component explains."""
-    if vectors.shape[0] < 2:
-        return float("nan")
-    centred = vectors - vectors.mean(axis=0, keepdims=True)
-    singular = np.linalg.svd(centred, compute_uv=False)
-    variance = singular ** 2
-    total = float(variance.sum())
-    # No variance at all is every vector on one point: the whole collapse.
-    return float(variance[0] / total) if total > 0 else 1.0
-
-
 def evaluate_gate_three(vectors: np.ndarray, *, seed: int = 42) -> CheckResult:
     """Two collapse canaries, both of which block shipping (FR-123).
 
@@ -431,13 +344,6 @@ def evaluate_gate_three(vectors: np.ndarray, *, seed: int = 42) -> CheckResult:
 
 
 # ── the ward canary (FR-112) ────────────────────────────────────────────
-
-
-def cosine_distance(a: np.ndarray, b: np.ndarray) -> float:
-    denominator = float(np.linalg.norm(a) * np.linalg.norm(b))
-    if denominator == 0.0:
-        return float("nan")
-    return 1.0 - float(np.dot(a, b)) / denominator
 
 
 def evaluate_ward_canary(
@@ -508,118 +414,6 @@ def skip_unavailable(name: str) -> CheckResult:
     )
 
 
-# ── the role-polarity probe (FR-116) ────────────────────────────────────
-
-
-def evaluate_role_polarity(
-    cost_position_sign: float | None, effect_position_sign: float | None,
-) -> CheckResult:
-    """Does ``{R}`` in a cost mean the opposite of ``{R}`` in an effect?
-
-    The narrowest possible test of the role embedding. The same mana symbol
-    appears on both sides of an activated ability, and the two mean opposite
-    things: paying ``{R}`` takes red mana out of the pool, producing ``{R}``
-    puts it in. A model that read the symbol without its role would predict the
-    same sign for both.
-
-    Needs mana records, so it waits for stage two: the cost half is observable
-    from stage one, but the effect half only exists once mana abilities are
-    collected.
-    """
-    if cost_position_sign is None or effect_position_sign is None:
-        return skip_unavailable("role-polarity")
-    values = {
-        "cost_position_mana_sign": cost_position_sign,
-        "effect_position_mana_sign": effect_position_sign,
-    }
-    if cost_position_sign < 0 < effect_position_sign:
-        return CheckResult(
-            "role-polarity", CheckStatus.REPORTED,
-            f"{{R}} in cost position predicts a mana decrease "
-            f"({cost_position_sign:+.3f}) and in effect position an increase "
-            f"({effect_position_sign:+.3f})",
-            values,
-        )
-    return CheckResult(
-        "role-polarity", CheckStatus.REPORTED,
-        f"{{R}} predicts the same direction in both positions "
-        f"(cost {cost_position_sign:+.3f}, effect {effect_position_sign:+.3f}) "
-        "— the role embedding is not separating them",
-        values,
-    )
-
-
-# ── the fork checks (FR-042, FR-116) ────────────────────────────────────
-
-
-def pair_forks(records: list) -> list[tuple]:
-    """Join each fork record to the real record it mirrors.
-
-    The pairing lives in ``mirror_of`` rather than being reconstructed from
-    board state, because two combats on one turn can look identical and the
-    pairing has to be exact for the difference to mean anything.
-    """
-    by_id = {record.record_id: record for record in records}
-    pairs = []
-    for record in records:
-        if record.fork and record.mirror_of:
-            real = by_id.get(record.mirror_of)
-            if real is not None:
-                pairs.append((real, record))
-    return pairs
-
-
-def evaluate_matched_forks(
-    pairs: list[tuple], agreements: list[bool],
-) -> CheckResult:
-    """How often the model's predictions agree across a matched pair.
-
-    The real-versus-fork difference is computed **here**, at evaluation time,
-    and never becomes a training target (FR-042). A model trained on its own
-    disagreements would learn to reproduce its errors rather than correct them.
-    """
-    if not pairs:
-        return skip_unavailable("matched-real-vs-fork")
-    if not agreements:
-        return CheckResult(
-            "matched-real-vs-fork", CheckStatus.REPORTED,
-            f"{len(pairs)} matched pairs, none scored",
-        )
-    rate = sum(agreements) / len(agreements)
-    return CheckResult(
-        "matched-real-vs-fork", CheckStatus.REPORTED,
-        f"predictions agree on {rate:.1%} of {len(pairs)} matched pairs",
-        {"agreement": rate, "pairs": float(len(pairs))},
-    )
-
-
-def evaluate_probe_diff(
-    verdicts_by_keyword: dict[str, KeywordVerdict],
-    probed_keywords: tuple[str, ...],
-) -> CheckResult:
-    """Gate 2's canary, re-run over the real-and-fork combat pairs.
-
-    Only for keywords a probe was actually taken for: the point is to check
-    whether an isolated counterfactual agrees with the model-side perturbation
-    gate 2 used, and a keyword with no probe has nothing to compare against.
-    """
-    if not probed_keywords:
-        return skip_unavailable("probe-diff")
-    rendered = []
-    for keyword in probed_keywords:
-        verdict = verdicts_by_keyword.get(keyword)
-        if verdict is None:
-            continue
-        rendered.append(
-            f"{keyword} {verdict.direction_agreement:.1%} over "
-            f"{verdict.qualifying_records} pairs"
-        )
-    return CheckResult(
-        "probe-diff", CheckStatus.REPORTED,
-        "; ".join(rendered) if rendered else "no probed keyword had pairs",
-    )
-
-
 # ── the report ──────────────────────────────────────────────────────────
 
 
@@ -679,6 +473,13 @@ class EvaluationReport:
         return "\n".join(lines)
 
 
+#: Where the sealed pipeline's per-card winnability labels live by default;
+#: ``--win-rates`` names another table. The decodability battery skips when it
+#: is absent rather than failing: the labels are an operator's training data,
+#: not a repository artifact.
+DEFAULT_WIN_RATES = Path("output/sealed/cards-win-rates.txt")
+
+
 @dataclass
 class EvaluateEffectModelConfig:
     checkpoint: Path = field(
@@ -699,9 +500,7 @@ class EvaluateEffectModelConfig:
         default_factory=lambda: Path("output/effects/abilities"),
     )
     #: The per-card win-rate table the decodability battery reads (FR-070).
-    win_rates: Path = field(
-        default_factory=lambda: Path("output/sealed/cards-win-rates.txt"),
-    )
+    win_rates: Path = field(default_factory=lambda: DEFAULT_WIN_RATES)
 
 
 def parse_variant_checkpoint(value: str) -> tuple[str, Path]:
@@ -940,12 +739,6 @@ NEIGHBOUR_QUERIES: tuple[LineQuery, ...] = (
         "target creature gets +2/+2 until end of turn.", card="artful maneuver",
     ),
 )
-
-#: Where the sealed pipeline's per-card winnability labels live by default;
-#: ``--win-rates`` names another table. The decodability battery skips when it
-#: is absent rather than failing: the labels are an operator's training data,
-#: not a repository artifact.
-DEFAULT_WIN_RATES = Path("output/sealed/cards-win-rates.txt")
 
 # ── breakdowns (FR-064 – FR-068) ────────────────────────────────────────
 #

@@ -642,6 +642,23 @@ def events_of(record: EffectRecord) -> tuple[Event, ...]:
     return ()
 
 
+def pair_forks(records: list[EffectRecord]) -> list[tuple[EffectRecord, EffectRecord]]:
+    """Join each fork record to the real record it mirrors, as ``(real, fork)``.
+
+    The pairing lives in ``mirror_of`` rather than being reconstructed from
+    board state, because two combats on one turn can look identical and the
+    pairing has to be exact for the difference to mean anything.
+    """
+    by_id = {record.record_id: record for record in records}
+    pairs = []
+    for record in records:
+        if record.fork and record.mirror_of:
+            real = by_id.get(record.mirror_of)
+            if real is not None:
+                pairs.append((real, record))
+    return pairs
+
+
 def acting_keys(record: EffectRecord) -> tuple[ProvenanceKey, ...]:
     """The keys ``[ACT]`` reads: the acting line, or a decision's candidate.
 

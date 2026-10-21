@@ -19,8 +19,8 @@ from pathlib import Path
 
 import pytest
 
-from effects.application.evaluate_effect_model import pair_forks
 from effects.domain.collection_caps import CollectionCaps
+from effects.domain.records import pair_forks
 from effects.infrastructure.record_io import read_records
 from price_predictor.infrastructure.forge_jvm import resolve_connector_jar
 from sealed.infrastructure.match_worker_connector import MatchWorkerConnector
