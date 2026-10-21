@@ -201,17 +201,33 @@ def load_runnable(
     ).runnable(records)
 
 
+#: Model state a shipped checkpoint may lack. The training-only heads are
+#: filtered out at save time (FR-076), and the option-kind embedding, which
+#: starts at zero, postdates checkpoints that read every row as it trained
+#: without it (FR-063a). Anything else missing would run at its random
+#: initial weights while every number it produced still looked like a result.
+OPTIONAL_STATE_PREFIXES: tuple[str, ...] = (
+    *(f"{head}." for head in EffectModel.TRAINING_ONLY_HEADS),
+    "option_kind_embedding.",
+)
+
+
 def _load_weights(checkpoint, device) -> tuple[AbilityEncoder, EffectModel]:
+    """The checkpoint's encoder and model on ``device``, in evaluation mode."""
     # Built at the size the checkpoint recorded (FR-061): a non-default arm
     # loads without its flags restated.
     encoder = AbilityEncoder(checkpoint.encoder_config).to(device)
     if checkpoint.encoder_state:
         encoder.load_state_dict(checkpoint.encoder_state)
     model = EffectModel(checkpoint.model_config).to(device)
-    # The training-only heads are filtered out at save time, so the shipped
-    # state is a strict subset of what the model declares.
-    model.load_state_dict(checkpoint.model_state, strict=False)
-    return encoder, model
+    missing, unexpected = model.load_state_dict(checkpoint.model_state, strict=False)
+    absent = [key for key in missing if not key.startswith(OPTIONAL_STATE_PREFIXES)]
+    if absent or unexpected:
+        raise RuntimeError(
+            f"the checkpoint's model state does not fit the model it declares: "
+            f"missing {absent}, unexpected {list(unexpected)}"
+        )
+    return encoder.eval(), model.eval()
 
 
 def _identity_table(checkpoint, device) -> torch.nn.Embedding | None:
