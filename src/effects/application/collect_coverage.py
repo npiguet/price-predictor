@@ -34,9 +34,10 @@ import logging
 import os
 import random
 from collections import Counter, defaultdict
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass, field, replace
+from functools import partial
 from pathlib import Path
 
 from effects.domain.collection_caps import CollectionCaps
@@ -81,6 +82,7 @@ RANDOM_SEED = 42
 
 #: FR-036's floor: distinct games a held-out text must act in.
 DEFAULT_MIN_TEXT_GAMES = 5
+
 
 @dataclass
 class CollectCoverageConfig:
@@ -133,7 +135,7 @@ def count_shard(shard: Path) -> Counter[str]:
     return counts
 
 
-class CoverageCounter:
+class _ShardCounter:
     """Counts each shard once across a whole run, not once per round.
 
     The recount used to re-read every shard under ``--effect-records`` after
@@ -147,32 +149,31 @@ class CoverageCounter:
     condition fires — and a shard file is never reopened afterwards, because
     its name carries the worker's JVM lifetime and each round's workers are new
     JVMs. So a shard this has read cannot gain records later.
-
-    The consequence for callers: ``CardCoverage.records`` is now accumulated
-    rather than assigned, so nothing else may overwrite it.
     """
 
     def __init__(self, progress_every: int = PROGRESS_EVERY_SHARDS) -> None:
         self._counted: set[Path] = set()
         self._progress_every = progress_every
 
-    def update(
+    def _count_fresh[T](
         self,
-        coverage: dict[str, CardCoverage],
         records_dir: Path,
+        count: Callable[[Path], T],
+        apply: Callable[[T], None],
         *,
-        workers: int | None = None,
+        workers: int | None,
     ) -> int:
-        """Add the counts of shards not yet read. Returns how many it read.
+        """``count`` each shard not yet read and ``apply`` it. Returns how many.
 
-        Shards are independent and each contributes only a per-card count, so
-        the work maps: count shards in parallel, sum the counters, apply once.
-        Summation is associative, so the answer cannot depend on how the shards
-        were divided or in what order they finished.
+        Shards are independent and each contributes only its own counts, so
+        the work maps: count shards in parallel, apply each as it arrives.
+        Applying adds, which is associative, so the answer cannot depend on
+        how the shards were divided or in what order they finished.
 
         ``workers`` defaults to the machine's usable cores. One means in-process
         — what the tests use for the serial reference, and what a handful of
         shards wants, since a process pool costs more to start than it saves.
+        ``count`` must pickle, since a pool ships it to every process.
         """
         from effects.infrastructure.record_io import iter_shards
 
@@ -185,23 +186,17 @@ class CoverageCounter:
 
         workers = workers or (os.process_cpu_count() or 1)
         workers = max(1, min(workers, len(fresh)))
-        totals: Counter[str] = Counter()
         if workers == 1:
             for done, shard in enumerate(fresh, start=1):
-                totals += count_shard(shard)
+                apply(count(shard))
                 self._note_progress(done, len(fresh))
         else:
             with ProcessPoolExecutor(max_workers=workers) as pool:
-                done = 0
-                for counted in pool.map(count_shard, fresh, chunksize=1):
-                    totals += counted
-                    done += 1
+                parts = pool.map(count, fresh, chunksize=1)
+                for done, part in enumerate(parts, start=1):
+                    apply(part)
                     self._note_progress(done, len(fresh))
 
-        for name, count in totals.items():
-            card = coverage.get(name)
-            if card is not None:
-                card.records += count
         self._counted.update(fresh)
         return len(fresh)
 
@@ -213,6 +208,31 @@ class CoverageCounter:
                 "Counted %d of %d shard(s) (%.0f%%)",
                 done, total, 100.0 * done / total,
             )
+
+
+class CoverageCounter(_ShardCounter):
+    """Each card's qualifying records, each shard counted once across the run.
+
+    The consequence for callers: ``CardCoverage.records`` is accumulated
+    rather than assigned, so nothing else may overwrite it.
+    """
+
+    def update(
+        self,
+        coverage: Mapping[str, CardCoverage],
+        records_dir: Path,
+        *,
+        workers: int | None = None,
+    ) -> int:
+        """Add the counts of shards not yet read. Returns how many it read."""
+
+        def add(counts: Counter[str]) -> None:
+            for name, records in counts.items():
+                card = coverage.get(name)
+                if card is not None:
+                    card.records += records
+
+        return self._count_fresh(records_dir, count_shard, add, workers=workers)
 
 
 def build_coverage_decks(
@@ -567,40 +587,27 @@ def count_text_shard(
     return dict(games)
 
 
-class TextCoverageCounter:
-    """Each shard counted once across the run, as ``CoverageCounter`` does."""
+class TextCoverageCounter(_ShardCounter):
+    """Each held-out text's games, each shard counted once across the run."""
 
-    def __init__(self, roots: dict[str, str]) -> None:
+    def __init__(
+        self, roots: dict[str, str], progress_every: int = PROGRESS_EVERY_SHARDS,
+    ) -> None:
+        super().__init__(progress_every)
         self._roots = dict(roots)
-        self._counted: set[Path] = set()
 
     def update(
-        self, coverage: dict[str, TextCoverage], records_dir: Path,
+        self, coverage: Mapping[str, TextCoverage], records_dir: Path,
         *, workers: int | None = None,
     ) -> int:
-        from functools import partial
+        """Add the games of shards not yet read. Returns how many it read."""
 
-        from effects.infrastructure.record_io import iter_shards
+        def add(games_by_text: dict[str, set[str]]) -> None:
+            for text, games in games_by_text.items():
+                coverage[text].games |= games
 
-        fresh = [s for s in iter_shards(Path(records_dir)) if s not in self._counted]
-        if not fresh:
-            return 0
         count = partial(count_text_shard, roots=self._roots, texts=frozenset(coverage))
-        workers = max(1, min(workers or (os.process_cpu_count() or 1), len(fresh)))
-        if workers == 1:
-            parts = map(count, fresh)
-        else:
-            pool = ProcessPoolExecutor(max_workers=workers)
-            parts = pool.map(count, fresh, chunksize=1)
-        try:
-            for part in parts:
-                for text, games in part.items():
-                    coverage[text].games |= games
-        finally:
-            if workers > 1:
-                pool.shutdown()
-        self._counted.update(fresh)
-        return len(fresh)
+        return self._count_fresh(records_dir, count, add, workers=workers)
 
 
 @dataclass

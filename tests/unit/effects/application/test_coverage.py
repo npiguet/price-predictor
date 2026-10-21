@@ -930,6 +930,23 @@ class TestCountingReportsProgress:
 
         assert not [r for r in caplog.messages if "shard" in r and "of 3" in r]
 
+    def test_the_held_out_round_reports_progress_too(self, tmp_path, caplog) -> None:
+        """Its first pass reads the same whole corpus, and was silent."""
+        from effects.application.collect_coverage import TextCoverageCounter
+        from effects.domain.coverage import TextCoverage
+
+        self._shards(tmp_path, 120)
+        counter = TextCoverageCounter(
+            {"cardsfolder": str(tmp_path / "none")}, progress_every=50,
+        )
+
+        with caplog.at_level("INFO"):
+            read = counter.update({"t": TextCoverage(text="t")}, tmp_path, workers=1)
+
+        assert read == 120
+        progress = [r for r in caplog.messages if "of 120 shard" in r]
+        assert len(progress) >= 2, f"expected periodic progress, got {progress}"
+
     def test_a_counting_worker_never_loads_torch(self, tmp_path) -> None:
         """One pool worker per core, each loading torch's CUDA DLLs, exhausts
         the Windows paging file beside a training job — and counting a shard
