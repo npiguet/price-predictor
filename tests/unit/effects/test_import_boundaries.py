@@ -144,6 +144,10 @@ _TORCH_FREE = (
     "effects.domain.sampling",
     "effects.domain.split",
     "effects.domain.variants",
+    "effects.domain.coverage",
+    "effects.domain.canonical_digest",
+    "effects.domain.strata",
+    "effects.application.build_corpus",
 )
 
 
