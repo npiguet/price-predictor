@@ -38,6 +38,7 @@ public final class PatchHooks {
     static final String CARD = "forge.game.card.Card";
     static final String COMBAT = "forge.game.combat.Combat";
     static final String PLAYER_CONTROLLER_AI = "forge.ai.PlayerControllerAi";
+    static final String EFFECT_RECORD_HOOK = "forge.game.ability.EffectRecordHook";
 
     /**
      * One method the engine patch adds, and what having it buys.
@@ -133,6 +134,18 @@ public final class PatchHooks {
             new Hook(EFFECT_RECORD_OUTCOMES, "setEffectRecordOutcomeListener",
                     "the outcomes an effect computes and discards: a coin's "
                     + "result, a clash's winner, a vote's tally, a pile's size"));
+
+    /**
+     * The hooks whose listener has thrown in this JVM, which the engine has
+     * since been ignoring: each slot reports its first failure once on
+     * stderr and carries on, so a channel can go quiet mid-run. Empty on an
+     * unpatched checkout.
+     */
+    @SuppressWarnings("unchecked")
+    public static List<String> silencedHooks() {
+        Object failed = readStatic(EFFECT_RECORD_HOOK, "failedHooks");
+        return failed instanceof List<?> names ? (List<String>) names : List.of();
+    }
 
     /** The required hooks this checkout does not have. */
     public static List<Hook> missing() {

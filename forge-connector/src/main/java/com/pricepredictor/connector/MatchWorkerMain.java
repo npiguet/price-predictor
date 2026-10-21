@@ -297,6 +297,7 @@ public class MatchWorkerMain {
         // keep working unchanged for `sealed match-outcomes`), so a decks-only
         // run goes through the full constructor directly, supplying the same
         // random source and exclusion set the shorter constructors default to.
+        SilencedHookReport silencedHookReport = new SilencedHookReport();
         MatchGenerator generator = new MatchGenerator(
                 eligibleSets, new DeckBuilder(),
                 new GamePlayer(config.bestOf(), effectRecords), config.runId(),
@@ -306,7 +307,10 @@ public class MatchWorkerMain {
 
         long succeeded = generateMatches(
                 generator::generateMatch,
-                result -> recordMatch(result, writer, cardsPlayedWriter, progressWriter),
+                result -> {
+                    recordMatch(result, writer, cardsPlayedWriter, progressWriter);
+                    silencedHookReport.afterMatch();
+                },
                 MAX_CONSECUTIVE_MATCH_FAILURES);
 
         System.err.println("Worker giving up after " + MAX_CONSECUTIVE_MATCH_FAILURES
@@ -391,6 +395,28 @@ public class MatchWorkerMain {
      * {@code null} — is exercisable by a plain unit test that constructs a
      * {@link MatchGenerationResult} fixture and never touches Forge.
      */
+    /**
+     * Names, once per match boundary, each effect-record hook that has gone
+     * quiet since the last one.
+     *
+     * <p>The engine contains a listener that throws, reports it once on
+     * stderr and stops listening to it, so a channel can empty mid-run while
+     * the worker goes on playing. That one stderr line scrolls away; this
+     * line repeats the channel's name where the match log is read.
+     */
+    static final class SilencedHookReport {
+        private int reported;
+
+        void afterMatch() {
+            List<String> silenced = PatchHooks.silencedHooks();
+            if (silenced.size() > reported) {
+                System.err.println("effect-record hooks silenced after a listener failure, "
+                        + "their channels now empty: " + silenced);
+                reported = silenced.size();
+            }
+        }
+    }
+
     static void recordMatch(
             MatchGenerationResult result,
             MatchResultWriter writer,

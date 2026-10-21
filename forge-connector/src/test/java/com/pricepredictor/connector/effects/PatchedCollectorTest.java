@@ -1509,6 +1509,19 @@ class PatchedCollectorTest {
     }
 
     /**
+     * A patched checkout has every required hook, not just the one the mode
+     * probes: an engine refactor that drops or renames a setter would
+     * otherwise leave its channel empty while the count above still agrees
+     * with itself.
+     */
+    @Test
+    void aPatchedCheckoutHasEveryRequiredHook() {
+        if (AttributionMode.detect() == AttributionMode.PATCHED) {
+            assertEquals(List.of(), PatchHooks.missing(), PatchHooks.report());
+        }
+    }
+
+    /**
      * The two read-only hooks answer null outside a resolution.
      *
      * <p>True on a stock checkout because the method does not exist, and true

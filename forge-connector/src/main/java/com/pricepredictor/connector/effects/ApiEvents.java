@@ -487,12 +487,10 @@ final class ApiEvents {
      * different clause for the rest of the JVM's run -- two independent
      * failure modes in two independent pieces of code should not be able to
      * mute each other. A dedicated latch is also this branch's own
-     * convention rather than an exception to it: {@code
-     * AbilityUtils.CLAUSE_LISTENER_FAILURE_REPORTED}, {@code
-     * EffectRecordOutcomes.OUTCOME_LISTENER_FAILURE_REPORTED} and {@code
-     * PatchedCollectors.UNKNOWN_OUTCOME_TYPE_REPORTED} are each their own
-     * latch for their own diagnostic, not one shared across unrelated
-     * failure classes.
+     * convention rather than an exception to it: each engine
+     * {@code EffectRecordHook} and {@code
+     * PatchedCollectors.UNKNOWN_OUTCOME_TYPE_REPORTED} is its own latch for
+     * its own diagnostic, not one shared across unrelated failure classes.
      */
     static void reportMemoFailure(String eventType, RuntimeException e) {
         if (MEMO_FAILURE_REPORTED.compareAndSet(false, true)) {
