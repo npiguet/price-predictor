@@ -123,8 +123,12 @@ def checkpoints(epochs: dict[str, list[dict]]) -> list[tuple[Checkpoint, dict]]:
         if not eps or "arm complete" not in read(RUNS / run.directory / "arm.log"):
             continue  # still training: its best epoch is not final
         best = min(eps, key=lambda e: e["card_disjoint"])
+        # A continuation that never beat its starting checkpoint keeps that checkpoint,
+        # which its parent already probed; its own lowest epoch is probed in "-best".
+        best_dir = (run.directory + "-best" if (RUNS / (run.directory + "-best")).exists()
+                    else run.directory)
         out.append((Checkpoint(f"{run.name} best" if run.parent else run.name, run, "best",
-                               run.directory), best))
+                               best_dir), best))
         last_dir = run.directory + "-last"
         if run.parent and (RUNS / last_dir).exists():
             last = max(eps, key=lambda e: e["epoch"])
