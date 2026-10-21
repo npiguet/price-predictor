@@ -483,6 +483,37 @@ class TestTheRewriteResult:
         assert record_from_dict(record_to_dict(record)).payload.result is result
 
 
+class TestEveryEventReadsOneCounterSpelling:
+    """``+1/+1`` becomes ``P1P1`` on read wherever an event sits, not only in a
+    resolution's event list: a rewrite's outgoing event is a target too, and a
+    raw spelling there falls through to ``counters_delta_other``."""
+
+    @staticmethod
+    def _counter_event() -> Event:
+        return Event(type=EventType.COUNTER_CHANGE, subjects=("E1",),
+                     params={"counter_type": "+1/+1", "delta": 1})
+
+    def test_a_rewrites_events(self):
+        record = _record(
+            kind=RecordKind.REWRITE, moment=None,
+            payload=RewritePayload(
+                incoming=self._counter_event(), outgoing=self._counter_event(),
+                result=RewriteResult.UPDATED,
+            ),
+        )
+        loaded = record_from_dict(record_to_dict(record))
+        assert loaded.payload.incoming.params["counter_type"] == "P1P1"
+        assert loaded.payload.outgoing.params["counter_type"] == "P1P1"
+
+    def test_a_triggers_event(self):
+        record = _record(
+            kind=RecordKind.TRIGGER, moment=None,
+            payload=TriggerPayload(event=self._counter_event(), fired=True),
+        )
+        loaded = record_from_dict(record_to_dict(record))
+        assert loaded.payload.event.params["counter_type"] == "P1P1"
+
+
 class TestARewriteShardCollectedBeforeTheResult:
     """Both shapes coexist: the corpus is append-only.
 

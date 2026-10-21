@@ -347,7 +347,7 @@ def _snapshot_from_json(data: dict) -> StateSnapshot:
             x=refs.get("x"),
             choices=dict(refs.get("choices", {})),
         ),
-        pending_event=Event.from_dict(pending) if pending else None,
+        pending_event=_event_from_json(pending) if pending else None,
         tiers=frozenset(InclusionTier(t) for t in data.get("tiers", ())),
     )
 
@@ -493,8 +493,8 @@ def _payload_from_json(
         outgoing = data.get("outgoing")
         result = data.get("result")
         return RewritePayload(
-            incoming=Event.from_dict(data["incoming"]),
-            outgoing=Event.from_dict(outgoing) if outgoing else None,
+            incoming=_event_from_json(data["incoming"]),
+            outgoing=_event_from_json(outgoing) if outgoing else None,
             result=RewriteResult(result) if result else None,
             replaced_by=_keys_from_json(data.get("replaced_by")),
         )
@@ -531,7 +531,7 @@ def _payload_from_json(
         )
     if kind is RecordKind.TRIGGER:
         return TriggerPayload(
-            event=Event.from_dict(data["event"]), fired=bool(data["fired"]),
+            event=_event_from_json(data["event"]), fired=bool(data["fired"]),
         )
     if discriminator is PlayabilitySubkind.DECISION:
         return PlayabilityDecisionPayload(
