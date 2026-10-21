@@ -74,15 +74,7 @@ class FieldMeans:
 
 def field_means(results: Iterable[RecordResult]) -> FieldMeans:
     """Each field's mean loss over the records that supervise it."""
-    sums: dict[str, float] = defaultdict(float)
-    counts: dict[str, int] = defaultdict(int)
-    for result in results:
-        for name, value in result.losses.items():
-            sums[name] += value
-            counts[name] += 1
-    return FieldMeans(
-        {name: sums[name] / counts[name] for name in sums}, dict(counts),
-    )
+    return _mean_per_key(result.losses for result in results)
 
 
 def per_text_means(results: Iterable[RecordResult]) -> FieldMeans:
@@ -100,10 +92,20 @@ def per_text_means(results: Iterable[RecordResult]) -> FieldMeans:
 
 
 def _mean_of_means(groups: Iterable[FieldMeans]) -> FieldMeans:
+    return _mean_per_key(group.means for group in groups)
+
+
+def _mean_per_key(rows: Iterable[dict[str, float]]) -> FieldMeans:
+    """Each key's mean over the rows that carry it, beside how many did.
+
+    A row without a key is not a zero for it: a record that does not
+    supervise a field, like a text none of whose records did, says nothing
+    about that field.
+    """
     sums: dict[str, float] = defaultdict(float)
     counts: dict[str, int] = defaultdict(int)
-    for group in groups:
-        for name, value in group.means.items():
+    for row in rows:
+        for name, value in row.items():
             sums[name] += value
             counts[name] += 1
     return FieldMeans(
