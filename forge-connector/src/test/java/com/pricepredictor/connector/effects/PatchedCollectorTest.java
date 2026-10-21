@@ -1523,16 +1523,14 @@ class PatchedCollectorTest {
     }
 
     /**
-     * The two read-only hooks answer null outside a resolution.
+     * The read-only sub-ability hook answers null outside a resolution.
      *
      * <p>True on a stock checkout because the method does not exist, and true
-     * on a patched one because no trigger or sub-ability is resolving on this
-     * thread — the test asserts the caller-visible behaviour that holds either
-     * way.
+     * on a patched one because no sub-ability is resolving on this thread —
+     * the test asserts the caller-visible behaviour that holds either way.
      */
     @Test
-    void theCauseAndSubAbilityHooksReadNullOutsideAResolution() {
-        assertEquals(null, PatchHooks.currentTriggerCause());
+    void theSubAbilityHookReadsNullOutsideAResolution() {
         assertEquals(null, PatchHooks.currentSubAbility());
     }
 

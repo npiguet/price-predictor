@@ -94,16 +94,15 @@ public final class PatchHooks {
      * absent one does instead of throwing inside a dynamic proxy.
      */
     public static final List<Hook> REQUIRED = List.of(
-            new Hook(TRIGGER_HANDLER, "getEffectRecordCause",
-                    "cause attribution; this is the hook mode detection probes"),
+            new Hook(ABILITY_UTILS, "getEffectRecordSubAbility",
+                    "per-clause attribution: an event's attributed_to; this is "
+                    + "the hook mode detection probes"),
             new Hook(TRIGGER_HANDLER, "setEffectRecordTriggerListener",
                     "trigger records, fired and not"),
             new Hook(REPLACEMENT_HANDLER, "setEffectRecordListener",
                     "rewrite records: the event a replacement received, what it "
                     + "rewrote in place, which of the five ReplacementResults "
                     + "it returned and which ability stood in for the event"),
-            new Hook(ABILITY_UTILS, "getEffectRecordSubAbility",
-                    "per-clause attribution: an event's attributed_to"),
             new Hook(ABILITY_UTILS, "setEffectRecordClauseListener",
                     "the events an effect API describes but the bus never announces"),
             new Hook(AI_CONTROLLER, "setEffectRecordPlayabilityListener",
@@ -326,11 +325,6 @@ public final class PatchHooks {
             }
         }
         return true;
-    }
-
-    /** The trigger currently running, when the cause hook is present. */
-    public static Object currentTriggerCause() {
-        return readStatic(TRIGGER_HANDLER, "getEffectRecordCause");
     }
 
     /** The sub-ability currently resolving, when the pointer hook is present. */
