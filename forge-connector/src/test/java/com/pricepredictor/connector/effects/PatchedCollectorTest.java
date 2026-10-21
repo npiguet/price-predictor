@@ -2620,8 +2620,7 @@ class PatchedCollectorTest {
     }
 
     private interface PlayabilityListenerShape {
-        void onCandidate(SpellAbility candidate, boolean canPlay, boolean affordable,
-                boolean hasLegalTarget);
+        void onCandidate(SpellAbility candidate);
     }
 
     private interface CombatLegalityListenerShape {
@@ -2690,7 +2689,7 @@ class PatchedCollectorTest {
                 TestCards.game(), writer, "run.0-l1.0", caps(0, 1.0), 1L)) {
             collectors.playabilityHandler().invoke(null,
                     methodNamed(PlayabilityListenerShape.class, "onCandidate"),
-                    new Object[]{forkCandidate, true, true, true});
+                    new Object[]{forkCandidate});
         } finally {
             writer.close();
         }
@@ -2818,7 +2817,7 @@ class PatchedCollectorTest {
                 TestCards.game(), writer, "run.0-l1.0", caps(0, 1.0), 1L)) {
             collectors.playabilityHandler().invoke(null,
                     methodNamed(PlayabilityListenerShape.class, "onCandidate"),
-                    new Object[]{liveCandidate, true, true, true});
+                    new Object[]{liveCandidate});
         } finally {
             writer.close();
         }
@@ -2922,7 +2921,7 @@ class PatchedCollectorTest {
                 TestCards.game(), soloWriter, "solo.0-l1.0", halfRate, 1L)) {
             solo.playabilityHandler().invoke(null,
                     methodNamed(PlayabilityListenerShape.class, "onCandidate"),
-                    new Object[]{liveCandidate, true, true, true});
+                    new Object[]{liveCandidate});
         } finally {
             soloWriter.close();
         }
@@ -2938,10 +2937,10 @@ class PatchedCollectorTest {
                 TestCards.game(), pairedWriter, "paired.0-l1.0", halfRate, 1L)) {
             paired.playabilityHandler().invoke(null,
                     methodNamed(PlayabilityListenerShape.class, "onCandidate"),
-                    new Object[]{forkCandidate, true, true, true});
+                    new Object[]{forkCandidate});
             paired.playabilityHandler().invoke(null,
                     methodNamed(PlayabilityListenerShape.class, "onCandidate"),
-                    new Object[]{liveCandidate, true, true, true});
+                    new Object[]{liveCandidate});
         } finally {
             pairedWriter.close();
         }
@@ -3216,7 +3215,7 @@ class PatchedCollectorTest {
                 game, writer, "run.0-l1.0", caps(0, 1.0), 1L)) {
             collectors.playabilityHandler().invoke(null,
                     methodNamed(PlayabilityListenerShape.class, "onCandidate"),
-                    new Object[]{candidate, true, true, true});
+                    new Object[]{candidate});
         } finally {
             writer.close();
         }

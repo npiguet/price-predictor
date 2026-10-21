@@ -1,6 +1,7 @@
 package com.pricepredictor.connector;
 
 import com.pricepredictor.connector.effects.PatchedCollectors;
+import com.pricepredictor.connector.effects.PlayabilityVerdict;
 import com.pricepredictor.connector.effects.RandomChoices;
 import forge.LobbyPlayer;
 import forge.ai.ComputerUtilAbility;
@@ -178,10 +179,10 @@ public final class RandomSeatController extends PlayerControllerAi {
     }
 
     /**
-     * What the rules let this seat play now: the AI's own filter — can play,
-     * timing, affordable — over everything but lands and mana abilities
-     * (FR-022a), each candidate reported as a {@code decision} record through
-     * the hook's own emitter (FR-022d).
+     * What the rules let this seat play now: the {@link PlayabilityVerdict}
+     * plus timing over everything but lands and mana abilities (FR-022a),
+     * each candidate reported as a {@code decision} record through the hook's
+     * own emitter (FR-022d), with the verdict the AI seat's records carry.
      */
     private List<SpellAbility> playableCandidates() {
         Game game = player.getGame();
@@ -192,44 +193,25 @@ public final class RandomSeatController extends PlayerControllerAi {
             if (sa.isLandAbility() || sa.isManaAbility()) {
                 continue;
             }
-            boolean canPlay;
+            PlayabilityVerdict verdict;
             boolean timing;
-            boolean affordable;
-            boolean hasTarget;
             try {
                 sa.setActivatingPlayer(player);
-                canPlay = sa.canPlay();
+                verdict = PlayabilityVerdict.of(sa);
                 timing = sa.canCastTiming(player);
-                affordable = ComputerUtilCost.canPayCost(sa, player, false);
-                hasTarget = hasLegalTargets(sa);
             } catch (RuntimeException e) {
                 // A script whose restriction throws on this board is one the
                 // AI would have skipped the same way; it is not playable.
                 continue;
             }
             if (collectors != null) {
-                collectors.recordCandidate(player, sa, canPlay, affordable, hasTarget);
+                collectors.recordCandidate(player, sa, () -> verdict);
             }
-            if (canPlay && timing && affordable && hasTarget) {
+            if (verdict.canPlay() && timing && verdict.affordable() && verdict.hasLegalTarget()) {
                 playable.add(sa);
             }
         }
         return playable;
-    }
-
-    /**
-     * Whether every targeting clause of the chain can reach its minimum.
-     * A charm's modes are not in the chain yet and are checked when drawn.
-     */
-    private static boolean hasLegalTargets(SpellAbility ability) {
-        for (SpellAbility clause = ability; clause != null; clause = clause.getSubAbility()) {
-            if (clause.usesTargeting()
-                    && clause.getTargetRestrictions().getNumCandidates(clause)
-                            < clause.getMinTargets()) {
-                return false;
-            }
-        }
-        return true;
     }
 
     /**

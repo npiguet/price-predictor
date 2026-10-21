@@ -237,12 +237,11 @@ class RandomSeatControllerTest {
     }
 
     /**
-     * And when nothing remains the seat passes: the abandoned play returns
-     * false, the engine asks again, and the answer is a pass rather than
-     * another draw over the same impossible candidate.
+     * A charm none of whose modes can be chosen is no candidate at all, so
+     * the seat passes rather than drawing a play it would have to abandon.
      */
     @Test
-    void whenEveryCandidateIsAbandonedTheSeatPasses() {
+    void aCharmWithNoChoosableModeIsNotACandidate() {
         Game game = gameWithRandomSeatA(PhaseType.MAIN2, 1.0, 1L);
         Player a = game.getPlayers().get(0);
         for (int i = 0; i < 5; i++) {
@@ -252,11 +251,7 @@ class RandomSeatControllerTest {
         RandomSeatController seat = seatOf(game);
         seat.attach(game, null);
 
-        List<SpellAbility> chosen = seat.chooseSpellAbilityToPlay();
-        assertNotNull(chosen, "the charm passes the candidate filter");
-        assertFalse(seat.playChosenSpellAbility(chosen.get(0)));
-        assertTrue(game.getStack().isEmpty());
-        assertNull(seat.chooseSpellAbilityToPlay(), "nothing left to draw: pass");
+        assertNull(seat.chooseSpellAbilityToPlay(), "no creature, no artifact: nothing to draw, pass");
     }
 
     /**

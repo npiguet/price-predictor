@@ -31,6 +31,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.StringJoiner;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Supplier;
 
 /**
  * The four record kinds the engine patch unlocks.
@@ -896,7 +897,11 @@ public final class PatchedCollectors implements AutoCloseable {
      *
      * <p>The AI's policy judgments never reach a record: they are its opinion
      * rather than the game's rules, and training on them would teach the model
-     * Forge's play style instead of Magic.
+     * Forge's play style instead of Magic. So the hook hands over only the
+     * candidate, and the verdict is {@link PlayabilityVerdict}'s, computed here
+     * after the sampler draw. A patch that still passes three verdict booleans
+     * after the candidate has them ignored: they were computed by the AI's own
+     * cost check, which is policy.
      *
      * <p>Sampled at {@code --playability-rate} because the AI evaluates every
      * candidate at every priority, which would otherwise swamp the corpus. The
@@ -910,7 +915,7 @@ public final class PatchedCollectors implements AutoCloseable {
     InvocationHandler playabilityHandler() {
         return (proxy, method, args) -> {
             if (!"onCandidate".equals(method.getName()) || args == null
-                    || args.length < 4) {
+                    || args.length < 1) {
                 return null;
             }
             // final-fix-3.md item 2 / final-fix-4.md item 5: checked before the
@@ -930,10 +935,8 @@ public final class PatchedCollectors implements AutoCloseable {
             if (candidate != null && !belongsToLiveGame(candidate)) {
                 return null;
             }
-            recordCandidate(
-                    deciderOf(candidate), candidate,
-                    Boolean.TRUE.equals(args[1]), Boolean.TRUE.equals(args[2]),
-                    Boolean.TRUE.equals(args[3]));
+            recordCandidate(deciderOf(candidate), candidate,
+                    () -> PlayabilityVerdict.of(candidate));
             return null;
         };
     }
@@ -966,12 +969,22 @@ public final class PatchedCollectors implements AutoCloseable {
      * drew from through the same door. Sampled at {@code --playability-rate}
      * and de-duplicated here, so both callers get the same treatment.
      *
+     * <p>The verdict is asked for only once the candidate is sampled in, so a
+     * candidate the sampler drops costs no rules check. A candidate whose
+     * check throws is one the engine cannot evaluate on this board, the way
+     * the random seat treats it, and is not recorded.
+     *
      * @param decider the candidate's controller, written as {@code actor_player}
      */
     public void recordCandidate(
-            Player decider, SpellAbility candidate,
-            boolean canPlay, boolean affordable, boolean hasLegalTarget) {
+            Player decider, SpellAbility candidate, Supplier<PlayabilityVerdict> verdictOf) {
         if (sampler.nextDouble() > caps.playabilityRate()) {
+            return;
+        }
+        PlayabilityVerdict verdict;
+        try {
+            verdict = verdictOf.get();
+        } catch (RuntimeException e) {
             return;
         }
         // Snapshot defensively: a verdict can be abandoned mid-evaluation,
@@ -1001,9 +1014,9 @@ public final class PatchedCollectors implements AutoCloseable {
                         ? List.of() : List.of(candidate.getHostCard()));
         String payload = "{\"candidates\":[{"
                         + "\"ability\":" + keyListJson(candidateKeys)
-                        + ",\"verdict\":{\"can_play\":" + canPlay
-                        + ",\"affordable\":" + affordable
-                        + ",\"has_legal_target\":" + hasLegalTarget + "}"
+                        + ",\"verdict\":{\"can_play\":" + verdict.canPlay()
+                        + ",\"affordable\":" + verdict.affordable()
+                        + ",\"has_legal_target\":" + verdict.hasLegalTarget() + "}"
                         + ",\"legal_targets\":" + legalTargets
                         + ",\"cost_after_adjustment\":"
                         + (manaCost == null
