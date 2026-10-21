@@ -49,6 +49,25 @@ class Resolution:
     problem: str = ""
 
 
+@dataclass(frozen=True, slots=True)
+class CacheGeometry:
+    """The two collapse measures of one set of vectors (FR-123).
+
+    Measured once per cache: gate 3 reads the shipping cache's, and every
+    baseline comparison reads it again beside the baseline's own.
+    """
+
+    mean_pairwise_cosine: float
+    top_component_share: float
+
+    @classmethod
+    def of(cls, vectors: np.ndarray, *, seed: int = 42) -> CacheGeometry:
+        return cls(
+            mean_pairwise_cosine(vectors, seed=seed),
+            top_component_share(vectors),
+        )
+
+
 @dataclass
 class CachedVectors:
     """One variant's cache, loaded once and indexed by ability text.
@@ -72,11 +91,18 @@ class CachedVectors:
     by_card: dict[str, np.ndarray] = field(default_factory=dict)
     display: dict[str, str] = field(default_factory=dict)
     by_prose: dict[str, dict[str, set[str]]] = field(default_factory=dict)
+    _geometry: CacheGeometry | None = field(default=None, repr=False)
 
     def matrix(self) -> np.ndarray:
         if not self.by_text:
             return np.zeros((0, 0), dtype=np.float32)
         return np.stack(list(self.by_text.values()))
+
+    def geometry(self) -> CacheGeometry:
+        """The cache's collapse measures, computed on first use and kept."""
+        if self._geometry is None:
+            self._geometry = CacheGeometry.of(self.matrix())
+        return self._geometry
 
     def texts(self) -> list[str]:
         return list(self.by_text)
@@ -197,14 +223,19 @@ def pooled(matrix: np.ndarray) -> np.ndarray:
 
 
 def evaluate_gate_three(vectors: np.ndarray, *, seed: int = 42) -> CheckResult:
-    """Two collapse canaries, both of which block shipping (FR-123).
+    """Two collapse canaries, both of which block shipping (FR-123)."""
+    return gate_three_verdict(CacheGeometry.of(vectors, seed=seed))
+
+
+def gate_three_verdict(geometry: CacheGeometry) -> CheckResult:
+    """Gate 3 on measured geometry.
 
     One vector per unique ability text. A collapsed space passes every
     average-case metric — every prediction is the corpus mean and every mean is
     close — so this is checked on the geometry rather than on the loss.
     """
-    cosine = mean_pairwise_cosine(vectors, seed=seed)
-    top = top_component_share(vectors)
+    cosine = geometry.mean_pairwise_cosine
+    top = geometry.top_component_share
     values = {"mean_pairwise_cosine": cosine, "top_component_share": top}
     failures = breaches(
         margin(
@@ -227,14 +258,13 @@ def evaluate_gate_three(vectors: np.ndarray, *, seed: int = 42) -> CheckResult:
 def run_gate_three(cached: CachedVectors, abilities_root: Path) -> CheckResult:
     """Gate 3, read off the cache, or a skip where there is none to read."""
     logger.info("gate 3: geometry over %d unique cached texts", len(cached.by_text))
-    vectors = cached.matrix()
-    if vectors.shape[0] < 2:
+    if len(cached) < 2:
         return CheckResult(
             CheckName.GATE_3, CheckStatus.SKIPPED,
             f"no ability cache under {abilities_root}; run "
             "encode-abilities first",
         )
-    return evaluate_gate_three(vectors)
+    return gate_three_verdict(cached.geometry())
 
 
 # ── nearest neighbours ──────────────────────────────────────────────────
@@ -471,10 +501,12 @@ def check_decodability(
     # still describes embedding row i.
     canonical = {name.casefold(): name for name in load_labels(Path(win_rates_path))}
     labelled = [canonical.get(name.casefold(), name) for name in shared]
-    if sum(name in canonical.values() for name in labelled) < 50:
+    with_rate = sum(name.casefold() in canonical for name in shared)
+    if with_rate < 50:
         return CheckResult(
             CheckName.DECODABILITY, CheckStatus.SKIPPED,
-            f"only {len(shared)} cached cards, too few with a win rate to fit probes",
+            f"only {with_rate} of {len(shared)} cached cards have a win rate, "
+            "too few to fit probes",
         )
     table = build_label_table(
         labelled,
@@ -515,16 +547,16 @@ def check_variant_geometry(
             CheckName.variant_comparison(name), CheckStatus.SKIPPED,
             f"no {name} cache; run encode-abilities --variant {name}",
         )
-    full_matrix, variant_matrix = full.matrix(), variant.matrix()
+    shipping, baseline = full.geometry(), variant.geometry()
     return CheckResult(
         CheckName.variant_comparison(name), CheckStatus.REPORTED,
-        f"mean pairwise cosine {mean_pairwise_cosine(full_matrix):.3f} vs "
-        f"{mean_pairwise_cosine(variant_matrix):.3f}; top component "
-        f"{top_component_share(full_matrix):.1%} vs "
-        f"{top_component_share(variant_matrix):.1%}",
+        f"mean pairwise cosine {shipping.mean_pairwise_cosine:.3f} vs "
+        f"{baseline.mean_pairwise_cosine:.3f}; top component "
+        f"{shipping.top_component_share:.1%} vs "
+        f"{baseline.top_component_share:.1%}",
         {
-            "full_cosine": mean_pairwise_cosine(full_matrix),
-            f"{name}_cosine": mean_pairwise_cosine(variant_matrix),
+            "full_cosine": shipping.mean_pairwise_cosine,
+            f"{name}_cosine": baseline.mean_pairwise_cosine,
         },
     )
 

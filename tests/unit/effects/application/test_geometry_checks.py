@@ -512,6 +512,17 @@ class TestDecodability:
         assert result.status is CheckStatus.SKIPPED
         assert "too few" in result.detail
 
+    def test_the_skip_counts_the_cards_that_have_a_win_rate(self, tmp_path):
+        """The threshold is on labelled cards, so that is the count to print."""
+        win_rates = tmp_path / "cards-win-rates.txt"
+        win_rates.write_text(
+            "card_name;a\n" + "".join(f"Storm Crow {i};0.5\n" for i in range(3)),
+            encoding="utf-8",
+        )
+        by_card = {f"storm crow {i}": np.ones(4) for i in range(60)}
+        result = check_decodability(CachedVectors(by_card=by_card), win_rates)
+        assert result.status is CheckStatus.SKIPPED
+        assert "only 3 of 60 cached cards have a win rate" in result.detail
 
     def test_the_cache_s_lowercase_names_join_the_canonical_win_rate_names(self, tmp_path):
         """A sidecar names its card in lowercase; the win-rate table in Forge's
@@ -562,6 +573,30 @@ class TestVariantComparison:
         result = check_variant_geometry(full, collapsed, "no-state")
         assert result.status is CheckStatus.REPORTED
         assert result.values["full_cosine"] < result.values["no-state_cosine"]
+
+    def test_each_cache_s_geometry_is_measured_once(self, monkeypatch):
+        """Gate 3 measures the shipping cache; both comparisons reuse it."""
+        from effects.application import geometry_checks
+        from effects.application.geometry_checks import run_gate_three
+
+        calls = []
+        measure = geometry_checks.mean_pairwise_cosine
+
+        def counted(vectors, **kwargs):
+            calls.append(vectors.shape)
+            return measure(vectors, **kwargs)
+
+        monkeypatch.setattr(geometry_checks, "mean_pairwise_cosine", counted)
+        rng = np.random.default_rng(2)
+        full = CachedVectors(by_text={f"t{i}": rng.normal(size=8) for i in range(50)})
+        baselines = [
+            CachedVectors(by_text={f"t{i}": rng.normal(size=8) for i in range(50)})
+            for _ in range(2)
+        ]
+        run_gate_three(full, Path("abilities"))
+        for baseline in baselines:
+            check_variant_geometry(full, baseline, "no-state")
+        assert len(calls) == 3
 
 
 class TestScorerSmokeCache:

@@ -26,7 +26,7 @@ from __future__ import annotations
 
 import argparse
 import importlib.util
-from collections import defaultdict
+from collections import Counter, defaultdict
 from pathlib import Path
 
 import numpy as np
@@ -180,7 +180,8 @@ def main() -> None:
             games = [game_of[r] for r in record_ids]
             kind = kinds[target]
             rows = check(data, record_ids, games, kind)
-            singles = sum(1 for r in record_ids if record_ids.count(r) == 1)
+            per_record = Counter(record_ids)
+            singles = sum(1 for r in record_ids if per_record[r] == 1)
             print(f"\n{target}, {stratum}: {len(items)} items, {len(set(record_ids))} records, "
                   f"{len(set(games))} games, {singles} items alone in their record "
                   f"({'AUC' if kind == 'binary' else 'R²'})")
