@@ -243,6 +243,37 @@ class TestMultiBinaryFields:
         vector = targets["E1"].fields["keywords_gained"]
         assert vector[OVERLAY_KEYWORDS.index("first_strike")] == 1.0
 
+    def test_a_keyword_with_a_value_sets_its_bit(self):
+        """``StatDiffer`` writes the keyword as printed, value included."""
+        targets = derive_targets(_resolution(
+            Event(type=EventType.KEYWORD_CHANGE, subjects=("E1",),
+                  params={"keywords": ["ward:2", "annihilator:2"]}),
+        ))
+        vector = targets["E1"].fields["keywords_gained"]
+        assert vector[OVERLAY_KEYWORDS.index("ward")] == 1.0
+        assert vector[OVERLAY_KEYWORDS.index("annihilator")] == 1.0
+
+    def test_protection_from_a_quality_sets_the_protection_bit(self):
+        """The overlay has one protection slot; the input layout folds
+        ``protection_from_red`` onto it, and the target has to agree."""
+        targets = derive_targets(_resolution(
+            Event(type=EventType.KEYWORD_CHANGE, subjects=("E1",),
+                  params={"keywords": ["protection from blue"]}),
+        ))
+        vector = targets["E1"].fields["keywords_gained"]
+        assert vector[OVERLAY_KEYWORDS.index("protection")] == 1.0
+
+    def test_a_continuous_grant_with_a_value_sets_its_bit(self):
+        record = _record(
+            ContinuousPayload(contributions=(
+                Contribution(entity="E1", keywords=("ward:2", "-protection_from_red")),
+            )),
+            kind=RecordKind.CONTINUOUS,
+        )
+        fields = derive_targets(record)["E1"].fields
+        assert fields["keywords_gained"][OVERLAY_KEYWORDS.index("ward")] == 1.0
+        assert fields["keywords_lost"][OVERLAY_KEYWORDS.index("protection")] == 1.0
+
     def test_an_untracked_keyword_sets_no_bit(self):
         targets = derive_targets(_resolution(
             Event(type=EventType.KEYWORD_CHANGE, subjects=("E1",),

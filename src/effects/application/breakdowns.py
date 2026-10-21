@@ -26,6 +26,7 @@ from collections import defaultdict
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
 
+from effects.domain.keyword_names import normalize_keyword
 from effects.domain.rarity import RARITY_BUCKETS, rarity_bucket
 
 #: The loss key every scored record carries: the per-entity loss summed over
@@ -241,11 +242,3 @@ def keyword_slice(
 
     return _group(results, group)
 
-
-def normalize_keyword(name: str) -> str:
-    """A keyword in the gate's spelling: lower case, underscores, no value.
-
-    ``Ward:2`` and ``ward`` are one keyword; ``First Strike`` is
-    ``first_strike``.
-    """
-    return name.split(":", 1)[0].strip().lower().replace(" ", "_")

@@ -32,6 +32,7 @@ from dataclasses import dataclass, field
 from enum import IntEnum
 from functools import lru_cache
 
+from effects.domain.keyword_names import overlay_keyword
 from effects.domain.provenance import ProvenanceKey
 from effects.domain.records import (
     CombatPayload,
@@ -120,7 +121,6 @@ PHASE_ALIASES: dict[str, str] = {
 COUNTER_ALIASES: dict[str, str] = {"+1/+1": "P1P1", "-1/-1": "M1M1"}
 #: Appended rather than inserted, so every earlier member keeps its slot.
 OVERLAY_KEYWORDS_GEN2: tuple[str, ...] = (*OVERLAY_KEYWORDS, "landwalk")
-_PROTECTION_FROM = "protection_from_"
 
 #: Positions of a thermometer code. Position k is set when the value is at
 #: least k, so the dot product of an amount's code with a one-hot of t is 1
@@ -153,9 +153,7 @@ def _counter_name(name: str, layout: str | None) -> str:
 
 
 def _keyword_in(keyword: str, layout: str | None) -> str:
-    if layout is not EARLIER_LAYOUT and keyword.startswith(_PROTECTION_FROM):
-        return "protection"
-    return keyword
+    return keyword if layout is EARLIER_LAYOUT else overlay_keyword(keyword)
 
 
 @lru_cache(maxsize=None)
@@ -179,14 +177,17 @@ def _positions(vocabulary: tuple[str, ...]) -> dict[str, int]:
     return positions
 
 
+def _spelling(value: str) -> str:
+    """A value in its vocabulary's spelling: lower case, underscores."""
+    return value.strip().lower().replace(" ", "_")
+
+
 def _one_hot(value: str | None, vocabulary: tuple[str, ...]) -> list[float]:
     """One-hot over ``vocabulary`` plus a trailing "other/absent" slot."""
     out = [0.0] * (len(vocabulary) + 1)
     if value is None:
         return out
-    index = _positions(vocabulary).get(
-        value.strip().lower().replace(" ", "_")
-    )
+    index = _positions(vocabulary).get(_spelling(value))
     out[-1 if index is None else index] = 1.0
     return out
 
@@ -239,7 +240,7 @@ def _multi_hot(present, vocabulary: tuple[str, ...]) -> list[float]:
     seen: set[str] = set()
     other = 0
     for value in present:
-        normalized = value.strip().lower().replace(" ", "_")
+        normalized = _spelling(value)
         if normalized in seen:
             continue
         seen.add(normalized)

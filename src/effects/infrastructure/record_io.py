@@ -49,6 +49,7 @@ from typing import IO, Any
 import orjson
 
 from effects.domain.event_schema import Event
+from effects.domain.keyword_names import normalize_keyword
 from effects.domain.provenance import ProvenanceKey
 from effects.domain.records import (
     ActivationPayload,
@@ -84,7 +85,6 @@ from effects.domain.state_snapshot import (
     StackExtras,
     StateSnapshot,
     normalize_counter_type,
-    normalize_keyword,
 )
 from price_predictor.infrastructure.append_only import (
     count_complete_lines,

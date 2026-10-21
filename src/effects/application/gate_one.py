@@ -28,7 +28,7 @@ import numpy as np
 import torch
 from torch.nn import functional
 
-from effects.application.breakdowns import TOTAL, RecordResult, normalize_keyword
+from effects.application.breakdowns import TOTAL, RecordResult
 from effects.application.surface_batching import SurfaceBatcher
 from effects.domain.damage_step_keywords import KeywordResolver, keyword_of_line
 from effects.domain.effect_model import (
@@ -40,6 +40,7 @@ from effects.domain.effect_model import (
     field_loss,
 )
 from effects.domain.effect_targets import derive_targets
+from effects.domain.keyword_names import normalize_keyword
 from effects.domain.records import RecordKind
 from effects.domain.rule_families import rule_family
 

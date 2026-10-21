@@ -167,9 +167,6 @@ class TestWithheldKeyword:
         assert groups[bd.WITHHELD].per_record.records == 1
         assert groups[bd.TRAINED].per_record.records == 1
 
-    def test_a_keyword_value_is_not_part_of_its_name(self):
-        assert bd.normalize_keyword("Ward:2") == "ward"
-
 
 class TestTheReport:
     def test_every_section_appears_for_a_gen2_shaped_set(self, rows):

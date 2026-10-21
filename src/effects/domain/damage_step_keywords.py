@@ -47,6 +47,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from enum import StrEnum
 
+from effects.domain.keyword_names import normalize_keyword
 from effects.domain.records import RecordKind
 from effects.domain.state_snapshot import EntityState, StateSnapshot
 
@@ -657,7 +658,7 @@ def keyword_of_line(line) -> str | None:
     script = getattr(line, "script_text", None)
     if not script or "$" in script or "|" in script:
         return None
-    return script.strip().lower().replace(" ", "_")
+    return normalize_keyword(script)
 
 
 # ── who is observed ─────────────────────────────────────────────────────

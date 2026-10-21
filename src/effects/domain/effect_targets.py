@@ -32,6 +32,7 @@ from effects.domain.effect_model import (
     FieldSpec,
 )
 from effects.domain.event_schema import Event, EventType
+from effects.domain.keyword_names import overlay_keyword
 from effects.domain.records import (
     ActivationPayload,
     EffectRecord,
@@ -72,6 +73,15 @@ _LIBRARY_EVENT_BY_TYPE: dict[EventType, str] = {
     EventType.LIBRARY_REORDERED: "reorder",
     EventType.CARD_REVEALED: "reveal",
 }
+
+_OVERLAY_INDEX: dict[str, int] = {
+    keyword: index for index, keyword in enumerate(OVERLAY_KEYWORDS)
+}
+
+
+def overlay_index(raw: str) -> int | None:
+    """The overlay slot a keyword, in any spelling Forge writes, sets."""
+    return _OVERLAY_INDEX.get(overlay_keyword(raw))
 
 
 @dataclass
@@ -232,15 +242,15 @@ def _apply_multi(entry: EntityTargets, name: str, values, kind: str) -> None:
 
 
 def _apply_keywords(entry: EntityTargets, params: dict) -> None:
-    from effects.domain.effect_head_input import OVERLAY_KEYWORDS
-
     name = "keywords_lost" if params.get("removed") else "keywords_gained"
     for keyword in params.get("keywords") or ():
-        normalized = str(keyword).strip().lower().replace(" ", "_")
-        for index, member in enumerate(OVERLAY_KEYWORDS):
-            if member == normalized:
-                entry.flag(name, index, len(OVERLAY_KEYWORDS))
-                break
+        _flag_keyword(entry, name, str(keyword))
+
+
+def _flag_keyword(entry: EntityTargets, name: str, keyword: str) -> None:
+    index = overlay_index(keyword)
+    if index is not None:
+        entry.flag(name, index, len(OVERLAY_KEYWORDS))
 
 
 def _apply_mana(entry: EntityTargets, mana, *, sign: int) -> None:
@@ -288,8 +298,6 @@ def _apply_continuous(record: EffectRecord, slot) -> None:
     payload = record.payload
     if not hasattr(payload, "contributions"):
         return
-    from effects.domain.effect_head_input import OVERLAY_KEYWORDS
-
     for contribution in payload.contributions:
         entry = slot(contribution.entity)
         entry.affected = True
@@ -301,13 +309,10 @@ def _apply_continuous(record: EffectRecord, slot) -> None:
             # that takes a keyword away marks it, because the contribution is
             # one flat list and the head has a field for each direction.
             lost = keyword.startswith("-")
-            normalized = keyword.lstrip("-").strip().lower().replace(" ", "_")
-            if normalized in OVERLAY_KEYWORDS:
-                entry.flag(
-                    "keywords_lost" if lost else "keywords_gained",
-                    OVERLAY_KEYWORDS.index(normalized),
-                    len(OVERLAY_KEYWORDS),
-                )
+            _flag_keyword(
+                entry, "keywords_lost" if lost else "keywords_gained",
+                keyword.lstrip("-"),
+            )
         gained, lost = _split_contribution(contribution.types)
         _apply_multi(entry, "types_gained", gained, _TYPE_INDEX)
         _apply_multi(entry, "types_lost", lost, _TYPE_INDEX)
@@ -462,9 +467,9 @@ def created_objects_targets(record: EffectRecord) -> list[float]:
             if card_type in card_types:
                 target[base + 5 + index] = 1.0
         for keyword in group["keywords"]:
-            normalized = str(keyword).strip().lower().replace(" ", "_")
-            if normalized in OVERLAY_KEYWORDS:
-                target[base + 5 + len(CARD_TYPES) + OVERLAY_KEYWORDS.index(normalized)] = 1.0
+            index = overlay_index(str(keyword))
+            if index is not None:
+                target[base + 5 + len(CARD_TYPES) + index] = 1.0
     target[-1] = 1.0 if len(ordered) > CREATED_OBJECT_SLOTS else 0.0
     return target
 

@@ -39,6 +39,7 @@ from effects.domain.corpus_curation import (
     signature_label,
 )
 from effects.domain.corpus_manifest import SourceShard
+from effects.domain.keyword_names import normalize_keyword
 from effects.domain.provenance import ProvenanceKey
 from effects.domain.record_quality import (
     NO_ACTING_TEXT,
@@ -700,11 +701,6 @@ _DAMAGE_STEP_NAMES = frozenset({
 })
 
 
-def gate_keyword(name: str) -> str:
-    """An operator's keyword spelling in gate 2's (``first strike`` → ``first_strike``)."""
-    return name.strip().lower().replace(" ", "_")
-
-
 @dataclass(frozen=True, slots=True)
 class BuildCorpusConfig:
     """The `build-corpus` flags (root spec § Curated corpus)."""
@@ -807,7 +803,7 @@ class BuildCorpusConfig:
             )
         unknown = [
             name for name in self.game_disjoint_keywords
-            if gate_keyword(name) not in _DAMAGE_STEP_NAMES
+            if normalize_keyword(name) not in _DAMAGE_STEP_NAMES
         ]
         if unknown:
             raise BuildCorpusError(
@@ -2000,7 +1996,7 @@ def build(config: BuildCorpusConfig) -> int:
             sidecar_roots={name: str(path) for name, path in roots.items()},
             remapper=remapper,
             game_disjoint_keywords=tuple(
-                gate_keyword(name) for name in config.game_disjoint_keywords
+                normalize_keyword(name) for name in config.game_disjoint_keywords
             ),
         ),
         workers=config.workers,
