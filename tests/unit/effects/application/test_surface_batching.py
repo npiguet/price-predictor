@@ -63,9 +63,9 @@ def _record() -> EffectRecord:
     )
 
 
-def _batcher(**masks) -> SurfaceBatcher:
+def _batcher(sidecars=None, **masks) -> SurfaceBatcher:
     return SurfaceBatcher(
-        tokenizer=None, sidecars=_Sidecars(), masks=VariantMasks(**masks),
+        tokenizer=None, sidecars=sidecars or _Sidecars(), masks=VariantMasks(**masks),
         surface="script", e_dim=4, widths={}, device=torch.device("cpu"),
     )
 
@@ -109,8 +109,7 @@ def test_a_key_is_joined_once_however_often_the_batch_asks():
     # Three keys, asked for by `batch_texts` and then three more times per
     # record inside `surface_for`, over two passes.
     sidecars = _Counting()
-    batcher = _batcher()
-    batcher.sidecars = sidecars
+    batcher = _batcher(sidecars)
     records = [_record()]
     for _ in range(2):
         texts = batcher.batch_texts(records)
@@ -123,16 +122,14 @@ def test_a_key_is_joined_once_however_often_the_batch_asks():
 def test_a_sidecar_mismatch_is_never_memoised():
     # A mismatch is the one answer the memo must not keep: swallowing it once
     # would turn "the sidecar does not describe this card" into no text at all.
-    batcher = _batcher()
-    batcher.sidecars = _Mismatching()
+    batcher = _batcher(_Mismatching())
     for _ in range(3):
         with pytest.raises(KeyError, match="neither the lines"):
             batcher.text_of(_ACT)
 
 
 def test_a_sidecar_mismatch_raises_out_of_the_batcher():
-    batcher = _batcher()
-    batcher.sidecars = _Mismatching()
+    batcher = _batcher(_Mismatching())
     with pytest.raises(KeyError, match="neither the lines"):
         batcher.batch_texts([_record()])
 

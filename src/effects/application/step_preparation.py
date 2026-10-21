@@ -27,6 +27,7 @@ from pathlib import Path
 
 import torch
 
+from effects.application.ability_text import KeyResolver
 from effects.application.surface_batching import (
     MaskedTokens,
     PreparedBatch,
@@ -35,7 +36,6 @@ from effects.application.surface_batching import (
 )
 from effects.application.train_effect_model import (
     TrainEffectModelConfig,
-    ability_text_of,
     rarity_coverage,
 )
 from effects.domain.ability_encoder import TruncationLog, surface_of
@@ -301,6 +301,17 @@ class StepPreparation:
             self.config.cards_folders, self.config.variant_scripts,
         ))
 
+    def _key_resolver(self, sidecars) -> KeyResolver:
+        """The run's key-to-text join over ``sidecars``, built on first use.
+
+        One per sidecar cache rather than one per step: every step meets the
+        same cards, and a batcher built per step used to start its memo empty.
+        """
+        resolver = getattr(self, "_key_texts", None)
+        if resolver is None or resolver.sidecars is not sidecars:
+            resolver = self._key_texts = KeyResolver(sidecars, self.surface)
+        return resolver
+
     def _batcher(
         self, tokenizer, sidecars, widths, *, training: bool = True,
         rng: random.Random | None = None,
@@ -322,6 +333,7 @@ class StepPreparation:
         return SurfaceBatcher(
             tokenizer=tokenizer,
             sidecars=sidecars,
+            resolver=self._key_resolver(sidecars),
             masks=self.masks,
             surface=self.surface,
             e_dim=self.config.e_dim,
@@ -525,7 +537,7 @@ class StepPreparation:
         it, and resolving it is a sidecar join per record.
         """
         return {
-            record.record_id: ability_text_of(record, sidecars, self.surface)
+            record.record_id: self._key_resolver(sidecars).acting_text(record)
             for record in records
         }
 

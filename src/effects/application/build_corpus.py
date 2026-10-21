@@ -861,7 +861,7 @@ def _text_of_rendered_key(
     rendered: str, sidecars: SidecarCache, surface: str,
 ) -> str | None:
     """The text a survey key folds to, through the trainer's own definition."""
-    from effects.application.train_effect_model import text_for_key
+    from effects.application.ability_text import text_for_key
 
     for key in parse_ability_key(rendered):
         text = text_for_key(key, sidecars, surface)

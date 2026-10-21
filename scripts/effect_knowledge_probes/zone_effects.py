@@ -279,18 +279,15 @@ def report_amounts(chosen, probe_model, per_sweep: int) -> None:
             if player is None:
                 continue
             key = record.ability[0]
-            original = batcher._resolve(key)
-            if original[0] is None or not _NUMCARDS_RE.search(original[0]):
+            original = batcher.text_of(key)
+            if original is None or not _NUMCARDS_RE.search(original):
                 continue
             curve = []
-            try:
-                for amount in AMOUNTS:
-                    batcher._text_by_key[key] = (set_amount(original[0], amount), original[1])
+            for amount in AMOUNTS:
+                with batcher.reading_as(key, set_amount(original, amount)):
                     reading = sweeps._predict(probe_model, [record],
                                               lambda o, v, s, r: _read(o, s, r))[0]
-                    curve.append(reading["players"].get(player, {}).get(field, float("nan")))
-            finally:
-                batcher._text_by_key[key] = original
+                curve.append(reading["players"].get(player, {}).get(field, float("nan")))
             rows.append(curve)
             if len(rows) >= per_sweep:
                 break

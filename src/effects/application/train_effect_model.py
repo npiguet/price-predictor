@@ -34,7 +34,6 @@ from typing import TYPE_CHECKING
 from effects.domain.ability_tokenizer import keyword_token
 from effects.domain.records import (
     EffectRecord,
-    acting_keys,
 )
 from effects.domain.split import (
     CorpusSplit,
@@ -501,45 +500,6 @@ class EarlyStopper:
 
 
 # ── the run ─────────────────────────────────────────────────────────────
-
-
-def text_for_key(key, sidecars, surface: str) -> str | None:
-    """One provenance key's text on ``surface``, or None where it has none.
-
-    The single key-level definition. ``build-corpus`` surveys by provenance key
-    and folds to text afterwards, and a second spelling of this would key the
-    rarity table differently from every lookup the trainer makes against it.
-
-    Falls back to the key itself where the sidecar carries neither surface, so
-    a line that cannot be read is still a distinct unit for rarity weighting
-    rather than collapsing into every other unreadable line.
-    """
-    from effects.domain.ability_encoder import encoding_text
-    from effects.infrastructure.sidecar_io import UnconfiguredTree
-
-    try:
-        line = sidecars.line_for(key)
-    except UnconfiguredTree:
-        return None
-    if line is None:
-        return None
-    text = encoding_text(line, sidecars.prose_for(key), surface)
-    return text or f"{key.script_file}:{key.trait_kind}:{key.index_within_kind}"
-
-
-def ability_text_of(
-    record: EffectRecord, sidecars, surface: str = "prose",
-) -> str | None:
-    """The acting line's text on ``surface``, or None where no line acts.
-
-    ``combat`` and the ``attackers``/``blockers`` subkinds have none, which is
-    what makes them sample uniformly rather than by rarity.
-    """
-    for key in acting_keys(record):
-        text = text_for_key(key, sidecars, surface)
-        if text is not None:
-            return text
-    return None
 
 
 def load_shard(path: Path) -> list[EffectRecord]:

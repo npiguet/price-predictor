@@ -232,7 +232,7 @@ class TestEpochShares:
 
     def test_a_texts_bucket_reads_the_corpus_wide_table(self, monkeypatch, records, sidecars):
         loop = _loop(monkeypatch, vocab_path=Path("models/effects/vocab-script.txt"))
-        from effects.application.train_effect_model import ability_text_of
+        from effects.application.ability_text import ability_text_of
 
         record = next(
             r for r in records if r.moment is Moment.RESOLUTION

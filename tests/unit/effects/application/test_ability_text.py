@@ -98,7 +98,10 @@ class FakeSidecarCache:
 
 
 def test_text_for_key_and_ability_text_of_agree_on_one_key():
-    from effects.application.train_effect_model import ability_text_of, text_for_key
+    from effects.application.ability_text import (
+        ability_text_of,
+        text_for_key,
+    )
 
     key = ProvenanceKey("cardsfolder/f/flying_test.txt", 0, "keyword", 0)
     record = _record("g1", ability=(key,))
@@ -126,7 +129,7 @@ def test_a_key_in_neither_list_raises_rather_than_reading_as_no_text(tmp_path):
     are declared here, so static 1 is an index the converter parsed around and
     put in neither list, which only a reconversion produces.
     """
-    from effects.application.train_effect_model import text_for_key
+    from effects.application.ability_text import text_for_key
     from effects.infrastructure.sidecar_io import sidecar_path_for
 
     script = "cardsfolder/p/plague_sliver.txt"
@@ -158,7 +161,7 @@ def test_a_key_in_neither_list_raises_rather_than_reading_as_no_text(tmp_path):
 def test_an_unconfigured_tree_still_reads_as_no_text(tmp_path):
     """A variant key without ``--variant-scripts`` resolves to nothing, as pinned
     by ``test_without_the_variant_tree_a_variant_text_resolves_to_nothing``."""
-    from effects.application.train_effect_model import text_for_key
+    from effects.application.ability_text import text_for_key
 
     sidecars = SidecarCache({"cardsfolder": tmp_path})
     key = ProvenanceKey("variant-scripts/x.txt", 0, "spell", 0)
@@ -168,7 +171,7 @@ def test_an_unconfigured_tree_still_reads_as_no_text(tmp_path):
 
 
 def test_an_unconverted_script_reads_as_no_text(tmp_path):
-    from effects.application.train_effect_model import text_for_key
+    from effects.application.ability_text import text_for_key
 
     sidecars = SidecarCache({"cardsfolder": tmp_path})
     key = ProvenanceKey("cardsfolder/f/food_token.txt", 0, "spell", 0)
@@ -181,7 +184,7 @@ def test_a_decisions_acting_text_is_its_candidates():
     """A ``decision`` record names no acting line of its own; ``[ACT]`` reads
     its candidate's, and rarity has to key on the same text or the whole
     decision class weighs as if it had none."""
-    from effects.application.train_effect_model import ability_text_of
+    from effects.application.ability_text import ability_text_of
     from effects.domain.records import (
         Candidate,
         PlayabilityDecisionPayload,

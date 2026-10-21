@@ -414,17 +414,11 @@ def run_sweep(name: str, probe_model, record, row: dict) -> list[dict]:
         predictions = []
         batcher = probe_model.batcher
         key = record.ability[0]
-        original = batcher._resolve(key)
-        try:
-            for amount in values:
-                # The acting key's text is the batcher's memo of it; pointing
-                # the memo at the edited text is what makes the checkpoint's
-                # own encoder encode the edited script, with nothing else moved.
-                batcher._text_by_key[key] = (set_damage(original[0], amount), original[1])
+        original = batcher.text_of(key)
+        for amount in values:
+            with batcher.reading_as(key, set_damage(original, amount)):
                 predictions += _predict(probe_model, [base],
                                         lambda o, v, s, r: _death(o, s, r, row["entity"]))
-        finally:
-            batcher._text_by_key[key] = original
     else:
         raise KeyError(name)
     return [{"value": int(v), "prediction": p} for v, p in zip(values, predictions)]
