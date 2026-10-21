@@ -535,21 +535,17 @@ class SurfaceBatcher:
     def prepare_texts(self, ordered: list[str]) -> list:
         """Each text tokenized and its keywords expanded, the withheld one always.
 
-        A withheld keyword's token survives only where it has no definition to
-        expand to; there it is dropped, so the model never reads the token.
+        The withheld keyword's token is dropped wherever it is left, inside an
+        expansion too (``AbilityTokenizer.encoding_tokens``), so the model
+        never reads it.
         """
         withheld = withheld_keyword_tokens(self.withhold_keyword)
         lines = []
         for text in ordered:
-            tokens = self.tokenizer.expand_keywords(
-                self.tokenizer.tokenize(text),
-                probability=self.keyword_expand_p, rng=self.rng, forced=withheld,
+            tokens = self.tokenizer.encoding_tokens(
+                text, withheld=withheld,
+                probability=self.keyword_expand_p, rng=self.rng,
             )
-            if withheld:
-                tokens = [
-                    t for t in tokens
-                    if t.expanded_from is not None or t.text not in withheld
-                ]
             line = prepare_line(self.tokenizer, tokens)
             if line.truncated and self.truncations is not None:
                 self.truncations.note(text, self._keys_of(text))

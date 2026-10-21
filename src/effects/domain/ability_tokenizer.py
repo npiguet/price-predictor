@@ -549,6 +549,32 @@ class AbilityTokenizer:
                 out.append(token)
         return out
 
+    def encoding_tokens(
+        self,
+        text: str,
+        *,
+        role_spans: tuple[RoleSpan, ...] = (),
+        withheld: frozenset[str] = frozenset(),
+        probability: float = 0.0,
+        rng: random.Random | None = None,
+    ) -> list[Token]:
+        """The tokens one ability text is encoded from, wherever it is encoded.
+
+        Tokenized, keywords expanded — a ``withheld`` keyword always, as an
+        unknown one is — and then the withheld keyword's token dropped
+        everywhere it is left: where it had no definition to expand to, and
+        inside an expansion, since a reminder text can name its own keyword
+        (flying's does, and so does reach's). Training, evaluation and the
+        cache all encode through here, so none of them ever reads the token.
+        """
+        tokens = self.expand_keywords(
+            self.tokenize(text, role_spans),
+            probability=probability, rng=rng, forced=withheld,
+        )
+        if withheld:
+            tokens = [token for token in tokens if token.text not in withheld]
+        return tokens
+
     def _expand_line(
         self,
         tokens: list[Token],

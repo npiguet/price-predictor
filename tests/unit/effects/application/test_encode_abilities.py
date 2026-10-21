@@ -400,6 +400,47 @@ class TestTheRealEncoder:
         assert "truncated" not in caplog.text
 
 
+class TestTheWithheldKeyword:
+    """The cache reads a withheld keyword the way training did: its definition
+    with the token dropped, never a token training never updated (FR-070)."""
+
+    def test_the_runner_encodes_the_keyword_as_its_expansion(self):
+        from effects.application.extract_keyword_definitions import KeywordDefinition
+        from effects.domain.ability_encoder import AbilityEncoder
+        from effects.domain.ability_tokenizer import AbilityTokenizer
+        from effects.infrastructure.ability_encoder_runner import AbilityEncoderRunner
+
+        words = ["[PAD]", "[UNK]", "cardname", "[MASK]", "[CLS]", "flying", "reach",
+                 "cant", "be", "blocked", "except", "by", "creatures", "with", "or"]
+        tokenizer = AbilityTokenizer(
+            {word: index for index, word in enumerate(words)},
+            {"Flying": KeywordDefinition(
+                keyword="Flying",
+                reminder_template="cant be blocked except by creatures with flying or reach",
+            )},
+        )
+        torch.manual_seed(0)
+        config = AbilityEncoderConfig(
+            vocab_size=len(words), e_dim=E_DIM, d_model=16, n_layers=1, n_heads=2,
+            ff_dim=32,
+        )
+        state = AbilityEncoder(config).state_dict()
+
+        def runner(withheld):
+            return AbilityEncoderRunner(
+                config, state, tokenizer, surface="prose",
+                device=torch.device("cpu"), withheld_keyword=withheld,
+            )
+
+        withheld = runner("Flying").encode_texts(["flying"])
+        expansion = runner(None).encode_texts(
+            ["cant be blocked except by creatures with or reach"],
+        )
+        token = runner(None).encode_texts(["flying"])
+        assert np.allclose(withheld, expansion, atol=1e-6)
+        assert not np.allclose(withheld, token, atol=1e-6)
+
+
 class TestTruncation:
     """``prepare_line`` says when it cut a line, and a run says so once."""
 

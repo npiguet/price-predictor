@@ -190,25 +190,21 @@ def run(config: EncodeAbilitiesConfig, *, encode_lines=None) -> EncodeSummary:
 
 
 def truncated_lines(
-    tokenizer, sidecar: ProvenanceSidecar, prose: list[str], surface: str,
+    prepare, sidecar: ProvenanceSidecar, prose: list[str], surface: str,
 ) -> list[tuple[SidecarLine, str]]:
     """The lines of one source the encoder's window cuts short, with their text.
 
-    Tokenized exactly as the cache encodes them: the line's encoding text on
-    this surface, keywords expanded at the inference probability (FR-006).
+    ``prepare`` is the runner's own ``text -> EncodedLine``, so a line is
+    measured exactly as the cache encodes it (FR-006).
     """
-    from effects.domain.ability_encoder import encoding_text, prepare_line
-    from effects.domain.ability_tokenizer import INFERENCE_KEYWORD_EXPAND_P
+    from effects.domain.ability_encoder import encoding_text
 
     cut: list[tuple[SidecarLine, str]] = []
     for line in sidecar.lines:
         text = encoding_text(line, prose_for(line, prose), surface)
         if not text:
             continue
-        tokens = tokenizer.expand_keywords(
-            tokenizer.tokenize(text), probability=INFERENCE_KEYWORD_EXPAND_P,
-        )
-        if prepare_line(tokenizer, tokens).truncated:
+        if prepare(text).truncated:
             cut.append((line, text))
     return cut
 
@@ -245,7 +241,7 @@ def build_encode_lines(loaded: InferenceCheckpoint):
         # The prose surface reads the converted .txt beside the sidecar; the
         # script surface does not, and a variant tree has no prose at all.
         prose = prose_lines(converted_text_path(sidecar_path))
-        for line, text in truncated_lines(tokenizer, sidecar, prose, surface):
+        for line, text in truncated_lines(runner.prepare, sidecar, prose, surface):
             truncations.note(text, line.provenance)
         return runner.encode_sidecar_lines(sidecar, prose)
 

@@ -19,6 +19,7 @@ import logging
 import numpy as np
 import torch
 
+from effects.application.train_effect_model import withheld_keyword_tokens
 from effects.domain.ability_encoder import (
     AbilityEncoder,
     AbilityEncoderConfig,
@@ -57,6 +58,7 @@ class AbilityEncoderRunner:
         surface: str,
         device: torch.device | None = None,
         batch_lines: int = DEFAULT_BATCH_LINES,
+        withheld_keyword: str | None = None,
     ) -> None:
         self.device = device or torch.device(
             "cuda" if torch.cuda.is_available() else "cpu"
@@ -71,6 +73,9 @@ class AbilityEncoderRunner:
         self.surface = surface
         self.batch_lines = batch_lines
         self.e_dim = config.e_dim
+        #: The keyword the checkpoint trained without: the cache reads it as
+        #: its definition, as training did, never as a token nothing updated.
+        self.withheld = withheld_keyword_tokens(withheld_keyword)
 
     @classmethod
     def from_checkpoint(
@@ -87,6 +92,7 @@ class AbilityEncoderRunner:
             tokenizer,
             surface=surface_of(vocab_path),
             device=device,
+            withheld_keyword=checkpoint.provenance.withheld_keyword,
         )
 
     def encode_texts(self, texts: list[str]) -> np.ndarray:
@@ -95,7 +101,8 @@ class AbilityEncoderRunner:
         A known keyword stays the token it trained as and only an unknown one
         expands (FR-012): the shared inference probability is zero, and the
         cache is an artifact, so a sampled expansion would make two runs of the
-        same command disagree.
+        same command disagree. The withheld keyword expands as it did in
+        training, its token dropped.
         """
         if not texts:
             return np.zeros((0, self.e_dim), dtype=np.float32)
@@ -103,22 +110,19 @@ class AbilityEncoderRunner:
         with torch.no_grad():
             for start in range(0, len(texts), self.batch_lines):
                 chunk = texts[start : start + self.batch_lines]
-                lines = [
-                    prepare_line(
-                        self.tokenizer,
-                        self.tokenizer.expand_keywords(
-                            self.tokenizer.tokenize(text),
-                            probability=INFERENCE_KEYWORD_EXPAND_P,
-                        ),
-                    )
-                    for text in chunk
-                ]
+                lines = [self.prepare(text) for text in chunk]
                 batch = collate_lines(lines, self.tokenizer.pad_id)
                 batch = {k: v.to(self.device) for k, v in batch.items()}
                 vectors, _hidden = self.encoder(**batch)
                 # One transfer per batch rather than per line.
                 rows.append(vectors.cpu().numpy())
         return np.concatenate(rows).astype(np.float32)
+
+    def prepare(self, text: str):
+        """One text as the encoder reads it, through the trainer's own path."""
+        return prepare_line(self.tokenizer, self.tokenizer.encoding_tokens(
+            text, withheld=self.withheld, probability=INFERENCE_KEYWORD_EXPAND_P,
+        ))
 
     def encode_sidecar_lines(
         self, sidecar: ProvenanceSidecar, prose: list[str],

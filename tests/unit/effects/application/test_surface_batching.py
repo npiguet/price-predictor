@@ -393,3 +393,33 @@ def test_a_withheld_keyword_is_read_as_its_definition_never_its_token():
     ids = {word: index for index, word in enumerate(words)}
     # [CLS], then the reminder text in place of the bare token.
     assert line.token_ids[1:4] == [ids["cant"], ids["be"], ids["blocked"]]
+
+
+def test_a_withheld_keywords_token_never_appears_even_inside_an_expansion():
+    """Flying's own reminder text says "flying", and so does Reach's."""
+    from effects.application.extract_keyword_definitions import KeywordDefinition
+    from effects.domain.ability_tokenizer import AbilityTokenizer
+
+    words = ["[PAD]", "[UNK]", "cardname", "[MASK]", "[CLS]", "flying", "reach",
+             "cant", "be", "blocked", "except", "by", "creatures", "with", "or",
+             "can", "block"]
+    tokenizer = AbilityTokenizer(
+        {word: index for index, word in enumerate(words)},
+        {
+            "Flying": KeywordDefinition(
+                keyword="Flying",
+                reminder_template="cant be blocked except by creatures with flying or reach",
+            ),
+            "Reach": KeywordDefinition(
+                keyword="Reach", reminder_template="can block creatures with flying",
+            ),
+        },
+    )
+    batcher = SurfaceBatcher(
+        tokenizer=tokenizer, sidecars=_Sidecars(), masks=VariantMasks(),
+        surface="prose", e_dim=4, widths={}, device=torch.device("cpu"),
+        withhold_keyword="Flying", keyword_expand_p=1.0,
+    )
+    flying = words.index("flying")
+    for line in batcher.prepare_texts(["flying", "reach", "creatures with flying"]):
+        assert flying not in line.token_ids
