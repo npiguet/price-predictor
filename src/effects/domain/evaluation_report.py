@@ -46,8 +46,8 @@ class CheckName(StrEnum):
     The values are what the rendered report prints and what the report scripts
     (``scripts/effect_gen2_report``) parse, so a member is renamed freely and a
     value never is. Breakdown lines compose their names from the stratum and
-    group, and a variant comparison from the variant
-    (:meth:`variant_comparison`).
+    group, and a baseline comparison from the baseline
+    (:meth:`baseline_comparison`).
     """
 
     GATE_1 = "gate-1"
@@ -57,7 +57,7 @@ class CheckName(StrEnum):
     NEAREST_NEIGHBOUR = "nearest-neighbour"
     UMAP = "umap"
     DECODABILITY = "decodability"
-    VARIANT_COMPARISON = "comparison"
+    BASELINE_COMPARISON = "comparison"
     BREAKDOWNS = "breakdowns"
     MEMORIZATION_GAP = "memorization-gap"
     ZERO_SHOT_KEYWORD = "zero-shot-keyword"
@@ -66,9 +66,9 @@ class CheckName(StrEnum):
     ROLE_POLARITY = "role-polarity"
 
     @classmethod
-    def variant_comparison(cls, variant: str) -> str:
+    def baseline_comparison(cls, baseline: str) -> str:
         """``no-state-comparison``: one baseline cache's geometry beside the shipping one's."""
-        return f"{variant}-{cls.VARIANT_COMPARISON}"
+        return f"{baseline}-{cls.BASELINE_COMPARISON}"
 
 
 @dataclass(frozen=True, slots=True)

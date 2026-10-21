@@ -40,13 +40,13 @@ from effects.application.train_effect_model import (
 from effects.application.training_loop import TrainingLoop
 from effects.domain.ability_encoder import AbilityEncoder
 from effects.domain.ability_tokenizer import SPECIAL_TOKENS, AbilityTokenizer
+from effects.domain.baselines import baseline_masks
 from effects.domain.effect_head_input import feature_widths
 from effects.domain.effect_model import EffectModel
 from effects.domain.sampling import sampling_class
 from effects.domain.split import (
     CorpusSplit,
 )
-from effects.domain.variants import variant_masks
 from effects.infrastructure.record_io import read_shard, write_shard
 from effects.infrastructure.sidecar_io import SidecarCache
 from effects.infrastructure.step_workers import pack, unpack
@@ -92,7 +92,7 @@ def corpus(tmp_path_factory, records):
     base = {token: index for index, token in enumerate(SPECIAL_TOKENS)}
     bare = AbilityTokenizer(base, definitions, surface="script")
     batcher = make_batcher(
-        tokenizer=bare, sidecars=sidecars, masks=variant_masks("full"),
+        tokenizer=bare, sidecars=sidecars, masks=baseline_masks("full"),
         surface="script", e_dim=16, widths={}, device=torch.device("cpu"),
     )
     texts = [*batcher.batch_texts(records)]

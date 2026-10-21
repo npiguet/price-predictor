@@ -92,9 +92,9 @@ class TestRowAlignment:
 class TestVariantOfACacheFile:
     def test_each_variant_reads_back_from_the_path_it_was_written_to(self):
         from effects.domain.ability_cache_layout import variant_of_cache_file
-        from effects.domain.variants import VARIANTS
+        from effects.domain.baselines import BASELINES
 
-        for variant in VARIANTS:
+        for variant in BASELINES:
             assert variant_of_cache_file(cache_path_for(_SCRIPT, variant=variant)) == variant
 
     def test_a_dot_in_a_sources_own_name_is_still_the_shipping_cache(self):

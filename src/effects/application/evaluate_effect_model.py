@@ -31,9 +31,10 @@ from pathlib import Path
 from effects.application.evaluation_context import (
     EvaluateEffectModelConfig,
     EvaluationContext,
+    load_baselines,
     load_context,
-    load_variants,
 )
+from effects.domain.baselines import Baseline
 from effects.domain.evaluation_report import (
     CheckName,
     CheckResult,
@@ -41,7 +42,6 @@ from effects.domain.evaluation_report import (
     EvaluationReport,
 )
 from effects.domain.strata import VALIDATION_STRATA
-from effects.domain.variants import Variant
 
 logger = logging.getLogger(__name__)
 
@@ -176,7 +176,7 @@ def run(config: EvaluateEffectModelConfig) -> EvaluationReport:
     from effects.application.geometry_checks import run_gate_three
 
     context = load_context(config)
-    variants = load_variants(config, context.main)
+    variants = load_baselines(config, context.main)
 
     report = EvaluationReport()
     cached = _load_cache(context)
@@ -223,23 +223,23 @@ def _gate_one(context: EvaluationContext, variants: dict) -> CheckResult:
     """Gate 1, which is defined against the identity baseline and needs it."""
     from effects.application.gate_one import run_gate_one
 
-    if Variant.IDENTITY not in variants:
+    if Baseline.IDENTITY not in variants:
         return CheckResult(
             CheckName.GATE_1, CheckStatus.SKIPPED,
             "needs --variant-checkpoint identity=PATH: gate 1 is defined "
             "against that baseline",
         )
-    return run_gate_one(context, variants[Variant.IDENTITY])
+    return run_gate_one(context, variants[Baseline.IDENTITY])
 
 
 def _geometry_checks(context: EvaluationContext, cached) -> list[CheckResult]:
     """The e-geometry checks, all reported, none gating."""
     from effects.application.geometry_checks import (
         NEIGHBOUR_QUERIES,
+        check_baseline_geometry,
         check_decodability,
         check_nearest_neighbours,
         check_umap,
-        check_variant_geometry,
         check_ward,
     )
 
@@ -253,8 +253,8 @@ def _geometry_checks(context: EvaluationContext, cached) -> list[CheckResult]:
             held_out_cards=context.main.provenance.held_out_cards,
         ),
     ]
-    for variant in (Variant.NO_STATE, Variant.TAXONOMY):
-        checks.append(check_variant_geometry(
+    for variant in (Baseline.NO_STATE, Baseline.TAXONOMY):
+        checks.append(check_baseline_geometry(
             cached, _load_cache(context, variant), variant,
         ))
     return checks

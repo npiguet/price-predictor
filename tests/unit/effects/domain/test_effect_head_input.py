@@ -794,8 +794,8 @@ class TestOptionRows:
     def test_the_batcher_reads_the_modes_off_the_sidecar(self):
         import torch
 
+        from effects.domain.baselines import BaselineMasks
         from effects.domain.provenance import ProvenanceSidecar, SidecarLine
-        from effects.domain.variants import VariantMasks
         from tests.unit.effects.builders import make_batcher
 
         modes = self._modes()
@@ -820,7 +820,7 @@ class TestOptionRows:
                 return None
 
         batcher = make_batcher(
-            tokenizer=None, sidecars=_Sidecars(), masks=VariantMasks(),
+            tokenizer=None, sidecars=_Sidecars(), masks=BaselineMasks(),
             surface="script", e_dim=E_DIM, widths={}, device=torch.device("cpu"),
         )
         assert batcher.options_for(self._CHARM) == modes

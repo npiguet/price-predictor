@@ -206,9 +206,9 @@ def make_batcher(
     from effects.application.ability_text import KeyResolver
     from effects.application.surface_batching import Materializer, SurfaceBatcher
     from effects.application.text_staging import TextStager
-    from effects.domain.variants import VariantMasks
+    from effects.domain.baselines import BaselineMasks
 
-    masks = masks or VariantMasks()
+    masks = masks or BaselineMasks()
     return SurfaceBatcher(
         stager=TextStager(
             tokenizer=tokenizer, surface=surface, withhold_keyword=withhold_keyword,

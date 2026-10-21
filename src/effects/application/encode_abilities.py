@@ -22,8 +22,8 @@ from pathlib import Path
 import numpy as np
 
 from effects.domain.ability_cache_layout import DEFAULT_CACHE_ROOT
+from effects.domain.baselines import Baseline
 from effects.domain.provenance import ProvenanceSidecar, SidecarLine
-from effects.domain.variants import Variant
 from effects.infrastructure.ability_cache_store import AbilityCacheStore
 from effects.infrastructure.effect_model_store import (
     InferenceCheckpoint,
@@ -41,7 +41,7 @@ DEFAULT_CARDS_FOLDERS: tuple[Path, ...] = (
 
 @dataclass
 class EncodeAbilitiesConfig:
-    variant: str = Variant.FULL
+    variant: str = Baseline.FULL
     checkpoint: Path | None = None
     cards_folders: tuple[Path, ...] = DEFAULT_CARDS_FOLDERS
     variant_scripts: Path | None = None
@@ -125,12 +125,12 @@ def encode_sidecar(
     """
     if not sidecar.lines:
         return np.zeros((0, e_dim), dtype=np.float32)
-    if variant == Variant.TAXONOMY:
+    if variant == Baseline.TAXONOMY:
         rows = [taxonomy_vector(line, e_dim) for line in sidecar.lines]
         return np.stack(rows).astype(np.float32)
     if encode_lines is None:
         raise ValueError(
-            f"--variant {variant} needs an encoder; only {Variant.TAXONOMY} "
+            f"--variant {variant} needs an encoder; only {Baseline.TAXONOMY} "
             "can be emitted without one"
         )
     return encode_lines(sidecar, sidecar_path).astype(np.float32)
@@ -158,7 +158,7 @@ def run(config: EncodeAbilitiesConfig, *, encode_lines=None) -> EncodeSummary:
     )
     e_dim = loaded.checkpoint.encoder_config.e_dim
     provenance = loaded.checkpoint.provenance
-    if encode_lines is None and config.variant != Variant.TAXONOMY:
+    if encode_lines is None and config.variant != Baseline.TAXONOMY:
         encode_lines = build_encode_lines(loaded)
 
     folders = [Path(f) for f in config.cards_folders if Path(f).is_dir()]

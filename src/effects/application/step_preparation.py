@@ -43,6 +43,7 @@ from effects.domain.ability_tokenizer import (
     INFERENCE_KEYWORD_EXPAND_P,
     AbilityTokenizer,
 )
+from effects.domain.baselines import baseline_masks
 from effects.domain.damage_step_keywords import KeywordResolver
 from effects.domain.effect_head_input import SlotKind
 from effects.domain.effect_head_layout import (
@@ -73,7 +74,6 @@ from effects.domain.split import (
 )
 from effects.domain.surface_collation import entity_target_tensors
 from effects.domain.value_targets import params, segments, value_targets
-from effects.domain.variants import variant_masks
 from effects.infrastructure.sidecar_io import SidecarCache, sidecar_roots
 from price_predictor.infrastructure.tokenizer_store import load_vocabulary
 
@@ -342,7 +342,7 @@ class StepPreparer:
         self.config = settings.config
         self.seed = settings.seed
         self.surface = surface_of(settings.config.vocab_path)
-        self.masks = variant_masks(settings.config.variant)
+        self.masks = baseline_masks(settings.config.variant)
         #: The corpus's split, read from its manifest; its validation games
         #: never reach training.
         self.split = settings.split

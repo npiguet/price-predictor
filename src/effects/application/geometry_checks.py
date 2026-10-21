@@ -532,8 +532,8 @@ def _probe_summary(label: str, probes) -> str:
 # ── the average-effect control and the taxonomy comparison ──────────────
 
 
-def check_variant_geometry(
-    full: CachedVectors, variant: CachedVectors, name: str,
+def check_baseline_geometry(
+    full: CachedVectors, baseline_vectors: CachedVectors, name: str,
 ) -> CheckResult:
     """Compare a baseline's cache geometry against the shipping one.
 
@@ -542,14 +542,14 @@ def check_variant_geometry(
     because what they test is whether the encoder's space carries more than
     theirs does.
     """
-    if len(variant) < 2 or len(full) < 2:
+    if len(baseline_vectors) < 2 or len(full) < 2:
         return CheckResult(
-            CheckName.variant_comparison(name), CheckStatus.SKIPPED,
+            CheckName.baseline_comparison(name), CheckStatus.SKIPPED,
             f"no {name} cache; run encode-abilities --variant {name}",
         )
-    shipping, baseline = full.geometry(), variant.geometry()
+    shipping, baseline = full.geometry(), baseline_vectors.geometry()
     return CheckResult(
-        CheckName.variant_comparison(name), CheckStatus.REPORTED,
+        CheckName.baseline_comparison(name), CheckStatus.REPORTED,
         f"mean pairwise cosine {shipping.mean_pairwise_cosine:.3f} vs "
         f"{baseline.mean_pairwise_cosine:.3f}; top component "
         f"{shipping.top_component_share:.1%} vs "

@@ -229,7 +229,7 @@ class TestEvaluateEffectModel:
         args = parse("evaluate-effect-model")
         assert args.checkpoint == Path("models/effects/effect-model/latest.pt")
         assert args.records_dir == Path("output/effects/records/")
-        assert args.variant_checkpoints is None
+        assert args.baseline_checkpoints is None
         assert not hasattr(args, "sealed_encoder_checkpoint")
 
     def test_variant_checkpoint_is_repeatable(self):
@@ -238,7 +238,7 @@ class TestEvaluateEffectModel:
             "--variant-checkpoint", "identity=a.pt",
             "--variant-checkpoint", "no-state=b.pt",
         )
-        assert args.variant_checkpoints == ["identity=a.pt", "no-state=b.pt"]
+        assert args.baseline_checkpoints == ["identity=a.pt", "no-state=b.pt"]
 
     def test_there_is_no_split_flag(self):
         """Splits come from the checkpoint — never a flag, never recomputed."""

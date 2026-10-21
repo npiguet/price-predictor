@@ -54,13 +54,13 @@ def variant_of_cache_file(path: Path) -> str | None:
     ``full`` — whatever dots the source's own name holds — and None for a file
     that is not a cache file at all.
     """
-    from effects.domain.variants import VARIANTS
+    from effects.domain.baselines import BASELINES
 
     name = Path(path).name
     if not name.endswith(CACHE_SUFFIX):
         return None
     stem = name[: -len(CACHE_SUFFIX)]
-    for variant in VARIANTS:
+    for variant in BASELINES:
         if variant != "full" and stem.endswith(f".{variant}"):
             return variant
     return "full"

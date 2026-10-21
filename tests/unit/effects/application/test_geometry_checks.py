@@ -17,10 +17,10 @@ from effects.application.evaluation_context import EvaluateEffectModelConfig
 from effects.application.geometry_checks import (
     NEIGHBOUR_QUERIES,
     CachedVectors,
+    check_baseline_geometry,
     check_decodability,
     check_nearest_neighbours,
     check_umap,
-    check_variant_geometry,
     check_ward,
     load_cache,
     nearest_neighbours,
@@ -553,10 +553,10 @@ class TestDecodability:
         assert result.status is CheckStatus.REPORTED
         assert "score_play nan" not in result.detail, result.detail
 
-class TestVariantComparison:
+class TestBaselineComparison:
     def test_it_skips_without_the_variant_cache(self, cache):
         cards, abilities = cache
-        result = check_variant_geometry(
+        result = check_baseline_geometry(
             load_cache(abilities, cards, surface="script"), CachedVectors(), "no-state",
         )
         assert result.status is CheckStatus.SKIPPED
@@ -570,7 +570,7 @@ class TestVariantComparison:
         collapsed = CachedVectors(by_text={
             f"t{i}": np.ones(8) + 0.001 * rng.normal(size=8) for i in range(50)
         })
-        result = check_variant_geometry(full, collapsed, "no-state")
+        result = check_baseline_geometry(full, collapsed, "no-state")
         assert result.status is CheckStatus.REPORTED
         assert result.values["full_cosine"] < result.values["no-state_cosine"]
 
@@ -595,7 +595,7 @@ class TestVariantComparison:
         ]
         run_gate_three(full, Path("abilities"))
         for baseline in baselines:
-            check_variant_geometry(full, baseline, "no-state")
+            check_baseline_geometry(full, baseline, "no-state")
         assert len(calls) == 3
 
 

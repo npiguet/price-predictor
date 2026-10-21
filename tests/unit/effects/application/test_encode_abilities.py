@@ -231,7 +231,7 @@ class TestIdempotence:
         assert summary.rows == 4
 
 
-class TestTaxonomyVariant:
+class TestTaxonomyBaseline:
     def test_it_emits_into_the_same_row_layout_without_an_encoder(self):
         """Every e-geometry check reads one file shape (FR-102)."""
         sidecar = _sidecar("cardsfolder/s/serra_angel.txt", 3)
@@ -464,7 +464,7 @@ class TestTruncation:
     def test_training_batchers_sharing_a_log_report_a_text_once(self, tokenizer):
         """The trainer hands one log to every per-batch batcher."""
         from effects.domain.ability_encoder import TruncationLog
-        from effects.domain.variants import VariantMasks
+        from effects.domain.baselines import BaselineMasks
         from tests.unit.effects.builders import make_batcher
 
         reported = []
@@ -472,7 +472,7 @@ class TestTruncation:
         long_text = " ".join(["x"] * 600)
         for _batch in range(3):
             batcher = make_batcher(
-                tokenizer=tokenizer, sidecars=None, masks=VariantMasks(),
+                tokenizer=tokenizer, sidecars=None, masks=BaselineMasks(),
                 surface="script", e_dim=4, widths={},
                 device=torch.device("cpu"), truncations=log,
             )

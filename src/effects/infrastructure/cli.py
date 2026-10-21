@@ -30,6 +30,7 @@ from effects.application.train_effect_model import (
     DEFAULT_SHARDS_PER_EPOCH,
 )
 from effects.application.validate_corpus import Thresholds
+from effects.domain.baselines import BASELINES, Baseline
 from effects.domain.collection_caps import (
     DEFAULT_INTERVENTIONS_PER_GAME,
     DEFAULT_LEGALITY_RATE,
@@ -41,7 +42,6 @@ from effects.domain.collection_caps import (
     CollectionCaps,
 )
 from effects.domain.split import HOLDOUT_MAX_CARRIERS, HOLDOUT_PERMILLE
-from effects.domain.variants import VARIANTS, Variant
 from effects.infrastructure.default_paths import (
     DEFAULT_ABILITIES_ROOT,
     DEFAULT_CARDS_FOLDERS,
@@ -222,7 +222,7 @@ def _add_holdout_unit(parser: argparse.ArgumentParser, *, default: str | None) -
 def _add_variant(parser: argparse.ArgumentParser, *, help_text: str | None = None) -> None:
     """``--variant``: the shipping model or one of its baselines."""
     parser.add_argument(
-        "--variant", choices=VARIANTS, default=Variant.FULL.value, help=help_text,
+        "--variant", choices=BASELINES, default=Baseline.FULL.value, help=help_text,
     )
 
 
@@ -1531,7 +1531,7 @@ def _evaluate_effect_model_parser(subparsers) -> None:
     parser.set_defaults(func=run_evaluate_effect_model)
     parser.add_argument("--checkpoint", type=Path, default=DEFAULT_CHECKPOINT)
     parser.add_argument(
-        "--variant-checkpoint", action="append", dest="variant_checkpoints",
+        "--variant-checkpoint", action="append", dest="baseline_checkpoints",
         default=None, metavar="NAME=PATH",
         help="Baseline checkpoint to compare against; repeatable",
     )
@@ -1561,7 +1561,7 @@ def run_evaluate_effect_model(args: argparse.Namespace) -> int:
     from effects.application.evaluation_context import (
         CorpusMismatchError,
         EvaluateEffectModelConfig,
-        parse_variant_checkpoint,
+        parse_baseline_checkpoint,
     )
     from effects.infrastructure.effect_model_store import (
         HashMismatchError,
@@ -1570,8 +1570,8 @@ def run_evaluate_effect_model(args: argparse.Namespace) -> int:
 
     try:
         variants = dict(
-            parse_variant_checkpoint(value)
-            for value in (args.variant_checkpoints or [])
+            parse_baseline_checkpoint(value)
+            for value in (args.baseline_checkpoints or [])
         )
     except ValueError as exc:
         logger.error("%s", exc)
@@ -1579,7 +1579,7 @@ def run_evaluate_effect_model(args: argparse.Namespace) -> int:
 
     config = config_from_args(
         EvaluateEffectModelConfig, args,
-        variant_checkpoints=variants,
+        baseline_checkpoints=variants,
         cards_folders=resolve_cards_folders(args.cards_folders),
     )
     try:

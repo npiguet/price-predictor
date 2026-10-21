@@ -44,6 +44,7 @@ from effects.domain.ability_tokenizer import (
     AbilityTokenizer,
     tokenizer_surface,
 )
+from effects.domain.baselines import baseline_masks
 from effects.domain.effect_head_input import (
     INPUT_LAYOUT_KEY,
     feature_widths,
@@ -51,7 +52,6 @@ from effects.domain.effect_head_input import (
 from effects.domain.effect_head_layout import FieldSpec, active_fields
 from effects.domain.effect_model import EffectModel
 from effects.domain.sampling import sampling_class
-from effects.domain.variants import variant_masks
 from effects.infrastructure.sidecar_io import SidecarCache, sidecar_roots
 from price_predictor.infrastructure.tokenizer_store import load_vocabulary
 
@@ -153,7 +153,7 @@ class LoadedModel:
         # arm trained before the layout was recorded, reads the earlier layout
         # bit for bit (FR-063c).
         layout = input_layout_of(checkpoint)
-        masks = variant_masks(checkpoint.variant)
+        masks = baseline_masks(checkpoint.variant)
         return SurfaceBatcher(
             stager=TextStager(
                 tokenizer=self.tokenizer,
@@ -238,7 +238,7 @@ def _load_weights(checkpoint, device) -> tuple[AbilityEncoder, EffectModel]:
 
 def _identity_table(checkpoint, device) -> IdentityTable | None:
     """The identity baseline's learned ``e`` table; None for any other variant."""
-    if not variant_masks(checkpoint.variant).identity_embedding:
+    if not baseline_masks(checkpoint.variant).identity_embedding:
         return None
     saved = checkpoint.extra.get(IDENTITY_TABLE_KEY)
     if saved is not None:

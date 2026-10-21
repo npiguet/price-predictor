@@ -30,6 +30,7 @@ from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from effects.domain.baselines import Baseline
 from effects.domain.records import (
     EffectRecord,
 )
@@ -38,7 +39,6 @@ from effects.domain.split import (
     text_keyed_holdout,
 )
 from effects.domain.strata import VALIDATION_STRATA, Stratum
-from effects.domain.variants import Variant
 
 logger = logging.getLogger(__name__)
 
@@ -199,7 +199,7 @@ class TrainEffectModelConfig:
         default_factory=lambda: Path("output/effects/keyword-definitions.json"),
     )
     model_output: Path | None = None
-    variant: str = Variant.FULL
+    variant: str = Baseline.FULL
     e_dim: int = 64
     #: The noise ratio ``r`` on ``e``, relative to the running covariance of
     #: ``e`` itself (FR-056) — no longer a fixed σ.

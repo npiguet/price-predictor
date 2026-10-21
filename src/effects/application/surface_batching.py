@@ -39,6 +39,7 @@ from effects.application.text_staging import (
     pinned,
 )
 from effects.domain.ability_encoder import AbilityEncoder, EncodedLine
+from effects.domain.baselines import BaselineMasks
 from effects.domain.damage_step_keywords import keyword_of_line
 from effects.domain.effect_head_input import (
     ACT_SLOT,
@@ -50,7 +51,6 @@ from effects.domain.effect_head_input import (
 )
 from effects.domain.records import PlayabilityDecisionPayload, acting_keys
 from effects.domain.surface_collation import collate_surfaces, scatter_e_rows
-from effects.domain.variants import VariantMasks
 
 #: Running-covariance decay for the noise on ``e`` (FR-056).
 NOISE_DECAY = 0.99
@@ -283,7 +283,7 @@ class Materializer:
     """
 
     device: torch.device
-    masks: VariantMasks
+    masks: BaselineMasks
     identity_table: IdentityTable | None = None
     noise: NoiseState | None = None
 
@@ -360,7 +360,7 @@ class SurfaceBatcher:
         *,
         stager: TextStager,
         resolver: KeyResolver,
-        masks: VariantMasks,
+        masks: BaselineMasks,
         e_dim: int,
         widths: dict[SlotKind, int],
         materializer: Materializer | None = None,

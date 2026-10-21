@@ -14,8 +14,8 @@ import pytest
 import torch
 
 from effects.domain.ability_encoder import AbilityEncoderConfig
+from effects.domain.baselines import BASELINES, Baseline
 from effects.domain.effect_model import EffectModel, EffectModelConfig
-from effects.domain.variants import VARIANTS, Variant
 from effects.infrastructure.effect_model_store import (
     DEFAULT_MODEL_OUTPUT,
     EffectCheckpoint,
@@ -175,11 +175,11 @@ class TestHashChecking:
 
 class TestVariantIsolation:
     def test_full_writes_to_the_shipping_directory(self):
-        assert model_output_for(Variant.FULL) == DEFAULT_MODEL_OUTPUT
+        assert model_output_for(Baseline.FULL) == DEFAULT_MODEL_OUTPUT
 
     def test_every_other_variant_writes_under_its_own_name(self):
-        for variant in VARIANTS:
-            if variant == Variant.FULL:
+        for variant in BASELINES:
+            if variant == Baseline.FULL:
                 continue
             assert model_output_for(variant) == DEFAULT_MODEL_OUTPUT / variant
 
@@ -187,7 +187,7 @@ class TestVariantIsolation:
         main = _checkpoint(files)
         variant = _checkpoint(files, variant="identity")
         require_same_split(
-            main, variant, main_path=tmp_path / "a.pt", variant_path=tmp_path / "b.pt",
+            main, variant, main_path=tmp_path / "a.pt", baseline_path=tmp_path / "b.pt",
         )
 
     def test_a_different_split_fails_fast_naming_both(self, tmp_path, files):
@@ -199,7 +199,7 @@ class TestVariantIsolation:
         with pytest.raises(SplitMismatchError) as excinfo:
             require_same_split(
                 main, variant,
-                main_path=tmp_path / "main.pt", variant_path=tmp_path / "var.pt",
+                main_path=tmp_path / "main.pt", baseline_path=tmp_path / "var.pt",
             )
         assert "main.pt" in str(excinfo.value)
         assert "var.pt" in str(excinfo.value)
@@ -213,7 +213,7 @@ class TestVariantIsolation:
         with pytest.raises(SplitMismatchError, match="vocabulary"):
             require_same_split(
                 main, variant,
-                main_path=tmp_path / "a.pt", variant_path=tmp_path / "b.pt",
+                main_path=tmp_path / "a.pt", baseline_path=tmp_path / "b.pt",
             )
 
     def test_a_different_held_out_card_list_fails_fast(self, tmp_path, files):
@@ -225,7 +225,7 @@ class TestVariantIsolation:
         with pytest.raises(SplitMismatchError):
             require_same_split(
                 main, variant,
-                main_path=tmp_path / "a.pt", variant_path=tmp_path / "b.pt",
+                main_path=tmp_path / "a.pt", baseline_path=tmp_path / "b.pt",
             )
 
 

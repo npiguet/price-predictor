@@ -26,7 +26,7 @@ from effects.domain.ability_encoder import (
     prepare_line,
 )
 from effects.domain.ability_tokenizer import AbilityTokenizer, withheld_keyword_tokens
-from effects.domain.variants import VariantMasks
+from effects.domain.baselines import BaselineMasks
 
 #: Texts per encoder pass. A batch's texts are sorted by length and encoded in
 #: groups this size, each padded to its own longest text: padded to the
@@ -143,7 +143,7 @@ class TextStager:
     truncations: TruncationLog | None = None
 
     def stage(
-        self, texts: Mapping[str, object], *, masks: VariantMasks, e_dim: int,
+        self, texts: Mapping[str, object], *, masks: BaselineMasks, e_dim: int,
         rng: random.Random, keys_of: Callable[[str], list],
     ) -> StagedTexts:
         """``texts`` (each to its sidecar line) staged for this variant.

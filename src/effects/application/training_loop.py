@@ -103,6 +103,7 @@ from effects.domain.ability_tokenizer import (
     TOKENIZER_RULES,
     TOKENIZER_RULES_KEY,
 )
+from effects.domain.baselines import baseline_masks
 from effects.domain.effect_head_input import (
     INPUT_LAYOUT,
     INPUT_LAYOUT_KEY,
@@ -129,7 +130,6 @@ from effects.domain.sampling import SAMPLING_CLASSES, BatchPlan, sampling_class
 from effects.domain.split import CorpusSplit
 from effects.domain.strata import VALIDATION_STRATA, Stratum
 from effects.domain.surface_collation import gather_entities
-from effects.domain.variants import variant_masks
 from effects.infrastructure.effect_model_store import (
     EPOCHS_DIR,
     EffectCheckpoint,
@@ -494,7 +494,7 @@ class TrainingLoop:
         #: The curated dataset's manifest digest at read time (FR-147), read
         #: into the checkpoint's provenance by ``_provenance`` below.
         self.corpus_digest = corpus_digest
-        self.masks = variant_masks(config.variant)
+        self.masks = baseline_masks(config.variant)
         # The surface follows the vocabulary the run loads, so the text an
         # ability is encoded from and the vocabulary it is tokenized against can
         # never disagree.

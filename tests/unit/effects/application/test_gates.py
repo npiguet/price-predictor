@@ -16,7 +16,7 @@ from effects.application.evaluate_effect_model import (
     NOT_IMPLEMENTED_CHECKS,
     not_implemented,
 )
-from effects.application.evaluation_context import parse_variant_checkpoint
+from effects.application.evaluation_context import parse_baseline_checkpoint
 from effects.application.gate_one import GateOneMetrics, evaluate_gate_one
 from effects.application.gate_two import evaluate_gate_two, evaluate_keyword
 from effects.application.geometry_checks import (
@@ -458,14 +458,14 @@ class TestReport:
 
 class TestVariantCheckpointFlag:
     def test_it_parses_name_equals_path(self):
-        name, path = parse_variant_checkpoint("identity=models/x/latest.pt")
+        name, path = parse_baseline_checkpoint("identity=models/x/latest.pt")
         assert name == "identity"
         assert path.name == "latest.pt"
 
     def test_a_bare_path_is_rejected(self):
         with pytest.raises(ValueError, match="NAME=PATH"):
-            parse_variant_checkpoint("models/x/latest.pt")
+            parse_baseline_checkpoint("models/x/latest.pt")
 
     def test_an_empty_name_is_rejected(self):
         with pytest.raises(ValueError, match="NAME=PATH"):
-            parse_variant_checkpoint("=models/x/latest.pt")
+            parse_baseline_checkpoint("=models/x/latest.pt")

@@ -21,10 +21,10 @@ from effects.application.train_effect_model import (
 )
 from effects.domain.ability_encoder import AbilityEncoderConfig
 from effects.domain.ability_tokenizer import withheld_keyword_tokens
-from effects.domain.effect_model import EffectModelConfig
-from effects.domain.variants import (
-    variant_masks,
+from effects.domain.baselines import (
+    baseline_masks,
 )
+from effects.domain.effect_model import EffectModelConfig
 from effects.infrastructure.effect_model_store import (
     DEFAULT_MODEL_OUTPUT,
     EffectCheckpoint,
@@ -67,7 +67,7 @@ class TestVariantCheckpointDisagreement:
             require_same_split(
                 main, variant,
                 main_path=tmp_path / "full.pt",
-                variant_path=tmp_path / "identity.pt",
+                baseline_path=tmp_path / "identity.pt",
             )
         message = str(excinfo.value)
         assert "full.pt" in message and "identity.pt" in message
@@ -78,7 +78,7 @@ class TestVariantCheckpointDisagreement:
         with pytest.raises(SplitMismatchError, match="vocabulary"):
             require_same_split(
                 main, variant,
-                main_path=tmp_path / "a.pt", variant_path=tmp_path / "b.pt",
+                main_path=tmp_path / "a.pt", baseline_path=tmp_path / "b.pt",
             )
 
     def test_a_keyword_definition_disagreement_fails_fast(self, tmp_path):
@@ -89,7 +89,7 @@ class TestVariantCheckpointDisagreement:
         with pytest.raises(SplitMismatchError, match="keyword definitions"):
             require_same_split(
                 main, variant,
-                main_path=tmp_path / "a.pt", variant_path=tmp_path / "b.pt",
+                main_path=tmp_path / "a.pt", baseline_path=tmp_path / "b.pt",
             )
 
     def test_matching_checkpoints_pass(self, tmp_path):
@@ -97,7 +97,7 @@ class TestVariantCheckpointDisagreement:
         variant = _checkpoint(self._provenance())
         require_same_split(
             main, variant,
-            main_path=tmp_path / "a.pt", variant_path=tmp_path / "b.pt",
+            main_path=tmp_path / "a.pt", baseline_path=tmp_path / "b.pt",
         )
 
 
@@ -116,36 +116,36 @@ class TestHashMismatchAtInference:
             provenance.verify_hashes(vocab_path=vocab, keyword_path=keywords)
 
 
-class TestVariantMasks:
+class TestBaselineMasks:
     def test_full_masks_nothing(self):
-        masks = variant_masks("full")
+        masks = baseline_masks("full")
         assert not (masks.zero_act_e or masks.zero_context_e or masks.zero_state)
         assert not (masks.identity_embedding or masks.taxonomy_embedding)
 
     def test_identity_replaces_the_encoder(self):
-        assert variant_masks("identity").identity_embedding
+        assert baseline_masks("identity").identity_embedding
 
     def test_state_only_zeroes_every_e(self):
-        masks = variant_masks("state-only")
+        masks = baseline_masks("state-only")
         assert masks.zero_act_e and masks.zero_context_e
         assert not masks.zero_state
 
     def test_no_state_zeroes_the_ability_tokens_too(self):
         """Otherwise it would read the board through the abilities on it."""
-        masks = variant_masks("no-state")
+        masks = baseline_masks("no-state")
         assert masks.zero_state
         assert masks.zero_context_e
 
     def test_no_state_keeps_the_acting_lines_e(self):
         """FR-094: every input zeroed except [ACT] and the record-kind flag."""
-        assert not variant_masks("no-state").zero_act_e
+        assert not baseline_masks("no-state").zero_act_e
 
     def test_taxonomy_swaps_e_for_the_sidecars_api_fields(self):
-        assert variant_masks("taxonomy").taxonomy_embedding
+        assert baseline_masks("taxonomy").taxonomy_embedding
 
     def test_an_unknown_variant_is_rejected(self):
         with pytest.raises(ValueError, match="unknown --variant"):
-            variant_masks("oracle-text")
+            baseline_masks("oracle-text")
 
 
 class TestScheduleConstants:

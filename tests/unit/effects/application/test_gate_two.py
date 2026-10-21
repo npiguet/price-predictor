@@ -36,6 +36,7 @@ from effects.application.gate_two import (
     subject_id,
 )
 from effects.application.surface_batching import IdentityTable, SurfaceBatcher
+from effects.domain.baselines import BaselineMasks
 from effects.domain.damage_step_keywords import (
     KEYWORDS_BY_NAME,
     Subject,
@@ -64,7 +65,6 @@ from effects.domain.state_snapshot import (
     PowerToughness,
     StateSnapshot,
 )
-from effects.domain.variants import VariantMasks
 from effects.infrastructure.model_runner import Runnable
 from tests.unit.effects.builders import make_batcher, slots_of_kind
 
@@ -188,7 +188,7 @@ def _batcher() -> SurfaceBatcher:
     """
     return make_batcher(
         tokenizer=None, sidecars=_Sidecars(),
-        masks=VariantMasks(identity_embedding=True),
+        masks=BaselineMasks(identity_embedding=True),
         surface="script", e_dim=4, widths={}, device=torch.device("cpu"),
         identity_table=IdentityTable(
             [line.script_text for line in _LINES.values()], 4,

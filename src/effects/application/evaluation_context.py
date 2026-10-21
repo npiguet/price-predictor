@@ -91,7 +91,7 @@ class EvaluateEffectModelConfig:
     checkpoint: Path = field(
         default_factory=lambda: Path(default_paths.DEFAULT_CHECKPOINT),
     )
-    variant_checkpoints: dict[str, Path] = field(default_factory=dict)
+    baseline_checkpoints: dict[str, Path] = field(default_factory=dict)
     records_dir: Path = field(
         default_factory=lambda: Path(default_paths.DEFAULT_RECORDS_DIR),
     )
@@ -111,7 +111,7 @@ class EvaluateEffectModelConfig:
     win_rates: Path = field(default_factory=lambda: DEFAULT_WIN_RATES)
 
 
-def parse_variant_checkpoint(value: str) -> tuple[str, Path]:
+def parse_baseline_checkpoint(value: str) -> tuple[str, Path]:
     """``NAME=PATH`` for ``--variant-checkpoint``."""
     name, separator, path = value.partition("=")
     if not separator or not name.strip() or not path.strip():
@@ -223,7 +223,7 @@ def load_context(config: EvaluateEffectModelConfig) -> EvaluationContext:
     )
 
 
-def load_variants(config: EvaluateEffectModelConfig, main) -> dict[str, EffectCheckpoint]:
+def load_baselines(config: EvaluateEffectModelConfig, main) -> dict[str, EffectCheckpoint]:
     """Every ``--variant-checkpoint``, refused unless it shares main's split."""
     from effects.infrastructure.effect_model_store import (
         load_effect_checkpoint,
@@ -231,11 +231,11 @@ def load_variants(config: EvaluateEffectModelConfig, main) -> dict[str, EffectCh
     )
 
     variants = {}
-    for name, path in config.variant_checkpoints.items():
+    for name, path in config.baseline_checkpoints.items():
         loaded = load_effect_checkpoint(path)
         require_same_split(
             main, loaded,
-            main_path=Path(config.checkpoint), variant_path=Path(path),
+            main_path=Path(config.checkpoint), baseline_path=Path(path),
         )
         variants[name] = loaded
     return variants
