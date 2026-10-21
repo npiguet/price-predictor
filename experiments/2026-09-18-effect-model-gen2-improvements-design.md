@@ -1,104 +1,97 @@
 # Ability effect model — gen-2
 
-This record covers the second generation of a model that learns what Magic: The Gathering abilities do by watching Forge play. Forge is the open-source Magic rules engine, and its AI plays both sides of the sealed games the model learns from. Every ability on a Forge card is a line of script, such as `SP$ DealDamage | NumDmg$ 3 | ValidTgts$ Creature`. The model reads that script and predicts what the ability does on a given board: which creatures die, how much damage each takes, whose life changes, which keywords are gained.
+This record covers gen-2, the second generation of a model that learns what Magic: The Gathering abilities do by watching Forge play. Forge is the open-source Magic rules engine, and its AI plays both sides of the sealed games the model learns from. Every ability on a Forge card is a line of script, such as `SP$ DealDamage | NumDmg$ 3 | ValidTgts$ Creature`. An encoder reads that script and outputs one vector `e`, the ability's embedding. An effect head reads `e` beside a snapshot of the board and predicts, for every card and player, what the ability changes: which creatures die, how much damage each takes, whose life changes, which keywords are gained. The training data are effect records, one per observed event such as an ability resolving or a combat damage step, each holding the board before the event and what the event changed.
 
-The model has two parts. The encoder reads one ability's script and outputs a fixed-length vector `e`, the ability's embedding. The effect head reads `e` together with a snapshot of the board and predicts, for every card and player, what changed. The effect head is a transformer: a network that reads a set of input vectors, here `e` and one slot per card and player, and lets each prediction depend on all of them. Its shared body is called the trunk, and small output layers read the trunk to produce each predicted field. The training data are effect records: one record per observed event, such as an ability resolving or a combat damage step, holding the board before the event and what the event changed.
-
-`e` is the part meant for reuse. Deckbuilding and drafting models read one fixed vector per ability without any board, and a future game-playing agent would read it as its ability representation. The record therefore asks two questions of every checkpoint: what the whole model predicts, and how much of that knowledge lives in `e`. A checkpoint is the saved weights of a model at one epoch of training.
-
-Every checkpoint is measured three ways:
-
-- **Two validation strata kept out of training.** The game-disjoint stratum holds whole games whose ability texts also appear in training. The card-disjoint stratum holds games containing a held-out card, whose ability texts the model never trained on. A validation loss is the training loss measured on one of these strata.
-- **Three gates** from gen-1's design. Gate 1 compares the encoder with a baseline that memorizes each text, gate 2 checks that combat keywords move predictions the way they move real outcomes, and gate 3 checks that `e` does not collapse onto a few directions.
-- **The knowledge probes**, recorded in [`2026-09-19-effect-knowledge-probes-design.md`](2026-09-19-effect-knowledge-probes-design.md), called the probes record below. A probe asks a model a targeted question, such as whether a creature dealt 3 damage at toughness 4 dies, by editing a real record and reading the prediction, or by fitting a small model to read a known property from the model's vectors.
-
-Gen-2 is a sweep: a set of training runs, called arms, that differ in the width of `e` and in what the training adds. Continuation runs then carry the best arms further. The results come first below, organized by question, each with a chart. The design rationale for what gen-2 changed from gen-1 follows them, and the run-by-run details and the fixes the runs forced come last.
-
-All the data behind the tables and charts is in [`2026-09-18-effect-model-gen2/`](2026-09-18-effect-model-gen2/README.md), one CSV per kind of result, with an index of where each file comes from. `scripts/effect_gen2_report/build_data.py` regenerates the CSVs from the run directories, and `scripts/effect_gen2_report/make_charts.py` draws every chart from the CSVs alone.
+Gen-2 changes what the encoder reads, collects a new corpus with a seat that sometimes plays at random, and trains a sweep: arms, runs from scratch that differ in the width of `e`, and continuation runs that carry them further. This record judges those changes and the rules they targeted: the death rule and its boundary, combat, gate 2, how a checkpoint is chosen, the losses and the width. Its sibling, [the knowledge-probes record](2026-09-19-effect-knowledge-probes-design.md), reports where in the model each kind of knowledge lives, and what the model knows of evasion, targeting, colour and zones. The results come first, organized by question and read through the measures that [the section after the summary](#seventeen-checkpoints-from-twelve-runs-read-on-two-validation-strata-kept-out-of-training) defines. The design of each change follows them, and the runs, the fixes they forced and the defects found afterwards come last, with the data in [`2026-09-18-effect-model-gen2/`](2026-09-18-effect-model-gen2/README.md).
 
 ## What gen-2 found
 
-**The model learns that damage kills a creature only when training shows it the rule directly.** Forge's AI aims its removal at creatures it can kill, so nearly every damage spell in the corpus is lethal, and the first arms predicted deaths from a creature's toughness alone. Training copies of qualifying records, with the damage and the toughness redrawn and the death labelled by the rule, gave the model the damage-versus-toughness comparison. The copies make up 2% of the records trained and cost nothing on the validation loss ([the death rule](#the-model-compares-damage-with-toughness-only-after-training-shows-it-the-rule-directly)).
+**The model learns that damage kills a creature only when training shows it the rule directly.** Forge's AI aims its removal at creatures it can kill, so nearly every damage spell in the corpus is lethal, and the first arms predicted deaths from a creature's toughness alone. Lethality copies, training copies of qualifying records with the damage and the toughness redrawn and the death labelled by the rule, gave the model the damage-versus-toughness comparison. The copies make up 2% of the records trained and cost nothing on the validation loss. Where a checkpoint still misses a lethal hit, as on activated 1-damage pings, it mostly doubts that the hit creature is affected at all, and that doubt follows the ability's wording and how rarely training shows it ([the death rule](#the-model-compares-damage-with-toughness-only-after-training-shows-it-the-rule-directly)).
 
-![Predicted death of a damage spell's target, by damage and toughness, across the arms and continuation runs](2026-09-18-effect-model-gen2/charts/damage-grids.png)
+![Sixteen-panel grid of predicted death by damage and toughness for a damage spell's target, one row per width of e and one column per stage of training](2026-09-18-effect-model-gen2/charts/damage-grids.png)
 
-*Each cell is the predicted death of a damage spell's target, averaged over 20 real records with the spell's damage and the target's toughness edited. Orange cells predict a death more likely than not and blue cells less likely, brighter meaning more likely on both sides. The rule says the target dies on and below the black staircase. Arm `e64` trained without copies; every other panel trained with them. Data: `damage_grids.csv`.*
+*Each cell is the predicted death of a damage spell's target, averaged over 20 real records with the spell's damage and the target's toughness edited. Rows are the width of `e`; columns run from the arm without copies through the arm with copies to each continuation run's kept and last epoch. Orange cells predict a death more likely than not and blue cells less likely, brighter meaning more likely on both sides. The rule says the target dies on and below the black staircase, where the damage is at least the toughness. Each panel's error is the mean absolute difference from the rule's 0 or 1 over its 64 cells; run B256's last epoch has the lowest, in bold. Data: `damage_grids.csv`.*
 
 **Where the lethal boundary sits wanders from epoch to epoch at the full learning rate, and settles near the rule at a tenth of it.** Twenty more epochs at the same rate sharpen the boundary but move its position by up to a point of damage between consecutive epochs. A tenth of the rate holds it in a narrow band near the rule, from whichever checkpoint the run starts ([the boundary](#where-the-boundary-sits-wanders-between-epochs-at-the-full-learning-rate-and-settles-near-the-rule-at-a-tenth-of-it)).
 
-**The validation loss and the probes disagree about which checkpoint is best.** In every continuation run, the probes rate the last epoch as good as or better than the epoch with the lowest card-disjoint loss. The loss rises late in training because the model grows more confident, not because it ranks outcomes worse. Gen-3 judges checkpoints by probes instead ([validation against probes](#the-probes-keep-improving-after-the-card-disjoint-loss-has-bottomed-out)).
+**The validation loss and the probes disagree about which checkpoint is best.** In every continuation run, the probes rate the last epoch as good as or better than the epoch with the lowest card-disjoint loss. The loss rises late in training because the model grows more confident on texts it never trained on, mostly about whether a card is affected at all and about poison, and not because it ranks outcomes worse. Gen-3 judges checkpoints by probes instead ([validation against probes](#the-probes-keep-improving-after-the-card-disjoint-loss-has-bottomed-out)).
 
-**In combat, the model applies power against toughness softly, learns indestructible and most of deathtouch, and does not learn first strike.** The corpus lost every real blocked fight of the first-strike damage step to a collector bug, and the model never learned that a first striker survives the creature it kills first ([combat](#in-combat-the-model-applies-power-against-toughness-softly-learns-indestructible-and-deathtouch-and-not-first-strike)).
+**In combat, the model applies power against toughness softly and learns indestructible and most of deathtouch, and the grid that finds no first strike may understate it.** The combat grid kept each base record's damage assignment when it edited the board, so its first-strike and power readings ask about boards that contradict their own input. The corpus also lost every real blocked fight of the first-strike damage step to a collector bug, so only the probe forks showed a first striker surviving the creature it kills first, too few to teach the step ([combat](#in-combat-the-model-applies-power-against-toughness-softly-and-learns-indestructible-and-most-of-deathtouch-and-the-grid-that-finds-no-first-strike-may-understate-it)).
 
-**Three combat keywords hold on every checkpoint, and double strike swings far beyond its sampling noise.** Lifelink and indestructible agree with real outcomes 97% of the time or more on every checkpoint, and trample 87% or more. Double strike ranges from below half to above four in five between checkpoints of one run, several times what its 294 records allow by chance ([gate 2](#three-combat-keywords-hold-on-every-checkpoint-and-double-strike-swings-far-beyond-its-sampling-noise)).
+**Three combat keywords hold on every checkpoint, and double strike swings far beyond its sampling noise.** Lifelink, indestructible and trample agree with real outcomes well above gate 2's bar on every checkpoint. Double strike fails and passes between checkpoints of one run, by several times what its records allow by chance ([gate 2](#three-combat-keywords-hold-on-every-checkpoint-and-double-strike-swings-far-beyond-its-sampling-noise)).
 
-**Validation losses swing between epochs by about as much as a run improves, and a tenth of the learning rate cuts the swing several times over.** A difference of a tenth of a loss point between two checkpoints is within that swing ([training](#validation-losses-swing-between-epochs-by-about-as-much-as-a-run-improves)).
+**Validation losses swing between epochs by about as much as a run improves, and a tenth of the learning rate cuts the swing several times over.** A difference of a tenth of a loss point between two checkpoints at the full rate is within that swing. The output fields with many records plateau by epoch 20, and the small ones, such as poison, swing more than they improve ([training](#validation-losses-swing-between-epochs-by-about-as-much-as-a-run-improves)).
 
-**No width of `e` leads on every measure, and the three widths do not line up in order.** The 64-wide line has the lowest loss on unseen texts at every stage of training. The 256-wide line has the lowest loss on known texts in new games and, from the continuation runs on, the best probes by a small margin. The 128-wide line has the weakest probes at every stage. Each line is one seed, and a middle width that trails both others points to the seeds rather than the width ([width](#the-64-wide-and-256-wide-lines-split-the-measures-and-the-128-wide-line-trails-on-the-probes-at-every-stage)).
+**No width of `e` leads on every measure, and the three widths do not line up in order.** The 64-wide line has the lowest loss on unseen texts at every stage of training. The 256-wide line has the lowest loss on known texts in new games and, at a tenth of the learning rate, the best probes by a small margin; its continuation checkpoints also rank best on average over thirteen measures. The 128-wide line has the weakest probes at every stage, which points to the seeds rather than to the width ([width](#the-64-wide-and-256-wide-lines-split-the-measures-and-the-128-wide-line-trails-on-the-probes-at-every-stage)).
 
-**Gen-2's `e` holds a line's costs, timing and amounts far better than gen-1's, and the trunk still supplies deaths, damage and trigger firing.** The probes record measures where each kind of knowledge lives.
+**Gen-2's `e` spreads over two to three times as many directions as gen-1's, and a linear probe reads a line's kind and amounts from it far better** ([embedding probes](#gen-2s-e-spreads-over-two-to-three-times-gen-1s-directions-and-reads-a-lines-kind-and-amounts-far-better)).
+
+**Where knowledge lives, the probes record finds that `e` carries what a line states and the trunk works out what the board decides.** The board and `e` alone, without the trunk, give nearly all of what the model knows about whether an ability is affordable and how long a pump lasts. On deaths, trigger firing, targets and damage taken, a probe on the trunk reads as much as the model's own answer, and the probes cannot say whether `e` holds what those questions need. On deaths, `e` adds only a few hundredths of AUC over a random vector of its width, and nothing at width 256. `e` holds at most a sixth of how much a text's outcome varies across boards on trained lines and none on unseen ones, less than gen-1's ([the probes record's summary](2026-09-19-effect-knowledge-probes-design.md#what-the-probes-found)).
+
+**Gen-2's first arm trailed gen-1 on the part of the loss the two generations share, in the fields whose targets gen-2 made larger or new** ([gen-2 against gen-1](#the-first-arm-trailed-gen-1-on-the-loss-the-two-generations-share-in-the-fields-whose-targets-gen-2-made-larger-or-new)).
+
+**Collector defects shaped several of gen-2's labels, and qualify some of the results above and in the probes record.** The largest: more than half of the corpus's "may not block" labels name a creature the AI had already planned to block with, though no rule kept it from blocking ([the collector defects](#collector-defects-taught-the-ais-block-plan-as-a-rule-and-bent-the-affected-gate-and-the-combat-input)).
+
+**The zero-shot keyword check measured nothing.** Every arm deleted cascade, the keyword withheld from training, instead of expanding it to its definition, so the check compared records missing an ability with records whose abilities trained ([the withheld keyword](#every-arm-deleted-the-withheld-keyword-instead-of-expanding-it-so-the-zero-shot-check-measured-nothing)).
+
+## Seventeen checkpoints from twelve runs, read on two validation strata kept out of training
+
+Every result below reads one or more of seventeen gen-2 checkpoints, a checkpoint being the saved weights of a model at one epoch of training. An epoch is one pass of the training schedule: 5,000 steps of 32 records each. The subsections define the model's parts, the data each measure reads, the measures, the runs, and the size of a difference that counts.
+
+### The trunk reads each ability's `e` in a slot of its own beside the board
+
+The effect head is a transformer: a network that reads a set of input vectors, its slots, and lets each output depend on all of them. Its shared body is the trunk, and small output heads read the trunk to produce each predicted field. The trunk reads a slot for the game, one per player, an `[ACT]` slot holding the acting ability's `e`, and for each object in the snapshot a `[CARD]` slot followed by the `e` of that object's spell and activated abilities. Statics, triggers and replacements on the board have no slot. `e` is the part meant for reuse: deckbuilding and drafting models read one fixed `e` per ability without any board, and a future game-playing agent would read it as its ability representation.
+
+![Diagram of the effect model. A Forge script passes through a tokenizer and the ability encoder to a vector e of width 64, 128 or 256. In training only, noise is added to e, an MLM head reads the encoder's tokens, and value, API-type and parameter-key heads read e alone. e feeds the [ACT] slot and the ability slots of each object's block in the trunk's input, beside [GLOBAL], two [PLAYER] slots and [CARD] slots. Statics, triggers and replacements are never in a block. A six-layer trunk feeds the created-objects, verdict and per-entity heads. Numbered badges mark where read-out ladder rungs 0, 1, 1w, 1o, 2 and 3 read, and a panel shows the three ablation scopes.](2026-09-18-effect-model-gen2/charts/diagram-model-and-probes.png)
+
+*Dashed parts exist only in training. The MLM head, a masked-language-model head, trains the encoder to restore hidden words of the script. The rose badges mark the input each rung of the probes record's read-out ladder probes, and the slot rows at the bottom right show which slots each ablation scope replaces; [the probes record](2026-09-19-effect-knowledge-probes-design.md) defines both.*
+
+### Two validation strata keep whole games out of training, and one of them holds texts the model never trained on
+
+The card-disjoint stratum holds games containing a held-out card, whose ability texts the model never trained on. The game-disjoint stratum holds whole games whose ability texts also appear in training. A validation loss is the training loss measured on a fixed sample of 2,048 records from one stratum, the same records every epoch. Each run keeps the epoch with the lowest card-disjoint loss, called its kept epoch. The knowledge probes read a frozen probe set drawn from both strata, so every checkpoint is probed on the same items.
+
+![Diagram of how games are split. A game with any record naming a held-out card goes to the card-disjoint stratum; otherwise a hash of its game id sends a small fixed share to the game-disjoint stratum and the rest to training. Both strata feed a fixed validation sample and the frozen probe set.](2026-09-18-effect-model-gen2/charts/diagram-validation-strata.png)
+
+*Whole games move together, never single records, because the records of one game share a board. Held-out texts are picked by a hash of each text's masked template, and training games are played from pools without any held-out card. The card-disjoint loss chooses the epoch a run keeps.*
+
+### Three gates and a probe mean score every checkpoint
+
+The three gates come from gen-1's design. Gate 1 compares the encoder with a baseline that memorizes each text, and gen-2 does not run it, because it trains no such baseline. Gate 2 checks that combat keywords move predictions the way they move real outcomes. Gate 3 checks that `e` does not collapse onto a few directions.
+
+The knowledge probes are recorded in [the probes record](2026-09-19-effect-knowledge-probes-design.md). A probe asks a model a targeted question, such as whether a creature dealt 3 damage at toughness 4 dies, by editing a real record and reading the prediction, or by fitting a small model to read a known property from the model's vectors. A yes/no probe is scored by AUC, the chance that a true case is ranked above a false one, so 0.5 is chance. An amount is scored by R², the share of its variance the probe explains.
+
+The probe mean summarizes a checkpoint in one number. It is the mean AUC of the model's own answer, read from its trained output heads with no probe fitted, on eight questions over the game-disjoint probe records: whether a card is affected, whether it dies, whether a trigger fires, whether an ability is affordable, whether a target is legal, whether a target carrying protection is legal, whether a creature may block, and whether a pump lasts until end of turn. Four of the eight read labels that gen-2's defects distort. May block, whether a card is affected and whether an ability is affordable carry collector defects ([the collector defects](#collector-defects-taught-the-ais-block-plan-as-a-rule-and-bent-the-affected-gate-and-the-combat-input)). May block and pump duration also read fields whose unset targets were trained as 0 ([the zero-filled targets](#every-affected-entity-was-scored-on-every-output-field-and-a-field-with-no-event-was-taught-as-0)).
+
+### A checkpoint is named after its run: an arm, then an A run at the full learning rate, then a B run at a tenth of it
+
+Gen-2 trains in three stages. An arm is a run from scratch, named after the width of `e`: `e64`, `e128` and the others. An arm whose name ends in `-lethality` trained with lethality copies. Arm `e64 (earlier inputs)` is `e64`'s first run, on the model inputs as they were before three corrections that every later run uses. An A run resumes its arm from the arm's last epoch for twenty more epochs at the same learning rate, the step size of each weight update. A B run starts from its A run's kept epoch and trains twenty epochs at a tenth of that rate.
+
+Each continuation is probed at its kept epoch, as `A64 best`, and at its last, as `A64 last`. Run A256 reached its lowest card-disjoint loss at its last epoch, so it has a single checkpoint. Run B256 never went below the checkpoint it started from, so it keeps run A256's epoch 53; its own lowest epoch, 55, is probed as `B256 best`. Gen-1 is the checkpoint of the previous generation. The full run table is in [Details](#the-runs-and-the-checkpoints).
+
+![Gantt chart of the gen-2 runs by epoch, one bar per run grouped by width of e, with arrows from each continuation to the weights it starts from and markers at each probed checkpoint](2026-09-18-effect-model-gen2/charts/run-lineage.png)
+
+*Each bar is one run. An A run resumes its arm after the arm's last epoch; a B run starts from its A run's kept epoch at a tenth of the learning rate. Triangles mark arms, squares A runs and circles B runs; a filled marker is a run's kept epoch and a hollow one its last, and `B256 best` is half filled. Grey bars trained without lethality copies, and the hatched bar is `e64 (earlier inputs)`. Data: `runs.csv`, `checkpoints.csv`.*
+
+### Each run is one seed, so a difference between runs counts only where it exceeds the swing between epochs
+
+Every run is a single training run with one seed, so two runs can differ by chance alone. A seed fixes a run's initial weights, the order of its data, its dropout and its noise. Dropout switches off a random share of the network's units at each training step. Three sources of variation make two equally good runs score differently, and one run measures only two of them.
+
+| source | what varies | measured from one run |
+|---|---|---|
+| validation sample | the card-disjoint loss of one model on another sample of held-out texts | yes, by resampling the held-out texts |
+| movement within a run | the loss from one epoch to the next as the weights keep changing | yes, from the epochs on the plateau |
+| seed | the level a run settles at | no; it needs a second run |
+
+The epoch-to-epoch swing sets a floor, not the whole margin. On arm `e64 (earlier inputs)` the plateau's swing was about a tenth of a loss point, and [the training results](#validation-losses-swing-between-epochs-by-about-as-much-as-a-run-improves) measure it on every run. Seed variance is usually larger, because a run with another seed tends to sit at another level for the whole run rather than only to wobble differently. Consecutive epochs start from each other's weights, so their spread also understates the noise in their mean.
+
+| arm `e64 (earlier inputs)`, epochs 14 to 20 | mean | standard deviation |
+|---|---:|---:|
+| card-disjoint loss | 4.06 | 0.11 |
+| of it, the output fields | 3.58 | 0.12 |
+
+The runs are therefore compared by agreement across measures. A width that wins on both losses, on the probes and on the death-rule and combat probes is more convincing than one that wins on a single number, although all of them come from the same run. The scorecard in [the width section](#the-64-wide-and-256-wide-lines-split-the-measures-and-the-128-wide-line-trails-on-the-probes-at-every-stage) is that comparison. Two stronger checks were designed and not run: a comparison of two checkpoints paired on the same held-out texts, with a confidence interval bootstrapped over texts, and a second seed of one run, which would measure the spread between seeds.
 
 ## Results
-
-### Validation losses swing between epochs by about as much as a run improves
-
-Both validation losses fall quickly for about ten epochs and slowly after that. From then on, single epochs land a tenth of a point or more above or below the trend, about as far as the trend falls in five to ten epochs. The validation samples are fixed, the same 2,048 records per stratum every epoch, so the swing is the model changing between epochs and not a different sample. Each run keeps its epoch with the lowest card-disjoint loss, marked with a star, so the kept epoch is partly the luckiest one. Run B256's lowest epoch stayed above the checkpoint it started from, which it keeps instead.
-
-![Card-disjoint, game-disjoint and training loss by epoch for every run, by width of e](2026-09-18-effect-model-gen2/charts/training-losses.png)
-
-*Grey: the arm without lethality copies. Light to dark: the arm with copies, its continuation at the same learning rate (runs A64, A128 and A256), and the continuation of that run's kept epoch at a tenth of the learning rate (runs B64, B128 and B256). The bottom row is the training loss, averaged over each epoch's 5,000 steps; it runs about a tenth higher with lethality copies, which add records the corpus rarely shows. Data: `epochs.csv`.*
-
-The card-disjoint loss swings more than the game-disjoint loss in almost every run. The card-disjoint stratum holds 500 texts the model never saw, and how well the model generalizes to each of them changes from epoch to epoch. The training loss moves by two to three hundredths in every run.
-
-The training loss also shows why the validation losses swing. After a short warmup the learning rate stays at its peak for the whole run, so the weights never settle: each epoch ends at a different point near the bottom of the loss surface. The training loss is averaged over the 5,000 steps of an epoch and smooths that movement out, while a validation loss scores the single set of weights the epoch ended on. When runs B64 and B128 drop to a tenth of the rate, their training loss falls by about a tenth in the first epoch and by about two tenths within two, against run A64 and run A128 on the same shards. The weights move closer to the bottom once their steps are smaller.
-
-At a tenth of the learning rate the swing shrinks between two and six times on card-disjoint loss and about three times on game-disjoint loss, while the training loss keeps the same small movement. The three B runs are the only runs whose single epochs can be compared with each other at face value.
-
-![Standard deviation of each loss around its five-epoch moving mean, per run](2026-09-18-effect-model-gen2/charts/loss-noise.png)
-
-*Spread of each loss around its own five-epoch moving mean, from epoch 10 on. Data: `epochs.csv`.*
-
-Two consequences carry through the rest of the record. A difference of a tenth of a point between two runs' kept epochs at the full rate is inside the swing and says little. The early stopper, which ends a run after five epochs without a new lowest card-disjoint loss, ended every arm while its trend was still falling, and every continuation run lowered its arm's loss further. Each run is one seed, so the level a second seed would settle at is not measured at all; the run plan's stage 6 describes what measuring it would take.
-
-### The probes keep improving after the card-disjoint loss has bottomed out
-
-In each continuation run whose last epoch was not also its lowest, the last epoch has a higher card-disjoint loss than the kept epoch, yet the probes rate it as good or better. Run A256 reached its lowest card-disjoint loss at its last epoch, so it has a single checkpoint and no arrow. Run B256 never went below run A256's epoch 53, the checkpoint it started from and keeps, so its arrow starts at its own lowest epoch, 55. The chart plots each checkpoint's mean probe score against each validation loss, and an arrow joins each run's lowest card-disjoint epoch to its last. Every arrow points right on the card-disjoint panel, toward a worse loss, and level or up, toward better probes. The probe mean is the model's own prediction on eight knowledge-probe questions, scored as AUC: the chance that a true case is ranked above a false one.
-
-![Mean probe score against each validation loss, with arrows from each run's lowest card-disjoint epoch to its last](2026-09-18-effect-model-gen2/charts/probes-vs-loss.png)
-
-*Blue: 64-wide; orange: 128-wide; green: 256-wide; open squares: trained without lethality copies. Data: `checkpoints.csv`, `probe_ladder.csv` (rung 3, the model's own prediction, game-disjoint records).*
-
-The card-disjoint loss rises because the model grows more confident, not because it ranks outcomes worse. Most of the rise is in the gate field, whether a card was affected at all, and in poison. On the same card-disjoint records, the probe asking whether a card is affected scores as high or higher at the last epoch in four runs of five. Log-loss charges heavily for a confident miss, and a text the model never saw produces a few.
-
-Across checkpoints of different runs, both losses track the probes. Lower-loss checkpoints have better probes, on either loss. Among the fourteen checkpoints trained with lethality copies the two losses track them about equally. The 64-wide line has the lowest card-disjoint loss and the 256-wide line the lowest game-disjoint loss, and the probes rate the two lines close together. With fourteen checkpoints, a rank correlation below about 0.55 cannot be told from none.
-
-| rank correlation with the probe mean, sign set so that positive means agreement | card-disjoint loss | game-disjoint loss |
-|---|---:|---:|
-| all 17 checkpoints | +0.71 | +0.73 |
-| the 14 checkpoints with lethality copies | +0.55 | +0.53 |
-
-*Run A256's single checkpoint counts once. Data: `checkpoints.csv`, `probe_ladder.csv`.*
-
-Two of the three runs at a tenth of the learning rate show the confidence rise within a single run. The card-disjoint losses of runs B64 and B256 creep up across the run, while run B128's falls for a few epochs and then holds level. All three runs read the same shards at matching epochs, and all three training losses keep falling. Run B256 never went below the checkpoint it started from, run A256's epoch 53, so it keeps that checkpoint.
-
-- **The rise in runs B64 and B256 is confidence on unseen texts.** Nearly all of it is in the gate field, whether a card was affected at all, while the zone outcome and the damage stay level or improve. Both runs' last epochs score as well as their lowest-loss epochs on the probes, and their error against the death rule keeps falling.
-- **Run B128 had a misplaced boundary to repair.** It started from the checkpoint whose boundary leaned furthest toward a death, and its first epochs pull that boundary back, which is where its early gain comes from. Its gate loss falls slightly instead of rising.
-
-| at a tenth of the learning rate | run B64 | run B128 | run B256 |
-|---|---:|---:|---:|
-| starting checkpoint's card-disjoint loss, below its parent run's five-epoch mean | 0.16 | 0.10 | 0.09 |
-| card-disjoint trend after the first three epochs, per ten epochs | +0.04 | 0.00 | +0.05 |
-| game-disjoint trend, per ten epochs | +0.03 | −0.02 | +0.01 |
-| training-loss trend, per ten epochs | −0.08 | −0.12 | −0.08 |
-| affected gate's card-disjoint loss, first epoch → last | 1.06 → 1.15 | 1.16 → 1.13 | 1.04 → 1.11 |
-
-*The five-epoch mean is centred on the starting epoch; run A256's starting epoch is its last, so its mean covers epochs 49 to 53. Data: `epochs.csv`, `fields_by_epoch.csv`.*
-
-The luck of the starting checkpoint does not separate the runs. Each continuation starts from its parent run's kept epoch, the lowest point of a noisy series, so its starting loss is partly a favourable swing. Run B64's start sat furthest below its parent's trend. Run B256's sat no further below than run B128's, and run B256 still rose as run B64 did.
-
-The rises in runs B64 and B256 are several times their epoch-to-epoch swing, so they are trends rather than noise. They are not the extra epochs alone: over epochs 43 to 50, which runs B64 and B128 both trained, run B64 still rises and run B128 barely moves. The width does not order the three runs, since the 64-wide and 256-wide runs rise and the 128-wide run between them does not.
-
-Gen-3 therefore picks its checkpoints by a score built from the probes and from rule scenarios, rather than by the summed loss; the gen-3 draft records the design.
 
 ### The model compares damage with toughness only after training shows it the rule directly
 
@@ -106,7 +99,7 @@ Without help, the model predicts a creature's death from its toughness alone. Th
 
 ![Toughness sweep by damage group, one row per width of e and one column per stage of training: the range of records as a band, the median as a line](2026-09-18-effect-model-gen2/charts/toughness-sweep-records.png)
 
-*One row per width of `e`; the columns run from the arm without copies through the arm with copies to each continuation run's kept and last epoch. Each band spans the lowest to the highest record of one damage group at each toughness, and the solid line is the group's median; the count of records is in the legend. The rule says a group stops dying at its dotted line, and the black line marks an even chance. An activated ping is a permanent's paid ability that deals 1 damage, such as Prodigal Sorcerer's "{T}: deal 1 damage to any target"; the 1-damage spells and triggered abilities form their own group. Data: `sweep_records.csv`, `toughness_sweep_records.csv`.*
+*One row per width of `e`; the columns run from the arm without copies through the arm with copies to each continuation run's kept and last epoch. Each band spans the lowest to the highest record of one damage group at each toughness, and the solid line is the group's median; the count of records is in the legend. The rule says a group stops dying at its dotted line, and the black line marks an even chance. The 1-damage spell group and the activated-ping group share the line at 1.5, drawn in alternating blue and purple dashes. An activated ping is a permanent's paid ability that deals 1 damage, such as Prodigal Sorcerer's "{T}: deal 1 damage to any target"; the 1-damage spells and triggered abilities form their own group. Data: `sweep_records.csv`, `toughness_sweep_records.csv`.*
 
 The corpus rarely shows a damage spell falling short of its target's toughness. Forge's AI aims its removal at creatures it can kill, so a model fitting the corpus learns that "a small creature hit by removal dies" and has no reason to compare the amount with the toughness. Combat shows many more short hits, but there both numbers are on the board; a spell's amount reaches the trunk only through `e`.
 
@@ -117,37 +110,33 @@ The corpus rarely shows a damage spell falling short of its target's toughness. 
 
 The fix is training copies labelled by the rule. A record qualifies when its acting ability deals one stated amount of damage, or -X/-X, and nothing in its chain can change whether the creature dies. Each copy redraws the amount and the hit creature's toughness from 1 to 8 and labels the death by rule 704.5f-g, so about half the copies are lethal. About one training record in four hundred qualifies, and `--lethality-copies 8` makes the copies about 2% of the records an epoch trains on. The target is the rule as written, not Forge's AI, so a label taken from the rule is what the model should learn.
 
-With the copies, nearly every line falls at or within one point of its own damage, and the damage-by-toughness grid at the top of this record gains its diagonal. The card-disjoint loss did not get worse, so the copies cost nothing on the objective.
+With the copies, most lines fall at or within one point of their own damage, and the damage-by-toughness grid at the top of this record gains its diagonal. The card-disjoint loss did not get worse, so the copies cost nothing on the objective.
 
 Three faults remain, and the grids show all of them:
 
-- **The boundary is soft.** Where the damage exactly equals the toughness, the prediction sits between two fifths and four fifths rather than near one.
-- **The lethal side tops out near 0.8 on the arms.** That ceiling comes from the gate rather than from the death: on clearly lethal hits the predicted death given that the creature was affected is 0.99, and on a quarter to a third of the training records the arms doubt that the hit creature is affected at all ([the gate](#where-the-model-doubts-that-a-hit-creature-is-affected-the-text-leaves-the-victim-open-or-is-rare-in-training)).
-- **Activated pings for 1 damage**, abilities like Prodigal Sorcerer's that a permanent uses by paying a cost, are predicted to spare a toughness-1 creature by the 64-wide checkpoints and arm `e256-lethality`; the 128-wide checkpoints and run A256 get them right, as the toughness chart shows. The 256-wide line loses the fault between its arm and its continuation, so it is a property of each checkpoint rather than of the width. Much of the fault is in the gate, because training holds few activated "any target" pings ([the gate](#where-the-model-doubts-that-a-hit-creature-is-affected-the-text-leaves-the-victim-open-or-is-rare-in-training)).
+- **The boundary is soft.** Where the damage exactly equals the toughness, the prediction sits mostly between two fifths and four fifths rather than near one.
+- **The lethal side tops out near 0.85 on the arms and near 0.9 on the continuation runs.** That ceiling comes from the gate, the model's predicted chance that a card is affected at all, rather than from the death. On clearly lethal hits the predicted death given that the creature is affected, the quantity [the boundary chart](#where-the-boundary-sits-wanders-between-epochs-at-the-full-learning-rate-and-settles-near-the-rule-at-a-tenth-of-it) plots, is 0.99. On a quarter to a third of the training records the arms doubt that the hit creature is affected at all ([the gate](#where-the-model-doubts-that-a-hit-creature-is-affected-the-text-leaves-the-victim-open-or-is-rare-in-training)).
+- **Activated pings at a toughness-1 creature are predicted to spare it on most 64-wide checkpoints and on arm `e256-lethality`.** Arm `e64 (earlier inputs)` predicts the death, and the 128-wide checkpoints and run A256 do too. `B256 best` and `B256 last` pass only narrowly. The 256-wide line loses the fault between its arm and its continuation, so it is a property of each checkpoint rather than of the width. Much of the fault is in the gate, because training holds few activated "any target" pings.
 
-The damage sweep reads the same rule from the other side: it fixes a toughness-4 target and re-encodes one spell's script with `NumDmg$` from 1 to 8. The rule puts the step between 3 and 4. Arm `e64` barely rises with the damage. With copies, every checkpoint rises steeply, and where it crosses one half moves from checkpoint to checkpoint, which the next section explains.
+| activated 1-damage pings at toughness 1, median predicted death | checkpoints |
+|---|---|
+| 0.90 | `e64 (earlier inputs)` |
+| 0.06 to 0.24 | `e64`, `e64-lethality`, A64 best and last, B64 best and last |
+| 0.10 | `e256-lethality` |
+| 0.55 and 0.62 | B256 last, B256 best |
+| 0.68 to 0.93 | every 128-wide checkpoint, A256 |
 
-![Damage sweep curves over quadrants marking where a prediction is on the rule's side](2026-09-18-effect-model-gen2/charts/damage-sweep.png)
+*Data: `sweep_records.csv`, `toughness_sweep_records.csv`.*
 
-*The damage sweep for the arms and continuation runs. Green quadrants are where a prediction falls on the rule's side of an even chance, a survival below 4 damage and a death from 4 up, however soft; red quadrants are where it falls on the wrong side. Colour gives the width of `e`, and the line style the run: dotted the arm, dashed the A run, solid the B run; squares mark a run's lowest card-disjoint epoch. A checkpoint with every point on the rule's side is drawn bold and ticked in the legend, the others faint. Data: `sweeps.csv` (sweep `damage_spell`).*
+The damage sweep reads the same rule from the other side: it fixes a toughness-4 target and re-encodes one spell's script with `NumDmg$` from 1 to 8. The rule puts the step between 3 and 4. Arm `e64` barely rises with the damage. With copies, every checkpoint rises steeply, and where it crosses one half moves from checkpoint to checkpoint, which [the boundary section](#where-the-boundary-sits-wanders-between-epochs-at-the-full-learning-rate-and-settles-near-the-rule-at-a-tenth-of-it) explains.
 
-### Where the boundary sits wanders between epochs at the full learning rate, and settles near the rule at a tenth of it
+![Damage sweep curves in four panels, the checkpoints without lethality copies and then one panel per width, over grey quadrants marking where a prediction falls on the wrong side of the rule](2026-09-18-effect-model-gen2/charts/damage-sweep.png)
 
-At the full learning rate the boundary sharpens over twenty more epochs, but its position moves from one epoch to the next by more than that sharpening. The chart reads the same 40 qualifying training records at every epoch, with the predicted death of a hit lethal by one point, exactly lethal, and short by one point. A sharp boundary at the right place puts the red line near 1, the blue line near 0, and the orange line in between. Because the 40 records are the same every epoch, the movement is the model's, not a sample's.
+*The damage sweep for every checkpoint. The first panel holds the checkpoints trained without lethality copies, gen-1 among them; the other three hold one width each. Grey quadrants are where a prediction falls on the wrong side of an even chance: a death predicted below 4 damage, or a survival from 4 up. Dotted triangles are the arm, dashed squares the A run and solid circles the B run; a filled marker is a run's kept epoch and a hollow one its last. `B256 best` is half filled, and gen-1 is a dark grey cross. A checkpoint with every point on the rule's side is ticked in the legend and drawn bold: arm `e64-lethality`, run A256 and all six B-run checkpoints. Data: `sweeps.csv` (sweep `damage_spell`).*
 
-![Predicted death for hits lethal by one, exactly lethal and short by one, epoch by epoch, for both widths](2026-09-18-effect-model-gen2/charts/boundary-by-epoch.png)
+#### Where the model doubts that a hit creature is affected, the text leaves the victim open or is rare in training
 
-*Dotted: the arm's own checkpoints. Thin: the A run (A64, A128, A256), twenty more epochs at the full rate. Thick: the B run (B64, B128, B256), from the A run's kept epoch at a tenth of the rate (grey band). Dashed verticals: each run's lowest card-disjoint epoch. The black line marks an even chance: in the B runs a hit short by one point stays below it, after run B128's first few epochs, and an exactly lethal hit above it, while in the A runs both cross it. Data: `boundary_by_epoch.csv`.*
-
-In run A128 a hit short by one point is predicted to kill anywhere from one time in six to three times in four, depending on the epoch. Run A256's range is as wide, and run A64's narrower but of the same kind. The epoch a run keeps can land anywhere in that range: run A128's kept epoch has the boundary moved furthest toward a death of any checkpoint, while run A64's happened to land near the rule. Arm `e256-lethality`'s kept epoch also leans toward a death: its damage sweep crosses one half before 3 damage, where arm `e128-lethality`'s crossed after 5 and arm `e64-lethality`'s near the rule.
-
-At a tenth of the learning rate the position settles. Run B128 started from run A128's misplaced epoch 30, pulled the boundary back within a few epochs, and then held it. The gap between "lethal by one" and "short by one" holds near six tenths in runs B64 and B256 and near a half in run B128, and in all three B runs the error against the rule falls slowly. On the probe set's grids, run B256's last epoch has the lowest error against the rule of any checkpoint, and run B128's last epoch the next lowest, level with run A256's checkpoint; the training-records chart and the probe-set grids agree.
-
-Dropping to a tenth of the rate is therefore what places the boundary. More epochs at the full rate do not. On the damage sweep, all six checkpoints of the B runs, lowest-loss and last, keep every point on the rule's side of an even chance. Of the full-rate checkpoints trained with lethality copies, only arm `e64-lethality`, by a hundredth at 4 damage, and run A256's single checkpoint do. Run A256's boundary moved between epochs as much as run A128's, and its last epoch is the one where it happened to sit near the rule.
-
-### Where the model doubts that a hit creature is affected, the text leaves the victim open or is rare in training
-
-On the arms, a quarter to a third of the boundary chart's 40 training rows put the gate below an even chance at the hit creature, though the creature was hit in every one. The gate is the model's predicted chance that a card is affected at all. The B runs keep three or four such rows, and in runs B64 and B256 every one is a text that leaves its victim to a choice. The doubt falls on three kinds of text.
+On the arms, a quarter to a third of the boundary chart's 40 training rows put the gate below an even chance at the hit creature, though the creature was hit in every one. The B runs keep three or four such rows, and in runs B64 and B256 every one is a triggered ability. The doubt falls on three kinds of text.
 
 | acting line | rows | `e64-lethality` | `e256-lethality` | run B64, last | run B128, last | run B256, last |
 |---|---:|---:|---:|---:|---:|---:|
@@ -161,20 +150,13 @@ On the arms, a quarter to a third of the boundary chart's 40 training rows put t
 
 - **A victim left to a choice.** Purging Scythe deals 2 damage to the creature with the least toughness, and its controller picks among ties. When several creatures share the least toughness, doubting each of them is the right answer.
 - **A spell with two targets.** Suffocating Blast counters a spell and deals 3 damage to a creature. Arm `e64-lethality` puts the creature's gate between a third and two fifths, and run B256's last epoch near certainty.
-- **Activated "any target" damage abilities**, such as Prodigal Sorcerer's "{T}: deal 1 damage to any target". The checkpoints that miss the pings in the toughness sweep doubt their target.
+- **Activated "any target" damage abilities**, such as Prodigal Sorcerer's ping. The checkpoints that miss the pings in the toughness sweep doubt their target.
 
-The pings' doubt comes from their wording, not from the board. The probe set's toughness sweep holds five activated damage records, four of them 1-damage pings. Each was read again after one edit to the record or to the acting text. Moving the record to the main phase or untapping the source moves the gate by a tenth at most. Replacing "any target" with "target creature" lifts it above nine in ten on every checkpoint. Reading the line as a spell lifts it on run B64's last epoch but not on arm `e256-lethality`. A healer's "prevent the next 1 damage" text in the ping's place puts the gate at zero, as it should, since a prevention shield changes nothing on the board.
+The pings' doubt comes from their wording, not from the board. The probe set's toughness sweep holds five activated damage records, four of them 1-damage pings. Each was read again after one edit to the record or to the acting text. Only replacing "any target" with "target creature" lifts the gate above nine in ten on every checkpoint read. Moving the record to the main phase or untapping the source moves it by a tenth at most. Reading the line as a spell lifts it on run B64's last epoch and lowers it on arm `e256-lethality`. A healer's "prevent the next 1 damage" text in the ping's place puts the gate at zero, as it should, since a prevention shield changes nothing on the board.
 
-| edit, mean over the five records | `e64-lethality` | run B64, last | `e256-lethality` | run B256, last |
-|---|---:|---:|---:|---:|
-| as collected | 0.42 | 0.56 | 0.61 | 0.96 |
-| moved to the first main phase | 0.43 | 0.59 | 0.63 | 0.95 |
-| source untapped | 0.51 | 0.63 | 0.58 | 0.96 |
-| read as a spell: `AB$` to `SP$`, cost dropped | 0.60 | 0.91 | 0.46 | 0.98 |
-| "any target" read as "target creature" | 0.97 | 0.93 | 0.92 | 0.98 |
-| a healer's "prevent the next 1 damage" text in its place | 0.00 | 0.00 | 0.02 | 0.01 |
+![Dot plot of the gate at the targeted creature under six edits of five activated damage records, one marker per checkpoint for four checkpoints, with the rule's answer as a black tick](2026-09-18-effect-model-gen2/charts/ping-gate-edits.png)
 
-*The gate at the targeted creature, at the record's own toughness. Data: `ping_gate_edits.csv`.*
+*The gate at the targeted creature, at the record's own toughness, averaged over the five records. Four checkpoints were read: arms `e64-lethality` and `e256-lethality` (triangles) and the last epochs of runs B64 and B256 (circles). The shaded row is the only edit that puts every checkpoint above 0.9. The bottom row is a control whose rule answer is 0. Data: `ping_gate_edits.csv`.*
 
 The input and the labels are not the cause. Every one of these records lists the hit creature as the ability's target, and training marks the creature targets of resolved activated damage abilities affected eight to nine times in ten. What training lacks is volume. The first 150 of the 444 training shards hold 24 resolved "any target" damage abilities with a tap in their cost, so the whole corpus holds about 70, about 45 of them at a creature. That count already includes the curated corpus's repeats of rare texts. "Any target" damage spells resolve about seven times as often, and their creature targets are always marked affected. With so few examples, whether a checkpoint ties the targeted creature to the gate for this wording comes down to its fit, which is why the fault comes and goes between checkpoints of one width.
 
@@ -189,93 +171,221 @@ The input and the labels are not the cause. Every one of these records lists the
 
 *Data: `damage_targets_in_training.csv`.*
 
-The probe set's triggered damage records add a fourth kind, where the input cannot identify the victim. Skewer Slinger deals 1 damage to the creature it blocks or is blocked by. Both of its records have several creatures in combat, and the card features say that a creature blocks and how many creatures block it, not which attacker each blocker blocks. Run B256's last epoch gives the two victims a gate of 0.13 and 0.02. The gen-3 draft puts the pairing in the input ([gen-3 draft](2026-XX-XX-effect-model-gen3-design.md#the-board-input-should-say-which-attacker-each-blocker-blocks)), and gives rare wordings like the pings examples of their own ([gen-3 draft](2026-XX-XX-effect-model-gen3-design.md#a-rare-wording-of-a-common-effect-needs-examples-of-its-own-and-field-weighting-cannot-see-it)).
+The probe set's triggered damage records add a fourth kind, where the input cannot identify the victim. Skewer Slinger deals 1 damage to the creature it blocks or is blocked by. Both of its records have several creatures in combat, and the card features say that a creature blocks and how many creatures block it, not which attacker each blocker blocks. Run B256's last epoch gives the two victims a gate of 0.13 and 0.02. The gen-3 draft proposes the pairing as an input ([gen-3 draft](2026-XX-XX-effect-model-gen3-design.md#the-board-input-should-say-which-attacker-each-blocker-blocks)), and examples of their own for rare wordings like the pings ([gen-3 draft](2026-XX-XX-effect-model-gen3-design.md#a-rare-wording-of-a-common-effect-needs-examples-of-its-own-and-field-weighting-cannot-see-it)).
 
-### In combat the model applies power against toughness softly, learns indestructible and deathtouch, and not first strike
+### Where the boundary sits wanders between epochs at the full learning rate, and settles near the rule at a tenth of it
+
+At the full learning rate the boundary sharpens over twenty more epochs, but its position moves from one epoch to the next by more than that sharpening. The chart reads the same 40 qualifying training records at every epoch. It plots the predicted death given that the hit creature is affected, the death head alone without the gate, for a hit lethal by one point, exactly lethal, and short by one point. A sharp boundary at the right place puts "lethal by one" near 1 and "short by one" near 0, on either side of an even chance. Because the 40 records are the same every epoch, the movement is the model's, not a sample's.
+
+![Predicted death given that the hit creature is affected, for hits lethal by one, exactly lethal and short by one, epoch by epoch, one row per width of e](2026-09-18-effect-model-gen2/charts/boundary-by-epoch.png)
+
+*One row per width of `e`. The left panel holds the arm, dotted, and the A run, dashed, both at the full learning rate; the right panel holds the B run, solid, at a tenth of it. Dark purple downward triangles are hits lethal by one point, mid-purple circles exactly lethal hits, and light purple upward triangles hits short by one; the grey region is above an even chance, and a tinted span marks the arm's epochs. Dashed verticals mark each run's lowest card-disjoint epoch. Arm `e256-lethality`'s epochs were not read. In the B runs, after run B128's first few epochs, a hit short by one point stays at or below an even chance and an exactly lethal hit above it. In the A runs both cross it. Data: `boundary_by_epoch.csv`.*
+
+In run A128 a hit short by one point is predicted to kill anywhere from one time in six to three times in four, depending on the epoch. Run A256's range is as wide, and run A64's narrower but of the same kind. The epoch a run keeps can land anywhere in that range: run A128's kept epoch has the boundary moved furthest toward a death of any checkpoint, while run A64's happened to land near the rule. Arm `e256-lethality`'s kept epoch also leans toward a death: its damage sweep crosses one half before 3 damage, where arm `e128-lethality`'s crossed after 5 and arm `e64-lethality`'s near the rule.
+
+At a tenth of the learning rate the position settles. Run B128 started from run A128's misplaced epoch 30, pulled the boundary back within a few epochs, and then held it. The gap between "lethal by one" and "short by one" holds near six tenths in runs B64 and B256 and near a half in run B128, and in all three B runs the error against the rule falls slowly. On the probe set's grids, run B256's last epoch has the lowest error against the rule of any checkpoint. Run B128's last epoch, run A256's checkpoint and `B256 best` follow, level with each other. The training-records chart and the probe-set grids agree.
+
+Dropping to a tenth of the rate is therefore what places the boundary. More epochs at the full rate do not. On the damage sweep, all six checkpoints of the B runs, kept and last, keep every point on the rule's side of an even chance. Of the full-rate checkpoints trained with lethality copies, only arm `e64-lethality`, by a hundredth at 4 damage, and run A256's single checkpoint do. Run A256's boundary moved between epochs as much as run A128's, and its last epoch is the one where it happened to sit near the rule.
+
+### The probes keep improving after the card-disjoint loss has bottomed out
+
+In every continuation run whose last epoch was not also its lowest, the last epoch has a higher card-disjoint loss than the kept epoch, yet the probe mean rates it as good or better. The chart plots each checkpoint's [probe mean](#three-gates-and-a-probe-mean-score-every-checkpoint) against each validation loss, with an arrow from each run's lowest card-disjoint epoch to its last. Every arrow points right on the card-disjoint panel, toward a worse loss, and level or up, toward better probes.
+
+![Two scatter panels of probe mean against card-disjoint and game-disjoint loss for every gen-2 checkpoint, with an arrow per continuation run from its lowest card-disjoint epoch to its last](2026-09-18-effect-model-gen2/charts/probes-vs-loss.png)
+
+*Colour gives the width of `e`: blue 64, orange 128, green 256. Triangles are arms, squares A runs and circles B runs; a filled marker is the lowest card-disjoint epoch and a hollow one the last. Grey triangles trained without lethality copies, the lightest being `e64 (earlier inputs)`. Run A256 reached its lowest card-disjoint loss at its last epoch, so it has a single point and no arrow. Run B256's arrow starts at its own lowest epoch, 55, drawn half filled, not at the checkpoint it keeps. Data: `checkpoints.csv`, `probe_ladder.csv` (rung 3, the model's own answer, game-disjoint records).*
+
+The card-disjoint loss rises because the model grows more confident, not because it ranks outcomes worse. More than half of every run's rise is in the gate field, whether a card was affected at all, and poison adds the next-largest part in four runs of five. On the same card-disjoint records, the probe asking whether a card is affected scores as high or higher at the last epoch in four runs of five. Log-loss, the training loss, charges heavily for a confident miss, and a text the model never saw produces a few.
+
+![Stacked horizontal bars per continuation run of the change in each output field's card-disjoint loss from the run's lowest card-disjoint epoch to its last, with the net change marked](2026-09-18-effect-model-gen2/charts/loss-rise-by-field.png)
+
+*Rises extend right and falls left; the black tick is the net change. The gate, poison, power and toughness change and zone outcome have their own segments, and the other 42 output fields share one. Gen-2's 47 output-field terms do not sum to its card-disjoint loss: the rest, 0.40 to 0.57 on the continuation runs, is its own segment. Gen-1's field terms sum to its loss within half a hundredth. Run A256's lowest epoch is its last, so it has no rise, and run B256's bar runs from its own lowest epoch, 55. Data: `epochs.csv`, `fields_by_epoch.csv`.*
+
+Across all seventeen checkpoints, both losses track the probes: lower-loss checkpoints have better probes, on either loss. Among the fourteen checkpoints trained with lethality copies the correlation is at the edge of what fourteen points can tell from none, which is a rank correlation of about 0.55.
+
+| rank correlation with the probe mean, sign set so that positive means agreement | card-disjoint loss | game-disjoint loss |
+|---|---:|---:|
+| all 17 checkpoints | +0.71 | +0.73 |
+| the 14 checkpoints with lethality copies | +0.55 | +0.53 |
+
+*Run A256's single checkpoint counts once. Data: `checkpoints.csv`, `probe_ladder.csv`.*
+
+Gen-3 therefore judges its checkpoints by a score built from the probes and from rule scenarios, edits of real records that each test one rule as the damage grid does, rather than by the summed loss ([gen-3 draft](2026-XX-XX-effect-model-gen3-design.md#the-summed-validation-loss-disagrees-with-the-probes-over-training-and-gen-3-judges-checkpoints-by-probes-and-rule-scenarios)).
+
+#### At a tenth of the learning rate, two runs' losses rise with their confidence and the third repairs a misplaced boundary
+
+Two of the three runs at a tenth of the learning rate show the confidence rise within a single run. The card-disjoint losses of runs B64 and B256 creep up across the run, while run B128's falls for a few epochs and then holds level. All three training losses keep falling. The rises are several times their epoch-to-epoch swing.
+
+- **The rise in runs B64 and B256 is confidence on unseen texts.** In run B64 the gate field carries about two thirds of the rise. In run B256 the gate and poison together rise by more than the net, while the other fields fall. The zone outcome and the damage stay level or improve in both. Both runs' last epochs score as well as their lowest-loss epochs on the probes, and their error against the death rule keeps falling.
+- **Run B128 had a misplaced boundary to repair.** It started from the checkpoint whose boundary leaned furthest toward a death, and its first epochs pull that boundary back, which is where its early gain comes from. Its gate loss falls slightly instead of rising.
+
+| at a tenth of the learning rate | run B64 | run B128 | run B256 |
+|---|---:|---:|---:|
+| card-disjoint trend, per ten epochs | +0.04 | 0.00 | +0.05 |
+| game-disjoint trend, per ten epochs | +0.03 | −0.02 | +0.01 |
+| training-loss trend, per ten epochs | −0.08 | −0.12 | −0.08 |
+| affected gate's card-disjoint loss, first epoch → last | 1.06 → 1.15 | 1.16 → 1.13 | 1.04 → 1.11 |
+
+*Each trend is a straight-line fit over the run's epochs after its first three. Data: `epochs.csv`, `fields_by_epoch.csv`.*
+
+### In combat the model applies power against toughness softly and learns indestructible and most of deathtouch, and the grid that finds no first strike may understate it
+
+Every checkpoint gets the direction of the plain combat rule right, with a boundary as soft as the damage grid's. Indestructible is learned outright and deathtouch mostly. First strike barely moves the prediction, on a grid whose edited boards contradict their own damage input.
 
 The combat grid asks the same question of a block that the damage grid asks of a spell. It takes 40 real one-on-one blocks from the validation strata, edits the attacker's power and the blocker's toughness, or the blocker's power and the attacker's toughness, from 1 to 8, and reads the predicted death. A keyword variant grants one creature a keyword and compares the prediction with the rule. The script is `scripts/effect_knowledge_probes/combat_grid.py`.
 
-![Combat grids of run B64's last epoch: plain blocker and attacker deaths, deathtouch, and first strike](2026-09-18-effect-model-gen2/charts/combat-grids.png)
-
-*Run B64's last epoch, coloured as the damage grids: orange above an even chance of death, blue below. Rule: without keywords, the creature read dies on and below the staircase; with deathtouch every cell dies; in the first-strike step a first-striking attacker cannot die. Data: `combat_grids.csv`.*
-
-Every checkpoint gets the direction of the plain rule right, with a boundary blurred over two to three points of toughness, as soft as the damage grid's. The attacker's death sits further from the rule than the blocker's on every checkpoint. The likely reason is in the data: a combat record's snapshot is taken at the step's first damage event, so the creature damaged first already shows that damage. In 26 of the 40 blocks the blocker is marked with exactly the attacker's power, and the attacker is never marked. When the lethal damage is already on the board, every checkpoint predicts the death nine times in ten or more; when the model must add the opposing power itself, it is far less sure. The grid clears both creatures' marked damage before editing, and gen-3 moves the snapshot to the start of the damage step.
+The grid's edited boards contradict their own damage-assignment input, so its first-strike and power-axis readings may understate what the model knows. Each card slot of a combat record carries the damage the creature assigns, beside its power. The grid edited power and the damage step and kept the base record's assignment. A creature without first strike therefore still showed its damage assigned in the first-strike step, and an attacker edited to power 8 still showed the base record's assignment. The checkpoints below were not re-read with the grid's assignment set from the edited board ([the grid's assignment](#the-combat-grids-edits-have-to-move-the-damage-assignment-with-them-2026-10-21)).
 
 A combat record covers one damage step, and the model predicts that step alone. The grid reads a first striker in the first-strike step, where it deals its damage and the creature it fights deals none, and a double striker's second hit in the regular step, with the first hit already marked on the blocker.
 
-![For each combat keyword, the predicted death without it, with it, and the rule's answer, one dot per checkpoint](2026-09-18-effect-model-gen2/charts/combat-keywords.png)
+![Diagram of one combat's two damage steps as Forge runs them, the span each gen-2 combat record captured, the parts that reached no record, five numbered collector defects and where gen-3 moves the record's boundaries](2026-09-18-effect-model-gen2/charts/diagram-combat-step.png)
 
-*Each dot is one checkpoint's mean predicted death over the cells the keyword changes; grey lines join the same checkpoint with and without the keyword. Data: `combat_grids.csv`.*
+*One combat as Forge runs it, and what a gen-2 combat record captured. Hatched parts reached no record. The crimson numbers are collector defects. Defect 1 is in [the fixes](#the-first-arm-exposed-three-faults-in-the-models-inputs-and-the-arm-trained-again-on-corrected-ones-2026-10-14), defects 2 to 4 in [the collector defects](#nine-collector-defects-shaped-gen-2s-labels-and-gen-3-collects-without-them), and defect 5, the snapshot timing, below. The violet marks are where gen-3 moves the record's boundaries; the snapshot at the step's start is a proposal of the gen-3 draft, and the collector already makes the other changes.*
+
+![Combat grids of run B64's last epoch: plain blocker and attacker deaths, and the change in predicted death with deathtouch and with first strike](2026-09-18-effect-model-gen2/charts/combat-grids.png)
+
+*Run B64's last epoch. Top: the predicted death of the blocker and of the attacker with no keyword, coloured as the damage grids, orange above an even chance and blue below; the rule kills on and below the staircase. Bottom: the change in predicted death when the attacker has deathtouch, where the rule adds a death above the staircase, and when the attacker has first strike in the first-strike step, where the rule removes the attacker's death below it. The bottom row reads the stale damage assignment described above. Data: `combat_grids.csv`.*
+
+The plain rule's boundary is blurred over two to three points of toughness. The attacker's death sits further from the rule than the blocker's on every checkpoint. The likely reason is in the data: a combat record's snapshot is taken at the step's first damage event, so the creature damaged first already shows that damage. In 26 of the 40 blocks the blocker is marked with exactly the attacker's power, and the attacker is never marked. When the lethal damage is already on the board, every checkpoint predicts the death nine times in ten or more; when the model must add the opposing power itself, it is far less sure. The grid clears both creatures' marked damage before editing. The gen-3 draft proposes taking the snapshot at the start of the damage step ([gen-3 draft](2026-XX-XX-effect-model-gen3-design.md#a-combat-records-snapshot-should-be-taken-before-the-damage-step-deals-any-damage)).
+
+![Strip plot of the share of the rule's change each combat keyword produces in the predicted death, one row per keyword and one marker per checkpoint](2026-09-18-effect-model-gen2/charts/combat-keywords.png)
+
+*Each marker is one checkpoint's (with − without) / (rule − without): the change the keyword makes in the mean predicted death, over the cells where the keyword changes the rule's answer, as a share of the change the rule makes. 0 means the keyword is ignored and 1 means the rule's full change. Colour gives the width of `e` and the shape the stage, as in the other charts; grey triangles trained without copies. Data: `combat_grids.csv`.*
 
 The keywords sort into three groups:
 
-- **Learned outright: indestructible.** No checkpoint predicts an indestructible blocker's death more than one time in fourteen on cells where the damage is lethal.
-- **Learned mostly: deathtouch and damage already marked.** Deathtouch moves the non-lethal cells most of the way to a death, by different amounts on different checkpoints, and fades at the blocker's highest toughness on every checkpoint. A double striker's second hit is read from the damage the first one marked, and the last epochs of runs A64 and B64 read it best.
-- **Not learned: first strike.** In the first-strike step a first striker cannot die, yet every checkpoint on the corrected inputs predicts its death within a tenth of its death without the keyword, for an attacker and a blocker alike.
+- **Learned outright: indestructible.** No checkpoint predicts an indestructible blocker's death more than one time in fourteen, on average over the cells where the damage is lethal.
+- **Learned mostly: deathtouch and damage already marked.** Deathtouch moves the non-lethal cells between half and nearly all of the way to a death, depending on the checkpoint, and fades at the blocker's highest toughness on every checkpoint. A double striker's second hit is read from the damage the first one marked. Run A64's last epoch reads it best, ahead of run B64's last epoch and run B256's last, close behind each other.
+- **Not learned, as far as the grid can tell: first strike.** In the first-strike step a first striker cannot die, yet every checkpoint on the corrected inputs predicts its death within a tenth of its death without the keyword, for an attacker and a blocker alike. Only arm `e64 (earlier inputs)` moves it about half of the way.
 
-The corpus explains the last group. A collector bug lost the creature damage and deaths of every first-strike damage step, and the repair dropped the blocked first-strike fights it could not recover. The probe forks are the only blocked first-strike fights the model sees, and they do not teach the step. Gen-3 collects the first-strike step whole, and the gen-3 draft adds combat copies labelled by the rule as an option.
-
-The grid's edited boards also contradict their own assignment input, so its first-strike and power-axis readings may understate what the model knows. Each card slot of a combat record carries the damage the creature assigns, beside its power. The grid edited power and the damage step and kept the base record's assignment. A creature without first strike therefore still showed its damage assigned in the first-strike step, and an attacker edited to power 8 still showed the base record's assignment. The checkpoints above have not yet been re-read with the grid's assignment set from the edited board ([the grid's assignment](#the-combat-grids-edits-have-to-move-the-damage-assignment-with-them-2026-10-21)).
+The corpus explains the last group. A collector bug lost the creature damage and deaths of every first-strike damage step, and the repair dropped the blocked first-strike fights it could not recover. The probe forks are the only blocked first-strike fights the model sees, and they do not teach the step. The collector now records the first-strike step whole, and the gen-3 draft adds combat copies labelled by the rule as an option.
 
 ### Three combat keywords hold on every checkpoint, and double strike swings far beyond its sampling noise
 
+Lifelink, indestructible and trample pass gate 2 on every checkpoint with room to spare. First strike, deathtouch, infect and double strike vary between checkpoints far more than sampling allows. Double strike fails the gate on seven of the sixteen checkpoints scored on it, and infect fails it on arm `e64` alone.
+
 Gate 2 asks, on the game-disjoint stratum, whether the model's predictions move the way a damage-step keyword moves the real outcome. A probe fork copies a real combat and strips the keyword from one creature. The gate counts how often the model's predicted change and the real change point the same way, and passes a keyword at 70% over at least 200 qualifying records.
 
-![Gate 2 direction agreement by keyword and checkpoint](2026-09-18-effect-model-gen2/charts/gate2-keywords.png)
+![Strip plot of gate 2's direction agreement per keyword, one marker per checkpoint, with a grey band of the sampling noise around each row's median](2026-09-18-effect-model-gen2/charts/gate2-keywords.png)
 
-*Each label gives the median number of qualifying records and the 95% half-width that sampling alone would give at 80% agreement. The first run of arm `e64` scored first and double strike on the wrong damage step and is left blank for them. Data: `gate2.csv`.*
+*Each row gives its keyword's median number of qualifying records. The grey band is the row's median plus or minus the 95% half-width that sampling alone would give at that median, so a spread wider than the band is the model's. The black line is the gate's 70%. Arm `e64 (earlier inputs)` scored first and double strike on the wrong damage step and is left out of those rows. Data: `gate2.csv`.*
 
-Lifelink and indestructible agree 97% of the time or more on every checkpoint, and trample 87% or more. Their rows vary by about as much as sampling allows, or a little more.
+Lifelink and indestructible agree 97% of the time or more on every checkpoint, and trample 87% or more. Lifelink and indestructible vary by about as much as sampling allows, or a little more. Trample ranges over ten points, eight times its sampling half-width, so its variation is the model's, but no checkpoint comes near the gate's bar.
 
-The other four move far more than sampling allows, so their variation is the model's:
+The other four also move far more than sampling allows:
 
-- First strike ranges over about twenty points on 2,503 records, whose sampling half-width is two. Run A256's checkpoint scores lowest, just above the gate's 70%.
+- First strike ranges over about twenty points on 2,503 records, whose sampling half-width is under one and a half. Run A256's checkpoint scores lowest, just above the gate's 70%.
 - Deathtouch and infect each range over twelve to fourteen points.
 - Double strike ranges from 44% to 85% on 294 records, eight times its sampling half-width. Within run B64 it fails at the kept epoch and passes at the last.
 
-Nearly every qualifying first-strike and double-strike case is an unblocked attacker, read through the defending player's life, for the reason given in the combat section above. Neither the lethality copies nor the width moves any row consistently.
+Nearly every qualifying first-strike and double-strike case is an unblocked attacker, read through the defending player's life, because the corpus lost the blocked first-strike fights. Neither the lethality copies nor the width moves any row consistently. A keyword verdict from one checkpoint is therefore a draw from that range, and gate 2's pass or fail on double strike says little about the run. Gate 2 also read the effect fields without the gate and counted some records twice ([the gate-2 defect](#gate-2-read-the-effect-fields-without-the-affected-gate-over-a-population-up-to-a-third-larger-than-its-distinct-records)).
 
-A keyword verdict from one checkpoint is therefore a draw from that range, and gate 2's pass or fail on double strike says little about the run.
+### Validation losses swing between epochs by about as much as a run improves
 
-### The large output fields plateau by epoch 20, and the small ones swing more than they improve
+Both validation losses fall quickly for about ten epochs and slowly after that. From then on, single epochs land a tenth of a point or more above or below the trend, about as far as the trend falls in five to ten epochs. The validation samples are fixed, so the swing is the model changing between epochs and not a different sample. Each run keeps its lowest card-disjoint epoch, so the kept epoch is partly the luckiest one.
 
-The fields with many records, such as whether a card was affected, its zone outcome and the keywords it gained, rise smoothly to a plateau between three quarters and seven eighths of their learnable loss. The small fields swing by tens of points from one epoch to the next. Explained deviance is the share of a constant prediction's loss the model removes: 0% is no better than always predicting the field's average.
+![Card-disjoint, game-disjoint and training loss by epoch for every run, one column per width of e](2026-09-18-effect-model-gen2/charts/training-losses.png)
 
-![Card-disjoint explained deviance by epoch for six fields](2026-09-18-effect-model-gen2/charts/fields-explained.png)
+*One column per width of `e`. Line style gives the stage: dotted the arm with copies, dashed the A run at the full rate, solid the B run at a tenth of it; grey is the arm without copies. The large marker with a black edge is each run's lowest card-disjoint epoch, shaped by stage: triangle for the arm, square for the A run, circle for the B run. The bottom row is the training loss, averaged over each epoch's 5,000 steps; it runs about a tenth higher with lethality copies, which add records the corpus rarely shows. Data: `epochs.csv`.*
 
-*Card-disjoint explained deviance per epoch along the lethality-copy lines. Data: `fields_by_epoch.csv`.*
+The card-disjoint loss swings more than the game-disjoint loss in almost every run. The card-disjoint stratum holds 500 texts the model never saw, and how well the model generalizes to each of them changes from epoch to epoch. The training loss moves by two to three hundredths in every run.
 
-Poison is the clearest case. It moves between a fifth and seven tenths of its loss on the 64-wide line from epoch to epoch, and the 256-wide line stays in the same band. On the 128-wide line it rarely rises above two fifths and often falls below zero, worse than a constant prediction. Since the widest and the narrowest `e` agree, the 128-wide line's poison is more likely its seed's level than an effect of width. Types gained and blocking legality swing by about thirty points. A comparison of two checkpoints on any of these fields is mostly a comparison of two draws. Gen-3's field-normalized loss and its adaptive sampling address these fields directly.
+The training loss also shows why the validation losses swing. After a short warmup, in which the learning rate climbs from zero, it stays at its peak for the whole run, so the weights never settle: each epoch ends at a different point near the bottom of the loss surface. The training loss is averaged over the 5,000 steps of an epoch and smooths that movement out, while a validation loss scores the single set of weights the epoch ended on. When runs B64 and B128 drop to a tenth of the rate, their training loss falls by about a tenth in the first epoch and by about two tenths within two, against run A64 and run A128 on the same shards. The weights move closer to the bottom once their steps are smaller.
+
+At a tenth of the learning rate the swing shrinks between two and six times on card-disjoint loss and about three times on game-disjoint loss, while the training loss keeps the same small movement. The three B runs are the only runs whose single epochs can be compared with each other at face value.
+
+![Epoch-to-epoch swing of each loss, from the arm through the A run to the B run, one line per width of e](2026-09-18-effect-model-gen2/charts/loss-noise.png)
+
+*The standard deviation of each loss around its own five-epoch moving mean, from epoch 10 on, on a log scale. Each line runs from a width's arm through its A run to its B run, and the ÷ figure is how many times smaller the B run's swing is than the A run's. Grey triangles trained without lethality copies. Data: `epochs.csv`.*
+
+The early stopper, which ends a run after five epochs without a new lowest card-disjoint loss, ended every arm while its trend was still falling, and every continuation run lowered its arm's loss further. A difference of a tenth of a point between two runs' kept epochs at the full rate is inside the swing and says little.
+
+#### The large output fields plateau by epoch 20, and the small ones swing more than they improve
+
+The fields with many records, such as whether a card was affected, its zone outcome and the keywords it gained, rise smoothly to a plateau where they remove between three quarters and seven eighths of a constant prediction's loss. The small fields swing by tens of points from one epoch to the next. Explained deviance is the share of a constant prediction's loss the model removes: 0% is no better than always predicting the field's average.
+
+![Card-disjoint explained deviance by epoch for six output fields, along the three lethality-copy lines](2026-09-18-effect-model-gen2/charts/fields-explained.png)
+
+*Card-disjoint explained deviance per epoch along the lethality-copy lines. Colour gives the width of `e`, and the line style the stage: dotted the arm, dashed the A run, solid the B run. Below 0 is worse than a constant prediction. Data: `fields_by_epoch.csv`.*
+
+Poison is the clearest case. After the first twenty epochs it moves between a fifth and seven tenths of its loss on the 64-wide line from epoch to epoch, and the 256-wide line stays in the same band. On the 128-wide line it rarely rises above two fifths and often falls below zero, worse than a constant prediction. Since the widest and the narrowest `e` agree, the 128-wide line's poison is more likely its seed's level than an effect of width. Types gained and blocking legality swing by about thirty points. A comparison of two checkpoints on any of these fields is mostly a comparison of two draws. Gen-3's field-normalized loss and its adaptive sampling address these fields directly.
 
 ### The 64-wide and 256-wide lines split the measures, and the 128-wide line trails on the probes at every stage
 
-The 64-wide line has the lowest card-disjoint loss at every stage, and the 256-wide line the lowest game-disjoint loss, level with run A128's last epoch at the full-rate stage. Each point in the chart is a checkpoint trained with lethality copies, at three stages: the arm, the A run at the full learning rate and the B run at a tenth of it. On the probes the 64-wide arm leads the arms, runs A64 and A256 tie, and run B256 leads the B runs, its last epoch the best of any checkpoint. The 128-wide line has the highest card-disjoint loss and the weakest probes at every stage.
+The 64-wide line has the lowest card-disjoint loss at every stage. The 256-wide line has the lowest game-disjoint loss, level with run A128's last epoch at the full-rate stage. On the probes, the 64-wide arm leads the arms, runs A64 and A256 tie, and run B256 leads the B runs. Run B256's last epoch has the best probe mean of any checkpoint. The 128-wide line has the highest card-disjoint loss and the weakest probes at every stage. Each point in the chart is a checkpoint trained with lethality copies, at three stages: the arm, the A run at the full learning rate and the B run at a tenth of it.
 
-![Card-disjoint loss, game-disjoint loss, probe mean and participation ratio by width of e](2026-09-18-effect-model-gen2/charts/width.png)
+![Four slope panels of card-disjoint loss, game-disjoint loss, probe mean and participation ratio across the arm, A run and B run, one line per width of e](2026-09-18-effect-model-gen2/charts/width.png)
 
-*Light: the arm; mid: the A runs; dark: the B runs. Circles: a run's lowest card-disjoint epoch; triangles: its last, where it differs. Run B256 never went below the checkpoint it started from, and its circle is its own lowest epoch, 55. Data: `checkpoints.csv`, `probe_ladder.csv`, `gate3.csv`.*
+*Each panel's title says whether lower or higher is better. The solid line and filled markers join each width's kept epochs, the dashed line and hollow markers its last epochs; run B256's point is its own lowest epoch, 55, drawn half filled, not the checkpoint it keeps. The grey bar on each loss panel reaches one standard deviation of the epoch-to-epoch swing above the stage's lowest kept loss. The participation ratio is defined in [the next section](#gen-2s-e-spreads-over-two-to-three-times-gen-1s-directions-and-reads-a-lines-kind-and-amounts-far-better). Data: `checkpoints.csv`, `probe_ladder.csv`, `gate3.csv`.*
 
 The gaps between the lines are at the edge of the epoch-to-epoch swing at the full rate. The card-disjoint gap between the 64-wide and 128-wide lines is a tenth to two tenths of a point, and the probe means of the three lines lie within a hundredth and a half of each other at each stage. The 64-wide line keeps the lowest card-disjoint loss and the 128-wide line the weakest probes through both continuation runs, so those two gaps are more than one lucky epoch. The probe lead between the 64-wide and 256-wide lines changes hands between stages.
 
-The order of the lines points to the seeds rather than to the width. A width effect that grows or shrinks with the width would put the 128-wide line between the other two. On the card-disjoint loss and the probes it trails both. Each line is one seed, so a second seed per width is what would separate the two explanations; the run plan's stage 6 describes it.
+The order of the lines points to the seeds rather than to the width. A width effect that grows or shrinks with the width would put the 128-wide line between the other two. On the card-disjoint loss and the probes it trails both. Each line is one seed, so [a second seed per width](#each-run-is-one-seed-so-a-difference-between-runs-counts-only-where-it-exceeds-the-swing-between-epochs) is what would separate the two explanations.
 
-A wider `e` spreads its variance over few more effective directions. Every checkpoint sits between 9 and 12. The 256-wide arm has about 9.4, and runs A256 and B256 between 10.5 and 11.9, the highest of them less than one direction above the best narrower checkpoint, so the vector's extra width goes almost unused. A linear probe reads the stated amounts better from a wider `e`, which it would from any wider vector. An MLP probe reads damage, cost and counters on unseen lines slightly worse from the 256-wide `e` than from the narrower arms, and power change slightly better. On the death rule, combat, gate 2 and the board-abilities subsets, the 256-wide arm lands inside or at the edge of the range of the other checkpoints.
+The scorecard sets every gen-2 checkpoint against thirteen measures at once, and no checkpoint leads on most of them. Seven different checkpoints top a row. The 256-wide continuation checkpoints have the best mean rank, and the arms rank near the bottom. The B runs cluster at the top of the damage-grid and damage-sweep rows, and the activated-ping row cuts across the widths. The colours give rank, not size, so on rows such as the sweeper's slope a dark cell can lead by a hundredth.
 
-### Gen-2's `e` spreads over two to three times gen-1's dimensions, and reads a line's kind and amounts far better
+![Heatmap of thirteen measures by seventeen checkpoints grouped by width of e, each row coloured by rank, with the best in bold and a mean-rank row at the bottom](2026-09-18-effect-model-gen2/charts/scorecard.png)
 
-The participation ratio counts the equally weighted directions that would give `e`'s spread of variance: 3.9 for gen-1 and between 7.5 and 11.9 for every gen-2 checkpoint. A linear probe reads a line's API type, its mana cost and each of its stated amounts far better from gen-2's `e`. The wider `e` reads the amounts better still, though a linear probe with more inputs fits more of any label, so the table bounds what width adds rather than measuring it. Gen-2 trains two heads that read `e` alone, one predicting the API type and one the stated amounts, so part of the gain is by construction; the probes record tests whether the trunk uses it.
+*Each row is coloured by rank among the checkpoints, darker better; ▲ marks a measure where higher is better and ▼ one where lower is better, and the best cell is bold. The last row is each checkpoint's mean rank over the rows above. The rows from blocking onward come from the probes record. Data: `checkpoints.csv`, `probe_ladder.csv`, `damage_grids.csv`, `sweeps.csv`, `sweep_records.csv`, `gate2.csv`, `evasion_ranking.csv`, `colour_pips_ranking.csv`, `zone_amounts.csv`, `zone_who.csv`, `target_flips.csv`.*
+
+A wider `e` spreads its variance over few more effective directions. Every checkpoint trained with lethality copies sits between 9 and 12 directions; arm `e64`, without copies, has 7.5. The 256-wide arm has about 9.4, and runs A256 and B256 between 10.5 and 11.9, the highest of them less than one direction above the best narrower checkpoint, so the vector's extra width goes almost unused. What a nonlinear probe reads from `e` against a random vector of the same width is in [the probes record](2026-09-19-effect-knowledge-probes-design.md#e-adds-far-more-than-a-random-vector-of-its-width-on-what-a-line-states-and-almost-nothing-on-what-the-board-decides). On the death rule, combat, gate 2 and the board-abilities subsets, the 256-wide arm lands inside or at the edge of the range of the other checkpoints.
+
+### Gen-2's `e` spreads over two to three times gen-1's directions, and reads a line's kind and amounts far better
+
+The participation ratio counts the equally weighted directions that would give `e`'s spread of variance: 3.9 for gen-1 and between 7.5 and 11.9 for every gen-2 checkpoint. A linear probe, a straight-line fit from `e` to a property of the line, reads a line's API type, its mana cost and each of its stated amounts far better from gen-2's `e`. The API type is the first word of the script, the kind of effect, such as `DealDamage`. The wider `e` reads the amounts better still, though a linear probe with more inputs fits more of any label, so the table bounds what width adds rather than measuring it. Gen-2 trains two heads that read `e` alone, one predicting the API type and one the stated amounts, so part of the gain is by construction; the probes record tests whether the trunk uses it.
 
 | linear probe on `e`, all texts | gen-1 | `e64`, epoch 25 | run B64, epoch 62 | run B128, epoch 50 | `e256-lethality`, epoch 28 |
 |---|---:|---:|---:|---:|---:|
 | API type, accuracy | 0.64 | 0.89 | 0.91 | 0.91 | 0.91 |
 | mana cost, R² | 0.06 | 0.53 | 0.58 | 0.63 | 0.61 |
-| damage amount, R² | 0.34 | 0.49 | 0.50 | 0.61 | 0.70 |
+| damage amount, R² | 0.34 | 0.48 | 0.50 | 0.60 | 0.70 |
 | counters amount, R² | 0.18 | 0.54 | 0.54 | 0.65 | 0.64 |
-| life amount, R² | 0.09 | 0.32 | 0.33 | 0.40 | 0.45 |
+| life amount, R² | 0.09 | 0.31 | 0.33 | 0.40 | 0.45 |
 
 *Data: `embedding_probes.csv`, `gate3.csv`.*
 
-Gate 3 passes on every gen-2 checkpoint but one. The second run of arm `e64` put 30.03% of its variance on its top component, just past the gate's 30% limit. That component sorts lines by what they do, from damage and exile aimed at a creature to spell-copy and cast triggers, so it is a stretched direction rather than a collapse.
+Gate 3 passes on every gen-2 checkpoint but one. Arm `e64` put 30.03% of its variance on its top component, just past the gate's 30% limit. That component sorts lines by what they do, from damage and exile aimed at a creature to spell-copy and cast triggers, so it is a stretched direction rather than a collapse.
+
+The probes record reads `e` with a small nonlinear probe and against the trunk. It finds that `e` carries a line's costs, timing and most of its amounts, that it beats a random vector of its width strongly on what a line states and barely on what the board decides, and that the trunk works out deaths and trigger firing ([the probes record's summary](2026-09-19-effect-knowledge-probes-design.md#what-the-probes-found)).
+
+### The first arm trailed gen-1 on the loss the two generations share, in the fields whose targets gen-2 made larger or new
+
+The 47 output-field terms are the comparable part of the two generations' losses. Arm `e64 (earlier inputs)` matched gen-1 on them at epoch 9 and trailed it by a tenth to a fifth of a point from epoch 12 to 18. Arm `e64`, on the corrected inputs, trailed by a tenth to a quarter of a point from epoch 9 to 25. Gen-2's corpus puts more of its constant-prediction loss in fields the ability text decides, and less in the gate. `pt_duration`, how long a power and toughness change lasts, is a target gen-1 never had in practice, because gen-1 recorded every pump as instant. On keywords gained, the template holdout leaves a held-out keyword grant no near-twin in training.
+
+| field, epoch 18, card-disjoint | floor, gen-1 | floor, gen-2 | loss, gen-1 | loss, arm `e64 (earlier inputs)` |
+|---|---:|---:|---:|---:|
+| gate | 5.05 | 4.63 | 1.164 | 1.169 |
+| keywords gained | 0.43 | 0.57 | 0.065 | 0.164 |
+| +1/+1 counters | 0.12 | 0.43 | 0.026 | 0.079 |
+| `pt_duration` | 0.00 | 0.23 | 0.000 | 0.043 |
+| mana deltas, six fields | 0.10 | 0.41 | 0.024 | 0.049 |
+
+*The floor is a field's constant-predictor loss: the loss of always predicting the field's average. Data: `gen1_vs_e64_field_terms.csv`, `fields_by_epoch.csv`.*
+
+### Collector defects taught the AI's block plan as a rule, and bent the affected gate and the combat input
+
+Nine places where the corpus records something other than what happened in the game reach fields the model trains on. They sit in the Forge hooks and the connector's collectors and were found after the gen-2 runs. The gen-2 corpus is not collected again. Two of the playability verdict bits also carry the AI's answer rather than the rules'. The table names the field each one bends and the result it qualifies; the evidence for each is in [Details](#nine-collector-defects-shaped-gen-2s-labels-and-gen-3-collects-without-them).
+
+| defect | field it bends | result it qualifies |
+|---|---|---|
+| most "may not block" labels name a creature in the AI's unfinished block plan | `blocker_legal` | the probe mean's may-block question; the probes record's may-block rung and the evasion grid's level |
+| a reveal from a library reaches no card and no player | the `reveal` bit of `library_events` | none in either record |
+| created tokens carry no keywords, and several kinds of token are recorded as the first | the created-objects field | none in either record |
+| prevented damage names nobody it was prevented for | the affected gate | none in either record |
+| an ability's own card is marked affected by the tokens, coins and copies it produces | the affected gate | the card-affected question of the probe mean and of the probes record's ladder |
+| a double striker's second hit is recorded with no damage assigned | the combat input's damage assignment | the combat grid's double-strike second hit |
+| events of abilities that resolve after combat damage are written into the combat record | combat records' draws, tokens, discards and mills; those triggers' own resolutions | none; the combat grid reads deaths only |
+| "tapped for mana" trigger records are partly the AI's questions about planned taps | the trigger's fired bit, on a few mana cards | none measured |
+| a prevention shield with nothing left to prevent records a prevention of 0 | the `damage_prevented` amount | none in either record |
+| `affordable` and `has_legal_target` come partly from the AI's cost check and targeting | two playability verdict bits | the probe mean's affordable question; the probes record's affordability and colour probes |
+
+The block plan is the largest. More than half of the "may not block" labels in real block decisions name a creature the AI had already planned to block with, and two thirds name a creature no static restricts. Only one in fourteen names a tapped creature, a refusal the rules make.
+
+![Bar chart of the shares of gen-2's "may not block" labels, real block-legality records and anchoring attackers that reflect the AI's block plan rather than a rule](2026-09-18-effect-model-gen2/charts/planned-block-labels.png)
+
+*Real decisions in the game-disjoint stratum, as the collector counted them. The sub-counts within a group may overlap, so they are not stacked. Data: `legality_planned_blocks.csv`.*
+
+The corpus build, the training targets, the evaluator and the probe scripts carry fifteen further defects, which change what every arm learned on a few fields and bias some reported figures ([Details](#fifteen-defects-in-the-corpus-build-the-training-targets-the-evaluator-and-the-probes-shaped-gen-2s-results-and-gen-3-is-built-without-them)). Two of them reach the probe mean: its may-block and pump-duration questions read fields whose unset targets were trained as 0.
 
 ## What gen-3 takes from these results
 
@@ -283,9 +393,10 @@ The gen-3 draft, [`2026-XX-XX-effect-model-gen3-design.md`](2026-XX-XX-effect-mo
 
 - **Rebalancing by rule**, so that no keyword or rule is rare in training, with rule-labelled copies where real records are too few. The lethality copies are the first case, and combat copies are proposed.
 - **Checkpoints judged by probes and rule scenarios**, from the disagreement between the loss and the probes, with each field's loss divided by its constant prediction's.
-- **The first-strike step collected whole, the combat snapshot taken before damage, and the block pairing in the input**, from the combat results.
+- **The first-strike step collected whole**, which the collector already does, and two draft proposals from the combat results: **the combat snapshot taken before damage and the block pairing in the input**.
 - **Every line of a permanent on the board**, from the board-abilities results in the probes record.
 - **Block legality recorded before anyone declares, outcome notes that name only what they happened to, each damage step's own assignment, and combat records that stop where the stack starts**, from [the collector defects](#nine-collector-defects-shaped-gen-2s-labels-and-gen-3-collects-without-them) found after the runs.
+- **The withheld keyword read through its definition**, so the zero-shot check measures what it was meant to ([gen-3 draft](2026-XX-XX-effect-model-gen3-design.md#the-withheld-keyword-reaches-training-as-its-definition-so-gen-3s-zero-shot-slice-is-the-first-that-tests-reading-one)).
 
 ## Design: what gen-2 changes from gen-1, and why
 
@@ -294,6 +405,8 @@ Gen-1 is the model trained on the corpus of 2026-09-17 (run `09.17f`, filed unde
 The encoder has two surfaces. The script surface is the Forge script text, and the prose surface, the rendered rules text, is the fallback for a line with no script. A head is a network trained on top of a shared representation to predict one kind of output.
 
 Each of the first ten sections below records one gap found while gen-1 trained, the evidence for it, and the change gen-2 makes. The three after them set how gen-2 is collected, evaluated and trained, and the run plan orders the work. Gen-2's gate figures are not compared with gen-1's figure by figure, because the corpus, the split and the encoding all change.
+
+Three changes came during the runs, and the design sections do not describe them. Lethality copies, training copies whose death is labelled by the damage rule, joined after the first arms ([the death rule](#the-model-compares-damage-with-toughness-only-after-training-shows-it-the-rule-directly)). Thermometer codes for the board's amounts and "at least k" targets for the value head replaced plain numbers after the first arm ([the input fixes](#the-first-arm-exposed-three-faults-in-the-models-inputs-and-the-arm-trained-again-on-corrected-ones-2026-10-14)). And every arm deleted the withheld keyword where the design expands it ([the withheld keyword](#every-arm-deleted-the-withheld-keyword-instead-of-expanding-it-so-the-zero-shot-check-measured-nothing)).
 
 ### The encoder reads only the first script line of an ability, so a trigger's effect never reaches it
 
@@ -307,7 +420,7 @@ line alone:
 Execute$ TrigPutCounter | Mode$ LifeGained | TriggerDescription$ Whenever you gain life, put a +1/+1 counter on CARDNAME. | TriggerZones$ Battlefield | ValidPlayer$ You
 ```
 
-The `DB$ PutCounter | CounterType$ P1P1 | CounterNum$ 1` line that does the work is not in the text.
+The `DB$ PutCounter | Defined$ Self | CounterType$ P1P1 | CounterNum$ 1` line that does the work is not in the text.
 The model knows that this is a life-gain trigger which does something the description calls "put a
 +1/+1 counter"; it does not see the counter type or the count as parameters.
 
@@ -368,8 +481,8 @@ Replacement effects get the same treatment through `ReplaceWith$`. A dedicated t
 segments. Each segment after the root opens with the label its parent referenced it by, so
 `SubAbility$ SV2` in one segment and `SV2:` opening a later one give the model the link. The labels
 are renumbered by position within the line, so the link survives and the author's name for the SVar
-does not (next subsection). A charm's modes are not inlined into its root line. Each mode is encoded
-on a line of its own (subsection on charms).
+does not ([SVar labels](#gen-2-renumbers-svar-labels-by-position-because-the-names-authors-give-them-carry-no-mechanism)). A charm's modes are not inlined into its root line. Each mode is
+encoded on a line of its own ([charms](#gen-2-encodes-and-records-each-mode-of-a-charm-as-its-own-ability)).
 
 Four things follow from the change, and the third is the one that decides the order of work.
 
@@ -383,10 +496,10 @@ Four things follow from the change, and the third is the one that decides the or
    one per position in the longest chain, and the rarer sub-ability parameters.
 3. **The holdout is chosen on the chained text.** A text is held out by the hash of its masked
    template, the normalised script text with its numbers, `CARDNAME` and descriptions masked
-   (section on gate 1), and the corpus's rarity table is keyed on the script text. Changing
+   ([gate 1](#gate-1-scores-fewer-than-half-of-the-held-out-texts-and-a-third-of-the-recorded-ones-have-a-numeric-twin-in-training)), and the corpus's rarity table is keyed on the script text. Changing
    `script_text` changes every key. The holdout is therefore computed on the chained text before the
    new corpus is collected, which is the only point at which changing it costs no training games
-   (section on collecting from scratch).
+   ([collecting from scratch](#gen-2-collects-its-corpus-from-scratch-because-the-holdout-and-the-random-seat-both-act-at-collection-time)).
 4. **Sequence length grows, and most chains stay well under the cap.** The encoder truncates at 512
    tokens, and the table above gives the growth on chained lines. The distribution of chain lengths
    in tokens is measured after the rebuild. A chain that exceeds the cap is logged rather than
@@ -398,6 +511,19 @@ synthetic land mana line, and nothing else.
 Gen-2 does not build the design doc's paired-prose loss. That loss would pull a line's prose
 encoding toward its script encoding, so that a card with prose but no Forge script would still get a
 usable `e`. Gen-2 serves cards implemented in Forge, and every one of them has a script.
+
+Under gen-2's encoding, Ajani's Pridemate's counter reaches the encoder as parameters, a chain of
+sub-abilities reaches it segment by segment, and each mode of a charm gets its own `e`.
+
+![Diagram of what the encoder reads for Ajani's Pridemate in gen-1 and gen-2, with insets for Inspiring Overseer's three-segment chain and Barbed Lightning's charm](2026-09-18-effect-model-gen2/charts/diagram-encoder-reads.png)
+
+*Top: Ajani's Pridemate in Forge's script, a trigger line and the SVar its `Execute$` names. Gen-1
+encodes the root line only, so the counter type and count reach the model only as the English of
+the description. Gen-2 encodes the root, a `[SEG]` separator and the SVar line, with the label
+`TrigPutCounter` renamed `SV1`. Bottom left: Inspiring Overseer's trigger, its `Execute$` effect and
+that effect's `SubAbility$`, three segments. Bottom right: Barbed Lightning's charm root keeps only
+its choice, and each mode's option line, opened by `SV1` because numbering restarts on every line,
+gets its own `e`.*
 
 #### Gen-2 renumbers SVar labels by position, because the names authors give them carry no mechanism
 
@@ -484,9 +610,9 @@ off-policy play adds are the ones the corpus lacks:
   ability resolves and the entity stays, or the wrong side loses something. These teach the effect
   head's affected-or-unaffected output and its zone-outcome field to read the target's state.
 - Targeting through a ward cost the caster cannot pay. The cost record's outcome field already
-  carries `countered`; the class is simply empty today.
+  carries `countered`; the class is empty in gen-1's corpus.
 - A 1/1 attacking into a 4/4, and blocks Forge would never assign, including the combats deathtouch
-  decides, which Forge's combat AI declines (section on rare-keyword combats). Combat records are
+  decides, which Forge's combat AI declines ([rare-keyword combats](#two-build-settings-leave-gate-2-and-the-trainer-short-of-rare-keyword-combats)). Combat records are
   the observational complement, and random declarations reach the region Forge's attack logic never
   enters.
 - "Tap target creature" on a creature that is already tapped. A resolution that changes nothing,
@@ -535,23 +661,22 @@ Four details are fixed in this design rather than left to the collection run.
 3. **One match in four has a random seat, and it acts at random at half its decision points.** The
    random seat produces rare outcomes for common texts, and the attacks Forge's AI would not make,
    which are the only source of block decisions against such attacks once what-if queries are not
-   collected (section on what-if queries). On-policy games supply everything else, so the two share
+   collected ([what-if queries](#most-blockers-records-are-the-ais-what-if-queries-and-nothing-in-a-record-says-which-kind-it-is)). On-policy games supply everything else, so the two share
    one corpus. The two settings multiply to one eighth, the expected share of one seat's decisions
-   taken at random per match played. A seat that acted at random at every point would lose most games early, and its boards would say
-   little about the boards the model is asked about.
+   taken at random per match played. A seat that acted at random at every point would lose most
+   games early, and its boards would say little about the boards the model is asked about.
 4. **Random-seat games are played in both collections.** They appear in the training collection,
    played from pools depleted of every card that carries a held-out text, and in the full-strength
    collection, played from complete pools, that supplies the card-disjoint stratum. The off-policy
    records of training therefore have held-out counterparts to be scored on.
 
-**In the gen-2 corpus, two of the three verdict bits are partly the AI's answer rather than the rules'.** On a Forge seat's candidate, `has_legal_target` records whether the AI had set targets on it when the hook fired. The AI sets targets only when its evaluation gets that far and finds a target it wants. A candidate it put off until later therefore reads as having no legal target, and one evaluated earlier can keep that evaluation's targets. On both seats, `affordable` comes from Forge's AI cost check. That check refuses some costs the rules allow: a planeswalker's last loyalty, a Ward cost the AI dislikes and a Casualty sacrifice. It also adds the mana that taxes such as Nether Void's would demand. The random seat walks a charm's leftover chain of chosen modes rather than the modes the charm offers, so a charm with no choosable mode reads as having a legal target. The verdict head's `has_legal_target` column therefore learns in part when the AI chooses to target, and its `affordable` column learns some of the AI's cost preferences. The random seat filters its own plays through the same cost check, so it is kept from the costs that check refuses. Gen-3 computes all three bits from the rules alone ([gen-3 design](2026-XX-XX-effect-model-gen3-design.md#the-model-has-to-learn-every-rule-that-depends-on-whose-turn-or-which-step-it-is-and-collection-records-which-check-decided-each-one)).
-
 Two limits are accepted. Random targets on a wide board mostly produce uninformative no-ops, so the
 share of useful records per game is lower than under Forge's play. And random attacks and blocks
 cost the random seat life and creatures, so its games run shorter and its boards are thinner than
-Forge's. The probability of acting at random sets how far both go. The stage 2 pilot, at one match
-in eight and a quarter of the decisions, yielded too few block decisions against random attacks
-to replace the what-if queries, which is what sets the values above (Outcome, stage 2).
+Forge's. The probability of acting at random sets how far both go. The first pilot collection, at
+one match in eight and a quarter of the decisions, yielded too few block decisions against random
+attacks to replace the what-if queries, which is what sets the values above
+([the first pilot](#the-first-pilot-collection-showed-every-gen-2-mechanism-working-and-two-problems-2026-10-09)).
 
 ### The rarity weight is flat for 97% of texts and nothing balances rule families, so rare texts and rare rules train least
 
@@ -587,7 +712,7 @@ The per-text cap is the only setting that changes the mix of texts in the curate
 acts only on the most common texts. The cap drops about three of every five resolution-effect
 records read and about half or more in every other ability-keyed class. A cap is a ceiling and never
 a floor, so curation cannot add tail records. What it can do is stop the common texts from crowding
-them out, and today it does that only down to two hundred records per text.
+them out, and in gen-1 it does that only down to two hundred records per text.
 
 | class | records read | kept | dropped by the cap |
 |---|---|---|---|
@@ -606,8 +731,8 @@ single text from dominating a batch without flattening everything below it. The 
 the few hundred texts above the reference weigh less than it, which is where they belong. The rarity
 table in the manifest does not change; only the trainer's reading of it does.
 
-Nothing reports today whether training reaches the tail. The manifest's unique texts per output show
-only whether curation kept it. The trainer's epoch line therefore gains the share of records trained
+Nothing in gen-1 reports whether training reaches the tail. The manifest's unique texts per output
+show only whether curation kept it. The trainer's epoch line therefore gains the share of records trained
 by rarity bucket of their text: one game, two to four, five to nineteen, twenty or more.
 
 #### A per-text weight shows a mechanism once per variant, so a keyword with few variants stays rare
@@ -906,13 +1031,13 @@ round that gives the held-out texts enough records to score.
    what shows a keyword the model reads badly, which a mean over the damage spells would hide. The
    memorization gap is the gap between a family's results on the game-disjoint stratum, whose texts
    trained, and on the card-disjoint stratum, whose texts did not. Gate 1 itself is not computed,
-   because gen-2 trains no identity baseline (section on baselines).
+   because gen-2 trains no identity baseline ([baselines](#gen-2-trains-no-baselines-because-the-knowledge-probes-measure-what-the-baselines-measured)).
 3. **The holdout key is the masked template.** A text is held out when the hash of its template
    falls below the holdout fraction, a number of templates per thousand (`--holdout-permille`), so a
    text's numeric twins go with it and every held-out text is unseen in training, numbers included.
    The template is taken from the chained script text, and the new corpus is depleted against it
-   (section on collecting from scratch). Chain labels need no mask, because the encoding text has
-   already renumbered them (subsection on SVar labels). The eligibility rule counts the cards that
+   ([collecting from scratch](#gen-2-collects-its-corpus-from-scratch-because-the-holdout-and-the-random-seat-both-act-at-collection-time)). Chain labels need no mask, because the encoding text
+   has already renumbered them ([SVar labels](#gen-2-renumbers-svar-labels-by-position-because-the-names-authors-give-them-carry-no-mechanism)). The eligibility rule counts the cards that
    carry any text of the template, not the cards of one text: a template such as `Pump +N/+N until
    end of turn` spans thousands of cards, and holding it out would deplete them all. The holdout
    fraction is set against the share of cards the holdout depletes, which `holdout-cards` reports
@@ -1022,7 +1147,7 @@ its own rather than as its definition.
 The definition is looked up by the display name, the part of a keyword line's script text before its
 first colon, matched case-insensitively against the definitions table. The whole name is replaced,
 however many tokens it split into, and the text after the colon becomes the line's instance values.
-A keyword word inside another line keeps the token path it has now.
+A keyword word inside another line keeps the token path it has in gen-1.
 
 1. **The match is checked against the sidecar.** The batcher sees only the encoding text, so the
    match is made on the text. The corpus build asserts that every text it matches belongs to sidecar
@@ -1030,7 +1155,7 @@ A keyword word inside another line keeps the token path it has now.
    converter's category, `alternate cost` for jump-start.
 2. **The host-bodied list is checked on the same path.** It compares display names, so level up and
    read ahead are excluded as the list intends.
-3. **The keywords that never expand today are the test.** Jump-start, web-slinging and beam me up
+3. **The keywords that never expand in gen-1 are the test.** Jump-start, web-slinging and beam me up
    must each expand both with and without a merged vocabulary token for their name.
 
 #### Gen-2 fills each template with its line's values, strips every format specifier and reserves the definition words
@@ -1046,12 +1171,12 @@ A keyword word inside another line keeps the token path it has now.
 4. **The definition words are reserved in the vocabulary.** `build-vocab` seeds every word of every
    template after stripping, as it already seeds `[PAD]` and `[CLS]`, so `--target-size` cannot cut
    them. The build asserts that no definition expands to `[UNK]`. The reservation lands in the
-   script-vocabulary rebuild that the chain encoding and the camel-case split (tokenizer section)
-   already require, so it costs no rebuild of its own.
+   script-vocabulary rebuild that the chain encoding and the camel-case split
+   ([tokenizer](#the-script-tokenizer-is-never-called-and-the-prose-grammar-that-runs-in-its-place-splits-selectors-better)) already require, so it costs no rebuild of its own.
 
 #### Gen-2 keeps the reminder template on both surfaces and stops scanning generated scripts
 
-The generated script is not yet worth expanding to. It is the root line of the keyword's trait
+The generated script is not worth expanding to. It is the root line of the keyword's trait
 alone. Prowess's is its `SpellCast` trigger condition without the +1/+1 it grants, and no trigger
 among the 75 scripts carries the effect it executes: the same first-line gap the chain section
 describes. Its description parameter holds the reminder text anyway. And only 75 of the 202 keywords
@@ -1074,16 +1199,12 @@ keyword's expansion lands far from the vector of the trained keyword it defines.
    token out of training and expands every occurrence to its definition. The keyword is chosen
    before the sweep, among the script-generated keywords new sets introduce, with enough records in
    the corpus for its fields to be scored.
-2. **The check measures.** The evaluator today names the withheld keyword and stops. Gen-2 adds the
+2. **The check measures.** Gen-1's evaluator names the withheld keyword and stops. Gen-2 adds the
    measurement the design doc specifies: the effect head's per-field results on records where the
    withheld keyword acts or sits on the board, beside the same fields for keywords that trained.
 
-Every gen-2 arm deleted cascade instead of expanding it, so its zero-shot slice does not measure what
-step 1 sets out. The batcher removed the withheld keyword's token before expansion ran, and the
-expansion it should have forced never happened. A cascade line reached the encoder as its `[CLS]`
-token alone, in training and in evaluation. The slice therefore compares records whose acting or
-board ability is missing with records whose abilities trained, which is not a test of reading a
-keyword through its definition. The gen-3 design draft records the fix and what it changes.
+Every gen-2 arm deleted cascade, the withheld keyword, instead of expanding it, so the check measured
+nothing ([the withheld keyword](#every-arm-deleted-the-withheld-keyword-instead-of-expanding-it-so-the-zero-shot-check-measured-nothing)).
 
 ### The script tokenizer is never called, and the prose grammar that runs in its place splits selectors better
 
@@ -1163,7 +1284,7 @@ dragon` and `YouCtrl` as `you ctrl`.
    unknown-token rate on the parameters and the number of distinct compound parts, so the rebuild
    shows whether the unknown compounds went away.
 4. **Chain labels stay whole.** The chain encoding links a segment to its parent by its numbered
-   label (subsection on SVar labels). Read by the prose grammar, `SV2` becomes `sv 2`, and the digit
+   label ([SVar labels](#gen-2-renumbers-svar-labels-by-position-because-the-names-authors-give-them-carry-no-mechanism)). Read by the prose grammar, `SV2` becomes `sv 2`, and the digit
    reaches the numeric embedding as if it were an amount. The tokenizer therefore keeps whole the
    values of `Execute$`, `SubAbility$`, `RepeatSubAbility$`, `Choices$` and `ReplaceWith$`, and the
    label that opens each segment. `build-vocab` reserves `sv1` up to the longest chain's label
@@ -1206,7 +1327,7 @@ gen-1's size therefore holds roughly 1,300 to 2,600 wither combats, and reaching
 thirteenth and a seventh of them out of training. The other keywords lose less.
 
 The rule depends only on the game, so a rebuild over a grown corpus keeps every game it already
-placed in the stratum and only adds new ones. The seeded sample `build-corpus` draws today redraws
+placed in the stratum and only adds new ones. The seeded sample gen-1's `build-corpus` draws redraws
 the whole stratum whenever the corpus grows. That would move the games the knowledge probes read
 into training, and the probes would score later models on boards they trained on.
 
@@ -1265,13 +1386,10 @@ anchor attacker is attacking. The counts are over both validation strata, 6,848 
 The legal list in a legality record is a rules fact about the board in its snapshot, and the
 forbidden list of a `blockers` record is not. No `attackers` record in either stratum lists a tapped
 or summoning-sick creature as a legal attacker, and no `blockers` record lists a tapped creature as
-a legal blocker. The hook sits inside Forge's AI blocking code, which asks whether a creature may
-block against the block plan it is still building. A creature the AI has already planned to block
-one attacker with therefore reads as forbidden for every attacker it considers next, with no rule
-responsible. The legality head learns from a class dominated by planning queries about combats
-Forge was only considering, a record gives no way to tell the two kinds apart, and in a `blockers`
-record the forbidden side carries the plan as well
-([the gen-2 corpus measures it](#most-block-legality-labels-that-say-a-creature-may-not-block-describe-the-ais-unfinished-block-plan)).
+a legal blocker. The legality head learns from a class dominated by planning queries about combats
+Forge was only considering, and a record gives no way to tell the two kinds apart. The forbidden side
+of a `blockers` record also carries the AI's unfinished block plan
+([the block-plan defect](#most-block-legality-labels-that-say-a-creature-may-not-block-describe-the-ais-unfinished-block-plan)).
 
 Two further collector rules shrink the real decisions the corpus holds.
 
@@ -1295,8 +1413,7 @@ The key becomes the subkind, the payload and the snapshot, the same three parts
 written for, the AI re-asking during one combat evaluation, share a board and still collapse. A
 later turn with the same creatures on a different board is kept.
 
-That the re-asks share a board is an assumption, and the pilot collection tests it before the full
-run. If the snapshot carries the attack declarations the AI is simulating, each re-ask has a board
+The pilot collection tests, before the full run, the assumption that the re-asks share a board. If the snapshot carries the attack declarations the AI is simulating, each re-ask has a board
 of its own. The legality class then grows back toward the four fifths of the corpus it held before
 the collector de-duplicated legality records.
 
@@ -1334,17 +1451,17 @@ The off-policy random seat also needs games played with it.
 Everything collection fixes is therefore settled before the first game:
 
 - the holdout: masked templates of the chained script text with its labels renumbered, with the
-  eligibility rule counted per template (section on gate 1);
+  eligibility rule counted per template ([gate 1](#gate-1-scores-fewer-than-half-of-the-held-out-texts-and-a-third-of-the-recorded-ones-have-a-numeric-twin-in-training));
 - per-mode modal records: each chosen mode of a charm recorded through its own `option` line
-  (subsection on charms);
+  ([charms](#gen-2-encodes-and-records-each-mode-of-a-charm-as-its-own-ability));
 - the two new envelope fields, the random-seat flag and the what-if legality flag. Each is
   collection metadata, like `mode`, `fork` and `synthetic`, and never reaches the model. Each is
   additive, so the frozen-schema contract test gains one line per field, and both are in the schema
   before the first record;
-- the random seat's share of games (off-policy section), and its probability of acting at random as
-  the pilot leaves it;
+- the random seat's share of matches ([the random seat](#gen-2-collects-one-match-in-four-with-a-seat-that-takes-a-random-legal-action-at-half-its-decisions)), and its probability of acting
+  at random as the pilot leaves it;
 - the rule that places a game in the game-disjoint stratum, which depends only on the game itself
-  (section on rare-keyword combats).
+  ([rare-keyword combats](#two-build-settings-leave-gate-2-and-the-trainer-short-of-rare-keyword-combats)).
 
 A pilot of a few hundred games runs before the full collection, and the run plan says what it
 checks.
@@ -1377,10 +1494,11 @@ Without an identity checkpoint, `evaluate-effect-model` reports gate 1 as skippe
 and 3 and the checks it reports without a threshold, such as the ward canary. It already behaves that way when no `--variant-checkpoint identity`
 is given.
 
-### Gen-2 is a sweep over the width of `e` and the size of the encoder, compared by hand
+### Gen-2 is a sweep over the width of `e`, compared by hand
 
-Gen-2's training time goes to a sweep rather than to baselines. The main axis is the width of `e`.
-The encoder's depth and width are a second axis where time allows. Arms are compared by hand after
+Gen-2's training time goes to a sweep rather than to baselines. The axis is the width of `e`. The
+encoder's depth and width were planned as a second axis where time allowed, and were not run: every
+run uses an encoder of four layers 256 wide. Arms are compared by hand after
 the runs, and no selection rule is fixed in advance.
 
 Three things keep the arms comparable.
@@ -1393,7 +1511,8 @@ Three things keep the arms comparable.
   noise level independent of the batch size an arm needs to fit 8 GB.
 - **Measures that do not grow with the width of `e`.** A probe that reads a wider vector has more
   inputs and scores higher for that alone, so every probe on `e` is reported against a control of
-  the same width, a fixed random vector per text (probes record). Concentration is compared by
+  the same width, a fixed random vector per text
+  ([the probes record](2026-09-19-effect-knowledge-probes-design.md#the-width-control-keeps-arms-of-different-widths-comparable)). Concentration is compared by
   participation ratio, the number of equally weighted directions that would give the same spread.
   The top component's share is not comparable across widths.
 
@@ -1406,12 +1525,12 @@ is read beside every gain it shows. The comparison draws on:
 
 Strategic value, such as a card's win rate, is not compared: it is the game agent's to learn.
 
-### Run plan: a pilot before the full collection, and the gen-1 work while collection runs
+### The run plan pilots the collection before the full run, and does the gen-1 work while collection runs
 
 The plan has six stages. Stage 0 reads only gen-1's artifacts and can overlap stages 1 to 3. Every
 later stage needs the one before it.
 
-#### Stage 0 — on the gen-1 corpus
+#### Stage 0 runs the probes' first pass and the noise pilot on gen-1's corpus
 
 Both runs read the gen-1 corpus, whose manifest keys texts on the root line alone. They therefore
 run against gen-1's sidecars: before `convert` is re-run in stage 1, or against a copy of
@@ -1424,7 +1543,7 @@ run against gen-1's sidecars: before `convert` is re-run in stage 1, or against 
    auxiliary head on. The auxiliary head reads root-line labels only, since gen-1's sidecars carry
    no chain. The chosen ratio is fixed for every sweep arm.
 
-#### Stage 1 — the text and the holdout
+#### Stage 1 fixes the encoded text and the holdout before any game is played
 
 1. `python -m effects extract-keyword-definitions`, recording Forge's formatted value strings per
    keyword.
@@ -1437,10 +1556,11 @@ run against gen-1's sidecars: before `convert` is re-run in stage 1, or against 
    holdout fraction before anything is collected.
 5. `python -m sealed generate-pools --exclude-cards` with that list.
 
-#### Stage 2 — the pilot collection
+#### Stage 2, a pilot collection, checks the new fields and the minority outcomes
 
-1. A few hundred games of `python -m sealed match-outcomes --effect-records`, with the random seat
-   in one game of eight and both new envelope fields.
+1. A few hundred games of `python -m sealed match-outcomes --effect-records`, with both new envelope
+   fields and the pilot's random seat: one match in eight, acting at random at a quarter of its
+   decisions. The pilot raised both to the values the off-policy section gives.
 2. `python -m effects validate-corpus` on the first minutes, and `python -m effects field-coverage`
    on the pilot, which shows whether both new fields vary.
 3. `python -m effects build-corpus` over the pilot shards into a scratch directory. Its manifest
@@ -1451,7 +1571,7 @@ run against gen-1's sidecars: before `convert` is re-run in stage 1, or against 
    - Do the on-policy and off-policy counts and the real and what-if counts look as intended?
 4. The random seat's probability is raised only if the minority outcomes are too few.
 
-#### Stage 3 — the full collection
+#### Stage 3 collects for training and for the card-disjoint stratum
 
 1. Depleted sealed self-play with the random seat, for training.
 2. Full-strength collection with the random seat, for the card-disjoint stratum.
@@ -1461,7 +1581,7 @@ run against gen-1's sidecars: before `convert` is re-run in stage 1, or against 
 
 Each run gets `validate-corpus` over its first minutes.
 
-#### Stage 4 — the corpus build
+#### Stage 4 builds the one corpus every arm reads
 
 1. `python -m effects build-corpus` with rule-family balancing, outcome balancing and the
    game-disjoint stratum drawn toward rare-keyword combats.
@@ -1470,17 +1590,17 @@ Each run gets `validate-corpus` over its first minutes.
    rebuilt. The game-disjoint stratum keeps its games across the rebuild.
 3. The final build is the one every sweep arm reads.
 
-#### Stage 5 — the sweep, and the checks on each arm
+#### Stage 5 trains each arm and runs the gates and both probe suites on it
 
 For each arm, in order:
 
 1. `python -m effects train-effect-model --corpus <build> --withhold-keyword <keyword>`, at the
-   arm's width of `e` and size of encoder. The epoch line's shares per family and per rarity bucket
+   arm's width of `e`. The epoch line's shares per family and per rarity bucket
    show whether the tail is reached.
 2. `python -m effects encode-abilities`, with known keywords left as tokens.
 3. `python -m effects evaluate-effect-model`: gates 2 and 3, the ward canary, the nearest
-   neighbours and the zero-shot keyword check. The role-polarity check and the matched real-versus-fork check run if the corpus holds mana
-   and fork records. Gate 1 reports as skipped.
+   neighbours and the zero-shot keyword check. The role-polarity check and the matched
+   real-versus-fork check run if the corpus holds mana and fork records. Gate 1 reports as skipped.
 4. The gen-1 embedding probes in `scripts/effect_embedding_probes/`, against the arm's cache:
    `build_texts.py` first, then `effect_profiles.py`, `pca_directions.py`, `lexical_probes.py`,
    `linear_probes.py`, `type_merging.py`, `neighbours.py` and `keyword_expansion.py`. Their
@@ -1488,65 +1608,22 @@ For each arm, in order:
    `pca_directions.py` adds the participation ratio.
 5. The knowledge probes, following the probes record's run plan.
 
-The arms are then compared by hand, and the Results section records the comparison.
+The arms are then compared by hand, and the Results section records the comparison. The
+participation ratio, the embedding probes per checkpoint and the zero-shot measurement were built
+for this stage, and the embedding probes ran on every gen-2 checkpoint.
 
-#### Stage 6 — a difference between arms counts only where it exceeds the noise between runs
+#### Stage 6 compares the arms against the noise between runs
 
-Each arm is a single training run with one seed, so two arms can differ by chance alone. Whether
-this stage runs is decided once the sweep's results are in; it is worth its cost only when arms
-land close together.
-
-Three sources of variation make two equally good arms score differently, and one run measures
-only two of them.
-
-| source | what varies | measured from one run |
-|---|---|---|
-| validation sample | the card-disjoint loss of one model on another sample of held-out texts | yes, by resampling the held-out texts |
-| movement within a run | the loss from one epoch to the next as the weights keep changing | yes, from the epochs on the plateau |
-| seed | the level a run settles at, from its initial weights, data order, dropout and noise | no; it needs a second run |
-
-The epochs on the plateau set a floor, not the whole margin. Two arms that differ by less than
-their epoch-to-epoch movement cannot be told apart. Seed variance is usually larger, because a run
-with another seed tends to sit at another level for the whole run rather than only wobble
-differently, and nothing inside one run shows that offset. Consecutive epochs start from each
-other's weights, so their spread also understates the noise in their mean. On arm `e64`'s first
-run the plateau's movement was about a tenth of a loss point.
-
-| arm `e64`, first run, epochs 14 to 20 | mean | standard deviation |
-|---|---:|---:|
-| card-disjoint loss | 4.06 | 0.11 |
-| of it, the output fields | 3.58 | 0.12 |
-
-The comparison then takes three steps, each run only if the one before leaves the answer open.
-
-1. **A paired comparison on the same records.** Both arms' checkpoints score the same card-disjoint
-   records. The difference is taken per held-out text, because the records of one text are
-   correlated, and bootstrapped over texts for a confidence interval. Pairing removes most of the
-   sample's noise, since both models face the same hard and easy texts. The arms already train
-   with one seed, so they also read the same shards in the same order. Arms are compared on the
-   mean of their last few epochs as well as on their best one, because the best of about twenty
-   noisy epochs reads lower than the model's true level, and more so in a noisier run.
-2. **Agreement across measures.** A wider arm that wins on the card-disjoint loss, on most rule
-   families and on the knowledge probes' rung 1 minus rung 1w is more convincing than one that wins
-   on a single number, although all of them come from the same run.
-3. **A second seed of one arm.** One extra run gives a rough estimate of the spread between seeds,
-   σ, and three give a usable one. A difference between two arms is then read against about √2·σ.
-
-No script performs step 1 yet.
-
-#### Three pieces of tooling the run plan assumes do not exist yet
-
-- **The zero-shot measurement.** `evaluate-effect-model` names the withheld keyword and measures
-  nothing on it.
-- **The embedding probes take a checkpoint and a cache.** The scripts read gen-1's paths and the
-  taxonomy baseline's cache. Each arm needs its own.
-- **The participation ratio in `pca_directions.py`.**
+Each arm is a single run with one seed, so two arms can differ by chance alone. The plan read a
+difference between arms against the swing between epochs, then by agreement across measures, and
+only then by a paired comparison or a second seed. [Reading the results](#each-run-is-one-seed-so-a-difference-between-runs-counts-only-where-it-exceeds-the-swing-between-epochs)
+records how the comparison was made and which of these checks ran.
 
 ## Details
 
 ### The runs and the checkpoints
 
-Every gen-2 run trains on the stage-4 corpus (digest `b3adb69a2950`) with an encoder of four layers 256 wide, a noise ratio of 0.1, cascade withheld, seed 1255389894, 32 records per batch and 5,000 batches per epoch. An arm stops after five epochs without a new lowest card-disjoint loss and keeps that epoch. A continuation run trains a fixed twenty epochs, keeps every epoch's checkpoint, and is probed at both its kept epoch and its last. Every directory below is under `models/effects/runs/`, and each holds its logs, each opening with its command line and commit, and its probe reports; a continuation's last-epoch probes are in the same directory name with `-last` appended.
+Every gen-2 run trains on the stage-4 corpus (digest `b3adb69a2950`) with an encoder of four layers 256 wide, a noise ratio of 0.1, cascade withheld, seed 1255389894, 32 records per batch and 5,000 batches per epoch. An arm stops after five epochs without a new lowest card-disjoint loss and keeps its lowest epoch. A continuation run trains a fixed twenty epochs, keeps every epoch's checkpoint, and is probed at both its kept epoch and its last. An A run resumes its arm from the arm's last epoch, not its kept one, so run A64 starts at epoch 34 after `e64-lethality`'s last epoch, 33, though the arm keeps epoch 28. A B run starts from its A run's kept epoch. [The run-lineage chart](#a-checkpoint-is-named-after-its-run-an-arm-then-an-a-run-at-the-full-learning-rate-then-a-b-run-at-a-tenth-of-it) draws the same table. Every directory below is under `models/effects/runs/`, and each holds its logs, each opening with its command line and commit, and its probe reports; a continuation's last-epoch probes are in the same directory name with `-last` appended.
 
 | run | what it is | width of `e` | lethality copies | learning rate | epochs | kept epoch | directory |
 |---|---|---:|---:|---:|---|---:|---|
@@ -1563,7 +1640,7 @@ Every gen-2 run trains on the stage-4 corpus (digest `b3adb69a2950`) with an enc
 | run A256 | `e256-lethality` continued | 256 | 8 | full | 34–53 | 53 | `2026-10-gen2-e256-lethality-ext20/` |
 | run B256 | run A256's epoch 53 continued | 256 | 8 | a tenth | 54–73 | 53, run A256's | `2026-10-gen2-e256-lethality-lr0.1/` |
 
-Each run reads the same shards in the same order as the run it continues would have, since every draw is seeded by the step's place in the run. Run B256's lowest card-disjoint loss, at epoch 55, stayed above its starting checkpoint's, so it keeps run A256's epoch 53. Its epoch 55 is probed as `B256 best`, in the same directory name with `-best` appended. Data: `runs.csv`, `checkpoints.csv`.
+Each run reads the same shards in the same order as the run it continues would have, since every draw is seeded by the step's place in the run. Run B256's epoch 55, `B256 best`, is probed in the same directory name with `-best` appended. Data: `runs.csv`, `checkpoints.csv`.
 
 ### Fixes the runs forced, in the order they surfaced
 
@@ -1600,20 +1677,6 @@ The first arm ran out of the 8 GB of GPU memory early in its first epoch. A trai
 | share of the encoder's input that is padding | 79% | 22% |
 | highest GPU memory in one step | 6.4 GB, out of memory | 2.9 GB |
 
-#### The first arm trailed gen-1 on the output fields where gen-2's targets are larger or new
-
-On the 46 output-field terms, the comparable part of the two generations' losses, arm `e64` matched gen-1 for ten epochs and then trailed it by a tenth to a quarter of a point. Gen-2's corpus puts more of its constant-prediction loss in fields the ability text decides, and less in the gate. `pt_duration` is a target gen-1 never had in practice, because gen-1 recorded every pump as instant. On keywords gained, the template holdout leaves a held-out keyword grant no near-twin in training. Data: `gen1_vs_e64_field_terms.csv`.
-
-| field, epoch 18, card-disjoint | floor, gen-1 | floor, gen-2 | loss, gen-1 | loss, arm `e64` |
-|---|---:|---:|---:|---:|
-| gate | 5.05 | 4.63 | 1.164 | 1.169 |
-| keywords gained | 0.43 | 0.57 | 0.065 | 0.164 |
-| +1/+1 counters | 0.12 | 0.43 | 0.026 | 0.079 |
-| `pt_duration` | 0.00 | 0.23 | 0.000 | 0.043 |
-| mana deltas, six fields | 0.10 | 0.41 | 0.024 | 0.049 |
-
-The floor is a field's constant-predictor loss: the loss of always predicting the field's average.
-
 #### The first arm exposed three faults in the model's inputs, and the arm trained again on corrected ones (2026-10-14)
 
 The corrections are computed from fields the records already hold, so the corpus was neither collected nor built again. The first run's directory keeps the record of the uncorrected inputs.
@@ -1638,9 +1701,13 @@ The combat grid's first version granted first strike and double strike on regula
 
 The combat grid now sets both creatures' damage assignment from the edited board. A creature that strikes in the step assigns its power to the creature it fights, and one that does not strike assigns nothing. Before, the grid kept the base record's `assignment_choices`, which the input reads as each creature's number of targets and total damage assigned. Every cell off the base record's own power, and every first-strike-step cell, therefore asked about a board whose assignment disagreed with its power or its step.
 
+#### Every arm deleted the withheld keyword instead of expanding it, so the zero-shot check measured nothing
+
+Every gen-2 arm read cascade, the keyword withheld from training, as an empty line. `--withhold-keyword` is meant to keep the keyword's token out of training and replace each occurrence with its reminder text. The batcher removed the token before keyword expansion ran, and the expansion it should have forced never happened. A cascade line therefore reached the encoder as its `[CLS]` token alone, in training and in evaluation. The zero-shot slice compares the effect head's per-field results on records where cascade acts or sits on the board with the same fields for keywords that trained. With cascade's line empty, it compared records missing an ability with records whose abilities trained, which says nothing about reading a keyword through its definition. Gen-3 force-expands the withheld keyword wherever it appears ([gen-3 draft](2026-XX-XX-effect-model-gen3-design.md#the-withheld-keyword-reaches-training-as-its-definition-so-gen-3s-zero-shot-slice-is-the-first-that-tests-reading-one)).
+
 ### Nine collector defects shaped gen-2's labels, and gen-3 collects without them
 
-A review of the Forge hooks and the connector's collectors after the gen-2 runs found nine places where the corpus records something other than what happened in the game. Each one reaches a field the model trains on, and the first reaches two probes. The gen-2 corpus is not collected again. Gen-3 collects from scratch with all nine fixed ([gen-3 design](2026-XX-XX-effect-model-gen3-design.md#the-forge-hooks-and-collectors-recorded-planned-events-as-real-ones-and-several-outcomes-reached-the-wrong-record)).
+In nine places, found in the Forge hooks and the connector's collectors after the gen-2 runs, the corpus records something other than what happened in the game. Each one reaches a field the model trains on, and the first reaches two probes. A last entry, two playability verdict bits that carry the AI's answer, was known from the design and shapes labels the same way. The gen-2 corpus is not collected again. Gen-3 collects from scratch with all nine fixed ([gen-3 design](2026-XX-XX-effect-model-gen3-design.md#the-forge-hooks-and-collectors-recorded-planned-events-as-real-ones-and-several-outcomes-reached-the-wrong-record)).
 
 #### Most block-legality labels that say a creature may not block describe the AI's unfinished block plan
 
@@ -1690,7 +1757,7 @@ The observed record also read the table at the step's first damage or prevention
 
 #### Events from abilities that resolve after combat damage are written into the combat record
 
-Combat records carry the draws, tokens, discards and mills of abilities that resolved after the damage. A damage step has a priority window after its damage is dealt, and combat-damage triggers resolve in it: "whenever this creature deals combat damage to a player, draw a card", the monarch's transfer, a saboteur's discard. The collector filed every event of a damage step into the step's combat record. Those triggers' own resolution records therefore miss their effects, and a creature a spell damaged in the window is recorded as taking combat damage. Combat damage draws no card and makes no token, yet the combat records hold thousands of both.
+Combat records carry the draws, tokens, discards and mills of abilities that resolved after the damage. A damage step has a priority window after its damage is dealt, and combat-damage triggers resolve in it: "whenever this creature deals combat damage to a player, draw a card", the monarch's transfer, a saboteur's discard. The collector filed every event of a damage step into the step's combat record. Those triggers' own resolution records therefore miss their effects, and a creature a spell damaged in the window is recorded as taking combat damage. Combat damage draws no card and makes no token, yet the combat records hold nearly three thousand drawn cards and nearly two thousand made tokens.
 
 | full-strength raw shards | count |
 |---|---:|
@@ -1723,9 +1790,13 @@ One `damage_prevented` event in fifteen prevented nothing. A shield that prevent
 | `damage_prevented` events | 4,030 |
 | … of amount 0 | 262 |
 
+#### Two of the three playability verdict bits are partly the AI's answer rather than the rules'
+
+In the gen-2 corpus, `has_legal_target` and `affordable` record in part what Forge's AI chose rather than what the rules allow. On a Forge seat's candidate, `has_legal_target` records whether the AI had set targets on it when the hook fired. The AI sets targets only when its evaluation gets that far and finds a target it wants. A candidate it put off until later therefore reads as having no legal target, and one evaluated earlier can keep that evaluation's targets. On both seats, `affordable` comes from Forge's AI cost check. That check refuses some costs the rules allow: a planeswalker's last loyalty, a Ward cost the AI dislikes and a Casualty sacrifice. It also adds the mana that taxes such as Nether Void's would demand. The random seat walks a charm's leftover chain of chosen modes rather than the modes the charm offers, so a charm with no choosable mode reads as having a legal target. The verdict head's `has_legal_target` column therefore learns in part when the AI chooses to target, and its `affordable` column learns some of the AI's cost preferences. The random seat filters its own plays through the same cost check, so it is kept from the costs that check refuses. Gen-3 computes all three bits from the rules alone ([gen-3 design](2026-XX-XX-effect-model-gen3-design.md#the-model-has-to-learn-every-rule-that-depends-on-whose-turn-or-which-step-it-is-and-collection-records-which-check-decided-each-one)).
+
 ### Fifteen defects in the corpus build, the training targets, the evaluator and the probes shaped gen-2's results, and gen-3 is built without them
 
-A review of `src/effects` and the probe scripts after the gen-2 runs found fifteen places where the corpus, the model's targets or a reported figure differs from what the design says. Each defect was confirmed against the code and, where it leaves a trace, counted on the gen-2 corpus and the arms' logs. Four of them change what every gen-2 arm learned: zero-filled targets, triggers supervising their cause, the value head's misread amounts, and the corpus build's short training set. The rest change a probe, a gate's population or a single cache row. None of them flips a gate verdict. Gen-3 trains and is scored without any of them ([gen-3 design](2026-XX-XX-effect-model-gen3-design.md#the-corpus-build-the-targets-and-the-probes-were-reviewed-and-gen-3-trains-without-the-defects-found)).
+In fifteen places, found in `src/effects` and the probe scripts after the gen-2 runs, the corpus, the model's targets or a reported figure differs from what the design says. Each defect was confirmed against the code and, where it leaves a trace, counted on the gen-2 corpus and the arms' logs. Four of them change what every gen-2 arm learned: zero-filled targets, triggers supervising their cause, the value head's misread amounts, and the corpus build's short training set. The rest change a probe, a gate's population or a single cache row. None of them flips a gate verdict. Gen-3 trains and is scored without any of them ([gen-3 design](2026-XX-XX-effect-model-gen3-design.md#the-corpus-build-the-targets-and-the-probes-were-reviewed-and-gen-3-trains-without-the-defects-found)).
 
 #### Every affected entity was scored on every output field, and a field with no event was taught as 0
 
@@ -1781,7 +1852,7 @@ The masked-language-model term, which trains the encoder to restore hidden token
 
 #### Cascade's line in every gen-2 cache was encoded from a token training never updated
 
-The cached `e` of the withheld keyword is close to an arbitrary vector in every gen-2 arm. Training and evaluation force-expand cascade and drop its token, so the token's embedding never received a gradient. `encode-abilities`, which writes the cache, did neither, and encoded the Cascade line from that token. Every reader of the cache sees this row: the nearest-neighbour and UMAP checks, the decodability battery and the embedding probes. The evaluator's zero-shot slice builds its inputs as training does and is unaffected.
+The cached `e` of the withheld keyword is close to an arbitrary vector in every gen-2 arm. Training and evaluation drop cascade's token, so the token's embedding never received a gradient. `encode-abilities`, which writes the cache, kept the token and encoded the Cascade line from it. Every reader of the cache sees this row: the nearest-neighbour and UMAP checks, the decodability battery and the embedding probes. The evaluator's zero-shot slice builds its inputs as training does, so this row does not reach it; [the deletion](#every-arm-deleted-the-withheld-keyword-instead-of-expanding-it-so-the-zero-shot-check-measured-nothing) is what emptied that slice.
 
 #### Gate 2 read the effect fields without the affected gate, over a population up to a third larger than its distinct records
 
@@ -1828,7 +1899,7 @@ The evaluator's reports on every gen-2 arm say that three checks need fork recor
 
 ## Data and charts
 
-Every file below is in [`2026-09-18-effect-model-gen2/`](2026-09-18-effect-model-gen2/README.md), whose README gives each file's columns and source in full. `scripts/effect_gen2_report/build_data.py` writes the data from the run directories, and `scripts/effect_gen2_report/make_charts.py` draws the charts from the data alone.
+Every file below is in [`2026-09-18-effect-model-gen2/`](2026-09-18-effect-model-gen2/README.md), whose README gives each file's columns and source in full. `scripts/effect_gen2_report/build_data.py` writes the data from the run directories. `scripts/effect_gen2_report/make_charts.py` draws the data charts from the data alone, and `make_diagrams.py` draws the four diagrams, which hold no data.
 
 | file | contents |
 |---|---|
@@ -1842,4 +1913,4 @@ Every file below is in [`2026-09-18-effect-model-gen2/`](2026-09-18-effect-model
 | `data/probe_ladder.csv`, `data/sweeps.csv`, `data/sweep_records.csv` | the knowledge probes' scores and sweeps, which the probes record discusses |
 | `data/embedding_probes.csv` | the embedding probes on each cache |
 | the other `data/*.csv` | the smaller tables of the fixes above |
-| `charts/*.png` | every chart in this record and the probes record |
+| `charts/*.png` | every chart and diagram in this record and the probes record |

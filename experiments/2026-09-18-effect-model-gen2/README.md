@@ -8,15 +8,18 @@ The data and charts behind two records:
 To regenerate, from the repository root:
 
 ```
-python scripts/effect_gen2_report/build_data.py   # data/ from models/effects/runs/
-python scripts/effect_gen2_report/make_charts.py  # charts/ from data/ alone
+python scripts/effect_gen2_report/build_data.py     # data/ from models/effects/runs/
+python scripts/effect_gen2_report/make_charts.py    # the data charts, from data/ alone
+python scripts/effect_gen2_report/make_diagrams.py  # the four diagrams, which read no data
 ```
 
 `build_data.py` reads the run directories under `models/effects/runs/`, which are not in the repository. A run that does not exist yet is skipped, so re-running it as the sweep continues adds the new runs. Figures that exist only in the records' text are kept in `scripts/effect_gen2_report/transcribed.py`, each block naming where it was measured.
 
 ## Names
 
-A **run** is one training run: an arm (`e64`, `e128`, `e64-lethality`, ...) or a continuation (A64, B64, A128, B128, ...). A **checkpoint** is the run's kept epoch, the one with the lowest card-disjoint loss, named after the run (`e64-lethality`, `A64 best`). A continuation run's last epoch is also probed and is named `A64 last`. Run B256 never went below the checkpoint it started from and keeps run A256's epoch 53; `B256 best` is its own lowest epoch, 55, probed in the run directory's `-best` copy. `e64 (earlier inputs)` is arm `e64`'s first run, before the input corrections. `gen-1` is the gen-1 checkpoint.
+A **run** is one training run: an arm (`e64`, `e128`, `e64-lethality`, ...) or a continuation. An arm trains from scratch, and one whose name ends in `-lethality` trained with lethality copies. An A run (A64, A128, A256) resumes its arm from the arm's last epoch for twenty epochs at the full learning rate; a B run (B64, B128, B256) starts from its A run's kept epoch and trains twenty epochs at a tenth of it. A **checkpoint** is the run's kept epoch, the one with the lowest card-disjoint loss, named after the run (`e64-lethality`, `A64 best`). A continuation run's last epoch is also probed and is named `A64 last`. Run A256's lowest epoch is its last, so `A256 best` and `A256 last` are one checkpoint. Run B256 never went below the checkpoint it started from and keeps run A256's epoch 53; `B256 best` is its own lowest epoch, 55, probed in the run directory's `-best` copy. `e64 (earlier inputs)` is arm `e64`'s first run, before the input corrections. `gen-1` is the gen-1 checkpoint.
+
+Every data chart uses one visual language. Colour is the width of `e`: blue 64, orange 128, green 256. The stage of training is the marker shape for points (triangle for an arm, square for an A run, circle for a B run) and the line style for lines (dotted, dashed, solid). A filled marker is a run's kept epoch and a hollow one its last; `B256 best` is half filled. Arms without lethality copies are grey triangles, `e64 (earlier inputs)` the lightest, and gen-1 a dark grey cross.
 
 ## Data
 
@@ -52,34 +55,50 @@ A **run** is one training run: an arm (`e64`, `e128`, `e64-lethality`, ...) or a
 | `zone_moves.csv`, `zone_outcomes.csv` | checkpoint and starting zone, or starting zone and outcome: cards, moved cards, AUC; mean probability of the right outcome, share whose top destination is right, the outcome most often predicted instead | `zone-effects.txt` |
 | `zone_amounts.csv` | checkpoint and API: predicted count at the affected player for `NumCards$` 1 to 6 | `zone-effects.txt` |
 | `zone_who.csv` | checkpoint and API: predicted count at the targeted and the other player, before and after the target is handed over | `zone-effects.txt` |
-| `noise_pilot.csv`, `pilot_collections.csv`, `first_strike_repair.csv`, `lethal_hits_in_corpus.csv`, `gen1_vs_e64_field_terms.csv`, `legality_planned_blocks.csv`, `hook_defects_in_corpus.csv` | the smaller tables of the gen-2 record's details | transcribed |
+| `noise_pilot.csv`, `pilot_collections.csv`, `first_strike_repair.csv`, `lethal_hits_in_corpus.csv`, `gen1_vs_e64_field_terms.csv`, `legality_planned_blocks.csv`, `hook_defects_in_corpus.csv` | the smaller tables of the gen-2 record's details and its gen-1 comparison | transcribed |
 
 Rung names in `probe_ladder.csv` follow the probes record: `0` the board alone, `1` the board plus `e`, `1w` a random vector of the same width, `1o` the true script values, `2` the trunk's output, `3` the model's own prediction (probe `model`).
 
 ## Charts
 
+`make_charts.py` draws every data chart below, and `make_diagrams.py` the four diagrams.
+
 | chart | shows | data |
 |---|---|---|
-| `training-losses.png` | validation losses by epoch, per width | `epochs.csv` |
-| `loss-noise.png` | each loss's spread around its five-epoch moving mean | `epochs.csv` |
-| `probes-vs-loss.png` | probe mean against each validation loss, best-to-last arrows | `checkpoints.csv`, `probe_ladder.csv` |
+| `run-lineage.png` | every gen-2 run by epoch, what each continuation starts from, and the probed checkpoints | `runs.csv`, `checkpoints.csv` |
+| `training-losses.png` | training and validation losses by epoch, per width, each run's lowest card-disjoint epoch marked | `epochs.csv` |
+| `loss-noise.png` | each loss's spread around its five-epoch moving mean, from the arm through the A run to the B run | `epochs.csv` |
+| `probes-vs-loss.png` | probe mean against each validation loss, arrows from each run's lowest card-disjoint epoch to its last | `checkpoints.csv`, `probe_ladder.csv` |
+| `loss-rise-by-field.png` | each continuation run's late card-disjoint rise, split by output field | `epochs.csv`, `fields_by_epoch.csv` |
 | `fields-explained.png` | explained deviance by epoch for six fields | `fields_by_epoch.csv` |
-| `damage-grids.png` | damage-by-toughness grids | `damage_grids.csv` |
+| `damage-grids.png` | damage-by-toughness grids, with each panel's error against the rule | `damage_grids.csv` |
 | `toughness-sweep-records.png` | toughness sweep by damage group: range of records as a band, median as a line | `sweep_records.csv`, `toughness_sweep_records.csv` |
-| `boundary-by-epoch.png` | the lethal boundary per epoch along each width's line | `boundary_by_epoch.csv` |
-| `damage-sweep.png` | the damage sweep over quadrants marking the rule's side of an even chance | `sweeps.csv` |
-| `combat-grids.png` | combat grids of the latest run B64 checkpoint | `combat_grids.csv` |
-| `combat-keywords.png` | each combat keyword's effect against the rule | `combat_grids.csv` |
-| `gate2-keywords.png` | gate 2 agreement by keyword and checkpoint | `gate2.csv` |
-| `probe-ladder.png` | the read-out ladder per board target | `probe_ladder.csv` |
-| `line-properties.png` | line properties read from `e` alone | `probe_ladder.csv` |
-| `board-abilities.png` | losses where an unlisted static or replacement decides the answer | `board_abilities.csv` |
-| `ablation.png` | loss increase when `e` is replaced with noise, by scope | `ablation.csv` |
-| `evasion-grid.png` | predicted block legality by attacker keyword and blocker trait, rule cells outlined | `evasion_grid.csv` |
+| `boundary-by-epoch.png` | predicted death given affected, for hits lethal by one, exactly lethal and short by one, per epoch | `boundary_by_epoch.csv` |
+| `damage-sweep.png` | the damage sweep for every checkpoint, with the wrong side of the rule shaded | `sweeps.csv` |
+| `ping-gate-edits.png` | the gate at a ping's targeted creature under six edits, four checkpoints | `ping_gate_edits.csv` |
+| `combat-grids.png` | combat grids of B64 last: plain deaths, and the change with deathtouch and with first strike | `combat_grids.csv` |
+| `combat-keywords.png` | the share of the rule's change each combat keyword produces, per checkpoint | `combat_grids.csv` |
+| `gate2-keywords.png` | gate 2 agreement by keyword and checkpoint, against the sampling noise at each row's median | `gate2.csv` |
+| `width.png` | losses, probe mean and participation ratio across the three stages, per width | `checkpoints.csv`, `probe_ladder.csv`, `gate3.csv` |
+| `scorecard.png` | thirteen measures by seventeen checkpoints, coloured by rank, with a mean rank | `checkpoints.csv`, `probe_ladder.csv`, `damage_grids.csv`, `sweeps.csv`, `sweep_records.csv`, `gate2.csv`, `evasion_ranking.csv`, `colour_pips_ranking.csv`, `zone_amounts.csv`, `zone_who.csv`, `target_flips.csv` |
+| `planned-block-labels.png` | shares of the "may not block" labels and block records that reflect the AI's block plan | `legality_planned_blocks.csv` |
+| `probe-ladder.png` | the read-out ladder per board target, and the share `e` closes | `probe_ladder.csv` |
+| `e-over-random.png` | rung 1 minus rung 1w: what `e` adds over a random vector of its width, per target and checkpoint | `probe_ladder.csv` |
+| `line-properties.png` | line properties read from `e` alone, trained and held-out lines | `probe_ladder.csv` |
+| `board-abilities.png` | loss on restricted records over loss on unrestricted controls, per checkpoint | `board_abilities.csv` |
+| `ablation.png` | loss increase when `e` is replaced, by replacement and scope | `ablation.csv` |
+| `other-sweeps.png` | affordability sweep and board-size sweep | `sweeps.csv` |
+| `evasion-grid.png` | median lift in predicted block legality by attacker keyword and blocker trait, rule-allowed cells marked | `evasion_grid.csv` |
 | `evasion-ranking.png` | ranking AUC per attacker keyword across checkpoints | `evasion_ranking.csv` |
 | `target-flips.png` | predicted target legality before and after breaking a restriction's condition | `target_flips.csv` |
 | `colour-pips.png` | change in the affordable verdict from the exact board per land configuration, and the ranking AUCs | `colour_pips.csv`, `colour_pips_ranking.csv` |
 | `zone-outcomes.png` | share of moved cards whose most probable destination is right, by starting zone and destination | `zone_outcomes.csv` |
 | `zone-amounts.png` | predicted cards at the affected player as `NumCards$` runs from 1 to 6 | `zone_amounts.csv` |
-| `zone-who.png` | share of the predicted cards at the targeted player before and after retargeting | `zone_who.csv` |
-| `width.png` | losses, probes and participation ratio by width | `checkpoints.csv`, `probe_ladder.csv`, `gate3.csv` |
+| `zone-who.png` | share of the predicted cards left at the originally targeted player after retargeting | `zone_who.csv` |
+
+| diagram | shows |
+|---|---|
+| `diagram-model-and-probes.png` | the model's parts, the trunk's slots, where each read-out ladder rung reads, and the ablation scopes |
+| `diagram-validation-strata.png` | how whole games are split into training and the two validation strata |
+| `diagram-combat-step.png` | one combat's two damage steps, what a gen-2 combat record captured, and the collector defects |
+| `diagram-encoder-reads.png` | what the encoder reads for a trigger, a chain and a charm, gen-1 against gen-2 |

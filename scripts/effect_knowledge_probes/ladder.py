@@ -77,8 +77,10 @@ def width_vector(text: str, width: int, seed: int = SEED) -> np.ndarray:
     """Rung 1w's stand-in for ``e``: a fixed random vector per text.
 
     A function of the text and the seed only, so one text gets one vector across
-    records and runs. Under folds split by text it carries nothing from one text
-    to another, which is what makes it measure width alone.
+    records and runs. Where the folds split by acting text it carries nothing from
+    one text to another and measures width alone. Card-level targets fold by the
+    target's card instead, so there one acting text can sit on both sides of a
+    split and the vector names it, letting a probe learn that text's usual answer.
     """
     rng = np.random.default_rng([seed, zlib.crc32(text.encode("utf-8"))])
     return rng.standard_normal(width).astype(np.float32)
