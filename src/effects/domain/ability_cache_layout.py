@@ -49,6 +49,25 @@ def cache_path_for(
     return Path(root) / relative.parent / f"{stem}{suffix}"
 
 
+def variant_of_cache_file(path: Path) -> str | None:
+    """The variant a cache file belongs to, as :func:`cache_path_for` named it.
+
+    ``<name>.{variant}.npz`` for a variant the store knows, ``<name>.npz`` for
+    ``full`` — whatever dots the source's own name holds — and None for a file
+    that is not a cache file at all.
+    """
+    from effects.domain.variants import VARIANTS
+
+    name = Path(path).name
+    if not name.endswith(CACHE_SUFFIX):
+        return None
+    stem = name[: -len(CACHE_SUFFIX)]
+    for variant in VARIANTS:
+        if variant != "full" and stem.endswith(f".{variant}"):
+            return variant
+    return "full"
+
+
 def validate_alignment(matrix: np.ndarray, sidecar: ProvenanceSidecar) -> None:
     """Raise unless ``matrix`` has one row per sidecar line.
 

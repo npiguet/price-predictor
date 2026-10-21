@@ -92,6 +92,23 @@ class TestRowAlignment:
         assert ARRAY_KEY == "e"
 
 
+class TestVariantOfACacheFile:
+    def test_each_variant_reads_back_from_the_path_it_was_written_to(self):
+        from effects.domain.ability_cache_layout import variant_of_cache_file
+        from effects.domain.variants import VARIANTS
+
+        for variant in VARIANTS:
+            assert variant_of_cache_file(cache_path_for(_SCRIPT, variant=variant)) == variant
+
+    def test_a_dot_in_a_sources_own_name_is_still_the_shipping_cache(self):
+        """The suffix is read against the variant names, not counted in dots."""
+        from effects.domain.ability_cache_layout import variant_of_cache_file
+
+        path = cache_path_for("cardsfolder/a/a.d._decoy.txt")
+        assert variant_of_cache_file(path) == "full"
+        assert variant_of_cache_file(path.with_suffix(".txt")) is None
+
+
 class TestPooling:
     def test_the_pooled_vector_is_mean_then_max(self):
         matrix = np.array([[1.0, 0.0], [3.0, 4.0]], dtype=np.float32)
