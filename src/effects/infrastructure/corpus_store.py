@@ -16,6 +16,7 @@ import json
 from pathlib import Path
 
 from effects.domain.corpus_manifest import CorpusManifest, SourceShard
+from effects.domain.strata import OUTPUT_STRATA, Stratum
 
 MANIFEST_NAME = "manifest.json"
 
@@ -30,17 +31,24 @@ class CorpusStore:
     def manifest_path(self) -> Path:
         return self.directory / MANIFEST_NAME
 
+    def output_dir(self, stratum: Stratum) -> Path:
+        """Where ``stratum``'s shards live: training at the root, the rest under
+        ``validation/``."""
+        if stratum is Stratum.TRAINING:
+            return self.directory / stratum
+        return self.directory / "validation" / stratum
+
     @property
     def training_dir(self) -> Path:
-        return self.directory / "training"
+        return self.output_dir(Stratum.TRAINING)
 
     @property
     def card_disjoint_dir(self) -> Path:
-        return self.directory / "validation" / "card-disjoint"
+        return self.output_dir(Stratum.CARD_DISJOINT)
 
     @property
     def game_disjoint_dir(self) -> Path:
-        return self.directory / "validation" / "game-disjoint"
+        return self.output_dir(Stratum.GAME_DISJOINT)
 
     @property
     def gate_one_dir(self) -> Path:
@@ -55,7 +63,7 @@ class CorpusStore:
         pointed one level up counts those records two and three times over.
         Read one directory at a time.
         """
-        return self.directory / "validation" / "gate-one"
+        return self.output_dir(Stratum.GATE_ONE)
 
     @property
     def samples_dir(self) -> Path:
@@ -80,7 +88,7 @@ class CorpusStore:
     def clear_outputs(self) -> None:
         """Delete every output directory, leaving the manifest in place.
 
-        Every output in ``OUTPUTS`` plus the samples and the parts directory:
+        Every output stratum plus the samples and the parts directory:
         each is rewritten whole by the next build.
 
         A dataset is rebuilt whole rather than extended (FR-144): the split and
@@ -97,8 +105,8 @@ class CorpusStore:
         import shutil
 
         for directory in (
-            self.training_dir, self.card_disjoint_dir, self.game_disjoint_dir,
-            self.gate_one_dir, self.samples_dir, self.parts_dir,
+            *(self.output_dir(stratum) for stratum in OUTPUT_STRATA),
+            self.samples_dir, self.parts_dir,
         ):
             shutil.rmtree(directory, ignore_errors=True)
 

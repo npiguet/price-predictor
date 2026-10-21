@@ -25,9 +25,8 @@ from effects.application.collect_variants import (
     RANDOM_SEED,
     CollectVariantsConfig,
     GeneratedVariant,
-    _deck_text,
+    _deck_candidate,
     generate_variants,
-    is_multi_face,
     loadable_variants,
     perturb_script,
     variant_budget,
@@ -36,9 +35,7 @@ from effects.application.collect_variants import (
 )
 from effects.domain.records import (
     EffectRecord,
-    Moment,
     RecordKind,
-    ResolutionPayload,
 )
 from effects.domain.script_variants import (
     MAX_NUMERIC_SHIFT,
@@ -46,6 +43,7 @@ from effects.domain.script_variants import (
     SELECTOR_WHITELIST,
     PerturbationKind,
     double,
+    is_multi_face,
     numeric_params,
     perturb,
     selector_params,
@@ -53,6 +51,7 @@ from effects.domain.script_variants import (
     variant_name,
 )
 from effects.domain.state_snapshot import GlobalState, StateSnapshot
+from tests.unit.effects.builders import make_record
 
 _SNAPSHOT = StateSnapshot(
     global_=GlobalState(
@@ -69,14 +68,9 @@ _BOLT_SCRIPT = (
 
 
 def _record(**overrides) -> EffectRecord:
-    defaults: dict = {
-        "record_id": "r.0.1", "run_id": "r", "timestamp": "t", "game_id": "r.0.1",
-        "kind": RecordKind.RESOLUTION, "moment": Moment.RESOLUTION,
-        "actor_player": "P0", "state": _SNAPSHOT,
-        "payload": ResolutionPayload(),
-    }
+    defaults: dict = {"record_id": "r.0.1", "run_id": "r", "game_id": "r.0.1"}
     defaults.update(overrides)
-    return EffectRecord(**defaults)
+    return make_record(**defaults)
 
 
 class TestVariantRecordFlags:
@@ -376,12 +370,14 @@ class TestVolumeCap:
         second invocation regenerates the same perturbations, builds the same
         decks, and collects nothing.
         """
-        from effects.infrastructure.cli import VARIANT_RANDOM_SEED
+        from effects.infrastructure.cli import build_parser
 
         assert CollectVariantsConfig().seed == RANDOM_SEED
         assert CollectVariantsConfig(seed=7).seed == 7
-        # The CLI restates the constant rather than importing it.
-        assert VARIANT_RANDOM_SEED == RANDOM_SEED
+        assert build_parser().parse_args(["collect-variants"]).seed == RANDOM_SEED
+        assert build_parser().parse_args(
+            ["collect-variants", "--seed", "7"],
+        ).seed == 7
 
     def test_two_seeds_perturb_the_same_script_differently(self, tmp_path):
         source = tmp_path / "cards"
@@ -445,13 +441,12 @@ def test_variant_name_derives_from_its_source():
 
 
 class TestRunClosesTheSupervisor:
-    """final-fix-3.md item 5: same finding, same fix shape as
-    ``collect_coverage.run`` (see ``TestRunClosesTheSupervisor`` in
-    ``test_coverage.py`` for the full rationale) -- ``run()`` built a
-    ``CollectorSupervisor`` and played a round through it, but never called
-    ``.stop()``, so the worker log handles opened for F4's latched
-    effect-record failure reporters stayed open until the interpreter exited
-    on its own.
+    """The same property as ``collect_coverage.run``'s (see
+    ``TestRunClosesTheSupervisor`` in ``test_coverage.py`` for why): a run
+    that builds a ``CollectorSupervisor`` and plays a round through it must
+    call ``.stop()``, or the worker log handles opened for the latched
+    effect-record failure reporters stay open until the interpreter exits on
+    its own.
     """
 
     def _config(self, tmp_path, **overrides):
@@ -470,7 +465,7 @@ class TestRunClosesTheSupervisor:
 
         ``generate_variants`` is stubbed out below rather than exercised for
         real, so nothing else would write this file -- and ``run()`` now
-        reads it (``_deck_text``) to build the round's decks.
+        reads it (``_deck_candidate``) to build the round's decks.
         """
         path = tmp_path / "variant-scripts" / "lightning_bolt_variant_0.txt"
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -638,8 +633,8 @@ class TestTheVariantRoundPlaysTheVariants:
         assert supervisor.play_round.call_args.kwargs["matches"] == 3
 
 
-class TestDeckTextManaCostIsParseable:
-    """Fix round 1: `_deck_text` rendered the perturbed *script's* raw
+class TestVariantManaCostIsParseable:
+    """A variant's cost once reached the manabase as the perturbed *script's* raw
     ``ManaCost:`` line verbatim -- Forge's own space-separated shards, e.g.
     ``"2 R R"``. `compute_basic_lands` reads its input through
     `convert_mana_cost`, which extracts mana symbols with a ``{...}`` regex
@@ -673,9 +668,9 @@ class TestDeckTextManaCostIsParseable:
 
         from effects.application.collect_coverage import build_coverage_decks
 
-        texts = {variant.name: _deck_text(variant)}
         decks = build_coverage_decks(
-            {variant.name: 1.0}, texts, 1, rng=random.Random(0),
+            {variant.name: 1.0}, {variant.name: _deck_candidate(variant)}, 1,
+            rng=random.Random(0),
         )
 
         deck = decks[0]
@@ -693,7 +688,6 @@ class TestDeckTextManaCostIsParseable:
         ``convert_mana_cost`` rejoins them back to the exact literal
         ``ManaCost.parse`` special-cases, rather than the fix turning a land
         into a card with bogus, unparseable mana symbols."""
-        from effects.application.collect_coverage import _NonlandText
         from sealed.domain.manabase import compute_basic_lands
 
         path = tmp_path / "plains_variant.txt"
@@ -709,13 +703,45 @@ class TestDeckTextManaCostIsParseable:
         # Zero pips either way -- the point is this must land in the same
         # all-zero-pips (colorless-fallback) case a missing ManaCost: line
         # does, not raise and not inject a spurious color.
-        lands = compute_basic_lands([_NonlandText(_deck_text(variant))] * 23)
+        lands = compute_basic_lands([_deck_candidate(variant)] * 23)
         assert sum(lands.values()) == 17
         assert set(lands) == {"Plains", "Island", "Swamp", "Mountain", "Forest"}
 
 
+class TestTheVariantCandidateMatchesAConvertedCard:
+    def test_a_variant_hands_the_manabase_what_a_converted_card_would(
+        self, tmp_path,
+    ):
+        """The same cost reaches ``compute_basic_lands`` from either source, so
+        a variant gets the basics a converted card of that cost gets."""
+        from effects.domain.coverage import DeckCandidate
+
+        path = tmp_path / "bolt_variant.txt"
+        path.write_text(
+            "Name:Bolt Variant 0\nManaCost:2 R R\nTypes:Instant\n",
+            encoding="utf-8",
+        )
+        variant = GeneratedVariant(
+            name="Bolt Variant 0", source_card="Bolt", path=path,
+            perturbation="numeric",
+        )
+
+        assert _deck_candidate(variant) == DeckCandidate.from_converted_text(
+            "Bolt Variant 0", "name: bolt variant 0\nmana cost: {2}{R}{R}\n",
+        )
+
+    def test_a_script_without_a_cost_names_none(self, tmp_path):
+        path = tmp_path / "x.txt"
+        path.write_text("Name:X Variant 0\nTypes:Instant\n", encoding="utf-8")
+        variant = GeneratedVariant(
+            name="X Variant 0", source_card="X", path=path, perturbation="numeric",
+        )
+
+        assert _deck_candidate(variant).mana_cost is None
+
+
 class TestTheRunReportsWhatItCollected:
-    """Final review, IMPORTANT 5: ``run`` returned 0 with no evidence that a
+    """``run`` used to return 0 with no evidence that a
     single variant record had been written.
 
     It counted the corpus once, before play, purely to size the budget, and
@@ -850,7 +876,7 @@ class TestTheRunReportsWhatItCollected:
     def test_an_interrupted_round_does_not_report_success(
         self, tmp_path, monkeypatch,
     ):
-        """Final review, IMPORTANT 3, on the variant side: ``ForgeWorkerPool``
+        """Ctrl-C on the variant side: ``ForgeWorkerPool``
         swallows SIGINT, so a round the operator stopped returns exactly like
         one that finished."""
         collect_variants, config, supervisor = self._fixture(

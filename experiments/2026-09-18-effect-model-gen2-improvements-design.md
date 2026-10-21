@@ -1024,6 +1024,13 @@ keyword's expansion lands far from the vector of the trained keyword it defines.
    measurement the design doc specifies: the effect head's per-field results on records where the
    withheld keyword acts or sits on the board, beside the same fields for keywords that trained.
 
+Every gen-2 arm deleted cascade instead of expanding it, so its zero-shot slice does not measure what
+step 1 sets out. The batcher removed the withheld keyword's token before expansion ran, and the
+expansion it should have forced never happened. A cascade line reached the encoder as its `[CLS]`
+token alone, in training and in evaluation. The slice therefore compares records whose acting or
+board ability is missing with records whose abilities trained, which is not a test of reading a
+keyword through its definition. The gen-3 design draft records the fix and what it changes.
+
 ### The script tokenizer is never called, and the prose grammar that runs in its place splits selectors better
 
 `AbilityTokenizer.tokenize_script` is the tokenizer written for the script surface, and no code

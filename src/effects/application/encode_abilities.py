@@ -23,12 +23,12 @@ import numpy as np
 
 from effects.domain.ability_cache_layout import DEFAULT_CACHE_ROOT
 from effects.domain.provenance import ProvenanceSidecar, SidecarLine
+from effects.domain.variants import Variant
 from effects.infrastructure.ability_cache_store import AbilityCacheStore
 from effects.infrastructure.effect_model_store import (
-    VARIANT_FULL,
-    EffectModelStore,
+    InferenceCheckpoint,
+    load_for_inference,
     model_output_for,
-    resolve_inference_paths,
 )
 from effects.infrastructure.sidecar_io import SIDECAR_SUFFIX, prose_for, read_sidecar
 
@@ -37,12 +37,11 @@ logger = logging.getLogger(__name__)
 DEFAULT_CARDS_FOLDERS: tuple[Path, ...] = (
     Path("output/cardsfolder/"), Path("output/tokenscripts/"),
 )
-VARIANT_TAXONOMY = "taxonomy"
 
 
 @dataclass
 class EncodeAbilitiesConfig:
-    variant: str = VARIANT_FULL
+    variant: str = Variant.FULL
     checkpoint: Path | None = None
     cards_folders: tuple[Path, ...] = DEFAULT_CARDS_FOLDERS
     variant_scripts: Path | None = None
@@ -126,12 +125,12 @@ def encode_sidecar(
     """
     if not sidecar.lines:
         return np.zeros((0, e_dim), dtype=np.float32)
-    if variant == VARIANT_TAXONOMY:
+    if variant == Variant.TAXONOMY:
         rows = [taxonomy_vector(line, e_dim) for line in sidecar.lines]
         return np.stack(rows).astype(np.float32)
     if encode_lines is None:
         raise ValueError(
-            f"--variant {variant} needs an encoder; only {VARIANT_TAXONOMY} "
+            f"--variant {variant} needs an encoder; only {Variant.TAXONOMY} "
             "can be emitted without one"
         )
     return encode_lines(sidecar, sidecar_path).astype(np.float32)
@@ -145,16 +144,22 @@ def run(config: EncodeAbilitiesConfig, *, encode_lines=None) -> EncodeSummary:
     training stops the run rather than filling the cache with vectors that mean
     nothing.
 
-    ``encode_lines`` is injected so the pure pass is testable with no torch; the
-    CLI supplies :func:`build_encode_lines`, which loads the checkpoint's
-    encoder once and batches.
+    ``encode_lines`` is injected so the pure pass is testable with no torch;
+    left out, it is :func:`build_encode_lines` over the checkpoint already
+    loaded here, which builds the encoder once and batches.
     """
     store = AbilityCacheStore(config.output_root, variant=config.variant)
     cleaned = store.clean() if config.clean else 0
 
-    e_dim, provenance = _load_checkpoint_facts(config)
-    if encode_lines is None and config.variant != VARIANT_TAXONOMY:
-        encode_lines = build_encode_lines(config)
+    # Loaded once and hash-checked before anything is written.
+    loaded = load_for_inference(
+        config.resolved_checkpoint(),
+        vocab_path=config.vocab_path, keyword_path=config.keyword_definitions,
+    )
+    e_dim = loaded.checkpoint.encoder_config.e_dim
+    provenance = loaded.checkpoint.provenance
+    if encode_lines is None and config.variant != Variant.TAXONOMY:
+        encode_lines = build_encode_lines(loaded)
 
     folders = [Path(f) for f in config.cards_folders if Path(f).is_dir()]
     if config.variant_scripts and Path(config.variant_scripts).is_dir():
@@ -208,46 +213,29 @@ def truncated_lines(
     return cut
 
 
-def build_encode_lines(config: EncodeAbilitiesConfig):
+def build_encode_lines(loaded: InferenceCheckpoint):
     """The real encoder as a ``sidecar -> (n_lines, e_dim)`` callable.
 
-    Loaded once for the whole run: the checkpoint read and the weights moved to
-    the device are the expensive part, and doing them per card would dominate
-    the encode.
+    Built once for the whole run: moving the weights to the device is the
+    expensive part, and doing it per card would dominate the encode.
     """
-    from effects.application.extract_keyword_definitions import (
-        load_keyword_definitions,
-    )
     from effects.domain.ability_encoder import (
         TruncationLog,
         log_truncation,
         surface_of,
     )
-    from effects.domain.ability_tokenizer import AbilityTokenizer, tokenizer_surface
     from effects.infrastructure.ability_encoder_runner import (
         AbilityEncoderRunner,
     )
+    from effects.infrastructure.model_runner import tokenizer_for
     from effects.infrastructure.sidecar_io import (
         converted_text_path,
         prose_lines,
     )
-    from price_predictor.infrastructure.tokenizer_store import load_vocabulary
 
-    path = config.resolved_checkpoint()
-    checkpoint = EffectModelStore(path.parent).load(path)
-    vocab_path, keyword_path = resolve_inference_paths(
-        checkpoint.provenance,
-        vocab_path=config.vocab_path,
-        keyword_path=config.keyword_definitions,
-    )
-    definitions = (
-        load_keyword_definitions(keyword_path) if keyword_path.exists() else {}
-    )
+    checkpoint, vocab_path, keyword_path = loaded
     surface = surface_of(vocab_path)
-    tokenizer = AbilityTokenizer(
-        load_vocabulary(vocab_path), definitions,
-        surface=tokenizer_surface(surface, checkpoint.training_settings),
-    )
+    tokenizer = tokenizer_for(checkpoint, vocab_path, keyword_path)
     runner = AbilityEncoderRunner.from_checkpoint(
         checkpoint, tokenizer, vocab_path=vocab_path,
     )
@@ -262,18 +250,3 @@ def build_encode_lines(config: EncodeAbilitiesConfig):
         return runner.encode_sidecar_lines(sidecar, prose)
 
     return encode_lines
-
-
-def _load_checkpoint_facts(config: EncodeAbilitiesConfig):
-    """The bottleneck width and the provenance, hash-checked before any write."""
-    path = config.resolved_checkpoint()
-    checkpoint = EffectModelStore(path.parent).load(path)
-    vocab_path, keyword_path = resolve_inference_paths(
-        checkpoint.provenance,
-        vocab_path=config.vocab_path,
-        keyword_path=config.keyword_definitions,
-    )
-    checkpoint.provenance.verify_hashes(
-        vocab_path=vocab_path, keyword_path=keyword_path,
-    )
-    return checkpoint.encoder_config.e_dim, checkpoint.provenance

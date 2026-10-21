@@ -25,6 +25,7 @@ Pure dataclasses with no torch and no IO — serialization lives in
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 from enum import StrEnum
 
@@ -89,7 +90,7 @@ class RewriteResult(StrEnum):
     This is the field that makes the ``rewrite`` channel readable at all. Only
     ``Replaced`` and ``Updated`` can edit the event's parameter map, and only
     then when the substituted ability happens to write one; every other outcome
-    is a bare ``return`` in ``executeReplacementInternal``. Without ``result``,
+    is a bare ``return`` in ``executeReplacementUnobserved``. Without ``result``,
     "enters tapped", "exile it instead" and "prevent that damage" all record as
     an event that came out exactly as it went in.
     """
@@ -640,6 +641,55 @@ def events_of(record: EffectRecord) -> tuple[Event, ...]:
     if isinstance(payload, TriggerPayload):
         return (payload.event,) if payload.fired else ()
     return ()
+
+
+def pair_forks(records: list[EffectRecord]) -> list[tuple[EffectRecord, EffectRecord]]:
+    """Join each fork record to the real record it mirrors, as ``(real, fork)``.
+
+    The pairing lives in ``mirror_of`` rather than being reconstructed from
+    board state, because two combats on one turn can look identical and the
+    pairing has to be exact for the difference to mean anything.
+    """
+    by_id = {record.record_id: record for record in records}
+    pairs = []
+    for record in records:
+        if record.fork and record.mirror_of:
+            real = by_id.get(record.mirror_of)
+            if real is not None:
+                pairs.append((real, record))
+    return pairs
+
+
+def key_sites(record: EffectRecord) -> Iterator[ProvenanceKey]:
+    """Every printed-line key a record names, except its emblems', in record order.
+
+    The acting ``ability``; each entity's ``printed``, ``granted_attached`` and
+    ``granted_temporary`` keys; and every key its payload carries — a
+    decision's candidates and their ``responsible_static``, a legality
+    record's ``forbidden`` statics, a rewrite's ``replaced_by``. One walk, so a
+    payload field that gains keys is added here once rather than in each
+    consumer that has to see every key.
+
+    Emblems are left out: an emblem's traits are built by the engine and key to
+    a script path that exists in no converted tree, so a consumer joining keys
+    to sidecars would report every planeswalker ultimate as a mismatch.
+    """
+    if record.ability:
+        yield from record.ability
+    for entity in record.state.entities:
+        yield from entity.printed
+        yield from entity.granted_attached
+        yield from entity.granted_temporary.abilities
+    payload = record.payload
+    if isinstance(payload, PlayabilityDecisionPayload):
+        for candidate in payload.candidates:
+            yield from candidate.ability
+            yield from candidate.responsible_static
+    elif isinstance(payload, (PlayabilityAttackersPayload, PlayabilityBlockersPayload)):
+        for forbidden in payload.forbidden:
+            yield from forbidden.responsible_static
+    elif isinstance(payload, RewritePayload):
+        yield from payload.replaced_by
 
 
 def acting_keys(record: EffectRecord) -> tuple[ProvenanceKey, ...]:

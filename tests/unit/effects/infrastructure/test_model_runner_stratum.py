@@ -5,11 +5,12 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 from effects.domain.provenance import ProvenanceKey
-from effects.domain.records import EffectRecord, Moment, RecordKind, ResolutionPayload
+from effects.domain.records import EffectRecord
 from effects.domain.state_snapshot import GlobalState, StateSnapshot
 from effects.infrastructure.effect_model_store import SplitProvenance
 from effects.infrastructure.model_runner import stratum_records
 from effects.infrastructure.record_io import write_shard
+from tests.unit.effects.builders import make_record
 
 _SNAPSHOT = StateSnapshot(
     global_=GlobalState(turn=1, phase="main1", active="P0", priority="P0", stack_size=0),
@@ -22,10 +23,8 @@ def _key(name: str) -> ProvenanceKey:
 
 
 def _record(game: str, number: int, ability) -> EffectRecord:
-    return EffectRecord(
-        record_id=f"{game}.{number}", run_id="r", timestamp="t", game_id=game,
-        kind=RecordKind.RESOLUTION, moment=Moment.RESOLUTION, actor_player="P0",
-        state=_SNAPSHOT, payload=ResolutionPayload(), ability=ability,
+    return make_record(
+        record_id=f"{game}.{number}", run_id="r", game_id=game, ability=ability,
     )
 
 

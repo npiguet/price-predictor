@@ -15,11 +15,11 @@ import torch
 from effects.application import training_loop as loop_module
 from effects.application.train_effect_model import (
     EarlyStopper,
-    HeldOutCards,
     TrainEffectModelConfig,
 )
-from effects.application.training_loop import TrainingLoop
+from effects.application.training_loop import StepLoss, TrainingLoop
 from effects.domain.records import CombatPayload, RecordKind
+from effects.domain.split import CorpusSplit
 from effects.infrastructure.record_io import write_shard
 from effects.infrastructure.sidecar_io import SidecarCache
 from tests.unit.effects.domain.conftest import (  # noqa: F401
@@ -75,7 +75,8 @@ def run(tmp_path, make_record, monkeypatch):  # noqa: F811
 
     def loss_for(self, plan, *args, fields=None, **kwargs):
         events.append(("loss", id(fields), model.training))
-        return model.p.sum(), {}
+        loss = model.p.sum()
+        return StepLoss(total=loss, shipped=loss, parts={}, terms={})
 
     def validate(self, records, *args, parts=None, fields=None, **kwargs):
         events.append(("validate", id(fields), model.training))
@@ -113,8 +114,7 @@ def run(tmp_path, make_record, monkeypatch):  # noqa: F811
         prefetch_workers=0,
     )
     code = TrainingLoop(
-        config, held_out=HeldOutCards(names=frozenset(), script_files=frozenset()),
-        inherited=None, training_shards=[shard], validation_samples=samples,
+        config, split=CorpusSplit(), training_shards=[shard], validation_samples=samples,
         holdout_permille=20, holdout_max_carriers=8, gate_one_records=0,
         rarity={}, corpus_digest="",
     ).execute()

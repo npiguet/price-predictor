@@ -514,6 +514,7 @@ class AbilityTokenizer:
         probability: float = 0.0,
         rng: random.Random | None = None,
         instance_values: dict[str, list[str]] | None = None,
+        forced: frozenset[str] = frozenset(),
     ) -> list[Token]:
         """Replace some keywords with their definitions.
 
@@ -526,17 +527,22 @@ class AbilityTokenizer:
         expandable keyword unknown to the vocabulary is expanded, a known one
         with probability ``probability`` (FR-014). ``instance_values`` supplies
         already-formatted values for a keyword, by its token form; without
-        them a template's unfilled placeholders are removed.
+        them a template's unfilled placeholders are removed. A keyword whose
+        token form is in ``forced`` always expands, as an unknown one does:
+        that is how ``--withhold-keyword`` shows the model a keyword's
+        definition and never its token. An empty ``forced`` takes exactly the
+        draws it always took.
         """
         rng = rng or random.Random()
         values = instance_values or {}
         line = tokens[0].keyword_line if tokens else None
         if line is not None:
-            return self._expand_line(tokens, line, probability, rng, values)
+            return self._expand_line(tokens, line, probability, rng, values, forced)
         out: list[Token] = []
         for token in tokens:
             if self.must_expand(token) or (
-                self.expandable(token) and rng.random() < probability
+                self.expandable(token)
+                and (token.text in forced or rng.random() < probability)
             ):
                 out.extend(self._expansion(token, values.get(token.text)))
             else:
@@ -550,6 +556,7 @@ class AbilityTokenizer:
         probability: float,
         rng: random.Random,
         values: dict[str, list[str]],
+        forced: frozenset[str] = frozenset(),
     ) -> list[Token]:
         if not self._line_expandable(line):
             return list(tokens)
@@ -559,9 +566,9 @@ class AbilityTokenizer:
         unknown = not name_tokens or any(
             t.token_id == self.unk_id for t in name_tokens
         )
-        if not (unknown or rng.random() < probability):
-            return list(tokens)
         form = keyword_token(line.name)
+        if not (unknown or form in forced or rng.random() < probability):
+            return list(tokens)
         text = self.expansion_text(line.name, line.details, values.get(form))
         return self._as_expansion(text, role=tokens[0].role, keyword=form)
 

@@ -13,6 +13,8 @@ contract test.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from effects.infrastructure.cli import build_parser
@@ -32,7 +34,7 @@ class TestBuildVocab:
         assert args.surface == "prose"
         assert args.cards_folders is None  # resolved to both converted trees
         assert args.vocab_path is None  # resolved per surface
-        assert args.keyword_definitions == "output/effects/keyword-definitions.json"
+        assert args.keyword_definitions == Path("output/effects/keyword-definitions.json")
         assert args.target_size == 5000
 
     def test_cards_folder_is_repeatable(self):
@@ -56,21 +58,21 @@ class TestBuildVocab:
 
     def test_an_explicit_vocab_path_is_carried(self):
         args = parse("build-vocab", "--vocab-path", "models/x.txt")
-        assert args.vocab_path == "models/x.txt"
+        assert args.vocab_path == Path("models/x.txt")
 
 
 class TestExtractKeywordDefinitions:
     def test_the_output_default_is_the_contracts(self):
         args = parse("extract-keyword-definitions")
-        assert args.output == "output/effects/keyword-definitions.json"
+        assert args.output == Path("output/effects/keyword-definitions.json")
 
 
 class TestTrainEffectModel:
     def test_the_path_defaults_are_the_contracts(self):
         args = parse(*TRAIN)
         assert args.corpus == "output/effects/corpus"
-        assert args.vocab_path == "models/effects/vocab.txt"
-        assert args.keyword_definitions == "output/effects/keyword-definitions.json"
+        assert args.vocab_path == Path("models/effects/vocab.txt")
+        assert args.keyword_definitions == Path("output/effects/keyword-definitions.json")
         assert args.model_output is None  # resolved from --variant
         assert args.split_from is None
         assert args.variant_scripts is None
@@ -126,24 +128,12 @@ class TestTrainEffectModel:
 
 
 class TestVariantAcceptsCorpusAtThePreflightCheck:
-    """Task 7 fix round 1, Finding 2's CLI-layer gap.
+    """A baseline variant with ``--corpus`` and no ``--split-from`` reaches the
+    trainer: the curated dataset's manifest is the split it inherits.
 
-    ``require_split_from`` was fixed to accept ``--corpus`` as an alternative
-    to ``--split-from`` for a non-``full`` variant, but ``cli.py``'s own
-    ``run_train_effect_model`` calls it a second time, earlier, as a
-    pre-flight check, before ``train_config_from``/``run`` ever run. That call
-    was not updated alongside the library fix, so ``python -m effects
-    train-effect-model --variant identity --corpus DIR`` was still rejected at
-    the door — a gap the existing ``require_split_from`` unit tests cannot
-    see, because they call the function directly and never touch this second
-    call site. ``--corpus`` is required at the parser now, so this pre-flight
-    call can never raise ``MissingSplitError`` from here — it is a defensive
-    assertion, not a caught failure mode.
-
-    The real trainer entry point (``train_effect_model.run``) is
-    monkeypatched out in the accepted case, so getting past the pre-flight
-    check is what these tests prove — not a full training run — and neither
-    case imports torch or reads a real corpus off disk.
+    The real trainer entry point (``train_effect_model.run``) is monkeypatched
+    out, so getting past the CLI is what these tests prove, not a full training
+    run, and neither case imports torch or reads a real corpus off disk.
     """
 
     def test_a_variant_with_corpus_gets_past_the_preflight_check(self, monkeypatch):
@@ -216,7 +206,7 @@ class TestEncodeAbilities:
         args = parse("encode-abilities")
         assert args.variant == "full"
         assert args.checkpoint is None  # resolved from --variant
-        assert args.output_root == "output/effects/abilities/"
+        assert args.output_root == Path("output/effects/abilities/")
         assert args.clean is False
 
     def test_the_vocabulary_paths_default_to_the_checkpoints(self):
@@ -238,8 +228,8 @@ class TestEncodeAbilities:
 class TestEvaluateEffectModel:
     def test_the_defaults_are_the_contracts(self):
         args = parse("evaluate-effect-model")
-        assert args.checkpoint == "models/effects/effect-model/latest.pt"
-        assert args.records_dir == "output/effects/records/"
+        assert args.checkpoint == Path("models/effects/effect-model/latest.pt")
+        assert args.records_dir == Path("output/effects/records/")
         assert args.variant_checkpoints is None
         assert not hasattr(args, "sealed_encoder_checkpoint")
 
@@ -313,8 +303,8 @@ class TestBuildCorpus:
 
     def test_the_path_defaults_are_the_contracts(self):
         args = parse("build-corpus")
-        assert args.records_dir == "output/effects/records/"
-        assert args.output == "output/effects/corpus/"
+        assert args.records_dir == Path("output/effects/records/")
+        assert args.output == Path("output/effects/corpus/")
         assert args.cards_folders is None  # resolved to both converted trees
         assert args.vocab_path == "models/effects/vocab.txt"
         assert args.variant_scripts is None
@@ -351,8 +341,6 @@ class TestBuildCorpus:
 
     def test_the_parsed_defaults_and_the_configs_own_agree(self):
         """Two default surfaces for one flag set, and only this compares them."""
-        from pathlib import Path
-
         from effects.application.build_corpus import BuildCorpusConfig
 
         args = parse("build-corpus")

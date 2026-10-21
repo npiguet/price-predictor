@@ -16,6 +16,7 @@ therefore names different things on the two sides. Printed provenance is stable.
 
 from __future__ import annotations
 
+import functools
 from dataclasses import dataclass, field
 from enum import StrEnum
 
@@ -27,6 +28,17 @@ SOURCE_TREES: tuple[str, ...] = ("cardsfolder", "tokenscripts", "variant-scripts
 
 # Prose role tags spanning the converted text of one line.
 ROLES: tuple[str, ...] = ("cost", "effect", "trigger-condition", "target-spec")
+
+#: The fields every key's dict form carries; ``option`` is the one written only
+#: when set. What tells a key dict from any other mapping in a record's raw JSON.
+KEY_DICT_FIELDS: frozenset[str] = frozenset({
+    "script_file", "face", "trait_kind", "index_within_kind",
+})
+
+# The one-string form's separators: between a key's fields, and between the
+# keys of a tuple.
+_KEY_FIELD_SEPARATOR = "|"
+_KEY_SEPARATOR = ";"
 
 
 class KeyResolution(StrEnum):
@@ -103,6 +115,32 @@ class ProvenanceKey:
         del out["script_file"]
         return out
 
+    def render(self) -> str:
+        """The key as one string: ``script_file|face|trait_kind|index[|option]``.
+
+        The spelling a build manifest and the corpus survey key on, so it is
+        as frozen as the record's JSON form. ``|`` cannot occur in a script
+        path, and ``option`` is written only when set, as in :meth:`as_dict`.
+        """
+        fields = [
+            self.script_file, str(self.face), self.trait_kind,
+            str(self.index_within_kind),
+        ]
+        if self.option is not None:
+            fields.append(str(self.option))
+        return _KEY_FIELD_SEPARATOR.join(fields)
+
+    @classmethod
+    def parse(cls, rendered: str) -> ProvenanceKey:
+        """The inverse of :meth:`render`."""
+        script_file, face, trait_kind, index, *option = rendered.split(
+            _KEY_FIELD_SEPARATOR,
+        )
+        return cls(
+            script_file, int(face), trait_kind, int(index),
+            int(option[0]) if option else None,
+        )
+
     @classmethod
     def from_dict(cls, data: dict, *, script_file: str | None = None) -> ProvenanceKey:
         """Parse a key, taking ``script_file`` from the sidecar's header.
@@ -123,6 +161,23 @@ class ProvenanceKey:
             index_within_kind=int(data["index_within_kind"]),
             option=None if data.get("option") is None else int(data["option"]),
         )
+
+
+def render_keys(keys: tuple[ProvenanceKey, ...]) -> str:
+    """A whole key tuple as one hashable string, keys joined by ``;``."""
+    return _KEY_SEPARATOR.join(key.render() for key in keys)
+
+
+@functools.lru_cache(maxsize=None)
+def parse_keys(rendered: str) -> tuple[ProvenanceKey, ...]:
+    """The inverse of :func:`render_keys`.
+
+    Cached because a build's decision pass parses each rendered key several
+    times over, and the distinct keys are bounded by the card pool's traits
+    rather than by the corpus. Safe to share: the tuple and its keys are
+    immutable.
+    """
+    return tuple(ProvenanceKey.parse(part) for part in rendered.split(_KEY_SEPARATOR))
 
 
 @dataclass(frozen=True, slots=True)

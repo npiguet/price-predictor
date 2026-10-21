@@ -16,20 +16,19 @@ from __future__ import annotations
 
 import hashlib
 import random
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 
 import numpy as np
 import torch
 
-from effects.application.train_effect_model import (
-    VariantMasks,
-    withheld_keyword_rules,
-)
+from effects.application.ability_text import KeyResolver
+from effects.application.train_effect_model import withheld_keyword_tokens
 from effects.domain.ability_encoder import (
     AbilityEncoder,
     TruncationLog,
     collate_lines,
-    encoding_text,
     prepare_line,
 )
 from effects.domain.ability_tokenizer import AbilityTokenizer
@@ -42,7 +41,7 @@ from effects.domain.effect_head_input import (
 )
 from effects.domain.effect_model import collate_surfaces, scatter_e_rows
 from effects.domain.records import PlayabilityDecisionPayload, acting_keys
-from effects.infrastructure.sidecar_io import UnconfiguredTree
+from effects.domain.variants import VariantMasks
 
 #: Rows in the ``identity`` baseline's free-embedding table. Ample for the
 #: corpus's distinct ability texts, so collisions stay rare.
@@ -156,6 +155,22 @@ class NoiseState:
         #: ``V √Λ`` of the last factorized ``Σ`` and the draw it was taken at.
         self._factor: torch.Tensor | None = None
         self._draws_since_factor = 0
+
+    def state_dict(self) -> dict:
+        """Everything a resumed run needs to draw the noise the next step would."""
+        return {
+            "sigma": self.sigma, "step": self.step,
+            "factor": self._factor, "draws_since_factor": self._draws_since_factor,
+        }
+
+    def load_state_dict(self, state: dict, device: torch.device) -> None:
+        def on(tensor):
+            return tensor.to(device) if tensor is not None else None
+
+        self.sigma = on(state["sigma"])
+        self.step = state["step"]
+        self._factor = on(state["factor"])
+        self._draws_since_factor = state["draws_since_factor"]
 
     def scale(self) -> float:
         """``r`` at the current step."""
@@ -327,6 +342,7 @@ class SurfaceBatcher:
         noise: NoiseState | None = None,
         truncations: TruncationLog | None = None,
         input_layout: str | None = INPUT_LAYOUT,
+        resolver: KeyResolver | None = None,
     ) -> None:
         self.tokenizer = tokenizer
         #: The input layout every surface is built in (FR-063c): training's
@@ -351,50 +367,20 @@ class SurfaceBatcher:
         #: The last ``build``'s unique texts and their ``e`` rows.
         self.encoded: EncodedBatch | None = None
         self._prepared: list = []
-        #: ``key -> option-line keys after its line``, memoised like the text.
-        self._options_by_key: dict[object, tuple] = {}
-        #: ``key -> (text, line)``, the join's answer for one key on this
-        #: run's surface. ``SidecarCache`` already reads each card once, but
-        #: the *key* is still resolved three or four times per batch — once by
-        #: ``batch_texts`` and again by ``has_line`` and ``e_for`` for every
-        #: record the key's entity appears in — and each of those walks the
-        #: sidecar's lines and re-renders the text. The answer depends only on
-        #: the key and on ``self.surface``, both fixed for the batcher's life,
-        #: so it is computed once. (Swapping ``self.sidecars`` after the fact
-        #: would serve stale answers; nothing but the tests does that.)
-        self._text_by_key: dict[object, tuple[str | None, object]] = {}
+        #: The key-to-text join, memoised. A training step's batcher borrows
+        #: the run's, so the answers outlive the step.
+        self.resolver = resolver or KeyResolver(sidecars, surface)
+        #: ``key -> (text, line)`` for the keys this batcher stood in for
+        #: (:meth:`stand_in`). Kept apart from the resolver's memo, because a
+        #: counterfactual copy's text belongs to its step alone.
+        self._staged: dict[object, tuple[str, object]] = {}
 
     # ── the encoding text ───────────────────────────────────────────────
 
     def _resolve(self, key) -> tuple[str | None, object]:
-        """``(text, line)`` for one key, memoised; see ``_text_by_key``.
-
-        The mismatch ``KeyError`` is deliberately not cached — it is raised
-        from inside the ``try`` and nothing is stored — because a failure
-        remembered as "no text" is exactly the fail-loudly case going quiet.
-        """
-        cached = self._text_by_key.get(key)
-        if cached is not None:
-            return cached
-        try:
-            line = self.sidecars.line_for(key)
-        except UnconfiguredTree:
-            line = None
-        if line is None:
-            resolved: tuple[str | None, object] = (None, None)
-        else:
-            text = encoding_text(
-                line, self.sidecars.prose_for(key), self.surface,
-            )
-            resolved = (
-                text or (
-                    f"{key.script_file}:{key.trait_kind}:"
-                    f"{key.index_within_kind}"
-                ),
-                line,
-            )
-        self._text_by_key[key] = resolved
-        return resolved
+        """``(text, line)`` for one key: a staged stand-in, else the join."""
+        staged = self._staged.get(key)
+        return staged if staged is not None else self.resolver.resolve(key)
 
     def text_of(self, key) -> str | None:
         """The text one ability key is encoded from, on this run's surface.
@@ -419,8 +405,25 @@ class SurfaceBatcher:
         is the real line's with the amount edited, and everything read off the
         line itself, such as the API type, is the real line's.
         """
-        self._text_by_key[key] = (text, self.line_of(like))
-        self._options_by_key[key] = ()
+        self._staged[key] = (text, self.line_of(like))
+
+    @contextmanager
+    def reading_as(self, key, text: str) -> Iterator[None]:
+        """Inside the block ``key`` reads ``text``, keeping its own line.
+
+        How a probe edits one ability's script — a damage amount, a card count —
+        and has the checkpoint's own encoder read the edit with nothing else
+        moved. The key's previous reading is back when the block ends.
+        """
+        previous = self._staged.get(key)
+        self.stand_in(key, text, like=key)
+        try:
+            yield
+        finally:
+            if previous is None:
+                del self._staged[key]
+            else:
+                self._staged[key] = previous
 
     def batch_texts(self, records) -> dict[str, object]:
         """Every ability text this batch's surfaces reference, to its line.
@@ -456,29 +459,9 @@ class SurfaceBatcher:
     def options_for(self, key) -> tuple:
         """The keys of the charm-mode lines that follow ``key``'s line (FR-063a).
 
-        Empty for every line that is not a charm's root, and for a sidecar
-        source that cannot say (a stub, an unconverted script).
+        A stood-in key has none: it is one mode's or one spell's edited copy.
         """
-        cached = self._options_by_key.get(key)
-        if cached is not None:
-            return cached
-        found: tuple = ()
-        get = getattr(self.sidecars, "get", None)
-        # A mode is never a root: its siblings follow it in the sidecar too,
-        # and must not be read as its own options.
-        if get is not None and getattr(key, "option", None) is None:
-            try:
-                sidecar = get(key.script_file)
-                row = sidecar.row_for(key)
-            except KeyError:
-                row = None
-            if row is not None:
-                found = tuple(
-                    next(k for k in sidecar.lines[r].provenance if k.option is not None)
-                    for r in sidecar.option_rows_after(row)
-                )
-        self._options_by_key[key] = found
-        return found
+        return () if key in self._staged else self.resolver.options_for(key)
 
     # ── the ability vectors ─────────────────────────────────────────────
 
@@ -550,15 +533,23 @@ class SurfaceBatcher:
         return vectors
 
     def prepare_texts(self, ordered: list[str]) -> list:
-        """Each text tokenized, withheld keyword hidden, keywords expanded."""
-        hidden_keywords, _force = withheld_keyword_rules(self.withhold_keyword)
+        """Each text tokenized and its keywords expanded, the withheld one always.
+
+        A withheld keyword's token survives only where it has no definition to
+        expand to; there it is dropped, so the model never reads the token.
+        """
+        withheld = withheld_keyword_tokens(self.withhold_keyword)
         lines = []
         for text in ordered:
-            tokens = self.tokenizer.tokenize(text)
-            tokens = [t for t in tokens if t.text not in hidden_keywords]
             tokens = self.tokenizer.expand_keywords(
-                tokens, probability=self.keyword_expand_p, rng=self.rng,
+                self.tokenizer.tokenize(text),
+                probability=self.keyword_expand_p, rng=self.rng, forced=withheld,
             )
+            if withheld:
+                tokens = [
+                    t for t in tokens
+                    if t.expanded_from is not None or t.text not in withheld
+                ]
             line = prepare_line(self.tokenizer, tokens)
             if line.truncated and self.truncations is not None:
                 self.truncations.note(text, self._keys_of(text))
@@ -567,7 +558,8 @@ class SurfaceBatcher:
 
     def _keys_of(self, text: str) -> list:
         """The keys resolved to ``text`` so far: how a truncation is named."""
-        return [key for key, (known, _) in self._text_by_key.items() if known == text]
+        staged = [key for key, (known, _) in self._staged.items() if known == text]
+        return self.resolver.keys_of(text) + staged
 
     def mlm_inputs(self, encoder: AbilityEncoder, mask_prob: float):
         """The MLM pass over the last build's texts (FR-060b).
@@ -578,7 +570,7 @@ class SurfaceBatcher:
         the corruption shapes only what the encoder's token outputs must
         recover.
 
-        Returns ``(hidden, targets, None)`` on the device, already reduced to the
+        Returns ``(hidden, targets)`` on the device, already reduced to the
         masked positions, or None when nothing was masked. The mask is drawn and
         the positions picked on the host, so the device never has to report
         which they were; and the vocabulary projection then runs over the
@@ -621,7 +613,7 @@ class SurfaceBatcher:
         selected = hidden.reshape(-1, hidden.shape[-1]).index_select(
             0, masked.positions.to(self.device, non_blocking=True),
         )
-        return selected, masked.targets.to(self.device, non_blocking=True), None
+        return selected, masked.targets.to(self.device, non_blocking=True)
 
     def _taxonomy_vectors(
         self, ordered: list[str], lines: dict[str, object],

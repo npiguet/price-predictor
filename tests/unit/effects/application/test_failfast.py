@@ -14,20 +14,21 @@ import pytest
 from effects.application.train_effect_model import (
     LEARNING_RATE,
     MAX_GRAD_NORM,
-    VARIANT_FULL,
-    VARIANTS,
-    ContextCache,
     EarlyStopper,
     MissingSplitError,
     TrainEffectModelConfig,
     learning_rate_at,
     require_split_from,
-    variant_masks,
     warmup_steps,
-    withheld_keyword_rules,
+    withheld_keyword_tokens,
 )
 from effects.domain.ability_encoder import AbilityEncoderConfig
 from effects.domain.effect_model import EffectModelConfig
+from effects.domain.variants import (
+    VARIANTS,
+    Variant,
+    variant_masks,
+)
 from effects.infrastructure.effect_model_store import (
     DEFAULT_MODEL_OUTPUT,
     EffectCheckpoint,
@@ -54,7 +55,7 @@ def _checkpoint(provenance: SplitProvenance) -> EffectCheckpoint:
 class TestVariantRequiresASplit:
     def test_a_variant_run_without_split_from_fails_fast(self):
         for variant in VARIANTS:
-            if variant == VARIANT_FULL:
+            if variant == Variant.FULL:
                 continue
             with pytest.raises(MissingSplitError, match="--split-from"):
                 require_split_from(variant, None)
@@ -65,7 +66,7 @@ class TestVariantRequiresASplit:
         assert "saw different games" in str(excinfo.value)
 
     def test_a_full_run_computes_its_own_split(self):
-        require_split_from(VARIANT_FULL, None)
+        require_split_from(Variant.FULL, None)
 
     def test_a_variant_run_with_split_from_is_accepted(self):
         require_split_from("identity", Path("models/effects/effect-model/latest.pt"))
@@ -222,49 +223,12 @@ class TestEarlyStopping:
         assert stopper.best == 0.5
 
 
-class TestContextCache:
-    def test_it_starts_empty_and_due_only_after_enough_batches(self):
-        cache = ContextCache(refresh_every=3)
-        assert len(cache) == 0
-        assert not cache.due_for_refresh()
-        for _ in range(3):
-            cache.note_batch()
-        assert cache.due_for_refresh()
-
-    def test_a_refresh_seeds_unseen_texts_outright(self):
-        cache = ContextCache()
-        cache.refresh({"bolt": (1.0, 2.0)})
-        assert cache.get("bolt") == (1.0, 2.0)
-
-    def test_a_refresh_blends_a_seen_text_rather_than_snapping(self):
-        cache = ContextCache(momentum=0.5)
-        cache.refresh({"bolt": (0.0, 0.0)})
-        cache.refresh({"bolt": (2.0, 4.0)})
-        assert cache.get("bolt") == (1.0, 2.0)
-
-    def test_a_refresh_resets_the_counter(self):
-        cache = ContextCache(refresh_every=1)
-        cache.note_batch()
-        assert cache.due_for_refresh()
-        cache.refresh({})
-        assert not cache.due_for_refresh()
-
-    def test_an_unseen_text_reads_as_absent(self):
-        assert ContextCache().get("never encoded") is None
-
-
 class TestWithheldKeyword:
     def test_no_withholding_hides_nothing(self):
-        assert withheld_keyword_rules(None) == (frozenset(), False)
-
-    def test_a_withheld_keyword_is_hidden_and_force_expanded(self):
-        hidden, force = withheld_keyword_rules("cascade")
-        assert hidden == {"cascade"}
-        assert force
+        assert withheld_keyword_tokens(None) == frozenset()
 
     def test_the_token_form_matches_the_vocabularys(self):
-        hidden, _ = withheld_keyword_rules("First Strike")
-        assert hidden == {"first_strike"}
+        assert withheld_keyword_tokens("First Strike") == {"first_strike"}
 
 
 class TestConfigDefaults:

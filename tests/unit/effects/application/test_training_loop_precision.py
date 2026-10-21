@@ -13,12 +13,10 @@ from __future__ import annotations
 import torch
 
 from effects.application import training_loop as loop_module
-from effects.application.train_effect_model import (
-    HeldOutCards,
-    TrainEffectModelConfig,
-)
-from effects.application.training_loop import TrainingLoop, autocast_enabled
+from effects.application.train_effect_model import TrainEffectModelConfig
+from effects.application.training_loop import StepLoss, TrainingLoop, autocast_enabled
 from effects.domain.records import CombatPayload, RecordKind
+from effects.domain.split import CorpusSplit
 from effects.infrastructure.record_io import write_shard
 from tests.unit.effects.domain.conftest import (  # noqa: F401
     ability_key,
@@ -84,8 +82,7 @@ def _bare_loop(monkeypatch) -> TrainingLoop:
     monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
     return TrainingLoop(
         TrainEffectModelConfig(corpus="unused"),
-        held_out=HeldOutCards(names=frozenset(), script_files=frozenset()),
-        inherited=None, training_shards=[], validation_samples={},
+        split=CorpusSplit(), training_shards=[], validation_samples={},
         holdout_permille=20, holdout_max_carriers=8,
         gate_one_records=0, rarity={}, corpus_digest="",
     )
@@ -109,7 +106,7 @@ def _run_loss_for(monkeypatch, loop, *, autocast: bool):
         loop_module, "per_entity_loss",
         lambda *a, **k: (torch.tensor(0.0), {}),
     )
-    monkeypatch.setattr(TrainingLoop, "_head_terms", lambda self, *a, **k: {})
+    monkeypatch.setattr(TrainingLoop, "_head_terms", lambda self, *a, **k: ({}, None))
 
     class _Batcher:
         def materialize(self, prepared, encoder):
@@ -203,7 +200,9 @@ def _run_execute(monkeypatch, tmp_path, make_record, *, cuda: bool):  # noqa: F8
     )
     monkeypatch.setattr(
         TrainingLoop, "_loss_for",
-        lambda self, plan, *a, **k: (model.p.sum(), {}),
+        lambda self, plan, *a, **k: StepLoss(
+            total=model.p.sum(), shipped=model.p.sum(), parts={}, terms={},
+        ),
     )
     # The step's host half would pin its tensors on this fake device; the plan
     # stands in for what it would have prepared.
@@ -247,8 +246,7 @@ def _run_execute(monkeypatch, tmp_path, make_record, *, cuda: bool):  # noqa: F8
         prefetch_workers=0,
     )
     code = TrainingLoop(
-        config, held_out=HeldOutCards(names=frozenset(), script_files=frozenset()),
-        inherited=None, training_shards=[shard], validation_samples=samples,
+        config, split=CorpusSplit(), training_shards=[shard], validation_samples=samples,
         holdout_permille=20, holdout_max_carriers=8, gate_one_records=0,
         rarity={}, corpus_digest="",
     ).execute()

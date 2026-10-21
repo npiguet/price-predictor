@@ -13,7 +13,6 @@ from effects.domain.event_schema import Event, EventType
 from effects.domain.provenance import ProvenanceKey
 from effects.domain.records import (
     ActivationPayload,
-    CombatPayload,
     Costs,
     EffectRecord,
     Moment,
@@ -27,6 +26,7 @@ from effects.domain.state_snapshot import (
     InclusionTier,
     StateSnapshot,
 )
+from tests.unit.effects.builders import make_record, make_snapshot
 
 _KEY = ProvenanceKey("cardsfolder/l/lightning_bolt.txt", 0, "spell", 0)
 
@@ -35,37 +35,29 @@ MAX_FORKS_PER_RESOLUTION = 2
 
 
 def _snapshot(tiers=STAGE_ONE_TIERS) -> StateSnapshot:
-    return StateSnapshot(
+    return make_snapshot(
         global_=GlobalState(
             turn=4, phase="main1", active="P0", priority="P0", stack_size=1,
         ),
-        players=(),
-        entities=(),
         tiers=tiers,
     )
 
 
 def _record(**overrides) -> EffectRecord:
     defaults: dict = {
-        "record_id": "run.0.1", "run_id": "run", "timestamp": "t",
-        "game_id": "run.0.1", "kind": RecordKind.RESOLUTION,
-        "moment": Moment.RESOLUTION, "actor_player": "P0",
+        "record_id": "run.0.1", "game_id": "run.0.1",
         "state": _snapshot(), "ability": (_KEY,),
-        "payload": ResolutionPayload(),
     }
     defaults.update(overrides)
-    return EffectRecord(**defaults)
+    return make_record(**defaults)
 
 
 def _combat(**overrides) -> EffectRecord:
     defaults: dict = {
-        "record_id": "run.0.2", "run_id": "run", "timestamp": "t",
-        "game_id": "run.0.1", "kind": RecordKind.COMBAT,
-        "actor_player": "P0", "state": _snapshot(),
-        "payload": CombatPayload(),
+        "record_id": "run.0.2", "game_id": "run.0.1", "state": _snapshot(),
     }
     defaults.update(overrides)
-    return EffectRecord(**defaults)
+    return make_record(RecordKind.COMBAT, **defaults)
 
 
 class TestInterventionalResolutions:

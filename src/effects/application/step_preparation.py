@@ -23,10 +23,12 @@ from collections import Counter
 from collections.abc import Iterator, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
+from enum import StrEnum
 from pathlib import Path
 
 import torch
 
+from effects.application.ability_text import KeyResolver
 from effects.application.surface_batching import (
     MaskedTokens,
     PreparedBatch,
@@ -34,17 +36,8 @@ from effects.application.surface_batching import (
     pinned,
 )
 from effects.application.train_effect_model import (
-    CorpusSplit,
-    HeldOutCards,
     TrainEffectModelConfig,
-    VariantMasks,
-    ability_text_of,
-    batches_without_replacement,
-    effective_games,
     rarity_coverage,
-    sample_weights,
-    sampling_class,
-    shard_games,
 )
 from effects.domain.ability_encoder import TruncationLog, surface_of
 from effects.domain.ability_tokenizer import (
@@ -70,7 +63,17 @@ from effects.domain.lethality_counterfactuals import counterfactual, qualify
 from effects.domain.rarity import rarity_bucket
 from effects.domain.records import EffectRecord
 from effects.domain.rule_families import rule_family
+from effects.domain.sampling import (
+    batches_without_replacement,
+    effective_games,
+    sample_weights,
+    sampling_class,
+)
+from effects.domain.split import (
+    CorpusSplit,
+)
 from effects.domain.value_targets import params, segments, value_targets
+from effects.domain.variants import VariantMasks
 from effects.infrastructure.sidecar_io import SidecarCache, sidecar_roots
 from price_predictor.infrastructure.tokenizer_store import load_vocabulary
 
@@ -179,6 +182,24 @@ class PreparedStep:
         self.heads.pin()
 
 
+
+class Head(StrEnum):
+    """The heads beside the per-entity one, by the loss term each adds."""
+
+    #: Shipped: they join the per-entity loss at unit weight and are what
+    #: validation scores (FR-060a).
+    VERDICT = "verdict"
+    CREATED_OBJECTS = "created_objects"
+    #: Training-only: added for the backward pass at their own weights.
+    VALUE = "value"
+    MLM = "mlm"
+    API = "api"
+
+
+SHIPPED_HEADS: tuple[Head, ...] = (Head.VERDICT, Head.CREATED_OBJECTS)
+TRAINING_HEADS: tuple[Head, ...] = (Head.VALUE, Head.MLM, Head.API)
+
+
 @dataclass(frozen=True)
 class ShardTask:
     """One shard's share of an epoch: everything a preparer needs to plan it.
@@ -202,8 +223,6 @@ class ShardOpened:
 
     trainable: int
     held_back: int
-    #: Games naming a held-out card, for the split accumulator.
-    tainted: frozenset[str]
     #: ``(found, distinct)``: how many of the trainable records' distinct
     #: ability texts the rarity table names; None without a table.
     rarity_coverage: tuple[int, int] | None
@@ -255,7 +274,7 @@ class StepPreparation:
     """The host half's methods, shared by the training loop and its workers.
 
     A mixin over the attributes both set: ``config``, ``seed``, ``surface``,
-    ``masks``, ``held_out``, ``inherited``, ``rarity``, ``api_types``,
+    ``masks``, ``split``, ``rarity``, ``api_types``,
     ``param_keys``, ``truncations``, ``noise``, ``identity_table`` and
     ``device``. The worker's ``noise``, ``identity_table`` and ``device`` are
     inert — they are read only by the device half, which never runs there.
@@ -265,8 +284,9 @@ class StepPreparation:
     seed: int
     surface: str
     masks: VariantMasks
-    held_out: HeldOutCards
-    inherited: CorpusSplit | None
+    #: The corpus's split, read from its manifest; its validation games never
+    #: reach training.
+    split: CorpusSplit
     rarity: Mapping[str, int] | None
     #: The manifest's records per legality mode, which places a legality
     #: record in the family the build placed it in; None without one.
@@ -300,6 +320,17 @@ class StepPreparation:
             self.config.cards_folders, self.config.variant_scripts,
         ))
 
+    def _key_resolver(self, sidecars) -> KeyResolver:
+        """The run's key-to-text join over ``sidecars``, built on first use.
+
+        One per sidecar cache rather than one per step: every step meets the
+        same cards, and a batcher built per step used to start its memo empty.
+        """
+        resolver = getattr(self, "_key_texts", None)
+        if resolver is None or resolver.sidecars is not sidecars:
+            resolver = self._key_texts = KeyResolver(sidecars, self.surface)
+        return resolver
+
     def _batcher(
         self, tokenizer, sidecars, widths, *, training: bool = True,
         rng: random.Random | None = None,
@@ -321,6 +352,7 @@ class StepPreparation:
         return SurfaceBatcher(
             tokenizer=tokenizer,
             sidecars=sidecars,
+            resolver=self._key_resolver(sidecars),
             masks=self.masks,
             surface=self.surface,
             e_dim=self.config.e_dim,
@@ -467,15 +499,15 @@ class StepPreparation:
         if not training or not batch.rows:
             return targets
         texts = sorted(batch.rows, key=batch.rows.__getitem__)
-        if "value" in heads:
+        if Head.VALUE in heads:
             rows = [value_targets(text) for text in texts]
             targets.value = (
                 torch.tensor([row.values for row in rows]),
                 torch.tensor([row.mask for row in rows]),
             )
-        if "api" in heads:
+        if Head.API in heads:
             targets.api = self._api_batch(texts, batch.texts)
-        if "mlm" in heads:
+        if Head.MLM in heads:
             targets.mlm = batcher.draw_mlm_mask(
                 batch.prepared, self.config.mlm_mask_prob,
             )
@@ -524,7 +556,7 @@ class StepPreparation:
         it, and resolving it is a sidecar join per record.
         """
         return {
-            record.record_id: ability_text_of(record, sidecars, self.surface)
+            record.record_id: self._key_resolver(sidecars).acting_text(record)
             for record in records
         }
 
@@ -584,26 +616,18 @@ class StepPreparation:
     ) -> Iterator[ShardOpened | StepReady]:
         """One shard's messages: a ``ShardOpened``, then ``task.budget`` steps.
 
-        The split first. A game naming a held-out card is never trained on;
-        under an inherited split (every ``--corpus`` run) the validation games
-        are the manifest's, and otherwise the shard's own tainted games, which
-        is the whole of the accumulated set as far as this shard is concerned
-        because a game never spans two shards.
+        The split first: a game the manifest places in a validation stratum
+        is never trained on, and a game never spans two shards.
 
         Then the weighted shuffle without replacement, from ``plan_rng``, and
         each step's host half from its own ``step_rng``: exactly the budget,
         and the shard ends with no trainable record in it.
         """
-        tainted, _clean = shard_games(records, self.held_out)
-        excluded = (
-            self.inherited.validation_games if self.inherited is not None
-            else tainted
-        )
+        excluded = self.split.validation_games
         training = [r for r in records if r.game_id not in excluded]
         texts = self._texts(training, sidecars)
         yield ShardOpened(
             trainable=len(training), held_back=len(records) - len(training),
-            tainted=tainted,
             rarity_coverage=(
                 rarity_coverage(texts.values(), self.rarity)
                 if self.rarity is not None else None
@@ -644,14 +668,13 @@ class PreparerSettings:
     """What a worker process needs to rebuild the host half: picklable, once.
 
     Sent once per worker at start rather than with every shard, because the
-    rarity table and the inherited split are corpus-wide and each is several
-    megabytes for a real corpus.
+    rarity table and the split are corpus-wide and each is several megabytes
+    for a real corpus.
     """
 
     config: TrainEffectModelConfig
     seed: int
-    held_out: HeldOutCards
-    inherited: CorpusSplit | None
+    split: CorpusSplit
     rarity: Mapping[str, int] | None
     api_types: tuple[str, ...]
     param_keys: tuple[str, ...]
@@ -673,11 +696,10 @@ class StepPreparer(StepPreparation):
         self.config = settings.config
         self.seed = settings.seed
         self.surface = surface_of(settings.config.vocab_path)
-        from effects.application.train_effect_model import variant_masks
+        from effects.domain.variants import variant_masks
 
         self.masks = variant_masks(settings.config.variant)
-        self.held_out = settings.held_out
-        self.inherited = settings.inherited
+        self.split = settings.split
         self.rarity = settings.rarity
         self.legality_mode_counts = settings.legality_mode_counts
         self.api_types = list(settings.api_types)

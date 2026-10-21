@@ -15,9 +15,10 @@ import pytest
 import torch
 
 from effects.application.surface_batching import EncodedBatch, PreparedBatch
-from effects.application.train_effect_model import HeldOutCards, TrainEffectModelConfig
+from effects.application.train_effect_model import TrainEffectModelConfig
 from effects.application.training_loop import (
     NO_TEXT_BUCKET,
+    StepLoss,
     TrainingLoop,
     format_shares,
 )
@@ -37,6 +38,7 @@ from effects.domain.records import (
     TriggerPayload,
     events_of,
 )
+from effects.domain.split import CorpusSplit
 from effects.infrastructure.record_io import read_shard
 from effects.infrastructure.sidecar_io import SidecarCache
 
@@ -60,8 +62,7 @@ def _loop(monkeypatch, **config) -> TrainingLoop:
     monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
     return TrainingLoop(
         TrainEffectModelConfig(corpus="unused", **config),
-        held_out=HeldOutCards(names=frozenset(), script_files=frozenset()),
-        inherited=None, training_shards=[], validation_samples={},
+        split=CorpusSplit(), training_shards=[], validation_samples={},
         holdout_permille=20, holdout_max_carriers=8,
         gate_one_records=0, rarity={}, corpus_digest="",
     )
@@ -103,11 +104,9 @@ class _Batcher:
         return "masked"
 
     def mlm_forward(self, encoder, masked):
-        hidden = torch.randn(len(self.encoded.texts), 3, 8)
-        targets = torch.zeros(len(self.encoded.texts), 3, dtype=torch.long)
-        mask = torch.zeros(len(self.encoded.texts), 3, dtype=torch.bool)
-        mask[:, 1] = True
-        return hidden, targets, mask
+        hidden = torch.randn(len(self.encoded.texts), 8)
+        targets = torch.zeros(len(self.encoded.texts), dtype=torch.long)
+        return hidden, targets
 
 
 def _terms(loop, records, batcher, model, hidden, *, training):
@@ -120,9 +119,13 @@ def _terms(loop, records, batcher, model, hidden, *, training):
         records, batcher, batcher.prepared(), training=training,
         heads=loop._training_heads(model) if training else frozenset(),
     )
-    loop._last_terms = loop._head_terms(targets, batcher, None, model, hidden)
-    loop._mlm_backward(None, model)
-    return loop._last_terms
+    terms, pending = loop._head_terms(targets, batcher, None, model, hidden)
+    loss = StepLoss(
+        total=torch.zeros(()), shipped=torch.zeros(()), parts={}, terms=terms,
+        pending_mlm=pending,
+    )
+    loop._mlm_backward(loss, None, model)
+    return loss.terms
 
 
 def _kinds(records):
@@ -234,7 +237,7 @@ class TestEpochShares:
 
     def test_a_texts_bucket_reads_the_corpus_wide_table(self, monkeypatch, records, sidecars):
         loop = _loop(monkeypatch, vocab_path=Path("models/effects/vocab-script.txt"))
-        from effects.application.train_effect_model import ability_text_of
+        from effects.application.ability_text import ability_text_of
 
         record = next(
             r for r in records if r.moment is Moment.RESOLUTION

@@ -59,9 +59,9 @@ def checkpoint_stem(path: Path) -> str:
 
 
 def load_checkpoint(path: Path):
-    from effects.infrastructure.effect_model_store import EffectModelStore
+    from effects.infrastructure.effect_model_store import load_effect_checkpoint
 
-    return EffectModelStore(Path(path).parent).load(Path(path))
+    return load_effect_checkpoint(path)
 
 
 def sidecar_cache(cards_folders: Iterable[Path], variant_scripts: Path | None = None):
@@ -248,22 +248,25 @@ def load_probe_model(
     the inference constant, the variant masks applied.
     """
     from effects.domain.ability_encoder import surface_of
-    from effects.infrastructure.effect_model_store import resolve_inference_paths
+    from effects.infrastructure.effect_model_store import verified_inference_paths
     from effects.infrastructure.model_runner import load_runnable
 
     checkpoint = checkpoint or load_checkpoint(checkpoint_path)
-    vocab, keywords = resolve_inference_paths(
-        checkpoint.provenance, vocab_path=vocab_path, keyword_path=keyword_path,
+    # Hash-checked like every inference command: a probe over a vocabulary
+    # that moved since training reads vectors that look valid and mean nothing.
+    vocab, keywords = verified_inference_paths(
+        checkpoint, vocab_path=vocab_path, keyword_path=keyword_path,
     )
     config = SimpleNamespace(cards_folders=list(cards_folders), variant_scripts=None)
-    encoder, model, batcher, fields = load_runnable(
+    runnable = load_runnable(
         config, checkpoint, vocab_path=vocab, keyword_path=keywords, records=records,
     )
-    encoder.eval()
-    model.eval()
+    runnable.encoder.eval()
+    runnable.model.eval()
     return ProbeModel(
-        checkpoint=checkpoint, encoder=encoder, model=model, batcher=batcher,
-        fields=fields, device=batcher.device, surface=surface_of(vocab),
+        checkpoint=checkpoint, encoder=runnable.encoder, model=runnable.model,
+        batcher=runnable.batcher, fields=runnable.fields,
+        device=runnable.batcher.device, surface=surface_of(vocab),
         e_dim=checkpoint.encoder_config.e_dim,
     )
 

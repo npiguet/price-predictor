@@ -160,10 +160,10 @@ def pooled_e_by_path(abilities_root: Path, *, variant: str = "full") -> dict[str
 def run(config: ScorerSmokeTestConfig, *, runner=subprocess.run) -> ScorerSmokeTestResult:
     """Build the scratch tree, splice ``e`` in, and run Phase A on it."""
     from effects.application.geometry_checks import write_scorer_smoke_cache
-    from effects.infrastructure.effect_model_store import EffectModelStore
+    from effects.infrastructure.effect_model_store import load_effect_checkpoint
 
     checkpoint_path = Path(config.checkpoint)
-    checkpoint = EffectModelStore(checkpoint_path.parent).load(checkpoint_path)
+    checkpoint = load_effect_checkpoint(checkpoint_path)
     pooled = pooled_e_by_path(config.abilities_root, variant=checkpoint.variant)
     if not pooled:
         raise FileNotFoundError(

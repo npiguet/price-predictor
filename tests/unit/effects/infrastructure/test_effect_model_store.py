@@ -15,10 +15,9 @@ import torch
 
 from effects.domain.ability_encoder import AbilityEncoderConfig
 from effects.domain.effect_model import EffectModel, EffectModelConfig
+from effects.domain.variants import VARIANTS, Variant
 from effects.infrastructure.effect_model_store import (
     DEFAULT_MODEL_OUTPUT,
-    VARIANT_FULL,
-    VARIANTS,
     EffectCheckpoint,
     EffectModelStore,
     HashMismatchError,
@@ -26,6 +25,7 @@ from effects.infrastructure.effect_model_store import (
     SplitProvenance,
     content_hash,
     filter_training_only,
+    load_for_inference,
     model_output_for,
     require_same_split,
     resolve_inference_paths,
@@ -188,11 +188,11 @@ class TestHashChecking:
 
 class TestVariantIsolation:
     def test_full_writes_to_the_shipping_directory(self):
-        assert model_output_for(VARIANT_FULL) == DEFAULT_MODEL_OUTPUT
+        assert model_output_for(Variant.FULL) == DEFAULT_MODEL_OUTPUT
 
     def test_every_other_variant_writes_under_its_own_name(self):
         for variant in VARIANTS:
-            if variant == VARIANT_FULL:
+            if variant == Variant.FULL:
                 continue
             assert model_output_for(variant) == DEFAULT_MODEL_OUTPUT / variant
 
@@ -354,6 +354,33 @@ class TestInferencePathResolution:
                 vocab_path=vocab_path, keyword_path=keyword_path,
             )
 
+
+
+class TestLoadForInference:
+    """Loading for inference resolves and hash-checks in one step, so no
+    inference command can resolve its files and forget to verify them."""
+
+    def test_it_returns_the_checkpoint_and_its_verified_paths(self, tmp_path, files):
+        store = EffectModelStore(tmp_path / "effect-model")
+        path = store.save(_checkpoint(files))
+        loaded = load_for_inference(path)
+        assert (loaded.vocab_path, loaded.keyword_path) == files
+        assert loaded.checkpoint.provenance.withheld_keyword == "cascade"
+
+    def test_a_file_that_moved_since_training_fails_the_load(self, tmp_path, files):
+        store = EffectModelStore(tmp_path / "effect-model")
+        path = store.save(_checkpoint(files))
+        files[0].write_text("[PAD]\nextra\n", encoding="utf-8")
+        with pytest.raises(HashMismatchError):
+            load_for_inference(path)
+
+    def test_an_override_is_verified_too(self, tmp_path, files):
+        store = EffectModelStore(tmp_path / "effect-model")
+        path = store.save(_checkpoint(files))
+        other = tmp_path / "other-keywords.json"
+        other.write_text('{"flying": "x"}', encoding="utf-8")
+        with pytest.raises(HashMismatchError):
+            load_for_inference(path, keyword_path=other)
 
 _GEN1_CHECKPOINT = (
     __import__("pathlib").Path(__file__).parents[4]

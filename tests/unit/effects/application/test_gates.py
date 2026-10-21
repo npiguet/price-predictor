@@ -13,29 +13,17 @@ import numpy as np
 import pytest
 
 from effects.application.evaluate_effect_model import (
-    GATE1_MIN_DEVIANCE_REDUCTION,
-    GATE1_MIN_GATE_F1_GAIN,
-    GATE1_MIN_ZONE_ACCURACY_GAIN,
-    GATE3_COSINE_PAIRS,
-    GATE3_MAX_MEAN_COSINE,
-    GATE3_MAX_TOP_COMPONENT,
     STAGE_GATED_CHECKS,
     CheckStatus,
     EvaluationReport,
     GateOneMetrics,
-    Stratum,
-    cosine_distance,
     evaluate_gate_one,
     evaluate_gate_three,
     evaluate_gate_two,
     evaluate_keyword,
     evaluate_ward_canary,
-    f1_score,
-    mean_pairwise_cosine,
     parse_variant_checkpoint,
-    poisson_deviance,
     skip_unavailable,
-    top_component_share,
 )
 from effects.domain.damage_step_keywords import (
     DAMAGE_STEP_KEYWORDS,
@@ -46,6 +34,20 @@ from effects.domain.damage_step_keywords import (
     Subject,
 )
 from effects.domain.effect_model import FIELDS_BY_NAME
+from effects.domain.gate_metrics import (
+    GATE1_MIN_DEVIANCE_REDUCTION,
+    GATE1_MIN_GATE_F1_GAIN,
+    GATE1_MIN_ZONE_ACCURACY_GAIN,
+    GATE3_COSINE_PAIRS,
+    GATE3_MAX_MEAN_COSINE,
+    GATE3_MAX_TOP_COMPONENT,
+    balanced_accuracy,
+    cosine_distance,
+    f1_score,
+    mean_pairwise_cosine,
+    poisson_deviance,
+    top_component_share,
+)
 
 
 class TestGateOne:
@@ -149,6 +151,16 @@ class TestGateOneMetrics:
 
     def test_an_empty_slice_is_nan_rather_than_zero(self):
         assert math.isnan(poisson_deviance(np.array([]), np.array([])))
+
+    def test_zone_accuracy_weighs_every_observed_outcome_the_same(self):
+        """Answering the dominant class every time scores one over the number
+        of classes observed, not that class's share (FR-109)."""
+        observed = np.array([0] * 9 + [1])
+        always_stayed = np.zeros(10, dtype=int)
+        assert balanced_accuracy(always_stayed, observed) == pytest.approx(0.5)
+
+    def test_zone_accuracy_of_nothing_is_nan(self):
+        assert math.isnan(balanced_accuracy(np.array([]), np.array([])))
 
 
 class TestGateTwo:
@@ -413,36 +425,6 @@ class TestStageGatedChecks:
             assert "stage three" in skip_unavailable(name).detail
 
 
-class TestRolePolarity:
-    """The narrowest possible test of the role embedding."""
-
-    def test_opposite_signs_read_as_the_roles_separating(self):
-        from effects.application.evaluate_effect_model import evaluate_role_polarity
-
-        result = evaluate_role_polarity(-0.8, 0.9)
-        assert result.status is CheckStatus.REPORTED
-        assert "cost position predicts a mana decrease" in result.detail
-
-    def test_the_same_sign_reads_as_the_roles_not_separating(self):
-        from effects.application.evaluate_effect_model import evaluate_role_polarity
-
-        result = evaluate_role_polarity(0.5, 0.9)
-        assert "not separating them" in result.detail
-
-    def test_it_waits_for_mana_records(self):
-        from effects.application.evaluate_effect_model import evaluate_role_polarity
-
-        result = evaluate_role_polarity(None, None)
-        assert result.status is CheckStatus.SKIPPED
-        assert "stage two" in result.detail
-
-    def test_it_blocks_nothing_either_way(self):
-        from effects.application.evaluate_effect_model import evaluate_role_polarity
-
-        assert not evaluate_role_polarity(0.5, 0.5).blocks
-        assert not evaluate_role_polarity(-0.5, 0.5).blocks
-
-
 class TestReport:
     def test_a_report_ships_when_no_gate_blocks(self):
         report = EvaluationReport()
@@ -491,12 +473,6 @@ class TestReport:
         rendered = report.render()
         assert "mean_pairwise_cosine=" in rendered
         assert "top_component_share=" in rendered
-
-    def test_the_four_strata_are_named(self):
-        assert {s.value for s in Stratum} == {
-            "unique-text", "shared-text", "novel-combination",
-            "numeric-extrapolation",
-        }
 
 
 class TestVariantCheckpointFlag:

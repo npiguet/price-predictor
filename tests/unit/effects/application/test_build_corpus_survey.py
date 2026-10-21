@@ -38,37 +38,21 @@ from effects.domain.records import (
     ResolutionPayload,
     RewritePayload,
 )
-from effects.domain.state_snapshot import EntityState, GlobalState, StateSnapshot
+from effects.domain.state_snapshot import EntityState
 from effects.infrastructure.record_io import write_shard
 from effects.infrastructure.sidecar_io import sidecar_path_for, write_sidecar
+from tests.unit.effects.builders import make_entity, make_record, make_snapshot
 
 
 def _entity(name: str, **overrides) -> EntityState:
-    defaults = {
-        "id": f"E-{name}", "name": name, "zone": "battlefield",
-        "controller": "P0",
-    }
-    defaults.update(overrides)
-    return EntityState(**defaults)
+    return make_entity(f"E-{name}", name, **overrides)
 
 
 def _record(game_id: str, entities=(), ability=None, **overrides) -> EffectRecord:
-    defaults: dict = {
-        "record_id": f"{game_id}.1", "run_id": "run", "timestamp": "t",
-        "game_id": game_id, "kind": RecordKind.RESOLUTION,
-        "moment": Moment.RESOLUTION, "actor_player": "P0",
-        "ability": ability,
-        "state": StateSnapshot(
-            global_=GlobalState(
-                turn=1, phase="main1", active="P0", priority="P0", stack_size=0,
-            ),
-            players=(),
-            entities=tuple(entities),
-        ),
-        "payload": ResolutionPayload(),
-    }
-    defaults.update(overrides)
-    return EffectRecord(**defaults)
+    return make_record(
+        game_id=game_id, ability=ability,
+        state=make_snapshot(entities=tuple(entities)), **overrides,
+    )
 
 
 #: (moment, payload) for each ``kind`` string a survey test builds a record
@@ -218,8 +202,6 @@ def test_survey_counts_records_classes_and_games(tmp_path):
     )
 
     assert survey.records == 3
-    assert survey.class_records["rewrite"] == 2
-    assert survey.class_records["combat"] == 1
     assert survey.games == frozenset({"g1", "g2"})
     assert survey.held_out_games == frozenset()
 
@@ -356,7 +338,6 @@ def test_a_defective_record_is_counted_and_otherwise_ignored(tmp_path):
     assert out.quality_dropped == {NO_ABILITY: 1}
     assert out.records == 2
     assert out.games == {"g1"}
-    assert sum(out.class_records.values()) == 1
 
 
 class TestProgressSaysWhetherToWait:
@@ -417,7 +398,8 @@ _FOOD_SCRIPT = (
 
 def _food_remapper(tmp_path):
     """A remapper over one raw Forge token script with a converted sidecar."""
-    from effects.domain.token_key_remap import TokenKeyRemapper, load_token_script_facts
+    from effects.domain.token_key_remap import TokenKeyRemapper
+    from effects.infrastructure.token_script_io import load_token_script_facts
 
     forge = tmp_path / "forge-tokenscripts"
     forge.mkdir()

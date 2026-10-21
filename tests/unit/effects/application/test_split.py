@@ -18,47 +18,30 @@ from __future__ import annotations
 import json
 
 from effects.application.train_effect_model import (
-    HeldOutCards,
     load_card_files,
     load_first_printings,
-    record_names_held_out_card,
 )
 from effects.domain.provenance import ProvenanceKey
 from effects.domain.records import (
     EffectRecord,
-    Moment,
-    RecordKind,
-    ResolutionPayload,
 )
-from effects.domain.state_snapshot import EntityState, GlobalState, StateSnapshot
+from effects.domain.split import (
+    HeldOutCards,
+    record_names_held_out_card,
+)
+from effects.domain.state_snapshot import EntityState
+from tests.unit.effects.builders import make_entity, make_record, make_snapshot
 
 
 def _entity(name: str, **overrides) -> EntityState:
-    defaults = {
-        "id": f"E-{name}", "name": name, "zone": "battlefield",
-        "controller": "P0",
-    }
-    defaults.update(overrides)
-    return EntityState(**defaults)
+    return make_entity(f"E-{name}", name, **overrides)
 
 
 def _record(game_id: str, entities=(), ability=None, **overrides) -> EffectRecord:
-    defaults: dict = {
-        "record_id": f"{game_id}.1", "run_id": "run", "timestamp": "t",
-        "game_id": game_id, "kind": RecordKind.RESOLUTION,
-        "moment": Moment.RESOLUTION, "actor_player": "P0",
-        "ability": ability,
-        "state": StateSnapshot(
-            global_=GlobalState(
-                turn=1, phase="main1", active="P0", priority="P0", stack_size=0,
-            ),
-            players=(),
-            entities=tuple(entities),
-        ),
-        "payload": ResolutionPayload(),
-    }
-    defaults.update(overrides)
-    return EffectRecord(**defaults)
+    return make_record(
+        game_id=game_id, ability=ability,
+        state=make_snapshot(entities=tuple(entities)), **overrides,
+    )
 
 
 class TestRecordNamesHeldOutCard:
@@ -133,7 +116,7 @@ def test_functional_reprints_are_held_out_together(_ignored=None) -> None:
     gate 1 then drops those records for having text a training card carries. The
     two must agree at every threshold, not merely at the extremes.
     """
-    from effects.application.train_effect_model import text_keyed_holdout
+    from effects.domain.split import text_keyed_holdout
 
     shared = "SP$ DealDamage | NumDmg$ 3 | ValidTgts$ Any"
     card_files = {
@@ -158,7 +141,7 @@ def test_functional_reprints_are_held_out_together(_ignored=None) -> None:
 
 def test_the_holdout_carries_its_texts_for_sizing_the_stratum() -> None:
     """The guard needs the texts, not just the cards (T159)."""
-    from effects.application.train_effect_model import text_keyed_holdout
+    from effects.domain.split import text_keyed_holdout
 
     held = text_keyed_holdout(
         {"Alpha": "cardsfolder/a/alpha.txt"},

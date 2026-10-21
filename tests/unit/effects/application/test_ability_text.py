@@ -12,42 +12,26 @@ from __future__ import annotations
 import pytest
 
 from effects.domain.provenance import ProvenanceKey, ProvenanceSidecar, SidecarLine
-from effects.domain.records import EffectRecord, Moment, RecordKind, ResolutionPayload
-from effects.domain.state_snapshot import EntityState, GlobalState, StateSnapshot
+from effects.domain.records import EffectRecord, RecordKind
+from effects.domain.state_snapshot import EntityState
 from effects.infrastructure.sidecar_io import (
     SidecarCache,
     UnconfiguredTree,
     UnconvertedScript,
     write_sidecar,
 )
+from tests.unit.effects.builders import make_entity, make_record, make_snapshot
 
 
 def _entity(name: str, **overrides) -> EntityState:
-    defaults = {
-        "id": f"E-{name}", "name": name, "zone": "battlefield",
-        "controller": "P0",
-    }
-    defaults.update(overrides)
-    return EntityState(**defaults)
+    return make_entity(f"E-{name}", name, **overrides)
 
 
 def _record(game_id: str, entities=(), ability=None, **overrides) -> EffectRecord:
-    defaults: dict = {
-        "record_id": f"{game_id}.1", "run_id": "run", "timestamp": "t",
-        "game_id": game_id, "kind": RecordKind.RESOLUTION,
-        "moment": Moment.RESOLUTION, "actor_player": "P0",
-        "ability": ability,
-        "state": StateSnapshot(
-            global_=GlobalState(
-                turn=1, phase="main1", active="P0", priority="P0", stack_size=0,
-            ),
-            players=(),
-            entities=tuple(entities),
-        ),
-        "payload": ResolutionPayload(),
-    }
-    defaults.update(overrides)
-    return EffectRecord(**defaults)
+    return make_record(
+        game_id=game_id, ability=ability,
+        state=make_snapshot(entities=tuple(entities)), **overrides,
+    )
 
 
 class FakeSidecarCache:
@@ -98,7 +82,10 @@ class FakeSidecarCache:
 
 
 def test_text_for_key_and_ability_text_of_agree_on_one_key():
-    from effects.application.train_effect_model import ability_text_of, text_for_key
+    from effects.application.ability_text import (
+        ability_text_of,
+        text_for_key,
+    )
 
     key = ProvenanceKey("cardsfolder/f/flying_test.txt", 0, "keyword", 0)
     record = _record("g1", ability=(key,))
@@ -126,7 +113,7 @@ def test_a_key_in_neither_list_raises_rather_than_reading_as_no_text(tmp_path):
     are declared here, so static 1 is an index the converter parsed around and
     put in neither list, which only a reconversion produces.
     """
-    from effects.application.train_effect_model import text_for_key
+    from effects.application.ability_text import text_for_key
     from effects.infrastructure.sidecar_io import sidecar_path_for
 
     script = "cardsfolder/p/plague_sliver.txt"
@@ -158,7 +145,7 @@ def test_a_key_in_neither_list_raises_rather_than_reading_as_no_text(tmp_path):
 def test_an_unconfigured_tree_still_reads_as_no_text(tmp_path):
     """A variant key without ``--variant-scripts`` resolves to nothing, as pinned
     by ``test_without_the_variant_tree_a_variant_text_resolves_to_nothing``."""
-    from effects.application.train_effect_model import text_for_key
+    from effects.application.ability_text import text_for_key
 
     sidecars = SidecarCache({"cardsfolder": tmp_path})
     key = ProvenanceKey("variant-scripts/x.txt", 0, "spell", 0)
@@ -168,7 +155,7 @@ def test_an_unconfigured_tree_still_reads_as_no_text(tmp_path):
 
 
 def test_an_unconverted_script_reads_as_no_text(tmp_path):
-    from effects.application.train_effect_model import text_for_key
+    from effects.application.ability_text import text_for_key
 
     sidecars = SidecarCache({"cardsfolder": tmp_path})
     key = ProvenanceKey("cardsfolder/f/food_token.txt", 0, "spell", 0)
@@ -181,7 +168,7 @@ def test_a_decisions_acting_text_is_its_candidates():
     """A ``decision`` record names no acting line of its own; ``[ACT]`` reads
     its candidate's, and rarity has to key on the same text or the whole
     decision class weighs as if it had none."""
-    from effects.application.train_effect_model import ability_text_of
+    from effects.application.ability_text import ability_text_of
     from effects.domain.records import (
         Candidate,
         PlayabilityDecisionPayload,

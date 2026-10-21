@@ -39,8 +39,17 @@ from effects.domain.ability_encoder import ENCODER_D_MODEL
 from effects.domain.effect_head_input import (
     CARD_TYPES,
     COUNTER_TYPES,
+    MAGNITUDE_CAP,
     OVERLAY_KEYWORDS,
     SlotKind,
+)
+from effects.domain.sampling import (
+    CLASS_COMBAT,
+    CLASS_PLAYABILITY_DECISION,
+    CLASS_PLAYABILITY_LEGALITY,
+    CLASS_RESOLUTION_COST,
+    CLASS_RESOLUTION_EFFECT,
+    CLASS_REWRITE,
 )
 from effects.domain.state_snapshot import COLORS
 from effects.domain.value_targets import VALUE_TARGETS, ValueKind
@@ -63,22 +72,6 @@ DURATIONS: tuple[str, ...] = ("instant", "end_of_turn", "permanent")
 #: Library manipulations a player can undergo, as a multi-hot.
 LIBRARY_EVENTS: tuple[str, ...] = ("scry", "surveil", "tutor", "reveal", "reorder")
 
-#: The eight sampling classes, which are also the granularity FR-085 speaks in:
-#: a field whose classes are all absent from the corpus contributes no loss.
-CLASS_RESOLUTION_COST = "resolution-cost"
-CLASS_RESOLUTION_EFFECT = "resolution-effect"
-CLASS_REWRITE = "rewrite"
-CLASS_CONTINUOUS = "continuous"
-CLASS_TRIGGER = "trigger"
-CLASS_PLAYABILITY_DECISION = "playability-decision"
-CLASS_PLAYABILITY_LEGALITY = "playability-legality"
-CLASS_COMBAT = "combat"
-
-SAMPLING_CLASSES: tuple[str, ...] = (
-    CLASS_RESOLUTION_EFFECT, CLASS_COMBAT, CLASS_CONTINUOUS,
-    CLASS_PLAYABILITY_DECISION, CLASS_RESOLUTION_COST, CLASS_TRIGGER,
-    CLASS_REWRITE, CLASS_PLAYABILITY_LEGALITY,
-)
 
 #: Classes whose records describe an outcome for an arbitrary entity. Used
 #: below to say "every effect-shaped record supervises this field".
@@ -234,9 +227,25 @@ FIELDS_BY_NAME: dict[str, FieldSpec] = {s.name: s for s in PER_ENTITY_FIELDS}
 
 #: Created-objects head (FR-078): K group slots plus one overflow flag.
 CREATED_OBJECT_SLOTS = 4
-#: Per slot: present, scripted flag, count, power, toughness, then type and
-#: keyword flags for a characteristics-only group.
-CREATED_SLOT_WIDTH = 3 + 2 + len(CARD_TYPES) + len(OVERLAY_KEYWORDS)
+
+
+class CreatedSlot:
+    """Offsets within one created-objects slot.
+
+    Two binary flags, then three magnitudes, then one flag per card type and
+    per overlay keyword for a characteristics-only group.
+    """
+
+    PRESENT = 0
+    SCRIPTED = 1
+    COUNT = 2
+    POWER = 3
+    TOUGHNESS = 4
+    TYPES = 5
+    KEYWORDS = TYPES + len(CARD_TYPES)
+
+
+CREATED_SLOT_WIDTH = CreatedSlot.KEYWORDS + len(OVERLAY_KEYWORDS)
 CREATED_OBJECTS_WIDTH = CREATED_OBJECT_SLOTS * CREATED_SLOT_WIDTH + 1
 
 #: Verdict head (FR-079): three verdict bits, cost paid per colour, trigger fired.
@@ -317,6 +326,13 @@ class EffectModelConfig:
             )
 
 
+def _mlp(width_in: int, hidden: int, width_out: int) -> nn.Sequential:
+    """The two-layer head every output uses."""
+    return nn.Sequential(
+        nn.Linear(width_in, hidden), nn.GELU(), nn.Linear(hidden, width_out),
+    )
+
+
 class EffectModel(nn.Module):
     """Trunk plus the three shipped heads and the training-only auxiliaries."""
 
@@ -354,15 +370,9 @@ class EffectModel(nn.Module):
         self.norm = nn.LayerNorm(d)
 
         # ── shipped heads ──
-        self.per_entity_head = nn.Sequential(
-            nn.Linear(d, d), nn.GELU(), nn.Linear(d, PER_ENTITY_WIDTH),
-        )
-        self.created_objects_head = nn.Sequential(
-            nn.Linear(d, d), nn.GELU(), nn.Linear(d, CREATED_OBJECTS_WIDTH),
-        )
-        self.verdict_head = nn.Sequential(
-            nn.Linear(d, d), nn.GELU(), nn.Linear(d, VERDICT_WIDTH),
-        )
+        self.per_entity_head = _mlp(d, d, PER_ENTITY_WIDTH)
+        self.created_objects_head = _mlp(d, d, CREATED_OBJECTS_WIDTH)
+        self.verdict_head = _mlp(d, d, VERDICT_WIDTH)
 
         # ── training-only auxiliaries (FR-063), filtered at save time ──
         self.mlm_head = (
@@ -378,9 +388,7 @@ class EffectModel(nn.Module):
             if config.n_param_keys else None
         )
         # Amounts and costs the script states, read from e alone (FR-058).
-        self.value_head = nn.Sequential(
-            nn.Linear(config.e_dim, d), nn.GELU(), nn.Linear(d, VALUE_WIDTH),
-        )
+        self.value_head = _mlp(config.e_dim, d, VALUE_WIDTH)
 
     #: Head names filtered out of the saved artifact (FR-076, FR-059).
     TRAINING_ONLY_HEADS: tuple[str, ...] = (
@@ -467,15 +475,6 @@ def active_fields(
         if spec.supervised_by & present_classes
         and (spec.group is FieldGroup.DENSE or step >= curriculum_step)
     )
-
-
-#: The largest magnitude a count or a signed delta is scored at. Above about
-#: forty an amount is the game state compounding — a counter doubling run to two
-#: million in one long game — not what the ability's text says, and one such
-#: target under the Poisson loss pulls a step a million times harder than an
-#: ordinary one. Every consumer of the magnitudes caps them here: the field
-#: losses, the constant-predictor floor and the evaluation's deviance.
-MAGNITUDE_CAP = 40.0
 
 
 def capped(target: torch.Tensor) -> torch.Tensor:
@@ -771,21 +770,45 @@ def constant_predictor_floor(
     degenerate = {
         spec.name for spec in fields if _degenerate(batches, spec.name)
     }
-    summed: dict[str, float] = defaultdict(float)
-    counted: dict[str, int] = defaultdict(int)
+    means = PartsMean()
     for batch in batches:
         _, parts = per_entity_loss(
             vector.expand(*batch.gate.shape, PER_ENTITY_WIDTH),
             batch.gate, dict(batch.fields), batch.mask,
             fields=fields, report_parts=True,
         )
-        for name, value in parts.items():
-            summed[name] += value
-            counted[name] += 1
+        means.add(parts)
     return {
-        name: 0.0 if name in degenerate else summed[name] / counted[name]
-        for name in summed
+        name: 0.0 if name in degenerate else mean
+        for name, mean in means.means().items()
     }
+
+
+class PartsMean:
+    """Each field's loss averaged over the batches that carried it.
+
+    Over those batches rather than every batch: a field a batch did not
+    supervise contributes no zero, which would read as the model having got
+    it right.
+    """
+
+    def __init__(self) -> None:
+        self._summed: dict[str, float] = defaultdict(float)
+        self._counted: dict[str, int] = defaultdict(int)
+
+    def add(self, parts: Mapping[str, float]) -> None:
+        for name, value in parts.items():
+            self._summed[name] += value
+            self._counted[name] += 1
+
+    def means(self) -> dict[str, float]:
+        return {name: self._summed[name] / self._counted[name] for name in self._summed}
+
+
+def gather_entities(outputs: torch.Tensor, index: torch.Tensor) -> torch.Tensor:
+    """``(batch, entities, width)``: each surface's ``[CARD]`` and ``[PLAYER]``
+    columns of the per-entity output, in one batched gather."""
+    return outputs.gather(1, index.unsqueeze(-1).expand(-1, -1, outputs.shape[-1]))
 
 
 def created_objects_loss(
@@ -816,14 +839,15 @@ def created_objects_loss(
     total = prediction.new_zeros(())
     for slot in range(CREATED_OBJECT_SLOTS):
         base = slot * CREATED_SLOT_WIDTH
+        flags = slice(base + CreatedSlot.PRESENT, base + CreatedSlot.COUNT)
         total = total + functional.binary_cross_entropy_with_logits(
-            prediction[:, base:base + 2], target[:, base:base + 2],
-            reduction="sum",
+            prediction[:, flags], target[:, flags], reduction="sum",
         )
+        magnitudes = slice(base + CreatedSlot.COUNT, base + CreatedSlot.TYPES)
         total = total + _poisson(
-            prediction[:, base + 2:base + 5], capped(target[:, base + 2:base + 5]),
+            prediction[:, magnitudes], capped(target[:, magnitudes]),
         )
-        rest = slice(base + 5, base + CREATED_SLOT_WIDTH)
+        rest = slice(base + CreatedSlot.TYPES, base + CREATED_SLOT_WIDTH)
         total = total + functional.binary_cross_entropy_with_logits(
             prediction[:, rest], target[:, rest], reduction="sum",
         )
@@ -914,21 +938,14 @@ def value_loss(
     return total / rows
 
 
-def mlm_loss(
-    logits: torch.Tensor, targets: torch.Tensor, mask: torch.Tensor | None,
-) -> torch.Tensor:
-    """Cross-entropy at the masked positions only.
+def mlm_loss(logits: torch.Tensor, targets: torch.Tensor) -> torch.Tensor:
+    """Cross-entropy at the masked positions, which are the rows given.
 
     Training-only: it teaches the encoder the language of card text, which the
     effect objective alone would only reach through whichever words happened to
-    change an outcome. ``mask`` None means the rows are already the masked
-    positions, which is how the batcher hands them over.
+    change an outcome.
     """
-    if mask is None:
-        return functional.cross_entropy(logits, targets)
-    if not mask.any():
-        return logits.new_zeros(())
-    return functional.cross_entropy(logits[mask], targets[mask])
+    return functional.cross_entropy(logits, targets)
 
 
 def api_loss(
@@ -939,9 +956,8 @@ def api_loss(
 ) -> torch.Tensor:
     """Script-API classification from ``e``: the API type and its parameter keys.
 
-    This is not stage-four work. Through stage three the encoder reads prose
-    only, and this head is what stands in for the script structure prose does
-    not spell out — so the MVP needs it.
+    It teaches ``e`` the script structure the prose surface does not spell
+    out; on the script surface it reinforces what the encoder reads directly.
     """
     total = None
     if type_logits is not None and type_targets is not None:
@@ -1062,12 +1078,14 @@ def entity_target_tensors(
     trunk output. A record that mentions an entity no slot represents is simply
     not gathered — the surface is the authority on what exists.
     """
+    # Built in numpy and handed over whole: assigning element by element into
+    # torch tensors costs a dispatch per element, on every step's host half.
     batch = len(surfaces)
     width = max((len(s.entity_slots) for s in surfaces), default=1)
-    gate = torch.zeros(batch, width)
-    mask = torch.zeros(batch, width)
-    index = torch.zeros(batch, width, dtype=torch.long)
-    collected: dict[str, torch.Tensor] = {}
+    gate = np.zeros((batch, width), dtype=np.float32)
+    mask = np.zeros((batch, width), dtype=np.float32)
+    index = np.zeros((batch, width), dtype=np.int64)
+    collected: dict[str, np.ndarray] = {}
 
     for spec in fields:
         # Only a multi-binary field's *target* is as wide as its prediction.
@@ -1079,7 +1097,7 @@ def entity_target_tensors(
             if spec.type is FieldType.MULTI_BINARY
             else (batch, width)
         )
-        collected[spec.name] = torch.zeros(*shape)
+        collected[spec.name] = np.zeros(shape, dtype=np.float32)
 
     for row, (surface, targets) in enumerate(zip(surfaces, targets_per_surface)):
         for column, slot_index in enumerate(surface.entity_slots):
@@ -1096,9 +1114,12 @@ def entity_target_tensors(
                 if value is None:
                     continue
                 if isinstance(value, list):
-                    collected[spec.name][row, column, : len(value)] = torch.tensor(
-                        value, dtype=torch.float32,
-                    )
+                    collected[spec.name][row, column, : len(value)] = value
                 else:
                     collected[spec.name][row, column] = float(value)
-    return gate, collected, mask, index
+    return (
+        torch.from_numpy(gate),
+        {name: torch.from_numpy(values) for name, values in collected.items()},
+        torch.from_numpy(mask),
+        torch.from_numpy(index),
+    )

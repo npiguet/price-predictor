@@ -27,17 +27,23 @@ from effects.application.extract_keyword_definitions import load_keyword_definit
 from effects.application.step_preparation import ShardTask
 from effects.application.surface_batching import SurfaceBatcher
 from effects.application.train_effect_model import (
-    HeldOutCards,
     TrainEffectModelConfig,
     fields_for_epoch,
-    sampling_class,
-    variant_masks,
 )
-from effects.application.training_loop import TrainingLoop, parameter_groups
+from effects.application.training_loop import (
+    EpochTally,
+    RunContext,
+    StepLoss,
+    TrainingLoop,
+    parameter_groups,
+)
 from effects.domain.ability_encoder import AbilityEncoder, AbilityEncoderConfig
 from effects.domain.ability_tokenizer import SPECIAL_TOKENS, AbilityTokenizer
 from effects.domain.effect_head_input import SlotKind
 from effects.domain.effect_model import EffectModel, EffectModelConfig
+from effects.domain.sampling import sampling_class
+from effects.domain.split import CorpusSplit
+from effects.domain.variants import variant_masks
 from effects.infrastructure.record_io import read_shard
 from effects.infrastructure.sidecar_io import SidecarCache, script_vocabularies
 
@@ -64,6 +70,15 @@ def records():
 def definitions():
     return load_keyword_definitions(_FIXTURES / "keyword-definitions.json")
 
+def _run(encoder, model, tokenizer, sidecars, widths, optimizer) -> RunContext:
+    """The run a shard trains in, with no configs: nothing here saves."""
+    return RunContext(
+        encoder_config=None, model_config=None, encoder=encoder, model=model,
+        tokenizer=tokenizer, sidecars=sidecars, widths=widths,
+        optimizer=optimizer, warmup=1,
+    )
+
+
 
 def _config(**overrides) -> TrainEffectModelConfig:
     settings = dict(
@@ -84,8 +99,7 @@ def _loop(monkeypatch, *, prefetch: bool, **overrides) -> TrainingLoop:
     monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
     return TrainingLoop(
         _config(**overrides),
-        held_out=HeldOutCards(names=frozenset(), script_files=frozenset()),
-        inherited=None, training_shards=[], validation_samples={},
+        split=CorpusSplit(), training_shards=[], validation_samples={},
         holdout_permille=20, holdout_max_carriers=8,
         gate_one_records=0, rarity={}, corpus_digest="",
         prefetch_batches=prefetch,
@@ -159,16 +173,16 @@ def _train(monkeypatch, records, definitions, *, prefetch: bool):
         return real_prepare(self, *args, **kwargs)
 
     def loss_for(self, *args, **kwargs):
-        total, parts, shipped = real_loss(self, *args, **kwargs)
-        losses.append((float(total.detach()), float(shipped.detach())))
-        return total, parts, shipped
+        computed = real_loss(self, *args, **kwargs)
+        losses.append((float(computed.total.detach()), float(computed.shipped.detach())))
+        return computed
 
-    def mlm_backward(self, *args, **kwargs):
+    def mlm_backward(self, loss, *args, **kwargs):
         # Captured after the MLM pass, which runs after the main backward, so
         # the step's terms include it.
-        real_mlm(self, *args, **kwargs)
+        real_mlm(self, loss, *args, **kwargs)
         terms.append({
-            name: float(value.detach()) for name, value in self._last_terms.items()
+            name: float(value.detach()) for name, value in loss.terms.items()
         })
 
     monkeypatch.setattr(TrainingLoop, "_prepare_step", prepare)
@@ -177,17 +191,13 @@ def _train(monkeypatch, records, definitions, *, prefetch: bool):
     fields = fields_for_epoch(
         loop.config, present=frozenset(sampling_class(r) for r in records), epoch=1,
     )
-    running = torch.zeros(())
     task, steps = _shard(
         loop, records, tokenizer, sidecars, widths, STEPS, fields,
         heads=loop._training_heads(model),
     )
-    step, taken = loop._train_on_shard(
-        task, steps, 0.0,
-        encoder=encoder, model=model, tokenizer=tokenizer, sidecars=sidecars,
-        widths=widths, optimizer=optimizer, warmup=1, running=running,
-        step=0, taken=0, of=1,
-    )
+    run = _run(encoder, model, tokenizer, sidecars, widths, optimizer)
+    tally = EpochTally(running=torch.zeros(()))
+    loop._train_on_shard(task, steps, 0.0, run, tally, of=1)
     monkeypatch.undo()
     parameters = {
         f"{owner}.{name}": value.detach().clone()
@@ -196,8 +206,8 @@ def _train(monkeypatch, records, definitions, *, prefetch: bool):
     }
     return {
         "losses": losses, "terms": terms, "threads": threads,
-        "parameters": parameters, "running": float(running),
-        "counters": (step, taken),
+        "parameters": parameters, "running": float(tally.running),
+        "counters": (run.step, tally.taken),
     }
 
 
@@ -259,18 +269,19 @@ def _stubbed(monkeypatch, records, *, failing_at: int | None = None):
         time.sleep(PAUSE)
         mark("train", prepared, "finish")
         loss = model.p.sum()
-        return loss, {}, loss
+        return StepLoss(total=loss, shipped=loss, parts={}, terms={})
 
     monkeypatch.setattr(TrainingLoop, "_prepare_step", prepare)
     monkeypatch.setattr(TrainingLoop, "_loss_for", loss_for)
     loop = _loop(monkeypatch, prefetch=True)
     sidecars = SidecarCache(dict(_SIDECAR_ROOTS))
     task, steps = _shard(loop, records, None, sidecars, {}, 4, (), heads=frozenset())
+    run = _run(
+        _Stub(), model, None, sidecars, {},
+        torch.optim.SGD(model.parameters(), lr=0.1),
+    )
     loop._train_on_shard(
-        task, steps, 0.0,
-        encoder=_Stub(), model=model, tokenizer=None, sidecars=sidecars,
-        widths={}, optimizer=torch.optim.SGD(model.parameters(), lr=0.1),
-        warmup=1, running=torch.zeros(()), step=0, taken=0, of=1,
+        task, steps, 0.0, run, EpochTally(running=torch.zeros(())), of=1,
     )
     return marks, prepared
 

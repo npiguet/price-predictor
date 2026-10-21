@@ -26,13 +26,16 @@ from collections.abc import Iterable, Mapping
 from pathlib import Path
 
 from effects.domain.corpus_curation import record_hash
-from effects.domain.effect_model import CLASS_RESOLUTION_COST, CLASS_RESOLUTION_EFFECT
 from effects.domain.records import EffectRecord
+from effects.domain.sampling import (
+    CLASS_RESOLUTION_COST,
+    CLASS_RESOLUTION_EFFECT,
+)
+from effects.domain.strata import VALIDATION_STRATA, Stratum
 
 logger = logging.getLogger(__name__)
 
 SAMPLE_SEED_OFFSET = 0x2545F491
-STRATA = ("card-disjoint", "game-disjoint")
 #: Card-disjoint classes drawn from the gate-one slice before the stratum.
 GATE_ONE_CLASSES = frozenset({CLASS_RESOLUTION_EFFECT, CLASS_RESOLUTION_COST})
 #: Records each held-out text gives per round of the round-robin (FR-051).
@@ -77,7 +80,7 @@ def _gate_one_round_robin(
     slice; the second collects the chosen records.
     """
     from effects.application.build_corpus import ability_key
-    from effects.application.train_effect_model import sampling_class
+    from effects.domain.sampling import sampling_class
     from effects.infrastructure.record_io import read_records
 
     per_text: dict[str, dict[str, list[int]]] = {
@@ -155,7 +158,7 @@ def _collect(
     directory: Path, quota: Mapping[str, int], *, seed: int,
     only: frozenset[str] | None = None,
 ) -> dict[str, _Smallest]:
-    from effects.application.train_effect_model import sampling_class
+    from effects.domain.sampling import sampling_class
     from effects.infrastructure.record_io import read_records
 
     heaps = {name: _Smallest(cap) for name, cap in quota.items()}
@@ -182,7 +185,7 @@ def draw_samples(
     it the gate-one slice is drawn by smallest hash alone, as feature 023 did.
     """
     if size <= 0:
-        return {"card-disjoint": [], "game-disjoint": []}
+        return {stratum: [] for stratum in VALIDATION_STRATA}
 
     quota = class_quota(mix, size)
     out: dict[str, list[EffectRecord]] = {}
@@ -194,12 +197,12 @@ def draw_samples(
     else:
         gate = _collect(gate_one, quota, seed=seed, only=GATE_ONE_CLASSES)
         gate_records = {name: heap.records() for name, heap in gate.items()}
-    for stratum, directory in (("card-disjoint", card_disjoint), ("game-disjoint", game_disjoint)):
+    for stratum, directory in zip(VALIDATION_STRATA, (card_disjoint, game_disjoint)):
         heaps = _collect(directory, quota, seed=seed)
         sample: list[EffectRecord] = []
         for name, cap in quota.items():
             chosen: list[EffectRecord] = []
-            if stratum == "card-disjoint" and name in GATE_ONE_CLASSES:
+            if stratum is Stratum.CARD_DISJOINT and name in GATE_ONE_CLASSES:
                 chosen = gate_records.get(name, [])[:cap]
             taken = {r.record_id for r in chosen}
             for record in heaps[name].records():

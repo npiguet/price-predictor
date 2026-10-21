@@ -22,15 +22,15 @@ from effects.domain.lethality_counterfactuals import (
     qualify,
 )
 from effects.domain.provenance import ProvenanceKey
-from effects.domain.records import EffectRecord, Moment, RecordKind, ResolutionPayload
+from effects.domain.records import EffectRecord, ResolutionPayload
 from effects.domain.state_snapshot import (
     EntityState,
     GlobalState,
     PlayerState,
     PowerToughness,
     Refs,
-    StateSnapshot,
 )
+from tests.unit.effects.builders import make_entity, make_record, make_snapshot
 
 DIED = ZONE_OUTCOMES.index("died")
 BOLT = ("NumDmg$ 3 | SP$ DealDamage | SpellDescription$ CARDNAME deals 3 damage to "
@@ -49,18 +49,16 @@ def _creature(entity_id: str, toughness: int, *, damage: int = 0, **overrides) -
 
 
 def _record(events, entities, *, x=None, targets=("E1",)) -> EffectRecord:
-    state = StateSnapshot(
+    state = make_snapshot(
         global_=GlobalState(turn=3, phase="main1", active="P0", priority="P0", stack_size=1),
         players=(PlayerState(id="P0", life=20, hand=3, library=30, graveyard=0),
                  PlayerState(id="P1", life=20, hand=3, library=30, graveyard=0)),
-        entities=(EntityState(id="S1", name="spell", zone="stack", controller="P0"),
-                  *entities),
+        entities=(make_entity("S1", "spell", zone="stack"), *entities),
         refs=Refs(targets=targets, source="S1", x=x),
     )
-    return EffectRecord(
-        record_id="r.0-0.1", run_id="r", timestamp="t", game_id="r.0-0.1",
-        kind=RecordKind.RESOLUTION, moment=Moment.RESOLUTION, actor_player="P0",
-        state=state, payload=ResolutionPayload(events=tuple(events)), ability=(KEY,),
+    return make_record(
+        record_id="r.0-0.1", run_id="r", game_id="r.0-0.1", state=state,
+        payload=ResolutionPayload(events=tuple(events)), ability=(KEY,),
     )
 
 

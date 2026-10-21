@@ -395,7 +395,7 @@ def check_variant_geometry(
             f"{name}-comparison", CheckStatus.SKIPPED,
             f"no {name} cache; run encode-abilities --variant {name}",
         )
-    from effects.application.evaluate_effect_model import (
+    from effects.domain.gate_metrics import (
         mean_pairwise_cosine,
         top_component_share,
     )

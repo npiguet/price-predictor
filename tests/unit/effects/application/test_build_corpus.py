@@ -60,10 +60,11 @@ from effects.domain.records import (
     ResolutionPayload,
     RewritePayload,
 )
-from effects.domain.state_snapshot import EntityState, GlobalState, StateSnapshot
+from effects.domain.state_snapshot import StateSnapshot
 from effects.infrastructure.corpus_store import CorpusStore
 from effects.infrastructure.record_io import iter_shards, read_records, read_shard, write_shard
 from effects.infrastructure.sidecar_io import sidecar_path_for, write_sidecar
+from tests.unit.effects.builders import make_entity, make_snapshot
 
 _HELD_OUT_CARD = "Held Out Bears"
 #: Found by brute force over ``text_is_held_out(..., permille=20)`` (the
@@ -172,14 +173,9 @@ def _write_forge_tokenscripts(root: Path) -> Path:
 
 
 def _snapshot(entity_names: tuple[str, ...] = ()) -> StateSnapshot:
-    return StateSnapshot(
-        global_=GlobalState(
-            turn=1, phase="main1", active="P0", priority="P0", stack_size=0,
-        ),
-        players=(),
+    return make_snapshot(
         entities=tuple(
-            EntityState(id=f"E{index}", name=name, zone="battlefield", controller="P0")
-            for index, name in enumerate(entity_names)
+            make_entity(f"E{index}", name) for index, name in enumerate(entity_names)
         ),
     )
 
@@ -391,7 +387,7 @@ def test_no_training_record_belongs_to_a_withheld_game(tmp_path, a_corpus):
 
 def test_no_training_record_names_a_held_out_card(tmp_path, a_corpus):
     """FR-088: the exclusion is by game, and every held-out game is dropped."""
-    from effects.application.train_effect_model import (
+    from effects.domain.split import (
         HeldOutCards,
         record_names_held_out_card,
     )
@@ -720,7 +716,7 @@ def _mixture_config(output: Path, fixture: CorpusFixture):
 
 
 def _delivered_shares(training_dir: Path) -> dict[str, float]:
-    from effects.application.train_effect_model import sampling_class
+    from effects.domain.sampling import sampling_class
 
     counts: Counter[str] = Counter()
     for record in read_records(training_dir):
@@ -1588,11 +1584,11 @@ def test_the_cli_exposes_the_remap_flags():
     args = build_parser().parse_args([
         "build-corpus", "--forge-tokenscripts", "x", "--no-remap-token-keys",
     ])
-    assert args.forge_tokenscripts == "x"
+    assert args.forge_tokenscripts == Path("x")
     assert args.remap_token_keys is False
     defaults = build_parser().parse_args(["build-corpus"])
     assert defaults.remap_token_keys is True
-    assert defaults.forge_tokenscripts == "../forge/forge-gui/res/tokenscripts"
+    assert defaults.forge_tokenscripts == Path("../forge/forge-gui/res/tokenscripts")
 
 
 def test_a_class_lost_to_no_acting_text_is_told_to_reconvert():
@@ -1805,7 +1801,7 @@ class TestLegalityFamilies:
 
         return Survey(
             shards=(), records=sum(keyless.values()), key_games={}, key_records=Counter(),
-            class_records=Counter(), cell_key_records=Counter(), cell_key_heaps={},
+            cell_key_records=Counter(), cell_key_heaps={},
             cell_keyless=Counter(keyless), keyword_combat_games=frozenset(),
             held_out_text_games={}, held_out_games=frozenset(), games=frozenset(),
         )
@@ -1816,7 +1812,7 @@ class TestLegalityFamilies:
             legality_mode_counts,
             resolve_legality_families,
         )
-        from effects.domain.effect_model import CLASS_PLAYABILITY_LEGALITY as LEGALITY
+        from effects.domain.sampling import CLASS_PLAYABILITY_LEGALITY as LEGALITY
 
         survey = self._survey({
             Cell(LEGALITY, "real", "none"): 500,

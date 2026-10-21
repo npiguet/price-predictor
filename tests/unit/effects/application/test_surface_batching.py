@@ -13,7 +13,6 @@ import pytest
 import torch
 
 from effects.application.surface_batching import NoiseState, SurfaceBatcher
-from effects.application.train_effect_model import VariantMasks
 from effects.domain.effect_head_input import SlotKind
 from effects.domain.provenance import ProvenanceKey, SidecarLine
 from effects.domain.records import (
@@ -24,8 +23,10 @@ from effects.domain.records import (
     ResolutionPayload,
 )
 from effects.domain.state_snapshot import EntityState, GlobalState, StateSnapshot
+from effects.domain.variants import VariantMasks
 from effects.infrastructure.record_io import read_shard
 from effects.infrastructure.sidecar_io import SidecarCache
+from tests.unit.effects.builders import make_entity, make_record, make_snapshot
 
 _ACT = ProvenanceKey("cardsfolder/l/lightning_bolt.txt", 0, "spell", 0)
 _ANTHEM = ProvenanceKey("cardsfolder/a/anthem.txt", 0, "static", 0)
@@ -50,22 +51,18 @@ class _Sidecars:
 
 
 def _record() -> EffectRecord:
-    return EffectRecord(
-        record_id="run.0.1", run_id="run", timestamp="t", game_id="run.0.1",
-        kind=RecordKind.RESOLUTION, moment=Moment.RESOLUTION, actor_player="P0",
-        ability=(_ACT,), payload=ResolutionPayload(),
-        state=StateSnapshot(
+    return make_record(
+        record_id="run.0.1", run_id="run", game_id="run.0.1", ability=(_ACT,),
+        state=make_snapshot(
             global_=GlobalState(turn=1, phase="main1", active="P0", priority="P0", stack_size=1),
-            players=(),
-            entities=(EntityState(id="E1", name="Anthem", zone="battlefield",
-                                  controller="P0", printed=(_PHANTOM, _ANTHEM)),),
+            entities=(make_entity("E1", "Anthem", printed=(_PHANTOM, _ANTHEM)),),
         ),
     )
 
 
-def _batcher(**masks) -> SurfaceBatcher:
+def _batcher(sidecars=None, **masks) -> SurfaceBatcher:
     return SurfaceBatcher(
-        tokenizer=None, sidecars=_Sidecars(), masks=VariantMasks(**masks),
+        tokenizer=None, sidecars=sidecars or _Sidecars(), masks=VariantMasks(**masks),
         surface="script", e_dim=4, widths={}, device=torch.device("cpu"),
     )
 
@@ -109,8 +106,7 @@ def test_a_key_is_joined_once_however_often_the_batch_asks():
     # Three keys, asked for by `batch_texts` and then three more times per
     # record inside `surface_for`, over two passes.
     sidecars = _Counting()
-    batcher = _batcher()
-    batcher.sidecars = sidecars
+    batcher = _batcher(sidecars)
     records = [_record()]
     for _ in range(2):
         texts = batcher.batch_texts(records)
@@ -123,16 +119,14 @@ def test_a_key_is_joined_once_however_often_the_batch_asks():
 def test_a_sidecar_mismatch_is_never_memoised():
     # A mismatch is the one answer the memo must not keep: swallowing it once
     # would turn "the sidecar does not describe this card" into no text at all.
-    batcher = _batcher()
-    batcher.sidecars = _Mismatching()
+    batcher = _batcher(_Mismatching())
     for _ in range(3):
         with pytest.raises(KeyError, match="neither the lines"):
             batcher.text_of(_ACT)
 
 
 def test_a_sidecar_mismatch_raises_out_of_the_batcher():
-    batcher = _batcher()
-    batcher.sidecars = _Mismatching()
+    batcher = _batcher(_Mismatching())
     with pytest.raises(KeyError, match="neither the lines"):
         batcher.batch_texts([_record()])
 
@@ -328,8 +322,7 @@ def _mlm_batcher(lengths) -> SurfaceBatcher:
 
 def test_the_mlm_pass_returns_only_the_masked_positions():
     batcher = _mlm_batcher([6, 3, 9])
-    hidden, targets, mask = batcher.mlm_inputs(_EchoEncoder(), 0.5)
-    assert mask is None
+    hidden, targets = batcher.mlm_inputs(_EchoEncoder(), 0.5)
     # Every gathered row is a position the pass replaced with [MASK]...
     assert torch.all(hidden[:, 0] == _MaskTokens.mask_id)
     # ...and its target is the token that stood there: never [CLS] (id 2),
@@ -350,3 +343,29 @@ def test_a_stand_in_key_reads_its_text_with_the_real_line():
     assert batcher.text_of(stand) == "deals 5 damage to any target"
     assert batcher.line_of(stand) is _LINES[_ACT]
     assert batcher.options_for(stand) == ()
+
+
+def test_a_withheld_keyword_is_read_as_its_definition_never_its_token():
+    """``--withhold-keyword``: the line still says what the keyword does, so the
+    zero-shot check has a definition the model trained on reading."""
+    from effects.application.extract_keyword_definitions import KeywordDefinition
+    from effects.domain.ability_tokenizer import AbilityTokenizer
+
+    words = ["[PAD]", "[UNK]", "cardname", "[MASK]", "[CLS]", "flying", "reach",
+             "cant", "be", "blocked", "except", "by", "creatures", "with", "or"]
+    tokenizer = AbilityTokenizer(
+        {word: index for index, word in enumerate(words)},
+        {"Flying": KeywordDefinition(
+            keyword="Flying",
+            reminder_template="cant be blocked except by creatures with flying or reach",
+        )},
+    )
+    batcher = SurfaceBatcher(
+        tokenizer=tokenizer, sidecars=_Sidecars(), masks=VariantMasks(),
+        surface="prose", e_dim=4, widths={}, device=torch.device("cpu"),
+        withhold_keyword="Flying",
+    )
+    (line,) = batcher.prepare_texts(["flying"])
+    ids = {word: index for index, word in enumerate(words)}
+    # [CLS], then the reminder text in place of the bare token.
+    assert line.token_ids[1:4] == [ids["cant"], ids["be"], ids["blocked"]]

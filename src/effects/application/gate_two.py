@@ -28,10 +28,14 @@ from __future__ import annotations
 
 import logging
 import time
+from collections.abc import Iterator
 from dataclasses import dataclass, field
+from itertools import batched
+from typing import NamedTuple
 
 import torch
 
+from effects.application.gate_one import BATCH_RECORDS
 from effects.domain.damage_step_keywords import (
     CombatParticipant,
     DamageStepKeyword,
@@ -41,11 +45,15 @@ from effects.domain.damage_step_keywords import (
     subject_id,
 )
 from effects.domain.effect_model import (
-    FIELD_SLICES,
     FIELDS_BY_NAME,
     ZONE_OUTCOMES,
     FieldSpec,
     FieldType,
+)
+from effects.domain.head_decoding import (
+    direction_balance,
+    expected_magnitude,
+    field_outputs,
 )
 
 logger = logging.getLogger(__name__)
@@ -54,9 +62,16 @@ logger = logging.getLogger(__name__)
 #: from the raw corpus and runs for many minutes with nothing else to say.
 PROGRESS_EVERY_RECORDS = 50_000
 
-#: Observations per forward pass. Half of gate 1's record batch, because every
+#: Observations per forward pass: half of gate 1's record batch, because every
 #: observation is built twice — as collected and perturbed — in one batch.
-BATCH_OBSERVATIONS = 16
+BATCH_OBSERVATIONS = BATCH_RECORDS // 2
+
+
+class FieldAgreement(NamedTuple):
+    """How many of one effect's scored observations moved the rules' way."""
+
+    agreeing: int
+    scored: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -72,38 +87,28 @@ class KeywordScore:
     qualifying: int = 0
     agreeing: int = 0
     #: ``effect label -> (agreeing, scored)``.
-    per_field: dict[str, tuple[int, int]] = field(default_factory=dict)
+    per_field: dict[str, FieldAgreement] = field(default_factory=dict)
 
 
-def count_qualifying_all(
-    records, rows: tuple[DamageStepKeyword, ...], sidecars=None,
-) -> dict[str, int]:
-    """Every row's qualifying count, in one pass over the corpus.
+@dataclass(slots=True)
+class _Tally:
+    """One keyword's running counts while the pass is still reading."""
 
-    One pass rather than one per keyword: each entity's keyword set is resolved
-    once and checked against all eight, which is the difference between an
-    evaluation that finishes and one that does not.
+    qualifying: int = 0
+    agreeing: int = 0
+    per_field: dict[str, FieldAgreement] = field(default_factory=dict)
 
-    The unit is a ``(record, carrier)`` observation, not a record: two creatures
-    with lifelink in one combat are two independent perturbations, and the
-    scorer scores them separately.
-    """
-    resolver = KeywordResolver(sidecars)
-    counts = {row.keyword: 0 for row in rows}
-    for record in records:
-        for row, _participant in qualifying_observations(record, rows, resolver):
-            counts[row.keyword] += 1
-    return counts
+    def add(self, agreed: bool, per_effect: dict[str, bool]) -> None:
+        self.qualifying += 1
+        self.agreeing += 1 if agreed else 0
+        for label, ok in per_effect.items():
+            agreeing, scored = self.per_field.get(label, FieldAgreement(0, 0))
+            self.per_field[label] = FieldAgreement(
+                agreeing + (1 if ok else 0), scored + 1,
+            )
 
-
-def count_qualifying(records, row: DamageStepKeyword, sidecars=None) -> int:
-    """One row's qualifying count.
-
-    Without ``sidecars`` only the overlay channel is visible, and the count then
-    describes a different population than the gate's table does — printed first
-    strike is most first strike.
-    """
-    return count_qualifying_all(records, (row,), sidecars)[row.keyword]
+    def score(self) -> KeywordScore:
+        return KeywordScore(self.qualifying, self.agreeing, self.per_field)
 
 
 # ── decoding a head into one comparable number ──────────────────────────
@@ -124,15 +129,13 @@ def read_field(
     Any other type raises rather than guessing: the table pins every effect to a
     real head, and a row naming a field this cannot read is a table bug.
     """
-    start, end = FIELD_SLICES[spec.name]
-    slice_ = vector[start:end]
+    slice_ = field_outputs(vector, spec)
     match spec.type:
         case FieldType.COUNT:
-            return float(torch.exp(slice_[0]))
+            return float(expected_magnitude(spec, slice_))
         case FieldType.SIGNED_DELTA:
-            probabilities = torch.softmax(slice_[:3], dim=-1)
-            sign = float(probabilities[2] - probabilities[0])
-            return sign * float(torch.exp(slice_[3]))
+            sign = float(direction_balance(spec, slice_))
+            return sign * float(expected_magnitude(spec, slice_))
         case FieldType.CATEGORICAL:
             if spec.name != "zone_outcome" or category is None:
                 raise ValueError(
@@ -203,7 +206,6 @@ def score_keywords(
     encoder,
     model,
     batcher,
-    sidecars,
     *,
     fields: tuple[FieldSpec, ...],
 ) -> dict[str, KeywordScore]:
@@ -216,57 +218,61 @@ def score_keywords(
     a parsed record costs about 45 KB, and the game-disjoint split is a thousand
     games.
     """
-    resolver = KeywordResolver(sidecars)
-    #: keyword -> [qualifying, agreeing, {effect label: (agreeing, scored)}].
-    totals: dict[str, list] = {row.keyword: [0, 0, {}] for row in rows}
-    pending: list = []
+    # The batcher's own sidecar cache, never a second one: the resolver decides
+    # which entity carries a keyword and the surface builder decides which slot
+    # to drop for it, and the two reading different joins is exactly how a
+    # perturbation strips nothing.
+    resolver = KeywordResolver(batcher.sidecars)
+    tallies = {row.keyword: _Tally() for row in rows}
+    progress = _Progress()
 
     encoder.eval()
     model.eval()
-    started = time.monotonic()
-    read = observed = 0
-    with torch.no_grad():
-        for record in records:
-            read += 1
-            if read % PROGRESS_EVERY_RECORDS == 0:
-                logger.info(
-                    "gate 2: %d records read, %d observations scored (%.0fs)",
-                    read, observed, time.monotonic() - started,
-                )
-            for row, participant in qualifying_observations(
-                record, rows, resolver,
-            ):
-                pending.append((record, row, participant))
-                observed += 1
-                if len(pending) == BATCH_OBSERVATIONS:
-                    _score_chunk(
-                        pending, encoder, model, batcher, totals,
-                        fields=fields, keywords_of=resolver.keywords_of,
-                    )
-                    pending = []
-        if pending:
+    with torch.inference_mode():
+        observations = _qualifying(records, rows, resolver, progress)
+        for chunk in batched(observations, BATCH_OBSERVATIONS):
             _score_chunk(
-                pending, encoder, model, batcher, totals,
+                chunk, encoder, model, batcher, tallies,
                 fields=fields, keywords_of=resolver.keywords_of,
             )
-    logger.info(
-        "gate 2: %d records read, %d observations scored (%.0fs)",
-        read, observed, time.monotonic() - started,
-    )
+    progress.log()
+    return {keyword: tally.score() for keyword, tally in tallies.items()}
 
-    return {
-        keyword: KeywordScore(
-            qualifying=tally[0], agreeing=tally[1], per_field=tally[2],
+
+@dataclass(slots=True)
+class _Progress:
+    """Records read and observations found, for the periodic progress line."""
+
+    read: int = 0
+    observed: int = 0
+    started: float = field(default_factory=time.monotonic)
+
+    def log(self) -> None:
+        logger.info(
+            "gate 2: %d records read, %d observations scored (%.0fs)",
+            self.read, self.observed, time.monotonic() - self.started,
         )
-        for keyword, tally in totals.items()
-    }
+
+
+def _qualifying(
+    records, rows: tuple[DamageStepKeyword, ...], resolver: KeywordResolver,
+    progress: _Progress,
+) -> Iterator[tuple]:
+    """Every qualifying ``(record, row, participant)``, read lazily."""
+    for record in records:
+        progress.read += 1
+        if progress.read % PROGRESS_EVERY_RECORDS == 0:
+            progress.log()
+        for row, participant in qualifying_observations(record, rows, resolver):
+            progress.observed += 1
+            yield record, row, participant
 
 
 def _score_chunk(
-    chunk: list, encoder, model, batcher, totals: dict[str, list], *,
+    chunk: tuple, encoder, model, batcher, tallies: dict[str, _Tally], *,
     fields, keywords_of: KeywordsOf,
 ) -> None:
-    """Run one chunk of observations, paired, and fold it into ``totals``."""
+    """Run one chunk of observations, paired, and fold it into ``tallies``."""
     # Every observation twice: as collected, then with its keyword removed from
     # its carrier. One batch, so the two builds share the encoded abilities and
     # differ only in the perturbation.
@@ -286,12 +292,7 @@ def _score_chunk(
             _subject_vectors(surfaces[twin], outputs[twin], row, participant),
             fields=fields, keywords_of=keywords_of,
         )
-        tally = totals[row.keyword]
-        tally[0] += 1
-        tally[1] += 1 if agreed else 0
-        for label, ok in per_effect.items():
-            agreeing, scored = tally[2].get(label, (0, 0))
-            tally[2][label] = (agreeing + (1 if ok else 0), scored + 1)
+        tallies[row.keyword].add(agreed, per_effect)
 
 
 def _subject_vectors(

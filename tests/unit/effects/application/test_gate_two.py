@@ -29,8 +29,6 @@ import torch
 from effects.application.gate_two import (
     KeywordResolver,
     KeywordScore,
-    count_qualifying,
-    count_qualifying_all,
     qualifying_observations,
     read_field,
     score_keywords,
@@ -41,7 +39,6 @@ from effects.application.surface_batching import (
     IDENTITY_TABLE_SIZE,
     SurfaceBatcher,
 )
-from effects.application.train_effect_model import VariantMasks
 from effects.domain.damage_step_keywords import (
     KEYWORDS_BY_NAME,
     Subject,
@@ -70,6 +67,8 @@ from effects.domain.state_snapshot import (
     PowerToughness,
     StateSnapshot,
 )
+from effects.domain.variants import VariantMasks
+from effects.infrastructure.model_runner import Runnable
 
 # ── a board: one first-striking attacker, one blocker ────────────────────
 
@@ -694,6 +693,16 @@ class TestQualifyingObservations:
         assert sorted(p.carrier.id for _row, p in found) == ["A", "B0"]
 
 
+def count_qualifying_all(records, rows, sidecars=None) -> dict[str, int]:
+    """Every row's qualifying ``(record, carrier)`` observations."""
+    resolver = KeywordResolver(sidecars)
+    counts = {row.keyword: 0 for row in rows}
+    for record in records:
+        for row, _participant in qualifying_observations(record, rows, resolver):
+            counts[row.keyword] += 1
+    return counts
+
+
 class TestCounting:
     def test_it_counts_the_population_the_scorer_scores(self):
         records = [_printed_board(), _overlay_board()]
@@ -718,16 +727,8 @@ class TestCounting:
         assert counts["first_strike"] == 0
 
     def test_without_sidecars_a_printed_keyword_is_invisible(self):
-        assert count_qualifying(
-            [_printed_board()], KEYWORDS_BY_NAME["first_strike"], None,
-        ) == 0
-
-    def test_one_row_at_a_time_matches_the_one_pass_count(self):
-        records = [_printed_board(), _overlay_board()]
         row = KEYWORDS_BY_NAME["first_strike"]
-        assert count_qualifying(records, row, _Sidecars()) == (
-            count_qualifying_all(records, (row,), _Sidecars())[row.keyword]
-        )
+        assert count_qualifying_all([_printed_board()], (row,), None)[row.keyword] == 0
 
 
 # ── the whole scorer, against a model that reacts to the strip ───────────
@@ -766,7 +767,7 @@ class TestScoreKeywords:
         records = [_printed_board(game=f"g{i}") for i in range(3)]
         scores = score_keywords(
             records, (KEYWORDS_BY_NAME["first_strike"],),
-            _NoEncoder(), _AbilityCountingModel(), _batcher(), _Sidecars(),
+            _NoEncoder(), _AbilityCountingModel(), _batcher(),
             fields=_FIELDS,
         )
         score = scores["first_strike"]
@@ -777,7 +778,7 @@ class TestScoreKeywords:
         records = [_printed_board()]
         scores = score_keywords(
             records, (KEYWORDS_BY_NAME["first_strike"],),
-            _NoEncoder(), _AbilityCountingModel(), _batcher(), _Sidecars(),
+            _NoEncoder(), _AbilityCountingModel(), _batcher(),
             fields=_FIELDS,
         )
         assert set(scores["first_strike"].per_field) == {
@@ -787,7 +788,7 @@ class TestScoreKeywords:
     def test_a_keyword_no_record_qualifies_for_scores_nothing(self):
         scores = score_keywords(
             [_printed_board()], (KEYWORDS_BY_NAME["wither"],),
-            _NoEncoder(), _AbilityCountingModel(), _batcher(), _Sidecars(),
+            _NoEncoder(), _AbilityCountingModel(), _batcher(),
             fields=_FIELDS,
         )
         assert scores["wither"] == KeywordScore()
@@ -795,7 +796,7 @@ class TestScoreKeywords:
     def test_an_empty_corpus_scores_every_row_at_zero(self):
         scores = score_keywords(
             [], (KEYWORDS_BY_NAME["lifelink"],),
-            _NoEncoder(), _AbilityCountingModel(), _batcher(), _Sidecars(),
+            _NoEncoder(), _AbilityCountingModel(), _batcher(),
             fields=_FIELDS,
         )
         assert scores["lifelink"].qualifying == 0
@@ -829,6 +830,15 @@ class TestEvaluatorWiring:
             records_dir=tmp_path, cards_folders=(tmp_path / "cardsfolder",),
         )
 
+    def _context(self, tmp_path, checkpoint):
+        from effects.application.evaluate_effect_model import EvaluationContext
+
+        return EvaluationContext(
+            self._config(tmp_path), checkpoint,
+            vocab_path=tmp_path / "vocab.txt",
+            keyword_path=tmp_path / "keywords.json",
+        )
+
     def test_it_scores_the_game_disjoint_combat_records(self, tmp_path, monkeypatch):
         from effects.application import evaluate_effect_model as evaluator
 
@@ -838,15 +848,13 @@ class TestEvaluatorWiring:
         )
         monkeypatch.setattr(
             evaluator, "_gate_two_runnable",
-            lambda *a, **k: (
+            lambda *a, **k: Runnable(
                 _NoEncoder(), _AbilityCountingModel(), _batcher(), _FIELDS,
             ),
         )
 
         verdicts = evaluator.run_gate_two(
-            self._config(tmp_path), _Checkpoint(self._provenance(("gd-1",))),
-            vocab_path=tmp_path / "vocab.txt",
-            keyword_path=tmp_path / "keywords.json",
+            self._context(tmp_path, _Checkpoint(self._provenance(("gd-1",)))),
         )
 
         first_strike = next(v for v in verdicts if v.keyword == "first_strike")
@@ -862,15 +870,13 @@ class TestEvaluatorWiring:
         )
         monkeypatch.setattr(
             evaluator, "_gate_two_runnable",
-            lambda *a, **k: (
+            lambda *a, **k: Runnable(
                 _NoEncoder(), _AbilityCountingModel(), _batcher(), _FIELDS,
             ),
         )
 
         verdicts = evaluator.run_gate_two(
-            self._config(tmp_path), _Checkpoint(self._provenance(("gd-1",))),
-            vocab_path=tmp_path / "vocab.txt",
-            keyword_path=tmp_path / "keywords.json",
+            self._context(tmp_path, _Checkpoint(self._provenance(("gd-1",)))),
         )
 
         first_strike = next(v for v in verdicts if v.keyword == "first_strike")
@@ -892,9 +898,7 @@ class TestEvaluatorWiring:
         monkeypatch.setattr(evaluator, "_gate_two_runnable", _never)
 
         verdicts = evaluator.run_gate_two(
-            self._config(tmp_path), _Checkpoint(self._provenance(())),
-            vocab_path=tmp_path / "vocab.txt",
-            keyword_path=tmp_path / "keywords.json",
+            self._context(tmp_path, _Checkpoint(self._provenance(()))),
         )
 
         assert len(verdicts) == 8

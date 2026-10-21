@@ -8,10 +8,10 @@ from effects.application.train_effect_model import (
     fields_for_epoch,
 )
 from effects.domain.effect_model import (
-    CLASS_RESOLUTION_EFFECT,
     PER_ENTITY_FIELDS,
     FieldGroup,
 )
+from effects.domain.sampling import CLASS_RESOLUTION_EFFECT
 
 PRESENT = frozenset({CLASS_RESOLUTION_EFFECT})
 

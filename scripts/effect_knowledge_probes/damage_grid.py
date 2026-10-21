@@ -95,15 +95,12 @@ def main() -> None:
     batcher = probe_model.batcher
     for record, entity in pairs:
         key = record.ability[0]
-        original = batcher._resolve(key)
+        original = batcher.text_of(key)
         edited = [sweeps.set_toughness(record, entity, t) for t in VALUES]
-        try:
-            for i, amount in enumerate(VALUES):
-                batcher._text_by_key[key] = (sweeps.set_damage(original[0], amount), original[1])
+        for i, amount in enumerate(VALUES):
+            with batcher.reading_as(key, sweeps.set_damage(original, amount)):
                 grid[i] += sweeps._predict(probe_model, edited,
                                            lambda o, v, s, r: sweeps._death(o, s, r, entity))
-        finally:
-            batcher._text_by_key[key] = original
     grid /= max(len(pairs), 1)
     print(f"{args.checkpoint.parent.name}, {len(pairs)} {args.source} records")
     print("| damage \\ toughness | " + " | ".join(str(t) for t in VALUES) + " |")

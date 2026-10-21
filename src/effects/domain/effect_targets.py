@@ -25,16 +25,18 @@ from effects.domain.effect_model import (
     CREATED_OBJECT_SLOTS,
     CREATED_OBJECTS_WIDTH,
     CREATED_SLOT_WIDTH,
+    DURATIONS,
     LIBRARY_EVENTS,
     VERDICT_BITS,
     VERDICT_WIDTH,
     ZONE_OUTCOMES,
-    FieldSpec,
+    CreatedSlot,
 )
 from effects.domain.event_schema import Event, EventType
 from effects.domain.keyword_names import overlay_keyword
 from effects.domain.records import (
     ActivationPayload,
+    ContinuousPayload,
     EffectRecord,
     Moment,
     PlayabilityAttackersPayload,
@@ -77,6 +79,9 @@ _LIBRARY_EVENT_BY_TYPE: dict[EventType, str] = {
 _OVERLAY_INDEX: dict[str, int] = {
     keyword: index for index, keyword in enumerate(OVERLAY_KEYWORDS)
 }
+#: ``lower-cased member -> its flag``, for the type and colour channels.
+_TYPE_SLOTS: dict[str, int] = {t.lower(): i for i, t in enumerate(CARD_TYPES)}
+_COLOR_SLOTS: dict[str, int] = {c.lower(): i for i, c in enumerate(COLORS)}
 
 
 def overlay_index(raw: str) -> int | None:
@@ -170,14 +175,12 @@ def _apply_event(entry: EntityTargets, event: Event) -> None:
         case EventType.KEYWORD_CHANGE:
             _apply_keywords(entry, params)
         case EventType.TYPE_CHANGE:
-            _apply_multi(entry, "types_gained", params.get("types_added"), _TYPE_INDEX)
-            _apply_multi(entry, "types_lost", params.get("types_removed"), _TYPE_INDEX)
+            _apply_multi(entry, "types_gained", params.get("types_added"), _TYPE_SLOTS)
+            _apply_multi(entry, "types_lost", params.get("types_removed"), _TYPE_SLOTS)
             _apply_duration(entry, "type_color_duration", event.duration)
         case EventType.COLOR_CHANGE:
-            _apply_multi(entry, "colors_gained", params.get("colors"), _COLOR_INDEX)
-            _apply_multi(
-                entry, "colors_lost", params.get("colors_removed"), _COLOR_INDEX,
-            )
+            _apply_multi(entry, "colors_gained", params.get("colors"), _COLOR_SLOTS)
+            _apply_multi(entry, "colors_lost", params.get("colors_removed"), _COLOR_SLOTS)
             _apply_duration(entry, "type_color_duration", event.duration)
         case EventType.CONTROL_CHANGE:
             entry.set("control_change", 1)
@@ -208,10 +211,6 @@ def _apply_event(entry: EntityTargets, event: Event) -> None:
             )
 
 
-_TYPE_INDEX = "type"
-_COLOR_INDEX = "color"
-
-
 def _apply_duration(entry: EntityTargets, name: str, duration: str | None) -> None:
     """How long a lasting change lasts, where the record says.
 
@@ -223,22 +222,15 @@ def _apply_duration(entry: EntityTargets, name: str, duration: str | None) -> No
     An unrecognised or absent duration leaves the field unset rather than
     guessing a bucket, which reads as "this record does not say".
     """
-    from effects.domain.effect_model import DURATIONS
-
     if duration in DURATIONS:
         entry.set(name, DURATIONS.index(duration))
 
 
-def _apply_multi(entry: EntityTargets, name: str, values, kind: str) -> None:
-    from effects.domain.effect_head_input import CARD_TYPES
-
-    vocabulary = CARD_TYPES if kind == _TYPE_INDEX else COLORS
+def _apply_multi(entry: EntityTargets, name: str, values, slots: dict[str, int]) -> None:
     for value in values or ():
-        normalized = str(value).strip().lower()
-        for index, member in enumerate(vocabulary):
-            if member.lower() == normalized:
-                entry.flag(name, index, len(vocabulary))
-                break
+        index = slots.get(str(value).strip().lower())
+        if index is not None:
+            entry.flag(name, index, len(slots))
 
 
 def _apply_keywords(entry: EntityTargets, params: dict) -> None:
@@ -263,40 +255,34 @@ def _apply_mana(entry: EntityTargets, mana, *, sign: int) -> None:
 def _apply_playability(record: EffectRecord, slot) -> None:
     """Legality bits, which come from the payload rather than from events."""
     payload = record.payload
+
+    def mark(subject: str, name: str, value: int) -> None:
+        entry = slot(subject)
+        entry.affected = True
+        entry.set(name, value)
+
     if isinstance(payload, PlayabilityDecisionPayload):
         for candidate in payload.candidates:
             for target in candidate.legal_targets:
-                entry = slot(target)
-                entry.affected = True
-                entry.set("target_legal", 1)
+                mark(target, "target_legal", 1)
     elif isinstance(payload, PlayabilityAttackersPayload):
         for entity in payload.legal_attackers:
-            entry = slot(entity)
-            entry.affected = True
-            entry.set("attacker_legal", 1)
+            mark(entity, "attacker_legal", 1)
         for forbidden in payload.forbidden:
-            entry = slot(forbidden.entity)
-            entry.affected = True
-            entry.set("attacker_legal", 0)
+            mark(forbidden.entity, "attacker_legal", 0)
     elif isinstance(payload, PlayabilityBlockersPayload):
         for entity in payload.legal_blockers:
-            entry = slot(entity)
-            entry.affected = True
-            entry.set("blocker_legal", 1)
+            mark(entity, "blocker_legal", 1)
         for forbidden in payload.forbidden:
-            entry = slot(forbidden.entity)
-            entry.affected = True
-            entry.set("blocker_legal", 0)
+            mark(forbidden.entity, "blocker_legal", 0)
         # min_blockers is read at the anchored attacker, not at the blockers.
-        anchor = slot(payload.anchor_attacker)
-        anchor.affected = True
-        anchor.set("min_blockers", payload.min_blockers)
+        mark(payload.anchor_attacker, "min_blockers", payload.min_blockers)
 
 
 def _apply_continuous(record: EffectRecord, slot) -> None:
     """A continuous record's contributions are its targets directly."""
     payload = record.payload
-    if not hasattr(payload, "contributions"):
+    if not isinstance(payload, ContinuousPayload):
         return
     for contribution in payload.contributions:
         entry = slot(contribution.entity)
@@ -314,11 +300,11 @@ def _apply_continuous(record: EffectRecord, slot) -> None:
                 keyword.lstrip("-"),
             )
         gained, lost = _split_contribution(contribution.types)
-        _apply_multi(entry, "types_gained", gained, _TYPE_INDEX)
-        _apply_multi(entry, "types_lost", lost, _TYPE_INDEX)
+        _apply_multi(entry, "types_gained", gained, _TYPE_SLOTS)
+        _apply_multi(entry, "types_lost", lost, _TYPE_SLOTS)
         gained, lost = _split_contribution(contribution.colors)
-        _apply_multi(entry, "colors_gained", gained, _COLOR_INDEX)
-        _apply_multi(entry, "colors_lost", lost, _COLOR_INDEX)
+        _apply_multi(entry, "colors_gained", gained, _COLOR_SLOTS)
+        _apply_multi(entry, "colors_lost", lost, _COLOR_SLOTS)
 
 
 def _split_contribution(tokens: tuple[str, ...]) -> tuple[list[str], list[str]]:
@@ -332,7 +318,7 @@ def _split_contribution(tokens: tuple[str, ...]) -> tuple[list[str], list[str]]:
     record: the snapshot beside it is the board after the static applied, so
     reading the entity's current types back would name what it still has, not
     what it lost. Leaving the field unset says "this record does not say",
-    which is the one honest answer -- ``target_for`` skips an unset field
+    which is the one honest answer -- the loss skips an unset field
     rather than scoring it as an empty set.
 
     Tokens naming a whole class of type -- ``all-creature-types`` and the
@@ -350,13 +336,6 @@ def _split_contribution(tokens: tuple[str, ...]) -> tuple[list[str], list[str]]:
         else:
             gained.append(token)
     return gained, lost
-
-
-def target_for(
-    targets: EntityTargets, spec: FieldSpec,
-) -> float | int | list[float] | None:
-    """One field's target, or None where the record says nothing about it."""
-    return targets.fields.get(spec.name)
 
 
 # ── the [ACT] and [GLOBAL] heads (FR-060a) ──────────────────────────────
@@ -411,9 +390,7 @@ def supervises_created_objects(record: EffectRecord) -> bool:
     if record.kind is RecordKind.RESOLUTION:
         return record.moment is Moment.RESOLUTION
     if record.kind is RecordKind.REWRITE:
-        return isinstance(record.payload, RewritePayload) and (
-            record.payload.outgoing is not None
-        )
+        return isinstance(record.payload, RewritePayload) and record.payload.rewritten
     return False
 
 
@@ -427,51 +404,77 @@ def created_objects_targets(record: EffectRecord) -> list[float]:
     groups. Every slot carries the group's count, power, toughness and type and
     keyword flags, read from the event's ``characteristics``.
     """
-    groups: dict[tuple, dict] = {}
+    groups: dict[tuple, TokenGroup] = {}
     for event in events_of(record):
         if event.type is not EventType.TOKEN_CREATED:
             continue
-        params = event.params
+        found = TokenGroup.of(event.params)
+        group = groups.setdefault(found.key, found)
+        group.count += int(event.params.get("count", 1) or 1)
+
+    ordered = sorted(
+        (g for g in groups.values() if g.scripted), key=lambda g: g.id,
+    ) + sorted(
+        (g for g in groups.values() if not g.scripted), key=lambda g: -g.count,
+    )
+    target = [0.0] * CREATED_OBJECTS_WIDTH
+    for slot, group in enumerate(ordered[:CREATED_OBJECT_SLOTS]):
+        group.write(target, slot * CREATED_SLOT_WIDTH)
+    target[-1] = 1.0 if len(ordered) > CREATED_OBJECT_SLOTS else 0.0
+    return target
+
+
+@dataclass
+class TokenGroup:
+    """Tokens one record created that the head counts as one group (FR-078).
+
+    Grouped by token-script id where the event names one, otherwise by the
+    token's characteristics.
+    """
+
+    scripted: bool
+    id: str
+    power: object
+    toughness: object
+    types: str
+    keywords: tuple
+    count: int = 0
+
+    @classmethod
+    def of(cls, params: dict) -> TokenGroup:
         script = params.get("token_script_id") or None
         traits = params.get("characteristics") or {}
         keywords = traits.get("keywords") or ()
         if isinstance(keywords, str):
             keywords = (keywords,)
-        key = (
-            ("script", str(script)) if script is not None
-            else ("traits", str(traits.get("types", "")), traits.get("power"),
-                  traits.get("toughness"), tuple(sorted(map(str, keywords))))
+        return cls(
+            scripted=script is not None, id=str(script or ""),
+            power=traits.get("power"), toughness=traits.get("toughness"),
+            types=str(traits.get("types", "")), keywords=tuple(keywords),
         )
-        group = groups.setdefault(key, {
-            "scripted": script is not None, "id": str(script or ""), "count": 0,
-            "power": traits.get("power") or 0, "toughness": traits.get("toughness") or 0,
-            "types": str(traits.get("types", "")), "keywords": tuple(keywords),
-        })
-        group["count"] += int(params.get("count", 1) or 1)
 
-    ordered = sorted(
-        (g for g in groups.values() if g["scripted"]), key=lambda g: g["id"],
-    ) + sorted(
-        (g for g in groups.values() if not g["scripted"]), key=lambda g: -g["count"],
-    )
-    target = [0.0] * CREATED_OBJECTS_WIDTH
-    for slot, group in enumerate(ordered[:CREATED_OBJECT_SLOTS]):
-        base = slot * CREATED_SLOT_WIDTH
-        target[base] = 1.0
-        target[base + 1] = 1.0 if group["scripted"] else 0.0
-        target[base + 2] = float(group["count"])
-        target[base + 3] = max(float(_number(group["power"])), 0.0)
-        target[base + 4] = max(float(_number(group["toughness"])), 0.0)
-        card_types = group["types"].split(" - ", 1)[0].lower().split()
+    @property
+    def key(self) -> tuple:
+        if self.scripted:
+            return ("script", self.id)
+        return ("traits", self.types, self.power, self.toughness,
+                tuple(sorted(map(str, self.keywords))))
+
+    def write(self, target: list[float], base: int) -> None:
+        """This group's slot, from ``base`` on."""
+        target[base + CreatedSlot.PRESENT] = 1.0
+        target[base + CreatedSlot.SCRIPTED] = 1.0 if self.scripted else 0.0
+        target[base + CreatedSlot.COUNT] = float(self.count)
+        target[base + CreatedSlot.POWER] = max(_number(self.power), 0.0)
+        target[base + CreatedSlot.TOUGHNESS] = max(_number(self.toughness), 0.0)
+        card_types = self.types.split(" - ", 1)[0].lower().split()
         for index, card_type in enumerate(CARD_TYPES):
             if card_type in card_types:
-                target[base + 5 + index] = 1.0
-        for keyword in group["keywords"]:
+                target[base + CreatedSlot.TYPES + index] = 1.0
+        for keyword in self.keywords:
             index = overlay_index(str(keyword))
             if index is not None:
-                target[base + 5 + len(CARD_TYPES) + index] = 1.0
-    target[-1] = 1.0 if len(ordered) > CREATED_OBJECT_SLOTS else 0.0
-    return target
+                target[base + CreatedSlot.KEYWORDS + index] = 1.0
 
 
 def _number(value) -> float:

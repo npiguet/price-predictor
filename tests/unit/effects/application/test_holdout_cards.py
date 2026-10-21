@@ -16,7 +16,7 @@ from effects.application.holdout_cards import depletion_list
 
 def test_the_list_is_the_cards_the_trainer_holds_out() -> None:
     """One rule, exercised through both entry points (T163)."""
-    from effects.application.train_effect_model import text_keyed_holdout
+    from effects.domain.split import text_keyed_holdout
 
     card_files = {
         "Searing Spear": "cardsfolder/s/searing_spear.txt",
@@ -59,22 +59,6 @@ def test_the_list_is_sorted_so_two_runs_produce_the_same_file() -> None:
         "with no printings file to resolve against, the list keeps the "
         "converted tree's spelling"
     )
-
-
-def test_the_cli_defaults_match_the_trainer_constants() -> None:
-    """Two copies of the same number, kept honest.
-
-    The CLI restates them so `--help` stays free of torch, and a drift would
-    deplete pools against one holdout while the split used another.
-    """
-    from effects.application.train_effect_model import (
-        HOLDOUT_MAX_CARRIERS,
-        HOLDOUT_PERMILLE,
-    )
-    from effects.infrastructure import cli
-
-    assert cli.HOLDOUT_PERMILLE == HOLDOUT_PERMILLE
-    assert cli.HOLDOUT_MAX_CARRIERS == HOLDOUT_MAX_CARRIERS
 
 
 def test_a_checkpoint_records_the_holdout_flags_it_trained_under() -> None:

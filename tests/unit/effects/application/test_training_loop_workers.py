@@ -35,17 +35,18 @@ from effects.application.step_preparation import (
 )
 from effects.application.surface_batching import SurfaceBatcher
 from effects.application.train_effect_model import (
-    CorpusSplit,
-    HeldOutCards,
     TrainEffectModelConfig,
     fields_for_epoch,
-    sampling_class,
-    variant_masks,
 )
 from effects.application.training_loop import TrainingLoop
 from effects.domain.ability_encoder import AbilityEncoder
 from effects.domain.ability_tokenizer import SPECIAL_TOKENS, AbilityTokenizer
 from effects.domain.effect_model import EffectModel
+from effects.domain.sampling import sampling_class
+from effects.domain.split import (
+    CorpusSplit,
+)
+from effects.domain.variants import variant_masks
 from effects.infrastructure.record_io import read_shard, write_shard
 from effects.infrastructure.sidecar_io import SidecarCache
 from effects.infrastructure.step_workers import pack, unpack
@@ -169,7 +170,7 @@ def _run(
     def loss_for(self, *args, **kwargs):
         computed = real_loss(self, *args, **kwargs)
         if computed is not None:
-            losses.append(float(computed[0].detach()))
+            losses.append(float(computed.total.detach()))
         return computed
 
     monkeypatch.setattr(loop_module, "AbilityEncoder", encoder)
@@ -182,8 +183,7 @@ def _run(
                 corpus, out, prefetch_workers=workers, seed=seed, resume=resume,
                 **config,
             ),
-            held_out=HeldOutCards(names=frozenset(), script_files=frozenset()),
-            inherited=CorpusSplit(
+            split=CorpusSplit(
                 held_out_cards=(), card_disjoint_games=frozenset(),
                 game_disjoint_games=frozenset({corpus.held}),
             ),
@@ -455,8 +455,7 @@ def test_a_step_prepared_as_a_worker_prepares_it_equals_one_prepared_here(
     monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
     config = _config(corpus, corpus.root / "unused")
     loop = TrainingLoop(
-        config, held_out=HeldOutCards(names=frozenset(), script_files=frozenset()),
-        inherited=None, training_shards=[], validation_samples={},
+        config, split=CorpusSplit(), training_shards=[], validation_samples={},
         holdout_permille=20, holdout_max_carriers=8, rarity={"x": 3},
     )
     tokenizer = loop._build_tokenizer()
@@ -474,7 +473,7 @@ def test_a_step_prepared_as_a_worker_prepares_it_equals_one_prepared_here(
         task, records, tokenizer, sidecars, widths, heads=heads,
     ))
     worker = StepPreparer(PreparerSettings(
-        config=config, seed=loop.seed, held_out=loop.held_out, inherited=None,
+        config=config, seed=loop.seed, split=loop.split,
         rarity={"x": 3}, api_types=tuple(loop.api_types),
         param_keys=tuple(loop.param_keys), widths=widths, heads=heads,
     ))

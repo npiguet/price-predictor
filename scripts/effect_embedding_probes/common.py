@@ -209,10 +209,10 @@ def paths_for(
 
 def resolve_paths(args: argparse.Namespace) -> ProbePaths:
     """Load ``--checkpoint`` and resolve the run's paths from it."""
-    from effects.infrastructure.effect_model_store import EffectModelStore
+    from effects.infrastructure.effect_model_store import load_effect_checkpoint
 
     checkpoint = Path(args.checkpoint)
-    loaded = EffectModelStore(checkpoint.parent).load(checkpoint)
+    loaded = load_effect_checkpoint(checkpoint)
     paths = paths_for(
         checkpoint, args.abilities_root, loaded.provenance,
         recorded_folders=getattr(loaded, "cards_folders", ()),
