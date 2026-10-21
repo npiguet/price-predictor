@@ -33,7 +33,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 
 from effects.application.gate_one import GateOneMetrics
-from effects.application.gate_two import KeywordScore
+from effects.application.gate_two import FieldAgreement, KeywordScore
 from effects.domain.damage_step_keywords import (
     DAMAGE_STEP_KEYWORDS,
     MIN_DIRECTION_AGREEMENT,
@@ -242,7 +242,7 @@ def evaluate_keyword(
     *,
     qualifying_records: int,
     agreeing_records: int,
-    per_field: dict[str, tuple[int, int]] | None = None,
+    per_field: dict[str, FieldAgreement] | None = None,
 ) -> KeywordVerdict:
     """Route one keyword: pass, or send it to a stage-three probe (FR-119).
 
@@ -283,7 +283,7 @@ def evaluate_keyword(
     )
 
 
-def _render_per_field(per_field: dict[str, tuple[int, int]] | None) -> str:
+def _render_per_field(per_field: dict[str, FieldAgreement] | None) -> str:
     """The per-effect tail of a keyword's report line, or nothing."""
     if not per_field:
         return ""
@@ -1000,13 +1000,8 @@ def run_gate_two(
             config, main,
             vocab_path=vocab_path, keyword_path=keyword_path, records=head,
         )
-        # The batcher's own cache, not a second one built from the config: the
-        # resolver decides which entity carries a keyword and the surface
-        # builder decides which slot to drop for it, and the two reading
-        # different joins is exactly how a perturbation strips nothing.
         scores = score_keywords(
-            chain(head, records), rows, encoder, model, batcher,
-            batcher.sidecars, fields=fields,
+            chain(head, records), rows, encoder, model, batcher, fields=fields,
         )
     return [
         evaluate_keyword(

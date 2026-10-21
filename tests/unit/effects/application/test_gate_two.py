@@ -766,7 +766,7 @@ class TestScoreKeywords:
         records = [_printed_board(game=f"g{i}") for i in range(3)]
         scores = score_keywords(
             records, (KEYWORDS_BY_NAME["first_strike"],),
-            _NoEncoder(), _AbilityCountingModel(), _batcher(), _Sidecars(),
+            _NoEncoder(), _AbilityCountingModel(), _batcher(),
             fields=_FIELDS,
         )
         score = scores["first_strike"]
@@ -777,7 +777,7 @@ class TestScoreKeywords:
         records = [_printed_board()]
         scores = score_keywords(
             records, (KEYWORDS_BY_NAME["first_strike"],),
-            _NoEncoder(), _AbilityCountingModel(), _batcher(), _Sidecars(),
+            _NoEncoder(), _AbilityCountingModel(), _batcher(),
             fields=_FIELDS,
         )
         assert set(scores["first_strike"].per_field) == {
@@ -787,7 +787,7 @@ class TestScoreKeywords:
     def test_a_keyword_no_record_qualifies_for_scores_nothing(self):
         scores = score_keywords(
             [_printed_board()], (KEYWORDS_BY_NAME["wither"],),
-            _NoEncoder(), _AbilityCountingModel(), _batcher(), _Sidecars(),
+            _NoEncoder(), _AbilityCountingModel(), _batcher(),
             fields=_FIELDS,
         )
         assert scores["wither"] == KeywordScore()
@@ -795,7 +795,7 @@ class TestScoreKeywords:
     def test_an_empty_corpus_scores_every_row_at_zero(self):
         scores = score_keywords(
             [], (KEYWORDS_BY_NAME["lifelink"],),
-            _NoEncoder(), _AbilityCountingModel(), _batcher(), _Sidecars(),
+            _NoEncoder(), _AbilityCountingModel(), _batcher(),
             fields=_FIELDS,
         )
         assert scores["lifelink"].qualifying == 0
