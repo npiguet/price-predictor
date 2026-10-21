@@ -30,7 +30,6 @@ from __future__ import annotations
 
 import argparse
 import hashlib
-import importlib.util
 import json
 import sys
 import time
@@ -41,29 +40,24 @@ from pathlib import Path
 
 import numpy as np
 
-_HERE = Path(__file__).resolve().parent
+if __package__ in (None, ""):
+    # Run by path: put scripts/ on the path so the suite imports as a package.
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from effect_knowledge_probes import (  # noqa: E402
+    ablation,
+    common,
+    labels,
+    ladder,
+    sweeps,
+)
+from effect_knowledge_probes import board as board_probe  # noqa: E402
 
 
 def progress(message: str) -> None:
     """One timestamped line, flushed: a probing run takes the better part of an
     hour, and without these nothing says whether it is alive or where it is."""
     print(f"{datetime.now().strftime('%H:%M:%S')} {message}", flush=True)
-
-
-def sibling(name: str):
-    """A module of this suite, loaded by path under a name of its own.
-
-    By path because ``scripts/`` is not a package, and under
-    ``effect_knowledge_probes.<name>`` because the embedding probes beside it
-    have a ``common`` module of their own.
-    """
-    qualified = f"effect_knowledge_probes.{name}"
-    if qualified not in sys.modules:
-        spec = importlib.util.spec_from_file_location(qualified, _HERE / f"{name}.py")
-        module = importlib.util.module_from_spec(spec)
-        sys.modules[qualified] = module
-        spec.loader.exec_module(module)
-    return sys.modules[qualified]
 
 
 #: Probe games per validation stratum, by smallest ``crc32`` of the game id.
@@ -89,8 +83,6 @@ def probe_set_path(reports_dir: Path, corpus_digest: str) -> Path:
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    common = sibling("common")
-    labels = sibling("labels")
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--checkpoint", type=Path, required=True)
     parser.add_argument("--corpus", type=Path,
@@ -167,7 +159,6 @@ def _acting_text_function(sidecars, surface: str):
 
 
 def _game_shards(args, corpus: Path, stratum: str) -> list[Path]:
-    common = sibling("common")
     if args.records_dir is not None:
         return common.shards_of(args.records_dir)
     return common.shards_of(common.stratum_dir(corpus, stratum))
@@ -178,8 +169,6 @@ def freeze(args, checkpoint, corpus: Path, manifest, corpus_digest: str) -> dict
     from effects.domain.records import Moment, RecordKind, TriggerPayload
     from effects.infrastructure.record_io import iter_shards, read_shard
     from effects.infrastructure.sidecar_io import converted_text_path
-
-    common, labels, sweeps = sibling("common"), sibling("labels"), sibling("sweeps")
     surface = getattr(manifest, "surface", None) or "script"
     sidecars = common.sidecar_cache(args.cards_folder)
     acting_text = _acting_text_function(sidecars, surface)
@@ -361,8 +350,6 @@ def line_ladder(probe_set, probe_model, cache, targets, act_hidden, held_out_car
     checkpoint's cache: every line it encodes, read once per run.
     """
     from effects.domain.provenance import ProvenanceKey
-
-    ladder = sibling("ladder")
     items, text_by_key = cache
     by_text = {item.text: item for item in items}
     e_dim = probe_model.e_dim
@@ -419,8 +406,6 @@ def line_ladder(probe_set, probe_model, cache, targets, act_hidden, held_out_car
 def pair_ladder(probe_set, probe_model, cache, mlp_options, bootstrap) -> dict:
     """Interaction pairs: a trigger line with its cause, read from both ``e``."""
     from effects.domain.provenance import ProvenanceKey
-
-    ladder = sibling("ladder")
     items, text_by_key = cache
     by_text = {item.text: item for item in items}
     rows = []
@@ -477,8 +462,6 @@ def method_c(args, probe_model, corpus: Path, eval_records: list) -> dict:
     )
     from effects.domain.effect_targets import derive_targets
     from effects.infrastructure.record_io import iter_shards, read_shard
-
-    ablation = sibling("ablation")
     layers = args.method_c_layers
     config = replace(probe_model.checkpoint.model_config, n_layers=max(layers, 1))
     shallow = EffectModel(config).to(probe_model.device)
@@ -524,10 +507,6 @@ def probe(args, checkpoint, corpus: Path, probe_set: dict) -> dict:
     import torch
 
     from effects.infrastructure.record_io import read_shard
-
-    common, labels, ladder = sibling("common"), sibling("labels"), sibling("ladder")
-    sweeps, ablation = sibling("sweeps"), sibling("ablation")
-    board_probe = sibling("board")
     started = time.time()
     if torch.cuda.is_available():
         torch.cuda.reset_peak_memory_stats()
@@ -674,7 +653,7 @@ def probe(args, checkpoint, corpus: Path, probe_set: dict) -> dict:
     if board_chosen:
         progress("board-abilities ablation")
         stats = stats or ablation.cache_statistics(cache[0])
-        scorecard["board_abilities"] = board_probe.run(probe_model, board_chosen, stats, ablation)
+        scorecard["board_abilities"] = board_probe.run(probe_model, board_chosen, stats)
     if args.method_c and samples:
         progress("method C: a shallow trunk on frozen e")
         scorecard["method_c"] = method_c(args, probe_model, corpus, samples)
@@ -687,14 +666,6 @@ def probe(args, checkpoint, corpus: Path, probe_set: dict) -> dict:
 
 
 # ── tables ──────────────────────────────────────────────────────────────
-
-
-def _fmt(value) -> str:
-    if value is None:
-        return ""
-    if isinstance(value, float):
-        return "nan" if np.isnan(value) else f"{value:.3f}"
-    return str(value)
 
 
 def write_tables(out_dir: Path, scorecard: dict) -> None:
@@ -710,14 +681,14 @@ def write_tables(out_dir: Path, scorecard: dict) -> None:
                 for rung, scores in result["rungs"].items():
                     lines.append(
                         f"| {target} | {stratum} | {result['n']} | {rung} | "
-                        f"{_fmt(scores.get('linear'))} | {_fmt(scores.get('mlp'))} | "
-                        f"{_fmt(scores.get('model'))} |")
+                        f"{common.fmt(scores.get('linear'))} | {common.fmt(scores.get('mlp'))} | "
+                        f"{common.fmt(scores.get('model'))} |")
                 for probe_type, value in (result.get("share") or {}).items():
                     if value:
                         ci = value.get("ci") or [None, None]
                         shares.append(f"| {target} | {stratum} | {probe_type} | "
-                                      f"{_fmt(value['value'])} | {_fmt(ci[0])} | "
-                                      f"{_fmt(ci[1])} |")
+                                      f"{common.fmt(value['value'])} | {common.fmt(ci[0])} | "
+                                      f"{common.fmt(ci[1])} |")
         if shares:
             lines += ["", "## Share of the gap closed by e", "",
                       "| target | stratum | probe | share | 95% low | 95% high |",
@@ -730,23 +701,23 @@ def write_tables(out_dir: Path, scorecard: dict) -> None:
                 lines += [f"## {name}", "", f"Not run: {body['unavailable']}.", ""]
                 continue
             lines += [f"## {name}", "", "| value | mean prediction | n |", "|---:|---:|---:|"]
-            lines += [f"| {p['value']} | {_fmt(p['prediction'])} | {p['n']} |"
+            lines += [f"| {p['value']} | {common.fmt(p['prediction'])} | {p['n']} |"
                       for p in body["mean"]]
             lines.append("")
         (out_dir / "sweeps.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
     if scorecard.get("ablation"):
-        abl = sibling("ablation")
-        header = [f"{r} {s}" for r in abl.REPLACEMENTS for s in abl.SCOPES]
+        header = [f"{r} {s}" for r in ablation.REPLACEMENTS for s in ablation.SCOPES]
         lines = ["# Ablation: loss increase per field", "",
                  "| field | base | " + " | ".join(header) + " |",
                  "|---|---:|" + "---:|" * len(header)]
         for name, body in sorted(scorecard["ablation"].items()):
-            cells = [_fmt(body[r][s]) for r in abl.REPLACEMENTS for s in abl.SCOPES]
-            lines.append(f"| {name} | {_fmt(body['base_loss'])} | " + " | ".join(cells) + " |")
+            cells = [common.fmt(body[r][s]) for r in ablation.REPLACEMENTS for s in ablation.SCOPES]
+            base = common.fmt(body["base_loss"])
+            lines.append(f"| {name} | {base} | " + " | ".join(cells) + " |")
         (out_dir / "ablation.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
     if scorecard.get("board_abilities"):
         (out_dir / "board-abilities.md").write_text(
-            sibling("board").table(scorecard["board_abilities"]), encoding="utf-8")
+            board_probe.table(scorecard["board_abilities"]), encoding="utf-8")
 
 
 def probe_set_location(args: argparse.Namespace, corpus_digest: str) -> Path:
@@ -755,7 +726,7 @@ def probe_set_location(args: argparse.Namespace, corpus_digest: str) -> Path:
 
 
 def report_dir(reports_dir: Path, checkpoint: Path, date: str) -> Path:
-    stem = sibling("common").checkpoint_stem(checkpoint)
+    stem = common.checkpoint_stem(checkpoint)
     return Path(reports_dir) / f"knowledge-probes-{stem}-{date.replace('-', '')}"
 
 
@@ -763,7 +734,6 @@ def main(argv: list[str] | None = None) -> int:
     from effects.infrastructure.corpus_store import CorpusStore
 
     args = parse_args(argv)
-    common = sibling("common")
     checkpoint = common.load_checkpoint(args.checkpoint)
     corpus = args.corpus or (Path(checkpoint.provenance.corpus_path)
                              if checkpoint.provenance.corpus_path else None)

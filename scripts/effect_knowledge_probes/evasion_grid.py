@@ -25,18 +25,17 @@ and measure what the missing colour costs.
 from __future__ import annotations
 
 import argparse
-import importlib.util
-from dataclasses import replace
+import sys
 from pathlib import Path
 
 import numpy as np
 
-spec = importlib.util.spec_from_file_location(
-    "effect_knowledge_probes.run", Path(__file__).resolve().parent / "run.py")
-run = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(run)
-common = run.sibling("common")
-sweeps = run.sibling("sweeps")
+if __package__ in (None, ""):
+    # Run by path: put scripts/ on the path so the suite imports as a package.
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from effect_knowledge_probes import common, record_walk  # noqa: E402
+from effect_knowledge_probes.board_edits import BoardEdit  # noqa: E402
 
 CORPUS = Path("output/effects/corpus-gen2")
 COLOUR_WORDS = {"W": "white", "U": "blue", "B": "black", "R": "red", "G": "green"}
@@ -93,35 +92,6 @@ def may_block(attacker_keywords, attacker_colours, blocker_keywords, blocker_col
 # ── the edits ───────────────────────────────────────────────────────────
 
 
-def _edit_entity(record, entity_id: str, edit):
-    entities = tuple(edit(e) if e.id == entity_id else e for e in record.state.entities)
-    return replace(record, state=replace(record.state, entities=entities))
-
-
-def grant_keyword(record, entity_id: str, keyword: str):
-    def edit(entity):
-        granted = entity.granted_temporary
-        if keyword in granted.keywords:
-            return entity
-        return replace(entity, granted_temporary=replace(
-            granted, keywords=(*granted.keywords, keyword)))
-
-    return _edit_entity(record, entity_id, edit)
-
-
-def set_colours(record, entity_id: str, colours: tuple[str, ...]):
-    return _edit_entity(record, entity_id, lambda e: replace(e, colors=colours))
-
-
-def add_type(record, entity_id: str, card_type: str):
-    def edit(entity):
-        if card_type in entity.types:
-            return entity
-        return replace(entity, types=(*entity.types, card_type))
-
-    return _edit_entity(record, entity_id, edit)
-
-
 def attacker_keyword(row: str | None, attacker, blocker) -> str | None:
     """The keyword a row grants, with protection resolved to a concrete colour."""
     if row == "protection-blocker":
@@ -137,19 +107,21 @@ def edited(record, attacker_id: str, blocker_id: str, row: str | None,
            column: str | None):
     """One grid cell's record, and the rule's answer for it."""
     attacker = record.state.entity(attacker_id)
+    board = BoardEdit(record)
     if column in ("flying", "reach", "horsemanship", "shadow"):
-        record = grant_keyword(record, blocker_id, column)
+        board = board.grant_keyword(blocker_id, column)
     elif column == "artifact":
-        record = add_type(record, blocker_id, "artifact")
+        board = board.add_type(blocker_id, "artifact")
     elif column == "black":
-        record = set_colours(record, blocker_id, ("B",))
+        board = board.set_colours(blocker_id, ("B",))
     elif column == "shares-colour":
         shared = next(c for c in attacker.colors if c != "B")
-        record = set_colours(record, blocker_id, (shared,))
-    blocker = record.state.entity(blocker_id)
+        board = board.set_colours(blocker_id, (shared,))
+    blocker = board.record.state.entity(blocker_id)
     keyword = attacker_keyword(row, attacker, blocker)
     if keyword is not None:
-        record = grant_keyword(record, attacker_id, keyword)
+        board = board.grant_keyword(attacker_id, keyword)
+    record = board.record
     a = record.state.entity(attacker_id)
     b = record.state.entity(blocker_id)
     rule = may_block(a.granted_temporary.keywords, a.colors, b.granted_temporary.keywords,
@@ -192,21 +164,11 @@ def qualifying_pair(record, keywords_of) -> tuple[str, str] | None:
 
 def qualifying_records(directories, count: int, shards: int, keywords_of):
     """The first ``count`` qualifying ``(record, attacker, blocker)`` triples, one per game."""
-    from effects.infrastructure.record_io import iter_shards, read_shard
+    def choose(record):
+        pair = qualifying_pair(record, keywords_of)
+        return None if pair is None else (record, *pair)
 
-    chosen, games = [], set()
-    for directory in directories:
-        for shard in iter_shards(directory)[:shards]:
-            for record in read_shard(shard):
-                if record.game_id in games:
-                    continue
-                pair = qualifying_pair(record, keywords_of)
-                if pair is not None:
-                    games.add(record.game_id)
-                    chosen.append((record, *pair))
-                    if len(chosen) >= count:
-                        return chosen
-    return chosen
+    return record_walk.qualifying(directories, choose, count, per_game=1, shards=shards)
 
 
 # ── reading the model ───────────────────────────────────────────────────
@@ -226,10 +188,6 @@ def _may_block(outputs, surface, row, entity_id) -> float:
 
 def label(name: str | None) -> str:
     return "none" if name is None else name
-
-
-def _mean(values: np.ndarray) -> str:
-    return f"{values.mean():.2f}" if len(values) else "n/a"
 
 
 def main() -> None:
@@ -259,7 +217,7 @@ def main() -> None:
     for i, row in enumerate(ATTACKER_KEYWORDS):
         for j, column in enumerate(BLOCKER_TRAITS):
             cells = [edited(record, a, b, row, column) for record, a, b in triples]
-            predictions = sweeps._predict(
+            predictions = common.predict(
                 probe_model, [c[0] for c in cells],
                 lambda o, v, s, r, ids=[b for _, _, b in triples]: _may_block(o, s, r, ids[r]))
             grid[i, j] = float(np.mean(predictions))
@@ -279,7 +237,7 @@ def main() -> None:
     # The absolute level of `blocker_legal` sits low even on legal blocks, so the
     # ranking within a row says more: does the model put the blocks the rule allows
     # above the ones it forbids?
-    auc = run.sibling("target_restrictions").auc
+    auc = common.auc
     every = ([], [])
     print("\nranking within each attacker row, cells and records pooled")
     print("| attacker keyword | allowed, mean | forbidden, mean | AUC |")
@@ -288,7 +246,8 @@ def main() -> None:
         allowed, scores = np.asarray(allowed, bool), np.asarray(scores, float)
         every[0].extend(allowed)
         every[1].extend(scores)
-        print(f"| {label(row)} | {_mean(scores[allowed])} | {_mean(scores[~allowed])} | "
+        print(f"| {label(row)} | {common.fmt_mean(scores[allowed], 2)} | "
+              f"{common.fmt_mean(scores[~allowed], 2)} | "
               f"{auc(allowed, scores):.3f} |")
     print(f"| all rows | | | {auc(*every):.3f} |", flush=True)
 

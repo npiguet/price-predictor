@@ -25,19 +25,17 @@ knowing anything the head does not use, and each check removes one:
 from __future__ import annotations
 
 import argparse
-import importlib.util
+import sys
 from collections import Counter, defaultdict
 from pathlib import Path
 
 import numpy as np
 
-spec = importlib.util.spec_from_file_location(
-    "effect_knowledge_probes.run", Path(__file__).resolve().parent / "run.py")
-run = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(run)
-common = run.sibling("common")
-labels = run.sibling("labels")
-ladder = run.sibling("ladder")
+if __package__ in (None, ""):
+    # Run by path: put scripts/ on the path so the suite imports as a package.
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from effect_knowledge_probes import common, labels, ladder  # noqa: E402
 
 PROBE_SET = Path("output/effects/reports/knowledge-probes-set-b3adb69a2950.json")
 CORPUS = Path("output/effects/corpus-gen2")

@@ -142,11 +142,10 @@ def stratum_records(directory, *, shards: int = SHARDS_PER_STRATUM):
         yield from read_shard(shard)
 
 
-def run(probe_model, chosen: Mapping[str, Mapping[str, list]], stats, ablation) -> dict:
-    """``{subset: {"n": {stratum: n}, "ablation": ...}}``, both strata pooled.
+def run(probe_model, chosen: Mapping[str, Mapping[str, list]], stats) -> dict:
+    """``{subset: {"n": {stratum: n}, "ablation": ...}}``, both strata pooled."""
+    from effect_knowledge_probes import ablation
 
-    ``ablation`` is the suite's ablation module, which run.py loads by path.
-    """
     out: dict[str, dict] = {}
     for name in SUBSETS:
         records = [r for by_subset in chosen.values() for r in by_subset.get(name, [])]

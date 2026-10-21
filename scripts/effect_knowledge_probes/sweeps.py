@@ -31,6 +31,9 @@ from dataclasses import replace
 
 import numpy as np
 
+from effect_knowledge_probes.board_edits import BoardEdit
+from effect_knowledge_probes.common import predict
+
 TOUGHNESS_VALUES = tuple(range(1, 9))
 BOARD_SIZES = tuple(range(0, 9))
 DAMAGE_VALUES = tuple(range(1, 9))
@@ -56,28 +59,6 @@ _MANA_APIS = frozenset({"Mana", "ManaReflected"})
 
 
 # ── the edits ───────────────────────────────────────────────────────────
-
-
-def _with_entities(record, entities):
-    return replace(record, state=replace(record.state, entities=tuple(entities)))
-
-
-def set_toughness(record, entity_id: str, toughness: int):
-    """``record`` with one entity's total toughness set, and its damage cleared.
-
-    The base toughness absorbs the change, so boosts and counters keep their
-    own channels; damage is cleared so the toughness is what the ability faces.
-    """
-    from effects.domain.state_snapshot import PowerToughness
-
-    out = []
-    for entity in record.state.entities:
-        if entity.id == entity_id:
-            pt = entity.pt or PowerToughness(base=(0, 0))
-            base_t = toughness - pt.boosts[1] - pt.counters[1]
-            entity = replace(entity, pt=replace(pt, base=(pt.base[0], base_t)), damage=0)
-        out.append(entity)
-    return _with_entities(record, out)
 
 
 def cost_pips(cost: str) -> list[str]:
@@ -260,10 +241,10 @@ def set_opposing_creatures(record, count: int):
         template if k == 0 else replace(template, id=f"{template.id}~{k}")
         for k in range(count)
     ]
-    return _with_entities(record, [*kept, *copies])
+    return BoardEdit(record).with_entities([*kept, *copies]).record
 
 
-def set_damage(text: str, amount: int) -> str:
+def set_damage_amount(text: str, amount: int) -> str:
     """The acting text with every literal ``NumDmg$`` set to ``amount``."""
     return _NUMDMG_RE.sub(lambda m: f"{m.group(1)}{amount}", text)
 
@@ -346,20 +327,7 @@ def select_sweep_records(records, sidecars, *, per_sweep: int = RECORDS_PER_SWEE
 # ── running them ────────────────────────────────────────────────────────
 
 
-def _predict(probe_model, records, read) -> list[float]:
-    """One forward over ``records``; ``read(outputs, verdict, surface, row)``."""
-    import torch
-
-
-    with torch.no_grad():
-        batch, surfaces = probe_model.batcher.build(records, probe_model.encoder)
-        hidden = probe_model.model(**batch)
-        outputs = probe_model.model.per_entity(hidden)
-        verdict = probe_model.model.verdict(hidden)
-    return [read(outputs, verdict, surface, row) for row, surface in enumerate(surfaces)]
-
-
-def _death(outputs, surface, row, entity_id) -> float:
+def death(outputs, surface, row, entity_id) -> float:
     """One card's predicted death, gated (:class:`HeadReading`); NaN off the board."""
     from effects.domain.head_decoding import HeadReading
 
@@ -377,15 +345,15 @@ def run_sweep(name: str, probe_model, record, row: dict) -> list[dict]:
 
     if name == "toughness":
         values = TOUGHNESS_VALUES
-        edited = [set_toughness(record, row["entity"], t) for t in values]
-        predictions = _predict(probe_model, edited,
-                               lambda o, v, s, r: _death(o, s, r, row["entity"]))
+        edited = [BoardEdit(record).set_toughness(row["entity"], t).record for t in values]
+        predictions = predict(probe_model, edited,
+                              lambda o, v, s, r: death(o, s, r, row["entity"]))
     elif name == "affordability":
         pips = candidate_cost(record)
         values = tuple(range(0, len(pips) + 3))
         edited = [set_untapped_lands(record, record.actor_player, pips, v) for v in values]
         affordable = VERDICT_BITS.index("affordable")
-        predictions = _predict(probe_model, edited, lambda o, v, s, r: float(
+        predictions = predict(probe_model, edited, lambda o, v, s, r: float(
             torch.sigmoid(v[r, affordable])))
     elif name == "board_size":
         values = BOARD_SIZES
@@ -393,22 +361,22 @@ def run_sweep(name: str, probe_model, record, row: dict) -> list[dict]:
 
         def summed(o, v, s, r):
             return float(np.nansum([
-                _death(o, s, r, slot.entity_id) for slot in s.slots
+                death(o, s, r, slot.entity_id) for slot in s.slots
                 if slot.kind.name == "CARD" and slot.entity_id is not None
                 and _is_opposing(edited[r], slot.entity_id)
             ]))
-        predictions = _predict(probe_model, edited, summed)
+        predictions = predict(probe_model, edited, summed)
     elif name == "damage":
         values = DAMAGE_VALUES
-        base = set_toughness(record, row["entity"], DAMAGE_TARGET_TOUGHNESS)
+        base = BoardEdit(record).set_toughness(row["entity"], DAMAGE_TARGET_TOUGHNESS).record
         predictions = []
         batcher = probe_model.batcher
         key = record.ability[0]
         original = batcher.text_of(key)
         for amount in values:
-            with batcher.reading_as(key, set_damage(original, amount)):
-                predictions += _predict(probe_model, [base],
-                                        lambda o, v, s, r: _death(o, s, r, row["entity"]))
+            with batcher.reading_as(key, set_damage_amount(original, amount)):
+                predictions += predict(probe_model, [base],
+                                       lambda o, v, s, r: death(o, s, r, row["entity"]))
     else:
         raise KeyError(name)
     return [{"value": int(v), "prediction": p} for v, p in zip(values, predictions)]

@@ -38,18 +38,18 @@ assigns, because the input carries each creature's assignment beside its power.
 from __future__ import annotations
 
 import argparse
-import importlib.util
+import sys
 from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
 
-spec = importlib.util.spec_from_file_location(
-    "effect_knowledge_probes.run", Path(__file__).resolve().parent / "run.py")
-run = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(run)
-common = run.sibling("common")
-sweeps = run.sibling("sweeps")
+if __package__ in (None, ""):
+    # Run by path: put scripts/ on the path so the suite imports as a package.
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from effect_knowledge_probes import common, record_walk, sweeps  # noqa: E402
+from effect_knowledge_probes.board_edits import BoardEdit  # noqa: E402
 
 CORPUS = Path("output/effects/corpus-gen2")
 VALUES = range(1, 9)
@@ -119,55 +119,6 @@ def step_deaths(
 
 
 # ── the edits ───────────────────────────────────────────────────────────
-
-
-def _edit_entity(record, entity_id: str, edit):
-    entities = tuple(edit(e) if e.id == entity_id else e for e in record.state.entities)
-    return replace(record, state=replace(record.state, entities=entities))
-
-
-def set_power(record, entity_id: str, power: int):
-    """``record`` with one entity's total power set; base power absorbs the change."""
-    from effects.domain.state_snapshot import PowerToughness
-
-    def edit(entity):
-        pt = entity.pt or PowerToughness(base=(0, 0))
-        base_p = power - pt.boosts[0] - pt.counters[0]
-        return replace(entity, pt=replace(pt, base=(base_p, pt.base[1])))
-
-    return _edit_entity(record, entity_id, edit)
-
-
-def grant_keyword(record, entity_id: str, keyword: str):
-    """``record`` with one entity granted ``keyword`` until end of turn."""
-    def edit(entity):
-        granted = entity.granted_temporary
-        if keyword in granted.keywords:
-            return entity
-        return replace(entity, granted_temporary=replace(
-            granted, keywords=(*granted.keywords, keyword)))
-
-    return _edit_entity(record, entity_id, edit)
-
-
-def clear_damage(record, *entity_ids: str):
-    """``record`` with the named entities' marked damage cleared."""
-    out = record
-    for entity_id in entity_ids:
-        out = set_damage(out, entity_id, 0)
-    return out
-
-
-def set_step(record, step: str):
-    """``record`` as a snapshot of the given damage step."""
-    state = record.state
-    return replace(record, state=replace(
-        state, global_=replace(state.global_, combat_substep=step)))
-
-
-def set_damage(record, entity_id: str, damage: int):
-    """``record`` with one entity's marked damage set."""
-    return _edit_entity(record, entity_id, lambda entity: replace(entity, damage=damage))
 
 
 def assign_step_damage(record, attacker: str, blocker: str):
@@ -247,7 +198,7 @@ def single_block(record, keywords_of) -> tuple[str, str] | None:
     # be what the grid reads.
     targets = derive_targets(record)
     died = ZONE_OUTCOMES.index("died")
-    before = clear_damage(record, attacker_id, blocker_id)
+    before = BoardEdit(record).clear_damage(attacker_id, blocker_id).record
     expected = step_deaths(side_of(before, attacker_id)[0], side_of(before, blocker_id)[0])
     for entity_id, should_die in zip((attacker_id, blocker_id), expected):
         entry = targets.get(entity_id)
@@ -263,22 +214,11 @@ def qualifying_records(directories, count: int, shards: int, keywords_of):
     One per game because a game repeats its creatures from combat to combat, and forty
     blocks by one large attacker would read one board forty times.
     """
-    from effects.infrastructure.record_io import iter_shards, read_shard
+    def choose(record):
+        pair = single_block(record, keywords_of)
+        return None if pair is None else (record, *pair)
 
-    chosen = []
-    games: set[str] = set()
-    for directory in directories:
-        for shard in iter_shards(directory)[:shards]:
-            for record in read_shard(shard):
-                if record.game_id in games:
-                    continue
-                pair = single_block(record, keywords_of)
-                if pair is not None:
-                    games.add(record.game_id)
-                    chosen.append((record, *pair))
-                    if len(chosen) >= count:
-                        return chosen
-    return chosen
+    return record_walk.qualifying(directories, choose, count, per_game=1, shards=shards)
 
 
 # ── the grids ───────────────────────────────────────────────────────────
@@ -287,18 +227,18 @@ def qualifying_records(directories, count: int, shards: int, keywords_of):
 def grid_records(record, attacker: str, blocker: str, which: str, variant: str):
     """The 8 x 8 edited records of one grid, row by row, and the rule's answer for each."""
     holder, keyword, step, carried = VARIANTS[variant]
-    record = set_step(clear_damage(record, attacker, blocker), step)
+    base = BoardEdit(record).clear_damage(attacker, blocker).set_step(step)
     if keyword is not None:
-        record = grant_keyword(record, attacker if holder == "attacker" else blocker, keyword)
+        base = base.grant_keyword(attacker if holder == "attacker" else blocker, keyword)
     striker, struck = (attacker, blocker) if which == "blocker" else (blocker, attacker)
     rows, rules = [], []
     for power in VALUES:
         row, rule = [], []
         for toughness in VALUES:
-            edited = sweeps.set_toughness(set_power(record, striker, power), struck, toughness)
+            cell = base.set_power(striker, power).set_toughness(struck, toughness)
             if carried:
-                edited = set_damage(edited, blocker, side_of(edited, attacker)[0][0])
-            edited = assign_step_damage(edited, attacker, blocker)
+                cell = cell.set_marked_damage(blocker, side_of(cell.record, attacker)[0][0])
+            edited = assign_step_damage(cell.record, attacker, blocker)
             row.append(edited)
             a, a_kw = side_of(edited, attacker)
             b, b_kw = side_of(edited, blocker)
@@ -354,9 +294,9 @@ def main() -> None:
                 rows, rules = grid_records(record, attacker, blocker, which, variant)
                 read_id = blocker if which == "blocker" else attacker
                 for i, row in enumerate(rows):
-                    grid[i] += sweeps._predict(
+                    grid[i] += common.predict(
                         probe_model, row,
-                        lambda o, v, s, r, e=read_id: sweeps._death(o, s, r, e))
+                        lambda o, v, s, r, e=read_id: sweeps.death(o, s, r, e))
                 rule += rules
             grid /= max(len(triples), 1)
             rule /= max(len(triples), 1)

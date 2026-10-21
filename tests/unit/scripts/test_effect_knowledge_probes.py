@@ -1,8 +1,8 @@
 """The knowledge-probe suite (FR-089): share, labels, sweeps, folds, digest, compare.
 
-``scripts/`` is not part of the installed package, so the suite's modules are
-loaded by file path, through ``run.sibling`` — the same loader the suite uses,
-so a test reads the very modules a run would.
+``scripts/`` is not part of the installed package, so ``scripts/`` is put on
+the path and the suite imports as the package its entry scripts make it, so a
+test reads the very modules a run would.
 
 Fixtures are real: the gen-1 records and sidecars cut from the corpus by
 ``scripts/make_fixture_records.py``, and the real gen-2 chained sidecars.
@@ -10,7 +10,6 @@ Fixtures are real: the gen-1 records and sidecars cut from the corpus by
 
 from __future__ import annotations
 
-import importlib.util
 import io
 import json
 import sys
@@ -24,23 +23,24 @@ _ROOT = Path(__file__).resolve().parents[3]
 _SUITE = _ROOT / "scripts" / "effect_knowledge_probes"
 _FIXTURES = _ROOT / "tests" / "fixtures" / "effects"
 
+if str(_ROOT / "scripts") not in sys.path:
+    sys.path.insert(0, str(_ROOT / "scripts"))
 
-def _load_run():
-    spec = importlib.util.spec_from_file_location(
-        "effect_knowledge_probes.run", _SUITE / "run.py")
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
-run = _load_run()
-labels = run.sibling("labels")
-ladder = run.sibling("ladder")
-sweeps = run.sibling("sweeps")
-compare = run.sibling("compare")
-board = run.sibling("board")
-common = run.sibling("common")
-combat_grid = run.sibling("combat_grid")
+from effect_knowledge_probes import (  # noqa: E402
+    board,
+    colour_pips,
+    combat_grid,
+    common,
+    compare,
+    evasion_grid,
+    labels,
+    ladder,
+    run,
+    sweeps,
+    target_restrictions,
+    zone_effects,
+)
+from effect_knowledge_probes.board_edits import BoardEdit  # noqa: E402
 
 
 @pytest.fixture(scope="module")
@@ -484,7 +484,7 @@ class TestSweepEditor:
         record = next(r for r in records if any(
             e.pt is not None and e.zone == "battlefield" for e in r.state.entities))
         target = next(e for e in record.state.entities if e.pt is not None)
-        edited = sweeps.set_toughness(record, target.id, 7)
+        edited = BoardEdit(record).set_toughness(target.id, 7).record
         assert edited.state.entity(target.id).pt.total[1] == 7
         assert _differences(record, edited) == {"entities"}
         for before, after in zip(record.state.entities, edited.state.entities):
@@ -502,7 +502,7 @@ class TestSweepEditor:
 
     def test_damage_edits_only_the_amount(self):
         text = "NumDmg$ 3 | SP$ DealDamage | ValidTgts$ Creature [SEG] SV1: DB$ Draw"
-        assert sweeps.set_damage(text, 7) == text.replace("NumDmg$ 3", "NumDmg$ 7")
+        assert sweeps.set_damage_amount(text, 7) == text.replace("NumDmg$ 3", "NumDmg$ 7")
 
     def test_cost_pips_read_generic_and_coloured_mana(self):
         assert sweeps.cost_pips("{2}{G}") == ["1", "1", "G"]
@@ -1057,7 +1057,7 @@ class TestCombatGrid:
 
     def test_power_edits_one_entity_only(self, records):
         record, attacker, _ = _one_on_one(records)
-        edited = combat_grid.set_power(record, attacker, 7)
+        edited = BoardEdit(record).set_power(attacker, 7).record
         assert edited.state.entity(attacker).pt.total[0] == 7
         assert (edited.state.entity(attacker).pt.total[1]
                 == record.state.entity(attacker).pt.total[1])
@@ -1065,8 +1065,8 @@ class TestCombatGrid:
 
     def test_a_granted_keyword_is_added_once(self, records):
         record, attacker, _ = _one_on_one(records)
-        once = combat_grid.grant_keyword(record, attacker, "deathtouch")
-        twice = combat_grid.grant_keyword(once, attacker, "deathtouch")
+        once = BoardEdit(record).grant_keyword(attacker, "deathtouch")
+        twice = once.grant_keyword(attacker, "deathtouch").record
         assert twice.state.entity(attacker).granted_temporary.keywords.count("deathtouch") == 1
 
     def test_a_one_on_one_block_qualifies_when_its_outcome_obeys_the_rule(
@@ -1161,21 +1161,18 @@ class TestCombatGrid:
                    for e, dies in zip((attacker, blocker), combat_grid.step_deaths(a, b))}
         monkeypatch.setattr(effect_targets, "derive_targets", lambda r: outcome)
         assert combat_grid.single_block(record, _keywords) == (attacker, blocker)
-        first = combat_grid.set_step(record, "first_strike")
+        first = BoardEdit(record).set_step("first_strike").record
         assert combat_grid.single_block(first, _keywords) is None
 
     def test_damage_the_step_already_marked_is_cleared_and_other_damage_disqualifies(
         self, records, monkeypatch,
     ):
-        from dataclasses import replace
-
         import effects.domain.effect_targets as effect_targets
         from effects.domain.effect_model import ZONE_OUTCOMES
 
         record, attacker, blocker = _one_on_one(records)
         power = record.state.entity(attacker).pt.total[0]
-        marked = combat_grid._edit_entity(
-            record, blocker, lambda e: replace(e, damage=power))
+        marked = BoardEdit(record).set_marked_damage(blocker, power).record
         a, _ = combat_grid.side_of(record, attacker)
         b, _ = combat_grid.side_of(record, blocker)
         attacker_dies, blocker_dies = combat_grid.step_deaths(a, b)
@@ -1184,8 +1181,7 @@ class TestCombatGrid:
                    for e, dies in ((attacker, attacker_dies), (blocker, blocker_dies))}
         monkeypatch.setattr(effect_targets, "derive_targets", lambda r: outcome)
         assert combat_grid.single_block(marked, _keywords) == (attacker, blocker)
-        earlier = combat_grid._edit_entity(
-            record, blocker, lambda e: replace(e, damage=power + 1))
+        earlier = BoardEdit(record).set_marked_damage(blocker, power + 1).record
         assert combat_grid.single_block(earlier, _keywords) is None
         rows, rule = combat_grid.grid_records(marked, attacker, blocker, "attacker", "none")
         assert all(cell.state.entity(blocker).damage == 0 for row in rows for cell in row)
@@ -1194,10 +1190,6 @@ class TestCombatGrid:
 
 
 # ── the evasion grid ────────────────────────────────────────────────────
-
-evasion_grid = run.sibling("evasion_grid")
-target_restrictions = run.sibling("target_restrictions")
-
 
 def _block_pair(records):
     """A fixture block-legality record made to qualify: a red attacker, a green blocker."""
@@ -1208,13 +1200,12 @@ def _block_pair(records):
     record = next(r for r in records if isinstance(r.payload, PlayabilityBlockersPayload)
                   and r.payload.legal_blockers)
     attacker, blocker = record.payload.anchor_attacker, record.payload.legal_blockers[0]
-    record = evasion_grid.set_colours(record, attacker, ("R",))
-    record = evasion_grid.set_colours(record, blocker, ("G",))
-    record = evasion_grid._edit_entity(record, blocker, lambda e: replace(e, types=("creature",)))
+    board = (BoardEdit(record).set_colours(attacker, ("R",)).set_colours(blocker, ("G",))
+             .edit_entity(blocker, lambda e: replace(e, types=("creature",))))
     for entity in (attacker, blocker):
-        record = evasion_grid._edit_entity(record, entity, lambda e: replace(
+        board = board.edit_entity(entity, lambda e: replace(
             e, granted_temporary=replace(e.granted_temporary, keywords=())))
-    return record, attacker, blocker
+    return board.record, attacker, blocker
 
 
 def _no_keywords(entity):
@@ -1271,9 +1262,9 @@ class TestEvasionGrid:
         record, attacker, blocker = _block_pair(records)
         assert evasion_grid.qualifying_pair(record, _no_keywords) == (attacker, blocker)
         assert evasion_grid.qualifying_pair(replace(record, fork=True), _no_keywords) is None
-        flying = evasion_grid.grant_keyword(record, attacker, "flying")
+        flying = BoardEdit(record).grant_keyword(attacker, "flying").record
         assert evasion_grid.qualifying_pair(flying, _no_keywords) is None
-        black = evasion_grid.set_colours(record, blocker, ("B",))
+        black = BoardEdit(record).set_colours(blocker, ("B",)).record
         assert evasion_grid.qualifying_pair(black, _no_keywords) is None
 
 
@@ -1319,13 +1310,16 @@ class TestTargetRestrictions:
         assert "creature" not in lost.state.entity(entity.id).types
 
     def test_auc(self):
-        assert target_restrictions.auc([1, 1, 0, 0], [0.9, 0.8, 0.2, 0.1]) == 1.0
-        assert target_restrictions.auc([1, 1, 0, 0], [0.1, 0.2, 0.8, 0.9]) == 0.0
-        assert np.isnan(target_restrictions.auc([1, 1], [0.5, 0.6]))
+        assert common.auc([1, 1, 0, 0], [0.9, 0.8, 0.2, 0.1]) == 1.0
+        assert common.auc([1, 1, 0, 0], [0.1, 0.2, 0.8, 0.9]) == 0.0
+        assert np.isnan(common.auc([1, 1], [0.5, 0.6]))
+
+    def test_a_tie_counts_half(self):
+        """A score that cannot tell a positive from a negative ranks at chance."""
+        assert common.auc([1, 0], [0.5, 0.5]) == 0.5
+        assert common.auc([1, 1, 0, 0], [0.9, 0.5, 0.5, 0.1]) == pytest.approx(0.875)
 
 
-colour_pips = run.sibling("colour_pips")
-zone_effects = run.sibling("zone_effects")
 
 
 class TestColourPips:

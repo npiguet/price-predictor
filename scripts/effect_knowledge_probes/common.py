@@ -212,11 +212,6 @@ def read_games(
             yield shard, record_from_dict(json.loads(line))
 
 
-def batched(sequence: list, size: int) -> Iterator[list]:
-    for start in range(0, len(sequence), size):
-        yield sequence[start : start + size]
-
-
 # ── the model ───────────────────────────────────────────────────────────
 
 
@@ -271,6 +266,59 @@ def load_probe_model(
         device=runnable.batcher.device, surface=surface_of(vocab),
         e_dim=checkpoint.encoder_config.e_dim,
     )
+
+
+def predict(probe_model, records: list, read) -> list:
+    """One forward pass over ``records``; ``read(outputs, verdict, surface, row)`` per record.
+
+    ``outputs`` is the per-entity head's, ``verdict`` the verdict head's, both
+    for the whole batch; ``read`` picks out what its probe asks of one row.
+    """
+    import torch
+
+    with torch.no_grad():
+        batch, surfaces = probe_model.batcher.build(records, probe_model.encoder)
+        hidden = probe_model.model(**batch)
+        outputs = probe_model.model.per_entity(hidden)
+        verdict = probe_model.model.verdict(hidden)
+    return [read(outputs, verdict, surface, row) for row, surface in enumerate(surfaces)]
+
+
+def predict_all(probe_model, records: list, read, *, chunk: int = 32) -> list:
+    """:func:`predict` over ``records`` a chunk at a time, to bound the batch."""
+    out: list = []
+    for start in range(0, len(records), chunk):
+        out += predict(probe_model, records[start : start + chunk], read)
+    return out
+
+
+# ── scores and tables ───────────────────────────────────────────────────
+
+
+def auc(labels, scores) -> float:
+    """ROC AUC of ``scores`` against yes/no ``labels``, ties counted half; NaN
+    without both labels."""
+    from sklearn.metrics import roc_auc_score
+
+    labels = np.asarray(labels, dtype=bool)
+    scores = np.asarray(scores, dtype=np.float64)
+    if labels.all() or not labels.any():
+        return float("nan")
+    return float(roc_auc_score(labels, scores))
+
+
+def fmt(value) -> str:
+    """One table cell: blank for None, three decimals for a float."""
+    if value is None:
+        return ""
+    if isinstance(value, float):
+        return "nan" if np.isnan(value) else f"{value:.3f}"
+    return str(value)
+
+
+def fmt_mean(values, digits: int = 3) -> str:
+    """The mean of ``values`` as a table cell, ``n/a`` for none."""
+    return f"{np.mean(values):.{digits}f}" if len(values) else "n/a"
 
 
 def peak_gpu_bytes() -> int:

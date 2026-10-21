@@ -38,21 +38,20 @@ from) and reports four things:
 from __future__ import annotations
 
 import argparse
-import importlib.util
 import re
+import sys
 from collections import defaultdict
 from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
 
-spec = importlib.util.spec_from_file_location(
-    "effect_knowledge_probes.run", Path(__file__).resolve().parent / "run.py")
-run = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(run)
-common = run.sibling("common")
-sweeps = run.sibling("sweeps")
-auc = run.sibling("target_restrictions").auc
+if __package__ in (None, ""):
+    # Run by path: put scripts/ on the path so the suite imports as a package.
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from effect_knowledge_probes import common, record_walk  # noqa: E402
+from effect_knowledge_probes.common import auc  # noqa: E402
 
 CORPUS = Path("output/effects/corpus-gen2")
 ZONE_APIS = frozenset({
@@ -112,21 +111,9 @@ def chosen_record(record, sidecars):
 
 
 def qualifying_records(directories, count: int, shards: int, per_game: int, sidecars):
-    from effects.infrastructure.record_io import iter_shards, read_shard
-
-    chosen, per = [], defaultdict(int)
-    for directory in directories:
-        for shard in iter_shards(directory)[:shards]:
-            for record in read_shard(shard):
-                if per[record.game_id] >= per_game:
-                    continue
-                found = chosen_record(record, sidecars)
-                if found is not None:
-                    per[record.game_id] += 1
-                    chosen.append(found)
-                    if len(chosen) >= count:
-                        return chosen
-    return chosen
+    return record_walk.qualifying(
+        directories, lambda record: chosen_record(record, sidecars), count,
+        per_game=per_game, shards=shards)
 
 
 # ── reading the model ───────────────────────────────────────────────────
@@ -153,16 +140,8 @@ def _read(outputs, surface, row) -> dict:
     return {"players": players, "cards": cards}
 
 
-def predict_all(probe_model, records, chunk: int = 32) -> list[dict]:
-    out = []
-    for i in range(0, len(records), chunk):
-        out += sweeps._predict(probe_model, records[i:i + chunk],
-                               lambda o, v, s, r: _read(o, s, r))
-    return out
-
-
-def _fmt(values, digits: int = 2) -> str:
-    return f"{np.mean(values):.{digits}f}" if len(values) else "n/a"
+def predict_all(probe_model, records) -> list[dict]:
+    return common.predict_all(probe_model, records, lambda o, v, s, r: _read(o, s, r))
 
 
 # ── the four reports ────────────────────────────────────────────────────
@@ -201,7 +180,8 @@ def report_counts(chosen, readings) -> None:
                 predicted.append(reading["players"][hit[0]][field])
         share = f"{right / single:.2f}" if single else "n/a"
         print(f"| {field} | {len(labels)} | {sum(labels)} | {auc(labels, scores):.3f} | "
-              f"{naming} | {single} | {share} | {_fmt(actual)} | {_fmt(predicted)} |",
+              f"{naming} | {single} | {share} | {common.fmt_mean(actual, 2)} | "
+              f"{common.fmt_mean(predicted, 2)} |",
               flush=True)
 
 
@@ -251,8 +231,8 @@ def report_zones(chosen, readings) -> None:
                                                        -len(kv[1]["right"]))):
         instead = max(row["instead"].items(), key=lambda kv: kv[1])[0] \
             if row["instead"] else ""
-        print(f"| {zone} | {outcome} | {len(row['right'])} | {_fmt(row['right'])} | "
-              f"{_fmt(row['top'])} | {instead} |", flush=True)
+        print(f"| {zone} | {outcome} | {len(row['right'])} | {common.fmt_mean(row['right'], 2)} | "
+              f"{common.fmt_mean(row['top'], 2)} | {instead} |", flush=True)
 
 
 def _affected_player(record, targets, field):
@@ -282,8 +262,8 @@ def report_amounts(chosen, probe_model, per_sweep: int) -> None:
             curve = []
             for amount in AMOUNTS:
                 with batcher.reading_as(key, set_amount(original, amount)):
-                    reading = sweeps._predict(probe_model, [record],
-                                              lambda o, v, s, r: _read(o, s, r))[0]
+                    reading = common.predict(probe_model, [record],
+                                             lambda o, v, s, r: _read(o, s, r))[0]
                 curve.append(reading["players"].get(player, {}).get(field, float("nan")))
             rows.append(curve)
             if len(rows) >= per_sweep:
@@ -324,8 +304,8 @@ def report_who(chosen, readings, probe_model) -> None:
             cells["ta"].append(reading["players"][player][field])
             cells["ob"].append(before["players"][other][field])
             cells["oa"].append(reading["players"][other][field])
-        print(f"| {api} | {len(edited)} | {_fmt(cells['tb'])} | {_fmt(cells['ta'])} | "
-              f"{_fmt(cells['ob'])} | {_fmt(cells['oa'])} |", flush=True)
+        means = " | ".join(common.fmt_mean(cells[k], 2) for k in ("tb", "ta", "ob", "oa"))
+        print(f"| {api} | {len(edited)} | {means} |", flush=True)
 
 
 def main() -> None:

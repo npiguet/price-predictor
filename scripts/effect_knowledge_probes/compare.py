@@ -20,6 +20,12 @@ import math
 import sys
 from pathlib import Path
 
+if __package__ in (None, ""):
+    # Run by path: put scripts/ on the path so the suite imports as a package.
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from effect_knowledge_probes.common import fmt  # noqa: E402
+
 PROBE_TYPES = ("linear", "mlp")
 
 
@@ -74,14 +80,6 @@ def ranking(cards: list[dict]) -> dict[str, list[tuple[str, float]]]:
     return out
 
 
-def _fmt(value) -> str:
-    if value is None:
-        return ""
-    if isinstance(value, float) and math.isnan(value):
-        return "nan"
-    return f"{value:.3f}" if isinstance(value, float) else str(value)
-
-
 def render(cards: list[dict]) -> str:
     names = [Path(card.get("checkpoint", f"#{i}")).parent.name or card.get("checkpoint", "")
              for i, card in enumerate(cards)]
@@ -103,7 +101,7 @@ def render(cards: list[dict]) -> str:
         lines.append("|" + "|".join(["---"] * 3 + ["---:"] * (len(header) - 3)) + "|")
         for (target, stratum, rung), values in sorted(tables[family].items()):
             row = [target, stratum, rung] + [
-                _fmt(values.get((column, probe_type)))
+                fmt(values.get((column, probe_type)))
                 for column in range(len(cards))
                 for probe_type in (*PROBE_TYPES, "model")
             ]
@@ -112,7 +110,7 @@ def render(cards: list[dict]) -> str:
     lines += ["## Ranking on rung 1 − rung 1w", ""]
     for probe_type, ranked in ranking(cards).items():
         lines.append(f"- {probe_type}: " + ", ".join(
-            f"{Path(name).parent.name or name} ({_fmt(gain)})" for name, gain in ranked))
+            f"{Path(name).parent.name or name} ({fmt(gain)})" for name, gain in ranked))
     return "\n".join(lines) + "\n"
 
 

@@ -14,18 +14,18 @@ drawn from, so a soft diagonal there is a fault of fit rather than of generaliza
 selection on texts no training card carries.
 """
 import argparse
-import importlib.util
 import json
+import sys
 from pathlib import Path
 
 import numpy as np
 
-spec = importlib.util.spec_from_file_location(
-    "effect_knowledge_probes.run", Path(__file__).resolve().parent / "run.py")
-run = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(run)
-common = run.sibling("common")
-sweeps = run.sibling("sweeps")
+if __package__ in (None, ""):
+    # Run by path: put scripts/ on the path so the suite imports as a package.
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from effect_knowledge_probes import common, record_walk, sweeps  # noqa: E402
+from effect_knowledge_probes.board_edits import BoardEdit  # noqa: E402
 
 CORPUS = Path("output/effects/corpus-gen2")
 PROBE_SET = Path("output/effects/reports/knowledge-probes-set-b3adb69a2950.json")
@@ -49,26 +49,23 @@ def qualifying_records(directory: Path, count: int, shards: int) -> list[tuple[o
     from effects.domain.damage_step_keywords import KeywordResolver
     from effects.domain.effect_targets import derive_targets
     from effects.domain.lethality_counterfactuals import qualify
-    from effects.infrastructure.record_io import iter_shards, read_shard
 
     sidecars = common.sidecar_cache(common.DEFAULT_CARDS_FOLDERS)
     resolver = KeywordResolver(sidecars)
-    chosen = []
-    for shard in iter_shards(directory)[:shards]:
-        for record in read_shard(shard):
-            if not record.ability:
-                continue
-            line = sidecars.line_or_none(record.ability[0])
-            if line is None:
-                continue
-            qualified = qualify(record, line, derive_targets(record), resolver.keywords_of)
-            if (qualified is None or qualified.kind != "damage" or qualified.stated != "text"
-                    or len(qualified.hit) != 1):
-                continue
-            chosen.append((record, qualified.hit[0]))
-            if len(chosen) >= count:
-                return chosen
-    return chosen
+
+    def choose(record):
+        if not record.ability:
+            return None
+        line = sidecars.line_or_none(record.ability[0])
+        if line is None:
+            return None
+        qualified = qualify(record, line, derive_targets(record), resolver.keywords_of)
+        if (qualified is None or qualified.kind != "damage" or qualified.stated != "text"
+                or len(qualified.hit) != 1):
+            return None
+        return record, qualified.hit[0]
+
+    return record_walk.qualifying([directory], choose, count, per_game=None, shards=shards)
 
 
 def main() -> None:
@@ -95,11 +92,11 @@ def main() -> None:
     for record, entity in pairs:
         key = record.ability[0]
         original = batcher.text_of(key)
-        edited = [sweeps.set_toughness(record, entity, t) for t in VALUES]
+        edited = [BoardEdit(record).set_toughness(entity, t).record for t in VALUES]
         for i, amount in enumerate(VALUES):
-            with batcher.reading_as(key, sweeps.set_damage(original, amount)):
-                grid[i] += sweeps._predict(probe_model, edited,
-                                           lambda o, v, s, r: sweeps._death(o, s, r, entity))
+            with batcher.reading_as(key, sweeps.set_damage_amount(original, amount)):
+                grid[i] += common.predict(probe_model, edited,
+                                          lambda o, v, s, r: sweeps.death(o, s, r, entity))
     grid /= max(len(pairs), 1)
     print(f"{args.checkpoint.parent.name}, {len(pairs)} {args.source} records")
     print("| damage \\ toughness | " + " | ".join(str(t) for t in VALUES) + " |")
