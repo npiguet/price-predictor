@@ -33,7 +33,7 @@ from effects.domain.damage_step_keywords import (
     KeywordEffect,
     Subject,
 )
-from effects.domain.effect_model import FIELDS_BY_NAME
+from effects.domain.effect_head_layout import FIELDS_BY_NAME
 from effects.domain.gate_metrics import (
     GATE1_MIN_DEVIANCE_REDUCTION,
     GATE1_MIN_GATE_F1_GAIN,

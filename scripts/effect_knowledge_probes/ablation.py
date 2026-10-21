@@ -109,8 +109,9 @@ def run_ablation(probe_model, records: list, stats: CacheStatistics, *,
     """
     import torch
 
-    from effects.domain.effect_model import entity_target_tensors, per_entity_loss
+    from effects.domain.effect_losses import per_entity_loss
     from effects.domain.effect_targets import derive_targets
+    from effects.domain.surface_collation import entity_target_tensors
 
     model, encoder, batcher = probe_model.model, probe_model.encoder, probe_model.batcher
     fields = probe_model.fields
@@ -184,8 +185,9 @@ def field_losses(model, probe_model, records: list, *, batch_size: int = 32) -> 
     """
     import torch
 
-    from effects.domain.effect_model import entity_target_tensors, per_entity_loss
+    from effects.domain.effect_losses import per_entity_loss
     from effects.domain.effect_targets import derive_targets
+    from effects.domain.surface_collation import entity_target_tensors
 
     totals: dict[str, float] = defaultdict(float)
     count = 0

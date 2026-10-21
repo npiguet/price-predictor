@@ -379,7 +379,7 @@ def _readout(target: str, outputs, verdict, slot: int, row: int, *,
         return float("nan")
     import torch
 
-    from effects.domain.effect_model import (
+    from effects.domain.effect_head_layout import (
         DURATIONS,
         FIELD_SLICES,
         GATE_INDEX,

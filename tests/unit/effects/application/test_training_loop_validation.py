@@ -18,11 +18,8 @@ from effects.application.training_loop import (
     _format_floor,
     _format_parts,
 )
-from effects.domain.effect_model import (
-    FIELDS_BY_NAME,
-    EntityTargetBatch,
-    constant_predictor_floor,
-)
+from effects.domain.effect_head_layout import FIELDS_BY_NAME
+from effects.domain.loss_floor import EntityTargetBatch, constant_predictor_floor
 from effects.domain.records import CombatPayload, RecordKind
 from effects.domain.sampling import SAMPLING_CLASSES
 from effects.domain.split import CorpusSplit

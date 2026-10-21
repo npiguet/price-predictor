@@ -11,7 +11,7 @@ from __future__ import annotations
 import random
 from types import SimpleNamespace
 
-from effects.domain.effect_model import ZONE_OUTCOMES
+from effects.domain.effect_head_layout import ZONE_OUTCOMES
 from effects.domain.effect_targets import derive_targets
 from effects.domain.event_schema import Event, EventType
 from effects.domain.lethality_counterfactuals import (

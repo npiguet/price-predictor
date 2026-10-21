@@ -155,12 +155,8 @@ class TestPerRecordLosses:
 
         from effects.application.breakdowns import TOTAL
         from effects.application.gate_one import _record_losses
-        from effects.domain.effect_model import (
-            PER_ENTITY_FIELDS,
-            PER_ENTITY_WIDTH,
-            FieldType,
-            per_entity_loss,
-        )
+        from effects.domain.effect_head_layout import PER_ENTITY_FIELDS, PER_ENTITY_WIDTH, FieldType
+        from effects.domain.effect_losses import per_entity_loss
 
         torch.manual_seed(0)
         fields = PER_ENTITY_FIELDS
@@ -187,7 +183,7 @@ class TestPerRecordLosses:
 
         from effects.application.breakdowns import TOTAL
         from effects.application.gate_one import _record_losses
-        from effects.domain.effect_model import PER_ENTITY_FIELDS, PER_ENTITY_WIDTH
+        from effects.domain.effect_head_layout import PER_ENTITY_FIELDS, PER_ENTITY_WIDTH
 
         outputs = torch.zeros(1, 2, PER_ENTITY_WIDTH)
         losses = _record_losses(
@@ -204,14 +200,14 @@ class TestPerRecordLosses:
 
         from effects.application.breakdowns import TOTAL
         from effects.application.gate_one import _record_losses
-        from effects.domain.effect_model import (
+        from effects.domain.effect_head_layout import (
             FIELD_SLICES,
             GATE_INDEX,
             PER_ENTITY_FIELDS,
             PER_ENTITY_WIDTH,
             FieldType,
-            field_loss,
         )
+        from effects.domain.effect_losses import field_loss
 
         generator = torch.Generator().manual_seed(3)
         fields = PER_ENTITY_FIELDS
@@ -262,7 +258,7 @@ class TestMarginAccumulator:
     def _chunk(self, affected_damage: float):
         import torch
 
-        from effects.domain.effect_model import (
+        from effects.domain.effect_head_layout import (
             FIELD_SLICES,
             GATE_INDEX,
             PER_ENTITY_WIDTH,
@@ -286,7 +282,7 @@ class TestMarginAccumulator:
 
     def test_a_perfect_chunk_scores_perfectly(self):
         from effects.application.gate_one import MarginAccumulator
-        from effects.domain.effect_model import FIELDS_BY_NAME
+        from effects.domain.effect_head_layout import FIELDS_BY_NAME
 
         margins = MarginAccumulator(
             (FIELDS_BY_NAME["zone_outcome"], FIELDS_BY_NAME["damage_taken"]),

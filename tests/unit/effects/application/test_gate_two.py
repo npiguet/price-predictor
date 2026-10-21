@@ -49,7 +49,7 @@ from effects.domain.effect_head_input import (
     THERMOMETER_STEPS,
     SlotKind,
 )
-from effects.domain.effect_model import (
+from effects.domain.effect_head_layout import (
     FIELD_SLICES,
     FIELDS_BY_NAME,
     PER_ENTITY_FIELDS,

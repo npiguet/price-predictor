@@ -215,7 +215,7 @@ def qualifying_records(directories, count: int, shards: int, keywords_of):
 def _may_block(outputs, surface, row, entity_id) -> float:
     import torch
 
-    from effects.domain.effect_model import FIELD_SLICES
+    from effects.domain.effect_head_layout import FIELD_SLICES
 
     start, _ = FIELD_SLICES["blocker_legal"]
     for index, slot in enumerate(surface.slots):

@@ -12,7 +12,7 @@ from __future__ import annotations
 import pytest
 
 from effects.domain.effect_head_input import CARD_TYPES, OVERLAY_KEYWORDS
-from effects.domain.effect_model import LIBRARY_EVENTS, ZONE_OUTCOMES
+from effects.domain.effect_head_layout import LIBRARY_EVENTS, ZONE_OUTCOMES
 from effects.domain.effect_targets import derive_targets, events_of
 from effects.domain.event_schema import Event, EventType
 from effects.domain.records import (
@@ -487,7 +487,7 @@ class TestLegalityBits:
 
 class TestFieldNames:
     def test_every_produced_field_is_a_real_head_output(self):
-        from effects.domain.effect_model import FIELDS_BY_NAME
+        from effects.domain.effect_head_layout import FIELDS_BY_NAME
 
         record = _resolution(
             Event(type=EventType.DAMAGE_DEALT, subjects=("E1",),
@@ -505,7 +505,7 @@ class TestFieldNames:
 
     @pytest.mark.parametrize("counter", ["P1P1", "M1M1", "LOYALTY"])
     def test_every_tracked_counter_type_names_a_real_field(self, counter):
-        from effects.domain.effect_model import FIELDS_BY_NAME
+        from effects.domain.effect_head_layout import FIELDS_BY_NAME
 
         targets = derive_targets(_resolution(
             Event(type=EventType.COUNTER_CHANGE, subjects=("E1",),

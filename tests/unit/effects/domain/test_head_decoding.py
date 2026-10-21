@@ -7,7 +7,7 @@ import math
 import pytest
 import torch
 
-from effects.domain.effect_model import FIELDS_BY_NAME, PER_ENTITY_WIDTH
+from effects.domain.effect_head_layout import FIELDS_BY_NAME, PER_ENTITY_WIDTH
 from effects.domain.head_decoding import (
     direction_balance,
     expected_magnitude,

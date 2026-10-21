@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import torch
 
-from effects.domain.effect_model import FIELD_SLICES, FieldSpec, FieldType
+from effects.domain.effect_head_layout import FIELD_SLICES, FieldSpec, FieldType
 
 #: Field types that predict a magnitude under the count loss — "how much
 #: damage", "how many cards", "how far the life total moved".

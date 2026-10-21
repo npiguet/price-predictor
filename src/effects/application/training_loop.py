@@ -98,21 +98,21 @@ from effects.domain.effect_head_input import (
     SlotKind,
     feature_widths,
 )
-from effects.domain.effect_model import (
-    FLOOR_EPSILON,
-    EffectModel,
-    EffectModelConfig,
-    EntityTargetBatch,
-    FieldSpec,
-    PartsMean,
+from effects.domain.effect_head_layout import FieldSpec
+from effects.domain.effect_losses import (
     api_loss,
-    constant_predictor_floor,
     created_objects_loss,
-    gather_entities,
     mlm_loss,
     per_entity_loss,
     value_loss,
     verdict_loss,
+)
+from effects.domain.effect_model import EffectModel, EffectModelConfig
+from effects.domain.loss_floor import (
+    FLOOR_EPSILON,
+    EntityTargetBatch,
+    PartsMean,
+    constant_predictor_floor,
 )
 from effects.domain.rarity import RARITY_BUCKETS
 from effects.domain.sampling import SAMPLING_CLASSES, BatchPlan, sampling_class
@@ -120,6 +120,7 @@ from effects.domain.split import (
     CorpusSplit,
 )
 from effects.domain.strata import VALIDATION_STRATA, Stratum
+from effects.domain.surface_collation import gather_entities
 from effects.domain.variants import variant_masks
 from effects.infrastructure.effect_model_store import (
     EPOCHS_DIR,

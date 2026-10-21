@@ -138,7 +138,7 @@ def _read(outputs, surface, row) -> dict:
     """``{"players": {id: {field: count}}, "cards": {id: (gate, outcome probs)}}``."""
     import torch
 
-    from effects.domain.effect_model import FIELD_SLICES, GATE_INDEX
+    from effects.domain.effect_head_layout import FIELD_SLICES, GATE_INDEX
 
     players, cards = {}, {}
     zone = slice(*FIELD_SLICES["zone_outcome"])
@@ -209,7 +209,7 @@ def report_counts(chosen, readings) -> None:
 
 
 def report_zones(chosen, readings) -> None:
-    from effects.domain.effect_model import ZONE_OUTCOMES
+    from effects.domain.effect_head_layout import ZONE_OUTCOMES
 
     stayed = ZONE_OUTCOMES.index("stayed")
     rows = defaultdict(lambda: {"right": [], "top": [], "instead": defaultdict(int)})

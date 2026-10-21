@@ -120,7 +120,7 @@ def read_amount_alone() -> None:
             return original(target, outputs, verdict, slot, row, **kwargs)
         import torch
 
-        from effects.domain.effect_model import FIELD_SLICES
+        from effects.domain.effect_head_layout import FIELD_SLICES
 
         start, _ = FIELD_SLICES["damage_taken"]
         return float(torch.exp(outputs[row, slot, start]))

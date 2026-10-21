@@ -419,7 +419,7 @@ def warmup_steps(*, epochs: int, steps_per_epoch: int) -> int:
 
 def fields_for_epoch(config: TrainEffectModelConfig, *, present: frozenset[str], epoch: int):
     """The field set every step of ``epoch`` trains with, and validation scores."""
-    from effects.domain.effect_model import active_fields
+    from effects.domain.effect_head_layout import active_fields
 
     return active_fields(
         present_classes=present,

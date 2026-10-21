@@ -39,8 +39,8 @@ from effects.domain.effect_head_input import (
     build_effect_head_input,
     continuous_masked_keywords,
 )
-from effects.domain.effect_model import collate_surfaces, scatter_e_rows
 from effects.domain.records import PlayabilityDecisionPayload, acting_keys
+from effects.domain.surface_collation import collate_surfaces, scatter_e_rows
 from effects.domain.variants import VariantMasks
 
 #: Rows in the ``identity`` baseline's free-embedding table. Ample for the

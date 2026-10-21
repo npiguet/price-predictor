@@ -44,12 +44,7 @@ from effects.domain.damage_step_keywords import (
     qualifying_observations,
     subject_id,
 )
-from effects.domain.effect_model import (
-    FIELDS_BY_NAME,
-    ZONE_OUTCOMES,
-    FieldSpec,
-    FieldType,
-)
+from effects.domain.effect_head_layout import FIELDS_BY_NAME, ZONE_OUTCOMES, FieldSpec, FieldType
 from effects.domain.head_decoding import (
     direction_balance,
     expected_magnitude,

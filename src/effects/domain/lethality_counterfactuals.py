@@ -33,7 +33,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, replace
 from enum import Enum, StrEnum, auto
 
-from effects.domain.effect_model import ZONE_OUTCOMES
+from effects.domain.effect_head_layout import ZONE_OUTCOMES
 from effects.domain.effect_targets import EntityTargets
 from effects.domain.provenance import ProvenanceKey
 from effects.domain.value_targets import params, segments

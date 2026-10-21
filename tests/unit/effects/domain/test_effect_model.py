@@ -23,7 +23,7 @@ from effects.domain.effect_head_input import (
     Slot,
     SlotKind,
 )
-from effects.domain.effect_model import (
+from effects.domain.effect_head_layout import (
     CREATED_OBJECT_SLOTS,
     CREATED_OBJECTS_WIDTH,
     CREATED_SLOT_WIDTH,
@@ -36,24 +36,25 @@ from effects.domain.effect_model import (
     VERDICT_BITS,
     VERDICT_WIDTH,
     ZONE_OUTCOMES,
-    EffectModel,
-    EffectModelConfig,
-    EntityTargetBatch,
     FieldGroup,
     FieldScope,
     FieldSpec,
     FieldType,
     active_fields,
+)
+from effects.domain.effect_losses import (
     api_loss,
-    collate_surfaces,
-    constant_predictor_floor,
-    constant_predictor_outputs,
     created_objects_loss,
     field_loss,
     mlm_loss,
     per_entity_loss,
-    scatter_e_rows,
     verdict_loss,
+)
+from effects.domain.effect_model import EffectModel, EffectModelConfig
+from effects.domain.loss_floor import (
+    EntityTargetBatch,
+    constant_predictor_floor,
+    constant_predictor_outputs,
 )
 from effects.domain.records import CombatPayload, RecordKind
 from effects.domain.sampling import (
@@ -64,6 +65,7 @@ from effects.domain.sampling import (
     SAMPLING_CLASSES,
 )
 from effects.domain.state_snapshot import COLORS
+from effects.domain.surface_collation import collate_surfaces, scatter_e_rows
 
 _CONFIG = EffectModelConfig(
     global_features=8, act_features=6, player_features=10, card_features=12,
@@ -382,7 +384,7 @@ class TestLosses:
     def test_the_count_loss_is_nonnegative_at_its_optimum(self):
         """`full=True` adds the Stirling term, so a perfect prediction scores ~0
         instead of k - k ln k, which is -306 for a target of 88 (FR-081)."""
-        from effects.domain.effect_model import _poisson
+        from effects.domain.effect_losses import _poisson
         target = torch.tensor([88.0, 3.0, 1.0])
         loss = _poisson(torch.log(target), target)
         assert loss.item() >= 0.0
@@ -837,7 +839,7 @@ class TestGen2Heads:
     """The value head, the option-kind embedding, and the wired losses."""
 
     def test_the_value_head_reads_e_and_is_training_only(self, model):
-        from effects.domain.effect_model import VALUE_WIDTH
+        from effects.domain.effect_head_layout import VALUE_WIDTH
 
         assert model.value_head(torch.randn(3, _CONFIG.e_dim)).shape == (3, VALUE_WIDTH)
         assert "value_head" in EffectModel.TRAINING_ONLY_HEADS
@@ -880,7 +882,8 @@ class TestGen2Heads:
         )
 
     def test_the_value_loss_skips_masked_targets(self):
-        from effects.domain.effect_model import VALUE_WIDTH, value_loss
+        from effects.domain.effect_head_layout import VALUE_WIDTH
+        from effects.domain.effect_losses import value_loss
         from effects.domain.value_targets import VALUE_TARGETS
 
         prediction = torch.zeros(2, VALUE_WIDTH)
@@ -890,7 +893,8 @@ class TestGen2Heads:
         assert float(value_loss(prediction, target, ~none)) > 0.0
 
     def test_at_least_bits_read_the_magnitude(self):
-        from effects.domain.effect_model import AT_LEAST_STEPS, at_least_targets
+        from effects.domain.effect_head_layout import AT_LEAST_STEPS
+        from effects.domain.effect_losses import at_least_targets
 
         bits = at_least_targets(torch.tensor([0.0, 3.0, -2.0, 45.0]))
         assert bits.shape == (4, AT_LEAST_STEPS)
@@ -902,13 +906,13 @@ class TestGen2Heads:
     def test_the_at_least_steps_the_thermometer_and_the_cap_agree(self):
         # One scale on both sides of a comparison: the board's thermometer, the
         # value head's at-least bits and the magnitude every amount is scored at.
-        from effects.domain.effect_head_input import THERMOMETER_STEPS
-        from effects.domain.effect_model import AT_LEAST_STEPS, MAGNITUDE_CAP
+        from effects.domain.effect_head_input import MAGNITUDE_CAP, THERMOMETER_STEPS
+        from effects.domain.effect_head_layout import AT_LEAST_STEPS
 
         assert THERMOMETER_STEPS == AT_LEAST_STEPS == MAGNITUDE_CAP
 
     def test_every_amount_has_an_at_least_block_and_no_cost_flag_does(self):
-        from effects.domain.effect_model import (
+        from effects.domain.effect_head_layout import (
             AT_LEAST_SLICES,
             AT_LEAST_STEPS,
             VALUE_SLICES,
@@ -924,12 +928,8 @@ class TestGen2Heads:
         assert VALUE_WIDTH == first + len(amounts) * AT_LEAST_STEPS
 
     def test_the_value_loss_scores_the_at_least_bits(self):
-        from effects.domain.effect_model import (
-            AT_LEAST_SLICES,
-            VALUE_WIDTH,
-            at_least_targets,
-            value_loss,
-        )
+        from effects.domain.effect_head_layout import AT_LEAST_SLICES, VALUE_WIDTH
+        from effects.domain.effect_losses import at_least_targets, value_loss
         from effects.domain.value_targets import VALUE_TARGET_NAMES
 
         damage = VALUE_TARGET_NAMES.index("damage")
@@ -998,7 +998,7 @@ class TestHostPickedRowsMatchBooleanMasks:
     be exactly the loss the boolean-mask selection gave."""
 
     def _targets(self, generator, batch, entities):
-        from effects.domain.effect_model import FIELD_SLICES, PER_ENTITY_FIELDS, FieldType
+        from effects.domain.effect_head_layout import FIELD_SLICES, PER_ENTITY_FIELDS, FieldType
 
         out = {}
         for spec in PER_ENTITY_FIELDS:
@@ -1020,7 +1020,8 @@ class TestHostPickedRowsMatchBooleanMasks:
         return PER_ENTITY_FIELDS, out
 
     def _reference(self, outputs, gate_target, field_targets, entity_mask, fields):
-        from effects.domain.effect_model import FIELD_SLICES, GATE_INDEX, field_loss
+        from effects.domain.effect_head_layout import FIELD_SLICES, GATE_INDEX
+        from effects.domain.effect_losses import field_loss
 
         mask = entity_mask.bool()
         total = torch.nn.functional.binary_cross_entropy_with_logits(
@@ -1057,12 +1058,8 @@ class TestHostPickedRowsMatchBooleanMasks:
         assert torch.allclose(got, expected)
 
     def test_created_objects_and_verdict_losses_are_unchanged(self):
-        from effects.domain.effect_model import (
-            CREATED_OBJECTS_WIDTH,
-            VERDICT_WIDTH,
-            created_objects_loss,
-            verdict_loss,
-        )
+        from effects.domain.effect_head_layout import CREATED_OBJECTS_WIDTH, VERDICT_WIDTH
+        from effects.domain.effect_losses import created_objects_loss, verdict_loss
 
         generator = torch.Generator().manual_seed(13)
         prediction = torch.randn(5, CREATED_OBJECTS_WIDTH, generator=generator)
@@ -1093,14 +1090,14 @@ class TestMagnitudeCap:
     """
 
     def test_a_count_above_the_cap_scores_as_the_cap(self):
-        from effects.domain.effect_model import MAGNITUDE_CAP
+        from effects.domain.effect_head_input import MAGNITUDE_CAP
         spec = FIELDS_BY_NAME["damage_taken"]
         prediction = torch.zeros(1, 1)
         assert field_loss(spec, prediction, torch.tensor([2_000_000.0])) == \
             field_loss(spec, prediction, torch.tensor([MAGNITUDE_CAP]))
 
     def test_a_signed_delta_keeps_its_direction_and_caps_its_size(self):
-        from effects.domain.effect_model import MAGNITUDE_CAP
+        from effects.domain.effect_head_input import MAGNITUDE_CAP
         spec = FIELDS_BY_NAME["power_delta"]
         prediction = torch.zeros(1, 4)
         for sign in (1.0, -1.0):
@@ -1108,7 +1105,7 @@ class TestMagnitudeCap:
                 field_loss(spec, prediction, torch.tensor([sign * MAGNITUDE_CAP]))
 
     def test_the_floor_is_computed_over_capped_targets(self):
-        from effects.domain.effect_model import MAGNITUDE_CAP
+        from effects.domain.effect_head_input import MAGNITUDE_CAP
 
         def floor(value):
             batch = EntityTargetBatch(
@@ -1125,7 +1122,7 @@ class TestMagnitudeCap:
     def test_the_evaluation_deviance_caps_the_observed_amount(self):
         import numpy as np
 
-        from effects.domain.effect_model import MAGNITUDE_CAP
+        from effects.domain.effect_head_input import MAGNITUDE_CAP
         from effects.domain.gate_metrics import poisson_deviance
         predicted = np.array([3.0, 5.0])
         assert poisson_deviance(predicted, np.array([1.0, 2_000_000.0])) == \

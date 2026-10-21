@@ -46,12 +46,11 @@ from effects.domain.ability_tokenizer import (
 )
 from effects.domain.damage_step_keywords import KeywordResolver
 from effects.domain.effect_head_input import SlotKind
-from effects.domain.effect_model import (
+from effects.domain.effect_head_layout import (
     CREATED_OBJECTS_WIDTH,
     VERDICT_WIDTH,
     FieldSpec,
     active_fields,
-    entity_target_tensors,
 )
 from effects.domain.effect_targets import (
     created_objects_targets,
@@ -72,6 +71,7 @@ from effects.domain.sampling import (
 from effects.domain.split import (
     CorpusSplit,
 )
+from effects.domain.surface_collation import entity_target_tensors
 from effects.domain.value_targets import params, segments, value_targets
 from effects.domain.variants import VariantMasks
 from effects.infrastructure.sidecar_io import SidecarCache, sidecar_roots

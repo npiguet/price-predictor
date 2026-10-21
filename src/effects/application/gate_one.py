@@ -30,13 +30,8 @@ import torch
 from effects.application.breakdowns import TOTAL, RecordResult
 from effects.application.surface_batching import SurfaceBatcher
 from effects.domain.damage_step_keywords import KeywordResolver, keyword_of_line
-from effects.domain.effect_model import (
-    FIELDS_BY_NAME,
-    GATE_INDEX,
-    entity_target_tensors,
-    gather_entities,
-    per_entity_loss,
-)
+from effects.domain.effect_head_layout import FIELDS_BY_NAME, GATE_INDEX
+from effects.domain.effect_losses import per_entity_loss
 from effects.domain.effect_targets import derive_targets
 from effects.domain.gate_metrics import balanced_accuracy, f1_score, poisson_deviance
 from effects.domain.head_decoding import (
@@ -47,6 +42,7 @@ from effects.domain.head_decoding import (
 from effects.domain.keyword_names import normalize_keyword
 from effects.domain.records import RecordKind, acting_keys
 from effects.domain.rule_families import rule_family
+from effects.domain.surface_collation import entity_target_tensors, gather_entities
 
 logger = logging.getLogger(__name__)
 

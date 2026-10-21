@@ -473,12 +473,10 @@ def method_c(args, probe_model, corpus: Path, eval_records: list) -> dict:
     """Train a shallow trunk on frozen ``e`` and score it beside the full model."""
     import torch
 
-    from effects.domain.effect_model import (
-        EffectModel,
-        entity_target_tensors,
-        per_entity_loss,
-    )
+    from effects.domain.effect_losses import per_entity_loss
+    from effects.domain.effect_model import EffectModel
     from effects.domain.effect_targets import derive_targets
+    from effects.domain.surface_collation import entity_target_tensors
     from effects.infrastructure.record_io import iter_shards, read_shard
 
     ablation = sibling("ablation")

@@ -368,7 +368,7 @@ def _predict(probe_model, records, read) -> list[float]:
 def _death(outputs, surface, row, entity_id) -> float:
     import torch
 
-    from effects.domain.effect_model import FIELD_SLICES, GATE_INDEX, ZONE_OUTCOMES
+    from effects.domain.effect_head_layout import FIELD_SLICES, GATE_INDEX, ZONE_OUTCOMES
 
     for index, slot in enumerate(surface.slots):
         if slot.entity_id == entity_id and slot.kind.name == "CARD":
@@ -383,7 +383,7 @@ def run_sweep(name: str, probe_model, record, row: dict) -> list[dict]:
     """``[{value, prediction}]`` for one record of one sweep."""
     import torch
 
-    from effects.domain.effect_model import VERDICT_BITS
+    from effects.domain.effect_head_layout import VERDICT_BITS
 
     if name == "toughness":
         values = TOUGHNESS_VALUES

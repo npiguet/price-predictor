@@ -43,7 +43,8 @@ from effects.domain.effect_head_input import (
     INPUT_LAYOUT_KEY,
     feature_widths,
 )
-from effects.domain.effect_model import EffectModel, FieldSpec, active_fields
+from effects.domain.effect_head_layout import FieldSpec, active_fields
+from effects.domain.effect_model import EffectModel
 from effects.domain.sampling import sampling_class
 from effects.domain.variants import variant_masks
 from effects.infrastructure.sidecar_io import SidecarCache, sidecar_roots
