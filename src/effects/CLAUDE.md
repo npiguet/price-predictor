@@ -67,12 +67,12 @@ Every collecting supervisor runs its Forge workers under `-Xmx1200m` and has `Fo
 
 ### The engine hooks
 
-The hooks live on the **`effect-record-hooks` branch of the sibling `../forge` checkout**, one commit per hook. There is no exported patch series in this repository: the branch is the history, and a directory of `.patch` files beside it was a second copy of that history maintained by hand, which git already does better.
+The hooks live on the **`effect-record-hooks` branch of the sibling `../forge` checkout**, an ordinary branch: changes land as new commits on top, and a Forge upgrade is merged in rather than rebased under them. There is no exported patch series in this repository: the branch is the history, and a directory of `.patch` files beside it was a second copy of that history maintained by hand, which git already does better.
 
 `PatchHooks.REQUIRED` is the inventory — every class, method, and the record channel it feeds. It is the specification of what a patched Forge must have, and it is load-bearing rather than documentation: `AttributionMode` probes its first entry, `PatchedCollectors.CAN_SUPPRESS` reads the three `…Without` entries, and `PatchHooks.report()` prints what is missing at worker startup. A **partly-applied** patch is the state that matters — the mode still reads `patched`, because that is one hook's answer, while a channel the run meant to collect is quietly empty — so read that line, not just the mode.
 
 ```bash
-cd ../forge && git checkout effect-record-hooks   # or: git rebase master, after an upgrade
+cd ../forge && git checkout effect-record-hooks   # or: git merge master, after an upgrade
 mvn -pl forge-core,forge-game,forge-ai -am install -DskipTests
 cd ../price-predictor/forge-connector && mvn package -DskipTests
 ```

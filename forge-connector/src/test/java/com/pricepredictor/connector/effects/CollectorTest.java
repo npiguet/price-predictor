@@ -395,7 +395,7 @@ class CollectorTest {
     @Test
     void theDetectedModeMatchesTheHooksPresence() {
         boolean hookPresent = PatchHooks
-                .find(PatchHooks.TRIGGER_HANDLER, "setEffectRecordCause")
+                .find(PatchHooks.TRIGGER_HANDLER, "getEffectRecordCause")
                 .present();
         assertEquals(
                 hookPresent ? AttributionMode.PATCHED : AttributionMode.DEGRADED,
