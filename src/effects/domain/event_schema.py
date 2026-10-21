@@ -195,8 +195,8 @@ EVENT_PARAMS: dict[EventType, tuple[str, ...]] = {
     # The six Replace* APIs are exactly the getOverridingAbility() of a
     # replacement effect, so this and the `rewrite` record for the same
     # replacement are two views of ONE engine event, one call frame apart: the
-    # `rewrite` record is written from inside observeReplacement, wrapping the
-    # same executeReplacement call this row's ability runs from. They are not
+    # `rewrite` record is written from inside ReplacementObserver.observe,
+    # wrapping the same executeReplacement call this row's ability runs from. They are not
     # independent evidence of the same replacement -- a reader that treats a
     # `replacement_applied` row and its sibling `rewrite` row as two
     # confirming signals will double-count it. (`rewrite` is not written

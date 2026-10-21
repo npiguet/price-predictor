@@ -89,7 +89,7 @@ class RewriteResult(StrEnum):
     This is the field that makes the ``rewrite`` channel readable at all. Only
     ``Replaced`` and ``Updated`` can edit the event's parameter map, and only
     then when the substituted ability happens to write one; every other outcome
-    is a bare ``return`` in ``executeReplacementInternal``. Without ``result``,
+    is a bare ``return`` in ``executeReplacementUnobserved``. Without ``result``,
     "enters tapped", "exile it instead" and "prevent that damage" all record as
     an event that came out exactly as it went in.
     """
