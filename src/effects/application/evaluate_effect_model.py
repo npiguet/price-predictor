@@ -55,7 +55,13 @@ from effects.domain.records import LegalityDecision
 from effects.domain.strata import VALIDATION_STRATA
 
 if TYPE_CHECKING:
-    from effects.infrastructure.effect_model_store import SplitProvenance
+    from effects.domain.corpus_manifest import CorpusManifest
+    from effects.infrastructure.effect_model_store import (
+        EffectCheckpoint,
+        SplitProvenance,
+    )
+    from effects.infrastructure.model_runner import LoadedModel, Runnable
+    from effects.infrastructure.sidecar_io import SidecarCache
 
 logger = logging.getLogger(__name__)
 
@@ -86,28 +92,72 @@ class CheckResult:
         return self.status is CheckStatus.FAIL
 
 
+# ── what every stage reads ──────────────────────────────────────────────
+
+
+@dataclass
+class EvaluationContext:
+    """What every stage of one evaluation reads, gathered once in :func:`run`.
+
+    The main checkpoint's weights are loaded on first use and kept: gate 1,
+    the breakdowns and gate 2 all run it, and each used to load it afresh with
+    a sidecar cache of its own. Each record set still gets a batcher of its own
+    (``LoadedModel.runnable``), since the slot widths and the active fields are
+    measured from the records it scores.
+    """
+
+    config: EvaluateEffectModelConfig
+    main: EffectCheckpoint
+    vocab_path: Path
+    keyword_path: Path
+    corpus_path: Path | None = None
+    #: The curated dataset's manifest, read once; None for a raw-corpus run.
+    manifest: CorpusManifest | None = None
+    _main_model: LoadedModel | None = field(default=None, repr=False)
+    _sidecars: SidecarCache | None = field(default=None, repr=False)
+
+    def main_runnable(self, records) -> Runnable:
+        """The main checkpoint, ready to run over ``records``."""
+        if self._main_model is None:
+            self._main_model = self._load(self.main)
+        return self._main_model.runnable(records)
+
+    def runnable_of(self, checkpoint, records) -> Runnable:
+        """Another checkpoint over ``records``, loaded now and not kept."""
+        return self._load(checkpoint).runnable(records)
+
+    def _load(self, checkpoint) -> LoadedModel:
+        from effects.infrastructure.model_runner import build_sidecars, load_model
+
+        if self._sidecars is None:
+            self._sidecars = build_sidecars(self.config)
+        return load_model(
+            self.config, checkpoint,
+            vocab_path=self.vocab_path, keyword_path=self.keyword_path,
+            sidecars=self._sidecars,
+        )
+
+
 # ── gate 1: the identity baseline ───────────────────────────────────────
 
 
-def run_gate_one(
-    config, main, identity, *, vocab_path: Path, keyword_path: Path,
-) -> CheckResult:
+def run_gate_one(context: EvaluationContext, identity) -> CheckResult:
     """Score both models on the split's unique-text stratum and compare.
 
-    Loading two models and running the corpus twice is the expensive part of an
-    evaluation, so it happens only when the baseline is actually supplied.
+    Loading a second model and running the corpus twice is the expensive part
+    of an evaluation, so it happens only when the baseline is actually
+    supplied. The baseline is loaded for this gate alone and released after it.
     """
     from effects.application.gate_one import (
         measure,
         training_texts,
         unique_text_records,
     )
-    from effects.infrastructure.model_runner import (
-        load_runnable,
-        stratum_records,
-    )
+    from effects.infrastructure.model_runner import stratum_records
 
-    records, training_acting, message = stratum_records(config, main)
+    records, training_acting, message = stratum_records(
+        context.config, context.main,
+    )
     if not records:
         return CheckResult("gate-1", CheckStatus.SKIPPED, message)
 
@@ -115,12 +165,12 @@ def run_gate_one(
     # surface's texts decide the stratum for both.
     stratum = None
     scores = {}
-    for name, checkpoint in (("model", main), ("identity", identity)):
-        encoder, model, batcher, fields = load_runnable(
-            config, checkpoint,
-            vocab_path=vocab_path, keyword_path=keyword_path,
-            records=records,
+    for name, checkpoint in (("model", None), ("identity", identity)):
+        runnable = (
+            context.main_runnable(records) if checkpoint is None
+            else context.runnable_of(checkpoint, records)
         )
+        batcher = runnable.batcher
         if stratum is None:
             stratum = unique_text_records(
                 records, batcher, seen=training_texts(training_acting, batcher),
@@ -134,7 +184,8 @@ def run_gate_one(
                 "measure memorization on both sides rather than reading",
             )
         scores[name] = measure(
-            stratum, encoder, model, batcher, fields=fields,
+            stratum, runnable.encoder, runnable.model, batcher,
+            fields=runnable.fields,
         )
 
     return evaluate_gate_one(scores["model"], scores["identity"])
@@ -615,12 +666,14 @@ def run(config: EvaluateEffectModelConfig) -> EvaluationReport:
     corpus_path = resolve_corpus_path(
         main.provenance, corpus=config.corpus, checkpoint=main_path,
     )
-    actual_corpus_digest = ""
+    manifest = None
     if corpus_path is not None:
         from effects.infrastructure.corpus_store import CorpusStore
 
-        actual_corpus_digest = CorpusStore(corpus_path).load().digest()
-    check_corpus(main.provenance, actual_digest=actual_corpus_digest)
+        manifest = CorpusStore(corpus_path).load()
+    check_corpus(
+        main.provenance, actual_digest=manifest.digest() if manifest else "",
+    )
     if corpus_path is not None:
         from effects.infrastructure.record_io import iter_shards, refuse_mixed_generations
 
@@ -645,6 +698,10 @@ def run(config: EvaluateEffectModelConfig) -> EvaluationReport:
     )
     from effects.domain.ability_encoder import surface_of
 
+    context = EvaluationContext(
+        config, main, vocab_path, keyword_path,
+        corpus_path=corpus_path, manifest=manifest,
+    )
     report = EvaluationReport()
     logger.info("loading the ability cache under %s", config.abilities_root)
     # The surface the checkpoint encoded from, so every geometry check keys
@@ -672,25 +729,17 @@ def run(config: EvaluateEffectModelConfig) -> EvaluationReport:
             "against that baseline",
         ))
     else:
-        report.add(run_gate_one(
-            config, main, variants["identity"],
-            vocab_path=vocab_path, keyword_path=keyword_path,
-        ))
+        report.add(run_gate_one(context, variants["identity"]))
 
     # ── gate 2: per keyword, routing only ──
     logger.info("gate 2: scoring the damage-step keywords on the game-disjoint stratum")
-    verdicts = run_gate_two(
-        config, main, vocab_path=vocab_path, keyword_path=keyword_path,
-    )
+    verdicts = run_gate_two(context)
     report.keyword_verdicts = verdicts
     report.add(evaluate_gate_two(verdicts))
 
     # ── breakdowns: per text, rarity, family, policy, decision (FR-064–068) ──
     logger.info("breakdowns: scoring both validation strata")
-    for check in run_breakdowns(
-        config, main, corpus_path,
-        vocab_path=vocab_path, keyword_path=keyword_path,
-    ):
+    for check in run_breakdowns(context):
         report.add(check)
 
     # ── e-geometry checks, all reported ──
@@ -751,7 +800,7 @@ BREAKDOWN_RAW_RECORDS = 4096
 CARD_DISJOINT, GAME_DISJOINT = VALIDATION_STRATA
 
 
-def breakdown_records(config, main, corpus_path: Path | None) -> dict[str, list]:
+def breakdown_records(context: EvaluationContext) -> dict[str, list]:
     """Both validation strata, as the breakdowns score them.
 
     From the curated dataset's fixed samples when the checkpoint trained on
@@ -762,10 +811,11 @@ def breakdown_records(config, main, corpus_path: Path | None) -> dict[str, list]
     """
     from effects.infrastructure.record_io import read_records_matching, read_shard
 
-    if corpus_path is not None:
+    main = context.main
+    if context.corpus_path is not None:
         from effects.infrastructure.corpus_store import CorpusStore
 
-        store = CorpusStore(corpus_path)
+        store = CorpusStore(context.corpus_path)
         out = {}
         for stratum in (CARD_DISJOINT, GAME_DISJOINT):
             path = store.sample_path(stratum)
@@ -780,7 +830,8 @@ def breakdown_records(config, main, corpus_path: Path | None) -> dict[str, list]
     if not any(games.values()):
         return out
     wanted = games[CARD_DISJOINT] | games[GAME_DISJOINT]
-    for record in read_records_matching(Path(config.records_dir), game_ids=wanted):
+    records_dir = Path(context.config.records_dir)
+    for record in read_records_matching(records_dir, game_ids=wanted):
         for stratum, members in games.items():
             if record.game_id in members and len(out[stratum]) < BREAKDOWN_RAW_RECORDS:
                 out[stratum].append(record)
@@ -789,35 +840,25 @@ def breakdown_records(config, main, corpus_path: Path | None) -> dict[str, list]
     return out
 
 
-def run_breakdowns(
-    config, main, corpus_path: Path | None, *, vocab_path: Path, keyword_path: Path,
-) -> list[CheckResult]:
+def run_breakdowns(context: EvaluationContext) -> list[CheckResult]:
     """Score both validation strata once and report every breakdown."""
     from effects.application.gate_one import measure
-    from effects.infrastructure.model_runner import load_runnable
 
-    strata = breakdown_records(config, main, corpus_path)
+    strata = breakdown_records(context)
     everything = [record for rows in strata.values() for record in rows]
     if not everything:
         return [CheckResult(
             "breakdowns", CheckStatus.SKIPPED,
             "neither validation stratum holds a record to score",
         )]
-    encoder, model, batcher, fields = load_runnable(
-        config, main,
-        vocab_path=vocab_path, keyword_path=keyword_path, records=everything,
-    )
-    manifest = None
-    if corpus_path is not None:
-        from effects.infrastructure.corpus_store import CorpusStore
-
-        manifest = CorpusStore(corpus_path).load()
+    runnable = context.main_runnable(everything)
+    manifest = context.manifest
     mode_counts = (manifest.legality_mode_counts or None) if manifest else None
     scored = {
         stratum: (
             list(measure(
-                rows, encoder, model, batcher, fields=fields,
-                legality_mode_counts=mode_counts,
+                rows, runnable.encoder, runnable.model, runnable.batcher,
+                fields=runnable.fields, legality_mode_counts=mode_counts,
             ).records)
             if rows else []
         )
@@ -826,7 +867,7 @@ def run_breakdowns(
     games_by_text: dict[str, float] = dict(manifest.rarity) if manifest else {}
     return breakdown_checks(
         scored, games_by_text=games_by_text,
-        withheld_keyword=main.provenance.withheld_keyword,
+        withheld_keyword=context.main.provenance.withheld_keyword,
     )
 
 
@@ -962,19 +1003,16 @@ def _gate_two_records(config, provenance):
     )
 
 
-def _gate_two_runnable(config, checkpoint, *, vocab_path, keyword_path, records):
-    """The checkpoint, ready to run over ``records``. Loaded exactly once."""
-    from effects.infrastructure.model_runner import load_runnable
+def _gate_two_runnable(context: EvaluationContext, records):
+    """The main checkpoint with a batcher measured from ``records``.
 
-    return load_runnable(
-        config, checkpoint,
-        vocab_path=vocab_path, keyword_path=keyword_path, records=records,
-    )
+    A seam of its own so a test can hand gate 2 a stand-in model; the weights
+    come from the context, loaded once for the whole evaluation.
+    """
+    return context.main_runnable(records)
 
 
-def run_gate_two(
-    config, main, *, vocab_path: Path, keyword_path: Path,
-) -> list[KeywordVerdict]:
+def run_gate_two(context: EvaluationContext) -> list[KeywordVerdict]:
     """Score the eight keywords and route each one (FR-119 – FR-122).
 
     Nothing is loaded when the split holds no combat record to score: every
@@ -984,19 +1022,17 @@ def run_gate_two(
     from effects.application.gate_two import score_keywords
 
     rows = keyword_rows()
-    records = iter(_gate_two_records(config, main.provenance))
+    records = iter(_gate_two_records(context.config, context.main.provenance))
     # A handful of records up front, because the loader measures the slot
     # widths from real ones; the rest stays a stream the scorer reads in chunks.
     head = list(islice(records, SLOT_WIDTH_SAMPLE))
     if not head:
         scores = {row.keyword: KeywordScore() for row in rows}
     else:
-        encoder, model, batcher, fields = _gate_two_runnable(
-            config, main,
-            vocab_path=vocab_path, keyword_path=keyword_path, records=head,
-        )
+        runnable = _gate_two_runnable(context, head)
         scores = score_keywords(
-            chain(head, records), rows, encoder, model, batcher, fields=fields,
+            chain(head, records), rows, runnable.encoder, runnable.model,
+            runnable.batcher, fields=runnable.fields,
         )
     return [
         evaluate_keyword(

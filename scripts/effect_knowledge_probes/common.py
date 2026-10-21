@@ -258,14 +258,15 @@ def load_probe_model(
         checkpoint, vocab_path=vocab_path, keyword_path=keyword_path,
     )
     config = SimpleNamespace(cards_folders=list(cards_folders), variant_scripts=None)
-    encoder, model, batcher, fields = load_runnable(
+    runnable = load_runnable(
         config, checkpoint, vocab_path=vocab, keyword_path=keywords, records=records,
     )
-    encoder.eval()
-    model.eval()
+    runnable.encoder.eval()
+    runnable.model.eval()
     return ProbeModel(
-        checkpoint=checkpoint, encoder=encoder, model=model, batcher=batcher,
-        fields=fields, device=batcher.device, surface=surface_of(vocab),
+        checkpoint=checkpoint, encoder=runnable.encoder, model=runnable.model,
+        batcher=runnable.batcher, fields=runnable.fields,
+        device=runnable.batcher.device, surface=surface_of(vocab),
         e_dim=checkpoint.encoder_config.e_dim,
     )
 

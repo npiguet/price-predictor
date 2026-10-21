@@ -68,6 +68,7 @@ from effects.domain.state_snapshot import (
     StateSnapshot,
 )
 from effects.domain.variants import VariantMasks
+from effects.infrastructure.model_runner import Runnable
 
 # ── a board: one first-striking attacker, one blocker ────────────────────
 
@@ -829,6 +830,15 @@ class TestEvaluatorWiring:
             records_dir=tmp_path, cards_folders=(tmp_path / "cardsfolder",),
         )
 
+    def _context(self, tmp_path, checkpoint):
+        from effects.application.evaluate_effect_model import EvaluationContext
+
+        return EvaluationContext(
+            self._config(tmp_path), checkpoint,
+            vocab_path=tmp_path / "vocab.txt",
+            keyword_path=tmp_path / "keywords.json",
+        )
+
     def test_it_scores_the_game_disjoint_combat_records(self, tmp_path, monkeypatch):
         from effects.application import evaluate_effect_model as evaluator
 
@@ -838,15 +848,13 @@ class TestEvaluatorWiring:
         )
         monkeypatch.setattr(
             evaluator, "_gate_two_runnable",
-            lambda *a, **k: (
+            lambda *a, **k: Runnable(
                 _NoEncoder(), _AbilityCountingModel(), _batcher(), _FIELDS,
             ),
         )
 
         verdicts = evaluator.run_gate_two(
-            self._config(tmp_path), _Checkpoint(self._provenance(("gd-1",))),
-            vocab_path=tmp_path / "vocab.txt",
-            keyword_path=tmp_path / "keywords.json",
+            self._context(tmp_path, _Checkpoint(self._provenance(("gd-1",)))),
         )
 
         first_strike = next(v for v in verdicts if v.keyword == "first_strike")
@@ -862,15 +870,13 @@ class TestEvaluatorWiring:
         )
         monkeypatch.setattr(
             evaluator, "_gate_two_runnable",
-            lambda *a, **k: (
+            lambda *a, **k: Runnable(
                 _NoEncoder(), _AbilityCountingModel(), _batcher(), _FIELDS,
             ),
         )
 
         verdicts = evaluator.run_gate_two(
-            self._config(tmp_path), _Checkpoint(self._provenance(("gd-1",))),
-            vocab_path=tmp_path / "vocab.txt",
-            keyword_path=tmp_path / "keywords.json",
+            self._context(tmp_path, _Checkpoint(self._provenance(("gd-1",)))),
         )
 
         first_strike = next(v for v in verdicts if v.keyword == "first_strike")
@@ -892,9 +898,7 @@ class TestEvaluatorWiring:
         monkeypatch.setattr(evaluator, "_gate_two_runnable", _never)
 
         verdicts = evaluator.run_gate_two(
-            self._config(tmp_path), _Checkpoint(self._provenance(())),
-            vocab_path=tmp_path / "vocab.txt",
-            keyword_path=tmp_path / "keywords.json",
+            self._context(tmp_path, _Checkpoint(self._provenance(()))),
         )
 
         assert len(verdicts) == 8

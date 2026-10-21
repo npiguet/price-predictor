@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import logging
 import random
+from dataclasses import dataclass
 from pathlib import Path
 
 import torch
@@ -46,7 +47,7 @@ from effects.domain.effect_head_input import (
     global_features,
     player_features,
 )
-from effects.domain.effect_model import EffectModel, active_fields
+from effects.domain.effect_model import EffectModel, FieldSpec, active_fields
 from effects.domain.sampling import sampling_class
 from effects.domain.variants import variant_masks
 from effects.infrastructure.sidecar_io import SidecarCache, sidecar_roots
@@ -125,18 +126,107 @@ def tokenizer_for(checkpoint, vocab_path: Path, keyword_path: Path) -> AbilityTo
     )
 
 
-def load_runnable(
-    config, checkpoint, *, vocab_path: Path, keyword_path: Path, records,
-):
-    """``(encoder, model, batcher, fields)`` for one checkpoint.
+@dataclass(frozen=True, slots=True)
+class Runnable:
+    """One checkpoint, ready to run over one set of records.
 
-    ``fields`` is the active-field tuple for the classes the records actually
-    carry, read at a step past every curriculum threshold — the evaluator scores
-    a finished model, not one partway through its schedule.
+    ``fields`` is the active-field tuple for the classes those records carry,
+    read at a step past every curriculum threshold — the evaluator scores a
+    finished model, not one partway through its schedule.
+    """
+
+    encoder: AbilityEncoder
+    model: EffectModel
+    batcher: SurfaceBatcher
+    fields: tuple[FieldSpec, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class LoadedModel:
+    """A checkpoint's weights on the device, before any record is seen.
+
+    Split from :class:`Runnable` because the expensive part — the weights, the
+    identity table, the tokenizer — does not depend on the records, while the
+    batcher's slot widths and the active fields do. One load serves every
+    record set an evaluation scores; each set gets a batcher of its own, with
+    its own generator, so scoring one set never moves another's draws.
+    """
+
+    checkpoint: object
+    encoder: AbilityEncoder
+    model: EffectModel
+    tokenizer: AbilityTokenizer
+    identity_table: torch.nn.Embedding | None
+    surface: str
+    device: torch.device
+    sidecars: SidecarCache
+
+    def runnable(self, records) -> Runnable:
+        """The model with a batcher measured from ``records``."""
+        return Runnable(
+            self.encoder, self.model, self._batcher(records),
+            evaluation_fields(records),
+        )
+
+    def _batcher(self, records) -> SurfaceBatcher:
+        checkpoint = self.checkpoint
+        # The inputs the checkpoint learned on: a gen-1 checkpoint, or a gen-2
+        # arm trained before the layout was recorded, reads the earlier layout
+        # bit for bit (FR-063c).
+        layout = input_layout_of(checkpoint)
+        return SurfaceBatcher(
+            tokenizer=self.tokenizer,
+            sidecars=self.sidecars,
+            masks=variant_masks(checkpoint.variant),
+            surface=self.surface,
+            e_dim=checkpoint.encoder_config.e_dim,
+            widths=feature_widths(records, layout),
+            device=self.device,
+            withhold_keyword=checkpoint.provenance.withheld_keyword,
+            # Both are training-time augmentations. Sampling them at evaluation
+            # would make the gate's numbers depend on a coin flip.
+            keyword_expand_p=INFERENCE_KEYWORD_EXPAND_P,
+            context_dropout=0.0,
+            rng=random.Random(RANDOM_SEED),
+            identity_table=self.identity_table,
+            truncations=TruncationLog(log_truncation(logger, "evaluation")),
+            input_layout=layout,
+        )
+
+
+def load_model(
+    config, checkpoint, *, vocab_path: Path, keyword_path: Path,
+    sidecars: SidecarCache | None = None,
+) -> LoadedModel:
+    """``checkpoint``'s weights on the device, with its tokenizer.
+
+    ``sidecars`` lets several loads share one cache; left out, the roots
+    ``config`` names are read into a new one.
     """
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    tokenizer = tokenizer_for(checkpoint, vocab_path, keyword_path)
+    encoder, model = _load_weights(checkpoint, device)
+    return LoadedModel(
+        checkpoint=checkpoint,
+        encoder=encoder,
+        model=model,
+        tokenizer=tokenizer_for(checkpoint, vocab_path, keyword_path),
+        identity_table=_identity_table(checkpoint, device),
+        surface=surface_of(vocab_path),
+        device=device,
+        sidecars=sidecars if sidecars is not None else build_sidecars(config),
+    )
 
+
+def load_runnable(
+    config, checkpoint, *, vocab_path: Path, keyword_path: Path, records,
+) -> Runnable:
+    """One checkpoint, loaded and ready to run over ``records``."""
+    return load_model(
+        config, checkpoint, vocab_path=vocab_path, keyword_path=keyword_path,
+    ).runnable(records)
+
+
+def _load_weights(checkpoint, device) -> tuple[AbilityEncoder, EffectModel]:
     # Built at the size the checkpoint recorded (FR-061): a non-default arm
     # loads without its flags restated.
     encoder = AbilityEncoder(checkpoint.encoder_config).to(device)
@@ -146,53 +236,37 @@ def load_runnable(
     # The training-only heads are filtered out at save time, so the shipped
     # state is a strict subset of what the model declares.
     model.load_state_dict(checkpoint.model_state, strict=False)
+    return encoder, model
 
-    masks = variant_masks(checkpoint.variant)
-    identity_table = None
-    if masks.identity_embedding:
-        identity_table = torch.nn.Embedding(
-            IDENTITY_TABLE_SIZE, checkpoint.encoder_config.e_dim,
-        ).to(device)
-        saved = checkpoint.extra.get(IDENTITY_TABLE_KEY)
-        if saved is not None:
-            identity_table.load_state_dict(saved)
-        else:
-            logger.warning(
-                "The identity baseline at %s carries no embedding table, so "
-                "its e vectors are random rather than the ones it trained. "
-                "Gate 1's margin against it is not meaningful — retrain the "
-                "baseline with a build that saves the table.",
-                checkpoint.variant,
-            )
 
-    # The inputs the checkpoint learned on: a gen-1 checkpoint, or a gen-2 arm
-    # trained before the layout was recorded, reads the earlier layout bit for
-    # bit (FR-063c).
-    layout = input_layout_of(checkpoint)
-    batcher = SurfaceBatcher(
-        tokenizer=tokenizer,
-        sidecars=build_sidecars(config),
-        masks=masks,
-        surface=surface_of(vocab_path),
-        e_dim=checkpoint.encoder_config.e_dim,
-        widths=feature_widths(records, layout),
-        device=device,
-        withhold_keyword=checkpoint.provenance.withheld_keyword,
-        # Both are training-time augmentations. Sampling them at evaluation
-        # would make the gate's numbers depend on a coin flip.
-        keyword_expand_p=INFERENCE_KEYWORD_EXPAND_P,
-        context_dropout=0.0,
-        rng=random.Random(RANDOM_SEED),
-        identity_table=identity_table,
-        truncations=TruncationLog(log_truncation(logger, "evaluation")),
-        input_layout=layout,
-    )
-    fields = active_fields(
+def _identity_table(checkpoint, device) -> torch.nn.Embedding | None:
+    """The identity baseline's learned ``e`` table; None for any other variant."""
+    if not variant_masks(checkpoint.variant).identity_embedding:
+        return None
+    table = torch.nn.Embedding(
+        IDENTITY_TABLE_SIZE, checkpoint.encoder_config.e_dim,
+    ).to(device)
+    saved = checkpoint.extra.get(IDENTITY_TABLE_KEY)
+    if saved is not None:
+        table.load_state_dict(saved)
+    else:
+        logger.warning(
+            "The identity baseline at %s carries no embedding table, so "
+            "its e vectors are random rather than the ones it trained. "
+            "Gate 1's margin against it is not meaningful — retrain the "
+            "baseline with a build that saves the table.",
+            checkpoint.variant,
+        )
+    return table
+
+
+def evaluation_fields(records) -> tuple[FieldSpec, ...]:
+    """The fields active for ``records``' classes once training has finished."""
+    return active_fields(
         present_classes=frozenset(sampling_class(r) for r in records),
         step=EVALUATION_STEP,
         curriculum_step=1,
     )
-    return encoder, model, batcher, fields
 
 
 def stratum_records(config, checkpoint) -> tuple[list, set, str]:
