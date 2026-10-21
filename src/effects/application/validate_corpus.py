@@ -34,7 +34,7 @@ from __future__ import annotations
 
 from collections import Counter, defaultdict
 from collections.abc import Iterable, Iterator
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field, fields, replace
 from pathlib import Path
 
 from effects.domain.canonical_digest import canonical_digest
@@ -53,11 +53,13 @@ from effects.domain.records import (
     ActivationPayload,
     CollectionMode,
     CombatPayload,
+    Costs,
     EffectRecord,
     Moment,
     PlayabilityAttackersPayload,
     PlayabilityBlockersPayload,
     PlayabilityDecisionPayload,
+    RecordKind,
     ResolutionPayload,
     RewritePayload,
     TriggerPayload,
@@ -75,9 +77,7 @@ _IDENTITY_FIELDS = (
 )
 
 #: The six cost channels, in the order the schema lists them.
-_COST_FIELDS = (
-    "mana_by_color", "tapped", "life", "sacrificed", "discarded", "exiled",
-)
+_COST_FIELDS = tuple(spec.name for spec in fields(Costs))
 
 #: The channels a window with enough activations in it must have exercised.
 #: Not all six: sacrifice, discard and exile costs are genuinely rare in a
@@ -91,6 +91,14 @@ _COST_FIELDS_ALWAYS_PAID = ("mana_by_color", "tapped")
 #: How many offending examples a finding's detail carries. Enough to recognise a
 #: pattern, few enough that a broken run's report still fits on a screen.
 _EXAMPLES = 5
+
+#: The ``rewrite_results`` row for a rewrite written before the hook passed a
+#: ``result``. Kept beside the wire spellings, and printed with them.
+_NO_RESULT = "absent"
+
+#: What :func:`attribution_kind` calls a null pointer: the state that says
+#: nothing, neither the root line nor an explicit unresolved.
+_UNATTRIBUTED = attribution_kind(None)
 
 
 @dataclass(frozen=True, slots=True)
@@ -230,7 +238,16 @@ def validate_corpus(
     return findings
 
 
-#: The legality subkinds that must carry ``what_if`` on a gen-2 shard.
+@dataclass(slots=True)
+class _ShardPresence:
+    """One shard's raw lines, and how many carry each gen-2 envelope field."""
+
+    records: int = 0
+    with_random_seat: int = 0
+    #: The legality subkinds, which must carry ``what_if`` on a gen-2 shard.
+    legality: int = 0
+    legality_with_what_if: int = 0
+    others_with_what_if: int = 0
 
 
 @dataclass
@@ -243,24 +260,27 @@ class FieldPresence:
     the defect, and mixing whole gen-1 and gen-2 shards is refused elsewhere.
     """
 
-    #: shard -> [records, with random_seat, legality records, with what_if,
-    #: other records with what_if]
-    shards: dict[str, list[int]] = field(default_factory=dict)
+    shards: dict[str, _ShardPresence] = field(default_factory=dict)
 
     def observe(self, shard: str, data: dict) -> None:
-        counts = self.shards.setdefault(shard, [0, 0, 0, 0, 0])
-        counts[0] += 1
-        counts[1] += "random_seat" in data
-        legality = data.get("kind") == "playability" and data.get("subkind") in WHAT_IF_SUBKINDS
+        counts = self.shards.setdefault(shard, _ShardPresence())
+        counts.records += 1
+        counts.with_random_seat += "random_seat" in data
+        legality = (
+            data.get("kind") == RecordKind.PLAYABILITY.value
+            and data.get("subkind") in WHAT_IF_SUBKINDS
+        )
         if legality:
-            counts[2] += 1
-            counts[3] += "what_if" in data
+            counts.legality += 1
+            counts.legality_with_what_if += "what_if" in data
         else:
-            counts[4] += "what_if" in data
+            counts.others_with_what_if += "what_if" in data
 
     def finding(self) -> Finding:
         partial_seat, partial_what_if, stray = [], [], []
-        for shard, (records, seats, legality, what_ifs, others) in sorted(self.shards.items()):
+        for shard, counts in sorted(self.shards.items()):
+            records, seats = counts.records, counts.with_random_seat
+            legality, what_ifs = counts.legality, counts.legality_with_what_if
             if 0 < seats < records:
                 partial_seat.append(f"{shard}: random_seat on {seats} of {records} records")
             # A gen-2 shard owes what_if on every legality record; a gen-1 one
@@ -269,9 +289,12 @@ class FieldPresence:
                 partial_what_if.append(
                     f"{shard}: what_if on {what_ifs} of {legality} legality records"
                 )
-            if others:
-                stray.append(f"{shard}: what_if on {others} non-legality record(s)")
-        gen2 = sum(1 for counts in self.shards.values() if counts[1])
+            if counts.others_with_what_if:
+                stray.append(
+                    f"{shard}: what_if on {counts.others_with_what_if} "
+                    "non-legality record(s)"
+                )
+        gen2 = sum(1 for counts in self.shards.values() if counts.with_random_seat)
         bad = partial_seat + partial_what_if + stray
         return Finding(
             name="gen-2 envelope fields are on every record of the kinds that carry them",
@@ -751,7 +774,7 @@ class _Tally:
     def _add_rewrite(self, record: EffectRecord, payload: RewritePayload) -> None:
         self.rewrites += 1
         counts = self.rewrite_results[
-            payload.result.value if payload.result else "absent"
+            payload.result.value if payload.result else _NO_RESULT
         ]
         counts[0] += payload.outgoing is not None
         counts[1] += bool(payload.replaced_by)
@@ -779,15 +802,7 @@ class _Tally:
                 )
 
     def _add_costs(self, payload: ActivationPayload) -> None:
-        costs = payload.costs
-        paid = {
-            "mana_by_color": bool(costs.mana_by_color),
-            "tapped": bool(costs.tapped),
-            "life": costs.life != 0,
-            "sacrificed": bool(costs.sacrificed),
-            "discarded": bool(costs.discarded),
-            "exiled": bool(costs.exiled),
-        }
+        paid = {name: bool(getattr(payload.costs, name)) for name in _COST_FIELDS}
         for name, filled in paid.items():
             self.cost_fields[name] += filled
         self.costs_populated += any(paid.values())
@@ -1277,7 +1292,7 @@ class _Tally:
         indexing it here would invent an ``absent`` row on a healthy window,
         which every rewrite finding then prints.
         """
-        counts = self.rewrite_results.get("absent")
+        counts = self.rewrite_results.get(_NO_RESULT)
         return counts[2] if counts else 0
 
     def _rewrite_shown(self) -> str:
@@ -1347,7 +1362,7 @@ class _Tally:
         """``prevented`` and ``skipped`` cannot carry a payload.
 
         Both are bare ``return`` statements above the
-        ``playSpellAbilityNoStack`` call in ``executeReplacementInternal``: no
+        ``playSpellAbilityNoStack`` call in ``executeReplacementUnobserved``: no
         ability ran, and nothing was written to the parameter map on the way
         out. A record of one of those carrying an ``outgoing`` or a
         ``replaced_by`` is therefore a listener reading a stale argument, not a
@@ -1453,7 +1468,7 @@ class _Tally:
         the number that moves when the attribution channel is wired.
         """
         floor = limits.min_attributed_rate
-        named = self.resolution_events - self.attribution.get("absent", 0)
+        named = self.resolution_events - self.attribution.get(_UNATTRIBUTED, 0)
         rate = named / self.resolution_events if self.resolution_events else 0.0
         limit = "watched, no floor" if floor is None else f"floor {floor:.1%}"
         return Finding(
@@ -1482,7 +1497,7 @@ class _Tally:
         with the record it mirrors, which is the entire point of taking it.
         """
         floor = limits.min_fork_attributed_rate
-        named = self.fork_events - self.fork_attribution.get("absent", 0)
+        named = self.fork_events - self.fork_attribution.get(_UNATTRIBUTED, 0)
         rate = named / self.fork_events if self.fork_events else 0.0
         limit = "watched, no floor" if floor is None else f"floor {floor:.1%}"
         return Finding(
