@@ -31,29 +31,20 @@ from effects.domain.coverage import (
 from effects.domain.event_schema import Event, EventType
 from effects.domain.records import (
     EffectRecord,
-    Moment,
-    RecordKind,
     ResolutionPayload,
 )
-from effects.domain.state_snapshot import EntityState, GlobalState, Refs, StateSnapshot
+from effects.domain.state_snapshot import EntityState, Refs
+from tests.unit.effects.builders import make_entity, make_record, make_snapshot
 
 
 def _entity(entity_id: str, name: str) -> EntityState:
-    return EntityState(
-        id=entity_id, name=name, zone="battlefield", controller="P0",
-    )
+    return make_entity(entity_id, name)
 
 
 def _record(entities, *, source=None, targets=(), events=()) -> EffectRecord:
-    return EffectRecord(
-        record_id="r.0.1", run_id="r", timestamp="t", game_id="r.0.1",
-        kind=RecordKind.RESOLUTION, moment=Moment.RESOLUTION,
-        actor_player="P0",
-        state=StateSnapshot(
-            global_=GlobalState(
-                turn=1, phase="main1", active="P0", priority="P0", stack_size=0,
-            ),
-            players=(),
+    return make_record(
+        record_id="r.0.1", run_id="r", game_id="r.0.1",
+        state=make_snapshot(
             entities=tuple(entities),
             refs=Refs(source=source, targets=tuple(targets)),
         ),

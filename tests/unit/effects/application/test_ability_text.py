@@ -12,42 +12,26 @@ from __future__ import annotations
 import pytest
 
 from effects.domain.provenance import ProvenanceKey, ProvenanceSidecar, SidecarLine
-from effects.domain.records import EffectRecord, Moment, RecordKind, ResolutionPayload
-from effects.domain.state_snapshot import EntityState, GlobalState, StateSnapshot
+from effects.domain.records import EffectRecord, RecordKind
+from effects.domain.state_snapshot import EntityState
 from effects.infrastructure.sidecar_io import (
     SidecarCache,
     UnconfiguredTree,
     UnconvertedScript,
     write_sidecar,
 )
+from tests.unit.effects.builders import make_entity, make_record, make_snapshot
 
 
 def _entity(name: str, **overrides) -> EntityState:
-    defaults = {
-        "id": f"E-{name}", "name": name, "zone": "battlefield",
-        "controller": "P0",
-    }
-    defaults.update(overrides)
-    return EntityState(**defaults)
+    return make_entity(f"E-{name}", name, **overrides)
 
 
 def _record(game_id: str, entities=(), ability=None, **overrides) -> EffectRecord:
-    defaults: dict = {
-        "record_id": f"{game_id}.1", "run_id": "run", "timestamp": "t",
-        "game_id": game_id, "kind": RecordKind.RESOLUTION,
-        "moment": Moment.RESOLUTION, "actor_player": "P0",
-        "ability": ability,
-        "state": StateSnapshot(
-            global_=GlobalState(
-                turn=1, phase="main1", active="P0", priority="P0", stack_size=0,
-            ),
-            players=(),
-            entities=tuple(entities),
-        ),
-        "payload": ResolutionPayload(),
-    }
-    defaults.update(overrides)
-    return EffectRecord(**defaults)
+    return make_record(
+        game_id=game_id, ability=ability,
+        state=make_snapshot(entities=tuple(entities)), **overrides,
+    )
 
 
 class FakeSidecarCache:

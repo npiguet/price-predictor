@@ -35,9 +35,7 @@ from effects.application.collect_variants import (
 )
 from effects.domain.records import (
     EffectRecord,
-    Moment,
     RecordKind,
-    ResolutionPayload,
 )
 from effects.domain.script_variants import (
     MAX_NUMERIC_SHIFT,
@@ -53,6 +51,7 @@ from effects.domain.script_variants import (
     variant_name,
 )
 from effects.domain.state_snapshot import GlobalState, StateSnapshot
+from tests.unit.effects.builders import make_record
 
 _SNAPSHOT = StateSnapshot(
     global_=GlobalState(
@@ -69,14 +68,9 @@ _BOLT_SCRIPT = (
 
 
 def _record(**overrides) -> EffectRecord:
-    defaults: dict = {
-        "record_id": "r.0.1", "run_id": "r", "timestamp": "t", "game_id": "r.0.1",
-        "kind": RecordKind.RESOLUTION, "moment": Moment.RESOLUTION,
-        "actor_player": "P0", "state": _SNAPSHOT,
-        "payload": ResolutionPayload(),
-    }
+    defaults: dict = {"record_id": "r.0.1", "run_id": "r", "game_id": "r.0.1"}
     defaults.update(overrides)
-    return EffectRecord(**defaults)
+    return make_record(**defaults)
 
 
 class TestVariantRecordFlags:

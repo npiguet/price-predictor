@@ -22,14 +22,12 @@ from effects.application.gate_one import (
 )
 from effects.domain.provenance import ProvenanceKey
 from effects.domain.records import (
-    CombatPayload,
     EffectRecord,
-    Moment,
     RecordKind,
-    ResolutionPayload,
     acting_keys,
 )
 from effects.domain.state_snapshot import GlobalState, StateSnapshot
+from tests.unit.effects.builders import make_record
 
 _SNAPSHOT = StateSnapshot(
     global_=GlobalState(
@@ -58,15 +56,8 @@ def _record(
     index: int | None, *, kind: RecordKind = RecordKind.RESOLUTION,
     game: str = "g1",
 ) -> EffectRecord:
-    payload = (
-        ResolutionPayload() if kind is RecordKind.RESOLUTION
-        else CombatPayload()
-    )
-    return EffectRecord(
-        record_id=f"r.{index}", run_id="r", timestamp="t", game_id=game,
-        kind=kind,
-        moment=Moment.RESOLUTION if kind is RecordKind.RESOLUTION else None,
-        actor_player="P0", state=_SNAPSHOT, payload=payload,
+    return make_record(
+        kind, record_id=f"r.{index}", run_id="r", game_id=game,
         # None, not (): the envelope requires the kinds without an acting line
         # to carry no ability field at all.
         ability=(_key(index),) if index is not None else None,

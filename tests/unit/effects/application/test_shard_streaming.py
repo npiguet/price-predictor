@@ -33,35 +33,21 @@ from effects.application.train_effect_model import (
 )
 from effects.domain.records import (
     EffectRecord,
-    Moment,
-    RecordKind,
-    ResolutionPayload,
 )
 from effects.domain.split import (
     HeldOutCards,
 )
-from effects.domain.state_snapshot import EntityState, GlobalState, StateSnapshot
+from effects.domain.state_snapshot import EntityState
+from tests.unit.effects.builders import make_entity, make_record, make_snapshot
 
 
 def _entity(name: str) -> EntityState:
-    return EntityState(
-        id=f"E-{name}", name=name, zone="battlefield", controller="P0",
-    )
+    return make_entity(f"E-{name}", name)
 
 
 def _record(game_id: str, entities=()) -> EffectRecord:
-    return EffectRecord(
-        record_id=f"{game_id}.1", run_id="run", timestamp="t", game_id=game_id,
-        kind=RecordKind.RESOLUTION, moment=Moment.RESOLUTION, actor_player="P0",
-        ability=None,
-        state=StateSnapshot(
-            global_=GlobalState(
-                turn=1, phase="main1", active="P0", priority="P0", stack_size=0,
-            ),
-            players=(),
-            entities=tuple(entities),
-        ),
-        payload=ResolutionPayload(),
+    return make_record(
+        game_id=game_id, state=make_snapshot(entities=tuple(entities)),
     )
 
 

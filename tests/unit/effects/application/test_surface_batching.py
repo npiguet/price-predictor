@@ -26,6 +26,7 @@ from effects.domain.state_snapshot import EntityState, GlobalState, StateSnapsho
 from effects.domain.variants import VariantMasks
 from effects.infrastructure.record_io import read_shard
 from effects.infrastructure.sidecar_io import SidecarCache
+from tests.unit.effects.builders import make_entity, make_record, make_snapshot
 
 _ACT = ProvenanceKey("cardsfolder/l/lightning_bolt.txt", 0, "spell", 0)
 _ANTHEM = ProvenanceKey("cardsfolder/a/anthem.txt", 0, "static", 0)
@@ -50,15 +51,11 @@ class _Sidecars:
 
 
 def _record() -> EffectRecord:
-    return EffectRecord(
-        record_id="run.0.1", run_id="run", timestamp="t", game_id="run.0.1",
-        kind=RecordKind.RESOLUTION, moment=Moment.RESOLUTION, actor_player="P0",
-        ability=(_ACT,), payload=ResolutionPayload(),
-        state=StateSnapshot(
+    return make_record(
+        record_id="run.0.1", run_id="run", game_id="run.0.1", ability=(_ACT,),
+        state=make_snapshot(
             global_=GlobalState(turn=1, phase="main1", active="P0", priority="P0", stack_size=1),
-            players=(),
-            entities=(EntityState(id="E1", name="Anthem", zone="battlefield",
-                                  controller="P0", printed=(_PHANTOM, _ANTHEM)),),
+            entities=(make_entity("E1", "Anthem", printed=(_PHANTOM, _ANTHEM)),),
         ),
     )
 
