@@ -419,23 +419,44 @@ class TestRecordLabels:
                  if i.target == "damage_taken" and i.entity == creature.id]
         assert [i.label for i in found] == [MAGNITUDE_CAP]
 
-    def test_observed_mana_is_capped_where_the_model_s_targets_are(self, records):
+    @staticmethod
+    def _producing(records, *mana_by_color):
+        """A resolution whose events produce the given ``mana_by_color`` maps.
+
+        The map is what the collector writes: Forge's produced-mana string as a
+        count per colour letter, ``{"C": 2}`` for a Sol Ring's ``2``.
+        """
         from dataclasses import replace
 
-        from effects.domain.effect_model import MAGNITUDE_CAP
         from effects.domain.event_schema import Event, EventType
         from effects.domain.records import ResolutionPayload
 
         record = next(r for r in records if isinstance(r.payload, ResolutionPayload))
+        events = tuple(
+            Event(EventType.MANA_PRODUCED, subjects=(record.actor_player,),
+                  params={"mana_by_color": mana})
+            for mana in mana_by_color
+        )
+        return replace(record, payload=ResolutionPayload(events=events))
 
-        def producing(events: int):
-            # The event a real mana resolution carries, repeated.
-            event = Event(EventType.MANA_PRODUCED, subjects=(record.actor_player,),
-                          params={"mana_by_color": {"G": 1}})
-            return replace(record, payload=ResolutionPayload(events=(event,) * events))
+    def test_observed_mana_sums_the_counts_each_event_carries(self, records):
+        """A Sol Ring makes two mana in one event, a Tinder Farm one of each of
+        two colours."""
+        assert labels.mana_observed(self._producing(records, {"C": 2})) == 2.0
+        assert labels.mana_observed(self._producing(records, {"R": 1, "W": 1})) == 2.0
+        assert labels.mana_observed(
+            self._producing(records, {"G": 1}, {"G": 1}, {"U": 3})) == 5.0
 
-        assert labels.mana_observed(producing(3)) == 3.0
-        assert labels.mana_observed(producing(int(MAGNITUDE_CAP) + 10)) == MAGNITUDE_CAP
+    def test_observed_mana_is_capped_where_the_model_s_targets_are(self, records):
+        from effects.domain.effect_model import MAGNITUDE_CAP
+
+        produced = self._producing(records, *({"G": 1},) * (int(MAGNITUDE_CAP) + 10))
+        assert labels.mana_observed(produced) == MAGNITUDE_CAP
+
+    def test_an_event_that_names_no_mana_says_nothing(self, records):
+        """An empty map is mana the collector could not read, not zero mana."""
+        assert labels.mana_observed(self._producing(records, {})) is None
+        assert labels.mana_observed(self._producing(records, {}, {"B": 1})) == 1.0
 
     def test_the_join_finds_causes_in_the_same_game(self, records):
         result = labels.join_triggers(records)
