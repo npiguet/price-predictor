@@ -784,9 +784,25 @@ class TestGen2EnvelopeFields:
         records = list(read_shard(_GEN1_FIXTURE))
         assert len(records) > 40
         for record in records:
-            assert record.random_seat is False
+            assert record.random_seat is None
+            assert not record.random_seat
             assert record.what_if is None
             assert record.extra_fields == {}
+
+    def test_a_rewritten_gen1_shard_stays_gen1(self, tmp_path):
+        """A curated shard is gen-1 or gen-2 as its source was (FR-033).
+
+        Written with ``random_seat`` on every record whatever the source held,
+        a dataset built from gen-1 shards read as gen-2, and the mixed-
+        generation guard on ``--corpus`` could never fire.
+        """
+        from effects.infrastructure.record_io import GEN_1, shard_generation, write_shard
+
+        rewritten = tmp_path / "curated.jsonl.gz"
+        write_shard(rewritten, read_shard(_GEN1_FIXTURE))
+        assert shard_generation(rewritten) == GEN_1
+        for line in iter_shard_lines(rewritten):
+            assert "random_seat" not in json.loads(line)
 
     def test_a_gen1_line_carries_neither_field(self):
         for line in iter_shard_lines(_GEN1_FIXTURE):
@@ -969,10 +985,11 @@ class TestTheWireFormIsPinned:
         return digest.hexdigest()
 
     def test_the_gen1_fixture_serializes_to_the_pinned_bytes(self):
+        """Without ``random_seat``, which a gen-1 line never carried."""
         records = list(read_shard(_GEN1_FIXTURE))
         assert len(records) == 53
         assert self._digest(records) == (
-            "103eb3f98ab57d273be2f7c8c599ab3d5eb0f11e16ee8fa75a3ccf7a5d1f71d3"
+            "588245c598027912271025c937270892f62d31cfb9e8346c4d142ea00a5ea266"
         )
 
     def test_every_kind_serializes_to_the_pinned_bytes(self):

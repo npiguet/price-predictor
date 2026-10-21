@@ -461,9 +461,11 @@ class EffectRecord:
     interventional: bool = False
     fork: bool = False
     synthetic: bool = False
-    #: ``actor_player`` is the random seat (FR-030). A gen-1 shard never wrote
-    #: it, and its records read as on-policy. Collection metadata.
-    random_seat: bool = False
+    #: ``actor_player`` is the random seat (FR-030). None on a record read
+    #: from a gen-1 shard, which never wrote it: falsy, so the record reads as
+    #: on-policy, and kept apart from False so a rewritten record stays the
+    #: generation it was collected in (FR-033). Collection metadata.
+    random_seat: bool | None = False
     #: On ``attackers`` and ``blockers`` records only: False for the declaration
     #: a player actually made, True for a query the AI asked about a
     #: hypothetical (FR-027, FR-031). None is unknown — a gen-1 record — and

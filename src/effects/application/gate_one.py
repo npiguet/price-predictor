@@ -269,7 +269,7 @@ def _record_result(
         subkind=record.subkind.value if record.subkind else None,
         text=acting_text(record, batcher),
         family=family,
-        random_seat=record.random_seat,
+        random_seat=bool(record.random_seat),
         what_if=record.what_if,
         keywords=record_keywords(record, batcher, resolver),
         losses=losses,

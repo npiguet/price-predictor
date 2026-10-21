@@ -656,8 +656,12 @@ def record_to_dict(record: EffectRecord) -> dict:
         "interventional": record.interventional,
         "fork": record.fork,
         "synthetic": record.synthetic,
-        "random_seat": record.random_seat,
     }
+    # Written only where the source carried it: its presence is what makes a
+    # shard gen-2 (``shard_generation``), so a curated shard rewritten from
+    # gen-1 records has to stay gen-1 for the mixed-generation guard to fire.
+    if record.random_seat is not None:
+        out["random_seat"] = record.random_seat
     if record.what_if is not None:
         out["what_if"] = record.what_if
     out |= {
@@ -699,9 +703,9 @@ def record_from_dict(data: dict) -> EffectRecord:
         interventional=data.get("interventional", False),
         fork=data.get("fork", False),
         synthetic=data.get("synthetic", False),
-        # Absent on a gen-1 shard (FR-033): off-policy is something a record
-        # has to claim, and an unclassed legality record is never real.
-        random_seat=data.get("random_seat", False),
+        # Absent on a gen-1 shard (FR-033): None, which reads as on-policy and
+        # writes back absent, so the record keeps its generation.
+        random_seat=data.get("random_seat"),
         what_if=data.get("what_if"),
         ability=_keys_from_json(ability) if ability is not None else None,
         ability_unresolved=data.get("ability_unresolved"),
