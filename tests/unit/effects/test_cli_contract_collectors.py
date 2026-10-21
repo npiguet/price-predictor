@@ -7,10 +7,22 @@ side collection is the whole point, on that side it is an opt-in.
 
 from __future__ import annotations
 
+from dataclasses import fields
+
 import pytest
 
-from effects.infrastructure.cli import CAP_DEFAULTS, build_parser
+from effects.domain.collection_caps import CollectionCaps
+from effects.infrastructure.cli import build_parser
 from sealed.infrastructure.cli import build_parser as sealed_parser
+
+#: Every cap and its default, read off the dataclass the workers receive.
+#: ``random_seat_probability`` is left out: its flag defaults to None so that a
+#: share above 0 without it can be refused (FR-026).
+CAP_DEFAULTS = {
+    spec.name: spec.default
+    for spec in fields(CollectionCaps)
+    if spec.name != "random_seat_probability"
+}
 
 
 def parse(*argv: str):
@@ -67,7 +79,7 @@ class TestSharedCapFlags:
     def test_the_constants_and_the_parsed_defaults_agree(self):
         """Every cap in the table, not a list this test has to be told about.
 
-        Spelled out one by one, a cap added to `CAP_DEFAULTS` and to only one
+        Spelled out one by one, a cap added to `CollectionCaps` and to only one
         of the two parsers passed here — which is how `legality_rate` came to
         be readable by the JVM and settable by nobody.
         """

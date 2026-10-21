@@ -148,8 +148,14 @@ class TestScorerSmokeTest:
     """The cache it splices must be the one built from --checkpoint."""
 
     def test_the_abilities_root_defaults_to_the_shipping_cache(self):
+        from pathlib import Path
+
         args = parse("scorer-smoke-test", "--scratch-dir", "scratch/")
-        assert args.abilities_root == "output/effects/abilities"
+        assert Path(args.abilities_root) == Path("output/effects/abilities")
+        # The cache encode-abilities writes by default, not a lookalike path.
+        assert Path(args.abilities_root) == Path(
+            parse("encode-abilities").output_root,
+        )
 
     def test_the_abilities_root_reaches_the_config(self, monkeypatch):
         import effects.application.scorer_smoke_test as smoke

@@ -52,6 +52,7 @@ from effects.domain.gate_metrics import (
 )
 from effects.domain.line_query import LineQuery
 from effects.domain.records import LegalityDecision
+from effects.infrastructure import default_paths
 
 if TYPE_CHECKING:
     from effects.infrastructure.effect_model_store import SplitProvenance
@@ -473,11 +474,10 @@ class EvaluationReport:
         return "\n".join(lines)
 
 
-#: Where the sealed pipeline's per-card winnability labels live by default;
-#: ``--win-rates`` names another table. The decodability battery skips when it
-#: is absent rather than failing: the labels are an operator's training data,
-#: not a repository artifact.
-DEFAULT_WIN_RATES = Path("output/sealed/cards-win-rates.txt")
+#: The per-card win-rate table the decodability battery reads by default;
+#: defined beside the other default paths so ``--help`` can print it without
+#: importing this module, which loads torch.
+DEFAULT_WIN_RATES = Path(default_paths.DEFAULT_WIN_RATES)
 
 
 @dataclass

@@ -17,12 +17,17 @@ from __future__ import annotations
 import argparse
 import logging
 import sys
+from dataclasses import fields
 from pathlib import Path
 
+from effects.application import collect_coverage, collect_variants
+from effects.application.build_corpus import DEFAULT_GAME_DISJOINT_KEYWORDS
+from effects.application.build_vocab import DEFAULT_TARGET_SIZE
 from effects.application.train_effect_model import (
     DEFAULT_PREFETCH_WORKERS,
     DEFAULT_SHARDS_PER_EPOCH,
 )
+from effects.application.validate_corpus import Thresholds
 from effects.domain.collection_caps import (
     DEFAULT_INTERVENTIONS_PER_GAME,
     DEFAULT_LEGALITY_RATE,
@@ -34,62 +39,23 @@ from effects.domain.collection_caps import (
     CollectionCaps,
 )
 from effects.domain.split import HOLDOUT_MAX_CARRIERS, HOLDOUT_PERMILLE
+from effects.domain.variants import VARIANTS, Variant
+from effects.infrastructure.default_paths import (
+    DEFAULT_ABILITIES_ROOT,
+    DEFAULT_CARDS_FOLDERS,
+    DEFAULT_CHECKPOINT,
+    DEFAULT_CORPUS_OUTPUT,
+    DEFAULT_FORGE_CARDS_PATH,
+    DEFAULT_FORGE_TOKENSCRIPTS,
+    DEFAULT_KEYWORD_DEFINITIONS,
+    DEFAULT_RECORDS_DIR,
+    DEFAULT_SCRIPT_VOCAB_PATH,
+    DEFAULT_VARIANT_SCRIPTS,
+    DEFAULT_VOCAB_PATH,
+    DEFAULT_WIN_RATES,
+)
 
 logger = logging.getLogger(__name__)
-
-# ── shared defaults (contracts/cli.md) ──────────────────────────────────
-DEFAULT_RECORDS_DIR = "output/effects/records/"
-DEFAULT_CARDS_FOLDERS = ("output/cardsfolder/", "output/tokenscripts/")
-DEFAULT_KEYWORD_DEFINITIONS = "output/effects/keyword-definitions.json"
-DEFAULT_VOCAB_PATH = "models/effects/vocab.txt"
-DEFAULT_SCRIPT_VOCAB_PATH = "models/effects/vocab-script.txt"
-DEFAULT_VARIANT_SCRIPTS = "output/effects/variant-scripts/"
-#: Mirrors collect_variants.RANDOM_SEED. Restated rather than imported
-#: because the parser is built before that module is, and pinned against
-#: it by tests/unit/effects/application/test_variants.py.
-VARIANT_RANDOM_SEED = 42
-DEFAULT_ABILITIES_ROOT = "output/effects/abilities/"
-DEFAULT_CHECKPOINT = "models/effects/effect-model/latest.pt"
-
-#: Thresholds `validate-corpus` holds a fresh shard directory to. Set from the
-#: first collected corpus's measurements, so a run reproducing any of its
-#: defects fails rather than squeaking through.
-DEFAULT_MIN_KEYED_RATE = 0.95
-DEFAULT_MAX_DUPLICATE_RATE = 0.02
-DEFAULT_MAX_UNPAIRED_LINK_RATE = 0.02
-DEFAULT_MAX_NAMES_PER_GAME = 120
-DEFAULT_TURN_JUMP_TOLERANCE = 1
-DEFAULT_MIN_COST_EVIDENCE = 200
-DEFAULT_MAX_DUPLICATE_EVENT_RATE = 0.02
-DEFAULT_MAX_TRIGGER_FIRED_SHARE = 0.65
-
-#: The rates `validate-corpus` measures and does not judge unless asked.
-#: Their healthy value is not yet known — a `zone_change` for a card *made*
-#: rather than moved has no origin to report, and a hook that names no causing
-#: object is not a collector that lost it — so a default floor would fail every
-#: run, which is the failure mode the whole command exists to avoid.
-DEFAULT_MIN_ZONE_CHANGE_FROM_ZONE_RATE = None
-DEFAULT_MIN_ATTRIBUTED_RATE = None
-DEFAULT_MIN_FORK_ATTRIBUTED_RATE = None
-DEFAULT_MIN_CAUSE_RATE = None
-DEFAULT_MIN_REWRITE_REPLACED_BY_RATE = None
-
-#: Judged, and at zero: a fork is taken at the moment it mirrors, so the two
-#: records describe one moment and there is no rate at which they may disagree
-#: about which turn it is.
-DEFAULT_MAX_MIRROR_TURN_DISAGREEMENT_RATE = 0.0
-
-#: Caps and budgets, shared by every collecting supervisor (FR-028).
-CAP_DEFAULTS: dict[str, object] = {
-    "mana_cap": DEFAULT_MANA_CAP,
-    "playability_rate": DEFAULT_PLAYABILITY_RATE,
-    "interventions_per_game": DEFAULT_INTERVENTIONS_PER_GAME,
-    "probes_per_game": DEFAULT_PROBES_PER_GAME,
-    "probe_keywords": DEFAULT_PROBE_KEYWORDS,
-    "legality_rate": DEFAULT_LEGALITY_RATE,
-    "random_seat_share": DEFAULT_RANDOM_SEAT_SHARE,
-}
-
 
 def _add_cards_folder(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
@@ -104,37 +70,41 @@ def _add_cards_folder(parser: argparse.ArgumentParser) -> None:
 def _add_cap_flags(parser: argparse.ArgumentParser) -> None:
     """The cap and budget flags every collecting supervisor carries."""
     parser.add_argument(
-        "--mana-cap", type=int, default=CAP_DEFAULTS["mana_cap"],
+        "--mana-cap", type=int, default=DEFAULT_MANA_CAP,
         help=(
-            "Records per unique mana ability, per game (default: 1). A "
+            "Records per unique mana ability, per game (default: "
+            f"{DEFAULT_MANA_CAP}). A "
             "Mountain taps a dozen times a game for the same R, and the "
             "repeats observe a board that barely moved. Keyed on the mana "
             "produced too, so a dual land's two colours both record."
         ),
     )
     parser.add_argument(
-        "--playability-rate", type=float,
-        default=CAP_DEFAULTS["playability_rate"],
+        "--playability-rate", type=float, default=DEFAULT_PLAYABILITY_RATE,
         help=(
             "Fraction of decision-subkind logging points sampled (default: "
-            "0.1). The legality subkinds are not sampled — identical answers "
-            "are coalesced instead."
+            f"{DEFAULT_PLAYABILITY_RATE:g}). The legality subkinds are not "
+            "sampled — identical answers are coalesced instead."
         ),
     )
     parser.add_argument(
         "--interventions-per-game", type=int,
-        default=CAP_DEFAULTS["interventions_per_game"],
-        help="Interventional resolutions per game, stage three (default: 2)",
+        default=DEFAULT_INTERVENTIONS_PER_GAME,
+        help=(
+            "Interventional resolutions per game, stage three (default: "
+            f"{DEFAULT_INTERVENTIONS_PER_GAME})"
+        ),
     )
     parser.add_argument(
-        "--probes-per-game", type=int, default=CAP_DEFAULTS["probes_per_game"],
+        "--probes-per-game", type=int, default=DEFAULT_PROBES_PER_GAME,
         help=(
-            "Damage-step probe forks per game (default: 2). A budget, not a "
+            "Damage-step probe forks per game (default: "
+            f"{DEFAULT_PROBES_PER_GAME}). A budget, not a "
             "switch: it is spent only on keywords --probe-keywords names."
         ),
     )
     parser.add_argument(
-        "--probe-keywords", type=str, default=CAP_DEFAULTS["probe_keywords"],
+        "--probe-keywords", type=str, default=DEFAULT_PROBE_KEYWORDS,
         help=(
             "Comma-separated damage-step keywords to probe (default: all "
             f"eight, {DEFAULT_PROBE_KEYWORDS}). Name a subset to narrow the "
@@ -143,21 +113,21 @@ def _add_cap_flags(parser: argparse.ArgumentParser) -> None:
         ),
     )
     parser.add_argument(
-        "--legality-rate", type=float, default=CAP_DEFAULTS["legality_rate"],
+        "--legality-rate", type=float, default=DEFAULT_LEGALITY_RATE,
         help=(
-            "Fraction of the AI's what-if legality queries kept (default: 0, "
-            "none). Real attack and block declarations are always written."
+            "Fraction of the AI's what-if legality queries kept (default: "
+            f"{DEFAULT_LEGALITY_RATE:g}, none). Real attack and block "
+            "declarations are always written."
         ),
     )
     parser.add_argument(
-        "--random-seat-share", type=float,
-        default=CAP_DEFAULTS["random_seat_share"],
+        "--random-seat-share", type=float, default=DEFAULT_RANDOM_SEAT_SHARE,
         help=(
             "Share of matches in which one seat, chosen at random per match, "
             "is a random seat: with probability --random-seat-probability it "
             "plays, targets, attacks and blocks uniformly at random among the "
             "legal options instead of as the Forge AI, so it casts cards the "
-            "AI never would (default: 0, none)."
+            f"AI never would (default: {DEFAULT_RANDOM_SEAT_SHARE:g}, none)."
         ),
     )
     parser.add_argument(
@@ -247,8 +217,11 @@ def _build_vocab_parser(subparsers) -> None:
         help=f"Keyword definitions to scan (default: {DEFAULT_KEYWORD_DEFINITIONS})",
     )
     parser.add_argument(
-        "--target-size", type=int, default=5000,
-        help="Post-truncate the corpus-frequency vocabulary (default: 5000)",
+        "--target-size", type=int, default=DEFAULT_TARGET_SIZE,
+        help=(
+            "Post-truncate the corpus-frequency vocabulary (default: "
+            f"{DEFAULT_TARGET_SIZE})"
+        ),
     )
 
 
@@ -363,25 +336,36 @@ def _collect_coverage_parser(subparsers) -> None:
         ),
     )
     parser.add_argument(
-        "--min-text-games", type=int, default=5,
+        "--min-text-games", type=int,
+        default=collect_coverage.DEFAULT_MIN_TEXT_GAMES,
         help=(
             "With --only-cards: distinct games a held-out text must act in to "
-            "be satisfied (default: 5)"
+            f"be satisfied (default: {collect_coverage.DEFAULT_MIN_TEXT_GAMES})"
         ),
     )
     parser.add_argument(
-        "--target-records", type=int, default=50,
-        help="Per-card satisfaction goal (default: 50)",
+        "--target-records", type=int,
+        default=collect_coverage.DEFAULT_TARGET_RECORDS,
+        help=(
+            "Per-card satisfaction goal (default: "
+            f"{collect_coverage.DEFAULT_TARGET_RECORDS})"
+        ),
     )
     parser.add_argument(
-        "--decks-per-round", type=int, default=500,
-        help="Decks played as matches per round (default: 500)",
+        "--decks-per-round", type=int,
+        default=collect_coverage.DEFAULT_DECKS_PER_ROUND,
+        help=(
+            "Decks played as matches per round (default: "
+            f"{collect_coverage.DEFAULT_DECKS_PER_ROUND})"
+        ),
     )
     parser.add_argument(
-        "--no-progress-rounds", type=int, default=3,
+        "--no-progress-rounds", type=int,
+        default=collect_coverage.DEFAULT_NO_PROGRESS_ROUNDS,
         help=(
             "Consecutive rounds without a new qualifying record before a card "
-            "retires (default: 3). This is what makes the run terminate."
+            f"retires (default: {collect_coverage.DEFAULT_NO_PROGRESS_ROUNDS}). "
+            "This is what makes the run terminate."
         ),
     )
     parser.add_argument(
@@ -406,11 +390,9 @@ def holdout_source(args: argparse.Namespace) -> tuple[Path, Path | None]:
         ValueError: As :func:`resolve_training_corpus`, or when ``--split-from``
             names a holdout the depletion list already names.
     """
-    from effects.application.collect_coverage import TWO_HOLDOUT_SOURCES
-
     records, listed = resolve_training_corpus(args)
     if args.split_from and listed is not None:
-        raise ValueError(TWO_HOLDOUT_SOURCES)
+        raise ValueError(collect_coverage.TWO_HOLDOUT_SOURCES)
     return records, listed
 
 
@@ -477,7 +459,9 @@ def coverage_config_from(args: argparse.Namespace):
     records, listed = holdout_source(args)
     return CollectCoverageConfig(
         only_cards=Path(only_cards) if only_cards else None,
-        min_text_games=getattr(args, "min_text_games", 5),
+        min_text_games=getattr(
+            args, "min_text_games", collect_coverage.DEFAULT_MIN_TEXT_GAMES,
+        ),
         effect_records=records,
         cards_folders=resolve_cards_folders(args.cards_folders),
         split_from=Path(args.split_from) if args.split_from else None,
@@ -509,18 +493,6 @@ def run_collect_coverage(args: argparse.Namespace) -> int:
 
 # ── build-corpus ────────────────────────────────────────────────────────
 
-#: Kept apart from DEFAULT_RECORDS_DIR: this is the *curated dataset*
-#: directory build-corpus writes to, not the raw shard root it reads from
-#: (specs/2026-09-05-ability-effect-model.md § Curated corpus).
-DEFAULT_CORPUS_OUTPUT = "output/effects/corpus/"
-
-#: Forge's own token scripts, beside the card scripts `convert` reads. The
-#: remap needs the raw tree rather than `output/tokenscripts/`: it tells
-#: same-name token scripts apart by their Colors/Types/PT lines, which
-#: conversion does not preserve.
-DEFAULT_FORGE_TOKENSCRIPTS = "../forge/forge-gui/res/tokenscripts"
-
-
 def _class_mix(text: str) -> dict[str, float]:
     """``--class-mix`` as argparse wants it: parsed through the trainer's own
     ``parse_kind_mix``, so the two commands cannot disagree about the syntax
@@ -533,12 +505,6 @@ def _class_mix(text: str) -> dict[str, float]:
         return parse_kind_mix(text)
     except ValueError as exc:
         raise argparse.ArgumentTypeError(str(exc)) from None
-
-
-#: FR-045's default; restated rather than imported so ``--help`` stays light.
-DEFAULT_GAME_DISJOINT_KEYWORDS: tuple[str, ...] = (
-    "first strike", "deathtouch", "trample", "indestructible", "wither", "infect",
-)
 
 
 def _keyword_list(text: str) -> tuple[str, ...]:
@@ -785,8 +751,8 @@ def _holdout_cards_parser(subparsers) -> None:
         help="Destination file, one Forge canonical card name per line",
     )
     parser.add_argument(
-        "--cards-folder", type=str, default="output/cardsfolder/",
-        help="Converted card tree (default: output/cardsfolder/)",
+        "--cards-folder", type=str, default=DEFAULT_CARDS_FOLDERS[0],
+        help=f"Converted card tree (default: {DEFAULT_CARDS_FOLDERS[0]})",
     )
     parser.add_argument(
         "--printings-path", type=str, default="resources/AllPrintings.json",
@@ -962,6 +928,104 @@ def run_field_coverage(args: argparse.Namespace) -> int:
 # ── validate-corpus ─────────────────────────────────────────────────────
 
 
+#: The help for each ``Thresholds`` field, in the order ``--help`` lists them.
+#: The flag is the field's name, and its default and type are the field's own,
+#: so a threshold cannot drift from the value the check reads; why each default
+#: is what it is lives on the field. A field defaulting to None is a rate that
+#: is measured and reported as [WATCH] unless a floor is passed: its healthy
+#: value is not yet known, so a default floor would fail every run, which is
+#: the failure mode the whole command exists to avoid.
+_THRESHOLD_HELP: dict[str, str] = {
+    "min_keyed_rate": (
+        "Share of records naming a line that must resolve it to a printed "
+        "key (default: {default})"
+    ),
+    "max_duplicate_rate": (
+        "Share of a kind's records that may repeat an earlier record of "
+        "the same kind in the same game (default: {default})"
+    ),
+    "max_unpaired_link_rate": (
+        "Share of link ids that may lack one activation and one resolution "
+        "half (default: {default})"
+    ),
+    "max_names_per_game": (
+        "Distinct card names one game_id may show before it is reading as "
+        "more than one game (default: {default})"
+    ),
+    "min_cost_evidence": (
+        "Activation records needed before a cost channel reading zero "
+        "means the collector rather than the pool (default: {default})"
+    ),
+    "turn_jump_tolerance": (
+        "Turns a snapshot may sit below the highest already seen in its "
+        "game before that reads as a game boundary (default: {default}). "
+        "Deferred mana-reservoir flushes are exempt and the report says how "
+        "many were exempted."
+    ),
+    "max_duplicate_event_rate": (
+        "Share of events that may repeat another event in the same record "
+        "(default: {default}). Distinct from --max-duplicate-rate, which "
+        "compares whole records and read zero on a corpus that duplicated one "
+        "event in seven"
+    ),
+    "max_trigger_fired_share": (
+        "Share of trigger records that may report fired=true (default: "
+        "{default}); the negative sampler targets ~1:1, and the report breaks "
+        "the ratio down per evaluated mode"
+    ),
+    "min_zone_change_from_zone_rate": (
+        "Share of zone_change events that must carry from_zone. Unset by "
+        "default: the rate is measured and reported as [WATCH] without "
+        "failing the run"
+    ),
+    "min_attributed_rate": (
+        "Share of resolution events that must name a producing clause. "
+        "Unset by default: measured and reported as [WATCH] without "
+        "failing the run"
+    ),
+    "min_fork_attributed_rate": (
+        "Share of events on fork records that must name a producing "
+        "clause. Unset by default: measured and reported as [WATCH]. Kept "
+        "apart from --min-attributed-rate because the fork collectors are "
+        "different code, and the aggregate hid a fork path writing null "
+        "on every event"
+    ),
+    "min_cause_rate": (
+        "Share of the events whose schema row declares a cause that must "
+        "populate it. Unset by default: measured and reported as [WATCH]. "
+        "An empty cause is what makes two attackers' identical damage "
+        "read as one outcome written twice"
+    ),
+    "min_rewrite_replaced_by_rate": (
+        "Share of the rewrite records whose result ran an ability that "
+        "must name it. Unset by default: measured and reported as "
+        "[WATCH]. A replacement that substitutes an ability and cannot "
+        "say which one is the shape that left this channel unreadable"
+    ),
+    "max_mirror_turn_disagreement_rate": (
+        "Share of fork records whose turn may differ from the record they "
+        "mirror (default: {default}). A fork is taken at the moment it "
+        "mirrors, so a disagreement is a stale snapshot; it surfaced before "
+        "as a backward turn jump in the game_id check, which blamed a game "
+        "merge that had not happened"
+    ),
+}
+
+
+def _add_threshold_flags(parser: argparse.ArgumentParser) -> None:
+    """One flag per ``Thresholds`` field, defaulting to the field's own value."""
+    defaults = {spec.name: spec.default for spec in fields(Thresholds)}
+    for name, help_text in _THRESHOLD_HELP.items():
+        default = defaults[name]
+        parser.add_argument(
+            "--" + name.replace("_", "-"),
+            # A watched rate defaults to None and takes a share when set.
+            type=float if default is None else type(default),
+            default=default,
+            help=help_text.format(default=default),
+        )
+
+
 def _validate_corpus_parser(subparsers) -> None:
     parser = subparsers.add_parser(
         "validate-corpus",
@@ -983,131 +1047,7 @@ def _validate_corpus_parser(subparsers) -> None:
             "pass, and every record id is held in memory while it runs."
         ),
     )
-    parser.add_argument(
-        "--min-keyed-rate", type=float, default=DEFAULT_MIN_KEYED_RATE,
-        help=(
-            "Share of records naming a line that must resolve it to a printed "
-            f"key (default: {DEFAULT_MIN_KEYED_RATE})"
-        ),
-    )
-    parser.add_argument(
-        "--max-duplicate-rate", type=float, default=DEFAULT_MAX_DUPLICATE_RATE,
-        help=(
-            "Share of a kind's records that may repeat an earlier record of "
-            f"the same kind in the same game (default: {DEFAULT_MAX_DUPLICATE_RATE})"
-        ),
-    )
-    parser.add_argument(
-        "--max-unpaired-link-rate", type=float,
-        default=DEFAULT_MAX_UNPAIRED_LINK_RATE,
-        help=(
-            "Share of link ids that may lack one activation and one resolution "
-            f"half (default: {DEFAULT_MAX_UNPAIRED_LINK_RATE})"
-        ),
-    )
-    parser.add_argument(
-        "--max-names-per-game", type=int, default=DEFAULT_MAX_NAMES_PER_GAME,
-        help=(
-            "Distinct card names one game_id may show before it is reading as "
-            f"more than one game (default: {DEFAULT_MAX_NAMES_PER_GAME})"
-        ),
-    )
-    parser.add_argument(
-        "--min-cost-evidence", type=int, default=DEFAULT_MIN_COST_EVIDENCE,
-        help=(
-            "Activation records needed before a cost channel reading zero "
-            "means the collector rather than the pool (default: "
-            f"{DEFAULT_MIN_COST_EVIDENCE})"
-        ),
-    )
-    parser.add_argument(
-        "--turn-jump-tolerance", type=int, default=DEFAULT_TURN_JUMP_TOLERANCE,
-        help=(
-            "Turns a snapshot may sit below the highest already seen in its "
-            f"game before that reads as a game boundary (default: "
-            f"{DEFAULT_TURN_JUMP_TOLERANCE}). Deferred mana-reservoir flushes "
-            "are exempt and the report says how many were exempted."
-        ),
-    )
-    parser.add_argument(
-        "--max-duplicate-event-rate", type=float,
-        default=DEFAULT_MAX_DUPLICATE_EVENT_RATE,
-        help=(
-            "Share of events that may repeat another event in the same record "
-            f"(default: {DEFAULT_MAX_DUPLICATE_EVENT_RATE}). Distinct from "
-            "--max-duplicate-rate, which compares whole records and read zero "
-            "on a corpus that duplicated one event in seven"
-        ),
-    )
-    parser.add_argument(
-        "--max-trigger-fired-share", type=float,
-        default=DEFAULT_MAX_TRIGGER_FIRED_SHARE,
-        help=(
-            "Share of trigger records that may report fired=true (default: "
-            f"{DEFAULT_MAX_TRIGGER_FIRED_SHARE}); the negative sampler targets "
-            "~1:1, and the report breaks the ratio down per evaluated mode"
-        ),
-    )
-    parser.add_argument(
-        "--min-zone-change-from-zone-rate", type=float,
-        default=DEFAULT_MIN_ZONE_CHANGE_FROM_ZONE_RATE,
-        help=(
-            "Share of zone_change events that must carry from_zone. Unset by "
-            "default: the rate is measured and reported as [WATCH] without "
-            "failing the run"
-        ),
-    )
-    parser.add_argument(
-        "--min-attributed-rate", type=float,
-        default=DEFAULT_MIN_ATTRIBUTED_RATE,
-        help=(
-            "Share of resolution events that must name a producing clause. "
-            "Unset by default: measured and reported as [WATCH] without "
-            "failing the run"
-        ),
-    )
-    parser.add_argument(
-        "--min-fork-attributed-rate", type=float,
-        default=DEFAULT_MIN_FORK_ATTRIBUTED_RATE,
-        help=(
-            "Share of events on fork records that must name a producing "
-            "clause. Unset by default: measured and reported as [WATCH]. Kept "
-            "apart from --min-attributed-rate because the fork collectors are "
-            "different code, and the aggregate hid a fork path writing null "
-            "on every event"
-        ),
-    )
-    parser.add_argument(
-        "--min-cause-rate", type=float, default=DEFAULT_MIN_CAUSE_RATE,
-        help=(
-            "Share of the events whose schema row declares a cause that must "
-            "populate it. Unset by default: measured and reported as [WATCH]. "
-            "An empty cause is what makes two attackers' identical damage "
-            "read as one outcome written twice"
-        ),
-    )
-    parser.add_argument(
-        "--min-rewrite-replaced-by-rate", type=float,
-        default=DEFAULT_MIN_REWRITE_REPLACED_BY_RATE,
-        help=(
-            "Share of the rewrite records whose result ran an ability that "
-            "must name it. Unset by default: measured and reported as "
-            "[WATCH]. A replacement that substitutes an ability and cannot "
-            "say which one is the shape that left this channel unreadable"
-        ),
-    )
-    parser.add_argument(
-        "--max-mirror-turn-disagreement-rate", type=float,
-        default=DEFAULT_MAX_MIRROR_TURN_DISAGREEMENT_RATE,
-        help=(
-            "Share of fork records whose turn may differ from the record they "
-            f"mirror (default: {DEFAULT_MAX_MIRROR_TURN_DISAGREEMENT_RATE}). "
-            "A fork is taken at the moment it mirrors, so a disagreement is a "
-            "stale snapshot; it surfaced before as a backward turn jump in "
-            "the game_id check, which blamed a game merge that had not "
-            "happened"
-        ),
-    )
+    _add_threshold_flags(parser)
     _add_cards_folder(parser)
 
 
@@ -1208,8 +1148,7 @@ def _collect_variants_parser(subparsers) -> None:
         help=f"Destination shard directory (default: {DEFAULT_RECORDS_DIR})",
     )
     parser.add_argument(
-        "--forge-cards-path", type=str,
-        default="../forge/forge-gui/res/cardsfolder/",
+        "--forge-cards-path", type=str, default=DEFAULT_FORGE_CARDS_PATH,
         help=(
             "Forge's *source* card scripts, not the converted ones: a variant "
             "is a Forge script Forge must be able to load"
@@ -1220,10 +1159,12 @@ def _collect_variants_parser(subparsers) -> None:
         help=f"Where perturbed scripts are written (default: {DEFAULT_VARIANT_SCRIPTS})",
     )
     parser.add_argument(
-        "--variant-volume", type=float, default=0.2,
+        "--variant-volume", type=float,
+        default=collect_variants.DEFAULT_VARIANT_VOLUME,
         help=(
             "Cap on how many variant *scripts* are generated, as a fraction of "
-            "the real records already present (default: 0.2). Expressed "
+            "the real records already present (default: "
+            f"{collect_variants.DEFAULT_VARIANT_VOLUME}). Expressed "
             "against the corpus so it scales with it; at any real corpus size "
             "it exceeds the number of perturbable scripts and is inert."
         ),
@@ -1237,12 +1178,15 @@ def _collect_variants_parser(subparsers) -> None:
             "empty destination and allows nothing."
         ),
     )
-    parser.add_argument("--decks-per-round", type=int, default=500)
     parser.add_argument(
-        "--seed", type=int, default=VARIANT_RANDOM_SEED,
+        "--decks-per-round", type=int,
+        default=collect_variants.DEFAULT_DECKS_PER_ROUND,
+    )
+    parser.add_argument(
+        "--seed", type=int, default=collect_variants.RANDOM_SEED,
         help=(
             "Seeds both the perturbation and the deck build (default: "
-            f"{VARIANT_RANDOM_SEED}). A variant round weights every variant "
+            f"{collect_variants.RANDOM_SEED}). A variant round weights every variant "
             "equally and plays once, so a repeat run with the same seed "
             "regenerates the same scripts and decks and collects nothing; "
             "change it to top a corpus up."
@@ -1333,7 +1277,11 @@ def _train_effect_model_parser(subparsers) -> None:
     _add_holdout_unit(parser, default=None)
     parser.add_argument(
         "--variant-scripts", type=str, default=None,
-        help=f"Stage four: perturbed scripts (default: {DEFAULT_VARIANT_SCRIPTS})",
+        help=(
+            "Stage four: the perturbed-script tree collect-variants wrote "
+            f"(usually {DEFAULT_VARIANT_SCRIPTS}). Unset by default, and then "
+            "no variant tree is read"
+        ),
     )
     parser.add_argument(
         "--split-from", type=str, default=None,
@@ -1356,8 +1304,7 @@ def _train_effect_model_parser(subparsers) -> None:
     )
     parser.add_argument(
         "--variant",
-        choices=("full", "identity", "state-only", "no-state", "taxonomy"),
-        default="full",
+        choices=VARIANTS, default=Variant.FULL.value,
     )
     parser.add_argument("--e-dim", type=int, default=64)
     parser.add_argument(
@@ -1566,8 +1513,7 @@ def _encode_abilities_parser(subparsers) -> None:
     parser.set_defaults(func=run_encode_abilities)
     parser.add_argument(
         "--variant",
-        choices=("full", "identity", "state-only", "no-state", "taxonomy"),
-        default="full",
+        choices=VARIANTS, default=Variant.FULL.value,
         help="Resolves the checkpoint and the output suffix together",
     )
     parser.add_argument(
@@ -1657,7 +1603,7 @@ def _evaluate_effect_model_parser(subparsers) -> None:
     )
     parser.add_argument("--abilities-root", type=str, default=DEFAULT_ABILITIES_ROOT)
     parser.add_argument(
-        "--win-rates", type=str, default="output/sealed/cards-win-rates.txt",
+        "--win-rates", type=str, default=DEFAULT_WIN_RATES,
         help="Per-card win-rate table the decodability battery reads",
     )
 
@@ -1735,10 +1681,10 @@ def _scorer_smoke_test_parser(subparsers) -> None:
         help="Sealed encoder whose vectors pooled e is concatenated with",
     )
     parser.add_argument(
-        "--abilities-root", type=str, default="output/effects/abilities",
+        "--abilities-root", type=str, default=DEFAULT_ABILITIES_ROOT,
         help=(
             "Ability cache whose pooled e is spliced in: the one encode-abilities "
-            "wrote from --checkpoint (default: output/effects/abilities)"
+            f"wrote from --checkpoint (default: {DEFAULT_ABILITIES_ROOT})"
         ),
     )
     parser.add_argument(
