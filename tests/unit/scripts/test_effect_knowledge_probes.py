@@ -1469,3 +1469,20 @@ class TestProbeContext:
         path.write_text(json.dumps(payload), encoding="utf-8")
         with pytest.raises(SystemExit, match="another-corpus"):
             context.load_probe_set(tmp_path)
+
+
+# ── the line ladder's held-out split ────────────────────────────────────
+
+
+class TestLineSplit:
+    """Every game naming a held-out card is kept out of training, so a text is
+    untrained exactly when every card printing it is held out."""
+
+    def test_a_trained_text_printed_on_a_held_out_card_is_trained(self):
+        assert run.line_split({"Shock", "Lightning Strike"}, {"Shock"}) == "trained"
+
+    def test_a_text_every_carrier_of_which_is_held_out_is_held_out(self):
+        assert run.line_split({"Shock", "Spark"}, {"Shock", "Spark", "Bolt"}) == "held-out"
+
+    def test_a_text_on_no_held_out_card_is_trained(self):
+        assert run.line_split({"Lightning Strike"}, {"Shock"}) == "trained"

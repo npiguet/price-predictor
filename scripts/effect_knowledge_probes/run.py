@@ -319,6 +319,16 @@ def _union_groups(pairs: list[tuple[str, str]]) -> list[str]:
     return [find(a) for a, _ in pairs]
 
 
+def line_split(carriers: set[str], held_out_cards: set[str]) -> str:
+    """``held-out`` when every card printing the text is held out, else ``trained``.
+
+    Every game naming a held-out card is kept out of training, so a text printed
+    on one held-out card and one trained card was still trained on, through the
+    trained card. Only a text no trained card prints was never seen.
+    """
+    return "held-out" if carriers and carriers <= held_out_cards else "trained"
+
+
 def line_ladder(probe_set, probe_model, cache, targets, act_hidden, held_out_cards,
                 mlp_options, bootstrap) -> dict:
     """The short ladder for every line target: ``e``, its width control, ``[ACT]``.
@@ -345,7 +355,7 @@ def line_ladder(probe_set, probe_model, cache, targets, act_hidden, held_out_car
             if item is None or item.e is None:
                 continue
             weight = entry.get("weights", {}).get(spec.name, 1.0)
-            split = "held-out" if item.carriers & held_out_cards else "trained"
+            split = line_split(item.carriers, held_out_cards)
             rows.append((text, item.e, label, weight, split))
         strata = {}
         for split in ("held-out", "trained"):
