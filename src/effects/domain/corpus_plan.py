@@ -460,8 +460,11 @@ def admit_card_disjoint(
     records inside a game would separate a probe from the combat record its
     ``mirror_of`` names, and a stratum holding half a pair scores nothing.
 
-    ``text_games`` maps each held-out text to the games holding a record
-    acting through it.
+    ``text_games`` maps each held-out text to the games holding a
+    **resolution** record acting through it: gate 1 and the gate-one slice
+    score resolution records only, so a game whose only contact with a text is
+    a decision candidate, an unfired trigger, a rewrite or a cost half holds
+    nothing gate 1 measures and must not take one of the text's slots.
 
     A game is admitted only while **every** held-out text it carries is still
     under the cap, not merely one of them. Admitting on one never declined a

@@ -335,8 +335,8 @@ class GameTally:
     held_out: set[str] = field(default_factory=set)
     #: Games :class:`GameRouting` placed in the game-disjoint stratum.
     game_disjoint: set[str] = field(default_factory=set)
-    #: Held-out text -> games holding a record acting through it, which the
-    #: card-disjoint cap counts (FR-142).
+    #: Held-out text -> games holding a resolution record acting through it,
+    #: which the card-disjoint cap counts (FR-142) and gate 1 scores.
     held_out_text_games: dict[str, set[str]] = field(default_factory=dict)
 
     def merge(self, other: GameTally) -> None:
@@ -479,7 +479,7 @@ def survey_shard_with(
         if keys:
             out.rarity.note(keys, game)
         held_text = context.held_out_text(keys)
-        if held_text is not None:
+        if held_text is not None and record.kind is RecordKind.RESOLUTION:
             out.games.held_out_text_games.setdefault(held_text, set()).add(game)
         pending.append((
             game, klass, cell, keys, context.hash_of(record), held_text is not None,

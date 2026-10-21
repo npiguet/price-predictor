@@ -355,6 +355,23 @@ def test_a_keyword_combat_places_its_game_at_the_keyword_threshold(tmp_path):
 # ── held-out texts (G13, G14) ──────────────────────────────────────────
 
 
+def test_only_a_resolution_counts_a_game_toward_its_held_out_text(tmp_path):
+    """The card-disjoint cap admits games gate 1 can score, which are resolutions.
+
+    A decision candidate, an unfired trigger, a rewrite or a cost half acting
+    through the text holds nothing gate 1 measures; counted, 616 of 4,814
+    admitted gen-2 games held no gate-one record at all.
+    """
+    roots = converted_tree(tmp_path, *_SECRET, text={_SECRET[0]: _SECRET_TEXT})
+    out = _survey_one(tmp_path, [
+        a_record(record_id="r", game_id="g-resolved", ability=_SECRET),
+        a_record(record_id="t", game_id="g-triggered", kind="trigger", ability=_SECRET),
+    ], held_out=_HOLDOUT, sidecar_roots=roots)
+
+    assert out.games.held_out_text_games == {_SECRET_TEXT: {"g-resolved"}}
+    assert out.games.held_out == {"g-resolved", "g-triggered"}
+
+
 def test_a_training_record_acting_through_a_held_out_text_is_not_supplied(tmp_path):
     """A variant or token printing a held-out text, in a game naming no held-out card."""
     variant = (ProvenanceKey("variant-scripts/secret_variant_1.txt", 0, "spell", 0),)

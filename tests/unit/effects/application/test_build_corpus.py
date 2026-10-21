@@ -1857,6 +1857,29 @@ def test_every_class_delivers_its_target(tmp_path, a_corpus):
         assert manifest.per_class[klass].kept == target
 
 
+def test_a_held_out_game_resolving_no_held_out_text_is_dropped(tmp_path, a_corpus):
+    """Only a resolution counts a game toward its held-out text (G13, FR-142).
+
+    Gate 1 and the gate-one slice score resolution records, so a game whose
+    held-out text appears only on a rewrite holds nothing gate 1 measures.
+    """
+    write_shard(a_corpus.records / "full-strength" / "run.0-rewrite.jsonl.gz", [
+        _rewrite("g-held-3.0", "g-held-3", ability=(_HELD_OUT_KEY,)),
+        _resolution(
+            "g-held-3.1", "g-held-3", ability=(_SHOCK_KEY,),
+            entity_names=(_HELD_OUT_CARD,),
+        ),
+    ])
+    out = tmp_path / "curated"
+    _legacy_build(a_corpus, out)
+    manifest = CorpusStore(out).load()
+
+    assert "g-held-3" not in manifest.card_disjoint_games
+    assert "g-tainted" in manifest.card_disjoint_games
+    trained = {r.game_id for r in read_records(CorpusStore(out).training_dir)}
+    assert "g-held-3" not in trained
+
+
 def test_a_token_printing_a_held_out_text_holds_its_game_out(tmp_path, a_corpus):
     """A token script is a carrier, so a game it appears in is held out (G14)."""
     token_file = "tokenscripts/r_2_2_goblin_held.txt"
