@@ -101,41 +101,14 @@ def check(data, records, games, kind) -> list[tuple[str, dict]]:
     return rows
 
 
-def read_amount_alone() -> None:
-    """Make rung 3 of ``damage_taken`` the predicted amount alone, without the gate.
-
-    The ladder reads the head's damage as the affected gate times the predicted
-    amount. Every damage item took damage, so the probe is told the creature was
-    hit, while the gate's own uncertainty scales the head's answer.
-    """
-    original = ladder._readout
-
-    def readout(target, outputs, verdict, slot, row, **kwargs):
-        if target != "damage_taken":
-            return original(target, outputs, verdict, slot, row, **kwargs)
-        import torch
-
-        from effects.domain.effect_model import FIELD_SLICES
-
-        start, _ = FIELD_SLICES["damage_taken"]
-        return float(torch.exp(outputs[row, slot, start]))
-
-    ladder._readout = readout
-
-
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("checkpoint", type=Path)
     parser.add_argument("--targets", default="damage_taken,may_block,dies")
     parser.add_argument("--probe-set-dir", type=Path, default=common.DEFAULT_REPORTS,
                         help="where the corpus's frozen probe set is")
-    parser.add_argument("--amount-alone", action="store_true",
-                        help="read damage_taken's rung 3 without the affected gate")
     args = parser.parse_args()
     context = common.probe_context(args.checkpoint)
-
-    if args.amount_alone:
-        read_amount_alone()
 
     targets = set(args.targets.split(","))
     probe_set = context.load_probe_set(args.probe_set_dir)
