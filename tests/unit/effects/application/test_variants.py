@@ -376,12 +376,14 @@ class TestVolumeCap:
         second invocation regenerates the same perturbations, builds the same
         decks, and collects nothing.
         """
-        from effects.infrastructure.cli import VARIANT_RANDOM_SEED
+        from effects.infrastructure.cli import build_parser
 
         assert CollectVariantsConfig().seed == RANDOM_SEED
         assert CollectVariantsConfig(seed=7).seed == 7
-        # The CLI restates the constant rather than importing it.
-        assert VARIANT_RANDOM_SEED == RANDOM_SEED
+        assert build_parser().parse_args(["collect-variants"]).seed == RANDOM_SEED
+        assert build_parser().parse_args(
+            ["collect-variants", "--seed", "7"],
+        ).seed == 7
 
     def test_two_seeds_perturb_the_same_script_differently(self, tmp_path):
         source = tmp_path / "cards"

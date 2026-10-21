@@ -13,6 +13,8 @@ contract test.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from effects.infrastructure.cli import build_parser
@@ -32,7 +34,7 @@ class TestBuildVocab:
         assert args.surface == "prose"
         assert args.cards_folders is None  # resolved to both converted trees
         assert args.vocab_path is None  # resolved per surface
-        assert args.keyword_definitions == "output/effects/keyword-definitions.json"
+        assert args.keyword_definitions == Path("output/effects/keyword-definitions.json")
         assert args.target_size == 5000
 
     def test_cards_folder_is_repeatable(self):
@@ -56,21 +58,21 @@ class TestBuildVocab:
 
     def test_an_explicit_vocab_path_is_carried(self):
         args = parse("build-vocab", "--vocab-path", "models/x.txt")
-        assert args.vocab_path == "models/x.txt"
+        assert args.vocab_path == Path("models/x.txt")
 
 
 class TestExtractKeywordDefinitions:
     def test_the_output_default_is_the_contracts(self):
         args = parse("extract-keyword-definitions")
-        assert args.output == "output/effects/keyword-definitions.json"
+        assert args.output == Path("output/effects/keyword-definitions.json")
 
 
 class TestTrainEffectModel:
     def test_the_path_defaults_are_the_contracts(self):
         args = parse(*TRAIN)
         assert args.corpus == "output/effects/corpus"
-        assert args.vocab_path == "models/effects/vocab.txt"
-        assert args.keyword_definitions == "output/effects/keyword-definitions.json"
+        assert args.vocab_path == Path("models/effects/vocab.txt")
+        assert args.keyword_definitions == Path("output/effects/keyword-definitions.json")
         assert args.model_output is None  # resolved from --variant
         assert args.split_from is None
         assert args.variant_scripts is None
@@ -204,7 +206,7 @@ class TestEncodeAbilities:
         args = parse("encode-abilities")
         assert args.variant == "full"
         assert args.checkpoint is None  # resolved from --variant
-        assert args.output_root == "output/effects/abilities/"
+        assert args.output_root == Path("output/effects/abilities/")
         assert args.clean is False
 
     def test_the_vocabulary_paths_default_to_the_checkpoints(self):
@@ -226,8 +228,8 @@ class TestEncodeAbilities:
 class TestEvaluateEffectModel:
     def test_the_defaults_are_the_contracts(self):
         args = parse("evaluate-effect-model")
-        assert args.checkpoint == "models/effects/effect-model/latest.pt"
-        assert args.records_dir == "output/effects/records/"
+        assert args.checkpoint == Path("models/effects/effect-model/latest.pt")
+        assert args.records_dir == Path("output/effects/records/")
         assert args.variant_checkpoints is None
         assert not hasattr(args, "sealed_encoder_checkpoint")
 
@@ -301,8 +303,8 @@ class TestBuildCorpus:
 
     def test_the_path_defaults_are_the_contracts(self):
         args = parse("build-corpus")
-        assert args.records_dir == "output/effects/records/"
-        assert args.output == "output/effects/corpus/"
+        assert args.records_dir == Path("output/effects/records/")
+        assert args.output == Path("output/effects/corpus/")
         assert args.cards_folders is None  # resolved to both converted trees
         assert args.vocab_path == "models/effects/vocab.txt"
         assert args.variant_scripts is None
@@ -339,8 +341,6 @@ class TestBuildCorpus:
 
     def test_the_parsed_defaults_and_the_configs_own_agree(self):
         """Two default surfaces for one flag set, and only this compares them."""
-        from pathlib import Path
-
         from effects.application.build_corpus import BuildCorpusConfig
 
         args = parse("build-corpus")

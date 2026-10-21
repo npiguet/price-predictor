@@ -61,22 +61,6 @@ def test_the_list_is_sorted_so_two_runs_produce_the_same_file() -> None:
     )
 
 
-def test_the_cli_defaults_match_the_trainer_constants() -> None:
-    """Two copies of the same number, kept honest.
-
-    The CLI restates them so `--help` stays free of torch, and a drift would
-    deplete pools against one holdout while the split used another.
-    """
-    from effects.domain.split import (
-        HOLDOUT_MAX_CARRIERS,
-        HOLDOUT_PERMILLE,
-    )
-    from effects.infrastructure import cli
-
-    assert cli.HOLDOUT_PERMILLE == HOLDOUT_PERMILLE
-    assert cli.HOLDOUT_MAX_CARRIERS == HOLDOUT_MAX_CARRIERS
-
-
 def test_a_checkpoint_records_the_holdout_flags_it_trained_under() -> None:
     """A depleted corpus was composed against these values (T169, FR-134).
 

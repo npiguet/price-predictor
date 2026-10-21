@@ -7,6 +7,8 @@ checkpoint must keep working unchanged after a stage-four rebuild exists.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from effects.application.build_vocab import (
@@ -25,17 +27,17 @@ def parse(*argv: str):
 class TestCollectVariants:
     def test_the_defaults_are_the_contracts(self):
         args = parse("collect-variants")
-        assert args.effect_records == "output/effects/records/"
-        assert args.forge_cards_path == "../forge/forge-gui/res/cardsfolder/"
-        assert args.variant_scripts == "output/effects/variant-scripts/"
+        assert args.effect_records == Path("output/effects/records/")
+        assert args.forge_cards_path == Path("../forge/forge-gui/res/cardsfolder/")
+        assert args.variant_scripts == Path("output/effects/variant-scripts/")
         assert args.variant_volume == 0.2
         assert args.decks_per_round == 500
 
     def test_it_reads_forges_source_scripts_not_the_converted_ones(self):
         """A variant is a Forge script Forge must be able to load."""
         args = parse("collect-variants")
-        assert "forge-gui/res" in args.forge_cards_path
-        assert "output/" not in args.forge_cards_path
+        assert "forge-gui/res" in args.forge_cards_path.as_posix()
+        assert "output/" not in args.forge_cards_path.as_posix()
 
     def test_it_carries_the_shared_cap_flags(self):
         args = parse("collect-variants")
@@ -52,7 +54,7 @@ class TestCollectVariants:
 
     def test_it_accepts_a_split_to_inherit(self):
         args = parse("collect-variants", "--split-from", "models/x/latest.pt")
-        assert args.split_from == "models/x/latest.pt"
+        assert args.split_from == Path("models/x/latest.pt")
 
 
 class TestScriptSurface:
@@ -80,19 +82,19 @@ class TestVariantScriptsFlag:
         assert parse(*self._TRAIN).variant_scripts is None
         assert parse(
             *self._TRAIN, "--variant-scripts", "output/effects/v/",
-        ).variant_scripts == "output/effects/v/"
+        ).variant_scripts == Path("output/effects/v/")
 
     def test_encode_abilities_accepts_it_and_defaults_to_absent(self):
         assert parse("encode-abilities").variant_scripts is None
         assert parse(
             "encode-abilities", "--variant-scripts", "output/effects/v/",
-        ).variant_scripts == "output/effects/v/"
+        ).variant_scripts == Path("output/effects/v/")
 
     def test_the_evaluator_accepts_it_and_defaults_to_absent(self):
         assert parse("evaluate-effect-model").variant_scripts is None
         assert parse(
             "evaluate-effect-model", "--variant-scripts", "output/effects/v/",
-        ).variant_scripts == "output/effects/v/"
+        ).variant_scripts == Path("output/effects/v/")
 
     def test_absent_by_default_everywhere_it_appears(self):
         """A stage-one checkpoint keeps working unchanged."""
@@ -149,7 +151,9 @@ class TestScorerSmokeTest:
 
     def test_the_abilities_root_defaults_to_the_shipping_cache(self):
         args = parse("scorer-smoke-test", "--scratch-dir", "scratch/")
-        assert args.abilities_root == "output/effects/abilities"
+        assert args.abilities_root == Path("output/effects/abilities")
+        # The cache encode-abilities writes by default, not a lookalike path.
+        assert args.abilities_root == parse("encode-abilities").output_root
 
     def test_the_abilities_root_reaches_the_config(self, monkeypatch):
         import effects.application.scorer_smoke_test as smoke

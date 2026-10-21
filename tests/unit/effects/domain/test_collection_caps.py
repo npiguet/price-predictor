@@ -28,7 +28,6 @@ from effects.domain.collection_caps import (
     CollectionCaps,
 )
 from effects.domain.damage_step_keywords import KEYWORDS_BY_NAME
-from effects.infrastructure.cli import CAP_DEFAULTS
 from effects.infrastructure.cli import announce_probe_state as effects_announce
 from sealed.infrastructure.cli import (
     EFFECT_INTERVENTIONS_PER_GAME,
@@ -65,10 +64,8 @@ class TestBothSidesAnnounceProbesTheSameWay:
             )
 
     def test_the_two_defaults_both_turn_probes_on(self):
-        assert EFFECT_PROBE_KEYWORDS == CAP_DEFAULTS["probe_keywords"]
-        line = effects_announce(
-            CAP_DEFAULTS["probe_keywords"], DEFAULT_PROBES_PER_GAME,
-        )
+        assert EFFECT_PROBE_KEYWORDS == DEFAULT_PROBE_KEYWORDS
+        line = effects_announce(DEFAULT_PROBE_KEYWORDS, DEFAULT_PROBES_PER_GAME)
         assert "DISABLED" not in line
         assert "first_strike" in line and "infect" in line
 
