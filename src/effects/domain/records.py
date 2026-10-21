@@ -25,6 +25,7 @@ Pure dataclasses with no torch and no IO — serialization lives in
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 from enum import StrEnum
 
@@ -657,6 +658,38 @@ def pair_forks(records: list[EffectRecord]) -> list[tuple[EffectRecord, EffectRe
             if real is not None:
                 pairs.append((real, record))
     return pairs
+
+
+def key_sites(record: EffectRecord) -> Iterator[ProvenanceKey]:
+    """Every printed-line key a record names, except its emblems', in record order.
+
+    The acting ``ability``; each entity's ``printed``, ``granted_attached`` and
+    ``granted_temporary`` keys; and every key its payload carries — a
+    decision's candidates and their ``responsible_static``, a legality
+    record's ``forbidden`` statics, a rewrite's ``replaced_by``. One walk, so a
+    payload field that gains keys is added here once rather than in each
+    consumer that has to see every key.
+
+    Emblems are left out: an emblem's traits are built by the engine and key to
+    a script path that exists in no converted tree, so a consumer joining keys
+    to sidecars would report every planeswalker ultimate as a mismatch.
+    """
+    if record.ability:
+        yield from record.ability
+    for entity in record.state.entities:
+        yield from entity.printed
+        yield from entity.granted_attached
+        yield from entity.granted_temporary.abilities
+    payload = record.payload
+    if isinstance(payload, PlayabilityDecisionPayload):
+        for candidate in payload.candidates:
+            yield from candidate.ability
+            yield from candidate.responsible_static
+    elif isinstance(payload, (PlayabilityAttackersPayload, PlayabilityBlockersPayload)):
+        for forbidden in payload.forbidden:
+            yield from forbidden.responsible_static
+    elif isinstance(payload, RewritePayload):
+        yield from payload.replaced_by
 
 
 def acting_keys(record: EffectRecord) -> tuple[ProvenanceKey, ...]:

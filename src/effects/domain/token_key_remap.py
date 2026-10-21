@@ -33,9 +33,10 @@ from __future__ import annotations
 
 import re
 from collections import Counter
-from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
-from pathlib import Path
+from collections.abc import Iterable, Iterator, Mapping, Sequence
+from dataclasses import dataclass, field
+
+from effects.domain.provenance import KEY_DICT_FIELDS
 
 COLOR_WORDS: dict[str, str] = {
     "white": "W", "blue": "U", "black": "B", "red": "R", "green": "G",
@@ -65,52 +66,63 @@ class TokenScriptFacts:
     pt: tuple[str, str] | None
 
 
-def parse_token_script(stem: str, text: str) -> TokenScriptFacts | None:
-    """The facts a Forge token script declares, or None without a ``Name:``."""
-    name = None
-    colors: set[str] = set()
-    core: set[str] = set()
-    supers: set[str] = set()
-    subs: set[str] = set()
-    pt: tuple[str, str] | None = None
+def _script_values(text: str) -> dict[str, list[str]]:
+    """Every ``Key:value`` line's stripped value, by key, in script order."""
+    values: dict[str, list[str]] = {}
     for raw in text.splitlines():
         key, sep, value = raw.partition(":")
-        if not sep:
-            continue
-        value = value.strip()
-        if key == "Name":
-            name = value.lower()
-        elif key == "Colors":
-            for word in re.split(r"[,\s]+", value.lower()):
-                if word in COLOR_WORDS:
-                    colors.add(COLOR_WORDS[word])
-        elif key == "Types":
-            for word in value.lower().split():
-                if word in CORE_TYPES:
-                    core.add(word)
-                elif word in SUPERTYPE_WORDS:
-                    supers.add(word)
-                else:
-                    subs.add(word)
-        elif key == "PT":
-            left, _, right = value.partition("/")
-            pt = (left.strip(), right.strip())
-    if name is None:
-        return None
-    return TokenScriptFacts(
-        stem=stem, name=name, colors=frozenset(colors), core_types=frozenset(core),
-        supertypes=frozenset(supers), subtypes=frozenset(subs), pt=pt,
+        if sep:
+            values.setdefault(key, []).append(value.strip())
+    return values
+
+
+def _colors_of(lines: Iterable[str]) -> frozenset[str]:
+    return frozenset(
+        COLOR_WORDS[word]
+        for value in lines
+        for word in re.split(r"[,\s]+", value.lower())
+        if word in COLOR_WORDS
     )
 
 
-def load_token_script_facts(directory: Path) -> dict[str, list[TokenScriptFacts]]:
-    """Printed name (lowercase) -> the token scripts that carry it."""
-    out: dict[str, list[TokenScriptFacts]] = {}
-    for path in sorted(Path(directory).glob("*.txt")):
-        facts = parse_token_script(path.stem, path.read_text(encoding="utf-8", errors="replace"))
-        if facts is not None:
-            out.setdefault(facts.name, []).append(facts)
-    return out
+def _types_of(lines: Iterable[str]) -> tuple[frozenset[str], frozenset[str], frozenset[str]]:
+    """``(core types, supertypes, subtypes)`` across every ``Types:`` line."""
+    core: set[str] = set()
+    supers: set[str] = set()
+    subs: set[str] = set()
+    for value in lines:
+        for word in value.lower().split():
+            if word in CORE_TYPES:
+                core.add(word)
+            elif word in SUPERTYPE_WORDS:
+                supers.add(word)
+            else:
+                subs.add(word)
+    return frozenset(core), frozenset(supers), frozenset(subs)
+
+
+def _pt_of(value: str) -> tuple[str, str]:
+    left, _, right = value.partition("/")
+    return left.strip(), right.strip()
+
+
+def parse_token_script(stem: str, text: str) -> TokenScriptFacts | None:
+    """The facts a Forge token script declares, or None without a ``Name:``.
+
+    A key written twice keeps its last ``Name:`` and ``PT:`` and the union of
+    its ``Colors:`` and ``Types:`` lines.
+    """
+    values = _script_values(text)
+    names = values.get("Name")
+    if not names:
+        return None
+    core, supers, subs = _types_of(values.get("Types", ()))
+    pts = values.get("PT")
+    return TokenScriptFacts(
+        stem=stem, name=names[-1].lower(), colors=_colors_of(values.get("Colors", ())),
+        core_types=core, supertypes=supers, subtypes=subs,
+        pt=_pt_of(pts[-1]) if pts else None,
+    )
 
 
 def _pt_matches(script: tuple[str, str] | None, entity_pt) -> bool:
@@ -142,9 +154,20 @@ class TokenKeyRemapper:
         self.facts_by_name = {name: tuple(f) for name, f in facts_by_name.items()}
         self.converted_card_files = converted_card_files
         self.token_sidecars = token_sidecars
+        # script_file -> is_old_token_key's answer. The remap asks about every
+        # key of every record, ~56 a record over two passes of the corpus, and
+        # the distinct script files are bounded by the card pool.
+        self._old_names: dict[str, str | None] = {}
 
     def is_old_token_key(self, script_file: str) -> str | None:
         """The spaced token name when ``script_file`` is a remap candidate."""
+        try:
+            return self._old_names[script_file]
+        except KeyError:
+            name = self._old_names[script_file] = self._old_name(script_file)
+            return name
+
+    def _old_name(self, script_file: str) -> str | None:
         match = _OLD_KEY.match(script_file)
         if match is None or script_file in self.converted_card_files:
             return None
@@ -203,49 +226,60 @@ class RemapCounts:
     """
 
     remapped: int = 0
-    ambiguous: Counter = None  # type: ignore[assignment]
+    ambiguous: Counter = field(default_factory=Counter)
 
-    def __post_init__(self) -> None:
-        if self.ambiguous is None:
-            self.ambiguous = Counter()
-
-    def merge(self, other: "RemapCounts") -> None:
+    def merge(self, other: RemapCounts) -> None:
         """Fold another counts (e.g. another shard's) into this one."""
         self.remapped += other.remapped
         self.ambiguous.update(other.ambiguous)
 
-
-_KEY_FIELDS = {"script_file", "face", "trait_kind", "index_within_kind"}
-
-
-def _is_key(obj: object) -> bool:
-    """Whether ``obj`` is a provenance-key dict rather than a plain container."""
-    return isinstance(obj, Mapping) and _KEY_FIELDS <= obj.keys()
+    def reset(self) -> None:
+        """Back to zero, for a counter reused record after record."""
+        self.remapped = 0
+        self.ambiguous.clear()
 
 
 def _stem_of(script_file: str) -> str:
-    return script_file.rsplit("/", 1)[-1][:-4]
+    return script_file.rsplit("/", 1)[-1].removesuffix(".txt")
 
 
 def _rewrite(key: dict, stem: str) -> None:
     key["script_file"] = f"tokenscripts/{stem}.txt"
 
 
-def _walk(obj, visit) -> None:
-    """Call ``visit`` on every provenance-key dict below ``obj``.
+def _key_dicts(obj) -> Iterator[dict]:
+    """Every provenance-key dict below ``obj``, in document order.
 
     Stops descending into a dict once it is itself a key dict, so a key's
     own fields never get mistaken for nested containers holding more keys.
     """
     if isinstance(obj, dict):
-        if _is_key(obj):
-            visit(obj)
+        if KEY_DICT_FIELDS <= obj.keys():
+            yield obj
             return
         for value in obj.values():
-            _walk(value, visit)
+            yield from _key_dicts(value)
     elif isinstance(obj, list):
         for item in obj:
-            _walk(item, visit)
+            yield from _key_dicts(item)
+
+
+def _old_keys(obj, remapper: TokenKeyRemapper) -> Iterator[tuple[dict, str, str]]:
+    """``(key, script_file, token name)`` for every old token key below ``obj``."""
+    for key in _key_dicts(obj):
+        script_file = key["script_file"]
+        name = remapper.is_old_token_key(script_file)
+        if name is not None:
+            yield key, script_file, name
+
+
+def _entity_key_sites(entity: dict) -> tuple:
+    """An entity's key lists in its raw JSON, as ``EntityState`` names them."""
+    return (
+        entity.get("printed") or [],
+        entity.get("granted_attached") or [],
+        (entity.get("granted_temporary") or {}).get("abilities") or [],
+    )
 
 
 def remap_record_dict(data: dict, remapper: TokenKeyRemapper, counts: RemapCounts) -> None:
@@ -263,41 +297,8 @@ def remap_record_dict(data: dict, remapper: TokenKeyRemapper, counts: RemapCount
     name alone (step 1). A key that stays ambiguous is counted once, keyed
     by the old script's stem.
     """
-    state = data.get("state") or {}
-    entities = state.get("entities") or ()
-
-    # Per old script_file, every stem (or None) some entity carrying it
-    # resolved to -- the record-wide memo below trusts a file only when
-    # every entity that carried it agreed.
-    per_file_stems: dict[str, set[str | None]] = {}
-
-    for entity in entities:
-        entity_cache: dict[str, str | None] = {}
-
-        def resolve_for_entity(
-            script_file: str, entity: dict = entity, entity_cache: dict = entity_cache,
-        ) -> str | None:
-            name = remapper.is_old_token_key(script_file)
-            if name is None:
-                return None
-            if script_file not in entity_cache:
-                entity_cache[script_file] = remapper.resolve(
-                    name, entity=entity,
-                )
-            return entity_cache[script_file]
-
-        def visit_entity_key(key: dict, resolve_for_entity=resolve_for_entity) -> None:
-            script_file = key["script_file"]
-            stem = resolve_for_entity(script_file)
-            if remapper.is_old_token_key(script_file) is not None:
-                per_file_stems.setdefault(script_file, set()).add(stem)
-            if stem is not None:
-                _rewrite(key, stem)
-                counts.remapped += 1
-
-        for field in ("printed", "granted_attached"):
-            _walk(entity.get(field) or [], visit_entity_key)
-        _walk((entity.get("granted_temporary") or {}).get("abilities") or [], visit_entity_key)
+    entities = (data.get("state") or {}).get("entities") or ()
+    per_file_stems, entity_ambiguous = _remap_entity_keys(entities, remapper, counts)
 
     # Trust an old file's resolution for the record's other key sites only
     # when every entity that carried it agreed on one non-None stem.
@@ -306,36 +307,46 @@ def remap_record_dict(data: dict, remapper: TokenKeyRemapper, counts: RemapCount
         for script_file, stems in per_file_stems.items()
         if len(stems) == 1 and None not in stems
     }
-
-    def visit_other(key: dict) -> None:
-        script_file = key["script_file"]
-        name = remapper.is_old_token_key(script_file)
-        if name is None:
-            return
+    outside_state = [value for field_name, value in data.items() if field_name != "state"]
+    for key, script_file, name in _old_keys(outside_state, remapper):
         if script_file in memo:
             stem = memo[script_file]
         else:
             stem = memo[script_file] = remapper.resolve(name)
         if stem is None:
             counts.ambiguous[_stem_of(script_file)] += 1
-            return
-        _rewrite(key, stem)
-        counts.remapped += 1
+        else:
+            _rewrite(key, stem)
+            counts.remapped += 1
 
-    for field, value in data.items():
-        if field == "state":
-            continue
-        _walk(value, visit_other)
+    counts.ambiguous.update(entity_ambiguous)
 
-    # Entity keys that stayed ambiguous are counted once per key, here
-    # rather than inside visit_entity_key above: a rewritten key's
-    # script_file no longer looks like an old key, so this second pass
-    # over the same fields only ever finds the ones that never resolved.
+
+def _remap_entity_keys(
+    entities, remapper: TokenKeyRemapper, counts: RemapCounts,
+) -> tuple[dict[str, set[str | None]], list[str]]:
+    """Rewrite each entity's old keys against that entity alone.
+
+    Returns, per old script_file, every stem (or None) some entity carrying it
+    resolved to -- the record-wide memo trusts a file only when every entity
+    that carried it agreed -- and the stems of the entity keys that stayed
+    ambiguous. Those are counted by the caller only after the other key
+    sites, so the counter sees them in the order it always has: the manifest
+    keeps the 100 most common, and ties keep insertion order.
+    """
+    per_file_stems: dict[str, set[str | None]] = {}
+    ambiguous: list[str] = []
     for entity in entities:
-        def count_left(key: dict) -> None:
-            if remapper.is_old_token_key(key["script_file"]) is not None:
-                counts.ambiguous[_stem_of(key["script_file"])] += 1
-
-        for field in ("printed", "granted_attached"):
-            _walk(entity.get(field) or [], count_left)
-        _walk((entity.get("granted_temporary") or {}).get("abilities") or [], count_left)
+        resolved: dict[str, str | None] = {}
+        for site in _entity_key_sites(entity):
+            for key, script_file, name in _old_keys(site, remapper):
+                if script_file not in resolved:
+                    resolved[script_file] = remapper.resolve(name, entity=entity)
+                stem = resolved[script_file]
+                per_file_stems.setdefault(script_file, set()).add(stem)
+                if stem is None:
+                    ambiguous.append(_stem_of(script_file))
+                else:
+                    _rewrite(key, stem)
+                    counts.remapped += 1
+    return per_file_stems, ambiguous

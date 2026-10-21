@@ -414,7 +414,8 @@ _FOOD_SCRIPT = (
 
 def _food_remapper(tmp_path):
     """A remapper over one raw Forge token script with a converted sidecar."""
-    from effects.domain.token_key_remap import TokenKeyRemapper, load_token_script_facts
+    from effects.domain.token_key_remap import TokenKeyRemapper
+    from effects.infrastructure.token_script_io import load_token_script_facts
 
     forge = tmp_path / "forge-tokenscripts"
     forge.mkdir()
