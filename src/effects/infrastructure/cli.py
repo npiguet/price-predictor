@@ -17,8 +17,10 @@ from __future__ import annotations
 import argparse
 import logging
 import sys
+from collections.abc import Callable
 from dataclasses import fields
 from pathlib import Path
+from typing import Any, TypeVar
 
 from effects.application import collect_coverage, collect_variants
 from effects.application.build_corpus import DEFAULT_GAME_DISJOINT_KEYWORDS
@@ -57,6 +59,32 @@ from effects.infrastructure.default_paths import (
 
 logger = logging.getLogger(__name__)
 
+_Config = TypeVar("_Config")
+
+
+def config_from_args(cls: type[_Config], args: argparse.Namespace, **overrides: Any) -> _Config:
+    """``cls`` built from the parsed flags whose dest names one of its fields.
+
+    Every command's dests are its config's field names, so the config is read
+    off the namespace rather than copied field by field, and a flag added to
+    both reaches the run without a third edit. A field with no flag keeps the
+    dataclass default. ``overrides`` supplies what a flag cannot give as
+    parsed: a location resolved from several flags, a nested config, a dest
+    spelled differently. An override naming no field is refused, so a typo
+    cannot quietly fall back to the default.
+    """
+    names = {spec.name for spec in fields(cls) if spec.init}
+    unknown = sorted(overrides.keys() - names)
+    if unknown:
+        raise TypeError(f"{cls.__name__} has no field {', '.join(unknown)}")
+    values = {name: getattr(args, name) for name in names if hasattr(args, name)}
+    return cls(**{**values, **overrides})
+
+
+def _optional_path(text: str) -> Path | None:
+    """A path flag's ``type`` where an empty value means unset, as omitting it does."""
+    return Path(text) if text else None
+
 
 # ── flags several commands share ────────────────────────────────────────
 
@@ -80,7 +108,7 @@ def resolve_cards_folders(values: list[str] | None) -> tuple[Path, ...]:
 def _add_effect_records(parser: argparse.ArgumentParser, *, help_text: str) -> None:
     """``--effect-records``, defaulting to the raw shard root on every command."""
     parser.add_argument(
-        "--effect-records", type=str, default=DEFAULT_RECORDS_DIR, help=help_text,
+        "--effect-records", type=Path, default=DEFAULT_RECORDS_DIR, help=help_text,
     )
 
 
@@ -99,7 +127,7 @@ def _add_holdout_sources(
     holdout removes on this command.
     """
     parser.add_argument(
-        "--split-from", type=str, default=None,
+        "--split-from", type=_optional_path, default=None,
         help=(
             f"A checkpoint whose {excluded} are excluded from every deck. "
             "Without a holdout source a collection run contaminates the "
@@ -107,7 +135,7 @@ def _add_holdout_sources(
         ),
     )
     parser.add_argument(
-        "--exclude-cards", type=str, default=None,
+        "--exclude-cards", type=_optional_path, default=None,
         help=(
             "File of card names, one per line, to keep out of every deck — "
             "from 'python -m effects holdout-cards'. The ordinary way to name "
@@ -118,7 +146,7 @@ def _add_holdout_sources(
         ),
     )
     parser.add_argument(
-        "--training-corpus", type=str, default=None,
+        "--training-corpus", type=Path, default=None,
         help=(
             f"Directory holding the training corpus AND the {HOLDOUT_LIST_NAME} "
             "it was depleted against. Shorthand for --effect-records DIR plus "
@@ -197,14 +225,16 @@ def _add_variant(parser: argparse.ArgumentParser, *, help_text: str | None = Non
 
 
 def _add_variant_scripts(
-    parser: argparse.ArgumentParser, *, without: str = "no variant tree is read",
+    parser: argparse.ArgumentParser, *,
+    without: str = "no variant tree is read",
+    path_type: Callable[[str], object] = _optional_path,
 ) -> None:
     """``--variant-scripts`` on a command that reads the stage-four tree.
 
     ``without`` says what an unset flag costs on this command.
     """
     parser.add_argument(
-        "--variant-scripts", type=str, default=None,
+        "--variant-scripts", type=path_type, default=None,
         help=(
             "Stage four: the perturbed-script tree collect-variants wrote "
             f"(usually {DEFAULT_VARIANT_SCRIPTS}). Unset by default, and then "
@@ -222,7 +252,7 @@ def _add_recorded_tokenizer_paths(parser: argparse.ArgumentParser) -> None:
     """
     for flag in ("--vocab-path", "--keyword-definitions"):
         parser.add_argument(
-            flag, type=str, default=None,
+            flag, type=_optional_path, default=None,
             help="Defaults to the path the checkpoint recorded from training",
         )
 
@@ -360,14 +390,14 @@ def _build_vocab_parser(subparsers) -> None:
     )
     _add_cards_folder(parser)
     parser.add_argument(
-        "--vocab-path", type=str, default=None,
+        "--vocab-path", type=_optional_path, default=None,
         help=(
             f"Output path (default: {DEFAULT_VOCAB_PATH}, or "
             f"{DEFAULT_SCRIPT_VOCAB_PATH} under --surface script)"
         ),
     )
     parser.add_argument(
-        "--keyword-definitions", type=str, default=DEFAULT_KEYWORD_DEFINITIONS,
+        "--keyword-definitions", type=Path, default=DEFAULT_KEYWORD_DEFINITIONS,
         help=f"Keyword definitions to scan (default: {DEFAULT_KEYWORD_DEFINITIONS})",
     )
     parser.add_argument(
@@ -386,12 +416,9 @@ def run_build_vocab(args: argparse.Namespace) -> int:
     )
     from effects.application.build_vocab import run as build_vocab
 
-    config = BuildVocabConfig(
-        surface=args.surface,
+    config = config_from_args(
+        BuildVocabConfig, args,
         cards_folders=resolve_cards_folders(args.cards_folders),
-        vocab_path=Path(args.vocab_path) if args.vocab_path else None,
-        keyword_definitions=Path(args.keyword_definitions),
-        target_size=args.target_size,
     )
     try:
         build_vocab(config)
@@ -414,7 +441,7 @@ def _extract_keyword_definitions_parser(subparsers) -> None:
     )
     parser.set_defaults(func=run_extract_keyword_definitions)
     parser.add_argument(
-        "--output", type=str, default=DEFAULT_KEYWORD_DEFINITIONS,
+        "--output", type=Path, default=DEFAULT_KEYWORD_DEFINITIONS,
         help=f"Output path (default: {DEFAULT_KEYWORD_DEFINITIONS})",
     )
 
@@ -427,7 +454,7 @@ def run_extract_keyword_definitions(args: argparse.Namespace) -> int:
         run as extract,
     )
 
-    return extract(ExtractKeywordDefinitionsConfig(output=Path(args.output)))
+    return extract(config_from_args(ExtractKeywordDefinitionsConfig, args))
 
 
 # ── collect-coverage ────────────────────────────────────────────────────
@@ -450,7 +477,7 @@ def _collect_coverage_parser(subparsers) -> None:
     _add_cards_folder(parser)
     _add_holdout_sources(parser)
     parser.add_argument(
-        "--only-cards", type=str, default=None,
+        "--only-cards", type=_optional_path, default=None,
         help=(
             "The held-out coverage round: the list 'holdout-cards' writes. "
             "Decks are built from these cards alone, plus basics, records are "
@@ -522,17 +549,13 @@ def resolve_training_corpus(args: argparse.Namespace) -> tuple[Path, Path | None
     """
     corpus = getattr(args, "training_corpus", None)
     if corpus is None:
-        return (
-            Path(args.effect_records),
-            Path(args.exclude_cards) if args.exclude_cards else None,
-        )
-    if args.effect_records != DEFAULT_RECORDS_DIR or args.exclude_cards:
+        return args.effect_records, args.exclude_cards
+    if args.effect_records != Path(DEFAULT_RECORDS_DIR) or args.exclude_cards:
         raise ValueError(
             "pass one source of the corpus location, not both: "
             "--training-corpus DIR means --effect-records DIR with its own "
             f"{HOLDOUT_LIST_NAME}"
         )
-    corpus = Path(corpus)
     listed = corpus / HOLDOUT_LIST_NAME
     if not listed.is_file():
         raise ValueError(
@@ -567,19 +590,11 @@ def coverage_config_from(args: argparse.Namespace):
                 "keeps a holdout out of every deck. Pass one or the other."
             )
     records, listed = holdout_source(args)
-    return CollectCoverageConfig(
-        only_cards=Path(only_cards) if only_cards else None,
-        min_text_games=getattr(
-            args, "min_text_games", collect_coverage.DEFAULT_MIN_TEXT_GAMES,
-        ),
+    return config_from_args(
+        CollectCoverageConfig, args,
         effect_records=records,
-        cards_folders=resolve_cards_folders(args.cards_folders),
-        split_from=Path(args.split_from) if args.split_from else None,
         exclude_cards=listed,
-        target_records=args.target_records,
-        decks_per_round=args.decks_per_round,
-        no_progress_rounds=args.no_progress_rounds,
-        workers=args.workers,
+        cards_folders=resolve_cards_folders(args.cards_folders),
         caps=CollectionCaps.from_args(args),
     )
 
@@ -658,28 +673,31 @@ def _build_corpus_parser(subparsers) -> None:
 def _add_corpus_inputs(parser: argparse.ArgumentParser) -> None:
     """What ``build-corpus`` reads, and where it writes."""
     parser.add_argument(
-        "--records-dir", type=str, default=DEFAULT_RECORDS_DIR,
+        "--records-dir", type=Path, default=DEFAULT_RECORDS_DIR,
         help=f"Raw corpus root; discovery recurses (default: {DEFAULT_RECORDS_DIR})",
     )
     parser.add_argument(
-        "--output", type=str, default=DEFAULT_CORPUS_OUTPUT,
+        "--output", type=Path, default=DEFAULT_CORPUS_OUTPUT,
         help=f"Curated dataset directory (default: {DEFAULT_CORPUS_OUTPUT})",
     )
     _add_cards_folder(parser)
     parser.add_argument(
+        # A string for the same reason as --variant-scripts below.
         "--vocab-path", type=str, default=DEFAULT_VOCAB_PATH,
         help=(
             "Decides the encoding surface the rarity table's text keys are "
             f"built on (default: {DEFAULT_VOCAB_PATH})"
         ),
     )
-    _add_variant_scripts(parser, without=(
+    # Kept as typed: the manifest records the string, and a Path would
+    # rewrite its separators on Windows.
+    _add_variant_scripts(parser, path_type=str, without=(
         "a variant line resolves to no ability text, so it gets neither a "
         "rarity-table entry nor a per-text cap while every real ability "
         "gets both"
     ))
     parser.add_argument(
-        "--keyword-definitions", type=str, default=DEFAULT_KEYWORD_DEFINITIONS,
+        "--keyword-definitions", type=_optional_path, default=DEFAULT_KEYWORD_DEFINITIONS,
         help=(
             "The keyword table the tokenizer expands with; the build fails when "
             "a display-name match would expand a non-keyword line "
@@ -687,7 +705,7 @@ def _add_corpus_inputs(parser: argparse.ArgumentParser) -> None:
         ),
     )
     parser.add_argument(
-        "--forge-tokenscripts", type=str, default=DEFAULT_FORGE_TOKENSCRIPTS,
+        "--forge-tokenscripts", type=_optional_path, default=DEFAULT_FORGE_TOKENSCRIPTS,
         help=(
             "Forge's raw token scripts, read to remap the old collector's "
             "token keys: a key naming a cardsfolder path no tree holds, whose "
@@ -793,38 +811,12 @@ def run_build_corpus(args: argparse.Namespace) -> int:
 
     try:
         # Inside the try: the config validates its own counts on construction.
-        config = BuildCorpusConfig(
-            records_dir=Path(args.records_dir),
-            output=Path(args.output),
+        config = config_from_args(
+            BuildCorpusConfig, args,
             cards_folders=tuple(
                 str(path) for path in resolve_cards_folders(args.cards_folders)
             ),
-            vocab_path=args.vocab_path,
-            variant_scripts=args.variant_scripts,
-            forge_tokenscripts=(
-                Path(args.forge_tokenscripts) if args.forge_tokenscripts else None
-            ),
-            remap_token_keys=args.remap_token_keys,
-            holdout_permille=args.holdout_permille,
-            holdout_max_carriers=args.holdout_max_carriers,
-            holdout_unit=args.holdout_unit,
-            text_cap=args.text_cap,
-            reuse_cap=args.reuse_cap,
-            class_mix=args.class_mix,
-            training_records=args.training_records,
-            game_disjoint_share=args.game_disjoint_share,
-            game_disjoint_keyword_share=args.game_disjoint_keyword_share,
-            game_disjoint_keywords=args.game_disjoint_keywords,
-            keyword_definitions=(
-                Path(args.keyword_definitions) if args.keyword_definitions else None
-            ),
-            card_disjoint_text_cap=args.card_disjoint_text_cap,
-            shard_records=args.shard_records,
             max_events=args.max_events_per_record,
-            validation_sample=args.validation_sample,
-            seed=args.seed,
-            workers=args.workers,
-            verify=args.verify,
         )
         return build_corpus_module.build(config)
     except BuildCorpusError as exc:
@@ -969,7 +961,7 @@ def run_field_coverage(args: argparse.Namespace) -> int:
     )
     from effects.infrastructure.record_io import iter_shards, read_shard
 
-    root = Path(args.effect_records)
+    root = args.effect_records
     shards = iter_shards(root)
     if not shards:
         print(f"no shards under {root}")
@@ -1141,34 +1133,18 @@ def run_validate_corpus(args: argparse.Namespace) -> int:
     """
     from effects.application.validate_corpus import (
         FieldPresence,
-        Thresholds,
         read_window,
         validate_corpus,
     )
     from effects.infrastructure.record_io import iter_shards
 
-    root = Path(args.effect_records)
+    root = args.effect_records
     shards = iter_shards(root)
     if not shards:
         print(f"no shards under {root}")
         return 1
 
-    thresholds = Thresholds(
-        min_keyed_rate=args.min_keyed_rate,
-        max_duplicate_rate=args.max_duplicate_rate,
-        max_unpaired_link_rate=args.max_unpaired_link_rate,
-        max_names_per_game=args.max_names_per_game,
-        min_cost_evidence=args.min_cost_evidence,
-        turn_jump_tolerance=args.turn_jump_tolerance,
-        max_duplicate_event_rate=args.max_duplicate_event_rate,
-        max_trigger_fired_share=args.max_trigger_fired_share,
-        min_zone_change_from_zone_rate=args.min_zone_change_from_zone_rate,
-        min_attributed_rate=args.min_attributed_rate,
-        min_fork_attributed_rate=args.min_fork_attributed_rate,
-        min_cause_rate=args.min_cause_rate,
-        min_rewrite_replaced_by_rate=args.min_rewrite_replaced_by_rate,
-        max_mirror_turn_disagreement_rate=args.max_mirror_turn_disagreement_rate,
-    )
+    thresholds = config_from_args(Thresholds, args)
     sidecars = _sidecars_for_validation(args)
     presence = FieldPresence()
     findings = validate_corpus(
@@ -1226,14 +1202,14 @@ def _collect_variants_parser(subparsers) -> None:
         help_text=f"Destination shard directory (default: {DEFAULT_RECORDS_DIR})",
     )
     parser.add_argument(
-        "--forge-cards-path", type=str, default=DEFAULT_FORGE_CARDS_PATH,
+        "--forge-cards-path", type=Path, default=DEFAULT_FORGE_CARDS_PATH,
         help=(
             "Forge's *source* card scripts, not the converted ones: a variant "
             "is a Forge script Forge must be able to load"
         ),
     )
     parser.add_argument(
-        "--variant-scripts", type=str, default=DEFAULT_VARIANT_SCRIPTS,
+        "--variant-scripts", type=Path, default=DEFAULT_VARIANT_SCRIPTS,
         help=f"Where perturbed scripts are written (default: {DEFAULT_VARIANT_SCRIPTS})",
     )
     parser.add_argument(
@@ -1248,7 +1224,7 @@ def _collect_variants_parser(subparsers) -> None:
         ),
     )
     parser.add_argument(
-        "--corpus-records", type=str, default=None,
+        "--corpus-records", type=_optional_path, default=None,
         help=(
             "The real records --variant-volume is measured against (default: "
             "--effect-records). Point it at the corpus when variants are "
@@ -1287,19 +1263,10 @@ def run_collect_variants(args: argparse.Namespace) -> int:
         print(f"collect-variants: {exc}")
         return 1
     print(announce_probe_state(args.probe_keywords, args.probes_per_game))
-    return collect(CollectVariantsConfig(
+    return collect(config_from_args(
+        CollectVariantsConfig, args,
         effect_records=records,
-        forge_cards_path=Path(args.forge_cards_path),
-        variant_scripts=Path(args.variant_scripts),
-        variant_volume=args.variant_volume,
-        corpus_records=(
-            Path(args.corpus_records) if args.corpus_records else None
-        ),
-        decks_per_round=args.decks_per_round,
-        seed=args.seed,
-        split_from=Path(args.split_from) if args.split_from else None,
         exclude_cards=listed,
-        workers=args.workers,
         caps=CollectionCaps.from_args(args),
     ))
 
@@ -1333,19 +1300,19 @@ def _add_training_inputs(parser: argparse.ArgumentParser) -> None:
     _add_holdout_unit(parser, default=None)
     _add_variant_scripts(parser)
     parser.add_argument(
-        "--split-from", type=str, default=None,
+        "--split-from", type=_optional_path, default=None,
         help=(
             "Accepted for compatibility with older invocations of a --variant "
             "run; nothing is read from this path. The manifest of --corpus is "
             "authoritative for the split."
         ),
     )
-    parser.add_argument("--vocab-path", type=str, default=DEFAULT_VOCAB_PATH)
+    parser.add_argument("--vocab-path", type=Path, default=DEFAULT_VOCAB_PATH)
     parser.add_argument(
-        "--keyword-definitions", type=str, default=DEFAULT_KEYWORD_DEFINITIONS,
+        "--keyword-definitions", type=Path, default=DEFAULT_KEYWORD_DEFINITIONS,
     )
     parser.add_argument(
-        "--model-output", type=str, default=None,
+        "--model-output", type=_optional_path, default=None,
         help=(
             "Checkpoint directory (default: models/effects/effect-model/ for "
             "--variant full, models/effects/effect-model/{variant}/ otherwise)"
@@ -1515,44 +1482,9 @@ def train_config_from(args: argparse.Namespace):
     """The trainer's config, assembled from parsed arguments."""
     from effects.application.train_effect_model import TrainEffectModelConfig
 
-    return TrainEffectModelConfig(
-        corpus=args.corpus,
+    return config_from_args(
+        TrainEffectModelConfig, args,
         cards_folders=resolve_cards_folders(args.cards_folders),
-        variant_scripts=(
-            Path(args.variant_scripts) if args.variant_scripts else None
-        ),
-        split_from=Path(args.split_from) if args.split_from else None,
-        holdout_unit=args.holdout_unit,
-        vocab_path=Path(args.vocab_path),
-        keyword_definitions=Path(args.keyword_definitions),
-        model_output=Path(args.model_output) if args.model_output else None,
-        variant=args.variant,
-        e_dim=args.e_dim,
-        e_noise=args.e_noise,
-        value_weight=args.value_weight,
-        encoder_layers=args.encoder_layers,
-        encoder_d_model=args.encoder_d_model,
-        keyword_expand_p=args.keyword_expand_p,
-        context_dropout=args.context_dropout,
-        lethality_copies=args.lethality_copies,
-        lr_scale=args.lr_scale,
-        save_every_epoch=args.save_every_epoch,
-        mlm_weight=args.mlm_weight,
-        mlm_mask_prob=args.mlm_mask_prob,
-        api_weight=args.api_weight,
-        curriculum_epoch=args.curriculum_epoch,
-        batch_size=args.batch_size,
-        grad_accum=args.grad_accum,
-        context_cache=args.context_cache,
-        cache_refresh=args.cache_refresh,
-        steps_per_epoch=args.steps_per_epoch,
-        shards_per_epoch=args.shards_per_epoch,
-        prefetch_workers=args.prefetch_workers,
-        seed=args.seed,
-        epochs=args.epochs,
-        patience=args.patience,
-        withhold_keyword=args.withhold_keyword,
-        resume=args.resume,
     )
 
 
@@ -1569,13 +1501,13 @@ def _encode_abilities_parser(subparsers) -> None:
         parser, help_text="Resolves the checkpoint and the output suffix together",
     )
     parser.add_argument(
-        "--checkpoint", type=str, default=None,
+        "--checkpoint", type=_optional_path, default=None,
         help="Overrides the checkpoint --variant resolves",
     )
     _add_cards_folder(parser)
     _add_variant_scripts(parser)
     _add_recorded_tokenizer_paths(parser)
-    parser.add_argument("--output-root", type=str, default=DEFAULT_ABILITIES_ROOT)
+    parser.add_argument("--output-root", type=Path, default=DEFAULT_ABILITIES_ROOT)
     parser.add_argument(
         "--clean", action="store_true",
         help="Remove only the files this variant wrote, then re-encode",
@@ -1587,19 +1519,9 @@ def run_encode_abilities(args: argparse.Namespace) -> int:
     from effects.application.encode_abilities import run as encode
     from effects.infrastructure.effect_model_store import HashMismatchError
 
-    config = EncodeAbilitiesConfig(
-        variant=args.variant,
-        checkpoint=Path(args.checkpoint) if args.checkpoint else None,
+    config = config_from_args(
+        EncodeAbilitiesConfig, args,
         cards_folders=resolve_cards_folders(args.cards_folders),
-        variant_scripts=(
-            Path(args.variant_scripts) if args.variant_scripts else None
-        ),
-        vocab_path=Path(args.vocab_path) if args.vocab_path else None,
-        keyword_definitions=(
-            Path(args.keyword_definitions) if args.keyword_definitions else None
-        ),
-        output_root=Path(args.output_root),
-        clean=args.clean,
     )
     try:
         encode(config)
@@ -1621,27 +1543,27 @@ def _evaluate_effect_model_parser(subparsers) -> None:
         help="Run the three gates and the reported checks over a checkpoint",
     )
     parser.set_defaults(func=run_evaluate_effect_model)
-    parser.add_argument("--checkpoint", type=str, default=DEFAULT_CHECKPOINT)
+    parser.add_argument("--checkpoint", type=Path, default=DEFAULT_CHECKPOINT)
     parser.add_argument(
         "--variant-checkpoint", action="append", dest="variant_checkpoints",
         default=None, metavar="NAME=PATH",
         help="Baseline checkpoint to compare against; repeatable",
     )
-    parser.add_argument("--records-dir", type=str, default=DEFAULT_RECORDS_DIR)
+    parser.add_argument("--records-dir", type=Path, default=DEFAULT_RECORDS_DIR)
     _add_cards_folder(parser)
     _add_variant_scripts(parser)
     _add_recorded_tokenizer_paths(parser)
     parser.add_argument(
-        "--corpus", type=str, default=None,
+        "--corpus", type=_optional_path, default=None,
         help=(
             "A curated dataset directory (build-corpus); defaults to the one "
             "--checkpoint recorded, if any. Fails fast when it has been "
             "rebuilt since training."
         ),
     )
-    parser.add_argument("--abilities-root", type=str, default=DEFAULT_ABILITIES_ROOT)
+    parser.add_argument("--abilities-root", type=Path, default=DEFAULT_ABILITIES_ROOT)
     parser.add_argument(
-        "--win-rates", type=str, default=DEFAULT_WIN_RATES,
+        "--win-rates", type=Path, default=DEFAULT_WIN_RATES,
         help="Per-card win-rate table the decodability battery reads",
     )
 
@@ -1667,21 +1589,10 @@ def run_evaluate_effect_model(args: argparse.Namespace) -> int:
         logger.error("%s", exc)
         return 2
 
-    config = EvaluateEffectModelConfig(
-        checkpoint=Path(args.checkpoint),
+    config = config_from_args(
+        EvaluateEffectModelConfig, args,
         variant_checkpoints=variants,
-        records_dir=Path(args.records_dir),
         cards_folders=resolve_cards_folders(args.cards_folders),
-        variant_scripts=(
-            Path(args.variant_scripts) if args.variant_scripts else None
-        ),
-        vocab_path=Path(args.vocab_path) if args.vocab_path else None,
-        keyword_definitions=(
-            Path(args.keyword_definitions) if args.keyword_definitions else None
-        ),
-        corpus=Path(args.corpus) if args.corpus else None,
-        abilities_root=Path(args.abilities_root),
-        win_rates=Path(args.win_rates),
     )
     try:
         report = evaluate(config)
@@ -1710,27 +1621,27 @@ def _scorer_smoke_test_parser(subparsers) -> None:
     )
     parser.set_defaults(func=run_scorer_smoke_test)
     parser.add_argument(
-        "--checkpoint", type=str, default=DEFAULT_CHECKPOINT,
+        "--checkpoint", type=Path, default=DEFAULT_CHECKPOINT,
         help="Effect model whose cache's pooled e is written",
     )
     parser.add_argument(
-        "--sealed-encoder-checkpoint", type=str,
+        "--sealed-encoder-checkpoint", type=Path,
         default="models/sealed/encoder/latest.pt",
         help="Sealed encoder whose vectors pooled e is concatenated with",
     )
     parser.add_argument(
-        "--abilities-root", type=str, default=DEFAULT_ABILITIES_ROOT,
+        "--abilities-root", type=Path, default=DEFAULT_ABILITIES_ROOT,
         help=(
             "Ability cache whose pooled e is spliced in: the one encode-abilities "
             f"wrote from --checkpoint (default: {DEFAULT_ABILITIES_ROOT})"
         ),
     )
     parser.add_argument(
-        "--outcomes-path", type=str, default="output/sealed/match-outcomes.txt",
+        "--outcomes-path", type=Path, default="output/sealed/match-outcomes.txt",
         help="Match outcomes Phase A trains on (default: output/sealed/match-outcomes.txt)",
     )
     parser.add_argument(
-        "--scratch-dir", type=str, required=True,
+        "--scratch-dir", type=Path, required=True,
         help="Where the vectors and the scorer checkpoint go; nothing is written elsewhere",
     )
 
@@ -1739,13 +1650,7 @@ def run_scorer_smoke_test(args: argparse.Namespace) -> int:
     from effects.application.scorer_smoke_test import ScorerSmokeTestConfig
     from effects.application.scorer_smoke_test import run as smoke_test
 
-    config = ScorerSmokeTestConfig(
-        scratch_dir=Path(args.scratch_dir),
-        checkpoint=Path(args.checkpoint),
-        sealed_encoder_checkpoint=Path(args.sealed_encoder_checkpoint),
-        abilities_root=Path(args.abilities_root),
-        outcomes_path=Path(args.outcomes_path),
-    )
+    config = config_from_args(ScorerSmokeTestConfig, args)
     try:
         result = smoke_test(config)
     except (FileNotFoundError, ValueError, RuntimeError) as exc:

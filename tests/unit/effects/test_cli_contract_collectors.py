@@ -8,6 +8,7 @@ side collection is the whole point, on that side it is an opt-in.
 from __future__ import annotations
 
 from dataclasses import fields
+from pathlib import Path
 
 import pytest
 
@@ -31,7 +32,7 @@ def parse(*argv: str):
 
 class TestEffectRecordsDefaultAsymmetry:
     def test_collect_coverage_defaults_to_the_records_directory(self):
-        assert parse("collect-coverage").effect_records == "output/effects/records/"
+        assert parse("collect-coverage").effect_records == Path("output/effects/records/")
 
     def test_match_outcomes_has_no_default(self):
         """A default there would turn every self-play run into a collection run."""
@@ -51,7 +52,7 @@ class TestCollectCoverage:
 
     def test_split_from_is_accepted(self):
         args = parse("collect-coverage", "--split-from", "models/x/latest.pt")
-        assert args.split_from == "models/x/latest.pt"
+        assert args.split_from == Path("models/x/latest.pt")
 
     def test_cards_folder_is_repeatable(self):
         args = parse(

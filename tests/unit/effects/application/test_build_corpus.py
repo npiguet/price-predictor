@@ -1588,11 +1588,11 @@ def test_the_cli_exposes_the_remap_flags():
     args = build_parser().parse_args([
         "build-corpus", "--forge-tokenscripts", "x", "--no-remap-token-keys",
     ])
-    assert args.forge_tokenscripts == "x"
+    assert args.forge_tokenscripts == Path("x")
     assert args.remap_token_keys is False
     defaults = build_parser().parse_args(["build-corpus"])
     assert defaults.remap_token_keys is True
-    assert defaults.forge_tokenscripts == "../forge/forge-gui/res/tokenscripts"
+    assert defaults.forge_tokenscripts == Path("../forge/forge-gui/res/tokenscripts")
 
 
 def test_a_class_lost_to_no_acting_text_is_told_to_reconvert():
