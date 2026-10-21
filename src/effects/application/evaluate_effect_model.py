@@ -271,6 +271,10 @@ def evaluate_gate_one(
 
 
 # ── gate 2: the damage-step keyword canary ──────────────────────────────
+#
+# The scoring itself lives in `effects.application.gate_two`, the way gate 1's
+# does in `gate_one`; what is left here is the selection, the routing and the
+# report line.
 
 
 @dataclass(frozen=True, slots=True)
@@ -362,6 +366,75 @@ def evaluate_gate_two(verdicts: list[KeywordVerdict]) -> CheckResult:
         "gate-2", CheckStatus.REPORTED, detail,
         {v.keyword: v.direction_agreement for v in verdicts},
     )
+
+
+def keyword_rows() -> tuple[DamageStepKeyword, ...]:
+    """Gate 2's table, so the evaluator and the report read one source."""
+    return DAMAGE_STEP_KEYWORDS
+
+
+def _gate_two_records(config, provenance):
+    """The combat records of the checkpoint's **game-disjoint** games (FR-120).
+
+    Game-disjoint rather than card-disjoint: the gate asks whether the model
+    uses a keyword it has seen, not whether it generalizes to text it has not,
+    and holding out the carriers as well would empty six of the eight
+    populations to answer a question gate 1 already answers.
+
+    An iterator, not a list. The split is a thousand games and a parsed record
+    costs about 45 KB, so the scorer reads it a chunk at a time.
+    """
+    from effects.domain.records import RecordKind
+    from effects.infrastructure.record_io import read_records_matching
+
+    games = frozenset(provenance.game_disjoint_games)
+    if not games:
+        return iter(())
+    return read_records_matching(
+        Path(config.records_dir), game_ids=games, kinds={RecordKind.COMBAT.value},
+    )
+
+
+def _gate_two_runnable(context: EvaluationContext, records):
+    """The main checkpoint with a batcher measured from ``records``.
+
+    A seam of its own so a test can hand gate 2 a stand-in model; the weights
+    come from the context, loaded once for the whole evaluation.
+    """
+    return context.main_runnable(records)
+
+
+def run_gate_two(context: EvaluationContext) -> list[KeywordVerdict]:
+    """Score the eight keywords and route each one (FR-119 – FR-122).
+
+    Nothing is loaded when the split holds no combat record to score: every
+    keyword is then under-sampled at n=0, which is the same verdict a corpus
+    with forty records gets and for the same reason.
+    """
+    from effects.application.gate_two import score_keywords
+
+    rows = keyword_rows()
+    records = iter(_gate_two_records(context.config, context.main.provenance))
+    # A handful of records up front, because the loader measures the slot
+    # widths from real ones; the rest stays a stream the scorer reads in chunks.
+    head = list(islice(records, SLOT_WIDTH_SAMPLE))
+    if not head:
+        scores = {row.keyword: KeywordScore() for row in rows}
+    else:
+        runnable = _gate_two_runnable(context, head)
+        scores = score_keywords(
+            chain(head, records), rows, runnable.encoder, runnable.model,
+            runnable.batcher, fields=runnable.fields,
+        )
+    return [
+        evaluate_keyword(
+            row,
+            qualifying_records=scores[row.keyword].qualifying,
+            agreeing_records=scores[row.keyword].agreeing,
+            per_field=scores[row.keyword].per_field,
+        )
+        for row in rows
+    ]
 
 
 # ── gate 3: collapse canaries ───────────────────────────────────────────
@@ -465,325 +538,6 @@ def skip_unavailable(name: str) -> CheckResult:
         f"needs {STAGE_GATED_CHECKS[name]}, which the corpus does not have yet",
     )
 
-
-# ── the report ──────────────────────────────────────────────────────────
-
-
-@dataclass
-class EvaluationReport:
-    """Everything one evaluation run produced."""
-
-    checks: list[CheckResult] = field(default_factory=list)
-    keyword_verdicts: list[KeywordVerdict] = field(default_factory=list)
-
-    def add(self, result: CheckResult) -> CheckResult:
-        self.checks.append(result)
-        return result
-
-    @property
-    def blocking_failures(self) -> list[CheckResult]:
-        return [check for check in self.checks if check.blocks]
-
-    @property
-    def ships(self) -> bool:
-        """Whether gates 1 and 3 both hold.
-
-        Only gates 1 and 3 can answer no. Gate 2 is routing information and the
-        remaining checks are diagnostics. The verdict is reported; it never
-        stops the command.
-        """
-        return not self.blocking_failures
-
-    def render(self) -> str:
-        lines = []
-        for check in self.checks:
-            marker = {
-                CheckStatus.PASS: "PASS",
-                CheckStatus.FAIL: "FAIL",
-                CheckStatus.SKIPPED: "skip",
-                CheckStatus.REPORTED: "----",
-            }[check.status]
-            lines.append(f"[{marker}] {check.name}: {check.detail}")
-            # Every figure a check measured, whatever its verdict: the design
-            # record's Outcome section needs a passing margin as much as a
-            # failing one.
-            if check.values:
-                lines.append("       " + "  ".join(
-                    f"{name}={value:+.4f}"
-                    for name, value in check.values.items()
-                ))
-        for verdict in self.keyword_verdicts:
-            state = "pass" if verdict.passed else "→ probe"
-            lines.append(
-                f"    {verdict.keyword:<16} {state:<8} "
-                f"n={verdict.qualifying_records:<6} {verdict.reason}"
-            )
-        lines.append(
-            "SHIPS" if self.ships
-            else "GATES FAILED: " + ", ".join(c.name for c in self.blocking_failures)
-        )
-        return "\n".join(lines)
-
-
-#: Where the sealed pipeline's per-card winnability labels live by default;
-#: ``--win-rates`` names another table. The decodability battery skips when it
-#: is absent rather than failing: the labels are an operator's training data,
-#: not a repository artifact.
-DEFAULT_WIN_RATES = Path("output/sealed/cards-win-rates.txt")
-
-
-@dataclass
-class EvaluateEffectModelConfig:
-    checkpoint: Path = field(
-        default_factory=lambda: Path("models/effects/effect-model/latest.pt"),
-    )
-    variant_checkpoints: dict[str, Path] = field(default_factory=dict)
-    records_dir: Path = field(default_factory=lambda: Path("output/effects/records/"))
-    cards_folders: tuple[Path, ...] = (
-        Path("output/cardsfolder/"), Path("output/tokenscripts/"),
-    )
-    variant_scripts: Path | None = None
-    vocab_path: Path | None = None
-    keyword_definitions: Path | None = None
-    #: A curated dataset directory (`build-corpus`); defaults to the one
-    #: `--checkpoint` recorded, if any (FR-147).
-    corpus: Path | None = None
-    abilities_root: Path = field(
-        default_factory=lambda: Path("output/effects/abilities"),
-    )
-    #: The per-card win-rate table the decodability battery reads (FR-070).
-    win_rates: Path = field(default_factory=lambda: DEFAULT_WIN_RATES)
-
-
-def parse_variant_checkpoint(value: str) -> tuple[str, Path]:
-    """``NAME=PATH`` for ``--variant-checkpoint``."""
-    name, separator, path = value.partition("=")
-    if not separator or not name.strip() or not path.strip():
-        raise ValueError(
-            f"--variant-checkpoint takes NAME=PATH, got {value!r}"
-        )
-    return name.strip(), Path(path.strip())
-
-
-# ── corpus provenance (FR-147) ──────────────────────────────────────────
-
-
-class CorpusMismatchError(RuntimeError):
-    """The curated corpus was rebuilt since the checkpoint trained on it."""
-
-
-def check_corpus(provenance: SplitProvenance, *, actual_digest: str) -> None:
-    """Refuse a dataset that is not the one the checkpoint read (FR-147).
-
-    A rebuild is a different split, so scoring the gates against it would score
-    them partly on games the model trained on — the failure the recorded
-    ``game_id`` sets exist to prevent, arriving through the corpus instead.
-    """
-    if not provenance.corpus_digest:
-        return
-    if provenance.corpus_digest != actual_digest:
-        raise CorpusMismatchError(
-            f"{provenance.corpus_path} has been rebuilt since this checkpoint "
-            f"trained on it (recorded {provenance.corpus_digest}, found "
-            f"{actual_digest}). Evaluate against the dataset it read, or "
-            "retrain against this one."
-        )
-
-
-def resolve_corpus_path(
-    provenance: SplitProvenance, *, corpus: Path | None, checkpoint: Path,
-) -> Path | None:
-    """Where to read the curated corpus ``check_corpus`` verifies, if anywhere.
-
-    Defaults to what the checkpoint recorded; an explicit ``--corpus``
-    overrides it. That much matches ``resolve_inference_paths``, but the two
-    diverge on a checkpoint with no recorded corpus: ``resolve_inference_paths``
-    always resolves a path and hash-checks it afterwards, override or not,
-    while here there is no digest to check an override against, so the
-    override is discarded rather than resolved. Refusing outright would be too
-    strong — it would break a batch-eval script that passes ``--corpus``
-    uniformly across a mix of curated and legacy checkpoints — and honouring
-    it would be meaningless, so a warning names the checkpoint and says why,
-    rather than the flag silently doing nothing.
-    """
-    if not provenance.corpus_digest:
-        if corpus is not None:
-            logger.warning(
-                "%s records no curated corpus, so --corpus %s has nothing "
-                "to check its digest against and is ignored.",
-                checkpoint, corpus,
-            )
-        return None
-    if corpus is not None:
-        return Path(corpus)
-    return Path(provenance.corpus_path)
-
-
-def keyword_rows() -> tuple[DamageStepKeyword, ...]:
-    """Gate 2's table, so the evaluator and the report read one source."""
-    return DAMAGE_STEP_KEYWORDS
-
-
-def load_shipping_cache(
-    config: EvaluateEffectModelConfig, *, surface: str, variant: str = "full",
-):
-    """The cache the evaluator reads: the card and token trees, on ``surface``.
-
-    One vector per unique ability text on the checkpoint's encoding surface —
-    the population gate 3 is defined over (FR-123) and the one every other
-    geometry check reads. Keyed on the text rather than on the vector's bytes,
-    because one text encoded in two batches differs in float noise, and a
-    byte key counts those copies as distinct points. The variant-script tree
-    is left out: its perturbed scripts are synthetic collection input, and the
-    shipping cache serves the real card and token lines.
-    """
-    from effects.application.geometry_checks import load_cache
-
-    return load_cache(
-        config.abilities_root, config.cards_folders,
-        surface=surface, variant=variant,
-    )
-
-
-def run(config: EvaluateEffectModelConfig) -> EvaluationReport:
-    """Load the checkpoints, run every check, and report.
-
-    Splits come from ``--checkpoint`` and are never recomputed; a
-    ``--variant-checkpoint`` recording a different split fails fast here, before
-    any number is produced that would look comparable and not be.
-    """
-    from effects.infrastructure.effect_model_store import (
-        load_effect_checkpoint,
-        load_for_inference,
-        require_same_split,
-    )
-
-    main_path = Path(config.checkpoint)
-    main, vocab_path, keyword_path = load_for_inference(
-        main_path,
-        vocab_path=config.vocab_path, keyword_path=config.keyword_definitions,
-    )
-    corpus_path = resolve_corpus_path(
-        main.provenance, corpus=config.corpus, checkpoint=main_path,
-    )
-    manifest = None
-    if corpus_path is not None:
-        from effects.infrastructure.corpus_store import CorpusStore
-
-        manifest = CorpusStore(corpus_path).load()
-    check_corpus(
-        main.provenance, actual_digest=manifest.digest() if manifest else "",
-    )
-    if corpus_path is not None:
-        from effects.infrastructure.record_io import iter_shards, refuse_mixed_generations
-
-        # Before any record is read (FR-033): the two generations read
-        # actor_player on playability records differently.
-        refuse_mixed_generations(iter_shards(Path(corpus_path)))
-
-    variants = {}
-    for name, path in config.variant_checkpoints.items():
-        loaded = load_effect_checkpoint(path)
-        require_same_split(
-            main, loaded, main_path=main_path, variant_path=Path(path),
-        )
-        variants[name] = loaded
-
-    from effects.application.geometry_checks import (
-        check_decodability,
-        check_nearest_neighbours,
-        check_umap,
-        check_variant_geometry,
-        check_ward,
-    )
-    from effects.domain.ability_encoder import surface_of
-
-    context = EvaluationContext(
-        config, main, vocab_path, keyword_path,
-        corpus_path=corpus_path, manifest=manifest,
-    )
-    report = EvaluationReport()
-    logger.info("loading the ability cache under %s", config.abilities_root)
-    # The surface the checkpoint encoded from, so every geometry check keys
-    # the cache on the texts its vectors actually encode.
-    surface = surface_of(vocab_path)
-    cached = load_shipping_cache(config, surface=surface)
-
-    # ── gate 3: geometry, read off the cache ──
-    logger.info("gate 3: geometry over %d unique cached texts", len(cached.by_text))
-    vectors = cached.matrix()
-    if vectors.shape[0] < 2:
-        report.add(CheckResult(
-            "gate-3", CheckStatus.SKIPPED,
-            f"no ability cache under {config.abilities_root}; run "
-            "encode-abilities first",
-        ))
-    else:
-        report.add(evaluate_gate_three(vectors))
-
-    # ── gate 1: needs the identity baseline ──
-    if "identity" not in variants:
-        report.add(CheckResult(
-            "gate-1", CheckStatus.SKIPPED,
-            "needs --variant-checkpoint identity=PATH: gate 1 is defined "
-            "against that baseline",
-        ))
-    else:
-        report.add(run_gate_one(context, variants["identity"]))
-
-    # ── gate 2: per keyword, routing only ──
-    logger.info("gate 2: scoring the damage-step keywords on the game-disjoint stratum")
-    verdicts = run_gate_two(context)
-    report.keyword_verdicts = verdicts
-    report.add(evaluate_gate_two(verdicts))
-
-    # ── breakdowns: per text, rarity, family, policy, decision (FR-064–068) ──
-    logger.info("breakdowns: scoring both validation strata")
-    for check in run_breakdowns(context):
-        report.add(check)
-
-    # ── e-geometry checks, all reported ──
-    logger.info("reported checks: ward, neighbours, UMAP, decodability, baselines")
-    report.add(check_ward(cached))
-    report.add(check_nearest_neighbours(cached, NEIGHBOUR_QUERIES))
-    report.add(check_umap(cached))
-    report.add(check_decodability(
-        cached, Path(config.win_rates),
-        held_out_cards=main.provenance.held_out_cards,
-    ))
-    for name in ("no-state", "taxonomy"):
-        report.add(check_variant_geometry(
-            cached,
-            load_shipping_cache(config, surface=surface, variant=name),
-            name,
-        ))
-
-    # ── checks whose records do not exist yet ──
-    for name in STAGE_GATED_CHECKS:
-        report.add(skip_unavailable(name))
-
-    if not main.provenance.withheld_keyword:
-        report.add(CheckResult(
-            "zero-shot-keyword", CheckStatus.SKIPPED,
-            "the checkpoint withheld no keyword; retrain with "
-            "--withhold-keyword to give this check something to measure",
-        ))
-    return report
-
-
-#: Lines whose neighbours a reader can judge at a glance. Reported rather than
-#: scored: the point is for a person to see whether the neighbours of a removal
-#: spell are removal spells, which no metric asks. Each prose line is printed
-#: with several scripts across the corpus, so each pins the card whose script
-#: the query stands for (see :mod:`effects.domain.line_query`).
-NEIGHBOUR_QUERIES: tuple[LineQuery, ...] = (
-    LineQuery("destroy target creature.", card="murder"),
-    LineQuery("draw a card.", card="think twice"),
-    LineQuery("CARDNAME deals 3 damage to any target.", card="lightning bolt"),
-    LineQuery(
-        "target creature gets +2/+2 until end of turn.", card="artful maneuver",
-    ),
-)
 
 # ── breakdowns (FR-064 – FR-068) ────────────────────────────────────────
 #
@@ -974,72 +728,322 @@ def _group_check(name: str, group, *, detail: str | None = None) -> CheckResult:
         detail or f"{group.per_record.records} records, {texts} texts", values,
     )
 
-# ── gate 2: the damage-step keyword canary ──────────────────────────────
-#
-# The scoring itself lives in `effects.application.gate_two`, the way gate 1's
-# does in `gate_one`; what is left here is the selection, the routing and the
-# report line.
+
+# ── the report ──────────────────────────────────────────────────────────
 
 
-def _gate_two_records(config, provenance):
-    """The combat records of the checkpoint's **game-disjoint** games (FR-120).
+@dataclass
+class EvaluationReport:
+    """Everything one evaluation run produced."""
 
-    Game-disjoint rather than card-disjoint: the gate asks whether the model
-    uses a keyword it has seen, not whether it generalizes to text it has not,
-    and holding out the carriers as well would empty six of the eight
-    populations to answer a question gate 1 already answers.
+    checks: list[CheckResult] = field(default_factory=list)
+    keyword_verdicts: list[KeywordVerdict] = field(default_factory=list)
 
-    An iterator, not a list. The split is a thousand games and a parsed record
-    costs about 45 KB, so the scorer reads it a chunk at a time.
+    def add(self, result: CheckResult) -> CheckResult:
+        self.checks.append(result)
+        return result
+
+    @property
+    def blocking_failures(self) -> list[CheckResult]:
+        return [check for check in self.checks if check.blocks]
+
+    @property
+    def ships(self) -> bool:
+        """Whether gates 1 and 3 both hold.
+
+        Only gates 1 and 3 can answer no. Gate 2 is routing information and the
+        remaining checks are diagnostics. The verdict is reported; it never
+        stops the command.
+        """
+        return not self.blocking_failures
+
+    def render(self) -> str:
+        lines = []
+        for check in self.checks:
+            marker = {
+                CheckStatus.PASS: "PASS",
+                CheckStatus.FAIL: "FAIL",
+                CheckStatus.SKIPPED: "skip",
+                CheckStatus.REPORTED: "----",
+            }[check.status]
+            lines.append(f"[{marker}] {check.name}: {check.detail}")
+            # Every figure a check measured, whatever its verdict: the design
+            # record's Outcome section needs a passing margin as much as a
+            # failing one.
+            if check.values:
+                lines.append("       " + "  ".join(
+                    f"{name}={value:+.4f}"
+                    for name, value in check.values.items()
+                ))
+        for verdict in self.keyword_verdicts:
+            state = "pass" if verdict.passed else "→ probe"
+            lines.append(
+                f"    {verdict.keyword:<16} {state:<8} "
+                f"n={verdict.qualifying_records:<6} {verdict.reason}"
+            )
+        lines.append(
+            "SHIPS" if self.ships
+            else "GATES FAILED: " + ", ".join(c.name for c in self.blocking_failures)
+        )
+        return "\n".join(lines)
+
+
+#: Where the sealed pipeline's per-card winnability labels live by default;
+#: ``--win-rates`` names another table. The decodability battery skips when it
+#: is absent rather than failing: the labels are an operator's training data,
+#: not a repository artifact.
+DEFAULT_WIN_RATES = Path("output/sealed/cards-win-rates.txt")
+
+
+@dataclass
+class EvaluateEffectModelConfig:
+    checkpoint: Path = field(
+        default_factory=lambda: Path("models/effects/effect-model/latest.pt"),
+    )
+    variant_checkpoints: dict[str, Path] = field(default_factory=dict)
+    records_dir: Path = field(default_factory=lambda: Path("output/effects/records/"))
+    cards_folders: tuple[Path, ...] = (
+        Path("output/cardsfolder/"), Path("output/tokenscripts/"),
+    )
+    variant_scripts: Path | None = None
+    vocab_path: Path | None = None
+    keyword_definitions: Path | None = None
+    #: A curated dataset directory (`build-corpus`); defaults to the one
+    #: `--checkpoint` recorded, if any (FR-147).
+    corpus: Path | None = None
+    abilities_root: Path = field(
+        default_factory=lambda: Path("output/effects/abilities"),
+    )
+    #: The per-card win-rate table the decodability battery reads (FR-070).
+    win_rates: Path = field(default_factory=lambda: DEFAULT_WIN_RATES)
+
+
+def parse_variant_checkpoint(value: str) -> tuple[str, Path]:
+    """``NAME=PATH`` for ``--variant-checkpoint``."""
+    name, separator, path = value.partition("=")
+    if not separator or not name.strip() or not path.strip():
+        raise ValueError(
+            f"--variant-checkpoint takes NAME=PATH, got {value!r}"
+        )
+    return name.strip(), Path(path.strip())
+
+
+# ── corpus provenance (FR-147) ──────────────────────────────────────────
+
+
+class CorpusMismatchError(RuntimeError):
+    """The curated corpus was rebuilt since the checkpoint trained on it."""
+
+
+def check_corpus(provenance: SplitProvenance, *, actual_digest: str) -> None:
+    """Refuse a dataset that is not the one the checkpoint read (FR-147).
+
+    A rebuild is a different split, so scoring the gates against it would score
+    them partly on games the model trained on — the failure the recorded
+    ``game_id`` sets exist to prevent, arriving through the corpus instead.
     """
-    from effects.domain.records import RecordKind
-    from effects.infrastructure.record_io import read_records_matching
+    if not provenance.corpus_digest:
+        return
+    if provenance.corpus_digest != actual_digest:
+        raise CorpusMismatchError(
+            f"{provenance.corpus_path} has been rebuilt since this checkpoint "
+            f"trained on it (recorded {provenance.corpus_digest}, found "
+            f"{actual_digest}). Evaluate against the dataset it read, or "
+            "retrain against this one."
+        )
 
-    games = frozenset(provenance.game_disjoint_games)
-    if not games:
-        return iter(())
-    return read_records_matching(
-        Path(config.records_dir), game_ids=games, kinds={RecordKind.COMBAT.value},
+
+def resolve_corpus_path(
+    provenance: SplitProvenance, *, corpus: Path | None, checkpoint: Path,
+) -> Path | None:
+    """Where to read the curated corpus ``check_corpus`` verifies, if anywhere.
+
+    Defaults to what the checkpoint recorded; an explicit ``--corpus``
+    overrides it. That much matches ``resolve_inference_paths``, but the two
+    diverge on a checkpoint with no recorded corpus: ``resolve_inference_paths``
+    always resolves a path and hash-checks it afterwards, override or not,
+    while here there is no digest to check an override against, so the
+    override is discarded rather than resolved. Refusing outright would be too
+    strong — it would break a batch-eval script that passes ``--corpus``
+    uniformly across a mix of curated and legacy checkpoints — and honouring
+    it would be meaningless, so a warning names the checkpoint and says why,
+    rather than the flag silently doing nothing.
+    """
+    if not provenance.corpus_digest:
+        if corpus is not None:
+            logger.warning(
+                "%s records no curated corpus, so --corpus %s has nothing "
+                "to check its digest against and is ignored.",
+                checkpoint, corpus,
+            )
+        return None
+    if corpus is not None:
+        return Path(corpus)
+    return Path(provenance.corpus_path)
+
+
+# ── reported geometry checks ────────────────────────────────────────────
+
+#: Lines whose neighbours a reader can judge at a glance. Reported rather than
+#: scored: the point is for a person to see whether the neighbours of a removal
+#: spell are removal spells, which no metric asks. Each prose line is printed
+#: with several scripts across the corpus, so each pins the card whose script
+#: the query stands for (see :mod:`effects.domain.line_query`).
+NEIGHBOUR_QUERIES: tuple[LineQuery, ...] = (
+    LineQuery("destroy target creature.", card="murder"),
+    LineQuery("draw a card.", card="think twice"),
+    LineQuery("CARDNAME deals 3 damage to any target.", card="lightning bolt"),
+    LineQuery(
+        "target creature gets +2/+2 until end of turn.", card="artful maneuver",
+    ),
+)
+
+
+def load_shipping_cache(
+    config: EvaluateEffectModelConfig, *, surface: str, variant: str = "full",
+):
+    """The cache the evaluator reads: the card and token trees, on ``surface``.
+
+    One vector per unique ability text on the checkpoint's encoding surface —
+    the population gate 3 is defined over (FR-123) and the one every other
+    geometry check reads. Keyed on the text rather than on the vector's bytes,
+    because one text encoded in two batches differs in float noise, and a
+    byte key counts those copies as distinct points. The variant-script tree
+    is left out: its perturbed scripts are synthetic collection input, and the
+    shipping cache serves the real card and token lines.
+    """
+    from effects.application.geometry_checks import load_cache
+
+    return load_cache(
+        config.abilities_root, config.cards_folders,
+        surface=surface, variant=variant,
     )
 
 
-def _gate_two_runnable(context: EvaluationContext, records):
-    """The main checkpoint with a batcher measured from ``records``.
+# ── the command ─────────────────────────────────────────────────────────
 
-    A seam of its own so a test can hand gate 2 a stand-in model; the weights
-    come from the context, loaded once for the whole evaluation.
+
+def run(config: EvaluateEffectModelConfig) -> EvaluationReport:
+    """Load the checkpoints, run every check, and report.
+
+    Splits come from ``--checkpoint`` and are never recomputed; a
+    ``--variant-checkpoint`` recording a different split fails fast here, before
+    any number is produced that would look comparable and not be.
     """
-    return context.main_runnable(records)
+    from effects.infrastructure.effect_model_store import (
+        load_effect_checkpoint,
+        load_for_inference,
+        require_same_split,
+    )
 
+    main_path = Path(config.checkpoint)
+    main, vocab_path, keyword_path = load_for_inference(
+        main_path,
+        vocab_path=config.vocab_path, keyword_path=config.keyword_definitions,
+    )
+    corpus_path = resolve_corpus_path(
+        main.provenance, corpus=config.corpus, checkpoint=main_path,
+    )
+    manifest = None
+    if corpus_path is not None:
+        from effects.infrastructure.corpus_store import CorpusStore
 
-def run_gate_two(context: EvaluationContext) -> list[KeywordVerdict]:
-    """Score the eight keywords and route each one (FR-119 – FR-122).
+        manifest = CorpusStore(corpus_path).load()
+    check_corpus(
+        main.provenance, actual_digest=manifest.digest() if manifest else "",
+    )
+    if corpus_path is not None:
+        from effects.infrastructure.record_io import iter_shards, refuse_mixed_generations
 
-    Nothing is loaded when the split holds no combat record to score: every
-    keyword is then under-sampled at n=0, which is the same verdict a corpus
-    with forty records gets and for the same reason.
-    """
-    from effects.application.gate_two import score_keywords
+        # Before any record is read (FR-033): the two generations read
+        # actor_player on playability records differently.
+        refuse_mixed_generations(iter_shards(Path(corpus_path)))
 
-    rows = keyword_rows()
-    records = iter(_gate_two_records(context.config, context.main.provenance))
-    # A handful of records up front, because the loader measures the slot
-    # widths from real ones; the rest stays a stream the scorer reads in chunks.
-    head = list(islice(records, SLOT_WIDTH_SAMPLE))
-    if not head:
-        scores = {row.keyword: KeywordScore() for row in rows}
+    variants = {}
+    for name, path in config.variant_checkpoints.items():
+        loaded = load_effect_checkpoint(path)
+        require_same_split(
+            main, loaded, main_path=main_path, variant_path=Path(path),
+        )
+        variants[name] = loaded
+
+    from effects.application.geometry_checks import (
+        check_decodability,
+        check_nearest_neighbours,
+        check_umap,
+        check_variant_geometry,
+        check_ward,
+    )
+    from effects.domain.ability_encoder import surface_of
+
+    context = EvaluationContext(
+        config, main, vocab_path, keyword_path,
+        corpus_path=corpus_path, manifest=manifest,
+    )
+    report = EvaluationReport()
+    logger.info("loading the ability cache under %s", config.abilities_root)
+    # The surface the checkpoint encoded from, so every geometry check keys
+    # the cache on the texts its vectors actually encode.
+    surface = surface_of(vocab_path)
+    cached = load_shipping_cache(config, surface=surface)
+
+    # ── gate 3: geometry, read off the cache ──
+    logger.info("gate 3: geometry over %d unique cached texts", len(cached.by_text))
+    vectors = cached.matrix()
+    if vectors.shape[0] < 2:
+        report.add(CheckResult(
+            "gate-3", CheckStatus.SKIPPED,
+            f"no ability cache under {config.abilities_root}; run "
+            "encode-abilities first",
+        ))
     else:
-        runnable = _gate_two_runnable(context, head)
-        scores = score_keywords(
-            chain(head, records), rows, runnable.encoder, runnable.model,
-            runnable.batcher, fields=runnable.fields,
-        )
-    return [
-        evaluate_keyword(
-            row,
-            qualifying_records=scores[row.keyword].qualifying,
-            agreeing_records=scores[row.keyword].agreeing,
-            per_field=scores[row.keyword].per_field,
-        )
-        for row in rows
-    ]
+        report.add(evaluate_gate_three(vectors))
+
+    # ── gate 1: needs the identity baseline ──
+    if "identity" not in variants:
+        report.add(CheckResult(
+            "gate-1", CheckStatus.SKIPPED,
+            "needs --variant-checkpoint identity=PATH: gate 1 is defined "
+            "against that baseline",
+        ))
+    else:
+        report.add(run_gate_one(context, variants["identity"]))
+
+    # ── gate 2: per keyword, routing only ──
+    logger.info("gate 2: scoring the damage-step keywords on the game-disjoint stratum")
+    verdicts = run_gate_two(context)
+    report.keyword_verdicts = verdicts
+    report.add(evaluate_gate_two(verdicts))
+
+    # ── breakdowns: per text, rarity, family, policy, decision (FR-064–068) ──
+    logger.info("breakdowns: scoring both validation strata")
+    for check in run_breakdowns(context):
+        report.add(check)
+
+    # ── e-geometry checks, all reported ──
+    logger.info("reported checks: ward, neighbours, UMAP, decodability, baselines")
+    report.add(check_ward(cached))
+    report.add(check_nearest_neighbours(cached, NEIGHBOUR_QUERIES))
+    report.add(check_umap(cached))
+    report.add(check_decodability(
+        cached, Path(config.win_rates),
+        held_out_cards=main.provenance.held_out_cards,
+    ))
+    for name in ("no-state", "taxonomy"):
+        report.add(check_variant_geometry(
+            cached,
+            load_shipping_cache(config, surface=surface, variant=name),
+            name,
+        ))
+
+    # ── checks whose records do not exist yet ──
+    for name in STAGE_GATED_CHECKS:
+        report.add(skip_unavailable(name))
+
+    if not main.provenance.withheld_keyword:
+        report.add(CheckResult(
+            "zero-shot-keyword", CheckStatus.SKIPPED,
+            "the checkpoint withheld no keyword; retrain with "
+            "--withhold-keyword to give this check something to measure",
+        ))
+    return report
