@@ -237,12 +237,14 @@ def load_probe_model(
     vocab_path: Path | None = None,
     keyword_path: Path | None = None,
     checkpoint=None,
+    variant_scripts: Path | None = None,
 ) -> ProbeModel:
     """Encoder, model and batcher at the checkpoint's own size and surface.
 
     Through the evaluator's loader, so the probes read the model exactly as
     gate 1 does: the encoder built at its recorded size, keywords expanded at
-    the inference constant, the variant masks applied.
+    the inference constant, the variant masks applied, and the sidecars read
+    over the same trees, the variant-script tree among them.
     """
     from effects.domain.ability_encoder import surface_of
     from effects.infrastructure.effect_model_store import verified_inference_paths
@@ -254,7 +256,9 @@ def load_probe_model(
     vocab, keywords = verified_inference_paths(
         checkpoint, vocab_path=vocab_path, keyword_path=keyword_path,
     )
-    config = SimpleNamespace(cards_folders=list(cards_folders), variant_scripts=None)
+    config = SimpleNamespace(
+        cards_folders=list(cards_folders), variant_scripts=variant_scripts,
+    )
     runnable = load_runnable(
         config, checkpoint, vocab_path=vocab, keyword_path=keywords, records=records,
     )
@@ -319,6 +323,120 @@ def fmt(value) -> str:
 def fmt_mean(values, digits: int = 3) -> str:
     """The mean of ``values`` as a table cell, ``n/a`` for none."""
     return f"{np.mean(values):.{digits}f}" if len(values) else "n/a"
+
+
+# ── what one checkpoint's probes read ───────────────────────────────────
+
+
+def rooted(path) -> Path:
+    """A recorded path, relative ones read from the repository root.
+
+    Checkpoints and manifests record paths as the command that wrote them was
+    given them, from the repository root.
+    """
+    path = Path(path)
+    return path if path.is_absolute() else ROOT / path
+
+
+@dataclass
+class ProbeContext:
+    """Everything a probe of one checkpoint reads, resolved from what it recorded (FR-075).
+
+    The curated corpus it trained on, verified against the digest the
+    checkpoint pinned; the sidecar trees it resolved keys against; and the
+    variant-script tree that corpus records, without which a variant card's
+    ability keys resolve to no text. No probe names a corpus, a probe set or a
+    tree of its own, so every one runs unchanged on any checkpoint.
+    """
+
+    checkpoint_path: Path
+    checkpoint: object
+    corpus: Path
+    manifest: object
+    corpus_digest: str
+    cards_folders: tuple[Path, ...]
+    variant_scripts: Path | None
+    _sidecars: object = field(default=None, repr=False)
+
+    def sidecars(self):
+        """One sidecar cache over the checkpoint's trees, built on first use."""
+        if self._sidecars is None:
+            self._sidecars = sidecar_cache(self.cards_folders, self.variant_scripts)
+        return self._sidecars
+
+    def stratum_dir(self, stratum: str) -> Path:
+        return stratum_dir(self.corpus, stratum)
+
+    def validation_dirs(self) -> list[Path]:
+        """Both validation strata, card-disjoint first."""
+        return [self.stratum_dir(stratum) for stratum in STRATA]
+
+    @property
+    def training_dir(self) -> Path:
+        return Path(self.corpus) / "training"
+
+    def source_shards(self, names) -> list[Path]:
+        """A probe set's recorded shard names, read under this corpus."""
+        return [Path(n) if Path(n).is_absolute() else Path(self.corpus) / n for n in names]
+
+    def load_probe_set(self, directory: Path) -> dict:
+        """The probe set frozen for this corpus under ``directory``; refuses another's."""
+        from effect_knowledge_probes.probe_set import load_probe_set, probe_set_path
+
+        return load_probe_set(
+            probe_set_path(directory, self.corpus_digest), self.corpus_digest,
+        )
+
+    def model(self, records: list, *, vocab_path: Path | None = None,
+              keyword_path: Path | None = None) -> ProbeModel:
+        """The checkpoint ready to run over ``records``, on this context's trees."""
+        return load_probe_model(
+            self.checkpoint_path, list(self.cards_folders), records,
+            vocab_path=vocab_path, keyword_path=keyword_path,
+            checkpoint=self.checkpoint, variant_scripts=self.variant_scripts,
+        )
+
+
+def probe_context(
+    checkpoint_path: Path,
+    *,
+    corpus: Path | None = None,
+    cards_folders: Iterable[Path] | None = None,
+    variant_scripts: Path | None = None,
+) -> ProbeContext:
+    """Resolve one checkpoint's probing inputs; an explicit argument overrides.
+
+    Refuses a checkpoint that names no curated corpus, and a corpus rebuilt
+    since the checkpoint trained on it: a probe set frozen against the rebuild
+    describes different games.
+    """
+    from effects.infrastructure.corpus_store import CorpusStore
+
+    checkpoint = load_checkpoint(checkpoint_path)
+    provenance = checkpoint.provenance
+    recorded = provenance.corpus_path
+    corpus = Path(corpus) if corpus is not None else (rooted(recorded) if recorded else None)
+    if corpus is None or not (corpus / "manifest.json").exists():
+        raise SystemExit("no curated corpus: pass --corpus, or probe a checkpoint "
+                         "trained with --corpus")
+    manifest = CorpusStore(corpus).load()
+    digest = manifest.digest()
+    if provenance.corpus_digest and provenance.corpus_digest != digest:
+        raise SystemExit(
+            f"{corpus} has been rebuilt since {checkpoint_path} trained on it "
+            f"(recorded {provenance.corpus_digest}, found {digest})")
+    if cards_folders is None:
+        recorded_folders = getattr(checkpoint, "cards_folders", ())
+        cards_folders = (tuple(rooted(f) for f in recorded_folders)
+                         or DEFAULT_CARDS_FOLDERS)
+    if variant_scripts is None and manifest.variant_scripts:
+        variant_scripts = rooted(manifest.variant_scripts)
+    return ProbeContext(
+        checkpoint_path=Path(checkpoint_path), checkpoint=checkpoint, corpus=corpus,
+        manifest=manifest, corpus_digest=digest,
+        cards_folders=tuple(Path(f) for f in cards_folders),
+        variant_scripts=variant_scripts,
+    )
 
 
 def peak_gpu_bytes() -> int:

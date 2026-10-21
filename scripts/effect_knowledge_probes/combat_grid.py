@@ -51,7 +51,6 @@ if __package__ in (None, ""):
 from effect_knowledge_probes import common, record_walk, sweeps  # noqa: E402
 from effect_knowledge_probes.board_edits import BoardEdit  # noqa: E402
 
-CORPUS = Path("output/effects/corpus-gen2")
 VALUES = range(1, 9)
 #: Keywords that change who dies in a damage step; a qualifying pair carries none.
 COMBAT_KEYWORDS = frozenset({
@@ -274,17 +273,13 @@ def main() -> None:
     args = parser.parse_args()
     variants = list(VARIANTS) if "all" in args.variant else args.variant
 
-    sidecars = common.sidecar_cache(common.DEFAULT_CARDS_FOLDERS)
-    resolver = KeywordResolver(sidecars)
-    directories = ([CORPUS / "training"] if args.source == "training" else
-                   [CORPUS / "validation" / "card-disjoint",
-                    CORPUS / "validation" / "game-disjoint"])
+    context = common.probe_context(args.checkpoint)
+    resolver = KeywordResolver(context.sidecars())
+    directories = ([context.training_dir] if args.source == "training"
+                   else context.validation_dirs())
     triples = qualifying_records(directories, args.records, args.shards, resolver.keywords_of)
-    checkpoint = common.load_checkpoint(args.checkpoint)
-    probe_model = common.load_probe_model(
-        args.checkpoint, list(common.DEFAULT_CARDS_FOLDERS), [r for r, _, _ in triples],
-        checkpoint=checkpoint)
-    print(f"{args.checkpoint.parent.name} ({checkpoint.epoch}), "
+    probe_model = context.model([r for r, _, _ in triples])
+    print(f"{args.checkpoint.parent.name} ({context.checkpoint.epoch}), "
           f"{len(triples)} {args.source} one-on-one blocks", flush=True)
     for variant in variants:
         for which in ("blocker", "attacker"):

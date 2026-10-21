@@ -42,7 +42,6 @@ if __package__ in (None, ""):
 from effect_knowledge_probes import common, record_walk  # noqa: E402
 from effect_knowledge_probes.board_edits import BoardEdit  # noqa: E402
 
-CORPUS = Path("output/effects/corpus-gen2")
 BASE_TYPES = {"Artifact": "artifact", "Creature": "creature", "Enchantment": "enchantment",
               "Land": "land", "Planeswalker": "planeswalker", "Battle": "battle"}
 COLOUR_QUALIFIERS = {"White", "Blue", "Black", "Red", "Green", "nonWhite", "nonBlue",
@@ -181,15 +180,11 @@ def main() -> None:
                         help="items of each label a restriction row needs")
     args = parser.parse_args()
 
-    sidecars = common.sidecar_cache(common.DEFAULT_CARDS_FOLDERS)
-    directories = [CORPUS / "validation" / "card-disjoint",
-                   CORPUS / "validation" / "game-disjoint"]
-    chosen = qualifying_records(directories, args.records, args.shards, args.per_game, sidecars)
-    checkpoint = common.load_checkpoint(args.checkpoint)
-    probe_model = common.load_probe_model(
-        args.checkpoint, list(common.DEFAULT_CARDS_FOLDERS), [c[0] for c in chosen],
-        checkpoint=checkpoint)
-    print(f"{args.checkpoint.parent.name} ({checkpoint.epoch}), {len(chosen)} validation "
+    context = common.probe_context(args.checkpoint)
+    chosen = qualifying_records(context.validation_dirs(), args.records, args.shards,
+                                args.per_game, context.sidecars())
+    probe_model = context.model([c[0] for c in chosen])
+    print(f"{args.checkpoint.parent.name} ({context.checkpoint.epoch}), {len(chosen)} validation "
           f"targeting decisions", flush=True)
 
     gates = common.predict_all(probe_model, [c[0] for c in chosen],

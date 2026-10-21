@@ -51,7 +51,6 @@ if __package__ in (None, ""):
 
 from effect_knowledge_probes import common, record_walk, sweeps  # noqa: E402
 
-CORPUS = Path("output/effects/corpus-gen2")
 WUBRG = ("W", "U", "B", "R", "G")
 CONFIGURATIONS = ("exact", "surplus", "one short", "pip missing", "pip missing, +2",
                   "all off colour")
@@ -166,15 +165,11 @@ def main() -> None:
     parser.add_argument("--per-game", type=int, default=2)
     args = parser.parse_args()
 
-    sidecars = common.sidecar_cache(common.DEFAULT_CARDS_FOLDERS)
-    directories = [CORPUS / "validation" / "card-disjoint",
-                   CORPUS / "validation" / "game-disjoint"]
-    records = qualifying_records(directories, args.records, args.shards, args.per_game,
-                                 sidecars)
-    checkpoint = common.load_checkpoint(args.checkpoint)
-    probe_model = common.load_probe_model(
-        args.checkpoint, list(common.DEFAULT_CARDS_FOLDERS), records, checkpoint=checkpoint)
-    print(f"{args.checkpoint.parent.name} ({checkpoint.epoch}), {len(records)} validation "
+    context = common.probe_context(args.checkpoint)
+    records = qualifying_records(context.validation_dirs(), args.records, args.shards,
+                                 args.per_game, context.sidecars())
+    probe_model = context.model(records)
+    print(f"{args.checkpoint.parent.name} ({context.checkpoint.epoch}), {len(records)} validation "
           f"decisions with a land-payable cost", flush=True)
 
     # predicted[name][i], rule[name][i] for record i

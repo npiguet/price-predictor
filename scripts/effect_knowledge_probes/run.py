@@ -29,7 +29,6 @@ Nothing here does work at import time.
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import sys
 import time
@@ -52,6 +51,11 @@ from effect_knowledge_probes import (  # noqa: E402
     sweeps,
 )
 from effect_knowledge_probes import board as board_probe  # noqa: E402
+from effect_knowledge_probes.probe_set import (  # noqa: E402
+    canonical_digest,
+    load_probe_set,
+    probe_set_path,
+)
 
 
 def progress(message: str) -> None:
@@ -71,17 +75,6 @@ ABLATION_RECORDS = 1024
 METHOD_C_STEPS = 2000
 
 
-def canonical_digest(payload: dict) -> str:
-    """sha256 of the canonical JSON (sorted keys, no whitespace), ``digest`` excluded."""
-    body = {k: v for k, v in payload.items() if k != "digest"}
-    canonical = json.dumps(body, sort_keys=True, separators=(",", ":"))
-    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
-
-
-def probe_set_path(reports_dir: Path, corpus_digest: str) -> Path:
-    return Path(reports_dir) / f"knowledge-probes-set-{corpus_digest[:12]}.json"
-
-
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--checkpoint", type=Path, required=True)
@@ -91,8 +84,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                         help="where the probe games' shards are; default the "
                              "corpus's validation strata")
     parser.add_argument("--cards-folder", action="append", type=Path,
-                        help="sidecar tree (repeatable); default output/cardsfolder "
-                             "and output/tokenscripts")
+                        help="sidecar tree (repeatable); default the trees the "
+                             "checkpoint recorded")
     parser.add_argument("--abilities-root", type=Path, default=common.DEFAULT_ABILITIES)
     parser.add_argument("--vocab-path", type=Path)
     parser.add_argument("--keyword-definitions", type=Path)
@@ -123,7 +116,6 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--board-shards", type=int, default=None,
                         help="validation shards read per stratum for the board subsets")
     args = parser.parse_args(argv)
-    args.cards_folder = args.cards_folder or list(common.DEFAULT_CARDS_FOLDERS)
     unknown = set(args.families or ()) - set(labels.FAMILIES)
     if unknown:
         parser.error(f"unknown families: {sorted(unknown)}")
@@ -164,13 +156,14 @@ def _game_shards(args, corpus: Path, stratum: str) -> list[Path]:
     return common.shards_of(common.stratum_dir(corpus, stratum))
 
 
-def freeze(args, checkpoint, corpus: Path, manifest, corpus_digest: str) -> dict:
+def freeze(args, context: common.ProbeContext) -> dict:
     """Enumerate and label every probe item once for this corpus."""
     from effects.domain.records import Moment, RecordKind, TriggerPayload
     from effects.infrastructure.record_io import iter_shards, read_shard
     from effects.infrastructure.sidecar_io import converted_text_path
+    corpus, manifest = context.corpus, context.manifest
     surface = getattr(manifest, "surface", None) or "script"
-    sidecars = common.sidecar_cache(args.cards_folder)
+    sidecars = context.sidecars()
     acting_text = _acting_text_function(sidecars, surface)
 
     strata_games = {
@@ -241,7 +234,7 @@ def freeze(args, checkpoint, corpus: Path, manifest, corpus_digest: str) -> dict
     spread = labels.state_dependence(profiles)
 
     items_out = []
-    line_items = common.line_items(args.cards_folder, surface)
+    line_items = common.line_items(context.cards_folders, surface)
     for item in line_items:
         try:
             path = sidecars.path_for(item.script_file)
@@ -286,7 +279,7 @@ def freeze(args, checkpoint, corpus: Path, manifest, corpus_digest: str) -> dict
 
     payload = {
         "corpus": str(corpus),
-        "corpus_digest": corpus_digest,
+        "corpus_digest": context.corpus_digest,
         "surface": surface,
         "games": games,
         "sources": sources,
@@ -300,27 +293,11 @@ def freeze(args, checkpoint, corpus: Path, manifest, corpus_digest: str) -> dict
             "games_per_stratum": args.games_per_stratum,
             "items_per_target": args.items_per_target,
             "profile_shards": args.profile_shards,
-            "cards_folders": [str(f) for f in args.cards_folder],
+            "cards_folders": [str(f) for f in context.cards_folders],
         },
     }
     payload["digest"] = canonical_digest(payload)
     return payload
-
-
-def load_probe_set(path: Path, corpus_digest: str) -> dict:
-    """The frozen set for this corpus; refuses a missing or mismatched one."""
-    if not path.exists():
-        raise SystemExit(
-            f"no frozen probe set at {path}: run with --freeze-probe-set first "
-            "(once per curated corpus)")
-    probe_set = json.loads(path.read_text(encoding="utf-8"))
-    if probe_set.get("corpus_digest") != corpus_digest:
-        raise SystemExit(
-            f"{path} was frozen against corpus digest "
-            f"{probe_set.get('corpus_digest')}, not this corpus's {corpus_digest}")
-    if probe_set.get("digest") != canonical_digest(probe_set):
-        raise SystemExit(f"{path} does not match its own digest; it was edited")
-    return probe_set
 
 
 # ── probing ─────────────────────────────────────────────────────────────
@@ -502,11 +479,12 @@ def method_c(args, probe_model, corpus: Path, eval_records: list) -> dict:
     }
 
 
-def probe(args, checkpoint, corpus: Path, probe_set: dict) -> dict:
+def probe(args, context: common.ProbeContext, probe_set: dict) -> dict:
     """Run every selected family, the sweeps and the ablation; return the scorecard."""
     import torch
 
     from effects.infrastructure.record_io import read_shard
+    checkpoint, corpus = context.checkpoint, context.corpus
     started = time.time()
     if torch.cuda.is_available():
         torch.cuda.reset_peak_memory_stats()
@@ -531,8 +509,7 @@ def probe(args, checkpoint, corpus: Path, probe_set: dict) -> dict:
         sweep_ids = {r["record_id"] for rows in probe_set["sweeps"].values() for r in rows}
 
     def shards_for(stratum):
-        names = probe_set["sources"].get(stratum, [])
-        return [Path(n) if Path(n).is_absolute() else Path(corpus) / n for n in names]
+        return context.source_shards(probe_set["sources"].get(stratum, []))
 
     records_by_stratum: dict[str, list] = {}
     for stratum, game_ids in probe_set["games"].items():
@@ -547,7 +524,7 @@ def probe(args, checkpoint, corpus: Path, probe_set: dict) -> dict:
         raise SystemExit("no probe records were found in the probe set's sources")
     board_chosen: dict[str, dict[str, list]] = {}
     if not args.no_board:
-        board_sidecars = common.sidecar_cache(args.cards_folder)
+        board_sidecars = context.sidecars()
         for stratum in common.STRATA:
             directory = Path(corpus) / "validation" / stratum
             if not directory.exists():
@@ -561,9 +538,8 @@ def probe(args, checkpoint, corpus: Path, probe_set: dict) -> dict:
                 f"{name} {len(rows)}" for name, rows in board_chosen[stratum].items()))
             every += [r for rows in board_chosen[stratum].values() for r in rows]
     progress(f"loading {args.checkpoint}")
-    probe_model = common.load_probe_model(
-        args.checkpoint, args.cards_folder, every, checkpoint=checkpoint,
-        vocab_path=args.vocab_path, keyword_path=args.keyword_definitions)
+    probe_model = context.model(
+        every, vocab_path=args.vocab_path, keyword_path=args.keyword_definitions)
     mlp_options = {}
     bootstrap = ladder.BOOTSTRAP_RESAMPLES
 
@@ -605,7 +581,7 @@ def probe(args, checkpoint, corpus: Path, probe_set: dict) -> dict:
 
     progress("line-level probes over the ability cache")
     text_by_key: dict = {}
-    cache = (common.line_items(args.cards_folder, probe_model.surface, args.abilities_root,
+    cache = (common.line_items(context.cards_folders, probe_model.surface, args.abilities_root,
                                text_by_key=text_by_key), text_by_key)
     held_out_cards = set(checkpoint.provenance.held_out_cards)
     for name, entry in line_ladder(probe_set, probe_model, cache, targets, act_hidden,
@@ -731,28 +707,20 @@ def report_dir(reports_dir: Path, checkpoint: Path, date: str) -> Path:
 
 
 def main(argv: list[str] | None = None) -> int:
-    from effects.infrastructure.corpus_store import CorpusStore
-
     args = parse_args(argv)
-    checkpoint = common.load_checkpoint(args.checkpoint)
-    corpus = args.corpus or (Path(checkpoint.provenance.corpus_path)
-                             if checkpoint.provenance.corpus_path else None)
-    if corpus is None or not (Path(corpus) / "manifest.json").exists():
-        raise SystemExit("no curated corpus: pass --corpus, or probe a checkpoint "
-                         "trained with --corpus")
-    manifest = CorpusStore(Path(corpus)).load()
-    corpus_digest = manifest.digest()
-    set_path = probe_set_location(args, corpus_digest)
+    context = common.probe_context(
+        args.checkpoint, corpus=args.corpus, cards_folders=args.cards_folder)
+    set_path = probe_set_location(args, context.corpus_digest)
     if args.freeze_probe_set:
-        payload = freeze(args, checkpoint, Path(corpus), manifest, corpus_digest)
+        payload = freeze(args, context)
         common.write_json(set_path, payload)
         print(f"froze {len(payload['items'])} line items, "
               f"{len(payload['record_items'])} record items, "
               f"{len(payload['pairs'])} pairs; join rate "
               f"{payload['join_rate']:.3f}; digest {payload['digest'][:12]} -> {set_path}")
         return 0
-    probe_set = load_probe_set(set_path, corpus_digest)
-    scorecard = probe(args, checkpoint, Path(corpus), probe_set)
+    probe_set = load_probe_set(set_path, context.corpus_digest)
+    scorecard = probe(args, context, probe_set)
     out_dir = report_dir(args.reports_dir, args.checkpoint, scorecard["date"])
     common.write_json(out_dir / "scorecard.json", scorecard)
     write_tables(out_dir, scorecard)

@@ -35,6 +35,7 @@ from effect_knowledge_probes import (  # noqa: E402
     evasion_grid,
     labels,
     ladder,
+    probe_set,
     run,
     sweeps,
     target_restrictions,
@@ -637,28 +638,29 @@ class TestDigest:
     def test_it_is_stable_across_key_order(self):
         a = {"items": [1, 2], "games": {"x": ["g1"]}, "corpus_digest": "c"}
         b = {"corpus_digest": "c", "games": {"x": ["g1"]}, "items": [1, 2]}
-        assert run.canonical_digest(a) == run.canonical_digest(b)
+        assert probe_set.canonical_digest(a) == probe_set.canonical_digest(b)
 
     def test_it_excludes_itself(self):
         payload = {"items": [1]}
-        payload["digest"] = run.canonical_digest(payload)
-        assert run.canonical_digest(payload) == payload["digest"]
+        payload["digest"] = probe_set.canonical_digest(payload)
+        assert probe_set.canonical_digest(payload) == payload["digest"]
 
     def test_it_changes_with_a_label(self):
-        assert run.canonical_digest({"items": [1]}) != run.canonical_digest({"items": [2]})
+        digest = probe_set.canonical_digest
+        assert digest({"items": [1]}) != digest({"items": [2]})
 
     def test_a_probing_run_refuses_a_set_frozen_for_another_corpus(self, tmp_path):
         payload = {"corpus_digest": "aaa", "items": []}
-        payload["digest"] = run.canonical_digest(payload)
+        payload["digest"] = probe_set.canonical_digest(payload)
         path = tmp_path / "set.json"
         path.write_text(json.dumps(payload), encoding="utf-8")
         with pytest.raises(SystemExit, match="frozen against corpus digest"):
-            run.load_probe_set(path, "bbb")
-        assert run.load_probe_set(path, "aaa")["digest"] == payload["digest"]
+            probe_set.load_probe_set(path, "bbb")
+        assert probe_set.load_probe_set(path, "aaa")["digest"] == payload["digest"]
 
     def test_a_probing_run_refuses_without_a_set(self, tmp_path):
         with pytest.raises(SystemExit, match="--freeze-probe-set"):
-            run.load_probe_set(tmp_path / "missing.json", "aaa")
+            probe_set.load_probe_set(tmp_path / "missing.json", "aaa")
 
     def test_the_set_follows_the_reports_dir_by_default(self):
         args = run.parse_args(["--checkpoint", "c.pt", "--reports-dir", "arm/reports"])
@@ -1392,3 +1394,78 @@ class TestZoneEffects:
         moved = zone_effects.retargeted(aimed, one, two)
         assert moved.state.refs.targets == (two, "card-1")
         assert zone_effects.player_targets(moved) == [two]
+
+
+# ── what a checkpoint's probes read (FR-075) ─────────────────────────────
+
+
+def _corpus_manifest(**overrides):
+    from effects.domain.corpus_manifest import CorpusManifest
+
+    fields = dict(
+        seed=1, surface="script", vocab_path="models/effects/vocab-script.txt",
+        variant_scripts="", holdout_permille=20, holdout_max_carriers=8,
+        text_cap=0, card_disjoint_text_cap=0, training_records=1, class_mix={},
+        delivered_mix={}, held_out_cards=(), held_out_texts=(),
+        card_disjoint_games=("cg",), game_disjoint_games=("gg",), rarity={},
+        sources=(), per_class={}, per_stratum={}, unique_texts={}, shortfall={},
+    )
+    fields.update(overrides)
+    return CorpusManifest(**fields)
+
+
+class TestProbeContext:
+    """Every probe reads the corpus, sidecar trees and variant tree its checkpoint
+    trained against, never a corpus or probe set named in the script."""
+
+    def _context(self, tmp_path, monkeypatch, *, recorded_digest=None):
+        from effects.infrastructure.corpus_store import CorpusStore
+        from effects.infrastructure.effect_model_store import SplitProvenance
+
+        variants = tmp_path / "variant-scripts"
+        manifest = _corpus_manifest(variant_scripts=str(variants))
+        corpus = tmp_path / "corpus"
+        CorpusStore(corpus).save(manifest)
+        checkpoint = SimpleNamespace(
+            provenance=SplitProvenance(
+                corpus_path=str(corpus),
+                corpus_digest=recorded_digest or manifest.digest(),
+            ),
+            cards_folders=(str(tmp_path / "cardsfolder"), str(tmp_path / "tokenscripts")),
+            epoch=3,
+        )
+        monkeypatch.setattr(common, "load_checkpoint", lambda path: checkpoint)
+        return common.probe_context(tmp_path / "latest.pt"), manifest, corpus, variants
+
+    def test_the_corpus_is_the_one_the_checkpoint_recorded(self, tmp_path, monkeypatch):
+        context, manifest, corpus, _ = self._context(tmp_path, monkeypatch)
+        assert context.corpus == corpus
+        assert context.corpus_digest == manifest.digest()
+        assert context.validation_dirs() == [
+            corpus / "validation" / "card-disjoint",
+            corpus / "validation" / "game-disjoint",
+        ]
+
+    def test_the_sidecars_read_the_variant_tree_the_corpus_recorded(
+        self, tmp_path, monkeypatch,
+    ):
+        """Without it a variant card's ability keys resolve to no text."""
+        context, _, _, variants = self._context(tmp_path, monkeypatch)
+        assert context.variant_scripts == variants
+        assert context.sidecars().path_for("variant-scripts/shock_variant.txt").parent == (
+            variants
+        )
+        assert context.cards_folders == (tmp_path / "cardsfolder", tmp_path / "tokenscripts")
+
+    def test_a_corpus_rebuilt_since_training_is_refused(self, tmp_path, monkeypatch):
+        with pytest.raises(SystemExit, match="rebuilt"):
+            self._context(tmp_path, monkeypatch, recorded_digest="an-older-build")
+
+    def test_a_probe_set_frozen_on_another_corpus_is_refused(self, tmp_path, monkeypatch):
+        context, *_ = self._context(tmp_path, monkeypatch)
+        path = probe_set.probe_set_path(tmp_path, context.corpus_digest)
+        payload = {"corpus_digest": "another-corpus", "items": []}
+        payload["digest"] = probe_set.canonical_digest(payload)
+        path.write_text(json.dumps(payload), encoding="utf-8")
+        with pytest.raises(SystemExit, match="another-corpus"):
+            context.load_probe_set(tmp_path)

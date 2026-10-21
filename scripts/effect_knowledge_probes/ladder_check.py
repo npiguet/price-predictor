@@ -37,9 +37,6 @@ if __package__ in (None, ""):
 
 from effect_knowledge_probes import common, labels, ladder  # noqa: E402
 
-PROBE_SET = Path("output/effects/reports/knowledge-probes-set-b3adb69a2950.json")
-CORPUS = Path("output/effects/corpus-gen2")
-
 
 def _spearman(y, prediction) -> float:
     from scipy.stats import spearmanr
@@ -130,17 +127,18 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("checkpoint", type=Path)
     parser.add_argument("--targets", default="damage_taken,may_block,dies")
-    parser.add_argument("--probe-set", type=Path, default=PROBE_SET)
+    parser.add_argument("--probe-set-dir", type=Path, default=common.DEFAULT_REPORTS,
+                        help="where the corpus's frozen probe set is")
     parser.add_argument("--amount-alone", action="store_true",
                         help="read damage_taken's rung 3 without the affected gate")
     args = parser.parse_args()
-    import json
+    context = common.probe_context(args.checkpoint)
 
     if args.amount_alone:
         read_amount_alone()
 
     targets = set(args.targets.split(","))
-    probe_set = json.loads(args.probe_set.read_text(encoding="utf-8"))
+    probe_set = context.load_probe_set(args.probe_set_dir)
     kinds = {s.name: s.kind for s in labels.TARGETS}
     items_by_stratum: dict[str, dict[str, list]] = defaultdict(lambda: defaultdict(list))
     for row in probe_set["record_items"]:
@@ -152,17 +150,14 @@ def main() -> None:
             group=row["group"]))
     records_by_stratum = {}
     for stratum, game_ids in probe_set["games"].items():
-        shards = [Path(n) if Path(n).is_absolute() else CORPUS / n
-                  for n in probe_set["sources"].get(stratum, [])]
+        shards = context.source_shards(probe_set["sources"].get(stratum, []))
         wanted = set(items_by_stratum[stratum])
         records_by_stratum[stratum] = [
             record for _, record in common.read_games(shards, set(game_ids), wanted)]
         print(f"{stratum}: {len(records_by_stratum[stratum])} records", flush=True)
     every = [r for rows in records_by_stratum.values() for r in rows]
-    checkpoint = common.load_checkpoint(args.checkpoint)
-    probe_model = common.load_probe_model(
-        args.checkpoint, list(common.DEFAULT_CARDS_FOLDERS), every, checkpoint=checkpoint)
-    print(f"{args.checkpoint.parent.name} ({checkpoint.epoch})", flush=True)
+    probe_model = context.model(every)
+    print(f"{args.checkpoint.parent.name} ({context.checkpoint.epoch})", flush=True)
 
     for stratum, records in records_by_stratum.items():
         game_of = {r.record_id: r.game_id for r in records}

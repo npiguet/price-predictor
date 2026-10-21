@@ -14,7 +14,6 @@ drawn from, so a soft diagonal there is a fault of fit rather than of generaliza
 selection on texts no training card carries.
 """
 import argparse
-import json
 import sys
 from pathlib import Path
 
@@ -27,30 +26,29 @@ if __package__ in (None, ""):
 from effect_knowledge_probes import common, record_walk, sweeps  # noqa: E402
 from effect_knowledge_probes.board_edits import BoardEdit  # noqa: E402
 
-CORPUS = Path("output/effects/corpus-gen2")
-PROBE_SET = Path("output/effects/reports/knowledge-probes-set-b3adb69a2950.json")
 VALUES = range(1, 9)
 
 
-def probe_records(host: str) -> list[tuple[object, str]]:
-    probe_set = json.loads(PROBE_SET.read_text(encoding="utf-8"))
+def probe_records(context, probe_set: dict, host: str) -> list[tuple[object, str]]:
+    """The frozen probe set's damage-sweep records on ``host``, with their targets."""
     rows = [r for r in probe_set["sweeps"]["damage"] if r["host"] == host]
     ids = {r["record_id"] for r in rows}
     found = {}
     for stratum, games in probe_set["games"].items():
-        shards = [CORPUS / n for n in probe_set["sources"][stratum]]
+        shards = context.source_shards(probe_set["sources"][stratum])
         for _, rec in common.read_games(shards, set(games), ids):
             found[rec.record_id] = rec
     return [(found[r["record_id"]], r["entity"]) for r in rows]
 
 
-def qualifying_records(directory: Path, count: int, shards: int) -> list[tuple[object, str]]:
+def qualifying_records(
+    directory: Path, count: int, shards: int, sidecars,
+) -> list[tuple[object, str]]:
     """The first ``count`` single-target damage records with a literal amount that qualify."""
     from effects.domain.damage_step_keywords import KeywordResolver
     from effects.domain.effect_targets import derive_targets
     from effects.domain.lethality_counterfactuals import qualify
 
-    sidecars = common.sidecar_cache(common.DEFAULT_CARDS_FOLDERS)
     resolver = KeywordResolver(sidecars)
 
     def choose(record):
@@ -76,17 +74,18 @@ def main() -> None:
     parser.add_argument("--host", default="spell", help="probe source: spell or triggered")
     parser.add_argument("--records", type=int, default=40)
     parser.add_argument("--shards", type=int, default=200)
+    parser.add_argument("--probe-set-dir", type=Path, default=common.DEFAULT_REPORTS,
+                        help="where the corpus's frozen probe set is (probe source)")
     args = parser.parse_args()
+    context = common.probe_context(args.checkpoint)
     if args.source == "probe":
-        pairs = probe_records(args.host)
+        pairs = probe_records(context, context.load_probe_set(args.probe_set_dir), args.host)
     else:
-        directory = CORPUS / ("training" if args.source == "training"
-                              else "validation/card-disjoint")
-        pairs = qualifying_records(directory, args.records, args.shards)
+        directory = (context.training_dir if args.source == "training"
+                     else context.stratum_dir("card-disjoint"))
+        pairs = qualifying_records(directory, args.records, args.shards, context.sidecars())
     records = [record for record, _ in pairs]
-    checkpoint = common.load_checkpoint(args.checkpoint)
-    probe_model = common.load_probe_model(
-        args.checkpoint, list(common.DEFAULT_CARDS_FOLDERS), records, checkpoint=checkpoint)
+    probe_model = context.model(records)
     grid = np.zeros((8, 8))
     batcher = probe_model.batcher
     for record, entity in pairs:

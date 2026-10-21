@@ -37,7 +37,6 @@ if __package__ in (None, ""):
 from effect_knowledge_probes import common, record_walk  # noqa: E402
 from effect_knowledge_probes.board_edits import BoardEdit  # noqa: E402
 
-CORPUS = Path("output/effects/corpus-gen2")
 COLOUR_WORDS = {"W": "white", "U": "blue", "B": "black", "R": "red", "G": "green"}
 
 #: Attacker rows: the keyword the attacker is granted; ``None`` grants nothing.
@@ -199,16 +198,12 @@ def main() -> None:
     parser.add_argument("--shards", type=int, default=200)
     args = parser.parse_args()
 
-    sidecars = common.sidecar_cache(common.DEFAULT_CARDS_FOLDERS)
-    resolver = KeywordResolver(sidecars)
-    directories = [CORPUS / "validation" / "card-disjoint",
-                   CORPUS / "validation" / "game-disjoint"]
-    triples = qualifying_records(directories, args.records, args.shards, resolver.keywords_of)
-    checkpoint = common.load_checkpoint(args.checkpoint)
-    probe_model = common.load_probe_model(
-        args.checkpoint, list(common.DEFAULT_CARDS_FOLDERS), [r for r, _, _ in triples],
-        checkpoint=checkpoint)
-    print(f"{args.checkpoint.parent.name} ({checkpoint.epoch}), "
+    context = common.probe_context(args.checkpoint)
+    resolver = KeywordResolver(context.sidecars())
+    triples = qualifying_records(
+        context.validation_dirs(), args.records, args.shards, resolver.keywords_of)
+    probe_model = context.model([r for r, _, _ in triples])
+    print(f"{args.checkpoint.parent.name} ({context.checkpoint.epoch}), "
           f"{len(triples)} validation attacker-blocker pairs", flush=True)
 
     grid = np.zeros((len(ATTACKER_KEYWORDS), len(BLOCKER_TRAITS)))
