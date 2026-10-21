@@ -33,7 +33,13 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from effects.domain.collection_caps import CollectionCaps
-from effects.domain.script_variants import perturb, variant_name
+from effects.domain.script_variants import (
+    is_multi_face,
+    perturb,
+    renamed_script,
+    script_card_name,
+    variant_name,
+)
 from effects.infrastructure.variant_sidecar_connector import VariantSidecarConnector
 from price_predictor.infrastructure.card_filenames import sanitize_card_name
 
@@ -188,24 +194,6 @@ def perturb_script(
     return None
 
 
-def is_multi_face(source_lines: list[str]) -> bool:
-    """Whether a Forge script declares more than one card face.
-
-    A variant takes its own name, and renaming is a rewrite of the script's
-    first ``Name:`` line -- which on a two-faced card renames the front and
-    leaves the back answering to the original. Forge then builds card rules
-    whose faces disagree, and the failure is not a skipped card: ``StaticData``
-    throws while constructing the whole database, so every Forge startup that
-    sees the script dies, including runs with nothing to do with variants.
-
-    Perturbing one parameter of one face is not what these scripts are for
-    anyway, so they are left alone rather than renamed more cleverly.
-    """
-    return any(
-        line.strip().startswith("ALTERNATE") for line in source_lines
-    )
-
-
 def generate_variants(
     forge_cards_path: Path,
     output_path: Path,
@@ -243,7 +231,7 @@ def generate_variants(
             lines = source.read_text(encoding="utf-8").splitlines()
         except OSError:
             continue
-        card_name = _card_name(lines)
+        card_name = script_card_name(lines)
         if card_name is None or fold_card_name(card_name) in held_out:
             continue
         if is_multi_face(lines):
@@ -259,24 +247,10 @@ def generate_variants(
         # sidecar at exactly that path.
         path = output_path / f"{sanitize_card_name(name)}.txt"
         path.write_text(
-            "\n".join(_rename(perturbed, name)) + "\n", encoding="utf-8",
+            "\n".join(renamed_script(perturbed, name)) + "\n", encoding="utf-8",
         )
         generated.append(GeneratedVariant(name, card_name, path, description))
     return generated
-
-
-def _card_name(lines: list[str]) -> str | None:
-    for line in lines:
-        if line.startswith("Name:"):
-            return line[len("Name:"):].strip()
-    return None
-
-
-def _rename(lines: list[str], name: str) -> list[str]:
-    """Give the variant its own name so Forge files it as a separate card."""
-    return [
-        f"Name:{name}" if line.startswith("Name:") else line for line in lines
-    ]
 
 
 def held_out_cards(

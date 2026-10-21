@@ -16,14 +16,16 @@ from effects.application.collect_coverage import (
     DEFAULT_DECKS_PER_ROUND,
     DEFAULT_NO_PROGRESS_ROUNDS,
     DEFAULT_TARGET_RECORDS,
-    CardCoverage,
     CollectCoverageConfig,
+    residues,
+)
+from effects.domain.coverage import (
+    CardCoverage,
     ConsultVerdict,
     deck_weights,
     is_complete,
     qualifying_cards,
     rank_by_consult,
-    residues,
     retire_stalled,
 )
 from effects.domain.event_schema import Event, EventType
@@ -1006,7 +1008,7 @@ _FIXTURES = Path(__file__).parents[3] / "fixtures" / "effects"
 
 class TestHeldOutTextUnit:
     def test_a_held_out_text_is_one_only_listed_cards_carry(self):
-        from effects.application.collect_coverage import held_out_texts_of
+        from effects.domain.coverage import held_out_texts_of
 
         texts = held_out_texts_of(frozenset({"alpha", "beta"}), {
             "alpha": ["SP$ Rare | Thing$ 1", "SP$ Common"],
@@ -1040,7 +1042,7 @@ class TestHeldOutTextUnit:
         assert counted == expected
 
     def test_satisfaction_is_distinct_games_at_the_floor(self):
-        from effects.application.collect_coverage import TextCoverage
+        from effects.domain.coverage import TextCoverage
 
         unit = TextCoverage(text="t", games={"g1", "g2", "g3", "g4"})
         assert not unit.satisfied(5)
@@ -1049,11 +1051,8 @@ class TestHeldOutTextUnit:
 
     def test_the_round_ends_without_waiting_on_uncastable_texts(self):
         """FR-037 / spec Story 2 scenario 6."""
-        from effects.application.collect_coverage import (
-            TextCoverage,
-            is_text_round_complete,
-            text_residues,
-        )
+        from effects.application.collect_coverage import text_residues
+        from effects.domain.coverage import TextCoverage, is_text_round_complete
 
         coverage = {
             "done": TextCoverage(text="done", games={f"g{i}" for i in range(5)}),
@@ -1070,11 +1069,8 @@ class TestHeldOutTextUnit:
         """Spec Story 2 scenario 5."""
         import random
 
-        from effects.application.collect_coverage import (
-            TextCoverage,
-            build_coverage_decks,
-            text_deck_weights,
-        )
+        from effects.application.collect_coverage import build_coverage_decks
+        from effects.domain.coverage import TextCoverage, text_deck_weights
 
         carriers = {"t1": frozenset({"alpha"}), "t2": frozenset({"beta"})}
         coverage = {"t1": TextCoverage(text="t1"), "t2": TextCoverage(
@@ -1150,12 +1146,12 @@ class TestNonDeckTypesLeaveTheUnit:
         ("artifact attraction", False),
     ])
     def test_the_types_line_decides(self, types, deckable):
-        from effects.application.collect_coverage import is_deckable
+        from effects.domain.coverage import is_deckable
 
         assert is_deckable(f"name: x\ntypes: {types}\n") is deckable
 
     def test_a_card_without_a_types_line_is_kept(self):
-        from effects.application.collect_coverage import is_deckable
+        from effects.domain.coverage import is_deckable
 
         assert is_deckable("name: x\n")
 
