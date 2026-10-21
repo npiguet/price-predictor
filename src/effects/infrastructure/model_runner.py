@@ -188,35 +188,39 @@ def load_runnable(
     return encoder, model, batcher, fields
 
 
-def stratum_records(config, checkpoint) -> tuple[list, list, str]:
-    """``(card_disjoint, training, why_not)`` from the checkpoint's own split.
+def stratum_records(config, checkpoint) -> tuple[list, set, str]:
+    """``(card_disjoint, training_acting, why_not)`` from the checkpoint's split.
 
     The split comes from the checkpoint rather than being recomputed: the corpus
     is append-only, so a recomputed split would score the gate partly on games
     the model trained on.
 
-    The training records come back too, because gate 1's stratum is defined by
-    what the training games contain — a text the baseline never saw is the only
-    one it cannot simply recall.
+    The training side comes back as its distinct ``acting_keys`` tuples, because
+    gate 1's stratum is defined by what the training games contain — a text the
+    baseline never saw is the only one it cannot simply recall — and that is all
+    it needs of them. The training records themselves are the whole raw corpus.
     """
+    from effects.domain.records import acting_keys
     from effects.infrastructure.record_io import read_records
 
     held_out = frozenset(checkpoint.provenance.card_disjoint_games)
     if not held_out:
-        return [], [], (
+        return [], set(), (
             "the checkpoint records no card-disjoint games, so there is no "
             "held-out stratum to score gate 1 on"
         )
-    validation = held_out | frozenset(checkpoint.provenance.game_disjoint_games)
-    card_disjoint, training = [], []
+    validation = checkpoint.provenance.validation_games
+    card_disjoint, training_acting = [], set()
     for record in read_records(Path(config.records_dir)):
         if record.game_id in held_out:
             card_disjoint.append(record)
         elif record.game_id not in validation:
-            training.append(record)
+            keys = acting_keys(record)
+            if keys:
+                training_acting.add(keys)
     if not card_disjoint:
-        return [], [], (
+        return [], set(), (
             f"none of the checkpoint's {len(held_out)} card-disjoint games "
             f"appear in {config.records_dir}"
         )
-    return card_disjoint, training, ""
+    return card_disjoint, training_acting, ""

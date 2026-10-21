@@ -71,20 +71,26 @@ class GateOneMetrics:
 
 def acting_text(record, batcher: SurfaceBatcher) -> str | None:
     """The text of the line that acted, or None where nothing did."""
-    for key in acting_keys(record):
+    return _text_of_keys(acting_keys(record), batcher)
+
+
+def _text_of_keys(keys, batcher: SurfaceBatcher) -> str | None:
+    for key in keys:
         text = batcher.text_of(key)
         if text is not None:
             return text
     return None
 
 
-def training_texts(records, batcher: SurfaceBatcher) -> set[str]:
-    """Every acting-line text the training games contain."""
-    texts = set()
-    for record in records:
-        text = acting_text(record, batcher)
-        if text is not None:
-            texts.add(text)
+def training_texts(acting, batcher: SurfaceBatcher) -> set[str]:
+    """Every acting-line text the training games contain.
+
+    ``acting`` is the training records' distinct ``acting_keys`` tuples rather
+    than the records: the training stratum is the whole raw corpus, and its
+    distinct acting lines are what fits in memory.
+    """
+    texts = {_text_of_keys(keys, batcher) for keys in acting}
+    texts.discard(None)
     return texts
 
 

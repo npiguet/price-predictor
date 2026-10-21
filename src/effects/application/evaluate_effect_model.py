@@ -122,10 +122,13 @@ def run_gate_one(
         stratum_records,
     )
 
-    records, training, message = stratum_records(config, main)
+    records, training_acting, message = stratum_records(config, main)
     if not records:
         return CheckResult("gate-1", CheckStatus.SKIPPED, message)
 
+    # Both checkpoints read one vocabulary (require_same_split), so one
+    # surface's texts decide the stratum for both.
+    stratum = None
     scores = {}
     for name, checkpoint in (("model", main), ("identity", identity)):
         encoder, model, batcher, fields = load_runnable(
@@ -133,9 +136,10 @@ def run_gate_one(
             vocab_path=vocab_path, keyword_path=keyword_path,
             records=records,
         )
-        stratum = unique_text_records(
-            records, batcher, seen=training_texts(training, batcher),
-        )
+        if stratum is None:
+            stratum = unique_text_records(
+                records, batcher, seen=training_texts(training_acting, batcher),
+            )
         if not stratum:
             return CheckResult(
                 "gate-1", CheckStatus.SKIPPED,

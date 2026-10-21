@@ -27,6 +27,7 @@ from effects.domain.records import (
     Moment,
     RecordKind,
     ResolutionPayload,
+    acting_keys,
 )
 from effects.domain.state_snapshot import GlobalState, StateSnapshot
 
@@ -72,6 +73,10 @@ def _record(
     )
 
 
+def _acting(records) -> set:
+    return {acting_keys(record) for record in records}
+
+
 @pytest.fixture
 def batcher() -> _Batcher:
     return _Batcher({0: "deal 3 damage", 1: "draw a card", 2: "gain 2 life"})
@@ -97,13 +102,13 @@ class TestTheStratum:
         training = [_record(0)]
         held_out = [_record(0), _record(1)]
         stratum = unique_text_records(
-            held_out, batcher, seen=training_texts(training, batcher),
+            held_out, batcher, seen=training_texts(_acting(training), batcher),
         )
         assert [acting_text(r, batcher) for r in stratum] == ["draw a card"]
 
     def test_a_text_absent_from_training_is_kept(self, batcher):
         stratum = unique_text_records(
-            [_record(2)], batcher, seen=training_texts([_record(0)], batcher),
+            [_record(2)], batcher, seen=training_texts(_acting([_record(0)]), batcher),
         )
         assert len(stratum) == 1
 
@@ -134,12 +139,12 @@ class TestTheStratum:
 
 class TestTrainingTexts:
     def test_it_collects_every_acting_text(self, batcher):
-        assert training_texts([_record(0), _record(1)], batcher) == {
+        assert training_texts(_acting([_record(0), _record(1)]), batcher) == {
             "deal 3 damage", "draw a card",
         }
 
     def test_records_without_an_acting_line_contribute_nothing(self, batcher):
-        assert training_texts([_record(None)], batcher) == set()
+        assert training_texts(_acting([_record(None)]), batcher) == set()
 
 
 class TestMetrics:
