@@ -85,7 +85,9 @@ retired; reports the texts under the floor and, separately, the texts with no ca
 | ~~`--game-disjoint-games`~~ | removed | argparse rejects it |
 
 Fails when a display-name keyword expansion lands on a line whose `script_api_type` is not
-`Keyword` (FR-015). The summary log adds family shortfalls and the real/what-if counts.
+`Keyword` (FR-015). The summary log adds family shortfalls and the real/what-if counts, each class's
+target beside what was delivered, and a warning on a class delivered short. Token scripts count as
+carriers of a held-out text under either holdout unit (FR-040).
 
 ## `python -m effects train-effect-model` (existing)
 
@@ -97,7 +99,7 @@ Fails when a display-name keyword expansion lands on a line whose `script_api_ty
 | `--value-weight` | 0.05 | value-head loss weight |
 | `--encoder-layers` | 4 | encoder layers |
 | `--encoder-d-model` | 256 | encoder width; refused when not divisible by the head count |
-| `--mlm-weight`, `--mlm-mask-prob`, `--api-weight` | 0.1, 0.15, 0.05 | now wired |
+| `--mlm-weight`, `--mlm-mask-prob`, `--api-weight` | 0.1, 0.15, 0.003 | wired; a masked position's number value is zeroed with its token |
 | `--keyword-expand-p` | 0.25 (unchanged) | training only |
 
 Epoch line adds: share of trained records per rarity bucket and per rule family; the value, verdict,
@@ -118,10 +120,12 @@ constant (0). Reports each truncated line by provenance key.
 |---|---|---|
 | `--win-rates` | `output/sealed/cards-win-rates.txt` | read by the decodability battery |
 | `--cards-folder` | `output/cardsfolder/`, `output/tokenscripts/` | repeatable; sidecar roots |
+| `--variant-scripts` | the tree the corpus manifest records | the perturbed-script tree |
 
 Report adds: per-text card-disjoint results by rarity bucket and family (also averaged over
 families); per-family memorization gap; random-seat slice; real-decision legality slice; withheld
-keyword zero-shot, beside trained keywords; "gate 1 skipped" when no identity variant is given.
+keyword zero-shot, beside trained keywords; "gate 1 skipped" when no identity variant is given, or
+when the checkpoint records no curated corpus; `[todo]` lines for the three unbuilt FR-116 checks.
 
 ## `python -m effects scorer-smoke-test` (new)
 
@@ -138,7 +142,8 @@ Copies the converted `.txt` files under `--scratch-dir`, runs `python -m sealed 
 trailing deterministic-feature block of its vector (zeros for a card with no ability line), and runs
 `python -m sealed train-scorer` Phase A (`--embedding-lr 0`) on that directory as a subprocess, with
 its checkpoint directory under `--scratch-dir`. Writes nothing under `output/cardsfolder/`. Imports
-nothing from `sealed.application`.
+nothing from `sealed.application`. Refuses a `--scratch-dir` whose card tree already holds encoded
+vectors, deleting nothing.
 
 ## `scripts/effect_embedding_probes/*.py` (existing)
 
@@ -149,7 +154,8 @@ vocabulary, cache and width of `e` from them. Output goes under
 `output/effects/reports/embedding-probes-<label>-<date>/`, the label being the checkpoint stem, or
 `<run dir>-latest` for a `latest.pt`.
 `taxonomy` columns are omitted when that cache is absent. `pca_directions.py` adds the participation
-ratio.
+ratio. `effect_profiles.py` merges the training stratum's copies of one record by `record_id`, across
+shards, so each curated record is profiled once.
 
 ## `scripts/effect_knowledge_probes/run.py` (new)
 
@@ -158,7 +164,7 @@ ratio.
 | `--checkpoint` | required | any effects checkpoint, gen-1 included |
 | `--corpus` | the checkpoint's recorded corpus | curated corpus the probe set belongs to |
 | `--records-dir` | none | override: read the probe games from these raw shards instead of the corpus's `validation/{card-disjoint,game-disjoint}/` shards, which the probe set lists |
-| `--cards-folder` | `output/cardsfolder/`, `output/tokenscripts/` | sidecar trees (gen-1: the kept-aside copy) |
+| `--cards-folder` | the trees the checkpoint recorded, else `output/cardsfolder/`, `output/tokenscripts/` | sidecar trees (gen-1: the kept-aside copy) |
 | `--abilities-root` | `output/effects/abilities` | cache |
 | `--freeze-probe-set` | off | enumerate and write the probe set for `--corpus`, then exit |
 | `--families` | all | comma list of family names |
@@ -173,13 +179,15 @@ ratio.
 | `--reports-dir` | `output/effects/reports/` | parent of the probe-set file and the output directory |
 | `--vocab-path`, `--keyword-definitions` | the checkpoint's recorded paths | overrides |
 
-Refuses to probe when no frozen set exists for `--corpus`, or when the set's corpus digest does not
-match. The probe set stores line items grouped per key (`{key, labels: {target: value}, weights}`);
+The corpus, the sidecar trees and the variant tree resolve from the checkpoint and its corpus
+manifest (`common.probe_context`). Refuses a checkpoint naming no curated corpus, and a corpus whose
+manifest digest differs from the one the checkpoint recorded. Refuses to probe when no frozen set
+exists for `--corpus`, or when the set's corpus digest does not match. The probe set stores line items grouped per key (`{key, labels: {target: value}, weights}`);
 each ablation entry carries the field's `base_loss` beside the increases. Output: `output/effects/reports/knowledge-probes-<checkpoint stem>-<date>/` with tables and
 `scorecard.json`.
 
 ## `scripts/effect_knowledge_probes/compare.py` (new)
 
 `compare.py SCORECARD [SCORECARD …] [--output PATH]`: side-by-side table per family and rung, and a
-ranking on rung 1 − rung 1w per probe type. Warns when the scorecards record different probe-set
+ranking on rung 1 − rung 1w per probe type and per score (AUC and R² ranked apart, never averaged). Warns when the scorecards record different probe-set
 digests.

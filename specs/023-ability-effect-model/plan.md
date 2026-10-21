@@ -133,9 +133,9 @@ This feature both moves data and runs model compute, so the checklist applies in
   inputs are co-located on the GPU for training, encoding, and evaluation.
 - **GPU batching** — *Addressed.* Batches mix several games and group each game's records so grouped
   records share a board, which is what makes one encode serve many records. No per-record host↔device
-  transfer sits in the training loop; per-epoch metric reads are hoisted out. The root spec's documented
-  fallback when live context re-encoding exceeds the 8 GB budget is `--context-cache`, a stop-gradient
-  momentum cache refreshed every `--cache-refresh` batches.
+  transfer sits in the training loop; per-epoch metric reads are hoisted out. Context abilities are
+  always re-encoded live; a step's texts are encoded in length-sorted groups, each padded to its own
+  longest, which is what keeps live re-encoding inside the 8 GB budget. There is no momentum cache.
 - **Vectorize hot loops** — *Addressed.* The two per-item Python loops this feature adds are the
   snapshot-to-tensor derivation in `domain/effect_head_input.py` and per-line JSON parsing in
   `infrastructure/record_io.py`. The first builds one batch's entity tensors with numpy/torch array

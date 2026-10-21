@@ -366,6 +366,14 @@ Every gen-2 record carries `random_seat`, and every gen-2 legality record carrie
   that template. An eligible template is held out when `crc32` of the template modulo 1000
   is below `--holdout-permille`. Every text with a held-out template is a held-out text,
   and every card carrying one is a held-out card.
+- Token scripts are carriers under either unit, counted toward `--holdout-max-carriers`. A token
+  script carrying a held-out text is held out by its script file, so a game holding that token is
+  a held-out game. `holdout-cards`, `build-corpus` and `train-effect-model` all read the converted
+  token tree for it.
+- Under `template` a script text is held out when its template is. `collect-variants` deletes,
+  before decking, every variant whose lines print a held-out text or template under the holdout
+  `build-corpus` chooses. `build-corpus` does not write a training game's record acting through a
+  held-out text, and counts it under the `dropped-held-out-text` stratum.
 - `holdout-cards`, `build-corpus` and `train-effect-model` share the rule through
   `--holdout-unit template|text`. `text` is the base spec's rule, kept for corpora
   collected under it. Manifests and checkpoints record the unit, and one that records none
@@ -423,7 +431,9 @@ Playability families are read from payload fields:
 ## 8.3 Selection order
 
 Training records are selected per class, from the class budget the class mixture sets as
-in the base spec, in four steps. A text with `n` distinct records in a cell supplies at
+in the base spec, in four steps. Every quota and copy plan is sized on the records of training
+games only: the survey routes each game at the end of its shard (held out, else game-disjoint,
+else training) before it counts the game's records toward the plan. A text with `n` distinct records in a cell supplies at
 most `min(--reuse-cap × n, --text-cap)` written records there, repeats included, and a
 cell's capacity is the sum of that over its texts.
 
@@ -499,10 +509,24 @@ names, so a corpus built from records collected afterwards needs no repair.
   - `r` rises linearly from 0 to `--e-noise` over the first `--steps-per-epoch` steps.
 - Value head. A training-only head reads `e` alone and predicts values parsed from the
   line's script, summed over its segments: damage dealt, power change, toughness change,
-  counters placed, cards drawn, and mana cost by colour and generic, by count regression;
-  whether the cost taps and whether it sacrifices, as binary targets. A target is masked
-  where the script states no fixed value. The head is filtered out at save time, like the
-  MLM and script-API heads.
+  counters placed, counters removed, cards drawn, and mana cost by colour and generic, by count
+  regression; whether the cost taps and whether it sacrifices, as binary targets. The targets
+  are read from the line's script text on both encoding surfaces. A target is masked where the
+  script states no fixed value. The head is filtered out at save time, like the MLM and
+  script-API heads.
+
+  | Target | Read from | Absent key |
+  |---|---|---|
+  | damage | `NumDmg$` | 0 |
+  | power change | `NumAtt$`, `AddPower$` | 0 |
+  | toughness change | `NumDef$`, `AddToughness$` | 0 |
+  | counters placed | `CounterNum$` on `PutCounter`, `PutCounterAll` | 1 |
+  | counters removed | `CounterNum$` on `RemoveCounter` | 1 |
+  | counters removed | `CounterNum$` on `RemoveCounterAll` | masked |
+  | cards drawn | `NumCards$` on `Draw` | 1 |
+
+  A `MoveCounter`, `AddOrRemoveCounter` or `ReplaceCounter` segment masks both counter targets.
+  A non-literal value masks its target.
 - At-least targets. For each amount target, the value head also predicts whether the
   amount's magnitude is at least k, for k = 1 to 40, each as a binary target under the
   amount's mask, beside the amount's count or signed loss. The forty are averaged, so each
@@ -534,16 +558,18 @@ names, so a corpus built from records collected afterwards needs no repair.
 - No pairing term. The encoder has no paired-encoding loss and no pairing head.
 - Magnitude cap. Every count and signed-delta magnitude is scored at no more than 40, its
   sign kept: in the per-entity field losses, the created-objects counts, the
-  constant-predictor floor and the evaluation's Poisson deviance. The value head's
-  script-stated amounts are not capped.
+  constant-predictor floor and the evaluation's Poisson deviance. A per-entity count is also
+  scored from zero, never below. The value head's script-stated amounts are not capped.
 - Verdict and created-objects heads. Training applies both heads' losses as the base spec
   defines them, beside the per-entity loss: the verdict bits on `decision` records, the cost
   paid on cost halves, the trigger-fired bit on `trigger` records, and the created-objects
   slots on effect halves and `rewrite` records. A `decision` record's `[ACT]` reads the `e`
   of its candidate's acting line.
 - MLM and script-API heads. Training applies the base spec's MLM loss (`--mlm-weight`,
-  `--mlm-mask-prob`) and script-API loss (`--api-weight`). The script-API head predicts the
-  line's `script_api_type` and the parameter keys of every segment of its `script_text`. The
+  `--mlm-mask-prob`) and script-API loss (`--api-weight`, default 0.003). A masked position's
+  numeric value and number flag are zeroed with its token. The script-API head predicts the
+  line's `script_api_type` and the parameter keys of every segment of its `script_text`, on both
+  encoding surfaces. The
   MLM head is sized from `--encoder-d-model`. Both are training-only and filtered at save
   time.
 - Encoder size. `--encoder-layers` and `--encoder-d-model` replace the hardcoded encoder
@@ -564,7 +590,7 @@ names, so a corpus built from records collected afterwards needs no repair.
   | qualifies | a resolution effect half whose chain has one `DealDamage`/`DamageAll` segment with a literal or paid-X amount, or one `Pump`/`PumpAll` lowering toughness by one; no `Remember*`, `Condition*`, `ReplaceDying*`, `Imprint*`, `DamageSource`, `DividedAsYouChoose`, `DivideEvenly`, `ExcessSVar`, `ExcessDamage` or `KW` parameter in any segment |
   | hit | each battlefield creature the amount hit changes in the amount and its zone only; each player it hit loses exactly the amount; no other creature is hit |
   | excluded | a source with deathtouch, wither, infect or lifelink; a hit creature with indestructible, a shield counter or an attachment; a real outcome the rule contradicts |
-  | copy | a new amount and one hit creature's new toughness, each drawn uniformly from 1 to 8, the creature's marked damage cleared; a literal amount is edited in the copy's text, read under a key of its own, and a paid X in the copy's references |
+  | copy | a new amount and one hit creature's new toughness, each drawn uniformly from 1 to 8, the creature's marked damage cleared; a literal amount is edited in the copy's text, read under a key of its own, and a paid X in the copy's references. On the prose surface the edit is to the converted prose's amount, with its role spans shifted by any change in length |
   | label | every hit creature dies when its damage reaches its toughness or its toughness falls to 0 or below, and stays otherwise; its damage or toughness change, and each hit player's life change, is the new amount |
 
   The copies are drawn from the step's generator before its other draws, so K = 0 trains
@@ -598,6 +624,7 @@ names, so a corpus built from records collected afterwards needs no repair.
 | `--save-every-epoch` | off | also keep each epoch's checkpoint under `<model-output>/epochs/` |
 | `--e-noise` | 0.1 | noise ratio `r`, relative to the running covariance of `e` |
 | `--value-weight` | 0.05 | value-head loss weight |
+| `--api-weight` | 0.003 | script-API loss weight |
 | `--encoder-layers` | 4 | encoder transformer layers |
 | `--encoder-d-model` | 256 | encoder width |
 
@@ -617,7 +644,17 @@ names, so a corpus built from records collected afterwards needs no repair.
 - The zero-shot keyword check: for the checkpoint's withheld keyword, per-field results on
   records where that keyword is on the acting line or carried by an entity, beside the
   same fields over records carrying trained keywords.
-- Gate 1 reports as skipped when no `--variant-checkpoint identity` is given.
+- Gate 1 reports as skipped when no `--variant-checkpoint identity` is given, and when the
+  checkpoint records no curated corpus. Its unique-text stratum is the curated card-disjoint
+  stratum's resolution records whose acting text no record of the curated `training/` stratum
+  acts with.
+- Gate 2 reads the real combat records of the checkpoint's game-disjoint games, from the curated
+  corpus's `validation/game-disjoint`; forks and interventional records never qualify. Its 200 counts distinct records, and its agreement averages over
+  (record, carrier) observations. Each field is read as the gate's probability times the field's
+  expected value, or times the class probability for a categorical.
+- Matched real-vs-fork agreement, the probe-diff re-check and the role-polarity probe are not
+  implemented. Each reports `NOT_IMPLEMENTED`, printed `[todo]`, on every run.
+- `--variant-scripts` defaults to the tree the corpus manifest records.
 - Gate 2's first strike and double strike rows read first-strike-step combat records only
   (`combat_substep = first_strike`). Each scores what the carrier does in that step to
   whoever it fights: the blocker's damage taken, and its death where the hit is lethal, or
@@ -633,7 +670,7 @@ win-rate file the decodability battery reads.
 It writes the pooled `e` of `--checkpoint`, concatenated with the vectors of
 `--sealed-encoder-checkpoint`, into `--scratch-dir`, and runs `python -m sealed
 train-scorer` Phase A against that directory as a subprocess. It never writes under
-`output/cardsfolder/`.
+`output/cardsfolder/`, and refuses a `--scratch-dir` whose card tree already holds encoded vectors.
 
 # 11. Probe tooling
 
@@ -644,14 +681,19 @@ train-scorer` Phase A against that directory as a subprocess. It never writes un
   Columns that read the `taxonomy` cache are omitted when that cache is absent.
 - `pca_directions.py` reports the participation ratio, (Σλ)² / Σλ², over the eigenvalues λ
   of the cache's covariance.
+- `effect_profiles.py` profiles each curated record once, merging the training stratum's copies
+  of a record by `record_id` across shards.
 
 ## 11.2 Knowledge probes
 
-`scripts/effect_knowledge_probes/` holds the suite, with modules `labels`, `ladder`,
-`sweeps`, `ablation`, `compare` and `run`.
+`scripts/effect_knowledge_probes/` is an importable package holding the suite, with modules
+`common`, `labels`, `ladder`, `sweeps`, `ablation`, `board`, `board_edits`, `record_walk`,
+`probe_set`, `scorecard`, `compare` and `run`. The entry scripts run by path.
 
 - `run --checkpoint PATH` loads any checkpoint and resolves its vocabulary, cache and
-  width of `e`.
+  width of `e`. The curated corpus, the sidecar trees and the variant tree resolve from the
+  checkpoint and its corpus manifest. A checkpoint naming no curated corpus, a corpus rebuilt
+  since the checkpoint trained on it, and a probe set frozen against another corpus are refused.
 - `run --freeze-probe-set` enumerates, once per curated corpus, the probe items keyed by
   provenance, their labels, the probe games from both validation strata, and the
   board-sweep records, and writes them with a content digest. Every run against that
@@ -662,6 +704,9 @@ train-scorer` Phase A against that directory as a subprocess. It never writes un
   label sources.
 - Every amount label is capped at a magnitude of 40, its sign kept, as the model's targets
   are.
+- The observed-mana label sums each `mana_produced` event's `mana_by_color` counts. An empty map
+  counts for nothing, and a record whose every such event is empty has no label.
+- A line counts as held out only when every card carrying it is a held-out card.
 - For a board-dependent target, the ladder's rungs are:
 
   | Rung | Input |
@@ -671,7 +716,7 @@ train-scorer` Phase A against that directory as a subprocess. It never writes un
   | 1w | rung 1 with each `e` replaced by a fixed random vector per text, of the same width |
   | 1o | rung 0 plus the parsed script values the target depends on |
   | 2 | the trunk's output at `[ACT]`, or at the target entity's `[CARD]` slot |
-  | 3 | the model's own prediction |
+  | 3 | the model's own prediction, gated by the affected probability; `damage_taken` reads the amount alone |
 
   A line property that does not depend on the board reads `e`, its width control, and the
   trunk's output at `[ACT]`.
@@ -717,7 +762,8 @@ train-scorer` Phase A against that directory as a subprocess. It never writes un
 - `--per-layer` probes each trunk layer's output. `--method-c` trains a shallow trunk, one
   transformer layer or none, on frozen `e`.
 - `compare SCORECARD ...` sets scorecards side by side per family and per rung, and ranks
-  checkpoints on rung 1 minus rung 1w, per probe type.
+  checkpoints on rung 1 minus rung 1w, per probe type and per score: AUC and R² gains are ranked
+  apart.
 - Unit tests cover the share and its minimum-gap rule, the label extractors, the
   board-sweep editor, and fold assignment never splitting a text. Fixtures come from real
   records.
@@ -751,6 +797,7 @@ python -m effects train-effect-model
     [--cards-folder DIR ...]             default output/cardsfolder/, output/tokenscripts/
     [--e-noise R]                        default 0.1; noise ratio
     [--value-weight W]                   default 0.05
+    [--api-weight W]                     default 0.003
     [--encoder-layers N]                 default 4
     [--encoder-d-model N]                default 256
 
@@ -760,6 +807,7 @@ python -m effects encode-abilities
 python -m effects evaluate-effect-model
     [--win-rates PATH]                   default output/sealed/cards-win-rates.txt
     [--cards-folder DIR ...]             default output/cardsfolder/, output/tokenscripts/
+    [--variant-scripts DIR]              default the tree the corpus manifest records
 
 python -m effects scorer-smoke-test
     [--checkpoint PATH]                  default models/effects/effect-model/latest.pt
@@ -802,7 +850,9 @@ Startup validation, before any game, build or training step:
   - the games admitted to the game-disjoint stratum under the keyword threshold;
   - the held-out texts with no gate-one resolution record, and those recorded in fewer
     than five games;
-  - the holdout unit.
+  - the holdout unit;
+  - per class, the training target (`class_targets`), and per family, the planned count;
+  - the `dropped-held-out-text` stratum's record count.
 - Checkpoints add the holdout unit, `--encoder-layers`, `--encoder-d-model`, `--e-noise`
   and `--value-weight`.
 - The definitions file adds each keyword's value formatting (§ 5).
