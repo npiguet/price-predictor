@@ -15,7 +15,7 @@ import pytest
 import torch
 
 from effects.application.surface_batching import EncodedBatch, PreparedBatch
-from effects.application.train_effect_model import HeldOutCards, TrainEffectModelConfig
+from effects.application.train_effect_model import TrainEffectModelConfig
 from effects.application.training_loop import (
     NO_TEXT_BUCKET,
     TrainingLoop,
@@ -37,6 +37,7 @@ from effects.domain.records import (
     TriggerPayload,
     events_of,
 )
+from effects.domain.split import HeldOutCards
 from effects.infrastructure.record_io import read_shard
 from effects.infrastructure.sidecar_io import SidecarCache
 

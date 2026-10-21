@@ -22,6 +22,13 @@ import zlib
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
+from effects.domain.sampling import (
+    CLASS_COMBAT,
+    CLASS_CONTINUOUS,
+    CLASS_RESOLUTION_EFFECT,
+    CLASS_REWRITE,
+)
+
 #: uint64, which is the width the threshold comparison is over.
 _HASH_BYTES = 8
 
@@ -134,7 +141,7 @@ def class_targets(
 #: (FR-049 step 2). The others have no per-entity outcome to sort by: a cost
 #: half's outcome is its payment, a trigger's is whether it fired.
 SIGNATURE_CLASSES: frozenset[str] = frozenset({
-    "resolution-effect", "rewrite", "combat", "continuous",
+    CLASS_RESOLUTION_EFFECT, CLASS_REWRITE, CLASS_COMBAT, CLASS_CONTINUOUS,
 })
 
 

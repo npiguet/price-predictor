@@ -13,12 +13,10 @@ from __future__ import annotations
 import torch
 
 from effects.application import training_loop as loop_module
-from effects.application.train_effect_model import (
-    HeldOutCards,
-    TrainEffectModelConfig,
-)
+from effects.application.train_effect_model import TrainEffectModelConfig
 from effects.application.training_loop import TrainingLoop, autocast_enabled
 from effects.domain.records import CombatPayload, RecordKind
+from effects.domain.split import HeldOutCards
 from effects.infrastructure.record_io import write_shard
 from tests.unit.effects.domain.conftest import (  # noqa: F401
     ability_key,

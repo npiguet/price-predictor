@@ -13,7 +13,6 @@ import pytest
 import torch
 
 from effects.application.surface_batching import NoiseState, SurfaceBatcher
-from effects.application.train_effect_model import VariantMasks
 from effects.domain.effect_head_input import SlotKind
 from effects.domain.provenance import ProvenanceKey, SidecarLine
 from effects.domain.records import (
@@ -24,6 +23,7 @@ from effects.domain.records import (
     ResolutionPayload,
 )
 from effects.domain.state_snapshot import EntityState, GlobalState, StateSnapshot
+from effects.domain.variants import VariantMasks
 from effects.infrastructure.record_io import read_shard
 from effects.infrastructure.sidecar_io import SidecarCache
 

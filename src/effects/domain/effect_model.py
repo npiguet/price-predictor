@@ -43,6 +43,14 @@ from effects.domain.effect_head_input import (
     OVERLAY_KEYWORDS,
     SlotKind,
 )
+from effects.domain.sampling import (
+    CLASS_COMBAT,
+    CLASS_PLAYABILITY_DECISION,
+    CLASS_PLAYABILITY_LEGALITY,
+    CLASS_RESOLUTION_COST,
+    CLASS_RESOLUTION_EFFECT,
+    CLASS_REWRITE,
+)
 from effects.domain.state_snapshot import COLORS
 from effects.domain.value_targets import VALUE_TARGETS, ValueKind
 
@@ -64,22 +72,6 @@ DURATIONS: tuple[str, ...] = ("instant", "end_of_turn", "permanent")
 #: Library manipulations a player can undergo, as a multi-hot.
 LIBRARY_EVENTS: tuple[str, ...] = ("scry", "surveil", "tutor", "reveal", "reorder")
 
-#: The eight sampling classes, which are also the granularity FR-085 speaks in:
-#: a field whose classes are all absent from the corpus contributes no loss.
-CLASS_RESOLUTION_COST = "resolution-cost"
-CLASS_RESOLUTION_EFFECT = "resolution-effect"
-CLASS_REWRITE = "rewrite"
-CLASS_CONTINUOUS = "continuous"
-CLASS_TRIGGER = "trigger"
-CLASS_PLAYABILITY_DECISION = "playability-decision"
-CLASS_PLAYABILITY_LEGALITY = "playability-legality"
-CLASS_COMBAT = "combat"
-
-SAMPLING_CLASSES: tuple[str, ...] = (
-    CLASS_RESOLUTION_EFFECT, CLASS_COMBAT, CLASS_CONTINUOUS,
-    CLASS_PLAYABILITY_DECISION, CLASS_RESOLUTION_COST, CLASS_TRIGGER,
-    CLASS_REWRITE, CLASS_PLAYABILITY_LEGALITY,
-)
 
 #: Classes whose records describe an outcome for an arbitrary entity. Used
 #: below to say "every effect-shaped record supervises this field".

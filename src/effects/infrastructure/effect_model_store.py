@@ -34,6 +34,7 @@ from typing import Any
 
 from effects.domain.ability_encoder import AbilityEncoderConfig
 from effects.domain.effect_model import EffectModel, EffectModelConfig
+from effects.domain.variants import Variant
 from price_predictor.infrastructure.torch_checkpoint import (
     load_checkpoint,
     save_checkpoint,
@@ -44,18 +45,12 @@ logger = logging.getLogger(__name__)
 DEFAULT_MODEL_OUTPUT = Path("models/effects/effect-model")
 LATEST_NAME = "latest.pt"
 
-#: `--variant full` ships; every other variant writes under its own name so a
-#: baseline run can never overwrite the checkpoint the cache was built from.
-VARIANT_FULL = "full"
-VARIANTS: tuple[str, ...] = (
-    VARIANT_FULL, "identity", "state-only", "no-state", "taxonomy",
-)
 
 
 def model_output_for(variant: str, root: Path = DEFAULT_MODEL_OUTPUT) -> Path:
     """``models/effects/effect-model/`` for ``full``, a subdirectory otherwise."""
     root = Path(root)
-    return root if variant == VARIANT_FULL else root / variant
+    return root if variant == Variant.FULL else root / variant
 
 
 def content_hash(path: Path) -> str:
@@ -188,7 +183,7 @@ class EffectCheckpoint:
     encoder_state: dict[str, Any]
     model_state: dict[str, Any]
     provenance: SplitProvenance
-    variant: str = VARIANT_FULL
+    variant: str = Variant.FULL
     best_val_loss: float = float("inf")
     epoch: int = 0
     extra: dict[str, Any] = field(default_factory=dict)
@@ -297,7 +292,7 @@ class EffectModelStore:
             encoder_state=payload["encoder_state_dict"],
             model_state=payload["model_state_dict"],
             provenance=SplitProvenance.from_dict(payload.get("provenance", {})),
-            variant=payload.get("variant", VARIANT_FULL),
+            variant=payload.get("variant", Variant.FULL),
             best_val_loss=payload.get("best_val_loss", float("inf")),
             epoch=payload.get("epoch", 0),
             # Whatever a variant needed to save beyond the two state dicts —

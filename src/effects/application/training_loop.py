@@ -65,20 +65,15 @@ from effects.application.train_effect_model import (
     LEARNING_RATE,
     MAX_GRAD_NORM,
     WEIGHT_DECAY,
-    CorpusSplit,
     EarlyStopper,
     EpochResult,
-    HeldOutCards,
-    SplitAccumulator,
     TrainEffectModelConfig,
     check_holdout,
     epoch_shards,
     fields_for_epoch,
     learning_rate_at,
     load_shard,
-    sampling_class,
     steps_per_shard,
-    variant_masks,
     warmup_steps,
 )
 from effects.domain.ability_encoder import (
@@ -103,7 +98,6 @@ from effects.domain.effect_head_input import (
 )
 from effects.domain.effect_model import (
     FLOOR_EPSILON,
-    SAMPLING_CLASSES,
     EffectModel,
     EffectModelConfig,
     EntityTargetBatch,
@@ -117,6 +111,13 @@ from effects.domain.effect_model import (
     verdict_loss,
 )
 from effects.domain.rarity import RARITY_BUCKETS
+from effects.domain.sampling import SAMPLING_CLASSES, sampling_class
+from effects.domain.split import (
+    CorpusSplit,
+    HeldOutCards,
+    SplitAccumulator,
+)
+from effects.domain.variants import variant_masks
 from effects.infrastructure.effect_model_store import (
     EPOCHS_DIR,
     RESUME_BEST_NAME,
@@ -1574,7 +1575,7 @@ class TrainingLoop(StepPreparation):
             return float("nan")
         encoder.eval()
         model.eval()
-        from effects.application.train_effect_model import BatchPlan
+        from effects.domain.sampling import BatchPlan
 
         size = self.config.batch_size
         total = torch.zeros((), device=self.device)

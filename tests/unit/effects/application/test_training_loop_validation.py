@@ -9,7 +9,6 @@ import pytest
 import torch
 
 from effects.application.train_effect_model import (
-    HeldOutCards,
     TrainEffectModelConfig,
     run,
 )
@@ -21,11 +20,12 @@ from effects.application.training_loop import (
 )
 from effects.domain.effect_model import (
     FIELDS_BY_NAME,
-    SAMPLING_CLASSES,
     EntityTargetBatch,
     constant_predictor_floor,
 )
 from effects.domain.records import CombatPayload, RecordKind
+from effects.domain.sampling import SAMPLING_CLASSES
+from effects.domain.split import HeldOutCards
 from effects.infrastructure.record_io import write_shard
 from tests.unit.effects.domain.conftest import (  # noqa: F401
     ability_key,

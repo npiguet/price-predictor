@@ -18,10 +18,8 @@ from __future__ import annotations
 import json
 
 from effects.application.train_effect_model import (
-    HeldOutCards,
     load_card_files,
     load_first_printings,
-    record_names_held_out_card,
 )
 from effects.domain.provenance import ProvenanceKey
 from effects.domain.records import (
@@ -29,6 +27,10 @@ from effects.domain.records import (
     Moment,
     RecordKind,
     ResolutionPayload,
+)
+from effects.domain.split import (
+    HeldOutCards,
+    record_names_held_out_card,
 )
 from effects.domain.state_snapshot import EntityState, GlobalState, StateSnapshot
 
@@ -133,7 +135,7 @@ def test_functional_reprints_are_held_out_together(_ignored=None) -> None:
     gate 1 then drops those records for having text a training card carries. The
     two must agree at every threshold, not merely at the extremes.
     """
-    from effects.application.train_effect_model import text_keyed_holdout
+    from effects.domain.split import text_keyed_holdout
 
     shared = "SP$ DealDamage | NumDmg$ 3 | ValidTgts$ Any"
     card_files = {
@@ -158,7 +160,7 @@ def test_functional_reprints_are_held_out_together(_ignored=None) -> None:
 
 def test_the_holdout_carries_its_texts_for_sizing_the_stratum() -> None:
     """The guard needs the texts, not just the cards (T159)."""
-    from effects.application.train_effect_model import text_keyed_holdout
+    from effects.domain.split import text_keyed_holdout
 
     held = text_keyed_holdout(
         {"Alpha": "cardsfolder/a/alpha.txt"},

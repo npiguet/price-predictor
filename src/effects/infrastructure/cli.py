@@ -524,7 +524,7 @@ def _class_mix(text: str) -> dict[str, float]:
     or the class vocabulary. Raising ``ArgumentTypeError`` puts a bad value in
     the usage message rather than in a traceback.
     """
-    from effects.application.train_effect_model import parse_kind_mix
+    from effects.domain.sampling import parse_kind_mix
 
     try:
         return parse_kind_mix(text)

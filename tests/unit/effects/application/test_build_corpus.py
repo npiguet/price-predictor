@@ -391,7 +391,7 @@ def test_no_training_record_belongs_to_a_withheld_game(tmp_path, a_corpus):
 
 def test_no_training_record_names_a_held_out_card(tmp_path, a_corpus):
     """FR-088: the exclusion is by game, and every held-out game is dropped."""
-    from effects.application.train_effect_model import (
+    from effects.domain.split import (
         HeldOutCards,
         record_names_held_out_card,
     )
@@ -720,7 +720,7 @@ def _mixture_config(output: Path, fixture: CorpusFixture):
 
 
 def _delivered_shares(training_dir: Path) -> dict[str, float]:
-    from effects.application.train_effect_model import sampling_class
+    from effects.domain.sampling import sampling_class
 
     counts: Counter[str] = Counter()
     for record in read_records(training_dir):
@@ -1816,7 +1816,7 @@ class TestLegalityFamilies:
             legality_mode_counts,
             resolve_legality_families,
         )
-        from effects.domain.effect_model import CLASS_PLAYABILITY_LEGALITY as LEGALITY
+        from effects.domain.sampling import CLASS_PLAYABILITY_LEGALITY as LEGALITY
 
         survey = self._survey({
             Cell(LEGALITY, "real", "none"): 500,

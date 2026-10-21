@@ -13,28 +13,6 @@ from collections import Counter
 
 import pytest
 
-from effects.application.train_effect_model import (
-    DEFAULT_KIND_MIX,
-    RARITY_CAP,
-    UNIFORM_CLASSES,
-    batches_without_replacement,
-    effective_games,
-    parse_kind_mix,
-    rarity_weights,
-    sample_weights,
-    sampling_class,
-)
-from effects.domain.effect_model import (
-    CLASS_COMBAT,
-    CLASS_CONTINUOUS,
-    CLASS_PLAYABILITY_DECISION,
-    CLASS_PLAYABILITY_LEGALITY,
-    CLASS_RESOLUTION_COST,
-    CLASS_RESOLUTION_EFFECT,
-    CLASS_REWRITE,
-    CLASS_TRIGGER,
-    SAMPLING_CLASSES,
-)
 from effects.domain.event_schema import Event, EventType
 from effects.domain.records import (
     ActivationPayload,
@@ -51,6 +29,26 @@ from effects.domain.records import (
     ResolutionPayload,
     RewritePayload,
     TriggerPayload,
+)
+from effects.domain.sampling import (
+    CLASS_COMBAT,
+    CLASS_CONTINUOUS,
+    CLASS_PLAYABILITY_DECISION,
+    CLASS_PLAYABILITY_LEGALITY,
+    CLASS_RESOLUTION_COST,
+    CLASS_RESOLUTION_EFFECT,
+    CLASS_REWRITE,
+    CLASS_TRIGGER,
+    DEFAULT_KIND_MIX,
+    RARITY_CAP,
+    SAMPLING_CLASSES,
+    UNIFORM_CLASSES,
+    batches_without_replacement,
+    effective_games,
+    parse_kind_mix,
+    rarity_weights,
+    sample_weights,
+    sampling_class,
 )
 from effects.domain.state_snapshot import GlobalState, StateSnapshot
 
@@ -250,12 +248,10 @@ class TestWeightsKeyByAbilityText:
     """
 
     def test_a_single_game_ability_outweighs_a_many_game_one(self):
-        from effects.application.train_effect_model import (
-            HeldOutCards,
-            TrainEffectModelConfig,
-        )
+        from effects.application.train_effect_model import TrainEffectModelConfig
         from effects.application.training_loop import TrainingLoop
         from effects.domain.provenance import ProvenanceKey, SidecarLine
+        from effects.domain.split import HeldOutCards
         from tests.unit.effects.application.test_ability_text import (
             FakeSidecarCache,
         )
@@ -298,11 +294,9 @@ class TestProvenanceRecordsTheCorpus:
     split, so ``evaluate-effect-model`` can refuse one rebuilt since."""
 
     def test_a_corpus_runs_provenance_records_the_manifest_digest(self):
-        from effects.application.train_effect_model import (
-            HeldOutCards,
-            TrainEffectModelConfig,
-        )
+        from effects.application.train_effect_model import TrainEffectModelConfig
         from effects.application.training_loop import TrainingLoop
+        from effects.domain.split import HeldOutCards
 
         loop = TrainingLoop(
             TrainEffectModelConfig(corpus="output/effects/corpus"),
@@ -319,11 +313,9 @@ class TestProvenanceRecordsTheCorpus:
 
     def test_a_run_without_a_digest_records_no_corpus(self):
         """Nothing is pinned until a manifest has been read."""
-        from effects.application.train_effect_model import (
-            HeldOutCards,
-            TrainEffectModelConfig,
-        )
+        from effects.application.train_effect_model import TrainEffectModelConfig
         from effects.application.training_loop import TrainingLoop
+        from effects.domain.split import HeldOutCards
 
         loop = TrainingLoop(
             TrainEffectModelConfig(),
@@ -420,7 +412,7 @@ class TestRarityWeightsWithinAClass:
         assert max(weights.values()) <= RARITY_CAP * p99_weight + 1e-12
 
     def test_weights_are_normalized_within_each_class(self):
-        from effects.application.train_effect_model import sampling_class
+        from effects.domain.sampling import sampling_class
 
         resolutions = [
             _record(RecordKind.RESOLUTION, game_id=f"g{i}", record_id=f"r{i}")

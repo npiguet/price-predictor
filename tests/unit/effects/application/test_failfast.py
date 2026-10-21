@@ -14,19 +14,21 @@ import pytest
 from effects.application.train_effect_model import (
     LEARNING_RATE,
     MAX_GRAD_NORM,
-    VARIANT_FULL,
-    VARIANTS,
     EarlyStopper,
     MissingSplitError,
     TrainEffectModelConfig,
     learning_rate_at,
     require_split_from,
-    variant_masks,
     warmup_steps,
     withheld_keyword_tokens,
 )
 from effects.domain.ability_encoder import AbilityEncoderConfig
 from effects.domain.effect_model import EffectModelConfig
+from effects.domain.variants import (
+    VARIANTS,
+    Variant,
+    variant_masks,
+)
 from effects.infrastructure.effect_model_store import (
     DEFAULT_MODEL_OUTPUT,
     EffectCheckpoint,
@@ -53,7 +55,7 @@ def _checkpoint(provenance: SplitProvenance) -> EffectCheckpoint:
 class TestVariantRequiresASplit:
     def test_a_variant_run_without_split_from_fails_fast(self):
         for variant in VARIANTS:
-            if variant == VARIANT_FULL:
+            if variant == Variant.FULL:
                 continue
             with pytest.raises(MissingSplitError, match="--split-from"):
                 require_split_from(variant, None)
@@ -64,7 +66,7 @@ class TestVariantRequiresASplit:
         assert "saw different games" in str(excinfo.value)
 
     def test_a_full_run_computes_its_own_split(self):
-        require_split_from(VARIANT_FULL, None)
+        require_split_from(Variant.FULL, None)
 
     def test_a_variant_run_with_split_from_is_accepted(self):
         require_split_from("identity", Path("models/effects/effect-model/latest.pt"))

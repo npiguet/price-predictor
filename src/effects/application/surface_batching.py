@@ -21,10 +21,7 @@ from dataclasses import dataclass, field
 import numpy as np
 import torch
 
-from effects.application.train_effect_model import (
-    VariantMasks,
-    withheld_keyword_tokens,
-)
+from effects.application.train_effect_model import withheld_keyword_tokens
 from effects.domain.ability_encoder import (
     AbilityEncoder,
     TruncationLog,
@@ -42,6 +39,7 @@ from effects.domain.effect_head_input import (
 )
 from effects.domain.effect_model import collate_surfaces, scatter_e_rows
 from effects.domain.records import PlayabilityDecisionPayload, acting_keys
+from effects.domain.variants import VariantMasks
 from effects.infrastructure.sidecar_io import UnconfiguredTree
 
 #: Rows in the ``identity`` baseline's free-embedding table. Ample for the

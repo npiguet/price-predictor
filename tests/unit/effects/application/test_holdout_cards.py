@@ -16,7 +16,7 @@ from effects.application.holdout_cards import depletion_list
 
 def test_the_list_is_the_cards_the_trainer_holds_out() -> None:
     """One rule, exercised through both entry points (T163)."""
-    from effects.application.train_effect_model import text_keyed_holdout
+    from effects.domain.split import text_keyed_holdout
 
     card_files = {
         "Searing Spear": "cardsfolder/s/searing_spear.txt",
@@ -67,7 +67,7 @@ def test_the_cli_defaults_match_the_trainer_constants() -> None:
     The CLI restates them so `--help` stays free of torch, and a drift would
     deplete pools against one holdout while the split used another.
     """
-    from effects.application.train_effect_model import (
+    from effects.domain.split import (
         HOLDOUT_MAX_CARRIERS,
         HOLDOUT_PERMILLE,
     )

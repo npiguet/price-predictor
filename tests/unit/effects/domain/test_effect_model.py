@@ -24,10 +24,6 @@ from effects.domain.effect_head_input import (
     SlotKind,
 )
 from effects.domain.effect_model import (
-    CLASS_COMBAT,
-    CLASS_PLAYABILITY_DECISION,
-    CLASS_PLAYABILITY_LEGALITY,
-    CLASS_RESOLUTION_EFFECT,
     CREATED_OBJECT_SLOTS,
     CREATED_OBJECTS_WIDTH,
     CREATED_SLOT_WIDTH,
@@ -37,7 +33,6 @@ from effects.domain.effect_model import (
     GATE_INDEX,
     PER_ENTITY_FIELDS,
     PER_ENTITY_WIDTH,
-    SAMPLING_CLASSES,
     VERDICT_BITS,
     VERDICT_WIDTH,
     ZONE_OUTCOMES,
@@ -61,6 +56,13 @@ from effects.domain.effect_model import (
     verdict_loss,
 )
 from effects.domain.records import CombatPayload, RecordKind
+from effects.domain.sampling import (
+    CLASS_COMBAT,
+    CLASS_PLAYABILITY_DECISION,
+    CLASS_PLAYABILITY_LEGALITY,
+    CLASS_RESOLUTION_EFFECT,
+    SAMPLING_CLASSES,
+)
 from effects.domain.state_snapshot import COLORS
 
 _CONFIG = EffectModelConfig(

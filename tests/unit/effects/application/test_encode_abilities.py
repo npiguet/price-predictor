@@ -426,8 +426,8 @@ class TestTruncation:
     def test_training_batchers_sharing_a_log_report_a_text_once(self, tokenizer):
         """The trainer hands one log to every per-batch batcher."""
         from effects.application.surface_batching import SurfaceBatcher
-        from effects.application.train_effect_model import VariantMasks
         from effects.domain.ability_encoder import TruncationLog
+        from effects.domain.variants import VariantMasks
 
         reported = []
         log = TruncationLog(lambda text, keys: reported.append(text))

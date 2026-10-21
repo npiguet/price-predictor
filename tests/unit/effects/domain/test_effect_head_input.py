@@ -796,8 +796,8 @@ class TestOptionRows:
         import torch
 
         from effects.application.surface_batching import SurfaceBatcher
-        from effects.application.train_effect_model import VariantMasks
         from effects.domain.provenance import ProvenanceSidecar, SidecarLine
+        from effects.domain.variants import VariantMasks
 
         modes = self._modes()
         sidecar = ProvenanceSidecar(

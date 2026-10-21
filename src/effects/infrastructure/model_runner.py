@@ -26,11 +26,7 @@ from effects.application.surface_batching import (
     IDENTITY_TABLE_SIZE,
     SurfaceBatcher,
 )
-from effects.application.train_effect_model import (
-    RANDOM_SEED,
-    sampling_class,
-    variant_masks,
-)
+from effects.application.train_effect_model import RANDOM_SEED
 from effects.domain.ability_encoder import (
     AbilityEncoder,
     TruncationLog,
@@ -51,6 +47,8 @@ from effects.domain.effect_head_input import (
     player_features,
 )
 from effects.domain.effect_model import EffectModel, active_fields
+from effects.domain.sampling import sampling_class
+from effects.domain.variants import variant_masks
 from effects.infrastructure.sidecar_io import SidecarCache, sidecar_roots
 from price_predictor.infrastructure.tokenizer_store import load_vocabulary
 

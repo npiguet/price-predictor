@@ -26,8 +26,11 @@ from collections.abc import Iterable, Mapping
 from pathlib import Path
 
 from effects.domain.corpus_curation import record_hash
-from effects.domain.effect_model import CLASS_RESOLUTION_COST, CLASS_RESOLUTION_EFFECT
 from effects.domain.records import EffectRecord
+from effects.domain.sampling import (
+    CLASS_RESOLUTION_COST,
+    CLASS_RESOLUTION_EFFECT,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -77,7 +80,7 @@ def _gate_one_round_robin(
     slice; the second collects the chosen records.
     """
     from effects.application.build_corpus import ability_key
-    from effects.application.train_effect_model import sampling_class
+    from effects.domain.sampling import sampling_class
     from effects.infrastructure.record_io import read_records
 
     per_text: dict[str, dict[str, list[int]]] = {
@@ -155,7 +158,7 @@ def _collect(
     directory: Path, quota: Mapping[str, int], *, seed: int,
     only: frozenset[str] | None = None,
 ) -> dict[str, _Smallest]:
-    from effects.application.train_effect_model import sampling_class
+    from effects.domain.sampling import sampling_class
     from effects.infrastructure.record_io import read_records
 
     heaps = {name: _Smallest(cap) for name, cap in quota.items()}

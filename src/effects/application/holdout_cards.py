@@ -61,10 +61,8 @@ def holdout_report(
     matched against. Sorted because the file is compared between runs, and one
     that reordered would read as a changed holdout when nothing had changed.
     """
-    from effects.application.train_effect_model import (
-        fold_card_name,
-        text_keyed_holdout,
-    )
+    from effects.domain.card_names import fold_card_name
+    from effects.domain.split import text_keyed_holdout
     from effects.domain.text_holdout import holdout_key
 
     held = text_keyed_holdout(

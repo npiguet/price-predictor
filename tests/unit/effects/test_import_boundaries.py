@@ -141,6 +141,9 @@ _TORCH_FREE = (
     "effects.domain.records",
     "effects.domain.record_quality",
     "effects.domain.corpus_curation",
+    "effects.domain.sampling",
+    "effects.domain.split",
+    "effects.domain.variants",
 )
 
 

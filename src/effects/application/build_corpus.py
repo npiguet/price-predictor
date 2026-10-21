@@ -55,6 +55,11 @@ from effects.domain.records import (
     RecordKind,
     acting_keys,
 )
+from effects.domain.sampling import (
+    CLASS_PLAYABILITY_LEGALITY,
+    DEFAULT_KIND_MIX,
+    sampling_class,
+)
 from effects.domain.token_key_remap import RemapCounts, TokenKeyRemapper, remap_record_dict
 
 if TYPE_CHECKING:
@@ -208,8 +213,6 @@ def selection_half(record: EffectRecord, klass: str) -> str:
     The two halves of the legality class (FR-049 step 3): a gen-1 record,
     whose decision is unknown, selects as a what-if.
     """
-    from effects.domain.effect_model import CLASS_PLAYABILITY_LEGALITY
-
     if klass != CLASS_PLAYABILITY_LEGALITY:
         return ""
     if LegalityDecision.of(record) is LegalityDecision.REAL:
@@ -238,8 +241,6 @@ def cell_of(
     :func:`resolve_legality_families` folds once the counts exist; the write
     pass passes the counts and gets the final family directly.
     """
-    from effects.application.train_effect_model import sampling_class
-    from effects.domain.effect_model import CLASS_PLAYABILITY_LEGALITY
     from effects.domain.rule_families import NONE, legality_modes, rule_family
 
     klass = sampling_class(record)
@@ -409,13 +410,13 @@ def init_survey_worker(config: SurveyConfig) -> None:
 
 def survey_shard(relative: str) -> ShardSurvey:
     """Survey one shard. Module-level so a process pool can pickle it."""
-    from effects.application.train_effect_model import (
-        HeldOutCards,
-        record_names_held_out_card,
-    )
     from effects.domain.damage_step_keywords import (
         KEYWORDS_BY_NAME,
         qualifying_observations,
+    )
+    from effects.domain.split import (
+        HeldOutCards,
+        record_names_held_out_card,
     )
 
     config = _CONFIG
@@ -489,8 +490,6 @@ def _modes_of(family: str) -> frozenset[str]:
 
 def legality_mode_counts(survey: Survey) -> dict[str, int]:
     """Survey records per legality mode, over the provisional mode-set cells."""
-    from effects.domain.effect_model import CLASS_PLAYABILITY_LEGALITY
-
     counts: Counter[str] = Counter()
     cells = list(survey.cell_keyless.items()) + [
         (cell, n) for (cell, _key), n in survey.cell_key_records.items()
@@ -509,9 +508,7 @@ def resolve_legality_families(survey: Survey, counts: Mapping[str, int]) -> Surv
     capped hash heaps merge, which is what the write pass will place their
     records in.
     """
-    from effects.domain.effect_model import CLASS_PLAYABILITY_LEGALITY
     from effects.domain.rule_families import legality_family
-
     def final(cell: Cell) -> Cell:
         if cell.klass != CLASS_PLAYABILITY_LEGALITY:
             return cell
@@ -801,8 +798,6 @@ class BuildCorpusConfig:
             )
 
     def mix(self) -> dict[str, float]:
-        from effects.application.train_effect_model import DEFAULT_KIND_MIX
-
         return dict(self.class_mix or DEFAULT_KIND_MIX)
 
 
@@ -1432,7 +1427,6 @@ def _output_name(relative: str) -> str:
 
 def write_shard_pass(relative: str) -> WriteResult:
     """Filter one shard into its output parts. Module-level so it pickles."""
-    from effects.application.train_effect_model import sampling_class
     from effects.infrastructure.record_io import write_shard
 
     config = _WRITE
@@ -1879,10 +1873,10 @@ def build(config: BuildCorpusConfig) -> int:
     from effects.application.train_effect_model import (
         load_card_files,
         load_card_texts,
-        text_keyed_holdout,
     )
     from effects.domain.ability_encoder import surface_of
     from effects.domain.corpus_manifest import ClassCounts, CorpusManifest
+    from effects.domain.split import text_keyed_holdout
     from effects.infrastructure.corpus_store import CorpusStore, current_sources
     from effects.infrastructure.sidecar_io import SidecarCache, sidecar_roots
 

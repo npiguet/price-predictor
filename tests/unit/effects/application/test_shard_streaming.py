@@ -28,11 +28,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from effects.application.train_effect_model import (
-    CorpusSplit,
-    HeldOutCards,
-    SplitAccumulator,
     epoch_shards,
-    shard_games,
     steps_per_shard,
 )
 from effects.domain.records import (
@@ -40,6 +36,12 @@ from effects.domain.records import (
     Moment,
     RecordKind,
     ResolutionPayload,
+)
+from effects.domain.split import (
+    CorpusSplit,
+    HeldOutCards,
+    SplitAccumulator,
+    shard_games,
 )
 from effects.domain.state_snapshot import EntityState, GlobalState, StateSnapshot
 

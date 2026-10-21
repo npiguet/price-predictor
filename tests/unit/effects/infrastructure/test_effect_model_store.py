@@ -15,10 +15,9 @@ import torch
 
 from effects.domain.ability_encoder import AbilityEncoderConfig
 from effects.domain.effect_model import EffectModel, EffectModelConfig
+from effects.domain.variants import VARIANTS, Variant
 from effects.infrastructure.effect_model_store import (
     DEFAULT_MODEL_OUTPUT,
-    VARIANT_FULL,
-    VARIANTS,
     EffectCheckpoint,
     EffectModelStore,
     HashMismatchError,
@@ -188,11 +187,11 @@ class TestHashChecking:
 
 class TestVariantIsolation:
     def test_full_writes_to_the_shipping_directory(self):
-        assert model_output_for(VARIANT_FULL) == DEFAULT_MODEL_OUTPUT
+        assert model_output_for(Variant.FULL) == DEFAULT_MODEL_OUTPUT
 
     def test_every_other_variant_writes_under_its_own_name(self):
         for variant in VARIANTS:
-            if variant == VARIANT_FULL:
+            if variant == Variant.FULL:
                 continue
             assert model_output_for(variant) == DEFAULT_MODEL_OUTPUT / variant
 

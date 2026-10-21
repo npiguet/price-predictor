@@ -6,14 +6,14 @@ from collections import Counter
 
 import pytest
 
-from effects.application.train_effect_model import sampling_class
 from effects.application.validation_samples import _Smallest, class_quota, draw_samples
-from effects.domain.effect_model import (
+from effects.domain.records import CombatPayload, Moment, RecordKind
+from effects.domain.sampling import (
     CLASS_COMBAT,
     CLASS_RESOLUTION_COST,
     CLASS_RESOLUTION_EFFECT,
+    sampling_class,
 )
-from effects.domain.records import CombatPayload, Moment, RecordKind
 from effects.infrastructure.record_io import write_shard
 from tests.unit.effects.domain.conftest import ability_key, make_record, snapshot  # noqa: F401
 

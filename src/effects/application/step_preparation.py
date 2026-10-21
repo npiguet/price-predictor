@@ -34,17 +34,9 @@ from effects.application.surface_batching import (
     pinned,
 )
 from effects.application.train_effect_model import (
-    CorpusSplit,
-    HeldOutCards,
     TrainEffectModelConfig,
-    VariantMasks,
     ability_text_of,
-    batches_without_replacement,
-    effective_games,
     rarity_coverage,
-    sample_weights,
-    sampling_class,
-    shard_games,
 )
 from effects.domain.ability_encoder import TruncationLog, surface_of
 from effects.domain.ability_tokenizer import (
@@ -70,7 +62,19 @@ from effects.domain.lethality_counterfactuals import counterfactual, qualify
 from effects.domain.rarity import rarity_bucket
 from effects.domain.records import EffectRecord
 from effects.domain.rule_families import rule_family
+from effects.domain.sampling import (
+    batches_without_replacement,
+    effective_games,
+    sample_weights,
+    sampling_class,
+)
+from effects.domain.split import (
+    CorpusSplit,
+    HeldOutCards,
+    shard_games,
+)
 from effects.domain.value_targets import params, segments, value_targets
+from effects.domain.variants import VariantMasks
 from effects.infrastructure.sidecar_io import SidecarCache, sidecar_roots
 from price_predictor.infrastructure.tokenizer_store import load_vocabulary
 
@@ -673,7 +677,7 @@ class StepPreparer(StepPreparation):
         self.config = settings.config
         self.seed = settings.seed
         self.surface = surface_of(settings.config.vocab_path)
-        from effects.application.train_effect_model import variant_masks
+        from effects.domain.variants import variant_masks
 
         self.masks = variant_masks(settings.config.variant)
         self.held_out = settings.held_out

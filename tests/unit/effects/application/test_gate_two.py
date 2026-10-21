@@ -39,7 +39,6 @@ from effects.application.surface_batching import (
     IDENTITY_TABLE_SIZE,
     SurfaceBatcher,
 )
-from effects.application.train_effect_model import VariantMasks
 from effects.domain.damage_step_keywords import (
     KEYWORDS_BY_NAME,
     Subject,
@@ -68,6 +67,7 @@ from effects.domain.state_snapshot import (
     PowerToughness,
     StateSnapshot,
 )
+from effects.domain.variants import VariantMasks
 
 # ── a board: one first-striking attacker, one blocker ────────────────────
 

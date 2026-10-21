@@ -23,9 +23,9 @@ import numpy as np
 
 from effects.domain.ability_cache_layout import DEFAULT_CACHE_ROOT
 from effects.domain.provenance import ProvenanceSidecar, SidecarLine
+from effects.domain.variants import Variant
 from effects.infrastructure.ability_cache_store import AbilityCacheStore
 from effects.infrastructure.effect_model_store import (
-    VARIANT_FULL,
     EffectModelStore,
     model_output_for,
     resolve_inference_paths,
@@ -37,12 +37,11 @@ logger = logging.getLogger(__name__)
 DEFAULT_CARDS_FOLDERS: tuple[Path, ...] = (
     Path("output/cardsfolder/"), Path("output/tokenscripts/"),
 )
-VARIANT_TAXONOMY = "taxonomy"
 
 
 @dataclass
 class EncodeAbilitiesConfig:
-    variant: str = VARIANT_FULL
+    variant: str = Variant.FULL
     checkpoint: Path | None = None
     cards_folders: tuple[Path, ...] = DEFAULT_CARDS_FOLDERS
     variant_scripts: Path | None = None
@@ -126,12 +125,12 @@ def encode_sidecar(
     """
     if not sidecar.lines:
         return np.zeros((0, e_dim), dtype=np.float32)
-    if variant == VARIANT_TAXONOMY:
+    if variant == Variant.TAXONOMY:
         rows = [taxonomy_vector(line, e_dim) for line in sidecar.lines]
         return np.stack(rows).astype(np.float32)
     if encode_lines is None:
         raise ValueError(
-            f"--variant {variant} needs an encoder; only {VARIANT_TAXONOMY} "
+            f"--variant {variant} needs an encoder; only {Variant.TAXONOMY} "
             "can be emitted without one"
         )
     return encode_lines(sidecar, sidecar_path).astype(np.float32)
@@ -153,7 +152,7 @@ def run(config: EncodeAbilitiesConfig, *, encode_lines=None) -> EncodeSummary:
     cleaned = store.clean() if config.clean else 0
 
     e_dim, provenance = _load_checkpoint_facts(config)
-    if encode_lines is None and config.variant != VARIANT_TAXONOMY:
+    if encode_lines is None and config.variant != Variant.TAXONOMY:
         encode_lines = build_encode_lines(config)
 
     folders = [Path(f) for f in config.cards_folders if Path(f).is_dir()]

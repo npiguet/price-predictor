@@ -27,17 +27,17 @@ from effects.application.extract_keyword_definitions import load_keyword_definit
 from effects.application.step_preparation import ShardTask
 from effects.application.surface_batching import SurfaceBatcher
 from effects.application.train_effect_model import (
-    HeldOutCards,
     TrainEffectModelConfig,
     fields_for_epoch,
-    sampling_class,
-    variant_masks,
 )
 from effects.application.training_loop import TrainingLoop, parameter_groups
 from effects.domain.ability_encoder import AbilityEncoder, AbilityEncoderConfig
 from effects.domain.ability_tokenizer import SPECIAL_TOKENS, AbilityTokenizer
 from effects.domain.effect_head_input import SlotKind
 from effects.domain.effect_model import EffectModel, EffectModelConfig
+from effects.domain.sampling import sampling_class
+from effects.domain.split import HeldOutCards
+from effects.domain.variants import variant_masks
 from effects.infrastructure.record_io import read_shard
 from effects.infrastructure.sidecar_io import SidecarCache, script_vocabularies
 
