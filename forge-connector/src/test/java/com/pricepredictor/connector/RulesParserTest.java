@@ -618,7 +618,7 @@ class RulesParserTest {
         CardFace card = face("f/forest.txt");
         var activated = abilitiesOfType(card, AbilityType.ACTIVATED);
         assertEquals(1, activated.size());
-        assertEquals("{T}: add {G}", activated.get(0).descriptionText());
+        assertEquals("{T}: add {G}.", activated.get(0).descriptionText());
     }
 
     @Test
@@ -626,9 +626,26 @@ class RulesParserTest {
         CardFace card = face("b/bayou.txt");
         var activated = abilitiesOfType(card, AbilityType.ACTIVATED);
         assertEquals(1, activated.size());
-        assertTrue(activated.get(0).descriptionText().contains("{B}"));
-        assertTrue(activated.get(0).descriptionText().contains("or"));
-        assertTrue(activated.get(0).descriptionText().contains("{G}"));
+        assertEquals("{T}: add {B} or {G}.", activated.get(0).descriptionText());
+    }
+
+    @Test
+    void aTriomesManaLineReadsLikeAScriptedTriLand() {
+        // Ketria Triome's line is synthesized from its basic types; Arcane
+        // Sanctum's comes from its script. The two print the same sentence.
+        var triome = abilitiesOfType(face("k/ketria_triome.txt"), AbilityType.ACTIVATED);
+        assertTrue(triome.stream().anyMatch(a -> a.descriptionText().equals("{T}: add {U}, {R}, or {G}.")),
+                triome.toString());
+        var sanctum = abilitiesOfType(face("a/arcane_sanctum.txt"), AbilityType.ACTIVATED);
+        assertEquals("{T}: add {W}, {U}, or {B}.", sanctum.get(0).descriptionText());
+    }
+
+    @Test
+    void joinWithOrUsesTheSerialCommaFromThreeItems() {
+        assertEquals("a", RulesParser.joinWithOr(List.of("a")));
+        assertEquals("a or b", RulesParser.joinWithOr(List.of("a", "b")));
+        assertEquals("a, b, or c", RulesParser.joinWithOr(List.of("a", "b", "c")));
+        assertEquals("a, b, c, or d", RulesParser.joinWithOr(List.of("a", "b", "c", "d")));
     }
 
     @Test

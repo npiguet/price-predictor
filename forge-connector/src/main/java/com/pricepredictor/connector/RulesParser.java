@@ -661,22 +661,26 @@ public class RulesParser {
     }
 
     private static String buildAlternateAdditionalCostDescription(String original) {
-        String[] costParts = original.split(":", 2)[1].split(":");
-        StringBuilder desc = new StringBuilder();
-        for (int n = 0; n < costParts.length; n++) {
-            Cost cost = new Cost(costParts[n], false);
+        List<String> costs = new ArrayList<>();
+        for (String costPart : original.split(":", 2)[1].split(":")) {
+            Cost cost = new Cost(costPart, false);
             String costText = cost.toSimpleString();
-            if (cost.isOnlyManaCost()) {
-                desc.append("pay ");
-            }
-            desc.append(costText.substring(0, 1).toLowerCase()).append(costText.substring(1));
-            if (n + 2 == costParts.length) {
-                desc.append(costParts.length > 2 ? ", or " : " or ");
-            } else if (n + 1 < costParts.length) {
-                desc.append(", ");
-            }
+            costs.add((cost.isOnlyManaCost() ? "pay " : "")
+                    + costText.substring(0, 1).toLowerCase() + costText.substring(1));
         }
-        return desc.toString();
+        return joinWithOr(costs);
+    }
+
+    /**
+     * {@code a or b} for two items and {@code a, b, or c} for more — the
+     * serial comma Forge's own scripts print, as in Arcane Sanctum's "Add {W},
+     * {U}, or {B}." — so a line the converter builds reads like one a script
+     * wrote.
+     */
+    static String joinWithOr(List<String> items) {
+        if (items.size() <= 2) return String.join(" or ", items);
+        return String.join(", ", items.subList(0, items.size() - 1))
+                + ", or " + items.get(items.size() - 1);
     }
 
     private Card buildFullCard(CardRules rules) {
@@ -709,16 +713,9 @@ public class RulesParser {
         if (symbols.isEmpty()) {
             return null;
         }
-        StringBuilder sb = new StringBuilder("{T}: add ");
-        for (int i = 0; i < symbols.size(); i++) {
-            sb.append(symbols.get(i));
-            if (i + 2 == symbols.size()) {
-                sb.append(" or ");
-            } else if (i + 1 < symbols.size()) {
-                sb.append(", ");
-            }
-        }
-        return sb.toString();
+        // Shaped like a scripted mana ability's line after casing — "{T}: add
+        // {W}, {U}, or {B}." — so a triome and a tri-land print one sentence.
+        return "{T}: add " + joinWithOr(symbols) + ".";
     }
 
     private static String formatTypeLine(ICardFace face) {
