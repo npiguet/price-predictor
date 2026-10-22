@@ -11,6 +11,7 @@ import forge.game.card.Card;
 import forge.game.card.CardFactory;
 import forge.game.player.Player;
 import forge.game.spellability.SpellAbility;
+import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -108,9 +109,7 @@ class ClauseContractTest {
     void theStandInIsForgesOwnDeclaration() {
         PatchHooks.Lookup setter = PatchHooks.find(
                 PatchHooks.ABILITY_UTILS, "setEffectRecordClauseListener");
-        if (!setter.present()) {
-            return;
-        }
+        Assumptions.assumeTrue(setter.present(), "the checkout lacks the clause hook");
         Class<?> declared = setter.method().getParameterTypes()[0];
         for (String name : List.of("onClauseResolving", "onClauseResolved")) {
             Class<?>[] theirs = methodNamed(declared, name).getParameterTypes();
