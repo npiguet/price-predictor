@@ -924,7 +924,8 @@ public final class BusBracketCollector extends BusEventReader {
      *
      * <p>Package-visible because {@link GameRecording} installs it, and so a
      * test can drive it through a proxy of its own. The method name and the
-     * argument positions are the whole contract with the patch — {@link PatchHooks} looks both up by string — and a typo in either
+     * argument positions are the whole contract with the patch —
+     * {@link PatchHooks} looks both up by string — and a typo in either
      * degrades this channel silently.
      */
     InvocationHandler confirmHandler() {
