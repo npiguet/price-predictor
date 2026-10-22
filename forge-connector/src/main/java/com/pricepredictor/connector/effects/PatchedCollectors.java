@@ -276,8 +276,8 @@ public final class PatchedCollectors implements AutoCloseable {
                     || args.length < 3) {
                 return null;
             }
-            // final-fix-3.md item 2: a fork's own replacements resolve
-            // through this same JVM-static hook (ForkCollector.forceResolution
+            // A fork's own replacements resolve through this same JVM-static
+            // hook (ForkCollector.forceResolution
             // runs the fork's forced ability through the real resolution
             // pipeline, which is where replacements apply). args[0] is
             // declared ReplacementEffect on Forge's side -- always a
@@ -378,9 +378,8 @@ public final class PatchedCollectors implements AutoCloseable {
      * about when. Drawn at roughly 1:1 by sampling the negatives, since a turn
      * evaluates far more conditions than it fires.
      *
-     *
-     * <p>Package-private rather than private (final-fix-3.md item 2), the same
-     * reason {@link #rewriteHandler()} already is: the argument order has no
+     * <p>Package-private rather than private, the same reason {@link
+     * #rewriteHandler()} is: the argument order has no
      * compiler behind it, so this hook's own game-identity test calls it with
      * a synthesized argument array.
      */
@@ -390,8 +389,7 @@ public final class PatchedCollectors implements AutoCloseable {
                     || args.length < 3) {
                 return null;
             }
-            // final-fix-3.md item 2: checked first, before this evaluation can
-            // spend any of the mode's negative-sampling budget (offer/keep
+            // Checked first, before this evaluation can spend any of the mode's negative-sampling budget (offer/keep
             // below) -- a fork's trigger evaluations must not skew the live
             // game's ratio bookkeeping any more than they must reach its
             // shard. args[0] is declared Trigger on Forge's side, always a
@@ -587,9 +585,9 @@ public final class PatchedCollectors implements AutoCloseable {
      * {@code attackers} and {@code blockers} subkinds are always logged: they
      * fire once per combat, not once per candidate.
      *
-     * <p>Package-private rather than private (final-fix-3.md item 2), the same
-     * reason {@link #rewriteHandler()} already is: this hook's own
-     * game-identity test calls it with a synthesized argument array.
+     * <p>Package-private rather than private, the same reason {@link
+     * #rewriteHandler()} is: this hook's own game-identity test calls it with
+     * a synthesized argument array.
      */
     InvocationHandler playabilityHandler() {
         return (proxy, method, args) -> {
@@ -597,8 +595,7 @@ public final class PatchedCollectors implements AutoCloseable {
                     || args.length < 1) {
                 return null;
             }
-            // final-fix-3.md item 2 / final-fix-4.md item 5: checked before the
-            // sampler draw below, not after -- a fork's own candidates are
+            // Checked before the sampler draw below, not after -- a fork's own candidates are
             // evaluated for playability too (ForkCollector.forceResolution's
             // chooseTargets, and GameSimulator's own AI decisions, both ask the
             // same AiController this hook is installed on), and letting one
@@ -606,9 +603,8 @@ public final class PatchedCollectors implements AutoCloseable {
             // re-randomise the live sample stream for every other subkind that
             // draws from it (trigger negatives, the mana reservoir) --
             // exactly the cost triggerFireHandler's own identity check already
-            // avoids by running first. A null candidate is pre-existing,
-            // unrelated behaviour (the record still names no ability) and is
-            // left alone.
+            // avoids by running first. A null candidate is let through: its
+            // record names no ability either way.
             SpellAbility candidate =
                     args[0] instanceof SpellAbility sa ? sa : null;
             if (candidate != null && !belongsToLiveGame(candidate)) {
@@ -1257,8 +1253,7 @@ public final class PatchedCollectors implements AutoCloseable {
      * how this game's own two lobby seats were registered, so a forked
      * ability resolves through the exact same
      * {@code AbilityUtils.resolveApiAbility} these hooks are installed
-     * against (ruling R31, final-fix-1.md F2 -- reversing an earlier ruling
-     * of mine that treated this path as already inert). {@link ForkEventSink}
+     * against. {@link ForkEventSink}
      * keeps a fork's own <em>bus</em> events out of this game's records by
      * subscribing to the fork's own {@code Game} instead of this one, but
      * these hooks are not bus subscriptions, so that separation never
@@ -1293,16 +1288,15 @@ public final class PatchedCollectors implements AutoCloseable {
      * something both callers already have in scope. Both hooks' push/pop
      * bookkeeping in {@link #clauseMemos} is untouched by this: a fork's
      * clause still pushes and pops its own memo exactly as a live one does,
-     * so this fix cannot desynchronize the deque F3 balances.
+     * so this check cannot desynchronize that deque.
      *
-     * <p>Typed {@link CardTraitBase} rather than {@link SpellAbility} (final-
-     * fix-3.md item 2): {@code SpellAbility}, {@code ReplacementEffect} and
+     * <p>Typed {@link CardTraitBase} rather than {@link SpellAbility}:
+     * {@code SpellAbility}, {@code ReplacementEffect} and
      * {@code Trigger} all extend it and all declare {@code getHostCard()} on
      * it, so {@link #rewriteHandler()} and {@link #triggerFireHandler()} --
      * whose acting argument is a {@code ReplacementEffect}/{@code Trigger},
      * never a {@code SpellAbility} -- reuse this same check rather than a
-     * near-duplicate. Every existing caller passes a {@code SpellAbility},
-     * which still satisfies the widened parameter unchanged.
+     * near-duplicate.
      */
     private boolean belongsToLiveGame(CardTraitBase ability) {
         if (ability == null) {
@@ -1323,13 +1317,12 @@ public final class PatchedCollectors implements AutoCloseable {
     }
 
     /**
-     * Whether a null-ability outcome belongs to the live game (final-fix-3.md
-     * item 1; widened final-fix-4.md item 2).
+     * Whether a null-ability outcome belongs to the live game.
      *
      * <p>{@link #outcomeHandler()}'s two production null-ability sources --
-     * {@code GameAction.reveal}'s six-argument funnel (ruling R10) and
+     * {@code GameAction.reveal}'s six-argument funnel and
      * {@code ReplacementHandler.runSingleReplaceDamageEffect}'s two
-     * {@code damage_prevented} sites (rulings R11/R12) -- call
+     * {@code damage_prevented} sites -- call
      * {@code EffectRecordOutcomes.note} with a literal {@code null} ability,
      * always, on the live game exactly as on a fork: {@link
      * #belongsToLiveGame(CardTraitBase)} has nothing to compare, and simply
@@ -1353,8 +1346,8 @@ public final class PatchedCollectors implements AutoCloseable {
      *   ability resolves through {@code AbilityUtils.resolve}/{@code
      *   resolveApiAbility}, live or forked alike, and both set this pointer to
      *   the ability currently resolving before running its body. Kept as a
-     *   second, independent signal instead of removed now that the flag alone
-     *   is sufficient for both of this class's current fork mechanisms:
+     *   second, independent signal although the flag alone is sufficient for
+     *   both of this class's current fork mechanisms:
      *   insurance against a future one that resolves an ability without going
      *   through {@code intervene}/{@code probe}. When the flag is true this
      *   branch is redundant with it (both cover the resolving case), not a
@@ -1369,8 +1362,7 @@ public final class PatchedCollectors implements AutoCloseable {
      *
      * <p><b>Why not also use {@code damage_prevented}'s own {@code "source"}
      * param</b> (a raw {@code Card}, held at {@link #outcomeRefOf} before it is
-     * converted to a ref -- the reviewer's suggestion, final-fix-4.md item 2):
-     * considered and not added. With the flag now covering the entirety of
+     * converted to a ref): with the flag covering the entirety of
      * both fork mechanisms, there is no remaining path where {@code source}
      * would catch a fork this method's two signals miss -- it would be a
      * third check for a gap that is already closed, not a narrower one. It is
@@ -1473,12 +1465,10 @@ public final class PatchedCollectors implements AutoCloseable {
      * <p>{@code test_event_schema_completeness.py}'s
      * {@code _emitted_event_types()} is a <em>textual</em> scan for
      * {@code EffectEvent.<NAME>} in this package's source, and a javadoc
-     * listing satisfies that scan exactly as well as this set does — which
-     * was the defect: before this set existed, all nine types this task
-     * wired were referenced only inside a comment, so deleting an effect's
-     * {@code note(...)} call, or misspelling the event name, would go
-     * unnoticed by the guard built specifically to catch that, one level up
-     * from where this whole plan started. This set is what
+     * listing satisfies that scan exactly as well as this set does. Were the
+     * types referenced only inside a comment, deleting an effect's {@code
+     * note(...)} call, or misspelling the event name, would go unnoticed by
+     * the guard built specifically to catch that. This set is what
      * {@link #outcomeHandler()} actually validates incoming types against,
      * so the reference is load-bearing code, not prose a rename can silently
      * strand.
@@ -1489,15 +1479,14 @@ public final class PatchedCollectors implements AutoCloseable {
      * twelve, from an effect directly. {@code SPELL_COUNTERED} ({@code
      * CounterEffect}), {@code TOKEN_CREATED} ({@code TokenEffectBase}, shared
      * by the six token-making effects) and {@code DICE_ROLLED} ({@code
-     * RollDiceEffect}) are Task 11's three -- the other one of Task 11's four,
-     * {@code PLAYER_WON}, is a bus subscription (see {@code
-     * BusEventReader#onGameOutcome}), not an outcome-hook type, and does
-     * not belong here. {@code TURN_ENDED} ({@code EndTurnEffect}) and {@code
-     * TEXT_CHANGE} ({@code TextBoxExchangeEffect} -- {@code ChangeText}'s own
-     * contribution to {@code TEXT_CHANGE} is an {@code ApiEvents.RULES} entry,
-     * not this hook) are Task 12's two note-based additions; the other six of
-     * Task 12's eight types are {@code ApiEvents.RULES} entries and never reach
-     * this set at all.
+     * RollDiceEffect}) are the same; {@code PLAYER_WON} is a bus
+     * subscription (see {@code BusEventReader#onGameOutcome}), not an
+     * outcome-hook type, and does not belong here. {@code TURN_ENDED}
+     * ({@code EndTurnEffect}) and {@code TEXT_CHANGE} ({@code
+     * TextBoxExchangeEffect} -- {@code ChangeText}'s own contribution to
+     * {@code TEXT_CHANGE} is an {@code ApiEvents.RULES} entry, not this hook)
+     * are noted by their effects too; the types an {@code ApiEvents.RULES}
+     * entry emits never reach this set at all.
      */
     private static final Set<String> KNOWN_OUTCOME_TYPES = Set.of(
             EffectEvent.COIN_FLIPPED, EffectEvent.CLASH_RESOLVED, EffectEvent.VOTE_TAKEN,
@@ -1517,9 +1506,7 @@ public final class PatchedCollectors implements AutoCloseable {
      * {@code ApiEvents.reportEmitterFailure} and
      * {@code AbilityUtils.reportClauseListenerFailure} give their own hooks'
      * failures, for the same reason: a deleted {@code note(...)} call or a
-     * misspelled event name must not go dark silently, which is the exact
-     * founding failure mode this whole plan exists to end, recreated one
-     * level up.
+     * misspelled event name must not go dark silently.
      */
     private static void reportUnknownOutcomeType(String type) {
         if (UNKNOWN_OUTCOME_TYPE_REPORTED.compareAndSet(false, true)) {
@@ -1677,9 +1664,9 @@ public final class PatchedCollectors implements AutoCloseable {
      * That is what leaves the role-polarity probe unrunnable: paying {@code R}
      * is observable from stage one, producing it is not.
      *
-     * <p>Package-private rather than private (final-fix-3.md item 2), the same
-     * reason {@link #rewriteHandler()} already is: this hook's own
-     * game-identity test calls it with a synthesized argument array.
+     * <p>Package-private rather than private, the same reason {@link
+     * #rewriteHandler()} is: this hook's own game-identity test calls it with
+     * a synthesized argument array.
      */
     InvocationHandler manaHandler() {
         return (proxy, method, args) -> {
@@ -1689,8 +1676,8 @@ public final class PatchedCollectors implements AutoCloseable {
             }
             SpellAbility ability = args[0] instanceof SpellAbility sa ? sa : null;
             String produced = String.valueOf(args[2]);
-            // final-fix-3.md item 2: a fork's own mana abilities can resolve
-            // through the inline path too (forceResolution's forced ability,
+            // A fork's own mana abilities can resolve through the inline path
+            // too (forceResolution's forced ability,
             // or costs it pays along the way), and this hook is a JVM static
             // like the others.
             if (ability == null || produced.isEmpty() || !belongsToLiveGame(ability)) {

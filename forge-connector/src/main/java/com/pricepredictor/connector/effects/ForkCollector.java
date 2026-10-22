@@ -62,17 +62,13 @@ public final class ForkCollector {
      * Marks this thread as running one of this class's two forks -- an
      * {@link #intervene interventional resolution} or a {@link #probe
      * damage-step probe} -- for {@code
-     * PatchedCollectors.nullAbilityOutcomeBelongsToLiveGame()}
-     * (final-fix-3.md item 1; widened final-fix-4.md item 2).
+     * PatchedCollectors.nullAbilityOutcomeBelongsToLiveGame()}.
      *
-     * <p>Originally scoped to only {@link #probe}'s own
-     * {@code Combat.dealAssignedDamage} call (final-fix-3.md item 1's first
-     * pass), on the reasoning that the resolving-clause pointer already
-     * covered {@link #intervene}: a forced ability resolves through the
-     * normal {@code AbilityUtils.resolve} path, which sets that pointer to
-     * the fork's own ability. Widened to both methods' <em>entire</em> bodies
-     * (final-fix-4.md item 2) once the re-review priced the gap correctly:
-     * the pointer is null for every segment of a fork outside
+     * <p>It covers both methods' <em>entire</em> bodies, not just
+     * {@link #probe}'s own {@code Combat.dealAssignedDamage} call. The
+     * resolving-clause pointer does cover a forced ability as it resolves
+     * through the normal {@code AbilityUtils.resolve} path, but it is null
+     * for every segment of a fork outside
      * {@code AbilityUtils.resolve} itself -- {@link #intervene}'s own
      * {@code GameCopier}/score-check/{@code findInFork} setup,
      * {@link #forceResolution}'s pre-push {@code chooseModes}/
@@ -81,17 +77,17 @@ public final class ForkCollector {
      * {@code checkStateEffects}/{@code addAllTriggeredAbilitiesToStack} calls
      * -- and nothing currently reachable from those segments fires a
      * null-ability outcome only because no emitter happens to sit there
-     * today. A future one would have found the same hole {@link #probe}'s
-     * damage step did: null ability, null pointer, indistinguishable from the
-     * live game's own turn-based actions.
+     * today. A future one would find the same hole {@link #probe}'s damage
+     * step has: null ability, null pointer, indistinguishable from the live
+     * game's own turn-based actions.
      *
-     * <p>With the flag now covering everything either method does, "a fork is
+     * <p>With the flag covering everything either method does, "a fork is
      * running on this thread" is by itself a sufficient answer for every fork
      * mechanism this class has today, so {@code
      * nullAbilityOutcomeBelongsToLiveGame} checks it first -- the
      * resolving-clause pointer is not needed to make this flag correct, only
-     * kept behind it as a second, independent signal (final-fix-4.md item 2
-     * says to keep both) as insurance against a future fork mechanism that
+     * kept behind it as a second, independent signal, as insurance against a
+     * future fork mechanism that
      * resolves an ability without going through this flag's two entry
      * points.
      *

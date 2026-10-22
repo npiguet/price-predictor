@@ -608,7 +608,6 @@ final class RunParamNormalizer {
             Map.entry("Surveil", EffectEvent.CARD_LOOKED_AT),
             Map.entry("PhaseOut", EffectEvent.PHASED),
             Map.entry("PhaseIn", EffectEvent.PHASED),
-            Map.entry("Regenerated", EffectEvent.REGENERATED),
             // ── the replacement side's own spellings ────────────────────
             // ReplacementType names its modes differently from TriggerType,
             // and this table was written from the trigger vocabulary. A

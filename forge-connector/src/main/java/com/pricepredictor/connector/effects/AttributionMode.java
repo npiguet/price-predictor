@@ -17,7 +17,7 @@ package com.pricepredictor.connector.effects;
  */
 public enum AttributionMode {
 
-    /** The three attribution hooks are present; events name their cause. */
+    /** The attribution hook is present: events name the clause that produced them. */
     PATCHED("patched"),
 
     /**

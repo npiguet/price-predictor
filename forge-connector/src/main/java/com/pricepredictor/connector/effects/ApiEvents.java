@@ -79,20 +79,20 @@ final class ApiEvents {
      * null then -- unlike the methods the lambdas below call, which have no
      * such ordering.
      *
-     * <p>Fixed in fix round 2 (task-8-fix-2.md, Finding 1). The original
-     * version read {@code sa.getTargets().getTargetCards()} directly --
-     * the clause's own {@code TargetChoices}. But {@code
-     * HealDamageEffect.resolve()} finds its cards through {@code
+     * <p>Read through {@link #affectedCards} rather than off {@code
+     * sa.getTargets().getTargetCards()}, the clause's own {@code
+     * TargetChoices}. {@code HealDamageEffect.resolve()} finds its cards
+     * through {@code
      * SpellAbilityEffect.getTargetCards(sa)}, which consults {@code
      * sa.getTargets()} only when {@code sa.usesTargeting()} is true, and
      * neither real {@code HealDamage} card in the cardsfolder declares any
      * targeting on the clause itself -- both use {@code Defined$
      * Replaced*}, resolved through a replacement effect's {@code
-     * getReplacingObject}, which never touches {@code sa.getTargets()}. So
-     * the direct read found the clause's own (always-empty, per {@code
+     * getReplacingObject}, which never touches {@code sa.getTargets()}. A
+     * direct read would find the clause's own (always-empty, per {@code
      * SpellAbility.targetChosen}'s eager initialisation) {@code
-     * TargetChoices} on every real firing and reported {@code amount: 0} --
-     * a wrong value indistinguishable from a real "healed an undamaged
+     * TargetChoices} on every real firing and report {@code amount: 0} -- a
+     * wrong value indistinguishable from a real "healed an undamaged
      * creature," worse than a missing record because nothing downstream
      * could tell the two apart.
      */
@@ -155,53 +155,35 @@ final class ApiEvents {
                         event.param("owner", ownerOf(sa))),
                 "GainOwnership");
 
-            // ── Task 8: choices, healed damage, granted abilities, retargets ──
-            //
-            // Ruling R18 (task-8-brief.md) corrected two keys below that were NOT
-            // spelled like their effect classes. Verified against ApiType.java
-            // before use:
-            //   NameCard      (ApiType.java:135) declares ChooseCardNameEffect.class
-            //   GenericChoice (ApiType.java:109) declares ChooseGenericEffect.class
-            // A rule keyed by the CLASS stem matches nothing and fails silently.
-            //
-            // R18 also added a ChooseSector entry here, on the reasoning that it fits
-            // choice_made and that leaving it out would be a voluntary omission. That
-            // check covered ApiType.java and the Card accessor but never the Python
-            // schema, which already had the answer -- see the comment below
-            // GenericChoice, where that entry would otherwise sit. Fix round 1 removed
-            // it.
-            //
-            // The brief's sample code for every entry below constructed `Rule` with
-            // only two arguments (a memo-or-null, then the emitter), omitting the
-            // eventType this record actually declares first -- that does not compile
-            // against the real three-argument Rule above, so each entry here supplies
-            // the real constant the same way every pre-existing rule already does.
-            //
-            // GenericChoice, ChooseDirection, ChooseEvenOdd and NameCard are not
-            // optional extras needing a judgment call: all four are present in
-            // event_schema.py's EFFECT_API_EVENTS (mapped to CHOICE_MADE) and absent
-            // from EXCLUDED_EFFECT_APIS, so the schema itself declares that these APIs
-            // produce choice_made. A rule that matches here and reads nothing back
-            // would be worse than one left out of this table entirely -- it looks
-            // wired. Their choice() read branches, below, are required, not optional.
+        // ── choices, healed damage, granted abilities, retargets ─────────
+        //
+        // Two keys below are NOT spelled like their effect classes (ApiType.java):
+        //   NameCard      declares ChooseCardNameEffect.class
+        //   GenericChoice declares ChooseGenericEffect.class
+        // A rule keyed by the CLASS stem matches nothing and fails silently.
+        //
+        // GenericChoice, ChooseDirection, ChooseEvenOdd and NameCard are not
+        // optional extras needing a judgment call: all four are present in
+        // event_schema.py's EFFECT_API_EVENTS (mapped to CHOICE_MADE) and absent
+        // from EXCLUDED_EFFECT_APIS, so the schema itself declares that these APIs
+        // produce choice_made. A rule that matches here and reads nothing back
+        // would be worse than one left out of this table entirely -- it looks
+        // wired. Their choice() read branches, below, are required, not optional.
         put(rules, new Rule(EffectEvent.CHOICE_MADE, null, (sa, host, memo) -> choice(host)),
                 "ChooseColor", "ChooseType", "ChooseCard", "NameCard", "ChooseNumber",
                 "ChoosePlayer", "ChooseDirection", "ChooseEvenOdd", "ChooseSource",
                 "GenericChoice");
 
-            // ChooseSector is deliberately NOT wired here. Ruling R18 added it after
-            // checking ApiType.java (a real member, ApiType.java:54) and
-            // Card.getChosenSector() (a real accessor -- ChooseSectorEffect.java:13
-            // calls setChosenSector) -- but never checked the Python schema, which
-            // already had the answer: event_schema.py's EXCLUDED_EFFECT_APIS carries
-            //   "ChooseSector": "Unfinity attraction; not reachable in sealed or draft"
-            // with ChooseSector correspondingly absent from EFFECT_API_EVENTS. This
-            // corpus is collected from sealed and draft pools only, which never
-            // include Unfinity's silver-bordered attraction cards, so the clause this
-            // would read can never actually run here. If ChooseSector caught your eye
-            // in ApiType.java and you are about to re-add it the way R18 did: don't,
-            // without re-checking the schema first -- everyChoiceMadeApiHasAReadableChoice
-            // in ApiEventsTest will fail the moment you do, which is the point.
+        // ChooseSector is deliberately NOT wired here, though ApiType.java has
+        // it and Card.getChosenSector() is a real accessor: event_schema.py's
+        // EXCLUDED_EFFECT_APIS carries
+        //   "ChooseSector": "Unfinity attraction; not reachable in sealed or draft"
+        // with ChooseSector correspondingly absent from EFFECT_API_EVENTS. This
+        // corpus is collected from sealed and draft pools only, which never
+        // include Unfinity's silver-bordered attraction cards, so the clause this
+        // would read can never actually run here. Re-adding it needs the schema
+        // changed first -- everyChoiceMadeApiHasAReadableChoice in ApiEventsTest
+        // fails the moment the two disagree, which is the point.
         put(rules, Rule.shaped(EffectEvent.DAMAGE_HEALED, DAMAGE_BEFORE, (event, sa, host, memo) ->
                         event.param("amount", memo instanceof Integer n ? n : 0)),
                 "HealDamage");
@@ -216,46 +198,46 @@ final class ApiEvents {
         put(rules, new Rule(EffectEvent.TARGETS_CHANGED, null, (sa, host, memo) -> retargeted(sa)),
                 "ChangeTargets");
 
-            // ── Task 12: the eight highest-reach unemitted types ─────────
+        // ── schedules, replacements, titles and combat removals ──────────
 
-            // delayed_trigger_created: the card that scheduled it. Always the
-            // host -- neither effect reads Defined$/ValidTgts$ for the trigger
-            // itself, only for what the delayed trigger later acts on.
+        // delayed_trigger_created: the card that scheduled it. Always the
+        // host -- neither effect reads Defined$/ValidTgts$ for the trigger
+        // itself, only for what the delayed trigger later acts on.
         put(rules, Rule.shaped(EffectEvent.DELAYED_TRIGGER_CREATED, null, (event, sa, host, memo) ->
                         event.subject(SnapshotBuilder.entityId(host))),
                 "DelayedTrigger");
-            // ImmediateTriggerEffect.resolve() returns before registering
-            // anything when TriggerAmount$ (default 1) calculates to <= 0 --
-            // CR 603.12a's "once for each of those times" can be zero times.
-            // Captured as a memo (read the same way ApiEvents' own #amount
-            // helper reads it elsewhere) rather than re-read in the emitter,
-            // matching this file's own convention: nothing in the effect
-            // mutates whatever TriggerAmount$'s expression depends on before
-            // this is the first thing resolve() computes.
+        // ImmediateTriggerEffect.resolve() returns before registering
+        // anything when TriggerAmount$ (default 1) calculates to <= 0 --
+        // CR 603.12a's "once for each of those times" can be zero times.
+        // Captured as a memo (read the same way ApiEvents' own #amount
+        // helper reads it elsewhere) rather than re-read in the emitter,
+        // matching this file's own convention: nothing in the effect
+        // mutates whatever TriggerAmount$'s expression depends on before
+        // this is the first thing resolve() computes.
         put(rules, Rule.shaped(EffectEvent.DELAYED_TRIGGER_CREATED,
                         (sa, host) -> amount(sa, host, "TriggerAmount", "1"),
                         (event, sa, host, memo) -> memo instanceof Integer n && n <= 0 ? null
                                 : event.subject(SnapshotBuilder.entityId(host))),
                 "ImmediateTrigger");
 
-            // replacement_applied: the card whose replacement applied. See
-            // REPLACEMENT_APPLIED_EMITTER's own javadoc above for why all six
-            // share one emitter and why this is a strict subset of `rewrite`.
+        // replacement_applied: the card whose replacement applied. See
+        // REPLACEMENT_APPLIED_EMITTER's own javadoc above for why all six
+        // share one emitter and why this is a strict subset of `rewrite`.
         put(rules, Rule.shaped(EffectEvent.REPLACEMENT_APPLIED, null, REPLACEMENT_APPLIED_EMITTER),
                 "ReplaceEffect", "ReplaceCounter", "ReplaceDamage", "ReplaceMana",
                 "ReplaceSplitDamage", "ReplaceToken");
 
-            // monarch_changed: the new monarch, and only when the monarch
-            // genuinely changed. GameAction.becomeMonarch is a no-op (no
-            // state change, no trigger) when the named player already is the
-            // monarch or canBecomeMonarch() says no (a static ability, e.g.
-            // Crown of Vigor's granted "monarch can't lose the crown" combined
-            // with a would-be usurper who cannot become monarch some other
-            // way) -- replicating that condition here would be exactly the
-            // duplicated-classification shortcut ruling R12 rejected for
-            // damage_prevented. Reading the actual before/after monarch
-            // instead needs no such duplication and is correct regardless of
-            // how many players BecomeMonarchEffect's loop iterates.
+        // monarch_changed: the new monarch, and only when the monarch
+        // genuinely changed. GameAction.becomeMonarch is a no-op (no
+        // state change, no trigger) when the named player already is the
+        // monarch or canBecomeMonarch() says no (a static ability, e.g.
+        // Crown of Vigor's granted "monarch can't lose the crown" combined
+        // with a would-be usurper who cannot become monarch some other
+        // way) -- replicating that condition here would duplicate the
+        // engine's own classification, a second copy that drifts. Reading
+        // the actual before/after monarch
+        // instead needs no such duplication and is correct regardless of
+        // how many players BecomeMonarchEffect's loop iterates.
         put(rules, Rule.shaped(EffectEvent.MONARCH_CHANGED,
                         (sa, host) -> host.getGame().getMonarch(),
                         (event, sa, host, memo) -> {
@@ -267,15 +249,15 @@ final class ApiEvents {
                         }),
                 "BecomeMonarch");
 
-            // ring_tempts: the tempted player, always the activator --
-            // RingTemptsYouEffect.resolve() reads sa.getActivatingPlayer()
-            // unconditionally, never Defined$/targeting. The Ring-bearer is a
-            // separable second fact from the same clause (Card.setRingBearer,
-            // read back post-resolution since it is only known once the
-            // player's controller has chosen one) and is named as a second
-            // subject when one was actually chosen -- null when the player
-            // controls no creatures, per chooseSingleEntityForEffect's own
-            // contract on an empty candidate list.
+        // ring_tempts: the tempted player, always the activator --
+        // RingTemptsYouEffect.resolve() reads sa.getActivatingPlayer()
+        // unconditionally, never Defined$/targeting. The Ring-bearer is a
+        // separable second fact from the same clause (Card.setRingBearer,
+        // read back post-resolution since it is only known once the
+        // player's controller has chosen one) and is named as a second
+        // subject when one was actually chosen -- null when the player
+        // controls no creatures, per chooseSingleEntityForEffect's own
+        // contract on an empty candidate list.
         put(rules, Rule.shaped(EffectEvent.RING_TEMPTS, null, (event, sa, host, memo) -> {
                     Player p = sa.getActivatingPlayer();
                     if (p == null) {
@@ -290,54 +272,52 @@ final class ApiEvents {
                 }),
                 "RingTemptsYou");
 
-            // removed_from_combat: every creature actually removed, not just
-            // the first (Task 6's shipped defect, repeated here as a named
-            // risk). RemoveFromCombatEffect gates each target on several
-            // conditions (combat null, not in play, a stale LKI reference)
-            // this file cannot see from outside; reading whether each
-            // memoized combatant is still attacking or blocking afterward
-            // sidesteps replicating them, the same before/after-diff shape as
-            // BecomeMonarch above.
+        // removed_from_combat: every creature actually removed, not just
+        // the first. RemoveFromCombatEffect gates each target on several
+        // conditions (combat null, not in play, a stale LKI reference)
+        // this file cannot see from outside; reading whether each
+        // memoized combatant is still attacking or blocking afterward
+        // sidesteps replicating them, the same before/after-diff shape as
+        // BecomeMonarch above.
         put(rules, new Rule(EffectEvent.REMOVED_FROM_COMBAT,
                         (sa, host) -> combatantsBefore(sa, host),
                         (sa, host, memo) -> noLongerInCombat(host, memo)),
                 "RemoveFromCombat");
-            // ChangeCombatants reselects an attacker's defender by calling
-            // addToCombat, whose only removeFromCombat call sits immediately
-            // before re-adding the same creature against the new defender
-            // (SpellAbilityEffect.java:762) -- so "removed from combat" here
-            // means a targeted attacker's defender assignment actually
-            // changed, read the same way ChangeCombatantsEffect itself reads
-            // its own originalDefender/defender pair for retargeting
-            // triggers, not replicated from the Optional-decline or
-            // already-attacking-that-defender guards.
+        // ChangeCombatants reselects an attacker's defender by calling
+        // addToCombat, whose only removeFromCombat call sits immediately
+        // before re-adding the same creature against the new defender
+        // (SpellAbilityEffect.java:762) -- so "removed from combat" here
+        // means a targeted attacker's defender assignment actually
+        // changed, read the same way ChangeCombatantsEffect itself reads
+        // its own originalDefender/defender pair for retargeting
+        // triggers, not replicated from the Optional-decline or
+        // already-attacking-that-defender guards.
         put(rules, new Rule(EffectEvent.REMOVED_FROM_COMBAT,
                         (sa, host) -> attackerDefendersBefore(sa, host),
                         (sa, host, memo) -> reselectedAttackers(host, memo)),
                 "ChangeCombatants");
 
-            // initiative_taken: the player taking the initiative.
-            // GameAction.takeInitiative fires its trigger unconditionally --
-            // "You can take the initiative even if you already have it" is in
-            // the engine's own comment -- unlike becomeMonarch, which is a
-            // no-op when the target already holds the title. So this is NOT
-            // a before/after diff (that would wrongly suppress the
-            // already-has-it re-affirmation): it reads the post-resolution
-            // holder and confirms they are one of this clause's own targets,
-            // which is true whether the holder changed or was reconfirmed.
-            //
-            // Known limit (Task 12 fix round 1, item 4; record-schema.md
-            // "initiative_taken can miss a redirect"): a target who satisfies
-            // isInGame() but has also already hasLost() triggers
-            // GameAction.takeInitiative's own redirect to the next player,
-            // which that method's own unconditional fall-through then
-            // overwrites back to the original (lost) target before this rule
-            // ever reads game.getHasInitiative() -- so the event still fires,
-            // but can name the lost player instead of who the redirect
-            // actually landed on. Not replicated here: doing so would mean
-            // re-deriving GameAction's own fall-through as a second copy of
-            // it, the classification-duplication shortcut ruling R12 already
-            // rejected for damage_prevented.
+        // initiative_taken: the player taking the initiative.
+        // GameAction.takeInitiative fires its trigger unconditionally --
+        // "You can take the initiative even if you already have it" is in
+        // the engine's own comment -- unlike becomeMonarch, which is a
+        // no-op when the target already holds the title. So this is NOT
+        // a before/after diff (that would wrongly suppress the
+        // already-has-it re-affirmation): it reads the post-resolution
+        // holder and confirms they are one of this clause's own targets,
+        // which is true whether the holder changed or was reconfirmed.
+        //
+        // Known limit (record-schema.md "initiative_taken can miss a
+        // redirect"): a target who satisfies
+        // isInGame() but has also already hasLost() triggers
+        // GameAction.takeInitiative's own redirect to the next player,
+        // which that method's own unconditional fall-through then
+        // overwrites back to the original (lost) target before this rule
+        // ever reads game.getHasInitiative() -- so the event still fires,
+        // but can name the lost player instead of who the redirect
+        // actually landed on. Not replicated here: doing so would mean
+        // re-deriving GameAction's own fall-through as a second copy of it,
+        // which drifts the way any duplicated classification does.
         put(rules, Rule.shaped(EffectEvent.INITIATIVE_TAKEN, null, (event, sa, host, memo) -> {
                     Player holder = host.getGame().getHasInitiative();
                     if (holder == null || !affectedPlayers(sa).contains(holder)) {
@@ -347,16 +327,16 @@ final class ApiEvents {
                 }),
                 "TakeInitiative");
 
-            // text_change: the card(s) whose text changed. Only when the
-            // clause actually names a word to replace -- sa.hasParam reads
-            // its own params directly, no post-resolution state needed --
-            // since ChangeTextEffect's target loop still fires
-            // GameEventCardStatsChanged even when neither ChangeColorWord$
-            // nor ChangeTypeWord$ is set. ExchangeTextBox's own contribution
-            // to text_change is a note() call from TextBoxExchangeEffect
-            // itself (see that class), not a rule here: its two early returns
-            // (checkValidDuration, tgtCards.size() < 2) are not cheaply
-            // replicable from outside without duplicating engine logic.
+        // text_change: the card(s) whose text changed. Only when the
+        // clause actually names a word to replace -- sa.hasParam reads
+        // its own params directly, no post-resolution state needed --
+        // since ChangeTextEffect's target loop still fires
+        // GameEventCardStatsChanged even when neither ChangeColorWord$
+        // nor ChangeTypeWord$ is set. ExchangeTextBox's own contribution
+        // to text_change is a note() call from TextBoxExchangeEffect
+        // itself (see that class), not a rule here: its two early returns
+        // (checkValidDuration, tgtCards.size() < 2) are not cheaply
+        // replicable from outside without duplicating engine logic.
         put(rules, new Rule(EffectEvent.TEXT_CHANGE, null, (sa, host, memo) -> changeTextEvent(sa)),
                 "ChangeText");
         return Map.copyOf(rules);
@@ -365,17 +345,17 @@ final class ApiEvents {
     /**
      * What the emitter for this clause needs from before it runs, if anything.
      *
-     * <p>Contained the way {@link #after} is (final-fix-1.md F3): a memo reads
-     * engine state before the clause has resolved, which can throw on an
-     * edge-case board the same way an emitter can. Left uncontained, the
-     * throw used to propagate out of this call before
-     * {@code PatchedCollectors.clauseHandler()}'s own {@code
-     * clauseMemos.push(...)} ever ran, so the {@code Deque} that hook pairs
-     * pushes and pops through went one push short: the next sibling or
-     * enclosing clause's {@code onClauseResolved} then popped <em>this</em>
-     * clause's absent memo and got someone else's instead, and the clause
-     * that should have received that memo popped an empty deque and got
-     * {@code null} in its place -- one throw, two clauses misattributed.
+     * <p>Contained the way {@link #after} is: a memo reads engine state
+     * before the clause has resolved, which can throw on an edge-case board
+     * the same way an emitter can. Left uncontained, the throw would
+     * propagate out of this call before {@code
+     * PatchedCollectors.clauseHandler()}'s own {@code clauseMemos.push(...)}
+     * ran, so the {@code Deque} that hook pairs pushes and pops through would
+     * go one push short: the next sibling or enclosing clause's {@code
+     * onClauseResolved} would pop <em>this</em> clause's absent memo and get
+     * someone else's instead, and the clause that should have received that
+     * memo would pop an empty deque and get {@code null} in its place -- one
+     * throw, two clauses misattributed.
      *
      * <p>Catching here and always returning (a real memo or {@code null})
      * keeps {@code clauseMemos.push(...)} unconditional: a memo-less API and
@@ -386,7 +366,7 @@ final class ApiEvents {
      * {@code onClauseResolved} time except by consulting a second piece of
      * state kept in lockstep with this one, and that second state would
      * itself have to be pushed unconditionally to stay balanced, which is
-     * this fix again with extra steps.
+     * this design again with extra steps.
      */
     static Object before(SpellAbility sa) {
         Rule rule = ruleFor(sa);
@@ -396,9 +376,8 @@ final class ApiEvents {
         try {
             return rule.memo().take(sa, sa.getHostCard());
         } catch (RuntimeException e) {
-            // Own report, own latch (final-fix-3.md item 4) -- a memo that
-            // fails must not look identical to "this mechanic never
-            // happens", the exact failure this whole plan exists to end.
+            // Own report, own latch -- a memo that fails must not look
+            // identical to "this mechanic never happens".
             reportMemoFailure(rule.eventType(), e);
             return null;
         }
@@ -417,9 +396,8 @@ final class ApiEvents {
             // may have left in a shape it did not expect. A missing event is a
             // gap; a thrown one would end the resolution the observer is only
             // watching -- so the throw stays swallowed. But swallowed and
-            // "this mechanic never happens" must not look identical, which is
-            // the failure this whole plan exists to end, so the first one is
-            // not silent.
+            // "this mechanic never happens" must not look identical, so the
+            // first one is not silent.
             reportEmitterFailure(rule.eventType(), e);
             return null;
         }
@@ -461,11 +439,10 @@ final class ApiEvents {
 
     /**
      * As {@link #reportEmitterFailure}, for a rule's memo instead of its
-     * emitter (final-fix-3.md item 4).
+     * emitter.
      *
-     * <p>Previously routed through {@link #reportEmitterFailure} itself,
-     * which is wrong on two counts once F4 made these lines reachable by a
-     * human operator rather than only by a test. First, the wording: a memo
+     * <p>Not routed through {@link #reportEmitterFailure} itself, for two
+     * reasons. First, the wording: a memo
      * ({@link #before}) and an emitter ({@link #after}) are two different
      * halves of one {@link Rule} -- the memo reads engine state
      * <em>before</em> a clause resolves, the emitter builds the event
@@ -653,8 +630,8 @@ final class ApiEvents {
      * sa.getParamOrDefault(definedParam, "You").split(" & ")}, one lookup per
      * token, unioned. No card in the cardsfolder uses this today for either
      * {@code Defined$} on these three rules or {@code DefinedPlayer$} on
-     * {@code GainOwnership}, but this plan's accuracy constraint does not
-     * permit an approximation that is this cheap to close.
+     * {@code GainOwnership}, but an approximation this cheap to close is not
+     * worth keeping.
      */
     private static List<Player> definedPlayers(SpellAbility sa, String def) {
         List<Player> players = new ArrayList<>();
@@ -716,10 +693,8 @@ final class ApiEvents {
      * distinction, so this reads that instead; the named-card branch was
      * already guarded correctly by its paired {@code !isEmpty()} check.
      *
-     * <p>The direction, even/odd and mode branches are not in the brief's
-     * sample for this method, though the {@code ChooseDirection}, {@code
-     * ChooseEvenOdd} and {@code GenericChoice} rules above all route through
-     * it. These are not optional extras: {@code event_schema.py}'s {@code
+     * <p>The direction, even/odd and mode readings are not optional extras,
+     * though few cards reach them: {@code event_schema.py}'s {@code
      * EFFECT_API_EVENTS} maps all three (and {@code NameCard}) to {@code
      * CHOICE_MADE} and excludes none of them, so the schema itself declares
      * that these APIs produce {@code choice_made} -- a rule that matches and
@@ -735,16 +710,12 @@ final class ApiEvents {
      * the host to describe which one -- the schema still declares the API,
      * so the branch is what makes the reachable subset of it reachable.
      *
-     * <p>A {@code ChooseSector} branch reading {@code getChosenSector()}
-     * lived here briefly too. Removed along with the {@code RULES} entry
-     * (see the comment above {@code HealDamage}) once it turned out {@code
-     * event_schema.py} already excludes {@code ChooseSector} as unreachable
-     * in this corpus's sealed/draft pools -- so the accessor is still real,
-     * but nothing in {@code RULES} routes to this method carrying that API
-     * any more, and the branch would have been dead weight at best and a
-     * stale-state misattribution risk at worst (a host that happened to
-     * carry a leftover {@code chosenSector} from something else entirely
-     * would have outranked a later, real choice on the same card).
+     * <p>There is no {@code getChosenSector()} reading, for the reason there
+     * is no {@code ChooseSector} rule (see the comment above {@code
+     * HealDamage}): nothing routes that API here, and the reading would be a
+     * stale-state misattribution risk (a host carrying a leftover {@code
+     * chosenSector} from something else entirely would outrank a later, real
+     * choice on the same card).
      */
     private static EffectEvent choice(Card host) {
         if (host == null) {
@@ -802,22 +773,17 @@ final class ApiEvents {
      * -- this is the one outcome in this group that survives on an object
      * other than the host.
      *
-     * <p>Fixed in fix round 2 (task-8-fix-2.md, Finding 2) to read {@code
-     * getTargetEntities()} rather than only {@code getTargetCards()}.
-     * Redirecting a burn spell at a <em>player</em> is the classic use of
+     * <p>Reads {@code getTargetEntities()} rather than only {@code
+     * getTargetCards()}. Redirecting a burn spell at a <em>player</em> is the classic use of
      * this mechanic -- Deflection, Misdirection and Bolt Bend are all real
      * and all reach {@code ChangeTargetsEffect}'s default "choose any new
      * legal target" branch, which retargets at a player as readily as a
      * card. {@code getTargetCards()} filters to {@code Card} instances
-     * only, so a {@code Player} target was silently dropped and the event
-     * still fired with an empty {@code targets} list -- the channel looked
-     * wired while reporting nothing distinguishable from "retargeted at
-     * nothing." {@code SnapshotBuilder.stackExtrasJson} already reads
-     * mixed-entity targets the same way (a {@code GameEntity} loop plus an
-     * {@code instanceof} branch, rather than {@code SnapshotBuilder}'s
-     * separate {@code entityId(Card)}/{@code playerId(Player)} overloads
-     * folded into one serializer), so this follows that file's own
-     * precedent rather than inventing a second style for the same problem.
+     * only, so a {@code Player} target would be silently dropped and the
+     * event would still fire with an empty {@code targets} list -- a channel
+     * that looks wired while reporting nothing distinguishable from
+     * "retargeted at nothing." Mixed-entity targets are read as {@code
+     * SnapshotBuilder.stackExtrasJson} reads them, through {@link Refs#ofAny}.
      */
     private static EffectEvent retargeted(SpellAbility sa) {
         List<String> targets = new ArrayList<>();
@@ -834,15 +800,14 @@ final class ApiEvents {
         return new EffectEvent(EffectEvent.TARGETS_CHANGED).param("targets", targets);
     }
 
-    // ── Task 12 helpers ───────────────────────────────────────────────────
+    // ── text changes and combat removals ────────────────────────────────
 
     /**
      * {@code getCardsfromTargets(sa)} (SpellAbilityEffect.java:370), mirrored
      * the way {@link #affectedCards} already mirrors {@code getTargetCards}.
      *
      * <p>The {@code getTargetSpells()} union below is NOT dead for today's
-     * cardsfolder (corrected, fix round 1 item 4: an earlier version of this
-     * javadoc claimed it was). Seven of {@code ChangeText}'s seventeen
+     * cardsfolder. Seven of {@code ChangeText}'s seventeen
      * occurrences are {@code ValidTgts$ Card | TgtZone$ Stack,Battlefield} --
      * {@code artificial_evolution}, {@code sleight_of_mind} and {@code
      * magical_hack} among them -- which can target a spell on the stack, and

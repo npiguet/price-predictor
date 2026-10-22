@@ -899,8 +899,8 @@ public final class BusBracketCollector extends BusEventReader {
      * lethal damage step. The record for the combat that decided the game was
      * therefore the one combat record no game had.
      *
-     * <p>The <b>resolution bracket's own leftovers</b> (task-11 fix round 1,
-     * C1) are closed and cleared by the killing ability's own {@link
+     * <p>The <b>resolution bracket's own leftovers</b> are closed and
+     * cleared by the killing ability's own {@link
      * #endBracket} the moment it resolves -- before the state-based check that
      * discovers the game is over ever runs (CR 704.3, next main-loop
      * iteration). A bus event filed after that point, with no bracket open
@@ -988,8 +988,7 @@ public final class BusBracketCollector extends BusEventReader {
                     || args.length < 2) {
                 return null;
             }
-            // final-fix-3.md item 2: this hook is a JVM static like the other
-            // five that had no game check, and PlayerControllerAi.confirmAction
+            // This hook is a JVM static, and PlayerControllerAi.confirmAction
             // is exactly what a fork's own forced resolution asks when it
             // pays a cost or resolves an optional clause (GameSimulator builds
             // its own PlayerControllerAi over the forked Game, but the static
@@ -1176,8 +1175,8 @@ public final class BusBracketCollector extends BusEventReader {
      * read fresh, the same null-ability snapshot {@link #openCombatBracket}
      * takes for its own record.
      *
-     * <p><b>{@code resolving == null} is required, not incidental</b> (task-11
-     * fix round 2, item 1). {@link #bracketEvents} is non-empty at {@code
+     * <p><b>{@code resolving == null} is required, not incidental.</b>
+     * {@link #bracketEvents} is non-empty at {@code
      * finishGame()} in two reachable shapes, and only one of them means
      * "nothing was resolving": {@code openBracket(X)} runs at <em>cast</em>
      * time, not at resolution, so {@code resolving} stays {@code X} for as

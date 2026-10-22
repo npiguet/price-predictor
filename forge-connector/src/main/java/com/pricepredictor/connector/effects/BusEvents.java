@@ -184,14 +184,12 @@ final class BusEvents {
     /**
      * A regeneration shield doing its job: heal, tap, remove from combat.
      *
-     * <p>Read off the bus rather than through the mode table {@code
-     * describeParams} consults, because that table's {@code "Regenerated"}
-     * entry names no real Forge mode — {@code TriggerType} and {@code
-     * ReplacementType} spell regeneration's own trigger and replacement modes
-     * differently, so the entry can never match at runtime. It is a dead
-     * reference, the same shape as the original {@code damage_prevented} /
-     * {@code spell_copied} finding, not a live path serving a different
-     * purpose. {@code RegenerationEffect.resolve()} (fire site: {@code
+     * <p>Read off the bus rather than through the run-parameter mode table
+     * ({@code RunParamNormalizer}), which has no entry for it: {@code
+     * TriggerType} and {@code ReplacementType} spell regeneration's own
+     * trigger and replacement modes differently, and no mode a hook reports
+     * is the regeneration itself. {@code RegenerationEffect.resolve()}
+     * (fire site: {@code
      * RegenerationEffect.java:49}, the only one in the engine) publishes this
      * once per card actually regenerated.
      *
@@ -229,9 +227,8 @@ final class BusEvents {
      * winningPlayerName} -- a {@code LobbyPlayer}'s display name, not a ref --
      * so it is matched back against {@code game.getPlayers()} here rather than
      * carried through as a name: every other subject on this branch is an
-     * entity or player ref, and Task 7 shipped {@code damage_prevented.source}
-     * as a display name once, which silently dropped every row a reader joined
-     * to {@code state.entities}.
+     * entity or player ref, and a display name in a ref's place silently drops
+     * every row a reader joins to {@code state.entities}.
      *
      * <p>Null on a draw: {@code winningPlayerName} is null whenever {@code
      * GameOutcome.getWinningLobbyPlayer()} is, and a {@code player_won} with no
