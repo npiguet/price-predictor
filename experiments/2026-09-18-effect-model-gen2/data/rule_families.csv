@@ -1,0 +1,10 @@
+rule family,distinct texts,games
+ChangesZone triggers,5393,312514
+Pump,1989,73949
+DealDamage,1224,66343
+Flying,608,20153
+Suspend,52,3095
+Ninjutsu,22,738
+Cascade,11,1052
+Dredge,7,602
+Cypher,0,0

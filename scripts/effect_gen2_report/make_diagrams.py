@@ -10,6 +10,7 @@ arrow and label is fixed here, from the two records and the code under
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 import matplotlib
@@ -807,11 +808,215 @@ def encoder_reads() -> None:
     save(fig, "diagram-encoder-reads")
 
 
+# ── 5. the five shapes the training noise on e could take ───────────────
+
+NOISE = "#5e6370"  # the training noise: a darker shade of TRAIN_ONLY, read on a white panel
+
+
+def _cloud(n: int = 260, seed: int = 7):
+    """A schematic e cloud: elongated, tilted 30° off both coordinate axes."""
+    import numpy as np
+
+    rng = np.random.default_rng(seed)
+    angle = np.radians(30)
+    rot = np.array([[np.cos(angle), -np.sin(angle)], [np.sin(angle), np.cos(angle)]])
+    scale = np.diag([3.0, 0.55])
+    points = rng.standard_normal((n, 2)) @ scale @ rot.T
+    return points, rot @ scale @ scale @ rot.T
+
+
+def _ellipse(ax, centre, cov, k, **kw):
+    """The ``k``-sigma ellipse of ``cov`` around ``centre``."""
+    import numpy as np
+    from matplotlib.patches import Ellipse
+
+    values, vectors = np.linalg.eigh(cov)
+    angle = np.degrees(np.arctan2(vectors[1, 1], vectors[0, 1]))
+    ax.add_patch(Ellipse(centre, 2 * k * np.sqrt(values[1]), 2 * k * np.sqrt(values[0]),
+                         angle=angle, **kw))
+
+
+def noise_shapes() -> None:
+    """One panel per shape of the noise; the cloud is schematic, the noise exaggerated."""
+    import numpy as np
+
+    points, cov = _cloud()
+    ratio = 0.35  # drawn far above gen-2's 0.1 so that every shape is visible
+    std = np.sqrt(np.diag(cov))
+    panels = [
+        ("gen-1: a fixed noise", "0.05 per coordinate, whatever the\nspread. In gen-1's "
+         "cache the noise\nis 0.40 long against vectors 53\nlong: under a hundredth",
+         dict(kind="fixed")),
+        ("each e normalized to\none length first", "the noise cannot be escaped, but\nlength "
+         "is lost and every consumer\nof the cache reads a new e", dict(kind="sphere")),
+        ("one level, sized to\nthe average spread", "rescaling e changes nothing, but\nthe "
+         "long direction outruns the\nnoise and can carry a text key", dict(kind="iso")),
+        ("each coordinate sized\nto its own spread", "widening one axis no longer helps,\nbut "
+         "a diagonal direction still\noutruns the noise", dict(kind="axis")),
+        ("the covariance of the\ne vectors (gen-2)", "the same noise-to-spread ratio\nalong "
+         "every direction: no\nreshaping of e escapes it", dict(kind="cov")),
+    ]
+    fig, axes = plt.subplots(1, 5, figsize=(15.6, 4.9), dpi=150)
+    fig.subplots_adjust(left=0.01, right=0.99, top=0.78, bottom=0.27, wspace=0.08)
+    anchor = np.array([2.2, 1.25])  # one text's e, the vector the noise is drawn around
+    for ax, (title, body, spec) in zip(axes, panels):
+        kind = spec["kind"]
+        ax.set_aspect("equal")
+        ax.set_xlim(-6.2, 6.2)
+        ax.set_ylim(-4.6, 4.6)
+        ax.axis("off")
+        ax.axhline(0, color=RULE, lw=0.8, zorder=0)
+        ax.axvline(0, color=RULE, lw=0.8, zorder=0)
+        if kind == "sphere":
+            directions = points / np.linalg.norm(points, axis=1, keepdims=True)
+            shown, centre = 3.2 * directions, 3.2 * anchor / np.linalg.norm(anchor)
+            ax.add_patch(Circle((0, 0), 3.2, fc="none", ec=RULE, lw=0.8, ls="--", zorder=1))
+        else:
+            shown, centre = points, anchor
+            _ellipse(ax, (0, 0), cov, 2.0, fc="none", ec=MUTED, lw=0.9, ls="--", zorder=1)
+        ax.scatter(shown[:, 0], shown[:, 1], s=5, color=tint(STRUCT, 0.4), lw=0, zorder=2)
+        noise = dict(fc=tint(NOISE, 0.28), ec=NOISE, lw=1.6, zorder=4, alpha=0.9)
+        if kind == "fixed":
+            ax.add_patch(Circle(centre, 0.14, **noise))
+            ax.annotate("noise", centre, xytext=(26, 18), textcoords="offset points",
+                        fontsize=8.2, color=NOISE, arrowprops=dict(arrowstyle="-", color=NOISE,
+                                                                  lw=0.8))
+        elif kind == "sphere":
+            ax.add_patch(Circle(centre, 0.6, **noise))
+        elif kind == "iso":
+            ax.add_patch(Circle(centre, ratio * 2 * np.sqrt(np.trace(cov) / 2), **noise))
+        elif kind == "axis":
+            from matplotlib.patches import Ellipse
+            ax.add_patch(Ellipse(centre, 2 * ratio * 2 * std[0], 2 * ratio * 2 * std[1],
+                                 **noise))
+        else:
+            _ellipse(ax, centre, cov, ratio * 2, **noise)
+        ax.plot(*centre, "o", ms=3.5, color=INK, zorder=5)
+        if kind == "cov":
+            ax.add_patch(FancyBboxPatch((-6.0, -4.4), 12.0, 8.8, boxstyle="round,pad=0,"
+                                        "rounding_size=0.5", fc="none", ec=ABLATE, lw=1.6,
+                                        zorder=0))
+        ax.set_title(title, fontsize=10, color=INK, fontweight="bold", pad=6)
+        ax.text(0.5, -0.03, body, transform=ax.transAxes, ha="center", va="top", fontsize=8.6,
+                color=SOFT, linespacing=1.3)
+    handles = [plt.Line2D([], [], marker="o", ls="none", ms=4, color=tint(STRUCT, 0.4),
+                          label="e vectors (schematic cloud)"),
+               plt.Line2D([], [], ls="--", color=MUTED, lw=0.9,
+                          label="the cloud's spread, two standard deviations"),
+               plt.Line2D([], [], marker="o", ls="none", ms=4, color=INK,
+                          label="one text's e"),
+               matplotlib.patches.Patch(fc=tint(NOISE, 0.28), ec=NOISE,
+                                        label="the noise added to it in training, drawn at "
+                                              "3.5 times gen-2's ratio of 0.1")]
+    fig.legend(handles=handles, loc="lower center", ncol=4, fontsize=8.4, frameon=False,
+               bbox_to_anchor=(0.5, 0.0))
+    fig.text(0.01, 0.97, "Five shapes for the training noise on e, and how the encoder can "
+             "still escape each", fontsize=12, fontweight="bold", color=INK, va="top")
+    fig.text(0.01, 0.905, "A length penalty in the loss, the sixth option, has no shape of "
+             "its own: it keeps gen-1's fixed noise and lets the penalty's weight set its "
+             "effective size.", fontsize=8.6, color=MUTED, va="top")
+    save(fig, "diagram-noise-shapes")
+
+
+# ── 6. where each of gen-2's design changes acts ────────────────────────
+
+#: The pipeline's stages, left to right, each with its changes:
+#: (text, acts at collection time, came during the runs).
+DESIGN_STAGES = [
+    ("convert", "Forge scripts → sidecars", [
+        ("whole chain encoded: trigger,\nExecute$ and sub-abilities", True, False),
+        ("SVar labels renumbered\nby position", True, False),
+        ("each charm mode its own line", True, False),
+        ("holdout chosen on the\nchained template", True, False),
+    ]),
+    ("text to tokens", "vocabulary, keyword expansion", [
+        ("script tokenizer deleted;\ncamel-case compounds split", False, False),
+        ("keywords left as tokens; found\nby display name; templates filled", False, False),
+        ("one keyword withheld\nfor the zero-shot check", False, False),
+        ("every arm deleted the withheld\nkeyword instead of expanding it", False, True),
+    ]),
+    ("collect", "Forge AI + connector", [
+        ("a random seat in one match\nin four, at half its decisions", True, False),
+        ("each charm mode recorded\nas its own ability", True, False),
+        ("real decisions only, no what-if\nqueries; board in the dedup key", True, False),
+        ("game-disjoint stratum drawn toward\nrare-keyword combats", True, False),
+        ("corpus collected from scratch", True, False),
+    ]),
+    ("build-corpus", "curated training set", [
+        ("rarity-weight ceiling set\nagainst the 99th percentile", False, False),
+        ("rule families balanced;\noutcomes balanced within each", False, False),
+        ("rare-keyword combats get\na budget of their own", False, False),
+    ]),
+    ("train", "encoder + effect head", [
+        ("noise with the covariance\nof the e vectors", False, False),
+        ("auxiliary value head reads\nthe script's values from e", False, False),
+        ("a sweep over the width of e", False, False),
+        ("lethality copies labelled\nby the damage rule", False, True),
+        ("thermometer codes; \"at least k\"\nlabels for the value head", False, True),
+    ]),
+    ("evaluate", "gates + probes", [
+        ("unseen texts reported per text\nand per rule family", False, False),
+        ("no baselines: the knowledge\nprobes measure what they did", False, False),
+        ("arms compared by hand", False, False),
+    ]),
+]
+
+
+def design_changes() -> None:
+    """Gen-2's pipeline, each design change pinned under the stage where it acts."""
+    W = 6 * 4.3 + 0.4
+    H = 13.6
+    fig, ax = canvas(W, H, scale=0.62, bottom=0.0)
+    collect_fc = tint(PROBE, 0.12)
+    col_w, gap = 3.9, 0.4
+    top = 11.6
+    lowest = top
+    for i, (name, sub, changes) in enumerate(DESIGN_STAGES):
+        x = 0.3 + i * (col_w + gap)
+        box(ax, x, top, col_w, 1.15, fc=STRUCT, ec=STRUCT, radius=0.22, z=3)
+        text(ax, x + col_w / 2, top + 0.75, name, size=10.5, colour=WHITE, weight="bold")
+        text(ax, x + col_w / 2, top + 0.35, sub, size=8.2, colour=tint(WHITE, 1.0))
+        if i < len(DESIGN_STAGES) - 1:
+            arrow(ax, (x + col_w, top + 0.575), (x + col_w + gap, top + 0.575),
+                  colour=STRUCT, lw=1.6, shrink=0.5)
+        y = top - 0.35
+        for body, at_collection, in_run in changes:
+            h = 0.5 + 0.42 * body.count("\n") + 0.42
+            fc = collect_fc if at_collection else WHITE
+            ec = PROBE if at_collection else RULE
+            box(ax, x, y - h, col_w, h, fc=fc, ec=DEFECT if in_run else ec,
+                lw=1.5 if in_run else 1.0, ls=(0, (3, 2)) if in_run else "-", radius=0.14)
+            text(ax, x + 0.2, y - h / 2, body, size=9.2, ha="left", linespacing=1.25)
+            if in_run:
+                tag(ax, x + col_w - 0.12, y - 0.02, "during the runs", DEFECT, size=7.0,
+                    ha="right")
+            y -= h + 0.22
+        lowest = min(lowest, y)
+    text(ax, 0.3, H - 0.35, "Where each of gen-2's design changes acts", size=13,
+         weight="bold", ha="left", va="top")
+    ly = lowest - 0.55
+    box(ax, 0.3, ly - 0.25, 0.7, 0.5, fc=collect_fc, ec=PROBE, radius=0.1)
+    text(ax, 1.15, ly, "fixed when the corpus is collected: changing it means collecting again",
+         size=8.8, ha="left", colour=SOFT)
+    box(ax, 9.6, ly - 0.25, 0.7, 0.5, fc=WHITE, ec=RULE, radius=0.1)
+    text(ax, 10.45, ly, "acts after collection", size=8.8, ha="left", colour=SOFT)
+    box(ax, 14.0, ly - 0.25, 0.7, 0.5, fc=WHITE, ec=DEFECT, lw=1.5, ls=(0, (3, 2)),
+        radius=0.1)
+    text(ax, 14.85, ly, "came during the runs; the design sections do not describe it",
+         size=8.8, ha="left", colour=SOFT)
+    bottom = ly - 0.5
+    ax.set_ylim(bottom, H)
+    fig.set_size_inches(W * 0.62, (H - bottom) * 0.62)
+    save(fig, "diagram-design-changes")
+
+
 def main() -> None:
-    model_and_probes()
-    validation_strata()
-    combat_step()
-    encoder_reads()
+    """Draw every diagram, or only the ones named on the command line."""
+    only = set(sys.argv[1:])
+    for diagram in (model_and_probes, validation_strata, combat_step, encoder_reads,
+                    noise_shapes, design_changes):
+        if not only or diagram.__name__ in only:
+            diagram()
 
 
 if __name__ == "__main__":
