@@ -47,7 +47,7 @@ class ForkCollectorTest {
 
     private ForkCollector collector(CollectionCaps caps) {
         writer = new RecordShardWriter(tempDir, "run", 0, "l1");
-        return new ForkCollector(null, writer, "run.0-l1.0", caps, 42L);
+        return new ForkCollector(null, TestCollectors.context(writer, "run.0-l1.0"), caps, 42L);
     }
 
     /**
@@ -69,7 +69,7 @@ class ForkCollectorTest {
      */
     private ForkCollector collectorOverAGame(CollectionCaps caps) {
         writer = new RecordShardWriter(tempDir, "run", 0, "l1");
-        return new ForkCollector(TestCards.game(), writer, "run.0-l1.0", caps, 42L);
+        return new ForkCollector(TestCards.game(), TestCollectors.context(writer, "run.0-l1.0"), caps, 42L);
     }
 
     // ── the per-game budget ─────────────────────────────────────────────
@@ -252,11 +252,12 @@ class ForkCollectorTest {
         ForkCollector.HeldProbe held;
         try {
             ForkCollector forks = new ForkCollector(
-                    game, writer, "run.0-l1.0", caps(0, 1, List.of("trample")), 1L);
+                    game, TestCollectors.context(writer, "run.0-l1.0"),
+                    caps(0, 1, List.of("trample")), 1L);
             held = forks.probe("Trample", dreadmaw, DamageStep.REGULAR);
             assertNotNull(held, "the probe fork was discarded");
 
-            BusBracketCollector observed = new BusBracketCollector(game, writer, "run.0-l1.0");
+            BusBracketCollector observed = TestCollectors.bracket(game, writer, "run.0-l1.0");
             game.subscribeToEvents(observed);
             assertTrue(combat.assignCombatDamage(false), "the live step assigned no damage");
             combat.dealAssignedDamage();

@@ -28,12 +28,10 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.io.TempDir;
 
-import java.lang.reflect.Field;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.Callable;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -146,15 +144,18 @@ class RecordCharacterizationTest {
         charm.setChosenList(chosen);
         CharmEffect.chainAbilities(charm, chosen);
 
-        List<String> records = records(board, CAPS, (bracket, collectors) -> {
-            board.game.subscribeToEvents(bracket);
-            Assumptions.assumeTrue(
-                    collectors.install() > 0
-                            && PatchHooks.CLAUSE_LISTENER.present(),
-                    "../forge has no clause hook to split the modes");
+        Assumptions.assumeTrue(PatchHooks.CLAUSE_LISTENER.present(),
+                "../forge has no clause hook to split the modes");
+        writer = new RecordShardWriter(tempDir, "run", 0, "l1");
+        try (GameRecording recording =
+                new GameRecording(board.game, writer, GAME_ID, CAPS, 1L, null)) {
+            recording.open();
             resolveAll(board, charm);
             nextStep(board);
-        });
+        } finally {
+            writer.close();
+        }
+        List<String> records = ShardRun.readShard(writer.path());
 
         Characterization.assertMatches(
                 "record-resolution-modal.jsonl", Characterization.recordLines(records));
@@ -177,7 +178,7 @@ class RecordCharacterizationTest {
 
         List<String> records = records(board, CAPS, (bracket, collectors) -> {
             HookShapes.Replacement listener =
-                    HookShapes.proxy(HookShapes.Replacement.class, collectors.rewriteHandler());
+                    HookShapes.proxy(HookShapes.Replacement.class, collectors.rewrites().handler());
 
             ReplacementEffect exile = rest.getReplacementEffects().iterator().next();
             SpellAbility ran = exile.ensureAbility();
@@ -222,7 +223,7 @@ class RecordCharacterizationTest {
 
         List<String> records = records(board, CAPS, (bracket, collectors) -> {
             HookShapes.TriggerFire listener =
-                    HookShapes.proxy(HookShapes.TriggerFire.class, collectors.triggerFireHandler());
+                    HookShapes.proxy(HookShapes.TriggerFire.class, collectors.triggers().handler());
             Trigger entered = warden.getTriggers().iterator().next();
 
             Map<AbilityKey, Object> bearsEntered = AbilityKey.newMap();
@@ -250,7 +251,7 @@ class RecordCharacterizationTest {
     /** One record per static: a P/T boost, a granted keyword, a type and a colour change. */
     @Test
     void continuousRecords() throws Throwable {
-        Assumptions.assumeTrue(PatchedCollectors.CAN_SUPPRESS,
+        Assumptions.assumeTrue(ContinuousChannel.CAN_SUPPRESS,
                 "../forge cannot remove one static's contributions");
         CharacterizationBoard board = CharacterizationBoard.empty(PhaseType.MAIN1);
         board.battlefield("Glorious Anthem", board.you);
@@ -261,7 +262,7 @@ class RecordCharacterizationTest {
         board.game.getAction().checkStaticAbilities();
 
         List<String> records = records(board, CAPS,
-                (bracket, collectors) -> collectors.collectContinuous());
+                (bracket, collectors) -> collectors.continuous().collect());
 
         Characterization.assertMatches(
                 "record-continuous.jsonl", Characterization.recordLines(records));
@@ -292,13 +293,13 @@ class RecordCharacterizationTest {
         board.game.getAction().checkStaticAbilities();
         SpellAbility bolt = board.spell(board.hand("Lightning Bolt", you), you);
 
-        List<String> records = records(board, CAPS, (bracket, collectors) -> {
-            collectors.setRandomSeatPlayerId(SnapshotBuilder.playerId(opponent));
-            HookShapes.proxy(HookShapes.Playability.class, collectors.playabilityHandler())
+        List<String> records = records(board, CAPS, SnapshotBuilder.playerId(opponent),
+                (bracket, collectors) -> {
+            HookShapes.proxy(HookShapes.Playability.class, collectors.playability().decisionHandler())
                     .onCandidate(bolt);
 
             HookShapes.CombatLegality listener = HookShapes.proxy(
-                    HookShapes.CombatLegality.class, collectors.combatLegalityHandler());
+                    HookShapes.CombatLegality.class, collectors.playability().legalityHandler());
             listener.onAttackersDeclarable(
                     you, opponent, List.of(bears, elves), List.of(bears));
             listener.onBlockersDeclarable(
@@ -344,11 +345,9 @@ class RecordCharacterizationTest {
      * degraded, one cost half, and one effect half through the root line
      * holding every mode's bus events, since no clause hook splits them.
      *
-     * <p>The collector reads its mode from {@link AttributionMode#detect},
-     * which probes the sub-ability hook once per JVM; the probe's answer is
-     * set to degraded while the collector is built, as on a stock checkout,
-     * and put back after. The events are published outside any resolution,
-     * where the sub-ability pointer is empty as it always is unpatched.
+     * <p>The collector is handed the mode a stock checkout's probe answers.
+     * The events are published outside any resolution, where the
+     * sub-ability pointer is empty as it always is unpatched.
      */
     @Test
     void aDegradedWorkersModalResolution() throws Exception {
@@ -367,8 +366,9 @@ class RecordCharacterizationTest {
 
         writer = new RecordShardWriter(tempDir, "run", 0, "l1");
         try {
-            BusBracketCollector bracket = degraded(
-                    () -> new BusBracketCollector(board.game, writer, GAME_ID));
+            BusBracketCollector bracket = new BusBracketCollector(board.game,
+                    new CollectorContext(writer, GAME_ID, AttributionMode.DEGRADED, null),
+                    recordId -> { });
             board.game.subscribeToEvents(bracket);
             bracket.beginBracket(charm);
             board.game.fireEvent(new GameEventCardDamaged(
@@ -385,19 +385,6 @@ class RecordCharacterizationTest {
 
         Characterization.assertMatches("record-degraded.jsonl",
                 Characterization.recordLines(ShardRun.readShard(writer.path())));
-    }
-
-    /** Build {@code collector} while the JVM's attribution probe answers degraded. */
-    private static <T> T degraded(Callable<T> collector) throws Exception {
-        Field detected = AttributionMode.class.getDeclaredField("detected");
-        detected.setAccessible(true);
-        Object probed = detected.get(null);
-        detected.set(null, AttributionMode.DEGRADED);
-        try {
-            return collector.call();
-        } finally {
-            detected.set(null, probed);
-        }
     }
 
     // ── combat ──────────────────────────────────────────────────────────
@@ -428,16 +415,22 @@ class RecordCharacterizationTest {
         board.game.getPhaseHandler().setCombat(combat);
         CollectionCaps caps = new CollectionCaps(1, 1.0, 0, 1, List.of("trample"), 0.0, 0.0);
 
-        List<String> records = records(board, caps, (bracket, collectors) -> {
+        writer = new RecordShardWriter(tempDir, "run", 0, "l1");
+        try {
+            ProbeScheduler probing = new ProbeScheduler(board.game, GAME_ID, caps,
+                    new ForkCollector(board.game, TestCollectors.context(writer, GAME_ID), caps, 1L));
+            BusBracketCollector bracket = new BusBracketCollector(
+                    board.game, TestCollectors.context(writer, GAME_ID), probing::writeHeldProbes);
             board.game.subscribeToEvents(bracket);
-            collectors.withForks(new ForkCollector(board.game, writer, GAME_ID, caps, 1L));
-            bracket.onCombatRecord(collectors::writeHeldProbes);
-            collectors.collectProbes();
+            probing.collect();
             assertTrue(combat.assignCombatDamage(false), "the step assigned no damage");
             combat.dealAssignedDamage();
             board.game.getAction().checkStateEffects(false);
             board.game.fireEvent(new GameEventTurnPhase(you, PhaseType.COMBAT_END, ""));
-        });
+        } finally {
+            writer.close();
+        }
+        List<String> records = ShardRun.readShard(writer.path());
 
         List<String> observed = new ArrayList<>();
         List<String> probes = new ArrayList<>();
@@ -464,8 +457,8 @@ class RecordCharacterizationTest {
         CollectionCaps caps = new CollectionCaps(1, 1.0, 1, 0, List.of(), 0.0, 0.0);
 
         List<String> records = records(board, caps, (bracket, collectors) -> {
-            ForkCollector forks = new ForkCollector(board.game, writer, GAME_ID, caps, 1L);
-            collectors.withForks(forks);
+            ForkCollector forks = new ForkCollector(
+                    board.game, TestCollectors.context(writer, GAME_ID), caps, 1L);
             assertTrue(forks.intervene(pyroclasm, 1), "the fork observed nothing");
         });
 
@@ -478,7 +471,7 @@ class RecordCharacterizationTest {
     /** What a test does with a game's two collectors. */
     @FunctionalInterface
     private interface Body {
-        void run(BusBracketCollector bracket, PatchedCollectors collectors) throws Throwable;
+        void run(BusBracketCollector bracket, TestCollectors.Channels collectors) throws Throwable;
     }
 
     private RecordShardWriter writer;
@@ -490,12 +483,21 @@ class RecordCharacterizationTest {
      */
     private List<String> records(CharacterizationBoard board, CollectionCaps caps, Body body)
             throws Throwable {
+        return records(board, caps, null, body);
+    }
+
+    /** The same, for a match whose random seat is {@code randomSeatPlayerId}. */
+    private List<String> records(
+            CharacterizationBoard board, CollectionCaps caps, String randomSeatPlayerId,
+            Body body) throws Throwable {
         writer = new RecordShardWriter(tempDir, "run", 0, "l1");
         try {
-            BusBracketCollector bracket = new BusBracketCollector(board.game, writer, GAME_ID);
-            try (PatchedCollectors collectors = new PatchedCollectors(
-                    board.game, writer, GAME_ID, caps, 1L)) {
-                collectors.withBracket(bracket);
+            BusBracketCollector bracket = new BusBracketCollector(
+                    board.game, TestCollectors.context(writer, GAME_ID, randomSeatPlayerId),
+                    recordId -> { });
+            try (TestCollectors.Channels collectors = TestCollectors.Channels.of(
+                    board.game, TestCollectors.context(writer, GAME_ID, randomSeatPlayerId),
+                    caps, 1L, bracket)) {
                 body.run(bracket, collectors);
             }
         } finally {

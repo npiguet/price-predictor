@@ -356,7 +356,7 @@ public final class SnapshotBuilder {
          * What the card would be without this static, or null for no change.
          *
          * <p>Null when the patch is absent, which is also when a continuous
-         * record is never written — {@link PatchedCollectors#collectContinuous}
+         * record is never written — {@link ContinuousChannel#collect}
          * checks for these three before it collects, so a leaking snapshot is
          * not reachable by falling back to here.
          */

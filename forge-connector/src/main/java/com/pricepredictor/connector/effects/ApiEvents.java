@@ -350,7 +350,7 @@ final class ApiEvents {
      * before the clause has resolved, which can throw on an edge-case board
      * the same way an emitter can. Left uncontained, the throw would
      * propagate out of this call before {@code
-     * PatchedCollectors.clauseHandler()}'s own {@code clauseMemos.push(...)}
+     * ClauseOutcomeRouter.clauseHandler()}'s own {@code clauseMemos.push(...)}
      * ran, so the {@code Deque} that hook pairs pushes and pops through would
      * go one push short: the next sibling or enclosing clause's {@code
      * onClauseResolved} would pop <em>this</em> clause's absent memo and get
@@ -458,7 +458,7 @@ final class ApiEvents {
      * mute each other. A dedicated latch is also this branch's own
      * convention rather than an exception to it: each engine
      * {@code EffectRecordHook} and {@code
-     * PatchedCollectors.UNKNOWN_OUTCOME_TYPE_REPORTED} is its own latch for
+     * ClauseOutcomeRouter.UNKNOWN_OUTCOME_TYPE_REPORTED} is its own latch for
      * its own diagnostic, not one shared across unrelated failure classes.
      */
     static void reportMemoFailure(String eventType, RuntimeException e) {

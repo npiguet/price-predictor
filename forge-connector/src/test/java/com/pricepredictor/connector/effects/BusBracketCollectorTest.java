@@ -69,7 +69,7 @@ class BusBracketCollectorTest {
 
     private BusBracketCollector collector(Game game) {
         writer = new RecordShardWriter(tempDir, "run", 0, "l1");
-        return new BusBracketCollector(game, writer, "run.0-l1.0");
+        return TestCollectors.bracket(game, writer, "run.0-l1.0");
     }
 
     /**
@@ -816,7 +816,7 @@ class BusBracketCollectorTest {
      * <p>Companion to {@code OutcomeHandlerTest
      * .anOutcomeFromAnotherGameDoesNotReachThisGamesBracket} and {@code
      * ClauseContractTest.aClauseFromAnotherGameDoesNotReachThisGamesBracket},
-     * which cover the same fix on {@code PatchedCollectors}'s two hooks; this
+     * which cover the same fix on {@code ClauseOutcomeRouter}'s two hooks; this
      * one is on {@code BusBracketCollector} because {@code confirmHandler} is
      * declared there instead.
      */

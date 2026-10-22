@@ -44,7 +44,7 @@ class OutcomeHandlerTest {
      */
     @BeforeEach
     void resetUnknownOutcomeTypeLatch() {
-        TestLatches.reset(PatchedCollectors.class, "UNKNOWN_OUTCOME_TYPE_REPORTED");
+        TestLatches.reset(ClauseOutcomeRouter.class, "UNKNOWN_OUTCOME_TYPE_REPORTED");
     }
 
     private static final Method ON_OUTCOME =
@@ -205,7 +205,7 @@ class OutcomeHandlerTest {
     }
 
     /**
-     * An outcome type outside {@link PatchedCollectors#outcomeHandler()}'s
+     * An outcome type outside {@link ClauseOutcomeRouter#outcomeHandler()}'s
      * known set is exactly the failure this whole plan exists to end,
      * recreated one level up: before this check existed, all nine of this
      * task's types were referenced only inside a javadoc comment, which
@@ -220,11 +220,11 @@ class OutcomeHandlerTest {
         StringBuilder stderr = new StringBuilder();
         Path shard = ShardRun.shardOf(tempDir, TestCards.game(), (bracket, collectors) -> {
             stderr.append(StdStreams.captureStderr(() -> {
-                collectors.outcomeHandler().invoke(null, ON_OUTCOME,
+                collectors.clauses().outcomeHandler().invoke(null, ON_OUTCOME,
                         new Object[]{null, "dungeon_entered", Map.of()});
-                collectors.outcomeHandler().invoke(null, ON_OUTCOME,
+                collectors.clauses().outcomeHandler().invoke(null, ON_OUTCOME,
                         new Object[]{null, "dungeon_entered", Map.of()});
-                collectors.outcomeHandler().invoke(null, ON_OUTCOME,
+                collectors.clauses().outcomeHandler().invoke(null, ON_OUTCOME,
                         new Object[]{null, "another_unknown_type", Map.of()});
             }));
             bracket.finishGame(Set.of());
@@ -274,7 +274,7 @@ class OutcomeHandlerTest {
      *
      * <p>{@code vote_taken} and {@code coin_flipped} (the concrete types
      * named in final-fix-1.md F2) are both outcome-hook types, so this
-     * exercises {@link PatchedCollectors#outcomeHandler()} rather than the
+     * exercises {@link ClauseOutcomeRouter#outcomeHandler()} rather than the
      * clause hook -- {@code ClauseContractTest} covers the clause hook's own
      * half of the same fix.
      *
@@ -293,9 +293,9 @@ class OutcomeHandlerTest {
         List<String> records = ShardRun.records(tempDir, TestCards.game(), (bracket, collectors) -> {
             bracket.beginBracket(liveAbility);
 
-            collectors.outcomeHandler().invoke(null, ON_OUTCOME,
+            collectors.clauses().outcomeHandler().invoke(null, ON_OUTCOME,
                     new Object[]{forkAbility, "vote_taken", Map.of("tally", Map.of("beast", 2))});
-            collectors.outcomeHandler().invoke(null, ON_OUTCOME,
+            collectors.clauses().outcomeHandler().invoke(null, ON_OUTCOME,
                     new Object[]{liveAbility, "vote_taken", Map.of("tally", Map.of("cat", 1))});
 
             bracket.endBracket(liveAbility.getId(), false);
@@ -333,7 +333,7 @@ class OutcomeHandlerTest {
     private List<String> outcomeEvents(Object[]... reports) throws Throwable {
         List<String> records = ShardRun.records(tempDir, TestCards.game(), (bracket, collectors) -> {
             for (Object[] report : reports) {
-                collectors.outcomeHandler().invoke(null, ON_OUTCOME, report);
+                collectors.clauses().outcomeHandler().invoke(null, ON_OUTCOME, report);
             }
             bracket.finishGame(Set.of());
         });
@@ -441,7 +441,7 @@ class OutcomeHandlerTest {
         // mid combat-damage would route every other test's events there too.
         Game game = TestBoard.twoPlayerGame(PhaseType.COMBAT_DAMAGE);
         List<String> records = ShardRun.records(tempDir, game, (bracket, collectors) -> {
-            collectors.outcomeHandler().invoke(null, ON_OUTCOME,
+            collectors.clauses().outcomeHandler().invoke(null, ON_OUTCOME,
                     new Object[]{null, "damage_prevented", Map.of("amount", 3)});
 
             // Flushes the combat bracket the null-ability report above opened,
@@ -464,7 +464,7 @@ class OutcomeHandlerTest {
      * naive-fail-open trap -- passed every test in this class, because no
      * test ever set the pointer: the combat-damage test above leaves it null
      * by construction, and the probe test below only ever exercises the flag.
-     * So did dropping the {@link PatchedCollectors#belongsToLiveGame(CardTraitBase)}
+     * So did dropping the {@link LiveGame#owns(CardTraitBase)}
      * delegate and returning {@code true} whenever the pointer is merely
      * non-null. This resolves a real ability -- through {@code
      * AbilityUtils.resolve}, not a synthesized call -- so the pointer is
@@ -508,7 +508,7 @@ class OutcomeHandlerTest {
                     "setEffectRecordClauseListener", (proxy, method, args) -> {
                         if ("onClauseResolving".equals(method.getName())) {
                             try {
-                                collectors.outcomeHandler().invoke(null, ON_OUTCOME,
+                                collectors.clauses().outcomeHandler().invoke(null, ON_OUTCOME,
                                         new Object[]{null, "damage_prevented", Map.of("amount", 3)});
                             } catch (Throwable t) {
                                 throw new RuntimeException(t);
@@ -558,7 +558,7 @@ class OutcomeHandlerTest {
                     "setEffectRecordClauseListener", (proxy, method, args) -> {
                         if ("onClauseResolving".equals(method.getName())) {
                             try {
-                                collectors.outcomeHandler().invoke(null, ON_OUTCOME,
+                                collectors.clauses().outcomeHandler().invoke(null, ON_OUTCOME,
                                         new Object[]{null, "damage_prevented", Map.of("amount", 3)});
                             } catch (Throwable t) {
                                 throw new RuntimeException(t);
@@ -605,7 +605,7 @@ class OutcomeHandlerTest {
             ThreadLocal<Boolean> flag = (ThreadLocal<Boolean>) forkRunning.get(null);
             flag.set(true);
             try {
-                collectors.outcomeHandler().invoke(null, ON_OUTCOME,
+                collectors.clauses().outcomeHandler().invoke(null, ON_OUTCOME,
                         new Object[]{null, "damage_prevented", Map.of("amount", 3)});
             } finally {
                 flag.set(false);
@@ -613,7 +613,7 @@ class OutcomeHandlerTest {
 
             // The same report with no fork running is admitted, so the one
             // above was built and refused rather than lost on the way.
-            collectors.outcomeHandler().invoke(null, ON_OUTCOME,
+            collectors.clauses().outcomeHandler().invoke(null, ON_OUTCOME,
                     new Object[]{null, "damage_prevented", Map.of("amount", 4)});
 
             // The events reach the bracket's buffer, which only a flush

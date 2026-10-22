@@ -35,7 +35,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *
  * <p>{@link ApiEventsTest} covers what {@link ApiEvents} says about a clause
  * once it is handed one. What is here is the wiring that hands it one at all:
- * {@link PatchedCollectors#clauseHandler()}, called the way the engine calls
+ * {@link ClauseOutcomeRouter#clauseHandler()}, called the way the engine calls
  * it, with two real, distinct, non-null values so a position swap has
  * something to disagree with rather than two nulls agreeing by accident.
  */
@@ -108,7 +108,7 @@ class ClauseContractTest {
     void aSwappedCallWritesNoEvent() throws Throwable {
         SpellAbility sa = TestCards.scriptedAbility("Alchemist's Gambit", "AddTurn");
         List<String> records = ShardRun.records(tempDir, TestCards.game(), (bracket, collector) -> {
-            InvocationHandler handler = collector.clauseHandler();
+            InvocationHandler handler = collector.clauses().clauseHandler();
             bracket.beginBracket(sa);
             handler.invoke(null, clauseMethod("onClauseResolved"),
                     new Object[]{Boolean.FALSE, sa});
@@ -156,7 +156,7 @@ class ClauseContractTest {
         inner.getTargets().add(innerTarget);
 
         List<String> records = ShardRun.records(tempDir, TestCards.game(), (bracket, collector) -> {
-            InvocationHandler handler = collector.clauseHandler();
+            InvocationHandler handler = collector.clauses().clauseHandler();
             bracket.beginBracket(outer);
             handler.invoke(null, clauseMethod("onClauseResolving"),
                     new Object[]{outer});
@@ -204,7 +204,7 @@ class ClauseContractTest {
         forkAbility.getTargets().add(forkTarget);
 
         List<String> records = ShardRun.records(tempDir, TestCards.game(), (bracket, collector) -> {
-            InvocationHandler handler = collector.clauseHandler();
+            InvocationHandler handler = collector.clauses().clauseHandler();
             bracket.beginBracket(forkAbility);
             handler.invoke(null, clauseMethod("onClauseResolving"),
                     new Object[]{forkAbility});
@@ -274,7 +274,7 @@ class ClauseContractTest {
 
         StringBuilder stderr = new StringBuilder();
         List<String> records = ShardRun.records(tempDir, TestCards.game(), (bracket, collector) -> {
-            InvocationHandler handler = collector.clauseHandler(
+            InvocationHandler handler = collector.clauses().clauseHandler(
                     api -> api == ApiType.SkipTurn ? throwingMemo : ApiEvents.ruleFor(api));
             stderr.append(StdStreams.captureStderr(() -> {
                 bracket.beginBracket(outer);
@@ -327,7 +327,7 @@ class ClauseContractTest {
      */
     private List<String> resolveClause(SpellAbility sa, boolean threw) throws Throwable {
         List<String> records = ShardRun.records(tempDir, TestCards.game(), (bracket, collector) -> {
-            InvocationHandler handler = collector.clauseHandler();
+            InvocationHandler handler = collector.clauses().clauseHandler();
             bracket.beginBracket(sa);
             handler.invoke(null, clauseMethod("onClauseResolving"),
                     new Object[]{sa});

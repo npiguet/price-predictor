@@ -44,7 +44,7 @@ class ShardCharacterizationTest {
         Card elves = board.battlefield("Llanowar Elves", opponent);
 
         List<String> records = ShardRun.recordsWithClauseHook(
-                tempDir, board.game, "", (bracket, collectors) -> {
+                tempDir, board.game, "", () -> {
                     board.cast(board.card("Lightning Bolt", you), you, elves);
                     board.game.getStack().resolveStack();
                     board.game.getAction().checkStateEffects(false);

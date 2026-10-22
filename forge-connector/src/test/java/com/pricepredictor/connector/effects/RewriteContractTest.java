@@ -73,7 +73,7 @@ class RewriteContractTest {
     @EnumSource(ReplacementResult.class)
     void everyResultIsWrittenInItsWireSpelling(ReplacementResult result) {
         Card card = TestCards.build("Mountain");
-        String json = recording(tempDir).rewriteRecord(
+        String json = recording(tempDir).rewrites().record(
                 replacementOfMode("Moved"),
                 Map.of("Card", card), Map.of("Card", card), result, null).toJson();
 
@@ -92,7 +92,7 @@ class RewriteContractTest {
     @Test
     void aReplacementWithNoAnswerSaysSoRatherThanGuessing() {
         Card card = TestCards.build("Mountain");
-        String json = recording(tempDir).rewriteRecord(
+        String json = recording(tempDir).rewrites().record(
                 replacementOfMode("Moved"),
                 Map.of("Card", card), Map.of("Card", card), null, null).toJson();
 
@@ -125,7 +125,7 @@ class RewriteContractTest {
         Map<String, Object> after = new LinkedHashMap<>(before);
         after.put("DamageAmount", 1);
 
-        String json = recording(tempDir).rewriteRecord(
+        String json = recording(tempDir).rewrites().record(
                 replacementOfMode("DamageDone"), before, after,
                 ReplacementResult.Updated, null).toJson();
 
@@ -154,7 +154,7 @@ class RewriteContractTest {
         Map<String, Object> params = Map.of(
                 "Card", rest, "Destination", ZoneType.Graveyard);
 
-        String json = recording(tempDir).rewriteRecord(
+        String json = recording(tempDir).rewrites().record(
                 replacement, params, params, ReplacementResult.Replaced, ran).toJson();
 
         assertTrue(json.contains("\"outgoing\":null"), json);
@@ -171,7 +171,7 @@ class RewriteContractTest {
     @Test
     void nothingRunningInsteadIsAnEmptyListNotANull() {
         Card card = TestCards.build("Mountain");
-        String json = recording(tempDir).rewriteRecord(
+        String json = recording(tempDir).rewrites().record(
                 replacementOfMode("Untap"),
                 Map.of("Card", card), Map.of("Card", card),
                 ReplacementResult.Prevented, null).toJson();
@@ -190,7 +190,7 @@ class RewriteContractTest {
     @Test
     void aSubstitutedAbilityThatIsNotATraitCostsOnlyTheField() {
         Card card = TestCards.build("Mountain");
-        String json = recording(tempDir).rewriteRecord(
+        String json = recording(tempDir).rewrites().record(
                 replacementOfMode("Moved"),
                 Map.of("Card", card), Map.of("Card", card),
                 ReplacementResult.Replaced, "not an ability").toJson();
@@ -285,7 +285,7 @@ class RewriteContractTest {
      * replacements run through {@code GameSimulator.resolveStack}'s real
      * resolution pipeline -- must not reach the live shard. This hook had no
      * game check at all before this fix (unlike the clause/outcome hooks,
-     * which F2 already protected); {@code rewriteHandler} is a plain JVM
+     * which F2 already protected); {@code RewriteChannel.handler} is a plain JVM
      * static exactly like the other five this brief's item 2 covers.
      *
      * <p>Companion to {@code ClauseContractTest
@@ -301,7 +301,7 @@ class RewriteContractTest {
                 "Card", forkHost, "Destination", ZoneType.Graveyard);
 
         Path shard = ShardRun.shardOf(tempDir, TestCards.game(), (bracket, collector) ->
-                collector.rewriteHandler().invoke(null, onReplacement(HookShapes.Replacement.class),
+                collector.rewrites().handler().invoke(null, onReplacement(HookShapes.Replacement.class),
                         new Object[]{
                                 forkReplacement, params, params, ReplacementResult.Replaced, null}));
 
@@ -329,7 +329,7 @@ class RewriteContractTest {
         ReplacementEffect replacement =
                 rest.getCurrentState().getReplacementEffects().iterator().next();
 
-        String json = recording(tempDir).rewriteRecord(
+        String json = recording(tempDir).rewrites().record(
                 replacement,
                 Map.of("Card", rest, "Destination", ZoneType.Graveyard),
                 Map.of("Card", rest, "Destination", ZoneType.Exile),
@@ -369,7 +369,7 @@ class RewriteContractTest {
                 paralyze.getCurrentState().getReplacementEffects().iterator().next();
         assertEquals("Untap", String.valueOf(prevention.getMode()));
 
-        EffectRecord record = recording(tempDir).rewriteRecord(
+        EffectRecord record = recording(tempDir).rewrites().record(
                 prevention, Map.of("Card", paralyze), Map.of("Card", paralyze),
                 ReplacementResult.Skipped, null);
 
@@ -401,7 +401,7 @@ class RewriteContractTest {
         Map<String, Object> after = new LinkedHashMap<>(before);
         after.put("Number", 1);
 
-        EffectRecord record = recording(tempDir).rewriteRecord(
+        EffectRecord record = recording(tempDir).rewrites().record(
                 replacementOfMode("DrawCards"), before, after,
                 ReplacementResult.Updated, null);
 
@@ -462,8 +462,8 @@ class RewriteContractTest {
      */
     private Tally tallyAfter(Map<String, Object> before, Map<String, Object> after,
             ReplacementResult result) throws Throwable {
-        PatchedCollectors game = recording(tempDir);
-        game.rewriteRecord(replacementOfMode("Moved"), before, after, result, null);
+        TestCollectors.Channels game = recording(tempDir);
+        game.rewrites().record(replacementOfMode("Moved"), before, after, result, null);
         String printed = StdStreams.captureStdout(game::close);
         for (int games = 1; printed.isEmpty() && games < GAMES_PER_SUMMARY; games++) {
             printed = StdStreams.captureStdout(() -> unwired(CollectionCaps.defaults()).close());
@@ -478,13 +478,13 @@ class RewriteContractTest {
     /**
      * Everything the handler wrote for one notification, as the shard line.
      *
-     * <p>Driven through {@link PatchedCollectors#rewriteHandler} with a
+     * <p>Driven through {@link RewriteChannel#handler} with a
      * synthesized argument array, which is as close to the engine's own call as
      * this side can get without a patched jar to proxy over.
      */
     private String oneRecordFrom(Object[] args, Class<?> shape) throws Throwable {
         List<String> lines = ShardRun.records(tempDir, TestCards.game(), (bracket, collector) ->
-                collector.rewriteHandler().invoke(null, onReplacement(shape), args));
+                collector.rewrites().handler().invoke(null, onReplacement(shape), args));
         assertEquals(1, lines.size(), "one replacement writes one record");
         assertNotNull(lines.get(0));
         return lines.get(0);

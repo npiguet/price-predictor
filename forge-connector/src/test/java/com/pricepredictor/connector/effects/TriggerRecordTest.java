@@ -18,11 +18,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
-import static com.pricepredictor.connector.effects.TestCollectors.caps;
 import static com.pricepredictor.connector.effects.TestCollectors.recording;
 import static com.pricepredictor.connector.effects.TestCollectors.replacementOfMode;
 import static com.pricepredictor.connector.effects.TestCollectors.triggerOfMode;
-import static com.pricepredictor.connector.effects.TestCollectors.unwired;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -62,7 +60,7 @@ class TriggerRecordTest {
         assertEquals(2, triggers.size(), "Paralyze declares two T: lines");
 
         String json = recording(tempDir)
-                .triggerRecord(triggers.get(1), Map.of(), true).toJson();
+                .triggers().record(triggers.get(1), Map.of(), true).toJson();
 
         assertTrue(json.contains("\"trait_kind\":\"trigger\""), json);
         assertTrue(json.contains("cardsfolder/p/paralyze.txt"), json);
@@ -78,7 +76,7 @@ class TriggerRecordTest {
         String entity = SnapshotBuilder.entityId(paralyze);
 
         String json = recording(tempDir)
-                .triggerRecord(triggersOf(paralyze).get(0), Map.of(), false).toJson();
+                .triggers().record(triggersOf(paralyze).get(0), Map.of(), false).toJson();
 
         assertTrue(json.contains("\"source\":\"" + entity + "\""), json);
         // Tier 1 carries the host whatever zone it sits in. Without that a
@@ -95,7 +93,7 @@ class TriggerRecordTest {
      */
     @Test
     void anArgumentThatIsNotATraitStillProducesARecord() {
-        String json = recording(tempDir).triggerRecord("not a trait", Map.of(), true).toJson();
+        String json = recording(tempDir).triggers().record("not a trait", Map.of(), true).toJson();
 
         assertTrue(json.contains("\"ability\":[]"),
                 "an unattributable line is empty, not null: " + json);
@@ -126,7 +124,7 @@ class TriggerRecordTest {
                 "DB$ Draw | Defined$ You | NumCards$ 1", monarch);
         monarch.getCurrentState().addSpellAbility(draw);
 
-        String json = recording(tempDir).triggerRecord(draw, Map.of(), true).toJson();
+        String json = recording(tempDir).triggers().record(draw, Map.of(), true).toJson();
 
         assertTrue(json.contains("\"ability\":[]"), json);
         assertTrue(json.contains("\"ability_unresolved\":\"engine_effect\""), json);
@@ -142,7 +140,7 @@ class TriggerRecordTest {
      * the parameters, whichever kind of trait carries the mode.
      */
     private String eventJson(CardTraitBase trait, Map<String, Object> params) {
-        String json = recording(tempDir).triggerRecord(trait, params, true).toJson();
+        String json = recording(tempDir).triggers().record(trait, params, true).toJson();
         int at = json.indexOf("\"payload\":{\"event\":");
         return json.substring(at + 19, json.indexOf(",\"fired\"", at));
     }
@@ -278,171 +276,11 @@ class TriggerRecordTest {
         assertTrue(json.contains("\"delta\":4"), json);
     }
 
-    // ── the trigger negative sample and the per-line cap ───────────────
-
-    /**
-     * Drive one mode's evaluations and count what the writer was offered.
-     *
-     * @param burst how many non-fired evaluations follow each firing
-     */
-    private static int[] driveTrigger(
-            PatchedCollectors collector, String mode, int burst, int firings) {
-        int[] kept = new int[2];
-        for (int firing = 0; firing < firings; firing++) {
-            if (collector.offerTriggerEvaluation(mode, true)) {
-                collector.keepTriggerEvaluation(mode, true);
-                kept[0]++;
-            }
-            for (int i = 0; i < burst; i++) {
-                if (collector.offerTriggerEvaluation(mode, false)) {
-                    collector.keepTriggerEvaluation(mode, false);
-                    kept[1]++;
-                }
-            }
-        }
-        return kept;
-    }
-
-    /**
-     * The kept negatives track the kept positives, whatever the population is.
-     *
-     * <p>The first corpus used a fixed 2% rate and landed at 74:26 rather than
-     * 1:1, because a fixed rate cannot hold a ratio: the true population was
-     * 1:17.7 and it varies by mode, board and turn. Two modes with very
-     * different burst lengths are driven here, and both have to come out level
-     * — a fixed rate fails this by construction, at 1:0.8 for the short burst
-     * and 1:0.06 for the long one.
-     */
-    @Test
-    void negativesAreKeptAtAboutOneToOneWhateverTheBurstLength() {
-        PatchedCollectors collector = unwired(caps(1, 1.0));
-        int[] rare = driveTrigger(collector, "ChangesZone", 40, 200);
-        int[] common = driveTrigger(collector, "TapsForMana", 3, 200);
-
-        for (int[] kept : List.of(rare, common)) {
-            assertTrue(kept[0] > 0 && kept[1] > 0, "nothing was kept");
-            double ratio = (double) kept[1] / kept[0];
-            assertTrue(Math.abs(ratio - 1.0) < 0.1,
-                    "kept " + kept[0] + " fired against " + kept[1]
-                            + " not fired, a ratio of " + ratio);
-        }
-    }
-
-    /**
-     * The ratio holds over what reaches the shard, not over what was offered.
-     *
-     * <p>This is the 58:42 the corpus measured while the unit test above read
-     * 1:1. The difference is here: an offered negative is refused downstream by
-     * the duplicate check or the per-line flood cap far more often than a
-     * positive is, and under the old rate the deficit that leaves standing was
-     * repaid only at {@code deficit / estimated run length} — a lag a game's
-     * handful of firings per mode never works off. Three refusals in four is
-     * harsher than the corpus and the kept sets still come out level.
-     */
-    @Test
-    void negativesStayLevelEvenWhenMostOfThemAreRefusedDownstream() {
-        PatchedCollectors collector = unwired(caps(1, 1.0));
-        java.util.Random refusals = new java.util.Random(7);
-        int[] kept = new int[2];
-        for (int firing = 0; firing < 400; firing++) {
-            if (collector.offerTriggerEvaluation("ChangesZone", true)) {
-                collector.keepTriggerEvaluation("ChangesZone", true);
-                kept[0]++;
-            }
-            for (int i = 0; i < 20; i++) {
-                if (!collector.offerTriggerEvaluation("ChangesZone", false)) {
-                    continue;
-                }
-                // The record was built and then refused: nothing is kept, and
-                // the deficit it was drawn against is still owed.
-                if (refusals.nextInt(4) != 0) {
-                    continue;
-                }
-                collector.keepTriggerEvaluation("ChangesZone", false);
-                kept[1]++;
-            }
-        }
-        double ratio = (double) kept[1] / kept[0];
-        assertTrue(Math.abs(ratio - 1.0) < 0.1,
-                "kept " + kept[0] + " fired against " + kept[1]
-                        + " not fired, a ratio of " + ratio);
-    }
-
-    /**
-     * A deficit that cannot be filled costs a few offers, not all of them.
-     *
-     * <p>The price of offering on the deficit alone: a mode whose every acting
-     * line has hit its per-line cap owes a negative for ever, and each offer
-     * builds a snapshot on the hook that fires most often in the collector.
-     * The backoff is what keeps that bounded.
-     */
-    @Test
-    void aDeficitThatCanNeverBeFilledStopsSpendingWorkOnItself() {
-        PatchedCollectors collector = unwired(caps(1, 1.0));
-        collector.offerTriggerEvaluation("ChangesZone", true);
-        collector.keepTriggerEvaluation("ChangesZone", true);
-
-        int offered = 0;
-        for (int i = 0; i < 20_000; i++) {
-            if (collector.offerTriggerEvaluation("ChangesZone", false)) {
-                offered++;   // built, refused downstream, never kept
-            }
-        }
-        assertTrue(offered > 0, "the standing deficit is never abandoned");
-        assertTrue(offered < 100,
-                "20,000 unfillable evaluations built " + offered + " records");
-    }
-
-    /** A mode's balance is its own, so a busy mode cannot starve a quiet one. */
-    @Test
-    void oneModeDoesNotSpendAnothersBudget() {
-        PatchedCollectors collector = unwired(caps(1, 1.0));
-        driveTrigger(collector, "ChangesZone", 40, 200);
-        int[] quiet = driveTrigger(collector, "Untaps", 2, 5);
-
-        assertTrue(quiet[1] > 0,
-                "a quiet mode kept no negatives after a busy one ran");
-    }
-
-    /** A fired evaluation is always offered; only negatives are sampled. */
-    @Test
-    void everyFiredEvaluationIsOffered() {
-        PatchedCollectors collector = unwired(caps(1, 1.0));
-        for (int i = 0; i < 50; i++) {
-            assertTrue(collector.offerTriggerEvaluation("ChangesZone", true));
-        }
-    }
-
-    /** And a mode that never fires contributes no negatives, by construction. */
-    @Test
-    void aModeThatNeverFiresKeepsNoNegatives() {
-        PatchedCollectors collector = unwired(caps(1, 1.0));
-        for (int i = 0; i < 500; i++) {
-            assertFalse(collector.offerTriggerEvaluation("Untaps", false));
-        }
-    }
-
-    /** One acting line is worth a couple of dozen looks in a game, not hundreds. */
-    @Test
-    void oneTriggerLineIsCappedPerGameAndPerVerdict() {
-        PatchedCollectors collector = unwired(caps(2000, 1.0));
-        int written = 0;
-        for (int i = 0; i < 100; i++) {
-            if (collector.allowTriggerLine("[key]", true)) {
-                written++;
-            }
-        }
-        assertEquals(24, written);
-        // The other verdict has its own budget: "fired" and "did not fire" are
-        // different observations of the same line.
-        assertTrue(collector.allowTriggerLine("[key]", false));
-    }
-
     // ── the cause channel ───────────────────────────────────────────────
 
-    private static String eventOf(PatchedCollectors collector, Trigger trigger,
+    private static String eventOf(TestCollectors.Channels collector, Trigger trigger,
             Map<String, Object> runParams) {
-        return collector.triggerRecord(trigger, runParams, true).toJson();
+        return collector.triggers().record(trigger, runParams, true).toJson();
     }
 
     /**

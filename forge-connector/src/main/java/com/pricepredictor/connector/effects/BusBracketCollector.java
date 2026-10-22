@@ -186,36 +186,25 @@ public final class BusBracketCollector extends BusEventReader {
     private boolean bracketDeclined;
 
     /** Told each combat record's id, for a probe that mirrors it. */
-    private java.util.function.Consumer<String> onCombatRecord;
-
-    public BusBracketCollector(
-            Game game, RecordShardWriter writer, String gameId) {
-        super(game);
-        this.context = new CollectorContext(writer, gameId);
-        this.snapshots = new SnapshotBuilder(game);
-        // Installed here and dropped at GameEventGameFinished, because this
-        // collector has no other lifecycle: it is subscribed to the bus for
-        // exactly one game and the bus tells it when that game is over. On an
-        // unpatched checkout install() finds no hook and nothing changes.
-        PatchHooks.CONFIRM_LISTENER.install(confirmHandler());
-    }
+    private final java.util.function.Consumer<String> onCombatRecord;
 
     /**
-     * Be told the id of each {@code combat} record as it is written.
-     *
-     * <p>A damage-step probe forks before the step and cannot know what it
-     * mirrors until the real record exists, so the pairing is handed over here
-     * rather than reconstructed. Reconstructing it from board state would not
-     * work: two combats in one turn can look identical, and a wrong pairing
-     * makes the difference between them meaningless.
+     * @param onCombatRecord told the id of each {@code combat} record as it is
+     *                       written. A damage-step probe forks before the step
+     *                       and cannot know what it mirrors until the real
+     *                       record exists, so the pairing is handed over
+     *                       rather than reconstructed. Reconstructing it from
+     *                       board state would not work: two combats in one
+     *                       turn can look identical, and a wrong pairing makes
+     *                       the difference between them meaningless.
      */
-    public void onCombatRecord(java.util.function.Consumer<String> listener) {
-        this.onCombatRecord = listener;
-    }
-
-    /** Name the match's random seat, so every record can say whether it acted. */
-    public void setRandomSeatPlayerId(String playerId) {
-        context.setRandomSeatPlayerId(playerId);
+    BusBracketCollector(
+            Game game, CollectorContext context,
+            java.util.function.Consumer<String> onCombatRecord) {
+        super(game);
+        this.context = context;
+        this.snapshots = new SnapshotBuilder(game);
+        this.onCombatRecord = onCombatRecord;
     }
 
     // ── brackets ────────────────────────────────────────────────────────
@@ -617,7 +606,7 @@ public final class BusBracketCollector extends BusEventReader {
     /**
      * An event an effect API described rather than the bus announced.
      *
-     * <p>Package-private because {@code PatchedCollectors} owns the clause hook
+     * <p>Package-private because {@link ClauseOutcomeRouter} owns the clause hook
      * and this collector owns the open bracket: the event belongs to whatever
      * resolution is in flight, which only this class knows.
      */
@@ -915,9 +904,6 @@ public final class BusBracketCollector extends BusEventReader {
                             + names);
         }
         pendingActivations.clear();
-        // The listener is static and this collector lives for one game, so the
-        // game ending is where it has to go.
-        PatchHooks.CONFIRM_LISTENER.uninstall();
         return abandoned;
     }
 
@@ -936,9 +922,10 @@ public final class BusBracketCollector extends BusEventReader {
      * way the trigger-condition hook is, but an accepted offer is already
      * described by the events it produced.
      *
-     * <p>Package-visible so a test can drive it through a proxy of its own. The
-     * method name and the argument positions are the whole contract with the
-     * patch — {@link PatchHooks} looks both up by string — and a typo in either
+     * <p>Package-visible because {@link GameRecording} installs it, and so a
+     * test can drive it through a proxy of its own. The method name and the
+     * argument positions are the whole contract with the patch —
+     * {@link PatchHooks} looks both up by string — and a typo in either
      * degrades this channel silently.
      */
     InvocationHandler confirmHandler() {
@@ -959,11 +946,11 @@ public final class BusBracketCollector extends BusEventReader {
     }
 
     /**
-     * As {@code PatchedCollectors#belongsToLiveGame(CardTraitBase)}, kept as
-     * this class's own copy rather than shared: this one needs only the
-     * {@code SpellAbility} shape {@link
-     * #confirmHandler()} calls it with, not the wider {@code CardTraitBase}
-     * {@code PatchedCollectors} also needs for its rewrite/trigger hooks.
+     * As {@link LiveGame#owns(forge.game.CardTraitBase)}, kept as this class's
+     * own copy rather than shared: this one needs only the
+     * {@code SpellAbility} shape {@link #confirmHandler()} calls it with, not
+     * the wider {@code CardTraitBase} {@code LiveGame} also takes for the
+     * rewrite and trigger hooks.
      */
     private boolean belongsToLiveGame(SpellAbility ability) {
         Card host = ability.getHostCard();
@@ -1068,9 +1055,7 @@ public final class BusBracketCollector extends BusEventReader {
         // A damage-step probe forked before this step and has been holding its
         // branch since: it needs this record's id to say which combat it
         // mirrors, and the id does not exist until the record is written.
-        if (onCombatRecord != null) {
-            onCombatRecord.accept(record.recordId());
-        }
+        onCombatRecord.accept(record.recordId());
         combatEvents.clear();
         combatShape = CombatShape.empty();
         combatState = null;
