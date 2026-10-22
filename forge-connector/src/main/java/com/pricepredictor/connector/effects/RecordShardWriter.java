@@ -20,7 +20,7 @@ import java.util.zip.GZIPOutputStream;
  * match-outcome row, so concurrent appends would interleave mid-record; and a
  * shard per <b>JVM lifetime</b> rather than per worker index because the
  * supervisor recycles the longest-running worker every status interval and
- * restarts crashed ones — roughly 530 JVMs over an eight-hour run. The two
+ * restarts crashed ones — hundreds of JVMs over an overnight run. The two
  * counters below restart at zero with the JVM, so without a lifetime token a
  * restart reissues ids the previous JVM already used and dozens of unrelated
  * games merge under one game_id.

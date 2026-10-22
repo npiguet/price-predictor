@@ -150,9 +150,8 @@ class EffectRecordTest {
     /**
      * A trigger record names its acting line, and says so in the envelope.
      *
-     * <p>Guards the wire shape the collector now fills: the whole first corpus
-     * carried {@code "ability": null} on all 727,308 trigger records, and the
-     * field rule exempts only {@code combat} and {@code playability} -- a
+     * <p>Guards the wire shape the collector fills: the field rule exempts
+     * only {@code combat} and {@code playability} from naming a line, and a
      * trigger is a single acting line.
      */
     @Test

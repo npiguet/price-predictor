@@ -13,24 +13,16 @@ import java.util.StringJoiner;
 /**
  * What the rewrite channel wrote, for the whole worker process.
  *
- * <p>It counted drops until the payload could say which of the five
- * {@code ReplacementResult}s happened. That rule took 87% of the
- * candidates, and it had to: a substitution runs another ability rather
- * than editing the parameter map, so "exile it instead" and "the
- * replacement declined" arrived as the same pair of identical halves. With
- * the result recorded there is nothing left to drop, so this counts what
- * the channel produced instead — and the question it now answers, in the
- * first hour of a run rather than at the end of one, is whether the channel
- * filled: how many records, and in what proportions of result.
+ * <p>The question it answers, in the first hour of a run rather than at the
+ * end of one, is whether the channel filled: how many records, and in what
+ * proportions of the five {@code ReplacementResult}s.
  *
- * <p>The raw-parameter breakdown survives the change of subject, aimed at
- * the records that carry no {@code outgoing}. A key whose <em>value</em>
- * moved while the rendered halves stayed identical still names a parameter
- * this collector does not read, and that is still the difference between
- * "this replacement rewrote nothing" and "this normaliser cannot express
- * what it rewrote". What is new is that such a record is now written rather
- * than discarded, so the diagnostic says what a written record is missing
- * rather than what a discarded one contained.
+ * <p>The raw-parameter breakdown is aimed at the records that carry no
+ * {@code outgoing}. A key whose <em>value</em> moved while the rendered
+ * halves stayed identical names a parameter this collector does not read,
+ * and that is the difference between "this replacement rewrote nothing" and
+ * "this normaliser cannot express what it rewrote": the diagnostic says what
+ * a written record is missing.
  *
  * <p>Per JVM rather than per game: one game's replacements are too few to
  * read a share off, and a worker plays many games. Synchronized because

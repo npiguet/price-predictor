@@ -17,12 +17,13 @@ import java.util.Set;
  * <p>Forge's bus publishes what an effect <i>did</i> only for the outcomes that
  * have their own event: damage, counters, zone changes, taps. A pump, an anthem
  * recompute, an animation and a colour change all publish the same thing — the
- * card's stats changed — and say nothing about what changed. So the whole
- * "gets +2/+2 and gains flying" family, which is most of what a limited deck
- * does, produced records whose event list was empty or nearly so.
+ * card's stats changed — and say nothing about what changed. Read off the bus
+ * alone, the whole "gets +2/+2 and gains flying" family, which is most of what
+ * a limited deck does, would produce records whose event list is empty or
+ * nearly so.
  *
- * <p>This closes that by remembering each card's computed characteristics and
- * describing the difference when the engine says they moved. Computed rather
+ * <p>So this remembers each card's computed characteristics and describes
+ * the difference when the engine says they moved. Computed rather
  * than printed, for the reason every other characteristic in a snapshot is: the
  * model has to predict what happens to the 5/5 an anthem made, not to the 4/4
  * on the card.

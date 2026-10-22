@@ -42,8 +42,8 @@ import java.util.StringJoiner;
  * {@code outcome} is a field of it and a spell that is countered before it
  * resolves never publishes anything else the collector could attach the answer
  * to. A cast still on the stack when the game ends is dropped rather than given
- * one of the five outcomes it did not have — but it is now counted and named
- * rather than vanishing; see {@link #finishGame}.
+ * one of the five outcomes it did not have, and counted and named on stderr;
+ * see {@link #finishGame}.
  *
  * <p>Damage steps get their own brackets, closed at the phase boundary, so a
  * first-strike combat writes two records — the only way a keyword that acts by
@@ -168,9 +168,19 @@ public final class BusBracketCollector extends BusEventReader {
      * A modal resolution's chosen modes, split at each mode's first clause.
      *
      * <p>Emptied only when a resolution closes the bracket, not when a cast
-     * takes the slot over: a cast in the middle of a mode inherits the split,
-     * so its own resolution closes the open mode and writes the split's halves
-     * under its own key with the charm's options.
+     * takes the slot over. That has three consequences, all of them kept:
+     * <ul>
+     *   <li>a cast in the middle of a mode inherits the split, so its own
+     *   resolution closes the open mode and writes the split's halves under
+     *   its own key with the charm's options;</li>
+     *   <li>a nested ability that fizzles or is declined writes no effect
+     *   half, and {@link BusBracketCollector#closeBracket} throws the
+     *   inherited split away with it, so none of its halves is written;
+     *   and</li>
+     *   <li>{@link BusBracketCollector#wasDeclined} consults
+     *   {@link #anyEvents}, so events in the charm's inherited halves make a
+     *   nested refusal read as {@code resolved}.</li>
+     * </ul>
      */
     private static final class ModeSplit {
         /** The modes whose halves are complete, in order. */
@@ -224,7 +234,7 @@ public final class BusBracketCollector extends BusEventReader {
      *
      * <p>Everything but the events is fixed at the resolution — the id, the
      * timestamp, the key and the board, which is the one taken before the
-     * resolution as it always was. The events can still grow, by the deaths
+     * resolution. The events can still grow, by the deaths
      * the resolution's own effects cause; see {@link HeldResolution}.
      *
      * @param touched the entity refs this half's own events name as subjects,
@@ -255,11 +265,9 @@ public final class BusBracketCollector extends BusEventReader {
      * and returns, and the creature a Lightning Bolt left with lethal damage
      * dies at the next priority, inside {@code GameAction.checkStateEffects} —
      * after {@code GameEventPlayerPriority}, so not even that event is a
-     * boundary. Written at the resolved event, as it used to be, the effect
-     * half held the damage and never the death: across twelve real shards,
-     * none of 515 lethal-looking resolution damage events had its death in
-     * the same record, while combat records, whose bracket stays open until
-     * the step ends, held it 61% of the time.
+     * boundary. Written at the resolved event, the effect half would hold the
+     * damage and never the death, which a combat record, whose bracket stays
+     * open until the step ends, does hold.
      *
      * <p>So the halves are held from the resolution until the next real
      * action begins ({@link #onNextAction}) — a bracket opening for a cast or
@@ -393,10 +401,9 @@ public final class BusBracketCollector extends BusEventReader {
      * they are unreadable a moment later — but the record cannot be written yet,
      * because {@code outcome} is a field of the cost half and the answer to it
      * does not exist until the spell resolves or leaves the stack without
-     * resolving. Writing it here is why every one of the corpus's 4,989
-     * activation records said the literal {@code resolved}, and why 6.1% of
-     * link halves had no partner: a fizzled spell issued a {@code link_id} whose
-     * effect half never came.
+     * resolving. Written here, every activation would read {@code resolved},
+     * and a fizzled spell would issue a {@code link_id} whose effect half never
+     * comes.
      */
     @Subscribe
     public void onCast(GameEventSpellAbilityCast event) {
@@ -416,8 +423,7 @@ public final class BusBracketCollector extends BusEventReader {
      *
      * <p>Split from {@link #onCast} at the one line that reads the stack, so the
      * rules that decide what a cost record eventually says can be exercised
-     * against a real ability without a game in progress — which is exactly what
-     * they were missing while the outcome was a literal.
+     * against a real ability without a game in progress.
      */
     void beginBracket(SpellAbility ability) {
         // A cast, an activation or a trigger reaching the stack is the next
@@ -500,8 +506,10 @@ public final class BusBracketCollector extends BusEventReader {
         if (bracketIsThisAbility) {
             closeBracket();
         } else if (open == null) {
-            // Only the buffer: the open mode, if a cast took the slot over
-            // in the middle of one, waits for a resolution that closes it.
+            // Only the buffer. The split can be non-empty here only after a
+            // cast whose stack top held no ability (openBracket(null)) took
+            // the slot over in the middle of a mode; that mode stays in the
+            // split for the next cast's bracket to inherit (see ModeSplit).
             bracketEvents.clear();
         }
     }
@@ -910,7 +918,7 @@ public final class BusBracketCollector extends BusEventReader {
      * {@code link_id} promises that an effect half carrying the same id exists.
      * A resolution this collector could not describe -- the outer half of a
      * nested pair -- is a {@code resolved} activation with no link, which is
-     * honest; issuing the link anyway is what left 306 halves dangling.
+     * honest; issuing the link anyway would leave it dangling.
      *
      * @return the link the effect half may claim, or null when there is to be
      *         no effect half or nothing was held for this ability
@@ -1021,15 +1029,15 @@ public final class BusBracketCollector extends BusEventReader {
     /**
      * The last thing that happens to a game, and the last chance to write.
      *
-     * <p>Nothing subscribed this event, and three channels were being lost at it.
+     * <p>Three channels have nowhere else to be written.
      *
      * <p>The <b>combat bracket</b> is closed at a phase boundary, and a game
      * that ends in combat damage never reaches one:
      * {@code PhaseHandler.mainLoopStep} returns the moment
      * {@code checkStateBasedEffects} says the game is over, so neither
      * {@code GameEventTurnPhase} nor {@code GameEventCombatEnded} follows the
-     * lethal damage step. The record for the combat that decided the game was
-     * therefore the one combat record no game had.
+     * lethal damage step, and without this the combat that decided the game
+     * would never be written.
      *
      * <p>The <b>resolution bracket's own leftovers</b> are closed and
      * cleared by the killing ability's own {@link
@@ -1037,7 +1045,7 @@ public final class BusBracketCollector extends BusEventReader {
      * discovers the game is over ever runs (CR 704.3, next main-loop
      * iteration). A bus event filed after that point, with no bracket open
      * (the ordinary case for {@code player_won}: burn, drain, decking out,
-     * anything that is not a combat-damage kill), had nowhere left to be
+     * anything that is not a combat-damage kill), has nowhere left to be
      * flushed to. See {@link #flushOrphanedEvents}.
      *
      * <p>The <b>held casts</b> split in two, and only one half is writable.
@@ -1063,8 +1071,8 @@ public final class BusBracketCollector extends BusEventReader {
         // First, because it is the oldest: the resolution it describes ended
         // before anything the two below hold. The winner is not one of its
         // consequences -- player_won is not a permanent leaving the
-        // battlefield -- so it stays where flushOrphanedEvents has always put
-        // it, in a record of its own after this one.
+        // battlefield -- so it stays where flushOrphanedEvents puts it, in a
+        // record of its own after this one.
         onNextAction();
         flushCombat();
         flushOrphanedEvents();
@@ -1089,11 +1097,10 @@ public final class BusBracketCollector extends BusEventReader {
     /**
      * Notice that the controller said no to something.
      *
-     * <p>{@code declined} is the one outcome nothing ever wrote, and there is
-     * no bus event for it: an optional effect nobody took produces no zone
-     * change, no damage and no life total to notice, which is precisely why the
-     * schema wanted it — the counterfactual "it was offered and refused" is
-     * otherwise indistinguishable from "it was never offered".
+     * <p>There is no bus event for {@code declined}: an optional effect nobody
+     * took produces no zone change, no damage and no life total to notice,
+     * which is why the schema has the outcome — "it was offered and refused"
+     * is otherwise indistinguishable from "it was never offered".
      *
      * <p>Only the refusal is kept. The hook is called with both answers, the
      * way the trigger-condition hook is, but an accepted offer is already
@@ -1112,8 +1119,8 @@ public final class BusBracketCollector extends BusEventReader {
             // pays a cost or resolves an optional clause (GameSimulator builds
             // its own PlayerControllerAi over the forked Game, but the static
             // listener it calls is this game's). args[0] is declared
-            // SpellAbility on Forge's side; a value this cannot identify is
-            // left alone rather than newly dropped.
+            // SpellAbility on Forge's side; a value this cannot identify
+            // still counts as this game's refusal.
             SpellAbility offered = args.get(0, SpellAbility.class);
             if (Boolean.FALSE.equals(args.get(1))
                     && (offered == null || belongsToLiveGame(offered))) {
@@ -1163,7 +1170,7 @@ public final class BusBracketCollector extends BusEventReader {
      *
      * <p>Both names are tested: Forge's first-strike step is {@code
      * COMBAT_FIRST_STRIKE_DAMAGE}, which does not contain {@code
-     * COMBAT_DAMAGE}, and a test on that substring alone sent the step's
+     * COMBAT_DAMAGE}, so a test on that substring alone would send the step's
      * creature damage, life changes and deaths to the ordinary bracket.
      */
     private boolean inCombatDamageStep() {
@@ -1216,59 +1223,33 @@ public final class BusBracketCollector extends BusEventReader {
     }
 
     /**
-     * Write a leftover resolution-bracket buffer as its own record, the same
-     * rescue {@link #flushCombat} already gives the combat bracket -- and
-     * needed for exactly the same reason: something can end the game between
-     * the last bracket close and the next one that never comes.
+     * Write a leftover resolution-bracket buffer as its own record, the rescue
+     * {@link #flushCombat} gives the combat bracket, for the same reason:
+     * something can end the game between the last bracket close and the next
+     * one, which never comes.
      *
      * <p>Reachable by the most ordinary kind of win. {@code MagicStack} fires
-     * {@code GameEventSpellResolved} immediately after a resolving ability's
-     * own effect returns, with no game-over check between, so {@link
-     * #endBracket} runs -- holding that ability's own effect half and clearing
-     * the bracket -- before {@code checkStateBasedEffects} ever asks whether
-     * anyone lost (CR 704.3, checked at the start of the next main-loop
-     * iteration). A
-     * burn spell that leaves its target at 0 life closes its own bracket first
-     * and only then is the game discovered to be over: {@code
-     * GameEventGameOutcome} fires with no bracket open, {@link #fileOutcome} has
-     * nowhere to put it but the now-empty {@link #bracketEvents}, and no
-     * further ability ever resolves to trigger the {@link #endBracket} that
-     * would otherwise have flushed it. Without this, {@code player_won} (and
-     * anything else the bus files outside combat with no bracket open) was
-     * silently dropped for every non-combat kill -- a burn spell, a drain, a
-     * mill-out, a scripted "you lose the game" -- which is most of them.
+     * {@code GameEventSpellResolved} as soon as a resolving ability's effect
+     * returns, so {@link #endBracket} closes the bracket before {@code
+     * checkStateBasedEffects} asks whether anyone lost (CR 704.3, at the start
+     * of the next main-loop iteration). The {@code GameEventGameOutcome} of a
+     * burn spell, a drain, a mill-out or a scripted "you lose the game" then
+     * lands in the empty {@link #bracketEvents}, and no later resolution comes
+     * to flush it: without this, {@code player_won} is lost for every
+     * non-combat kill.
      *
-     * <p>{@code ability} is absent, the same as {@link #flushCombat}'s own
-     * combat record and for the same reason, not a narrower one: with no
-     * resolution open there is no acting line, so this writes the same honest
-     * answer {@code endBracket} would write for a bracket that closed with
-     * nothing resolving -- a game outcome genuinely has no acting line, which
-     * is a fact about the record, not a lookup that failed. {@code state} is
-     * read fresh, the same null-ability snapshot {@link #fileCombat} takes
-     * for its own record, since the board captured at a cast went with the
-     * resolution that closed.
+     * <p>{@code ability} is absent, as on {@link #flushCombat}'s record: with
+     * no resolution open there is no acting line. {@code state} is read fresh,
+     * as {@link #fileCombat} reads it, since the board captured at a cast went
+     * with the resolution that closed.
      *
-     * <p><b>{@code open == null} is required, not incidental.</b>
-     * {@link #bracketEvents} is non-empty at {@code
-     * finishGame()} in two reachable shapes, and only one of them means
-     * "nothing was resolving": {@code openBracket(X)} runs at <em>cast</em>
-     * time, not at resolution, so the bracket stays open on {@code X} for as
-     * long as {@code X} sits on the stack -- and {@code
-     * checkStateBasedEffects} runs at the top of every main-loop iteration,
-     * the same CR 704.3 mechanism this method's own rescue depends on, so a
-     * cast whose own cost payment ends the game (life paid to 0) can leave
-     * the bracket open on {@code X}, still on the stack, and never
-     * resolved. Writing this method's record in that shape would name
-     * {@code X} as the resolving ability in the <em>same</em> {@code
-     * finishGame()} call that {@link #writeOffRemoved} separately and
-     * correctly counts {@code X} as abandoned and never resolved -- two
-     * contradictory claims about one ability, and worse than attributing to
-     * nothing, because it names a real ability that demonstrably did not
-     * resolve. Chosen over keeping the events under some other attribution:
-     * whatever {@code X} was doing when the game cut it off is exactly as
-     * unfinished as {@code X} itself, so counted-and-dropped (the treatment
-     * the held casts already get) is the honest answer, not a partial one
-     * salvaged under a different name.
+     * <p><b>{@code open == null} is required, not incidental.</b> The bracket
+     * opens at the cast, so a cast whose own cost payment ends the game (life
+     * paid to 0) leaves it open on an ability {@code X} that is still on the
+     * stack and never resolved. A record here would name {@code X} as
+     * resolving in the same {@code finishGame()} call that counts {@code X}
+     * as abandoned. Its events are as unfinished as {@code X}, so they are
+     * dropped with it.
      */
     private void flushOrphanedEvents() {
         if (open != null || bracketEvents.isEmpty()) {

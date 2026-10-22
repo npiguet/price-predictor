@@ -43,7 +43,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * of Forge's declaration that {@code PatchHooksTest} checks against the real
  * one.
  *
- * <p>Beside that, the shape the contract fixed: one record per replacement
+ * <p>Beside that, the shape the contract fixes: one record per replacement
  * including the negatives, {@code outgoing} null exactly where nothing was
  * rewritten in place, and {@code replaced_by} keyed where an ability stood in
  * for the event; and what a record says about its acting line and its event.
@@ -63,11 +63,9 @@ class RewriteContractTest {
     /**
      * Each of the five results reaches the payload in its wire spelling.
      *
-     * <p>Including {@code NotReplaced}, which is this channel's negative and
-     * used to be indistinguishable from the four others: they all left the
-     * parameter map untouched, so all five arrived as an identity pair and the
-     * collector dropped them. That was 87% of the candidates and left 34
-     * records in 1.88M against a 7% share of the mixture.
+     * <p>Including {@code NotReplaced}, which is this channel's negative: all
+     * five can leave the parameter map untouched and arrive as an identity
+     * pair, so the result is the only thing that tells them apart.
      */
     @ParameterizedTest
     @EnumSource(ReplacementResult.class)
@@ -258,9 +256,9 @@ class RewriteContractTest {
     /**
      * A replacement that declined is a written record, not a dropped one.
      *
-     * <p>Through the handler rather than the builder, because dropping was the
-     * handler's decision to make and this is the assertion that it no longer
-     * makes it.
+     * <p>Through the handler rather than the builder, because dropping would
+     * be the handler's decision to make and this is the assertion that it does
+     * not make it.
      */
     @Test
     void aDeclinedReplacementReachesTheShard() throws Throwable {
@@ -276,17 +274,16 @@ class RewriteContractTest {
         assertTrue(line.contains("\"result\":\"not_replaced\""), line);
     }
 
-    // ── final-fix-3.md item 2: another game's replacement ───────────────
+    // ── another game's replacement ──────────────────────────────────────
 
     /**
-     * final-fix-3.md item 2: a replacement reported for an effect belonging
+     * A replacement reported for an effect belonging
      * to a DIFFERENT {@code Game} -- exactly {@code
      * ForkCollector.forceResolution}'s shape, since a forced ability's own
      * replacements run through {@code GameSimulator.resolveStack}'s real
-     * resolution pipeline -- must not reach the live shard. This hook had no
-     * game check at all before this fix (unlike the clause/outcome hooks,
-     * which F2 already protected); {@code RewriteChannel.handler} is a plain JVM
-     * static exactly like the other five this brief's item 2 covers.
+     * resolution pipeline -- must not reach the live shard.
+     * {@code RewriteChannel.handler} is a plain JVM static exactly like the
+     * clause, outcome, trigger, playability and mana hooks.
      *
      * <p>Companion to {@code ClauseContractTest
      * .aClauseFromAnotherGameDoesNotReachThisGamesBracket} and {@code
@@ -312,8 +309,8 @@ class RewriteContractTest {
     // ── what a rewrite record says ──────────────────────────────────────
 
     /**
-     * The other half of the same omission: 62,546 rewrite records that named
-     * no replacement effect, on the one hook every replacement passes through.
+     * A rewrite record names its replacement effect, on the one hook every
+     * replacement passes through.
      *
      * <p>And a record that names its line carries no reason for an empty one.
      * The two fields are one statement in two halves: a reason beside a named
@@ -350,17 +347,16 @@ class RewriteContractTest {
      *
      * <p>Paralyze's "doesn't untap" is the shape the whole contract is for: the
      * engine skips the event rather than rewriting a value, so both halves read
-     * alike and the record used to be dropped. It was 87% of the channel. The
-     * result is what makes the row readable without an outgoing — {@code skipped}
+     * alike. The result is what makes the row readable without an outgoing —
+     * {@code skipped}
      * says outright what an identity pair could only imply — so the record is
      * written, and its outgoing is null rather than a copy of its incoming.
      *
      * <p>{@code ReplacementType} names {@code Untap} where {@code TriggerType}
-     * names {@code Untaps}, and the mode table was written from the trigger
-     * vocabulary — so an untap replacement took the generic type, carried
-     * nothing but its own name, and could not differ from itself however much
-     * it changed. Paralyze's is that mode, and its incoming half is typed
-     * rather than generic.
+     * names {@code Untaps}, so without its own entry in the mode table an untap
+     * replacement would take the generic type, carry nothing but its own name,
+     * and could not differ from itself however much it changed. Paralyze's is
+     * that mode, and its incoming half is typed rather than generic.
      */
     @Test
     void aPreventionThatRewritesNothingIsStillARecord() {

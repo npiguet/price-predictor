@@ -28,11 +28,11 @@ import forge.game.zone.ZoneType;
  * The outcome events of the public bus, read once for every collector.
  *
  * <p>The bracket collector and the fork sink both describe what happened
- * through {@link BusEvents}, and they used to subscribe to the bus separately.
- * The two subscription lists drifted: the sink once listened to seven of the
- * sixteen outcome events, and it never passed the cause the bus names for a
- * damage, a poison or a radiation counter. So the subscriptions live here,
- * once, and a subclass decides only what it alone can decide: whether a card
+ * through {@link BusEvents}, and a forced resolution must be described the
+ * way an observed one is: the same outcome events, each with the cause the
+ * bus names for a damage, a poison or a radiation counter. Two subscription
+ * lists drift apart, so the subscriptions live here, once, and a subclass
+ * decides only what it alone can decide: whether a card
  * damage is combat damage, where an event goes, and what a permanent leaving
  * the battlefield means to it.
  *

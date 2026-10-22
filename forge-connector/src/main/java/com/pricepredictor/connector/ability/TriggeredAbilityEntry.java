@@ -73,7 +73,7 @@ public record TriggeredAbilityEntry(AbilityType type, String descriptionText, Li
             }
         }
 
-        // Sub-pattern 4a: walk execute chain for trailing sub-SpellDescriptions.
+        // Walk the execute chain for trailing sub-SpellDescriptions.
         // Only when the execute SA itself is transparent (has no description of its own):
         // in that case, sub-ability SpellDescriptions contain oracle text not in TriggerDescription.
         // Guard: also skip ImmediateTrigger (processed separately) and ETBReplacement (registered

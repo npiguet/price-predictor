@@ -43,7 +43,7 @@ class JsonTest {
 
     /**
      * A null nested in a map or a list is the string {@code "null"}: the
-     * spelling events already in the corpus carry.
+     * spelling the renderer {@code Json.value} was lifted from always produced.
      */
     @Test
     void aNestedNullIsTheStringNull() {

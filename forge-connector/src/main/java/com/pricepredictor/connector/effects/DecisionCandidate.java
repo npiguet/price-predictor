@@ -61,11 +61,9 @@ record DecisionCandidate(
     /**
      * What the rules allowed this candidate to target, not what the AI picked.
      *
-     * <p>The field was read off {@code getTargets()}, which is the chosen set --
-     * so it was present on 1.8% of candidates and, where it was present, meant
-     * the wrong thing. The per-entity target-legality head is specified to train
-     * on the legal set, and an AI's choice is a policy judgment the spec keeps
-     * out of the corpus.
+     * <p>Not {@code getTargets()}, which is the chosen set: the per-entity
+     * target-legality head is specified to train on the legal set, and an AI's
+     * choice is a policy judgment the spec keeps out of the corpus.
      *
      * <p>Capped, because a wide board can make this list longer than the record
      * around it.

@@ -278,16 +278,14 @@ final class BusEvents {
      * One completed move, with both ends of it.
      *
      * <p>Read from {@code GameEventCardChangeZone}, which fires once per move
-     * and carries the zone the card left as well as the one it reached. It
-     * replaces the per-zone-list notification {@code GameEventZone}, which is
+     * and carries the zone the card left as well as the one it reached, rather
+     * than from the per-zone-list notification {@code GameEventZone}, which is
      * not a move at all: {@code Zone.remove} publishes one for the zone the
      * card left, {@code Zone.add} another for the zone it reached and
-     * {@code MagicStack} a third for the stack, so one cast rendered three
-     * events of which the first named a destination the card never reached and
-     * the third repeated the second verbatim. That triple fire is where every
-     * exact-duplicate event measured in a record came from, and reading the
-     * move instead is the only way {@code from_zone} — a documented parameter
-     * of the event type that nothing had ever written — gets filled at all.
+     * {@code MagicStack} a third for the stack, so one cast would render three
+     * events, the first naming a destination the card never reached and the
+     * third repeating the second verbatim. Reading the move is also the only
+     * way {@code from_zone} gets filled at all.
      *
      * <p>Null when neither end is known, which is a move this collector has
      * nothing to say about rather than a move to nowhere.
@@ -297,10 +295,9 @@ final class BusEvents {
      * with the costs that were paid. Filed as an outcome it is worse than
      * redundant: it lands in whichever bracket happens to be open, so an
      * opponent's instant cast in response reads as something the resolving
-     * ability did. It was 54% of the whole zone_change channel. A move
-     * <i>off</i> the stack is kept, because that one is an outcome — the
-     * permanent arriving, or the spell going to the graveyard — and now says
-     * {@code from_zone=stack} where before it said nothing.
+     * ability did. A move <i>off</i> the stack is kept, because that one is an
+     * outcome — the permanent arriving, or the spell going to the graveyard —
+     * and says {@code from_zone=stack}.
      */
     static EffectEvent cardMoved(GameEventCardChangeZone event) {
         if (event.card() == null) {

@@ -87,11 +87,10 @@ class PatchedCollectorTest {
         }
     }
 
-    // ── final-fix-3.md item 2: the other four handlers ───────────────────
+    // ── the other four handlers ─────────────────────────────────────────
 
     /**
-     * final-fix-3.md item 2: {@code TriggerChannel.handler} had no game check
-     * at all before this fix. A fork's own trigger evaluations
+     * {@code TriggerChannel.handler} checks the game too. A fork's own trigger evaluations
      * ({@code GameSimulator.resolveStack} runs the forced ability's triggers
      * through the real {@code TriggerHandler}) must not reach the live shard.
      */
@@ -109,8 +108,8 @@ class PatchedCollectorTest {
     }
 
     /**
-     * final-fix-3.md item 2: {@code PlayabilityChannel.decisionHandler} had no
-     * game check either. {@code caps(0, 1.0)} forces {@code playabilityRate} to 1.0 so
+     * {@code PlayabilityChannel.decisionHandler} checks the game too.
+     * {@code caps(0, 1.0)} forces {@code playabilityRate} to 1.0 so
      * the sampling gate ahead of the game check cannot flakily hide it.
      */
     @Test
@@ -147,8 +146,7 @@ class PatchedCollectorTest {
     }
 
     /**
-     * final-fix-3.md item 2: {@code ManaChannel.handler} had no game check
-     * either.
+     * {@code ManaChannel.handler} checks the game too.
      * Held in {@link ManaChannel}'s reservoir rather than written
      * immediately, so the collector must be closed (which flushes it) before
      * the shard can be read.
@@ -168,11 +166,11 @@ class PatchedCollectorTest {
                 "a fork's own mana production must not land in the live shard");
     }
 
-    // ── final-fix-4.md item 3: a positive test behind each of those gates ──
+    // ── a positive test behind each of those gates ──────────────────────
     //
     // The trigger, decision, legality and mana handlers are invoked nowhere
-    // in the test tree except the four fork-rejection tests above -- the
-    // existing record(...)-style tests call the record builder directly and
+    // in the test tree except the four fork-rejection tests above and these
+    // -- the record(...)-style tests call the record builder directly and
     // never reach the handler (InvocationHandler) these gates actually live
     // in. A gate with only a negative test behind it can fail closed for
     // everything, live included, and every one of those tests would still
@@ -199,10 +197,9 @@ class PatchedCollectorTest {
         SpellAbility liveCandidate = AbilityFactory.getAbility(
                 "AB$ Pump | Cost$ 1 | NumAtt$ +1 | NumDef$ +1", liveCard);
 
-        // playabilityRate forced to 1.0, matching final-fix-4.md item 5's own
-        // fix: at the default 0.1 this record would be sampled out at random
-        // roughly nine times in ten, and a flaky pass here is exactly as
-        // uninformative as the vacuous one item 3 exists to close.
+        // playabilityRate forced to 1.0: at the default 0.1 this record would
+        // be sampled out at random roughly nine times in ten, and a flaky pass
+        // here is exactly as uninformative as a vacuous one.
         List<String> lines = ShardRun.records(tempDir, TestCards.game(), caps(0, 1.0),
                 (bracket, collectors) -> collectors.playability().decisionHandler()
                         .invoke(null, ON_CANDIDATE, new Object[]{liveCandidate}));

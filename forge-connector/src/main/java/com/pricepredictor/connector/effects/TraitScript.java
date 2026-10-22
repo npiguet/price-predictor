@@ -35,7 +35,7 @@ import java.util.TreeMap;
  * {@code Choices$} of a non-modal chooser — each segment its own parameters in
  * key order, joined by {@value #SEGMENT_SEPARATOR} and opened by the label its
  * parent referenced it by. Labels are the script author's own SVar names,
- * 3,488 distinct ones across the card tree and most used once, so they are
+ * thousands of distinct ones across the card tree and most used once, so they are
  * renamed by position ({@code SV1}, {@code SV2}, …) in order of first
  * appearance reading the text from its start: two cards whose chains differ
  * only in what they called a sub-ability render the same text. An SVar is

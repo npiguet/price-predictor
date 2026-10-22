@@ -50,8 +50,8 @@ class ClauseContractTest {
      * test trips {@code ApiEvents}' emitter-failure or memo-failure latch
      * first -- in this class or, within one JVM, {@code ApiEventsTest} --
      * leaves every test after it unable to see its own "did this print"
-     * outcome. Two latches since final-fix-3.md item 4 (they no longer share
-     * one), so both are reset here.
+     * outcome. There are two latches, one per failure kind, so both are reset
+     * here.
      */
     @BeforeEach
     void resetFailureLatches() {
@@ -123,14 +123,11 @@ class ClauseContractTest {
     // ── the mechanism: nested memos do not cross ─────────────────────────
 
     /**
-     * Every rule in {@code ApiEvents} passed a null {@code Memo} until the
-     * critical fix that gave {@code AddTurn}/{@code SkipTurn}/{@code
-     * SkipPhase} a real one (the targeted-player list, captured before
-     * resolution): before that, the {@code ThreadLocal<Deque<Object>>} this
-     * handler keeps was only ever exercised on its always-empty path, and a
-     * LIFO-pairing bug in it would first surface in Task 7 — someone else's
-     * task, building the first production rule that genuinely needs one.
-     * Pinned here instead, on the two real rules that supply one now.
+     * The {@code ThreadLocal<Deque<Object>>} this handler keeps pairs each
+     * clause's memo with its own resolved half, last in first out. Pinned
+     * here on two real rules that supply one — {@code AddTurn} and {@code
+     * SkipTurn}, whose memo is the targeted-player list captured before
+     * resolution — one nested inside the other.
      *
      * <p>Drives the documented firing order for a two-clause ability --
      * {@code resolving(root)}, {@code resolving(sub)}, {@code
@@ -177,22 +174,22 @@ class ClauseContractTest {
                 + SnapshotBuilder.playerId(innerTarget) + "\"]"), effectHalf);
     }
 
-    // ── F2: another game's clause must not reach this game's bracket ────
+    // ── another game's clause must not reach this game's bracket ────────
 
     /**
-     * F2: a clause resolving on a DIFFERENT {@code Game} -- exactly the shape
+     * A clause resolving on a DIFFERENT {@code Game} -- exactly the shape
      * {@code ForkCollector.forceResolution} produces, since {@code
      * GameSimulator.resolveStack} runs the real resolution pipeline against a
      * {@code GameCopier} clone under {@code AIOption.USE_FULL_SIMULATION}
-     * regardless of how this game's own lobby seats were registered (ruling
-     * R31) -- must not reach the live game's bracket. {@code GameCopier}
+     * regardless of how this game's own lobby seats were registered -- must
+     * not reach the live game's bracket. {@code GameCopier}
      * builds every copied {@code Card} against a new {@code Game} object, so
      * a fork's clause's own host card already carries a different
      * {@code Game} than this collector's.
      *
      * <p>Companion to {@code OutcomeHandlerTest
      * .anOutcomeFromAnotherGameDoesNotReachThisGamesBracket}, which covers
-     * the same fix on the outcome hook's half.
+     * the same check on the outcome hook's half.
      */
     @Test
     void aClauseFromAnotherGameDoesNotReachThisGamesBracket() throws Throwable {
@@ -219,10 +216,10 @@ class ClauseContractTest {
                 "a fork's clause must not land in the live game's record: " + shard);
     }
 
-    // ── F3: a throwing memo must not desync a sibling's pop ─────────────
+    // ── a throwing memo must not desync a sibling's pop ─────────────────
 
     /**
-     * F3: a clause whose own {@code Memo} throws must not desynchronize the
+     * A clause whose own {@code Memo} throws must not desynchronize the
      * deque for the clauses around it.
      *
      * <p>Same shape as {@link #nestedClausesDoNotCrossTheirMemos}, except the
@@ -232,17 +229,16 @@ class ClauseContractTest {
      * {@code AbilityUtils.getDefinedPlayers}/{@code getDefinedCards} throw --
      * every unrecognized input degrades to an empty list instead -- so there
      * is no real card this could be pinned to without hand-feeding the code a
-     * state the engine never produces, exactly the trap this branch's own
-     * test bar warns against.
+     * state the engine never produces.
      *
      * <p>The {@code onClauseResolving} calls go through {@link
      * #resolvingContained}, the way {@code
      * AbilityUtils.notifyClauseResolving} calls them in production: that
      * containment is what lets resolution continue past the throw at all,
-     * and before {@link ApiEvents#before}'s own fix, it is exactly what
-     * swallows the throw <em>before</em> {@code clauseMemos.push(...)} runs
-     * -- the missing push this test exists to catch. Before the fix: the
-     * inner clause's {@code onClauseResolving} throws out of {@link
+     * and unless {@link ApiEvents#before} contains the throw itself, it is
+     * what swallows the throw <em>before</em> {@code clauseMemos.push(...)}
+     * runs -- the missing push this test exists to catch. Then the inner
+     * clause's {@code onClauseResolving} throws out of {@link
      * ApiEvents#before} before its push runs, so the inner clause's
      * own {@code onClauseResolved} pops the OUTER clause's memo instead of
      * its own missing one, and the outer's own pop then reads an empty deque
@@ -314,7 +310,7 @@ class ClauseContractTest {
                     new Object[]{clause});
         } catch (RuntimeException e) {
             // Mirrors AbilityUtils.notifyClauseResolving's own containment,
-            // which catches RuntimeException and nothing wider (ruling R8) --
+            // which catches RuntimeException and nothing wider --
             // an Error is left to propagate here too.
         }
     }

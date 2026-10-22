@@ -36,14 +36,12 @@ final class RunParamNormalizer {
      * the key, never by the list of them, and what the record carries is the
      * <b>values</b>.
      *
-     * <p>That distinction is the whole of the rewrite channel's first defect.
-     * The previous reading built both halves of a rewrite record out of the
-     * mode, one subject per map entry, and a {@code cause} that was the
-     * comma-joined key names — so {@code incoming} and {@code outgoing} were
-     * byte-identical on 100% of 62,546 records by construction, and
-     * {@code cause} was a near-constant string per event type that named no
-     * cause. Every value that matters already has a slot in the event
-     * vocabulary, so filling those slots needs no change to the wire format.
+     * <p>Read off the key list instead — a subject per map entry, a
+     * {@code cause} of the comma-joined key names — both halves of a rewrite
+     * record would be byte-identical by construction, and {@code cause} a
+     * near-constant string per event type. Every value that matters already
+     * has a slot in the event vocabulary, so filling those slots needs no
+     * change to the wire format.
      */
     static EffectEvent describeParams(Object trait, Object params) {
         String mode = modeOf(trait);
@@ -116,11 +114,10 @@ final class RunParamNormalizer {
      * Keys that name what an event is <b>about</b>, most specific first.
      *
      * <p>A parameter map names one card several times over: {@code Card},
-     * {@code CardLKI} and {@code Affected} routinely all point at it, which is
-     * why 377 of 691 sampled trigger events carried a repeated subject. The
+     * {@code CardLKI} and {@code Affected} routinely all point at it. The
      * others in the map — {@code Cause}, {@code DamageSource},
      * {@code LastState*} — are causes and context, not subjects, and reading
-     * every entry as one is what made the subject list meaningless.
+     * every entry as one would make the subject list meaningless.
      */
     private static final List<String> SUBJECT_KEYS = List.of(
             "Affected", "Card", "Player", "DamageTarget", "Attacker",
@@ -129,15 +126,15 @@ final class RunParamNormalizer {
             // Blockers and is about the attacker, a Blocks map holds Blocker
             // and Attackers and is about the blocker, and an AttackersDeclared
             // map holds only the collection. Without these three, every one of
-            // them named no subject at all.
+            // them would name no subject at all.
             "Blocker", "Attackers", "Attached",
             // Last, and only as a last resort. CardLKI is a copy of the card as
             // it was, so wherever the live object is also in the map one of the
             // keys above names it and this is never reached. Where it is not --
             // MagicStack puts CardLKI, Activator and SpellAbility and no Card at
             // all -- it is the only name the map has for the spell that was
-            // cast, and without it all 1,917 SpellCast events of the smoke
-            // corpus named no subject whatever.
+            // cast, and without it every SpellCast event would name no
+            // subject whatever.
             "CardLKI");
 
     /** How many subjects one event may name before the list is capped. */
@@ -180,13 +177,11 @@ final class RunParamNormalizer {
     /**
      * Keys that name the object a run-parameter map blames, most specific first.
      *
-     * <p>Forge spells the causing object six ways and the reading was two of
-     * them. Measured over the 28,343 trait-derived events of the smoke corpus:
-     * {@code Cause} answers for {@code ChangesZone} (81%), {@code Sacrificed}
-     * and {@code Exiled}; {@code SpellAbility} answers for {@code SpellCast}
-     * (100%) and {@code LifeLost}. The four added here are where the rest of
-     * the volume keeps it — {@code Source} on {@code CounterAdded}
-     * ({@code Card.java:1790}) and on {@code LifeGained}
+     * <p>Forge spells the causing object six ways. {@code Cause} answers for
+     * {@code ChangesZone}, {@code Sacrificed} and {@code Exiled};
+     * {@code SpellAbility} answers for {@code SpellCast} and {@code LifeLost};
+     * the other four are where the rest keep it — {@code Source} on
+     * {@code CounterAdded} ({@code Card.java:1790}) and on {@code LifeGained}
      * ({@code Player.java:487}), {@code SourceSA} on {@code BecomesTarget}
      * ({@code SpellAbilityStackInstance.java:170}), {@code Causer} on
      * {@code Destroyed} ({@code GameAction.java:2161}), {@code Activator} on
@@ -207,9 +202,8 @@ final class RunParamNormalizer {
     /**
      * The object that caused this event, as a ref, or null when none is named.
      *
-     * <p>{@code cause} is documented as an entity or player ref and was once
-     * written as a comma-joined list of run-parameter key names — the one place
-     * the schema contradicted itself, and the value nothing could learn from.
+     * <p>{@code cause} is documented as an entity or player ref, never a list
+     * of run-parameter key names, which nothing could learn from.
      * A cause that is a spell or ability is named by the card it is on, which
      * is the identity the snapshot carries.
      *
@@ -237,7 +231,7 @@ final class RunParamNormalizer {
      * same thing from two different script APIs lands in the same slots, and a
      * key written outside the type's own set is one no reader will look for. A
      * type this has no reading for carries its mode and its cause and nothing
-     * else, which is a smaller claim than the identity pair it used to make.
+     * else, claiming no more than it read.
      */
     private static void normalizeParams(
             EffectEvent event, String mode, Map<String, Object> byName) {
@@ -490,9 +484,9 @@ final class RunParamNormalizer {
      * The entity a run-parameter value names, or null when it names none.
      *
      * <p>A replacement's and a trigger's parameter maps are the only place
-     * those records say what they are about, and nothing read them: every
-     * rewrite and trigger event in the corpus named no subjects at all, which
-     * left the pending-event overlay with nothing to attach to.
+     * those records say what they are about: unread, every rewrite and trigger
+     * event would name no subjects at all, leaving the pending-event overlay
+     * with nothing to attach to.
      */
     private static String subjectOf(Object value) {
         if (value instanceof SpellAbility ability && ability.getHostCard() != null) {
@@ -571,14 +565,14 @@ final class RunParamNormalizer {
             Map.entry("Attackers", EffectEvent.ATTACKERS_DECLARED),
             Map.entry("AttackersDeclared", EffectEvent.ATTACKERS_DECLARED),
             // Attacks is one creature being declared as an attacker, which is
-            // exactly what attackers_declared names -- and it is the third
-            // heaviest trait-derived mode in the corpus (2,632 events), every
-            // one of which took the generic type and carried nothing but its
-            // own name. As attackers_declared it carries the defender.
+            // exactly what attackers_declared names, and one of the heaviest
+            // trait-derived modes. Under the generic type it would carry
+            // nothing but its own name; as attackers_declared it carries the
+            // defender.
             Map.entry("Attacks", EffectEvent.ATTACKERS_DECLARED),
             Map.entry("Blocks", EffectEvent.BLOCKERS_DECLARED),
             // Retargeted: the subject of an AttackerBlocked event is the
-            // attacker, not the blocker, so blockers_declared put the wrong
+            // attacker, not the blocker, so blockers_declared would put the wrong
             // creature in the slot named "blocked". became_blocked is the type
             // whose subject is the attacker and whose param is the blockers.
             Map.entry("AttackerBlocked", EffectEvent.BECAME_BLOCKED),
@@ -591,13 +585,11 @@ final class RunParamNormalizer {
             Map.entry("PhaseIn", EffectEvent.PHASED),
             // ── the replacement side's own spellings ────────────────────
             // ReplacementType names its modes differently from TriggerType,
-            // and this table was written from the trigger vocabulary. A
+            // and the entries above follow the trigger vocabulary. A
             // replacement mode with no entry here takes the generic type and
             // carries nothing but its mode -- and an event with no value in it
-            // cannot differ from itself, so the pair is dropped as an identity
-            // rewrite however much the replacement changed. Untap was two such
-            // drops in the smoke run; the rest are the modes a random sealed
-            // game reaches less often.
+            // cannot differ from itself, so the record reads as a rewrite of
+            // nothing however much the replacement changed.
             Map.entry("Untap", EffectEvent.UNTAPPED),
             Map.entry("Tap", EffectEvent.TAPPED),
             Map.entry("DealtDamage", EffectEvent.DAMAGE_DEALT),

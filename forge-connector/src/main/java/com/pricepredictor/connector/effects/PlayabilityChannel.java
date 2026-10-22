@@ -122,18 +122,16 @@ public final class PlayabilityChannel {
         if (read.isEmpty()) {
             return;
         }
-        // The candidate goes into the snapshot: refs.source was null on all
-        // 11.2 million playability records, so a decision record did not say
-        // which card the candidate was even on except through its key.
+        // The candidate goes into the snapshot: without it refs.source is
+        // null on every playability record, and a decision record would not
+        // say which card the candidate is even on except through its key.
         String state = live.snapshots().ofAbility(
                 candidate,
                 candidate == null || candidate.getHostCard() == null
                         ? List.of() : List.of(candidate.getHostCard())).render();
         String payload = read.get().payloadJson();
-        // The decision path had no dedup at all, and every duplicate
-        // playability record measured in the first corpus was this subkind:
-        // the AI re-asks the same question about the same board, and the
-        // answer repeats verbatim.
+        // Deduplicated because the AI re-asks the same question about the
+        // same board, and the answer repeats verbatim.
         if (!dedup.allowDistinct(PlayabilitySubkind.DECISION.wireName(), payload, state)) {
             return;
         }

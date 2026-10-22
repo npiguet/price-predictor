@@ -137,9 +137,8 @@ class LayerContributionsTest {
     }
 
     /**
-     * The channel this task exists for: {@code contributions[].name} is
-     * declared and listed in {@code KNOWN_CONSTANT_FIELDS} because it had
-     * never carried a value in any corpus.
+     * {@code contributions[].name} carries the name a static gives a card;
+     * without this channel the declared field never carries a value.
      *
      * <p>Goes through the real {@code Card.addChangedName} and the real,
      * reflectively-read {@code Card.getChangedCardNames} rather than a

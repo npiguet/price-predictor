@@ -34,13 +34,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * What a fork hears, and how a move is read.
  *
- * <p>Two defects meet here. A fork described its resolution through seven bus
- * events against the sixteen the observed records use, so a forked draw or pump
- * recorded an empty event list and the counterfactual read as "the ability did
- * nothing" — the whole fork vocabulary across the sampled corpus was
- * {@code zone_change} and {@code counter_change}. And the zone reading itself
- * was wrong on both sides: one move rendered three events, one of them naming a
- * destination the card never reached.
+ * <p>Two properties meet here. A fork hears every bus event the observed
+ * records use, so a forked draw or pump records what it did rather than an
+ * empty event list that reads as "the ability did nothing". And a move is read
+ * once, from the event that carries both ends, rather than as three per-zone
+ * events, one of them naming a destination the card never reached.
  */
 @ExtendWith(ForgeExtension.class)
 class ForkEventSinkTest {
@@ -107,7 +105,7 @@ class ForkEventSinkTest {
         return gap;
     }
 
-    /** And it no longer listens to the notification that fired three times. */
+    /** And it does not listen to the per-zone notification, which fires three times per move. */
     @Test
     void aForkNoLongerReadsThePerZoneNotification() {
         assertFalse(subscriptions(ForkEventSink.class).contains(GameEventZone.class));
@@ -175,10 +173,8 @@ class ForkEventSinkTest {
      *
      * <p>{@code attributed_to} is a tri-state on the observed path — a
      * sub-ability acted, the root line acted, or no pointer was available — and
-     * this sink named none of the three, so every event on every fork record
-     * was silently null. Measured across the smoke corpus that was most of the
-     * 30.9% of events with no attribution at all, and it made a fork record
-     * unable to answer a question a real one answers.
+     * a sink that named none of the three would leave every event on every fork
+     * record silently null, unable to answer a question a real one answers.
      *
      * <p>{@code unresolved} is the honest answer here: nothing is resolving in
      * a unit test, and the point is that the field is <b>written</b> rather than

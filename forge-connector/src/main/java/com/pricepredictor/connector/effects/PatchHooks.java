@@ -207,11 +207,9 @@ public final class PatchHooks {
      *
      * <p>This list is the patch's description. The patch itself is a branch in
      * the sibling checkout — {@code effect-record-hooks} in {@code ../forge} —
-     * because a branch is what git is for; keeping exported {@code .patch} files
-     * beside it meant maintaining a second copy of the same history by hand,
-     * and the two could disagree. What could not live in a branch is *why* each
-     * hook exists and what breaks without it, so that lives here, next to the
-     * code that reads them.
+     * and this repo keeps no exported copy of it, which could disagree with the
+     * branch. What a branch cannot hold is *why* each hook exists and what
+     * breaks without it, so that lives here, next to the code that reads them.
      *
      * <p>Reconstructing a lapsed patch starts here: each entry names the class,
      * the method, and the record channel it feeds.

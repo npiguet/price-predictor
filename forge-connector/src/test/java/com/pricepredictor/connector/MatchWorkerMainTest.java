@@ -71,8 +71,8 @@ class MatchWorkerMainTest {
         // effect.records.dir rather than output.file: records-only mode, the
         // exact configuration collect-coverage / collect-variants runs under.
         // The progress property must not depend on output.file being set --
-        // that independence is the fix for Task 4's original defect (a
-        // records-only round's progress file never grew).
+        // without that independence a records-only round's progress file
+        // never grows.
         System.setProperty("match.run.id", RUN_ID);
         System.setProperty("effect.records.dir", "dummy-records");
         System.setProperty("sealed.progress.file", "dummy-progress.txt");

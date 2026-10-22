@@ -147,7 +147,7 @@ class MatchGeneratorTest {
 
     @Test
     void decksOnlyAcceptsAMirrorInsteadOfReachingForge() {
-        // The bug this guards against: a coverage round's live-card pool
+        // What this guards against: a coverage round's live-card pool
         // shrinks monotonically as cards are satisfied (deck_weights in
         // collect_coverage.py drops every satisfied card), so a round with
         // exactly one card left samples 23 nonlands with replacement from a

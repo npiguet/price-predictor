@@ -28,10 +28,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *
  * <p>Forge resolves an ability, fires {@code GameEventSpellResolved}, and only
  * at the next priority runs the state-based check that moves a creature with
- * lethal damage to the graveyard. The collector used to write the effect half
- * at the resolved event, so a Lightning Bolt at a 2/2 recorded the damage and
- * never the death: across twelve full-strength shards, none of 515
- * lethal-looking resolution damage events had the death in the same record.
+ * lethal damage to the graveyard. An effect half written at the resolved event
+ * would record a Lightning Bolt at a 2/2 as the damage and never the death.
  *
  * <p>These drive the real engine — the stack, the resolution, and
  * {@code GameAction.checkStateEffects} — with the collector subscribed to the

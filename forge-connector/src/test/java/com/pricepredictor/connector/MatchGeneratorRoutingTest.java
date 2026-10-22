@@ -131,7 +131,7 @@ class MatchGeneratorRoutingTest {
         assertTrue(sawForgeMethod, "the ordinary roll never picked a Forge method");
     }
 
-    // ── pickDeckB under decksOnly (the mirror-fallback fix) ────────────────────
+    // ── pickDeckB under decksOnly (the mirror fallback) ────────────────────────
     //
     // pickDeckB's happy path (a mirror is accepted) materializes a Forge Deck
     // via DeckSelection.fromFile, so it needs FModel initialized and lives in

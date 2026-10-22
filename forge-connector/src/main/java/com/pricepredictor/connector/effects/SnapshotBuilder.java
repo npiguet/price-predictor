@@ -51,12 +51,11 @@ import java.util.StringJoiner;
  * in whatever zone it sits (1), the global state, the battlefield and
  * command-zone effect cards (2), the unreferenced stack (3), and unreferenced
  * hands and graveyards (4). The depth is the same on every record, whatever
- * collector or run wrote it, because a depth that varied made
- * {@code state.tiers} a proxy for how a record was collected: interventional
- * forks once rendered four tiers while every other collector rendered two or
- * three, so tier 4 identified {@code interventional} exactly, and a flag the
- * schema bars from ever being a model input had a perfect proxy sitting in the
- * state.
+ * collector or run wrote it, because a depth that varies makes
+ * {@code state.tiers} a proxy for how a record was collected: a tier only the
+ * interventional forks rendered would identify {@code interventional} exactly,
+ * and a flag the schema bars from ever being a model input would have a
+ * perfect proxy sitting in the state.
  */
 public final class SnapshotBuilder {
 
@@ -241,8 +240,7 @@ public final class SnapshotBuilder {
      *
      * <p>Counted over untapped permanents' mana abilities, one per ability that
      * can produce the colour. It is what separates a board that can answer a
-     * threat from one that only looks like it can, and the field had been
-     * written as zero for every colour since the snapshot was first built.
+     * threat from one that only looks like it can.
      *
      * <p>An ability that makes one mana of any colour counts once for each, so
      * the numbers are an upper bound rather than a sum that can be spent.
@@ -273,8 +271,8 @@ public final class SnapshotBuilder {
      *
      * <p>The engine keeps what left the battlefield, not what died, so a
      * bounced or exiled creature counts here too. It is a close reading of a
-     * condition many triggers ask about and the field had been a constant zero;
-     * an exact count would need a hook where the death is decided.
+     * condition many triggers ask about; an exact count would need a hook where
+     * the death is decided.
      */
     private int creaturesLost(Player player) {
         int count = 0;
@@ -495,7 +493,7 @@ public final class SnapshotBuilder {
         if (combat.isBlocking(card)) {
             // The other half of blocked_by. Without it a blocker's own entry
             // says only that it is somewhere in a combat, so the flag the head
-            // reads for "is this creature blocking" was always false — and the
+            // reads for "is this creature blocking" would always be false — and the
             // blocking relationship is what trample and deathtouch act through.
             for (Card attacker : combat.getAttackersBlockedBy(card)) {
                 blocking.add(Json.string(entityId(attacker)));

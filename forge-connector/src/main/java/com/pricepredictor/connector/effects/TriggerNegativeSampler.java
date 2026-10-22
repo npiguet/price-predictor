@@ -54,17 +54,12 @@ final class TriggerNegativeSampler {
      * mode's kept negatives are behind its kept positives -- the deficit is the
      * whole rule, with no rate in front of it.
      *
-     * <p>Three designs, and why this is the third. A fixed 2% rate landed at
-     * 74:26 instead of 1:1, because <b>a fixed rate cannot hold a ratio</b>:
-     * the population ratio varies by mode, board size and turn, and it measured
-     * 1:17.7 over that run. A deficit rule with a probability in front of it --
-     * keep a negative with probability {@code deficit / estimated run length},
-     * so the kept ones spread through the run rather than bunching behind the
-     * last firing -- landed at 58:42. That rate is a <b>lagging</b> controller:
-     * over a run of the estimated length it catches a negative only about
-     * 1 - 1/e of the time, and one game gives a mode too few firings for the
-     * carried deficit ever to be repaid. Offering on the deficit alone removes
-     * the lag, which is the whole of the remaining eight points.
+     * <p>No sampling rate decides it. <b>A fixed rate cannot hold a ratio</b>:
+     * the population ratio varies by mode, board size and turn. A probability in
+     * front of the deficit is a <b>lagging</b> controller: it catches only
+     * some of the negatives it is owed, and one game gives a mode too few
+     * firings for the carried deficit ever to be repaid. Offering on the
+     * deficit alone has no lag.
      *
      * <p>Bunching behind the firing is not a loss worth a controller. The
      * negatives that reach the shard are spread by

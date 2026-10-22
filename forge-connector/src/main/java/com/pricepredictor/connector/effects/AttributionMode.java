@@ -6,7 +6,7 @@ package com.pricepredictor.connector.effects;
  *
  * <p>Detected at worker startup by probing for the patched hooks, not compiled
  * in. The patch lives in a sibling checkout that is rebuilt independently and
- * re-applied by hand after every Forge upgrade, so a build-time switch would
+ * carried across every Forge upgrade by hand, so a build-time switch would
  * silently mislabel a corpus collected after the patch lapsed — and a corpus
  * whose attribution is wrong in a way nothing records is worse than one that
  * says it is degraded.

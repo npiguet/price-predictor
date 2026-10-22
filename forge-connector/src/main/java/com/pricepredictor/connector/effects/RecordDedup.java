@@ -8,13 +8,9 @@ import java.util.Set;
 /**
  * The records one game has already written, by a hash of what they say.
  *
- * <p>The generalisation of the legality cap to the kinds that had none.
- * 624,679 records of the first corpus — 4.3% of it — were byte-identical to
- * another record of the same game, and dedup existed only for the attacker and
- * blocker subkinds: every duplicate playability record measured was the
- * {@code decision} subkind, which is exactly what an unguarded path predicts.
- * Two records that would be byte-identical carry one observation once, so
- * collapsing them loses nothing.
+ * <p>Two records that would be byte-identical carry one observation once, so
+ * collapsing them loses nothing, and the AI re-asking the same question about
+ * an unmoved board makes such pairs common.
  *
  * <p>One per game, shared by every channel that deduplicates: the tag keeps
  * one kind's record from colliding with another's, and nothing else
@@ -30,8 +26,8 @@ final class RecordDedup {
     /**
      * Whether a record saying exactly this has not been written this game yet.
      *
-     * <p>A 64-bit hash rather than the 32-bit {@code String.hashCode} the
-     * legality cap used: over the hundred thousand keys one game can produce,
+     * <p>A 64-bit hash rather than the 32-bit {@code String.hashCode}: over
+     * the hundred thousand keys one game can produce,
      * a 32-bit space has a real chance of colliding, and a collision here
      * silently drops a record that was not a duplicate.
      *

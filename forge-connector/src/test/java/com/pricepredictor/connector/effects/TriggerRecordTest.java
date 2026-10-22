@@ -48,10 +48,9 @@ class TriggerRecordTest {
     }
 
     /**
-     * The defect the whole trigger channel had: 727,308 records that said only
-     * "some trigger saw this event". The hook hands over the {@link Trigger}
-     * itself and the handler dropped it, so the key and {@code refs.source}
-     * were null on every row of the first collected corpus.
+     * A trigger record says which trigger, not only "some trigger saw this
+     * event". The hook hands over the {@link Trigger} itself, and the key and
+     * {@code refs.source} are read from it.
      */
     @Test
     void aTriggerRecordNamesItsTriggerLine() {
@@ -109,11 +108,10 @@ class TriggerRecordTest {
     /**
      * An engine-built card names no script file, and the record says which.
      *
-     * <p>This is the whole point of the field: 3.1% of resolution records named
-     * no acting line and there was no way to ask whether that was The Monarch
-     * being The Monarch or the resolver having regressed. {@code engine_effect}
-     * is the expected answer and {@code unindexable} is the alarm, and the
-     * corpus could not tell them apart because nothing wrote either.
+     * <p>This is the whole point of the field: a record naming no acting line
+     * cannot otherwise say whether that is The Monarch being The Monarch or the
+     * resolver having regressed. {@code engine_effect} is the expected answer
+     * and {@code unindexable} is the alarm.
      */
     @Test
     void anEngineBuiltLineSaysEngineEffectOnTheRecord() {
@@ -148,10 +146,9 @@ class TriggerRecordTest {
     /**
      * A zone rewrite says which zones, from the values rather than the keys.
      *
-     * <p>The whole rewrite channel was information-free because
-     * {@code describeParams} read the map's <b>key names</b>: it built both
-     * halves out of the mode plus a subject per entry, so incoming and outgoing
-     * were byte-identical on 100% of 62,546 records by construction.
+     * <p>Read from the map's <b>key names</b> — the mode plus a subject per
+     * entry — both halves would be byte-identical by construction, and the
+     * whole rewrite channel information-free.
      */
     @Test
     void aMoveNamesTheZonesItWentBetween() {
@@ -169,8 +166,8 @@ class TriggerRecordTest {
      * One card named three ways is one subject.
      *
      * <p>{@code Card}, {@code CardLKI} and {@code Affected} routinely all point
-     * at the same permanent, and reading every map entry as a subject gave
-     * 377 of 691 sampled trigger events a repeated one.
+     * at the same permanent, so reading every map entry as a subject would
+     * repeat it.
      */
     @Test
     void oneCardNamedThreeWaysIsOneSubject() {
@@ -186,11 +183,11 @@ class TriggerRecordTest {
     }
 
     /**
-     * {@code cause} is a ref, and never the list of key names it used to be.
+     * {@code cause} is a ref, and never a list of key names.
      *
-     * <p>The schema documents it as the entity or player that caused the event
-     * and the collector wrote a comma-joined list of {@code AbilityKey} names —
-     * a value that was near-constant per event type and named no cause at all.
+     * <p>The schema documents it as the entity or player that caused the event;
+     * a comma-joined list of {@code AbilityKey} names would be near-constant
+     * per event type and name no cause at all.
      */
     @Test
     void theCauseIsAnEntityRefRatherThanAListOfKeyNames() {
@@ -303,12 +300,10 @@ class TriggerRecordTest {
     /**
      * An event says what caused it, from whichever key the engine used.
      *
-     * <p>{@code causeOf} read {@code Cause} and {@code SpellAbility} only, and
-     * over the smoke corpus that answered on 48% of trait-derived events: the
-     * modes that keep the causing object under {@code Source}
-     * ({@code CounterAdded}, {@code LifeGained}), {@code SourceSA}
-     * ({@code BecomesTarget}) or {@code Causer} ({@code Destroyed}) said
-     * nothing at all.
+     * <p>Not only {@code Cause} and {@code SpellAbility}: the modes that keep
+     * the causing object under {@code Source} ({@code CounterAdded},
+     * {@code LifeGained}), {@code SourceSA} ({@code BecomesTarget}) or
+     * {@code Causer} ({@code Destroyed}) would otherwise say nothing at all.
      */
     @Test
     void aCounterEventNamesTheCardThatPutTheCounterThere() {
@@ -384,8 +379,8 @@ class TriggerRecordTest {
      *
      * <p>{@code MagicStack.java:363} builds the {@code SpellCast} map from
      * {@code CardLKI}, {@code Activator} and {@code SpellAbility} and no
-     * {@code Card} at all, so all 1,917 {@code SpellCast} events of the smoke
-     * corpus named no subject whatever. Last in the key order, because
+     * {@code Card} at all, so without it a {@code SpellCast} event names no
+     * subject whatever. Last in the key order, because
      * {@code CardLKI} is a copy of the card as it was and the live object is
      * the better answer wherever the map also holds one.
      */
@@ -405,10 +400,9 @@ class TriggerRecordTest {
     /**
      * A declared attack is an attack, not an unnamed state flag.
      *
-     * <p>{@code Attacks} is the third heaviest trait-derived mode in the smoke
-     * corpus (2,632 events) and had no entry in the mode table, so every one of
-     * them took the generic {@code state_flag_change} and carried nothing but
-     * its own name — two creatures attacking the same player were
+     * <p>{@code Attacks} is one of the heaviest trait-derived modes. Under the
+     * generic {@code state_flag_change} it would carry nothing but its own
+     * name — two creatures attacking the same player would be
      * indistinguishable rows. As {@code attackers_declared} it carries the
      * defender, read under the key {@code CombatUtil.checkDeclaredAttacker}
      * actually uses.
@@ -474,8 +468,8 @@ class TriggerRecordTest {
      * <p>{@code Blocks} holds {@code Blocker} and {@code Attackers},
      * {@code AttackerBlockedByCreature} holds {@code Attacker} and
      * {@code Blocker}, and {@code AttackersDeclared} holds only the collection —
-     * so with none of those three keys in the subject order, all 226 of them in
-     * the smoke corpus named no subject at all. The order is what keeps each
+     * so with none of those three keys in the subject order, every one of them
+     * would name no subject at all. The order is what keeps each
      * event about the right creature rather than about whichever key was found
      * first.
      */

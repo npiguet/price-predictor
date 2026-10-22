@@ -45,19 +45,17 @@ class PlayabilityChannelTest {
             HookShapes.method(HookShapes.CombatLegality.class, "onBlockersDeclarable");
 
     /**
-     * final-fix-4.md item 5: a fork candidate rejected on identity must not
-     * have drawn from the shared {@code sampler} on its way to being
-     * rejected -- checking identity before the {@code caps.playabilityRate()}
-     * draw is what this pins, not just what the diff shows.
+     * A fork candidate rejected on identity must not have drawn from the
+     * shared {@code sampler} on its way to being rejected -- checking identity
+     * before the {@code caps.playabilityRate()} draw is what this pins.
      *
      * <p>Both collectors share one seed (1) and one {@code playabilityRate}
      * (0.5). The sampler is <em>not</em> {@code new Random(1L)}: it is
      * {@code new Random(scramble(seed))}, and {@code scramble} is SplitMix64's
      * finalizer, so the draws are those of {@code Random(scramble(1L))} --
-     * {@code 0.9245, 0.1142}, not {@code Random(1L)}'s {@code 0.7309, 0.4101}.
-     * An earlier version of this comment cited the latter; the conclusion held
-     * either way, which is exactly why the wrong constants survived. Do not
-     * try to reproduce them against the real {@code sampler}.
+     * {@code 0.9245, 0.1142}, not {@code Random(1L)}'s {@code 0.7309, 0.4101};
+     * the conclusion holds either way, so do not reproduce the latter against
+     * the real {@code sampler}.
      *
      * <p>A solo live candidate draws only the first (0.9245 &gt; 0.5, sampled
      * out). If the identity check ran <em>after</em> the draw, the fork

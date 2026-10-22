@@ -25,8 +25,8 @@ import java.util.StringJoiner;
  * redefine a field, which is what lets a stage-one corpus stay trainable
  * alongside stage-four records.
  *
- * <p>{@link #rewritePayload} is the one place that widening has been exercised,
- * and it obeys the rule rather than bending it: {@code incoming} keeps exactly
+ * <p>{@link #rewritePayload} is where that widening happens, and it obeys the
+ * rule rather than bending it: {@code incoming} keeps exactly
  * the meaning it had, {@code outgoing} gains {@code null} the way a field gains
  * a sentinel, and {@code result} and {@code replaced_by} are new keys. No
  * already-collected record is reinterpreted — an old line that carries no
@@ -182,8 +182,7 @@ public final class EffectRecord {
      * would be unreadable: a reason beside a named line is a contradiction, and
      * an empty list with no reason is the ambiguity this field exists to
      * remove. An empty {@code ability} alone conflates "the Monarch has no
-     * printed line in any tree, correctly" with "the resolver regressed", and
-     * that is what hid a broken resolver for a whole collection run.
+     * printed line in any tree, correctly" with "the resolver regressed".
      *
      * <p>A null answer is treated as {@code unknown_kind} rather than as no
      * lookup at all: a caller reaching this method did look, so the record owes
@@ -308,20 +307,19 @@ public final class EffectRecord {
     /**
      * ``{"incoming": ..., "outgoing": ...|null, "result": ..., "replaced_by": []}``
      *
-     * <p>The pair alone could not express what a replacement does. Forge hardly
+     * <p>The pair alone cannot express what a replacement does. Forge hardly
      * ever edits an event's parameter map: {@code ReplacementHandler} substitutes
      * by running the {@code ReplaceWith$} ability and returning a
      * {@code ReplacementResult}, and its {@code Prevented}, {@code Skipped} and
      * {@code NotReplaced} branches return without touching the map at all. So
      * "enters tapped", "if it would die, exile it instead" and "prevent that
-     * damage" all arrived here as two byte-identical halves, and the channel
-     * held 34 records in 1.88M against a 7% share of the training mixture.
+     * damage" would all arrive here as two byte-identical halves.
      *
      * <p>{@code outgoing} is {@code null} — never a copy of {@code incoming} —
      * when the map was not edited in place. A record whose two halves read the
-     * same is what made this channel unreadable; null says "not rewritten"
-     * outright, and the corpus validator judges an identity pair at zero rather
-     * than letting it parse quietly.
+     * same says nothing; null says "not rewritten" outright, and the corpus
+     * validator judges an identity pair at zero rather than letting it parse
+     * quietly.
      *
      * @param incoming    the event as the replacement received it
      * @param outgoing    the rewritten event, or null where nothing was rewritten
@@ -405,10 +403,9 @@ public final class EffectRecord {
      * clears the paying mana), so a deferred record must hold this string
      * rather than the ability.
      *
-     * <p>Deliberately not read off {@code getPayCosts()}, which is what the
-     * first collected corpus did and why {@code tapped}, {@code sacrificed},
-     * {@code discarded} and {@code exiled} were empty on all 940,973 activation
-     * records. Two independent reasons, both in the engine:
+     * <p>Deliberately not read off {@code getPayCosts()}, where {@code tapped},
+     * {@code sacrificed}, {@code discarded} and {@code exiled} always read
+     * empty, for two independent reasons, both in the engine:
      * {@code CostAdjustment.adjust} pays a {@code cost.copy()}, so the parts
      * hanging off the ability are never the ones that were paid; and
      * {@code CostPayment} calls {@code resetLists()} on every list part the
@@ -418,8 +415,8 @@ public final class EffectRecord {
      *
      * <p>Mana is counted one entry per {@link Mana} actually spent, so a hybrid
      * paid as blue counts under {@code U} and under nothing else — where the
-     * printed cost the corpus used to read counted it under both halves, and
-     * ignored reductions and X entirely.
+     * printed cost would count it under both halves, and ignore reductions and
+     * X entirely.
      */
     public static String costsJson(SpellAbility ability) {
         if (ability == null) {

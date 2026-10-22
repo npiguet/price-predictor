@@ -66,7 +66,7 @@ class DeckBuilderTest {
     }
 
     /**
-     * The regression this method exists for. {@code SealedDeckBuilder} would re-derive the
+     * What this method exists for. {@code SealedDeckBuilder} would re-derive the
      * colours from the finished pool and return the same deck for both orders; the drafted
      * builder honours the commitment the pick order records, so disjoint opening pairs give
      * different decks.

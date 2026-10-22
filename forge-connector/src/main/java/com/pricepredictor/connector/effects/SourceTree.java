@@ -104,10 +104,10 @@ public final class SourceTree {
      * {@link CardFilenames#derivedDirectory} would, or it does not hold that
      * stem at all and the caller has nothing better than the derived answer.
      *
-     * <p>Only the disagreements are kept. The tree is ~33,700 files and 86 of
-     * them are filed somewhere other than under their initial, so an index of
-     * the exceptions is three orders of magnitude smaller than an index of the
-     * tree while answering the same question — and it is built from the tree
+     * <p>Only the disagreements are kept. A few dozen of the tree's tens of
+     * thousands of files are filed somewhere other than under their initial, so
+     * an index of the exceptions is orders of magnitude smaller than an index
+     * of the tree while answering the same question — and it is built from the tree
      * itself, so it stays right as the tree changes rather than freezing
      * today's list of oddities into code. The walk happens at most once per JVM
      * and only when something asks: the collector's first route is
@@ -183,8 +183,8 @@ public final class SourceTree {
             });
         } catch (IOException e) {
             // A half-walked tree still answers for what it saw, and the rest
-            // falls back to derivation — which is what happened before this
-            // existed, so a partial answer is never worse than no index.
+            // falls back to derivation, which is the answer with no index at
+            // all, so a partial answer is never worse than none.
         }
         return found;
     }

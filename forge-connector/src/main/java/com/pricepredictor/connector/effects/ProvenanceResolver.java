@@ -362,9 +362,8 @@ public final class ProvenanceResolver {
      * <p>Forge keeps no back-reference for these, so this is the one step
      * that searches rather than follows, and it is last for that reason. It
      * runs only once every back-reference in the chain has come up empty,
-     * which is also why walking four trait lists here costs nothing
-     * measurable: in the smoke corpus one record in a thousand ever reached
-     * this point.
+     * which is also why walking four trait lists here is cheap: few records
+     * ever reach this point.
      */
     private static ProvenanceKey keyForGrantingLine(CardTraitBase trait) {
         CardState state = trait.getCardState();
@@ -461,17 +460,15 @@ public final class ProvenanceResolver {
      * Initiative and the dungeons are {@code new Card(...)} with their traits
      * built inline, no paper card and no rules, so no script file exists to
      * name. That is expected rather than a resolver failure, and the two have
-     * to be distinguishable — an empty key alone cannot tell them apart, which
-     * is exactly what hid this defect for a whole collection run.
+     * to be distinguishable — an empty key alone cannot tell them apart.
      *
      * <p>The two granted cases exist for the same reason one layer down. A
-     * corpus that reported 443 {@code unindexable} traits was reporting a
-     * resolver bug that was not there: every one of them was a trait Forge
-     * grants at runtime — a poisonous trigger on the Sliver that received it, a
-     * Genju's trigger on an animated Plains, an {@code AtEOT$} sacrifice on a
-     * token copy — and lumping them in with the alarm makes the alarm
-     * unreadable, which is the same failure as an empty key with no reason at
-     * all. What the two say is checkable: {@code isCopiedTrait()} is Forge's
+     * trait Forge grants at runtime — a poisonous trigger on the Sliver that
+     * received it, a Genju's trigger on an animated Plains, an {@code AtEOT$}
+     * sacrifice on a token copy — is not a resolver bug, and lumping it in with
+     * {@code unindexable} makes that alarm unreadable, which is the same
+     * failure as an empty key with no reason at all. What the two say is
+     * checkable: {@code isCopiedTrait()} is Forge's
      * own test for a trait living on a card other than the one whose script
      * text it came from.
      */

@@ -89,7 +89,7 @@ public final class CardFilenames {
      *
      * <p>{@link SourceTree} is asked first for a letter-keyed tree, because the
      * tree is the authority on where it files a card and the initial is only a
-     * convention it keeps 99.7% of the time. Derivation answers for the rest —
+     * convention it keeps for nearly every card. Derivation answers for the rest —
      * a stem the tree does not hold at all still has to name something.
      */
     public static String scriptFileForStem(String tree, String stem) {

@@ -20,8 +20,9 @@ import java.util.function.Function;
  *
  * <p>Most of Forge's effects broadcast nothing. Damage and zone changes reach a
  * collector because the engine fires a bus event for them; an extra turn, a
- * prevented damage, a chosen colour reach nobody, and the corpus recorded those
- * abilities as abilities that did nothing. What every one of them does carry is
+ * prevented damage, a chosen colour reach nobody, and without an event of
+ * their own those abilities read as abilities that did nothing. What every
+ * one of them does carry is
  * its own {@code SpellAbility}: the parameters it was scripted with, and for
  * some, a result remembered on the host.
  *
@@ -182,7 +183,7 @@ final class ApiEvents {
         // with ChooseSector correspondingly absent from EFFECT_API_EVENTS. This
         // corpus is collected from sealed and draft pools only, which never
         // include Unfinity's silver-bordered attraction cards, so the clause this
-        // would read can never actually run here. Re-adding it needs the schema
+        // would read can never actually run here. Wiring it needs the schema
         // changed first -- everyChoiceMadeApiHasAReadableChoice in ApiEventsTest
         // fails the moment the two disagree, which is the point.
         put(rules, Rule.shaped(EffectEvent.DAMAGE_HEALED, DAMAGE_BEFORE, (event, sa, host, memo) ->
@@ -443,23 +444,12 @@ final class ApiEvents {
      * As {@link #reportEmitterFailure}, for a rule's memo instead of its
      * emitter.
      *
-     * <p>Not routed through {@link #reportEmitterFailure} itself, for two
-     * reasons. First, the wording: a memo
-     * ({@link #before}) and an emitter ({@link #after}) are two different
-     * halves of one {@link Rule} -- the memo reads engine state
-     * <em>before</em> a clause resolves, the emitter builds the event
-     * <em>after</em> -- so a report naming "the emitter" for a memo failure
-     * sends whoever reads it to the wrong function, with confidence; a wrong
-     * name is worse than no name at all. Second, the shared {@code
-     * AtomicBoolean}: {@link #EMITTER_FAILURE_REPORTED} latching on a memo
-     * failure would silence a later, unrelated, genuine emitter failure on a
-     * different clause for the rest of the JVM's run -- two independent
-     * failure modes in two independent pieces of code should not be able to
-     * mute each other. A dedicated latch is also this branch's own
-     * convention rather than an exception to it: each engine
-     * {@code EffectRecordHook} and {@code
-     * ClauseOutcomeRouter.UNKNOWN_OUTCOME_TYPE_REPORTED} is its own latch for
-     * its own diagnostic, not one shared across unrelated failure classes.
+     * <p>Its own message, because a memo ({@link #before}) and an emitter
+     * ({@link #after}) are different halves of one {@link Rule}, and a memo
+     * failure reported as "the emitter" sends its reader to the wrong one.
+     * Its own latch, because a memo failure latching
+     * {@link #EMITTER_FAILURE_REPORTED} would silence a later, unrelated
+     * emitter failure for the rest of the JVM.
      */
     static void reportMemoFailure(String eventType, RuntimeException e) {
         if (MEMO_FAILURE_REPORTED.compareAndSet(false, true)) {
@@ -495,26 +485,17 @@ final class ApiEvents {
      * actually affect -- the ones their own {@code resolve()} iterates, not
      * whoever activated them.
      *
-     * <p>{@code AddTurnEffect.resolve}, {@code SkipTurnEffect.resolve} and
-     * {@code SkipPhaseEffect.resolve} all iterate {@code getTargetPlayers(sa)}
-     * — {@code SpellAbilityEffect.getPlayers(false, "Defined", sa)}, not
-     * callable from here since it is private to a different package's class —
-     * where {@code definedFirst=false} means <b>targeting wins over
-     * {@code Defined$}</b> whenever the ability targets at all. The activator
-     * is not a safe default: {@code empty_city_ruse.txt} and
-     * {@code stonehorn_dignitary.txt} target {@code Opponent},
-     * {@code blinding_angel.txt} reads {@code Defined$ TriggeredTarget}, and
-     * of roughly eighteen real {@code SkipPhase} scripts, sixteen name a
-     * player other than whoever cast or activated the ability.
+     * <p>All three iterate {@code SpellAbilityEffect.getPlayers(false,
+     * "Defined", sa)}, which is private to its package and so mirrored here:
+     * <b>targeting wins over {@code Defined$}</b> whenever the ability
+     * targets at all. The activator is not a safe default: most
+     * {@code SkipPhase} scripts, and {@code empty_city_ruse.txt}'s
+     * {@code Opponent} target, name someone else.
      *
-     * <p>Captured as a memo, before the clause resolves, rather than
-     * re-read in {@link #after}: none of these three effects' {@code
-     * resolve()} mutates {@code sa}'s own targets today, so reading either
-     * side of resolution gives the same answer, but capturing before is the
-     * pattern the rest of this codebase already uses for exactly this shape
-     * of risk, and it is what lets the clause hook's push/pop pairing —
-     * otherwise exercised only on its always-empty path by every other rule
-     * here — be pinned against a real, non-trivial value instead of null.
+     * <p>Captured as a memo, before the clause resolves: none of the three
+     * changes {@code sa}'s targets, so either side reads the same, and the
+     * memo is what pins the clause hook's push/pop pairing against a
+     * non-null value.
      */
     private static List<Player> affectedPlayers(SpellAbility sa) {
         if (sa.usesTargeting()) {
@@ -637,8 +618,8 @@ final class ApiEvents {
      * checked first -- would report <i>every</i> clause routed through this
      * method as a colour choice, direction and number and all. {@code
      * hasChosenColor()} is what {@code Card} itself defines for this
-     * distinction, so this reads that instead; the named-card branch was
-     * already guarded correctly by its paired {@code !isEmpty()} check.
+     * distinction, so this reads that instead; the named-card branch is
+     * guarded by {@link #nonEmpty}.
      *
      * <p>The direction, even/odd and mode readings are not optional extras,
      * though few cards reach them: {@code event_schema.py}'s {@code

@@ -20,10 +20,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * The snapshot properties that a running game cannot check for you.
  *
- * <p>The tier vector is the one whose defect was invisible in a
- * fourteen-million-record corpus: chosen per call site, it made
- * {@code state.tiers} a perfect proxy for a collection flag the schema bars
- * from being a model input. Beside it, the state's block order and the
+ * <p>The tier vector is the one a corpus cannot show to be wrong: chosen per
+ * call site, it would make {@code state.tiers} a perfect proxy for a
+ * collection flag the schema bars from being a model input. Beside it, the
+ * state's block order and the
  * resolution-time refs reading that replaces the cast-time block and nothing
  * else.
  *
@@ -36,9 +36,8 @@ class SnapshotBuilderTest {
     // ── one depth for every record ──────────────────────────────────────
 
     /**
-     * The regression guard for the tier-4-means-interventional leak: a depth a
-     * caller could choose is how {@code state.tiers} became a proxy for which
-     * collector wrote a record, so the builder takes no depth at all.
+     * A depth a caller could choose would make {@code state.tiers} a proxy for
+     * which collector wrote a record, so the builder takes no depth at all.
      */
     @Test
     void noConstructionChoosesATierDepth() {

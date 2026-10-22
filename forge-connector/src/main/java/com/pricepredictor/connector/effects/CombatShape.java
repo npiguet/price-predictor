@@ -105,6 +105,10 @@ final class CombatShape {
      * <p>Handed over as fields rather than as a whole object so a caller can
      * add the fields only its own kind of record carries — the probe branch
      * adds what it perturbed.
+     *
+     * <p>A view, not a copy: the map is unmodifiable, but its values are this
+     * shape's own collections, so whoever renders it later sees them as they
+     * stand then, including an assignment added after this call.
      */
     Map<String, Object> fields() {
         Map<String, Object> fields = new LinkedHashMap<>();

@@ -166,14 +166,11 @@ class ForkCollectorTest {
      * A branch and the record it mirrors describe the same turn, or neither is
      * written.
      *
-     * <p>The substep alone was not enough. A branch whose own damage step wrote
-     * no combat record kept waiting for the next record of that substep, which
-     * in the smoke corpus arrived up to <b>eight turns</b> later: 55 of 1,069
-     * probe records mirrored a record from a different turn, and every mirrored
-     * pair whose turns disagreed was one of those. Because the branch's own
-     * snapshot is honest — the copier carries the turn across, and not one of
-     * the 1,788 interventional forks ever named a stale one — relabelling it
-     * would make the state block lie, so the branch is dropped instead.
+     * <p>The substep alone is not enough. A branch whose own damage step wrote
+     * no combat record keeps waiting for the next record of that substep,
+     * which can arrive turns later. Because the branch's own snapshot is
+     * honest — the copier carries the turn across — relabelling it would make
+     * the state block lie, so the branch is dropped instead.
      *
      * <p>Dropped still spends the fork's budget: the simulation was spent
      * either way.

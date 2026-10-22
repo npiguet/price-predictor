@@ -18,10 +18,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * What an activation record says was paid.
  *
- * <p>Every one of these channels was empty on all 940,973 activation records of
- * the first corpus, and the reason was the same for all of them: the collector
- * read {@code getPayCosts()}, which is the cost the card <b>asks</b> for and not
- * the payment. Two engine facts make that unreadable — cost adjustment pays a
+ * <p>Not {@code getPayCosts()}, which is the cost the card <b>asks</b> for and
+ * not the payment, and on which every one of these channels reads empty. Two
+ * engine facts make that unreadable — cost adjustment pays a
  * copy of the parts, and the payment clears the copies' lists before the cast
  * event fires — so these tests are written against the places the payment
  * actually survives: the paid hash, the paying-mana list and the life counter on
