@@ -8,11 +8,14 @@ import forge.game.event.GameEventSpellAbilityCast;
 import forge.game.event.IGameEventVisitor;
 import forge.game.player.PlayerView;
 import forge.game.zone.ZoneType;
+import forge.item.PaperCard;
+import forge.model.FModel;
 
 import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Per-game eventbus visitor that records every non-basic, non-token card
@@ -116,6 +119,7 @@ public class PlayedCardCollector extends IGameEventVisitor.Base<Void> {
         if (name == null || name.isEmpty()) {
             return;
         }
+        name = canonicalName(name);
         // Throws on a name neither side registered, as the winner mapping
         // does: a card credited to the wrong deck is a corrupt row.
         Side side = Side.ofLobbyName(owner.getLobbyPlayerName());
@@ -141,6 +145,22 @@ public class PlayedCardCollector extends IGameEventVisitor.Base<Void> {
                 ? card.getCurrentState().getOracleName()
                 : null;
     }
+
+    /**
+     * The name a deck lists for the card whose face or half is called
+     * {@code stateName}: a Room's door, a split card's half, an adventure, or a
+     * transform or modal back face is cast under the face's own name, while the
+     * deck holds the card under {@code PaperCard.getName()}. A name Forge
+     * cannot resolve is returned as given.
+     */
+    static String canonicalName(String stateName) {
+        return CANONICAL_NAMES.computeIfAbsent(stateName, name -> {
+            PaperCard paper = FModel.getMagicDb().getCommonCards().getCard(name);
+            return paper == null ? name : paper.getName();
+        });
+    }
+
+    private static final Map<String, String> CANONICAL_NAMES = new ConcurrentHashMap<>();
 
     /** Static filter: returns {@code true} iff the card should be recorded. */
     static boolean shouldRecord(
