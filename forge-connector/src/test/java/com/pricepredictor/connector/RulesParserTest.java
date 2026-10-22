@@ -1422,7 +1422,7 @@ class RulesParserTest {
         // A specialize card's faces were emitted in the iteration order of
         // CardRules' HashMap, which varies between JVM runs, while the
         // collectors number faces in the EnumMap order of the live card's
-        // states (ProvenanceKey.faceOrder). The two must agree, or a record's
+        // states (FaceOrder.faceOrder). The two must agree, or a record's
         // face index resolves to another face's lines.
         MultiCard card = convertFromFile("a/alora_rogue_companion.txt");
         assertEquals(

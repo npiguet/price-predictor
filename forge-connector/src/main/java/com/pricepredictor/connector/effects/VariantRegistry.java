@@ -16,7 +16,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * <p>A provenance key names the converted tree its script came from, and the
  * runtime has no other way to tell a variant from a printed card: a variant is
  * an ordinary non-token {@code Card} once Forge has loaded it, so
- * {@link ProvenanceKey} would key it under {@code cardsfolder/} and the Python
+ * {@link ScriptLocator} would key it under {@code cardsfolder/} and the Python
  * reader would look for a sidecar that does not exist there. Registering the
  * names at staging time is what makes the key say {@code variant-scripts/}.
  *

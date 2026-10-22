@@ -51,7 +51,7 @@ record DecisionCandidate(
             return Optional.of(new DecisionCandidate(List.of(), List.of(), null, verdict));
         }
         return Optional.of(new DecisionCandidate(
-                ProvenanceKey.keysOf(candidate),
+                ProvenanceResolver.keysOf(candidate),
                 legalTargetsOf(candidate),
                 candidate.getPayCosts() == null
                         ? null : String.valueOf(candidate.getPayCosts().getTotalMana()),

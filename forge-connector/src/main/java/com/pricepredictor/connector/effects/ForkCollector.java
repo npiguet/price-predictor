@@ -344,7 +344,7 @@ public final class ForkCollector {
             // names a printed line, which the copy shares — but keying off
             // the copy would make the record's identity depend on a game
             // that no longer exists.
-            ProvenanceKey.Resolved keys = ProvenanceKey.resolve(ability);
+            ProvenanceKey.Resolved keys = ProvenanceResolver.resolve(ability);
             String actorId = SnapshotBuilder.playerId(perspective);
             if (resolution.modes().isEmpty()) {
                 context.emit(forkedHalf(actorId, keys, resolution.state(), resolution.events()));
@@ -510,11 +510,11 @@ public final class ForkCollector {
         // apart: a creature spell's own modal enters trigger shares its host,
         // and its modes filed under the spell's key would name spell[0] with
         // an option, a line no sidecar has. The charm's own key can.
-        ProvenanceKey forcedKey = ProvenanceKey.resolve(ability).key();
+        ProvenanceKey forcedKey = ProvenanceResolver.resolve(ability).key();
         CLAUSE_LISTENER.set(clause -> {
             CharmModes.ModeStart start = CharmModes.modeStartOf(clause);
             if (start != null && forcedKey != null
-                    && forcedKey.equals(ProvenanceKey.resolve(start.charm()).key())) {
+                    && forcedKey.equals(ProvenanceResolver.resolve(start.charm()).key())) {
                 modes.add(new ModeBoundary(
                         start.option(), sink.beginMode(),
                         snapshots.ofAbility(ability, SnapshotBuilder.referencedOf(ability))

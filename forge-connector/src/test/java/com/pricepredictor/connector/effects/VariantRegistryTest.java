@@ -82,7 +82,7 @@ class VariantRegistryTest {
         variant.setName("Lightning Bolt Variant 4");
 
         assertEquals("variant-scripts/lightning_bolt_variant_4.txt",
-                ProvenanceKey.scriptFileOf(variant));
+                ScriptLocator.scriptFileOf(variant));
     }
 
     private static void write(Path dir, String file, String name)

@@ -16,7 +16,7 @@ import java.util.regex.Pattern;
  * Python suite uses.
  *
  * <p>This is the <b>fallback</b>, not the primary route. Forge's folder loader
- * records the file it read each card from, so {@link ProvenanceKey} asks
+ * records the file it read each card from, so {@link ScriptLocator} asks
  * {@code CardRules.getPath()} first and then its file stem in
  * {@code CardRules.getNormalizedName()} — Forge's filenames disagree with its
  * card names often enough that a sanitizer alone loses cards. The sanitizer

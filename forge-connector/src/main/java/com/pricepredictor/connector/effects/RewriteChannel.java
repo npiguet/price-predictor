@@ -122,14 +122,14 @@ final class RewriteChannel {
         // replacement is printed on -- what the field carries that `ability`
         // does not is that an ability ran at all, and the rarer case where the
         // overriding ability was granted from somewhere else.
-        List<ProvenanceKey> ranKeys = ran == null ? List.of() : ProvenanceKey.keysOf(ran);
+        List<ProvenanceKey> ranKeys = ran == null ? List.of() : ProvenanceResolver.keysOf(ran);
         String wireResult = EffectRecord.rewriteResult(result);
         JVM_REWRITES.record(
                 RunParamNormalizer.modeOf(trait), wireResult, outgoing != null,
                 !ranKeys.isEmpty(), before, after);
         return context.newRecord(RecordKind.REWRITE)
                 .actor(live.controllerOf(source))
-                .ability(ProvenanceKey.resolve(acting))
+                .ability(ProvenanceResolver.resolve(acting))
                 .state(live.snapshots().ofTrait(source, incoming).render())
                 .payload(EffectRecord.rewritePayload(
                         incoming, outgoing, wireResult, ranKeys));

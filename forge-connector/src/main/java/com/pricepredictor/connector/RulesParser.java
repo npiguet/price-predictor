@@ -19,6 +19,7 @@ import com.pricepredictor.connector.ability.StandardKeyword;
 import com.pricepredictor.connector.ability.StaticAbilityEntry;
 import com.pricepredictor.connector.ability.TextAbility;
 import com.pricepredictor.connector.ability.TriggeredAbilityEntry;
+import com.pricepredictor.connector.effects.FaceOrder;
 import com.pricepredictor.connector.effects.MissingSVarReport;
 import com.pricepredictor.connector.effects.ProvenanceKey;
 import com.pricepredictor.connector.effects.ProvenanceRecorder;
@@ -166,7 +167,7 @@ public class RulesParser {
             // In the state enum's order, not the parts map's: CardRules holds
             // them in a HashMap keyed by enum constants, whose order changes
             // from one JVM to the next, while the collectors number faces in
-            // the live card's EnumMap order (ProvenanceKey.faceOrder). A face
+            // the live card's EnumMap order (FaceOrder.faceOrder). A face
             // index taken from the map's order resolved a record to another
             // face's lines, and the converted text came out reordered.
             Map<CardStateName, ICardFace> parts = rules.getSpecializeParts();
@@ -282,7 +283,7 @@ public class RulesParser {
     /**
      * Route each keyword to the ability that renders it.
      *
-     * <p>The keyword ordinal is asked of ProvenanceKey rather than counted
+     * <p>The keyword ordinal is asked of FaceOrder rather than counted
      * here, because the collector asks the same question of the same method
      * at runtime and the two answers have to be the same number. A running
      * counter over getKeywords() is not that number: the iteration order is
@@ -308,7 +309,7 @@ public class RulesParser {
             } else {
                 p.abilities.add(StandardKeyword.of(ki, kw));
             }
-            int keywordIndex = ProvenanceKey.keywordIndex(p.card.getCurrentState(), ki);
+            int keywordIndex = FaceOrder.keywordIndex(p.card.getCurrentState(), ki);
             p.recorder.attributeKeyword(p.since(before),
                     keywordIndex < 0 ? null : p.key(TraitKind.KEYWORD, keywordIndex),
                     ki.getOriginal());

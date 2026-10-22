@@ -830,7 +830,7 @@ public final class BusBracketCollector extends BusEventReader {
      */
     private void openBracket(SpellAbility ability) {
         open = ability == null ? null : new OpenResolution(
-                ability, ProvenanceKey.resolve(ability), actorOf(ability),
+                ability, ProvenanceResolver.resolve(ability), actorOf(ability),
                 snapshots.ofAbility(ability, SnapshotBuilder.referencedOf(ability)));
         bracketEvents.clear();
     }
