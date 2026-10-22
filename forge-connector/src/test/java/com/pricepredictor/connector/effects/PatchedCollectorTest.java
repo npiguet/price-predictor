@@ -292,7 +292,7 @@ class PatchedCollectorTest {
 
     @Test
     void everySnapshotCarriesAllFourTiers() {
-        String json = recording(tempDir).triggerRecord(
+        String json = recording(tempDir).triggers().record(
                 triggerOfMode("ChangesZone"), Map.of(), true).toJson();
 
         assertTrue(json.contains("\"tiers\":[1,2,3,4]"), json);
@@ -330,7 +330,7 @@ class PatchedCollectorTest {
     // ── final-fix-3.md item 2: the other four handlers ───────────────────
 
     /**
-     * final-fix-3.md item 2: {@code triggerFireHandler} had no game check at
+     * final-fix-3.md item 2: {@code TriggerChannel.handler} had no game check at
      * all before this fix. A fork's own trigger evaluations
      * ({@code GameSimulator.resolveStack} runs the forced ability's triggers
      * through the real {@code TriggerHandler}) must not reach the live shard.
@@ -341,7 +341,7 @@ class PatchedCollectorTest {
         Trigger forkTrigger = forkCard.getCurrentState().getTriggers().get(0);
 
         Path shard = ShardRun.shardOf(tempDir, TestCards.game(), (bracket, collectors) ->
-                collectors.triggerFireHandler().invoke(null, ON_CONDITION_EVALUATED,
+                collectors.triggers().handler().invoke(null, ON_CONDITION_EVALUATED,
                         new Object[]{forkTrigger, Map.of(), true}));
 
         assertFalse(Files.exists(shard),
@@ -408,9 +408,9 @@ class PatchedCollectorTest {
 
     // ── final-fix-4.md item 3: a positive test behind each of those gates ──
     //
-    // triggerFireHandler, playabilityHandler, combatLegalityHandler and
+    // The trigger handler, playabilityHandler, combatLegalityHandler and
     // manaHandler are invoked nowhere in the test tree except the four
-    // fork-rejection tests above -- the existing triggerRecord(...)-style
+    // fork-rejection tests above -- the existing record(...)-style
     // tests call the record builder directly and never reach the handler
     // (InvocationHandler) these gates actually live in. A gate with only a
     // negative test behind it can fail closed for everything, live included,
@@ -425,7 +425,7 @@ class PatchedCollectorTest {
         Trigger liveTrigger = liveCard.getCurrentState().getTriggers().get(0);
 
         List<String> lines = ShardRun.records(tempDir, TestCards.game(), (bracket, collectors) ->
-                collectors.triggerFireHandler().invoke(null, ON_CONDITION_EVALUATED,
+                collectors.triggers().handler().invoke(null, ON_CONDITION_EVALUATED,
                         new Object[]{liveTrigger, Map.of(), true}));
         assertTrue(lines.stream().anyMatch(l -> l.contains("\"kind\":\"trigger\"")),
                 "a live trigger evaluation must reach the shard: " + lines);

@@ -79,13 +79,10 @@ public final class PatchedCollectors implements AutoCloseable {
     private final Set<String> coalescedBoards = new LinkedHashSet<>();
     /** The records this game has written, shared by every channel that deduplicates. */
     private final RecordDedup dedup = new RecordDedup();
-    /** Each trigger mode's written evaluations and pending offers, this game. */
-    private final Map<String, ModeBalance> triggerBalance = new HashMap<>();
-    /** Records written per acting line and verdict, for the flood cap. */
-    private final Map<LineVerdict, Integer> triggerPerLine = new HashMap<>();
     /** Static ability by layer-table id, resolved once per game. */
     private final Map<Long, StaticAbility> staticsById = new HashMap<>();
     private final java.util.Random sampler;
+    private final TriggerChannel triggers;
 
     /**
      * Whether the engine can say what a card would be without one static.
@@ -103,14 +100,8 @@ public final class PatchedCollectors implements AutoCloseable {
     }
 
     /** Every listener this collector installs, in the order it installs them. */
-    private final List<Listener> listeners = List.of(
-            new Listener(PatchHooks.REPLACEMENT_LISTENER, this::rewriteHandler),
-            new Listener(PatchHooks.TRIGGER_LISTENER, this::triggerFireHandler),
-            new Listener(PatchHooks.PLAYABILITY_LISTENER, this::playabilityHandler),
-            new Listener(PatchHooks.MANA_LISTENER, this::manaHandler),
-            new Listener(PatchHooks.COMBAT_LISTENER, this::combatLegalityHandler),
-            new Listener(PatchHooks.CLAUSE_LISTENER, this::clauseHandler),
-            new Listener(PatchHooks.OUTCOME_LISTENER, this::outcomeHandler));
+    private final List<Listener> listeners;
+
 
     /** @param bracket where the clause and outcome hooks file their events */
     PatchedCollectors(
@@ -124,6 +115,21 @@ public final class PatchedCollectors implements AutoCloseable {
         this.sampler = new java.util.Random(GameRecording.scramble(seed));
         this.manaReservoir = new ManaReservoir(caps.manaCap(), sampler);
         this.bracket = bracket;
+        this.triggers = new TriggerChannel(
+                live, context, dedup, new TriggerNegativeSampler(sampler));
+        this.listeners = List.of(
+                new Listener(PatchHooks.REPLACEMENT_LISTENER, this::rewriteHandler),
+                new Listener(PatchHooks.TRIGGER_LISTENER, triggers::handler),
+                new Listener(PatchHooks.PLAYABILITY_LISTENER, this::playabilityHandler),
+                new Listener(PatchHooks.MANA_LISTENER, this::manaHandler),
+                new Listener(PatchHooks.COMBAT_LISTENER, this::combatLegalityHandler),
+                new Listener(PatchHooks.CLAUSE_LISTENER, this::clauseHandler),
+                new Listener(PatchHooks.OUTCOME_LISTENER, this::outcomeHandler));
+    }
+
+    /** The trigger-condition channel. */
+    TriggerChannel triggers() {
+        return triggers;
     }
 
     /**
@@ -273,201 +279,6 @@ public final class PatchedCollectors implements AutoCloseable {
     /** The worker's rewrite tally, shared by every game it plays. */
     static final RewriteTally JVM_REWRITES = new RewriteTally();
 
-    // ── trigger-fire records ────────────────────────────────────────────
-
-    /**
-     * One record per evaluated trigger condition, fired or not.
-     *
-     * <p>Non-fired negatives are what teach the condition; without them the
-     * model would learn the base rate of a trigger type firing and nothing
-     * about when. Drawn at roughly 1:1 by sampling the negatives, since a turn
-     * evaluates far more conditions than it fires.
-     *
-     * <p>Package-private rather than private, the same reason {@link
-     * #rewriteHandler()} is: the argument order has no
-     * compiler behind it, so this hook's own game-identity test calls it with
-     * a synthesized argument array.
-     */
-    InvocationHandler triggerFireHandler() {
-        return PatchHooks.TRIGGER_LISTENER.listener((callback, args) -> {
-            // Checked first, before this evaluation can spend any of the mode's negative-sampling budget (offer/keep
-            // below) -- a fork's trigger evaluations must not skew the live
-            // game's ratio bookkeeping any more than they must reach its
-            // shard. args[0] is declared Trigger on Forge's side, always a
-            // CardTraitBase with a real host; anything this cannot identify
-            // is left alone rather than newly dropped.
-            CardTraitBase trait = args.get(0, CardTraitBase.class);
-            if (trait != null && !live.owns(trait)) {
-                return;
-            }
-            boolean fired = Boolean.TRUE.equals(args.get(2));
-            String mode = RunParamNormalizer.modeOf(args.get(0));
-            if (mode == null) {
-                mode = RunParamNormalizer.UNKNOWN_MODE;
-            }
-            if (!offerTriggerEvaluation(mode, fired)) {
-                return;
-            }
-            EffectRecord record = triggerRecord(args.get(0), args.get(1), fired);
-            if (!dedup.allowDistinct(
-                    RecordKind.TRIGGER.wireName(), record.payloadJson(), record.stateJson())
-                    || !allowTriggerLine(record.abilityJson(), fired)) {
-                return;
-            }
-            // Counted only for a record that is actually written, so a
-            // suppressed duplicate does not spend the negatives' quota and the
-            // ratio holds over what reaches the shard.
-            keepTriggerEvaluation(mode, fired);
-            emit(record);
-        });
-    }
-
-    /** Negatives kept per positive kept, per trigger mode. */
-    private static final double TARGET_NEGATIVE_RATIO = 1.0;
-    /**
-     * Negatives a mode may be offered at full rate before it backs off.
-     *
-     * <p>Only reached by a mode whose offered negatives are being refused
-     * downstream -- by the duplicate check or the per-line flood cap -- so it
-     * is a bound on wasted snapshot building, not a sampling parameter.
-     */
-    private static final int NEGATIVE_OFFERS_AT_FULL_RATE = 4;
-    /** No negative is ever kept with probability below this. */
-    private static final double MIN_NEGATIVE_RATE = 1.0 / 4096.0;
-    /** Records one acting line may write per verdict in one game. */
-    private static final int TRIGGER_RECORDS_PER_LINE = 24;
-
-    /**
-     * Whether this evaluation should be offered to the writer.
-     *
-     * <p>A fired evaluation always is. A non-fired one is offered whenever this
-     * mode's kept negatives are behind its kept positives -- the deficit is the
-     * whole rule, with no rate in front of it.
-     *
-     * <p>Three designs, and why this is the third. A fixed 2% rate landed at
-     * 74:26 instead of 1:1, because <b>a fixed rate cannot hold a ratio</b>:
-     * the population ratio varies by mode, board size and turn, and it measured
-     * 1:17.7 over that run. A deficit rule with a probability in front of it --
-     * keep a negative with probability {@code deficit / estimated run length},
-     * so the kept ones spread through the run rather than bunching behind the
-     * last firing -- landed at 58:42. That rate is a <b>lagging</b> controller:
-     * over a run of the estimated length it catches a negative only about
-     * 1 - 1/e of the time, and one game gives a mode too few firings for the
-     * carried deficit ever to be repaid. Offering on the deficit alone removes
-     * the lag, which is the whole of the remaining eight points.
-     *
-     * <p>Bunching behind the firing is not a loss worth a controller. The
-     * negatives that reach the shard are spread by
-     * {@link RecordDedup#allowDistinct} instead: two consecutive non-fired
-     * evaluations on an unmoved board render the same record and the second is
-     * refused, so this walks forward until it finds one that differs. The
-     * negative it lands on is then the one closest in time to the positive it
-     * balances, which is the more useful contrast rather than the less.
-     *
-     * <p>What the deterministic rule needs in exchange is a bound on wasted
-     * work, because a refusal downstream leaves the deficit standing and the
-     * next evaluation is offered again. A mode whose negatives are all being
-     * refused -- every acting line at its per-line cap, say -- would otherwise
-     * build a snapshot per evaluation of the busiest hook in the collector.
-     * {@link ModeBalance#offersSinceWrite} counts offers since that mode last
-     * wrote anything and decays the rate harmonically past
-     * {@link #NEGATIVE_OFFERS_AT_FULL_RATE}, so an unfillable deficit costs a
-     * few offers rather than all of them.
-     *
-     * <p>Per mode, and per game -- the balances live on this collector, which is
-     * built per game. A mode that never fires contributes no negatives, which
-     * is the intended reading of "negatives drawn from same-event-type
-     * evaluations". The aggregate ratio is therefore near 1:1 rather than
-     * exactly it, and the per-mode ratios are the ones to validate.
-     */
-    boolean offerTriggerEvaluation(String mode, boolean fired) {
-        if (fired) {
-            return true;
-        }
-        ModeBalance balance = triggerBalance.computeIfAbsent(mode, m -> new ModeBalance());
-        if (balance.fired * TARGET_NEGATIVE_RATIO - balance.notFired <= 0.0) {
-            return false;
-        }
-        balance.offersSinceWrite++;
-        if (balance.offersSinceWrite <= NEGATIVE_OFFERS_AT_FULL_RATE) {
-            return true;
-        }
-        double rate = Math.max(
-                MIN_NEGATIVE_RATE,
-                (double) NEGATIVE_OFFERS_AT_FULL_RATE / balance.offersSinceWrite);
-        return sampler.nextDouble() < rate;
-    }
-
-    /**
-     * Count a written evaluation against its mode's balance.
-     *
-     * <p>Called only for a record that reached the shard, which is what makes
-     * the ratio hold over the corpus rather than over the offers: a negative
-     * refused as a duplicate has not been drawn, and the deficit it leaves
-     * standing is repaid by the next evaluation of its mode.
-     */
-    void keepTriggerEvaluation(String mode, boolean fired) {
-        ModeBalance balance = triggerBalance.computeIfAbsent(mode, m -> new ModeBalance());
-        if (fired) {
-            balance.fired++;
-        } else {
-            balance.notFired++;
-        }
-        // A written record of either verdict opens a fresh window: a positive
-        // has just created a debt and a negative has just paid one, and either
-        // way the offers spent finding this record are spent.
-        balance.offersSinceWrite = 0;
-    }
-
-    /** One trigger mode's written evaluations, and the negatives offered since. */
-    private static final class ModeBalance {
-        private int fired;
-        private int notFired;
-        /** Negatives offered since this mode last wrote a record of either verdict. */
-        private int offersSinceWrite;
-    }
-
-    /** One acting line's verdict, the key the flood cap counts by. */
-    private record LineVerdict(String abilityJson, boolean fired) {
-    }
-
-    /**
-     * A flood cap per acting line, beside the duplicate check.
-     *
-     * <p>The duplicate check collapses records that say the same thing; this
-     * bounds the ones that differ only in a board that moved a little. One
-     * line's condition is worth a couple of dozen looks in a game, not the
-     * hundreds an aura on a creature that keeps being pumped would write.
-     */
-    boolean allowTriggerLine(String abilityJson, boolean fired) {
-        LineVerdict line = new LineVerdict(abilityJson, fired);
-        int written = triggerPerLine.getOrDefault(line, 0);
-        if (written >= TRIGGER_RECORDS_PER_LINE) {
-            return false;
-        }
-        triggerPerLine.put(line, written + 1);
-        return true;
-    }
-
-    /**
-     * One evaluated condition's record, built from the trigger itself.
-     *
-     * <p>Built after the sampling gate, so a non-fired evaluation that will not
-     * be written never pays for resolving its key — which matters, because this
-     * is the hook that fires most often in the whole collector.
-     */
-    EffectRecord triggerRecord(Object trait, Object runParams, boolean fired) {
-        CardTraitBase acting = trait instanceof CardTraitBase ctb ? ctb : null;
-        Card source = acting == null ? null : acting.getHostCard();
-        EffectEvent event = RunParamNormalizer.describeParams(trait, runParams);
-        return context.newRecord(RecordKind.TRIGGER)
-                .actor(live.controllerOf(source))
-                .ability(ProvenanceKey.resolve(acting))
-                .state(snapshots.ofTrait(source, event).render())
-                .payload("{\"event\":" + event.toJson()
-                        + ",\"fired\":" + fired + "}");
-    }
-
     // ── playability records ─────────────────────────────────────────────
 
     /**
@@ -499,7 +310,7 @@ public final class PatchedCollectors implements AutoCloseable {
             // consume from the shared `sampler` before being dropped would
             // re-randomise the live sample stream for every other subkind that
             // draws from it (trigger negatives, the mana reservoir) --
-            // exactly the cost triggerFireHandler's own identity check already
+            // exactly the cost the trigger hook's own identity check already
             // avoids by running first. A null candidate is let through: its
             // record names no ability either way.
             SpellAbility candidate = args.get(0, SpellAbility.class);

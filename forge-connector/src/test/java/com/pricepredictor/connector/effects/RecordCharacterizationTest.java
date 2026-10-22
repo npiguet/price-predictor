@@ -220,7 +220,7 @@ class RecordCharacterizationTest {
 
         List<String> records = records(board, CAPS, (bracket, collectors) -> {
             HookShapes.TriggerFire listener =
-                    HookShapes.proxy(HookShapes.TriggerFire.class, collectors.triggerFireHandler());
+                    HookShapes.proxy(HookShapes.TriggerFire.class, collectors.triggers().handler());
             Trigger entered = warden.getTriggers().iterator().next();
 
             Map<AbilityKey, Object> bearsEntered = AbilityKey.newMap();
