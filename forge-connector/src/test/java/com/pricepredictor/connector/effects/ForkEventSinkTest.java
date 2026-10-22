@@ -5,6 +5,7 @@ import com.pricepredictor.connector.ForgeExtension;
 import forge.game.ability.AbilityFactory;
 import forge.game.card.Card;
 import forge.game.event.GameEventCardChangeZone;
+import forge.game.event.GameEventCardDamaged;
 import forge.game.event.GameEventCombatEnded;
 import forge.game.event.GameEventGameFinished;
 import forge.game.event.GameEventLandPlayed;
@@ -40,13 +41,18 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @ExtendWith(ForgeExtension.class)
 class ForkEventSinkTest {
 
-    /** The bus events a class subscribes to. */
+    /**
+     * The bus events a class subscribes to, its superclasses' included, the
+     * way Forge's bus finds them.
+     */
     private static Set<Class<?>> subscriptions(Class<?> subscriber) {
         Set<Class<?>> types = new LinkedHashSet<>();
-        for (Method method : subscriber.getDeclaredMethods()) {
-            if (method.isAnnotationPresent(Subscribe.class)
-                    && method.getParameterCount() == 1) {
-                types.add(method.getParameterTypes()[0]);
+        for (Class<?> type = subscriber; type != null; type = type.getSuperclass()) {
+            for (Method method : type.getDeclaredMethods()) {
+                if (method.isAnnotationPresent(Subscribe.class)
+                        && method.getParameterCount() == 1) {
+                    types.add(method.getParameterTypes()[0]);
+                }
             }
         }
         return types;
@@ -152,7 +158,7 @@ class ForkEventSinkTest {
 
     /** Push one completed move through a sink and read back what it filed. */
     private static EffectEvent filedMove(SpellAbility acting) {
-        ForkEventSink sink = new ForkEventSink(null, acting);
+        ForkEventSink sink = ForkEventSink.forIntervention(null, acting);
         sink.onCardChangeZone(new GameEventCardChangeZone(
                 TestCards.build("Mountain"),
                 zone(ZoneType.Hand), zone(ZoneType.Battlefield)));
@@ -201,5 +207,40 @@ class ForkEventSinkTest {
         String json = filedMove(pump).toJson();
 
         assertTrue(json.contains("\"duration\":\"permanent\""), json);
+    }
+
+    // ── damage reads as the observed side reads it ──────────────────────
+
+    /** One card damage, dealt by {@code source}, pushed through a sink. */
+    private static String filedDamage(ForkEventSink sink, Card source) {
+        sink.onCardDamaged(new GameEventCardDamaged(
+                TestCards.build("Grizzly Bears").getView(), source.getView(), 2,
+                GameEventCardDamaged.DamageType.Normal));
+        return sink.events().get(0).toJson();
+    }
+
+    /**
+     * A forced resolution's damage is not combat damage, and names the
+     * permanent the bus says dealt it, as the observed record does.
+     */
+    @Test
+    void anInterventionsDamageIsNotCombatAndNamesItsSource() {
+        Card source = TestCards.build("Prodigal Pyromancer");
+
+        String json = filedDamage(ForkEventSink.forIntervention(null, null), source);
+
+        assertTrue(json.contains("\"combat\":false"), json);
+        assertTrue(json.contains("\"cause\":\"E" + source.getId() + "\""), json);
+    }
+
+    /** A damage-step probe deals combat damage, and says so. */
+    @Test
+    void aProbesDamageIsCombatDamage() {
+        Card source = TestCards.build("Grizzly Bears");
+
+        String json = filedDamage(ForkEventSink.forProbe(null), source);
+
+        assertTrue(json.contains("\"combat\":true"), json);
+        assertTrue(json.contains("\"cause\":\"E" + source.getId() + "\""), json);
     }
 }

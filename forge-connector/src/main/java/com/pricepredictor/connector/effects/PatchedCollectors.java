@@ -1854,7 +1854,7 @@ public final class PatchedCollectors implements AutoCloseable {
      * by the six token-making effects) and {@code DICE_ROLLED} ({@code
      * RollDiceEffect}) are Task 11's three -- the other one of Task 11's four,
      * {@code PLAYER_WON}, is a bus subscription (see {@code
-     * BusBracketCollector#onGameOutcome}), not an outcome-hook type, and does
+     * BusEventReader#onGameOutcome}), not an outcome-hook type, and does
      * not belong here. {@code TURN_ENDED} ({@code EndTurnEffect}) and {@code
      * TEXT_CHANGE} ({@code TextBoxExchangeEffect} -- {@code ChangeText}'s own
      * contribution to {@code TEXT_CHANGE} is an {@code ApiEvents.RULES} entry,

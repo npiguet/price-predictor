@@ -521,7 +521,7 @@ public final class ForkCollector {
         // The forked line is the sink's root: an event's attributed_to is read
         // against the ability the bracket belongs to, and a fork's bracket is
         // exactly this one forced resolution.
-        ForkEventSink sink = new ForkEventSink(fork, ability);
+        ForkEventSink sink = ForkEventSink.forIntervention(fork, ability);
         fork.subscribeToEvents(sink);
         List<ModeBoundary> modes = new ArrayList<>();
         java.util.function.Consumer<SpellAbility> previousListener = CLAUSE_LISTENER.get();
@@ -721,7 +721,7 @@ public final class ForkCollector {
             // No root: a damage step is a turn-based action, not a resolution, so
             // this branch's events attribute the way the observed combat record's
             // do -- from the resolving-clause pointer alone, which names nothing.
-            ForkEventSink sink = new ForkEventSink(fork, null);
+            ForkEventSink sink = ForkEventSink.forProbe(fork);
             fork.subscribeToEvents(sink);
             String state;
             CombatShape shape;

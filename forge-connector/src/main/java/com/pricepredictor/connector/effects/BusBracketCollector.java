@@ -1,33 +1,14 @@
 package com.pricepredictor.connector.effects;
 
-import com.google.common.collect.Table;
 import com.google.common.eventbus.Subscribe;
 import forge.game.Game;
 import forge.game.card.Card;
-import forge.game.player.Player;
 import forge.game.zone.ZoneType;
-import forge.game.card.CardView;
-import forge.game.event.GameEventCardAttachment;
 import forge.game.event.GameEventCardChangeZone;
-import forge.game.event.GameEventCardCounters;
-import forge.game.event.GameEventCardDamaged;
-import forge.game.event.GameEventCardRegenerated;
-import forge.game.event.GameEventCardStatsChanged;
-import forge.game.event.GameEventCardTapped;
 import forge.game.event.GameEventCombatEnded;
-import forge.game.event.GameEventDayTimeChanged;
 import forge.game.event.GameEventGameFinished;
 import forge.game.event.GameEventGameOutcome;
 import forge.game.event.GameEventLandPlayed;
-import forge.game.event.GameEventScry;
-import forge.game.event.GameEventShuffle;
-import forge.game.event.GameEventSurveil;
-import forge.game.event.GameEventPlayerCounters;
-import forge.game.event.GameEventPlayerDamaged;
-import forge.game.event.GameEventPlayerLivesChanged;
-import forge.game.event.GameEventPlayerPoisoned;
-import forge.game.event.GameEventPlayerRadiation;
-import forge.game.event.GameEventSpeedChanged;
 import forge.game.event.GameEventSpellAbilityCast;
 import forge.game.event.GameEventSpellResolved;
 import forge.game.event.GameEventTurnPhase;
@@ -36,10 +17,8 @@ import forge.game.spellability.SpellAbility;
 import java.lang.reflect.InvocationHandler;
 import java.util.ArrayList;
 import java.util.Iterator;
-import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import java.util.StringJoiner;
 
@@ -70,9 +49,8 @@ import java.util.StringJoiner;
  * first-strike combat writes two records — the only way a keyword that acts by
  * splitting the step is visible in the corpus at all.
  */
-public final class BusBracketCollector {
+public final class BusBracketCollector extends BusEventReader {
 
-    private final Game game;
     private final RecordShardWriter writer;
     private final SnapshotBuilder snapshots;
     private final AttributionMode mode;
@@ -204,14 +182,6 @@ public final class BusBracketCollector {
     /** The step's combat, read when its bracket opens rather than at flush. */
     private CombatShape combatShape = CombatShape.empty();
     /**
-     * Computed characteristics, so a stats-changed event can say what changed.
-     *
-     * <p>Lives for the game rather than the bracket: a pump in one bracket and
-     * its wearing off in another are both differences from what was there
-     * before, and a per-bracket baseline would report the second as nothing.
-     */
-    private final StatDiffer stats = new StatDiffer();
-    /**
      * Whether this damage step's combat record has been written because
      * something used the stack after the damage.
      *
@@ -250,7 +220,7 @@ public final class BusBracketCollector {
 
     public BusBracketCollector(
             Game game, RecordShardWriter writer, String gameId) {
-        this.game = game;
+        super(game);
         this.writer = writer;
         this.gameId = gameId;
         this.snapshots = new SnapshotBuilder(game);
@@ -479,150 +449,34 @@ public final class BusBracketCollector {
 
     // ── outcome events ──────────────────────────────────────────────────
 
+    @Override
+    boolean cardDamageIsCombat() {
+        return inCombatDamage();
+    }
+
     /**
-     * One damage, and the permanent that dealt it.
+     * Combat damage joins the step's bracket; any other damage the open one.
      *
-     * <p>The cause comes off the event rather than off the bracket, because in
-     * a damage step there is no bracket: nothing is resolving, and the
-     * attacking creature is the only answer to "what caused this". It is also
-     * what makes two attackers each dealing 1 damage to the same blocker two
-     * distinguishable events instead of one line rendered twice — 2,193 of the
-     * smoke corpus's 3,780 duplicated events are exactly that pair.
+     * <p>Routed by the caller's flag rather than by {@link #inCombatDamage},
+     * because a player damage carries Forge's own combat flag and a card
+     * damage has only the step to go by.
      */
-    @Subscribe
-    public void onCardDamaged(GameEventCardDamaged event) {
-        String subject = "E" + event.card().getId();
-        EffectEvent damage = EventAttribution.stamp(
-                BusEvents.cardDamaged(event, inCombatDamage()), resolving,
-                BusEvents.causeOf(event));
-        if (inCombatDamage()) {
+    @Override
+    void fileDamage(EffectEvent damage, String namedCause, boolean combat) {
+        EventAttribution.stamp(damage, resolving, namedCause);
+        if (combat) {
             openCombatBracket();
-            combatParticipants.add(subject);
+            combatParticipants.addAll(damage.subjects());
             combatEvents.add(damage);
         } else {
             bracketEvents.add(damage);
         }
     }
 
-    @Subscribe
-    public void onPlayerDamaged(GameEventPlayerDamaged event) {
-        String subject = "P" + event.target().getId();
-        EffectEvent damage = EventAttribution.stamp(
-                BusEvents.playerDamaged(event), resolving,
-                BusEvents.causeOf(event));
-        if (event.combat()) {
-            openCombatBracket();
-            combatParticipants.add(subject);
-            combatEvents.add(damage);
-        } else {
-            bracketEvents.add(damage);
-        }
-    }
-
-    @Subscribe
-    public void onLifeChanged(GameEventPlayerLivesChanged event) {
-        record(BusEvents.lifeChanged(event));
-    }
-
-    @Subscribe
-    public void onPoisoned(GameEventPlayerPoisoned event) {
-        record(BusEvents.poisoned(event), BusEvents.causeOf(event));
-    }
-
-    @Subscribe
-    public void onCounters(GameEventCardCounters event) {
-        record(BusEvents.counters(event));
-    }
-
-    /** Energy, and any other player counter the vocabulary learns to name. */
-    @Subscribe
-    public void onPlayerCounters(GameEventPlayerCounters event) {
-        EffectEvent counter = BusEvents.playerCounter(event);
-        if (counter != null) {
-            record(counter);
-        }
-    }
-
-    @Subscribe
-    public void onRadiation(GameEventPlayerRadiation event) {
-        record(BusEvents.radiation(event), BusEvents.causeOf(event));
-    }
-
-    @Subscribe
-    public void onSpeed(GameEventSpeedChanged event) {
-        record(BusEvents.speed(event));
-    }
-
-    @Subscribe
-    public void onDayTime(GameEventDayTimeChanged event) {
-        record(BusEvents.dayTime(event));
-    }
-
-    /**
-     * A regeneration shield doing its job. No named cause: see {@link
-     * BusEvents#regenerated}.
-     */
-    @Subscribe
-    public void onRegenerated(GameEventCardRegenerated event) {
-        record(BusEvents.regenerated(event));
-    }
-
-    /** A library shuffled. No named cause: see {@link BusEvents#libraryShuffled}. */
-    @Subscribe
-    public void onShuffle(GameEventShuffle event) {
-        record(BusEvents.libraryShuffled(event));
-    }
-
-    /**
-     * The game ended. No named cause, the same as {@link #onRegenerated}/
-     * {@link #onShuffle}: see {@link BusEvents#gameOutcome}. Null on a draw
-     * or when the winning name resolves to no player in this game -- checked
-     * here, the same as every other {@code BusEvents} factory that can
-     * return null (see {@link #onAttachment}, {@link #onPlayerCounters}).
-     */
-    @Subscribe
-    public void onGameOutcome(GameEventGameOutcome event) {
-        EffectEvent outcome = BusEvents.gameOutcome(event, game);
-        if (outcome != null) {
-            record(outcome);
-        }
-    }
-
-    @Subscribe
-    public void onTapped(GameEventCardTapped event) {
-        record(BusEvents.tapped(event));
-    }
-
-    /**
-     * A card moving, and the draw, discard or mill it may also be.
-     *
-     * <p>The workhorse outcome, and it is read here rather than off
-     * {@code GameEventZone} because only this event is a <b>move</b>: the
-     * per-zone-list notification fires once for the zone left, once for the zone
-     * reached and once more for the stack, which is where the 13.68% of events
-     * that repeated another event in the same record came from, and it cannot
-     * say where a card came from at all.
-     *
-     * <p>Draws, discards and mills have no event of their own: each is a card
-     * moving between two zones and which of the three it is depends on the pair.
-     * The head counts all three per player and none of those counters had ever
-     * fired.
-     */
-    @Subscribe
-    public void onCardChangeZone(GameEventCardChangeZone event) {
-        EffectEvent moved = BusEvents.cardMoved(event);
-        if (moved != null && !holdAsConsequence(event, moved)) {
+    @Override
+    void fileMove(GameEventCardChangeZone event, EffectEvent moved) {
+        if (!holdAsConsequence(event, moved)) {
             record(moved);
-        }
-        EffectEvent named = BusEvents.libraryMovement(event);
-        if (named != null) {
-            record(named);
-        }
-        if (event.card() != null && event.from() != null
-                && event.from().zoneType() == ZoneType.Battlefield) {
-            // Off the battlefield a card's computed characteristics stop
-            // meaning anything, and one that returns is a new object.
-            stats.forget(event.card().getId());
         }
     }
 
@@ -752,70 +606,6 @@ public final class BusBracketCollector {
         }
     }
 
-    /**
-     * The engine says a card's stats moved; this says what moved.
-     *
-     * <p>The bus publishes one event for a pump, an anthem recompute, an
-     * animation and a colour change alike, and it names only the card. Without
-     * the difference, the whole "gets +2/+2 and gains flying" family — most of
-     * what a limited deck does — resolved into an empty event list.
-     */
-    @Subscribe
-    public void onStatsChanged(GameEventCardStatsChanged event) {
-        if (event.cards() == null) {
-            return;
-        }
-        for (CardView view : event.cards()) {
-            if (view == null) {
-                continue;
-            }
-            Card card = cardById(view.getId());
-            if (card != null) {
-                for (EffectEvent changed : stats.diff(card)) {
-                    record(changed);
-                }
-            }
-        }
-    }
-
-    @Subscribe
-    public void onAttachment(GameEventCardAttachment event) {
-        EffectEvent attached = BusEvents.attachment(event);
-        if (attached != null) {
-            record(attached);
-        }
-    }
-
-    @Subscribe
-    public void onScry(GameEventScry event) {
-        for (EffectEvent looked : BusEvents.scry(event)) {
-            record(looked);
-        }
-    }
-
-    @Subscribe
-    public void onSurveil(GameEventSurveil event) {
-        for (EffectEvent looked : BusEvents.surveil(event)) {
-            record(looked);
-        }
-    }
-
-    /**
-     * The battlefield card an id names, or null.
-     *
-     * <p>The bus hands out views rather than cards, and a view carries the id
-     * and not the object. The battlefield is small enough that a scan costs
-     * less than an index kept in step with every zone change.
-     */
-    private Card cardById(int id) {
-        for (Card card : game.getCardsIn(ZoneType.Battlefield)) {
-            if (card.getId() == id) {
-                return card;
-            }
-        }
-        return null;
-    }
-
     // ── plumbing ────────────────────────────────────────────────────────
 
     /**
@@ -828,7 +618,7 @@ public final class BusBracketCollector {
      * with nothing resolving.
      */
     private void record(EffectEvent event) {
-        record(event, null);
+        fileOutcome(event, null);
     }
 
     /**
@@ -837,7 +627,8 @@ public final class BusBracketCollector {
      * @param namedCause the ref the engine named, which outranks the bracket's,
      *                   or null to take the bracket's
      */
-    private void record(EffectEvent event, String namedCause) {
+    @Override
+    void fileOutcome(EffectEvent event, String namedCause) {
         // Stamped here rather than where the event is built: which clause
         // produced it, how long it lasts and — absent a name off the event
         // itself — what caused it are properties of the bracket it landed in,
@@ -904,7 +695,7 @@ public final class BusBracketCollector {
      * "regenerate through first strike, then again in the regular step" lands
      * in two brackets and is never compared. And a second destroy check
      * driven by a separately-resolving ability changes {@code attributed_to}
-     * (stamped in {@link #record(EffectEvent, String)}), which breaks the
+     * (stamped in {@link #fileOutcome}), which breaks the
      * rendered-line equality {@link #fileEvent} dedups on. Nobody has
      * constructed, or ruled out, a same-bracket same-attribution double from
      * reasoning about the code alone — that is an open question static
@@ -1507,7 +1298,7 @@ public final class BusBracketCollector {
      * iteration). A
      * burn spell that leaves its target at 0 life closes its own bracket first
      * and only then is the game discovered to be over: {@code
-     * GameEventGameOutcome} fires with no bracket open, {@link #record} has
+     * GameEventGameOutcome} fires with no bracket open, {@link #fileOutcome} has
      * nowhere to put it but the now-empty {@link #bracketEvents}, and no
      * further ability ever resolves to trigger the {@link #endBracket} that
      * would otherwise have flushed it. Without this, {@code player_won} (and

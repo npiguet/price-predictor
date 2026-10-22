@@ -58,7 +58,7 @@ final class BusEvents {
      * cause an event ends up carrying is a decision about precedence — the
      * source the bus named beats the ability whose bracket the event landed in
      * — and this class deliberately holds no opinion about brackets. The
-     * collector combines the two; see {@code BusBracketCollector.record}.
+     * collector combines the two; see {@code BusBracketCollector.fileOutcome}.
      */
     static String causeOf(GameEventCardDamaged event) {
         return cardRef(event.source());
