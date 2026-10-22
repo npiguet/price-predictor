@@ -20,6 +20,7 @@ import forge.game.trigger.TriggerType;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -404,70 +405,25 @@ class ProvenanceKeyTest {
     // ── keyword-derived abilities ───────────────────────────────────────
 
     /**
-     * The ordinal both sides compute. It cannot be a position in
-     * {@code getKeywords()}: that collection is hash-ordered over an enum whose
-     * {@code hashCode()} is the identity hash, so the convert JVM and the
-     * collect JVM disagree about it. Sorting the printed text is stable in
-     * both.
+     * The ordinal both sides compute: the position of the keyword's printed
+     * text among the card's intrinsic keywords, sorted. It cannot be a position
+     * in {@code getKeywords()}: that collection is hash-ordered over an enum
+     * whose {@code hashCode()} is the identity hash, so the convert JVM and the
+     * collect JVM disagree about it. Pinned as literals because the sorted
+     * order is a contract between those two JVMs, not something to recompute.
      */
     @Test
-    void aKeywordOrdinalIsThePositionOfItsPrintedTextWhenSorted() {
-        Card blast = card("Blast from the Past");
-        CardState state = blast.getCurrentState();
+    void aKeywordOrdinalIsItsPrintedTextsPositionAmongTheSortedKeywords() {
+        CardState state = card("Blast from the Past").getCurrentState();
 
-        List<String> sorted = new ArrayList<>();
+        Map<String, Integer> ordinals = new LinkedHashMap<>();
         for (KeywordInterface keyword : state.getIntrinsicKeywords()) {
-            sorted.add(keyword.getOriginal());
-        }
-        java.util.Collections.sort(sorted);
-        assertEquals(5, sorted.size(), "Blast from the Past prints five keywords");
-
-        for (KeywordInterface keyword : state.getIntrinsicKeywords()) {
-            assertEquals(sorted.indexOf(keyword.getOriginal()),
+            ordinals.put(keyword.getOriginal().split("[: ]")[0],
                     ProvenanceKey.keywordIndex(state, keyword));
         }
-    }
 
-    /**
-     * The load-bearing assertion: if someone reverts to a running counter over
-     * {@code getKeywords()}, this fails. The two orders genuinely differ on a
-     * card with five keywords, which is why the counter was not reproducible.
-     */
-    @Test
-    void aKeywordOrdinalDoesNotFollowTheHashOrderedCollection() {
-        Card blast = card("Blast from the Past");
-        CardState state = blast.getCurrentState();
-
-        boolean anyDisagreement = false;
-        int position = 0;
-        for (KeywordInterface keyword : blast.getKeywords()) {
-            if (ProvenanceKey.keywordIndex(state, keyword) != position) {
-                anyDisagreement = true;
-            }
-            position++;
-        }
-        assertTrue(anyDisagreement,
-                "the sorted ordinal must not merely reproduce the collection order");
-    }
-
-    /** Two builds of one card agree, which the hash-ordered counter need not. */
-    @Test
-    void aKeywordOrdinalIsTheSameForTwoBuildsOfOneCard() {
-        Card first = card("Blast from the Past");
-        Card second = card("Blast from the Past");
-
-        assertEquals(ordinalsByKeywordText(first), ordinalsByKeywordText(second));
-    }
-
-    private static List<String> ordinalsByKeywordText(Card card) {
-        List<String> rendered = new ArrayList<>();
-        CardState state = card.getCurrentState();
-        for (KeywordInterface keyword : state.getIntrinsicKeywords()) {
-            rendered.add(keyword.getOriginal() + "@"
-                    + ProvenanceKey.keywordIndex(state, keyword));
-        }
-        java.util.Collections.sort(rendered);
-        return rendered;
+        assertEquals(Map.of("Buyback", 0, "Cycling", 1, "Flashback", 2,
+                "Kicker", 3, "Madness", 4), ordinals);
     }
 
     /**
