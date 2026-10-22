@@ -92,17 +92,10 @@ class RewriteTallyTest {
      * line, and repeating it once a game would be noise in every worker log.
      */
     @Test
-    void aGameWithNoReplacementPrintsNothing() {
+    void aGameWithNoReplacementPrintsNothing() throws Throwable {
         RewriteTally tally = new RewriteTally();
-        java.io.PrintStream out = System.out;
-        java.io.ByteArrayOutputStream captured = new java.io.ByteArrayOutputStream();
-        System.setOut(new java.io.PrintStream(captured));
-        try {
-            tally.endOfGame();
-        } finally {
-            System.setOut(out);
-        }
-        assertEquals("", captured.toString());
+
+        assertEquals("", StdStreams.captureStdout(tally::endOfGame));
     }
 
     /**

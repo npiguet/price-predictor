@@ -21,8 +21,11 @@ import java.util.EnumMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import static com.pricepredictor.connector.effects.TestCollectors.recording;
+import static com.pricepredictor.connector.effects.TestCollectors.unwired;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -409,30 +412,65 @@ class RewriteContractTest {
         assertTrue(json.contains("\"count\":1"), json);
     }
 
-    /** The live path feeds the tally, which is what makes it a live number. */
+    /**
+     * The live path feeds the worker's tally: every replacement is a record,
+     * the one that declined included, and only one that edited a parameter in
+     * place counts as a rewrite.
+     *
+     * <p>Read off the summary the collector prints when it closes, which is the
+     * number an operator reads. The tally is the worker's, so every test in
+     * this JVM has already added to it, and it prints only every tenth game:
+     * each step closes games until a summary prints and compares it with the
+     * one before.
+     */
     @Test
-    void everyReplacementReachesTheWorkerTally() {
+    void anUpdatedRewriteCountsTowardTheTallyAndADeclinedOneDoesNot() throws Throwable {
         Card card = TestCards.build("Mountain");
         Map<String, Object> before = new LinkedHashMap<>(Map.of(
                 "Origin", ZoneType.Battlefield, "Destination", ZoneType.Graveyard,
                 "Card", card));
         Map<String, Object> after = new LinkedHashMap<>(before);
         after.put("Destination", ZoneType.Exile);
-        // Deltas rather than absolutes: the tally is the worker's, so every
-        // other test in this JVM has already contributed to it.
-        long recordsBefore = PatchedCollectors.JVM_REWRITES.records();
-        PatchedCollectors collector = recording(tempDir);
 
-        collector.rewriteRecord(
-                new FakeTrait("Moved"), before, after,
-                ReplacementResult.Updated, null);
-        collector.rewriteRecord(
-                new FakeTrait("Moved"), before, before,
-                ReplacementResult.NotReplaced, null);
+        // A first record, so the tally has something to print at all.
+        Tally start = tallyAfter(before, before, ReplacementResult.NotReplaced);
+        Tally updated = tallyAfter(before, after, ReplacementResult.Updated);
+        Tally declined = tallyAfter(before, before, ReplacementResult.NotReplaced);
 
-        // Two records for two replacements: the one that declined is counted
-        // too, because it is no longer dropped.
-        assertEquals(recordsBefore + 2, PatchedCollectors.JVM_REWRITES.records());
+        assertEquals(start.records() + 1, updated.records());
+        assertEquals(start.rewritten() + 1, updated.rewritten(),
+                "a destination moved in place is a rewrite");
+        assertEquals(updated.records() + 1, declined.records(),
+                "a replacement that declined is still a record");
+        assertEquals(updated.rewritten(), declined.rewritten(),
+                "a replacement that declined rewrote nothing");
+    }
+
+    /** The headline counts of one printed tally summary. */
+    private record Tally(long records, long rewritten) {
+    }
+
+    private static final Pattern HEADLINE =
+            Pattern.compile("(\\d+) records, (\\d+) rewrote a parameter in place");
+
+    /** A summary prints on the worker's first game and every tenth after it. */
+    private static final int GAMES_PER_SUMMARY = 10;
+
+    /**
+     * One game whose only replacement is the one described, then as many
+     * games without one as it takes the tally to print, and what it printed.
+     */
+    private Tally tallyAfter(Map<String, Object> before, Map<String, Object> after,
+            ReplacementResult result) throws Throwable {
+        PatchedCollectors game = recording(tempDir);
+        game.rewriteRecord(new FakeTrait("Moved"), before, after, result, null);
+        String printed = StdStreams.captureStdout(game::close);
+        for (int games = 1; printed.isEmpty() && games < GAMES_PER_SUMMARY; games++) {
+            printed = StdStreams.captureStdout(() -> unwired(CollectionCaps.defaults()).close());
+        }
+        Matcher headline = HEADLINE.matcher(printed);
+        assertTrue(headline.find(), "no tally summary in " + GAMES_PER_SUMMARY + " games: " + printed);
+        return new Tally(Long.parseLong(headline.group(1)), Long.parseLong(headline.group(2)));
     }
 
     // ── plumbing ────────────────────────────────────────────────────────

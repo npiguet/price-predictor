@@ -2,9 +2,6 @@ package com.pricepredictor.connector.effects;
 
 import org.junit.jupiter.api.Test;
 
-import java.io.ByteArrayOutputStream;
-import java.io.PrintStream;
-import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
 
@@ -69,20 +66,16 @@ class CollectionCapsTest {
     }
 
     @Test
-    void aMalformedPropertyKeepsItsDefaultRatherThanFailing() {
+    void aMalformedPropertyKeepsItsDefaultRatherThanFailing() throws Throwable {
         System.setProperty(CollectionCaps.MANA_CAP, "not-a-number");
-        PrintStream realErr = System.err;
-        ByteArrayOutputStream warnings = new ByteArrayOutputStream();
-        System.setErr(new PrintStream(warnings, true, StandardCharsets.UTF_8));
+        String warning;
         try {
-            assertEquals(
+            warning = StdStreams.captureStderr(() -> assertEquals(
                     CollectionCaps.defaults().manaCap(),
-                    CollectionCaps.fromSystemProperties().manaCap());
+                    CollectionCaps.fromSystemProperties().manaCap())).strip();
         } finally {
-            System.setErr(realErr);
             System.clearProperty(CollectionCaps.MANA_CAP);
         }
-        String warning = warnings.toString(StandardCharsets.UTF_8).strip();
         assertEquals(1, warning.lines().count(), warning);
         assertTrue(warning.contains(CollectionCaps.MANA_CAP) && warning.contains("not-a-number"),
                 warning);

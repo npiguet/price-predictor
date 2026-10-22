@@ -10,8 +10,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.io.TempDir;
 
-import java.io.ByteArrayOutputStream;
-import java.io.PrintStream;
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
 import java.nio.file.Path;
@@ -273,14 +271,12 @@ class ClauseContractTest {
                 },
                 (sa, host, memo) -> new EffectEvent(EffectEvent.TURN_SKIPPED)));
 
-        ByteArrayOutputStream captured = new ByteArrayOutputStream();
-        PrintStream originalErr = System.err;
+        StringBuilder stderr = new StringBuilder();
         List<String> records;
         try {
             records = ShardRun.records(tempDir, TestCards.game(), (bracket, collector) -> {
                 InvocationHandler handler = collector.clauseHandler();
-                System.setErr(new PrintStream(captured, true));
-                try {
+                stderr.append(StdStreams.captureStderr(() -> {
                     bracket.beginBracket(outer);
                     resolvingContained(handler, outer);
                     resolvingContained(handler, inner);
@@ -290,9 +286,7 @@ class ClauseContractTest {
                             new Object[]{outer, false});
                     bracket.endBracket(outer.getId(), false);
                     bracket.flushHeldResolution();
-                } finally {
-                    System.setErr(originalErr);
-                }
+                }));
             });
         } finally {
             ApiEvents.clearRuleOverridesForTest();
@@ -303,9 +297,9 @@ class ClauseContractTest {
                 + SnapshotBuilder.playerId(outerTarget) + "\"]"),
                 "the outer clause's own event must be unaffected by the inner "
                         + "clause's memo failure: " + effectHalf);
-        assertTrue(captured.toString().contains("boom (memo)"),
+        assertTrue(stderr.toString().contains("boom (memo)"),
                 "the memo's failure must be reported, not swallowed silently: "
-                        + captured);
+                        + stderr);
     }
 
     /**

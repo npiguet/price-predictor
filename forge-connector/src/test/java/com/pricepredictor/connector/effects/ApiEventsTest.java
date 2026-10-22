@@ -13,12 +13,13 @@ import forge.game.spellability.SpellAbility;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 
-import java.io.ByteArrayOutputStream;
-import java.io.PrintStream;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
+import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -613,137 +614,94 @@ class ApiEventsTest {
         assertEquals("7", event.params().get("value"));
     }
 
-    // ── the once-latched failure report ──────────────────────────────────
+    // ── the once-latched failure reports ─────────────────────────────────
+
+    /** The two halves of a rule that can throw, each reported on its own latch. */
+    enum Report {
+        EMITTER("the emitter for", ApiEvents::reportEmitterFailure),
+        MEMO("the memo for", ApiEvents::reportMemoFailure);
+
+        /** How the report names the half that failed. */
+        final String names;
+        final BiConsumer<String, RuntimeException> report;
+
+        Report(String names, BiConsumer<String, RuntimeException> report) {
+            this.names = names;
+            this.report = report;
+        }
+
+        Report other() {
+            return this == EMITTER ? MEMO : EMITTER;
+        }
+    }
 
     /**
      * Mirrors {@code EffectRecordClauseHookTest
      * .testAThrowingListenerIsReportedExactlyOnceOnStderr} in the forge repo:
-     * capture {@code System.err}, call the package-private seam directly with
-     * a synthetic exception rather than contrive a rule that reliably throws,
-     * and assert both halves of the promise -- one line naming the event type
-     * and the exception, and silence on every call after the first, which is
-     * the half inspection of the {@code compareAndSet} alone cannot establish.
+     * call the report directly with a synthetic exception rather than contrive
+     * a rule that reliably throws, and assert both halves of the promise --
+     * one line naming the half that failed, the event type and the exception,
+     * and silence on every call after the first, which is the half inspection
+     * of the {@code compareAndSet} alone cannot establish.
      */
-    @Test
-    void anEmitterFailureIsReportedExactlyOnceOnStderr() {
-        ByteArrayOutputStream captured = new ByteArrayOutputStream();
-        PrintStream original = System.err;
-        System.setErr(new PrintStream(captured, true));
-        try {
-            ApiEvents.reportEmitterFailure("turn_added", new RuntimeException("boom"));
-            ApiEvents.reportEmitterFailure("turn_added", new RuntimeException("boom"));
-            ApiEvents.reportEmitterFailure("x_changed", new RuntimeException("boom again"));
-        } finally {
-            System.setErr(original);
-        }
+    @ParameterizedTest
+    @EnumSource(Report.class)
+    void aFailureIsReportedExactlyOnceOnStderr(Report half) throws Throwable {
+        String output = StdStreams.captureStderr(() -> {
+            half.report.accept("turn_added", new RuntimeException("boom"));
+            half.report.accept("turn_added", new RuntimeException("boom"));
+            half.report.accept("x_changed", new RuntimeException("boom again"));
+        });
 
-        String output = captured.toString();
         long lineCount = output.isBlank() ? 0 : output.strip().lines().count();
         assertEquals(1, lineCount, "exactly one report despite three throws: " + output);
+        assertTrue(output.contains(half.names), output);
         assertTrue(output.contains("turn_added"), output);
         assertTrue(output.contains("boom"), output);
     }
 
     @Test
-    void anEmitterThatNeverThrowsReportsNothing() {
-        ByteArrayOutputStream captured = new ByteArrayOutputStream();
-        PrintStream original = System.err;
-        System.setErr(new PrintStream(captured, true));
-        try {
-            SpellAbility sa = TestCards.scriptedAbility("Alchemist's Gambit", "AddTurn");
-            ApiEvents.after(sa, ApiEvents.before(sa));
-        } finally {
-            System.setErr(original);
-        }
+    void anEmitterThatNeverThrowsReportsNothing() throws Throwable {
+        SpellAbility sa = TestCards.scriptedAbility("Alchemist's Gambit", "AddTurn");
 
-        assertEquals("", captured.toString());
-    }
-
-    // ── final-fix-3.md item 4: the memo half's own report ────────────────
-
-    /** As {@link #anEmitterFailureIsReportedExactlyOnceOnStderr}, for the memo half. */
-    @Test
-    void aMemoFailureIsReportedExactlyOnceOnStderr() {
-        ByteArrayOutputStream captured = new ByteArrayOutputStream();
-        PrintStream original = System.err;
-        System.setErr(new PrintStream(captured, true));
-        try {
-            ApiEvents.reportMemoFailure("turn_added", new RuntimeException("boom"));
-            ApiEvents.reportMemoFailure("turn_added", new RuntimeException("boom"));
-            ApiEvents.reportMemoFailure("x_changed", new RuntimeException("boom again"));
-        } finally {
-            System.setErr(original);
-        }
-
-        String output = captured.toString();
-        long lineCount = output.isBlank() ? 0 : output.strip().lines().count();
-        assertEquals(1, lineCount, "exactly one report despite three throws: " + output);
-        assertTrue(output.contains("turn_added"), output);
-        assertTrue(output.contains("boom"), output);
+        assertEquals("", StdStreams.captureStderr(() -> ApiEvents.after(sa, ApiEvents.before(sa))));
     }
 
     /**
-     * The wording fix itself: a memo failure must name the memo, not the
-     * emitter -- before this fix, {@link ApiEvents#before} routed its catch
-     * through {@link ApiEvents#reportEmitterFailure}, which unconditionally
-     * printed "the emitter for ... threw" regardless of which half actually
-     * failed, sending an operator to the wrong function.
+     * Each half latches its own report: a memo failure on one clause must not
+     * silence a later, unrelated emitter failure on another for the rest of the
+     * JVM's run, nor the reverse.
+     *
+     * <p>Both orders, because neither is the natural one: a report that checked
+     * the other half's latch but set its own would pass one order and fail the
+     * other.
      */
-    @Test
-    void aMemoFailureNamesTheMemoNotTheEmitter() {
-        ByteArrayOutputStream captured = new ByteArrayOutputStream();
-        PrintStream original = System.err;
-        System.setErr(new PrintStream(captured, true));
-        try {
-            ApiEvents.reportMemoFailure("turn_added", new RuntimeException("boom"));
-        } finally {
-            System.setErr(original);
-        }
+    @ParameterizedTest
+    @EnumSource(Report.class)
+    void oneHalfsFailureDoesNotSilenceALaterFailureOfTheOther(Report first) throws Throwable {
+        String output = StdStreams.captureStderr(() -> {
+            first.report.accept("turn_added", new RuntimeException("first boom"));
+            first.other().report.accept("x_changed", new RuntimeException("second boom"));
+        });
 
-        String output = captured.toString();
-        assertTrue(output.contains("the memo for"), output);
-        assertFalse(output.contains("the emitter for"), output);
-    }
-
-    /**
-     * The latch-independence fix: before this, both halves shared {@code
-     * EMITTER_FAILURE_REPORTED}, so a memo failure on one clause silenced a
-     * later, unrelated, genuine emitter failure on a different one for the
-     * rest of the JVM's run. Reversed here: a memo failure first must not
-     * stop a later emitter failure from printing its own line, and vice
-     * versa.
-     */
-    @Test
-    void aMemoFailureDoesNotSilenceALaterEmitterFailure() {
-        ByteArrayOutputStream captured = new ByteArrayOutputStream();
-        PrintStream original = System.err;
-        System.setErr(new PrintStream(captured, true));
-        try {
-            ApiEvents.reportMemoFailure("turn_added", new RuntimeException("memo boom"));
-            ApiEvents.reportEmitterFailure("x_changed", new RuntimeException("emitter boom"));
-        } finally {
-            System.setErr(original);
-        }
-
-        String output = captured.toString();
         long lineCount = output.isBlank() ? 0 : output.strip().lines().count();
         assertEquals(2, lineCount, "one report from each latch, independently: " + output);
-        assertTrue(output.contains("memo boom"), output);
-        assertTrue(output.contains("emitter boom"), output);
+        assertTrue(output.contains("first boom"), output);
+        assertTrue(output.contains("second boom"), output);
     }
 
     /**
      * The wiring, not just the message: {@link ApiEvents#before} itself,
      * when a real rule's memo throws, must report through {@link
      * ApiEvents#reportMemoFailure} rather than {@link
-     * ApiEvents#reportEmitterFailure} -- the actual pre-fix defect, which a
-     * test that only calls {@code reportMemoFailure} directly (the two tests
-     * above) cannot see, since it never exercises {@code before}'s own catch
-     * block. Same throwing-memo shape {@code
+     * ApiEvents#reportEmitterFailure}, so the line names the memo -- the
+     * function to look at -- rather than the emitter. A test that only calls
+     * the report directly cannot see this, since it never exercises
+     * {@code before}'s own catch block. Same throwing-memo shape {@code
      * ClauseContractTest.aThrowingMemoDoesNotDesyncTheSiblingsPop} uses.
      */
     @Test
-    void beforeReportsAThrowingMemoAsAMemoNotAnEmitter() {
+    void beforeReportsAThrowingMemoAsAMemoNotAnEmitter() throws Throwable {
         SpellAbility sa = AbilityFactory.getAbility(
                 "SP$ SkipTurn | ValidTgts$ Player | NumTurns$ 1",
                 TestCards.build("Runeclaw Bear"));
@@ -754,40 +712,16 @@ class ApiEventsTest {
                 },
                 (s, host, memo) -> new EffectEvent(EffectEvent.TURN_SKIPPED)));
 
-        ByteArrayOutputStream captured = new ByteArrayOutputStream();
-        PrintStream original = System.err;
-        System.setErr(new PrintStream(captured, true));
+        String output;
         try {
-            Object memo = ApiEvents.before(sa);
-            assertNull(memo, "a failed memo still reads back as null");
+            output = StdStreams.captureStderr(
+                    () -> assertNull(ApiEvents.before(sa), "a failed memo still reads back as null"));
         } finally {
-            System.setErr(original);
             ApiEvents.clearRuleOverridesForTest();
         }
 
-        String output = captured.toString();
         assertTrue(output.contains("the memo for"), output);
         assertFalse(output.contains("the emitter for"), output);
-    }
-
-    /** The same, in the other order, since neither latch is checked first by construction. */
-    @Test
-    void anEmitterFailureDoesNotSilenceALaterMemoFailure() {
-        ByteArrayOutputStream captured = new ByteArrayOutputStream();
-        PrintStream original = System.err;
-        System.setErr(new PrintStream(captured, true));
-        try {
-            ApiEvents.reportEmitterFailure("x_changed", new RuntimeException("emitter boom"));
-            ApiEvents.reportMemoFailure("turn_added", new RuntimeException("memo boom"));
-        } finally {
-            System.setErr(original);
-        }
-
-        String output = captured.toString();
-        long lineCount = output.isBlank() ? 0 : output.strip().lines().count();
-        assertEquals(2, lineCount, "one report from each latch, independently: " + output);
-        assertTrue(output.contains("memo boom"), output);
-        assertTrue(output.contains("emitter boom"), output);
     }
 
     // ── Task 12: the eight highest-reach unemitted types ─────────────────

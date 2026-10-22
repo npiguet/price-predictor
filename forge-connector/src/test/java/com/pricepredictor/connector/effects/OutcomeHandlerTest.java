@@ -14,8 +14,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.io.TempDir;
 
-import java.io.ByteArrayOutputStream;
-import java.io.PrintStream;
 import java.lang.reflect.Method;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -243,24 +241,17 @@ class OutcomeHandlerTest {
     @Test
     void anUnrecognizedOutcomeTypeWritesNoEventAndIsReportedOnce() throws Throwable {
         PatchedCollectors collectors = recording(tempDir);
-        Method onOutcome = ON_OUTCOME;
 
-        ByteArrayOutputStream captured = new ByteArrayOutputStream();
-        PrintStream original = System.err;
-        System.setErr(new PrintStream(captured, true));
-        try {
-            collectors.outcomeHandler().invoke(null, onOutcome,
+        String output = StdStreams.captureStderr(() -> {
+            collectors.outcomeHandler().invoke(null, ON_OUTCOME,
                     new Object[]{null, "dungeon_entered", Map.of()});
-            collectors.outcomeHandler().invoke(null, onOutcome,
+            collectors.outcomeHandler().invoke(null, ON_OUTCOME,
                     new Object[]{null, "dungeon_entered", Map.of()});
-            collectors.outcomeHandler().invoke(null, onOutcome,
+            collectors.outcomeHandler().invoke(null, ON_OUTCOME,
                     new Object[]{null, "another_unknown_type", Map.of()});
-        } finally {
-            System.setErr(original);
-        }
+        });
 
         assertNull(collectors.lastClauseEvent(), "an unrecognized type must not become an event");
-        String output = captured.toString();
         long lineCount = output.isBlank() ? 0 : output.strip().lines().count();
         assertEquals(1, lineCount, "exactly one report despite three unrecognized types: " + output);
         assertTrue(output.contains("dungeon_entered"), "the report names the first unrecognized type: " + output);
