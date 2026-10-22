@@ -474,12 +474,20 @@ def gen3_line(row, entries, lookup, overrides):
                 dropped.add(name)
             elif target == "covered":
                 continue
-            elif target.startswith("fix."):
-                fixes.add(target)
-            elif context == "input" and not target.startswith("planned.timing") and not target.startswith("planned.failed"):
+            elif context == "input":
                 ins.add(target)
             else:
                 outs.add(target)
+    # An entry's requires come with it: floating effects are read through every line.
+    todo = list(ins | outs)
+    while todo:
+        for req in entries[todo.pop()].get("requires", ()):
+            if req not in ins | outs:
+                (outs if req.startswith(("out.", "planned.timing", "planned.failed")) else ins).add(req)
+                todo.append(req)
+    fixes = {i for i in ins | outs if i.startswith("fix.")}
+    ins -= fixes
+    outs -= fixes
     learnable = not dropped and not unmapped
     return {
         "gen3_inputs": sorted(ins), "gen3_outputs": sorted(outs), "gen3_fixes": sorted(fixes),
@@ -510,12 +518,27 @@ def cmd_gen3_fields(_args):
 
 def write_gen3_summary(reg, rows):
     """rules/GEN3-FIELDS.md: each canonical field, with the rules it serves."""
+    entries = {e["id"]: e for k in ("inputs", "outputs", "extensions", "planned", "fixes") for e in reg[k]}
+
+    def closure(i):
+        out, todo = {i}, [i]
+        while todo:
+            for req in entries[todo.pop()].get("requires", ()):
+                if req not in out:
+                    out.add(req)
+                    todo.append(req)
+        return out
+
     serves, alone = Counter(), Counter()
     for r in rows:
-        ids = r["gen3_inputs"] + r["gen3_outputs"] + r["gen3_fixes"]
+        ids = set(r["gen3_inputs"] + r["gen3_outputs"] + r["gen3_fixes"])
         serves.update(ids)
-        if len(ids) == 1 and not r["gen3_dropped"]:
-            alone[ids[0]] += 1
+        if r["gen3_dropped"]:
+            continue
+        # Alone: this entry and what it requires are the rule's whole change.
+        for i in ids:
+            if ids <= closure(i) and not any(ids <= closure(j) for j in ids if j != i and i in closure(j)):
+                alone[i] += 1
     now = sum(1 for r in rows if r["output"] == "trained" and r["input"] == "complete")
     after = sum(1 for r in rows if r["learnable_after_gen3"])
     out = ["# Gen-3 inputs and outputs", "",
@@ -524,7 +547,9 @@ def write_gen3_summary(reg, rows):
            "carries `gen3_inputs`, `gen3_outputs`, `gen3_fixes`, `gen3_dropped` and `learnable_after_gen3`.", "",
            f"Rules: {len(rows)}. Learnable today: {now}. Learnable once every field, extension, "
            f"planned item and fix below is in: {after}. Left out by a dropped name: {len(rows) - after}.", "",
-           "Columns: rules = rules that need it; alone = rules for which it is the only change needed.", ""]
+           "Columns: rules = rules that need it, counting the rules that need it through another entry's "
+           "requires; alone = rules for which it, with what it requires, is the whole change needed.", "",
+           "## Conventions", ""] + [f"- **{k.replace('_', ' ')}.** {v}" for k, v in reg["conventions"].items()] + [""]
 
     def table(title, items, cols):
         out.extend([f"## {title} ({len(items)})", "", "| id | " + " | ".join(cols) + " | rules | alone |",

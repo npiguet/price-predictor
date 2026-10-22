@@ -768,7 +768,7 @@ same holds for a player losing the game, a permanent being copied, or day becomi
   and entering the battlefield from any zone reads as a blink. A card shuffled into its library, put
   on the bottom, or returned from the graveyard to the battlefield is labelled as something else.
 
-### Step 3, the gen-3 fields: 34 new inputs and 22 new outputs make all but 77 rules learnable
+### Step 3, the gen-3 fields: 33 new inputs and 22 new outputs make all but 77 rules learnable
 
 **Every name the heads map proposed is merged into one list of fields, each with a slot, a shape
 and a source.** The heads map named what each rule lacks one rule at a time, so it used many
@@ -780,11 +780,11 @@ list and the merge, and `rules/GEN3-FIELDS.md` gives every field's shape and the
 
 | change | count |
 |---|---:|
-| new inputs | 34 |
+| new inputs | 33 |
 | new outputs | 22 |
 | existing inputs or outputs extended | 5 |
 | already planned in this record | 7 |
-| fixes to collection and curation | 2 |
+| fixes to collection and curation | 3 |
 
 **With every change in, the model can learn three times as many rules as today.** The 77 left
 out need something the design leaves out on purpose.
@@ -795,64 +795,96 @@ out need something the design leaves out on purpose.
 | learnable with every change above | 1,570 |
 | left out | 77 |
 
+#### What rules text describes is read as lines, links are edges, and only state stays numeric
+
+**A field that rules text describes is read through the e vectors of lines, never through a
+vocabulary of effect kinds.** Forge itself builds most lasting effects as lines. A prevention
+shield, "creatures can't block this turn" or "you may cast that card this turn" is an Effect card
+in the command zone, holding the triggers, statics and replacements of the spell that made it. A
+floating effect is therefore a card slot in the command zone, read like a permanent, with the e
+vectors of the source lines that created it. A dungeon is a card slot too, its rooms its lines.
+Only what text cannot say stays numeric: the objects the effect touches, its duration, and the
+amount left on a shield that counts down.
+
+**Which of a card's lines are in force is a flag on each line.** A line is active when its face is
+up, its Class level is reached or its Room door is unlocked. A spell's kicker or alternative cost
+is a flag on the line it was cast with, and a modal spell's choice a flag on the chosen mode.
+Temporary grants become lines as well, with a keyword read through its reminder text. Their own
+flag keeps them apart from printed lines, which the gate-2 keyword test needs, since it strips a
+keyword from the channel that carries it.
+
+**A link between two objects is an edge, not a flag on one end.** What an Aura is attached to,
+what an attacker attacks, what a spell targets and what a permanent exiled are each an attention
+bias between two slots, as the block-pairing section proposes for blockers. Names are edges too:
+the rules only compare names, as the legend rule does, so two slots whose names match are linked,
+and no name embedding is learned.
+
+**Four outputs take a shape other than the one the heads map named.** A player losing is one binary
+per player, because in a two-player game a win is the other player's loss and a draw is both
+losing. A cost reduction and a base power and toughness change are signed deltas, against the
+printed cost and the previous base, like the existing power change. The legality of an attack
+target needs an attackers record anchored to one attacker, as a blockers record already is,
+which is the third fix.
+
 #### The card slot takes the most new inputs, and seven only expose what the snapshot records
 
-**The 34 inputs fall into six places in the model's input.** A relation is a link between two
-slots, read as an attention bias of its own type, as the block-pairing section proposes for
-blockers.
+**The 33 inputs fall into seven places in the model's input.**
 
 | where | inputs |
 |---|---|
-| card slot (16) | subtypes, face state, is a copy, name, is a token, pending-event details, mana cost, printed loyalty and defense, designations, Class level, Room doors unlocked, X paid, chosen values, costs paid, history, order rank |
-| relations (8) | attached to, attacks, targets, source of a stack object, soulbond pair, a battle's protector, exiled with, merged with |
-| player slot (6) | speed, city's blessing, dungeon and room, rad counters, monarch, initiative |
+| card slot (13) | subtypes, face state, is a copy, is a token, pending-event details, mana cost, printed loyalty and defense, designations, X paid, chosen values, costs paid, history, order rank |
+| ability-token flags (1) | active, granted temporarily, cast with, chosen |
+| edges (9) | attached to, attacks, targets, source of a stack object, soulbond pair, a battle's protector, exiled with, merged with, same name |
+| player slot (5) | speed, city's blessing, rad counters, monarch, initiative |
 | global slot (1) | day or night |
-| new slot kinds (2) | floating effects (shields, delayed triggers, cast permissions, restrictions), library cards an effect touches |
+| command-zone and library card slots (3) | floating effects, dungeons, library cards an effect touches |
 | acting-ability slot (1) | die rolls and coin flips, taken as given |
 
-**Seven inputs need no new collection.** Subtypes, face state, whether a card is a copy, its name,
-whether it is a token, what it is attached to, what an attacker attacks and what a stack object
-targets are already in the snapshot. Pending-event details and a face-down card's real face are
-partly there.
+**Seven inputs need no new collection.** Subtypes, whether a card is a copy, whether it is a token,
+the same-name edges, and what a card is attached to, attacks or targets are already in the
+snapshot. Face state and pending-event details are partly there.
 
-**Chosen values, history and subtypes are the inputs the most rules need.**
+**Chosen values, line flags and history are the inputs the most rules need.** A rule counts for an
+input it needs through another one: every rule that needs floating effects needs every line of a
+permanent as well.
 
-| input | rules needing it | rules for which it is the only change |
+| input | rules needing it | rules for which it, with what it requires, is the whole change |
 |---|---:|---:|
 | chosen values | 119 | 35 |
+| line flags | 115 | 24 |
 | history | 91 | 29 |
 | subtypes | 90 | 14 |
+| order rank | 66 | 6 |
 | designations | 61 | 15 |
-| face state | 57 | 21 |
-| floating effects | 57 | 30 |
-| costs paid | 45 | 20 |
-| library cards | 38 | 14 |
+| face state | 57 | 31 |
+| floating effects | 57 | 38 |
 
-Every line of a permanent, already planned, still leads all of them: 438 rules need it, and it is
-the only change for 166.
+Every line of a permanent, already planned, still leads all of them: 573 rules need it, and it is
+the whole change for 166.
 
 #### The new outputs are each small, and most train on a field the records already carry
 
 **Copies, designation changes and the face a card ends on are the outputs the most rules need.**
-No new output serves more than 40 rules. A player winning or losing and a spell fizzling serve
-fewer, but for more of their rules they are the only change.
+No new output serves more than 40 rules. A player losing and a spell fizzling serve fewer, but
+for more of their rules they are the whole change.
 
-| output | rules needing it | rules for which it is the only change |
+| output | rules needing it | rules for which it, with what it requires, is the whole change |
 |---|---:|---:|
 | copies of spells and permanents | 40 | 4 |
 | designations changed | 39 | 4 |
 | face after a face change | 33 | 8 |
-| cost after adjustment | 30 | 3 |
+| cost adjustment | 30 | 4 |
 | player state changed (monarch, initiative, dungeon, speed) | 27 | 2 |
-| game result | 26 | 20 |
+| game lost | 26 | 20 |
 | combat status changed | 20 | 7 |
 | resolution outcome | 18 | 10 |
 
-The other 14 outputs serve between 2 and 19 rules each. The five extensions change existing
-outputs and inputs. The largest is the zone outcome, which 64 rules need to tell apart the
-destinations it now merges. Sixteen of the 22 outputs need no new collection, because the
-records already carry the event or field they would be trained on, and four more need it only in
-part.
+The other 14 outputs serve between 2 and 19 rules each. Two of them, day becoming night and
+extra or skipped turns, belong to no card or player and need a global head beside the
+created-objects head. The five extensions change existing outputs and inputs. The largest is the
+zone outcome, which 64 rules need to tell apart the destinations it now merges. Seventeen of the
+22 outputs need no new collection, because the records already carry the event or field they
+would be trained on, and three more need it only in part.
 
 #### The 77 rules left out are subgames, banding, casual variants and engine procedure
 
@@ -861,7 +893,8 @@ part.
 Attractions, sideboards and other casual mechanics leave out 17, procedure in the middle of an
 action, such as the order of pending extra turns, 15, and banding 8. The rest are characteristics
 the input already shows with no change to predict, such as a colour derived from a mana cost, and
-a few names of one or two rules. A rule can fall in more than one group. `rules/GEN3-FIELDS.md` lists each with its reason.
+a few names of one or two rules. A rule can fall in more than one group. `rules/GEN3-FIELDS.md`
+lists each with its reason.
 
 ### Steps still to take, as the catalogue, the heads map and the gen-3 fields set them
 
