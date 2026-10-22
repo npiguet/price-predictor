@@ -32,17 +32,12 @@ public record MultiCard(String layout, List<CardFace> faces) {
         return new MultiCard(layout, replaced);
     }
 
-    /** Format the complete card as text output. */
-    String formatText() {
-        return RenderedLine.join(renderLines());
-    }
-
     /**
      * Render the card one output line at a time, each line carrying the
      * ability and the face that produced it.
      *
-     * <p>{@code formatText} delegates here, so a sidecar's line indices always
-     * index the file that was written rather than a parallel rendering.
+     * <p>The converted file is these lines joined, so a sidecar's line indices
+     * always index the file that was written rather than a parallel rendering.
      */
     public List<RenderedLine> renderLines() {
         if (layout == null) {

@@ -14,7 +14,7 @@ class OutputFormatterTest {
         CardFace card = new CardFace(
                 "grizzly bears", "{1}{G}", "creature bear",
                 "2/2", null, null, null, null, List.of());
-        String output = card.formatText();
+        String output = RenderedLine.join(card.renderLines(0));
         assertEquals("""
                 name: grizzly bears
                 mana cost: {1}{G}
@@ -29,7 +29,7 @@ class OutputFormatterTest {
                 null, null, null, null, null,
                 List.of(new TextAbility(AbilityType.SPELL,
                         "CARDNAME deals 3 damage to any target.")));
-        String output = card.formatText();
+        String output = RenderedLine.join(card.renderLines(0));
         assertFalse(output.contains("power toughness:"));
         assertFalse(output.contains("loyalty:"));
         assertFalse(output.contains("defense:"));
@@ -48,7 +48,7 @@ class OutputFormatterTest {
                         new TextAbility(AbilityType.ACTIVATED, "{T}: add {W}."),
                         new TextAbility(AbilityType.TRIGGERED, "when test card enters, draw a card.")
                 ));
-        String output = card.formatText();
+        String output = RenderedLine.join(card.renderLines(0));
         int staticPos = output.indexOf("static: flying");
         int actPos = output.indexOf("activated[1]: {T}: add {W}.");
         int trigPos = output.indexOf("triggered: when test card enters, draw a card.");
@@ -86,7 +86,7 @@ class OutputFormatterTest {
                 "bearer of overwhelming truths", null, "creature human wizard",
                 "3/2", null, null, null, null, List.of());
         MultiCard multi = MultiCard.multiFace("transform", List.of(front, back));
-        String output = multi.formatText();
+        String output = RenderedLine.join(multi.renderLines());
 
         assertTrue(output.startsWith("layout: transform\n"));
         assertTrue(output.contains("ALTERNATE"));
@@ -100,7 +100,7 @@ class OutputFormatterTest {
                 "grizzly bears", "{1}{G}", "creature bear",
                 "2/2", null, null, null, null, List.of());
         MultiCard single = MultiCard.singleFace(card);
-        String output = single.formatText();
+        String output = RenderedLine.join(single.renderLines());
         assertFalse(output.contains("layout:"));
     }
 
@@ -110,7 +110,7 @@ class OutputFormatterTest {
                 "jace beleren", "{1}{U}{U}", "legendary planeswalker jace",
                 null, "3", null, null, null,
                 List.of(new TextAbility(AbilityType.PLANESWALKER, "+2: each player draws a card.")));
-        String output = card.formatText();
+        String output = RenderedLine.join(card.renderLines(0));
         assertTrue(output.contains("loyalty: 3"));
         assertTrue(output.contains("planeswalker[1]: +2: each player draws a card."));
     }

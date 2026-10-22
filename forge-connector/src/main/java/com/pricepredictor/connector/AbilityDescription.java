@@ -19,6 +19,8 @@ public final class AbilityDescription {
     private static final Pattern PLACEHOLDER_WORD = Pattern.compile("\\b(cardname|nickname|alternate)\\b");
     private static final Pattern VARIABLE_X = Pattern.compile("(?<![a-z])x(?![a-z])");
 
+    private static final String ADDITIONAL_COST_PREFIX = "as an additional cost to cast this spell, ";
+
     /**
      * Full normalization returning null for empty/null input.
      * Pipeline: strip reminder text, then apply casing.
@@ -27,6 +29,15 @@ public final class AbilityDescription {
         if (raw == null || raw.isEmpty()) return null;
         String result = applyCasing(stripReminderText(raw));
         return (result == null || result.isEmpty()) ? null : result;
+    }
+
+    /**
+     * Normalized cost text without its leading "as an additional cost to cast
+     * this spell, ", which the line's additional-cost type already says.
+     */
+    public static String stripAdditionalCostPrefix(String normalized) {
+        return normalized.startsWith(ADDITIONAL_COST_PREFIX)
+                ? normalized.substring(ADDITIONAL_COST_PREFIX.length()) : normalized;
     }
 
     /** The text up to its first newline, or all of it when it has none. */

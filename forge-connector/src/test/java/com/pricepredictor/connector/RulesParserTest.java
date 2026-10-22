@@ -36,6 +36,16 @@ class RulesParserTest {
         }
     }
 
+    /** The converted text BatchConverter writes for a card. */
+    private static String rendered(MultiCard card) {
+        return RenderedLine.join(card.renderLines());
+    }
+
+    /** The converted text of one face, as BatchConverter writes it. */
+    private static String rendered(CardFace face) {
+        return RenderedLine.join(face.renderLines(0));
+    }
+
     private CardFace face(String relativePath) {
         return convertFromFile(relativePath).faces().get(0);
     }
@@ -143,7 +153,7 @@ class RulesParserTest {
     @Test
     void activatedAbility() {
         CardFace card = face("l/llanowar_elves.txt");
-        String output = card.formatText();
+        String output = rendered(card);
         assertTrue(output.contains("activated[1]:"), output);
         assertTrue(output.contains("{T}"), output);
         assertTrue(output.contains("add {G}"), output);
@@ -196,10 +206,10 @@ class RulesParserTest {
 
     @Test
     void engineMetadataExcluded() {
-        String output = convert(
+        String output = rendered(convert(
                 "Name:Test Card", "ManaCost:1", "Types:Creature Human", "PT:1/1",
                 "AI:RemoveDeck:Random", "DeckHints:Ability$LifeGain",
-                "SVar:AnotherSVar:DB$ Something", "Oracle:").formatText();
+                "SVar:AnotherSVar:DB$ Something", "Oracle:"));
         assertFalse(output.contains("AI:"));
         assertFalse(output.contains("DeckHints"));
         assertFalse(output.contains("SVar"));
@@ -212,7 +222,7 @@ class RulesParserTest {
                 "K:Cycling:2", "A:AB$ GainLife | Cost$ T | LifeAmount$ 1 | SpellDescription$ Gain 1 life.",
                 "Oracle:").faces().get(0);
         // Verify sequential action numbers in formatted output
-        String output = card.formatText();
+        String output = rendered(card);
         assertTrue(output.contains("[1]:"), "Should have action number 1: " + output);
         assertTrue(output.contains("[2]:"), "Should have action number 2: " + output);
         assertTrue(output.indexOf("[1]:") < output.indexOf("[2]:"),
@@ -221,7 +231,7 @@ class RulesParserTest {
 
     @Test
     void textCasingCorrect() {
-        String output = convertFromFile("l/llanowar_elves.txt").formatText();
+        String output = rendered(convertFromFile("l/llanowar_elves.txt"));
         assertTrue(output.contains("llanowar elves"));
         assertTrue(output.contains("{G}"));
         assertTrue(output.contains("{T}"));
@@ -248,14 +258,14 @@ class RulesParserTest {
     void noCostCardOmitsManaCostLine() {
         CardFace card = face("a/ancestral_vision.txt");
         assertNull(card.manaCost());
-        assertFalse(card.formatText().contains("mana cost:"));
+        assertFalse(rendered(card).contains("mana cost:"));
     }
 
     @Test
     void textPropertyIncluded() {
-        String output = convert(
+        String output = rendered(convert(
                 "Name:Test Card", "ManaCost:1", "Types:Creature Human", "PT:1/1",
-                "Text:This is flavor text.", "Oracle:").faces().get(0).formatText();
+                "Text:This is flavor text.", "Oracle:").faces().get(0));
         assertTrue(output.contains("text: this is flavor text."));
     }
 
@@ -271,7 +281,7 @@ class RulesParserTest {
         assertTrue(pw.get(1).formatLine(null).contains("[-1]:"));
         assertTrue(pw.get(2).formatLine(null).contains("[-10]:"));
         // Verify sequential action numbers in formatted output
-        String output = card.formatText();
+        String output = rendered(card);
         assertTrue(output.contains("planeswalker[1]:"));
         assertTrue(output.contains("planeswalker[2]:"));
         assertTrue(output.contains("planeswalker[3]:"));
@@ -299,7 +309,7 @@ class RulesParserTest {
         assertEquals("invasion of kamigawa", front.name());
         assertEquals("4", front.defense());
         assertNull(front.powerToughness());
-        assertTrue(front.formatText().contains("defense: 4"));
+        assertTrue(rendered(front).contains("defense: 4"));
 
         CardFace back = result.faces().get(1);
         assertEquals("rooftop saboteurs", back.name());
@@ -323,7 +333,7 @@ class RulesParserTest {
         assertEquals(1, spells.size());
         assertTrue(spells.get(0).formatLine(null).contains("CARDNAME deals 3 damage"));
         // Verify action number in formatted output
-        String output = card.formatText();
+        String output = rendered(card);
         assertTrue(output.contains("spell[1]:"));
         assertEquals(0, countOfType(card, AbilityType.ADDITIONAL_COST));
     }
@@ -353,7 +363,7 @@ class RulesParserTest {
         var spells = abilitiesOfType(card, AbilityType.SPELL);
         assertFalse(spells.isEmpty());
         // Verify sequential action numbering in formatted output
-        String output = card.formatText();
+        String output = rendered(card);
         for (int i = 0; i < spells.size(); i++) {
             assertTrue(output.contains("spell[" + (i + 1) + "]:"),
                     "Expected spell[" + (i + 1) + "] in output: " + output);
@@ -442,7 +452,7 @@ class RulesParserTest {
         var levels = abilitiesOfType(card, AbilityType.LEVEL);
         assertEquals(3, levels.size());
         // Class levels use ordinal() for fixed numbering in formatted output
-        String output = card.formatText();
+        String output = rendered(card);
         assertTrue(output.contains("level[1]:"), "Level 1 in output: " + output);
         assertTrue(output.contains("level[2]:"), "Level 2 in output: " + output);
         assertTrue(output.contains("level[3]:"), "Level 3 in output: " + output);
@@ -462,7 +472,7 @@ class RulesParserTest {
         CardFace card = face("b/bard_class.txt");
         var levels = abilitiesOfType(card, AbilityType.LEVEL);
         assertEquals(3, levels.size());
-        String output = card.formatText();
+        String output = rendered(card);
         assertTrue(output.contains("level[1]:"), "Level 1 in output: " + output);
         assertTrue(levels.get(0).descriptionText().contains("legendary creatures"));
         assertNoRawEtbReplacementKeyword(card);
@@ -1137,8 +1147,8 @@ class RulesParserTest {
         CardFace card = face("m/march_of_souls.txt");
         var spells = abilitiesOfType(card, AbilityType.SPELL);
         assertEquals(1, spells.size(), "Should have exactly one SPELL: " + card.abilities());
-        // Use formatText (which calls formatBlock) to get the fully concatenated chain text.
-        String formatted = card.formatText();
+        // The rendered text (which calls formatBlock) holds the fully concatenated chain text.
+        String formatted = rendered(card);
         assertTrue(formatted.contains("destroy all creatures"),
                 "Output should contain 'destroy all creatures': " + formatted);
         assertTrue(formatted.contains("spirit"),
@@ -1155,7 +1165,7 @@ class RulesParserTest {
         var activated = abilitiesOfType(card, AbilityType.ACTIVATED);
         assertEquals(1, activated.size(),
                 "Arachnus Spinner should have 1 ACTIVATED ability: " + card.abilities());
-        String formatted = card.formatText();
+        String formatted = rendered(card);
         assertTrue(formatted.toLowerCase().contains("search"),
                 "Activated ability text should include 'search': " + formatted);
     }
@@ -1189,7 +1199,7 @@ class RulesParserTest {
         // Vincent's Limit Break: Tiered charm with PrecostDesc$ on each choice SVar.
         // Option text must include the PrecostDesc name, not just the raw P/T string.
         CardFace card = face("v/vincents_limit_break.txt");
-        String formatted = card.formatText();
+        String formatted = rendered(card);
         assertTrue(formatted.toLowerCase().contains("galian beast"),
                 "Tiered charm option should include 'Galian Beast': " + formatted);
         assertTrue(formatted.toLowerCase().contains("death gigas"),
@@ -1270,7 +1280,7 @@ class RulesParserTest {
         // processed both by the triggers/replacements loop and (incorrectly) by the
         // spell loop.  After the fix, no ability text should appear twice.
         CardFace card = face("s/sigardas_splendor.txt");
-        String formatted = card.formatText();
+        String formatted = rendered(card);
         // Collect all non-header values from formatted output
         long duplicateCount = java.util.Arrays.stream(formatted.split("\n"))
                 .filter(line -> line.contains(":"))
@@ -1316,7 +1326,7 @@ class RulesParserTest {
         // Ertai Resurrected trigger: MinCharmNum$ 0, no CharmNum — "choose up to one".
         // The charm is in a triggered sub-ability; check the full formatted text.
         CardFace card = face("e/ertai_resurrected.txt");
-        String formatted = card.formatText();
+        String formatted = rendered(card);
         assertTrue(formatted.contains("choose up to one"),
                 "Output should contain 'choose up to one': " + formatted);
     }
@@ -1767,7 +1777,7 @@ class RulesParserTest {
         CardFace card = face("d/delirium.txt");
         var spells = abilitiesOfType(card, AbilityType.SPELL);
         assertEquals(1, spells.size(), "Should have exactly 1 SPELL: " + card.abilities());
-        String formatted = card.formatText();
+        String formatted = rendered(card);
         // "prevent" must appear exactly once (from SpellDescription, not from replacement SVar)
         int first = formatted.indexOf("prevent");
         assertTrue(first >= 0, "Must contain 'prevent': " + formatted);
@@ -1800,7 +1810,7 @@ class RulesParserTest {
         assertEquals(1, spells.size(), "Should have 1 SPELL: " + card.abilities());
         // The single SPELL ability has a nested sub-ability chain representing all 3 effects.
         // Rendering must produce all 3 repetitions (not deduplicated away).
-        String formatted = card.formatText();
+        String formatted = rendered(card);
         // Count occurrences of "+3/+3" — must appear 3 times
         int count = 0, idx = 0;
         while ((idx = formatted.indexOf("+3/+3", idx)) >= 0) { count++; idx++; }
@@ -1828,7 +1838,7 @@ class RulesParserTest {
         CardFace card = face("m/mage_hunters_onslaught.txt");
         var spells = abilitiesOfType(card, AbilityType.SPELL);
         assertFalse(spells.isEmpty(), "Should have SPELL: " + card.abilities());
-        String formatted = card.formatText();
+        String formatted = rendered(card);
         assertTrue(formatted.contains("destroy target creature or planeswalker"),
                 "Must contain first effect: " + formatted);
         assertTrue(formatted.contains("whenever a creature blocks"),
@@ -1840,7 +1850,7 @@ class RulesParserTest {
         // Reckless Blaze: DB$ Effect with Triggers$ DiesTrig.
         // TriggerDescription must appear in the output (oracle=1 single paragraph).
         CardFace card = face("r/reckless_blaze.txt");
-        String formatted = card.formatText();
+        String formatted = rendered(card);
         assertTrue(formatted.contains("deals 5 damage to each creature"),
                 "Must contain main effect: " + formatted);
         assertTrue(formatted.contains("dies this turn"),
@@ -1852,7 +1862,7 @@ class RulesParserTest {
         // Dazzling Reflection: DB$ Effect with ReplacementEffects$ Dazzle.
         // Dazzle's Description$ must appear in the output.
         CardFace card = face("d/dazzling_reflection.txt");
-        String formatted = card.formatText();
+        String formatted = rendered(card);
         assertTrue(formatted.contains("you gain life equal to target creature"),
                 "Must contain main effect: " + formatted);
         assertTrue(formatted.contains("prevent that damage"),
@@ -1864,7 +1874,7 @@ class RulesParserTest {
         // Transgress the Mind: ExileCard SVar has StackDescription but no SpellDescription.
         // Must concatenate the StackDescription text into the spell line.
         CardFace card = face("t/transgress_the_mind.txt");
-        String formatted = card.formatText();
+        String formatted = rendered(card);
         assertTrue(formatted.contains("target player reveals their hand"),
                 "Must contain root spell description: " + formatted);
         assertTrue(formatted.contains("mana value 3 or greater"),
@@ -1879,7 +1889,7 @@ class RulesParserTest {
         // ActivatedAbilityEntry calls fromChain(sub) without parentDesc so parentDesc=null;
         // the effectsource guard must fire before the parentDesc null check.
         CardFace card = face("s/stuffy_doll_avatar.txt");
-        String formatted = card.formatText();
+        String formatted = rendered(card);
         assertFalse(formatted.contains("effectsource"),
                 "EFFECTSOURCE placeholder must not appear in output: " + formatted);
     }
@@ -1891,7 +1901,7 @@ class RulesParserTest {
         // Sarah's Wings: NoDamage SVar has SpellDescription$ = "(Players with flying can't...)"
         // which is entirely reminder text. collectEffectDescriptions must not run on it.
         CardFace card = face("s/sarahs_wings.txt");
-        String formatted = card.formatText();
+        String formatted = rendered(card);
         assertTrue(formatted.contains("flying"),
                 "Must contain flying grant: " + formatted);
         assertFalse(formatted.contains("prevent all damage"),
@@ -1905,7 +1915,7 @@ class RulesParserTest {
         // Eye for an Eye: SelflessDamage.Description$ says "this card deals that much damage"
         // while SpellDescription says "CARDNAME deals that much damage" — same meaning.
         CardFace card = face("e/eye_for_an_eye.txt");
-        String formatted = card.formatText();
+        String formatted = rendered(card);
         long count = formatted.lines()
                 .filter(l -> l.contains("deals that much damage to that source"))
                 .count();

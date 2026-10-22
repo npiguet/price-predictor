@@ -137,14 +137,7 @@ public final class ProvenanceRecorder {
         TraitScript script = TraitScript.ofKeyword(original);
         for (Ability ability : abilities) {
             if (ability == null) continue;
-            Source existing = byAbility.get(ability);
-            if (existing == null) {
-                List<ProvenanceKey> keys = new ArrayList<>();
-                keys.add(key);
-                byAbility.put(ability, new Source(keys, script));
-            } else if (!existing.keys().contains(key)) {
-                existing.keys().add(key);
-            }
+            claim(ability, key, script);
         }
     }
 

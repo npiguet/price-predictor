@@ -38,10 +38,9 @@ public final class HauntKeyword {
         }
         // Fallback: extract SpellDescription from the SVar content string
         if (effectDesc == null) {
-            String original = ki.getOriginal(); // "Haunt:SvarName"
-            if (original.contains(":")) {
-                String svarName = original.substring(original.indexOf(':') + 1);
-                effectDesc = parseSpellDesc(card.getSVar(svarName));
+            String svarName = new KeywordSpec(ki.getOriginal()).rest(1); // "Haunt:SvarName"
+            if (svarName != null) {
+                effectDesc = SpellAbilityUtils.svarParam(card.getSVar(svarName), "SpellDescription");
             }
         }
 
@@ -51,7 +50,7 @@ public final class HauntKeyword {
         if (!isCreature && effectDesc != null) {
             String normalized = AbilityDescription.normalize(effectDesc);
             if (normalized != null) {
-                result.add(new SpellEffect(AbilityDescription.applyCasing(normalized), List.of()));
+                result.add(new SpellEffect(normalized, List.of()));
             }
         }
 
@@ -72,10 +71,10 @@ public final class HauntKeyword {
                     CharmAbility.Expanded expanded =
                             CharmAbility.expandPlaceholder(tDesc, overrideSa, null);
                     String normalized2 = expanded.description();
-                    if (normalized2 == null || normalized2.isEmpty()) continue;
+                    if (normalized2 == null) continue;
                     if (!emitted.add(normalized2)) continue;
                     result.add(new TextAbility(AbilityType.forTrigger(t),
-                            AbilityDescription.applyCasing(normalized2), 0, expanded.options()));
+                            normalized2, 0, expanded.options()));
                     continue;
                 } else if (effectDesc != null) {
                     tDesc = tDesc.replace("ABILITY", effectDesc);
@@ -83,25 +82,12 @@ public final class HauntKeyword {
             }
 
             String normalized = AbilityDescription.normalize(tDesc);
-            if (normalized == null || normalized.isEmpty()) continue;
+            if (normalized == null) continue;
             if (!emitted.add(normalized)) continue; // skip duplicates
 
-            result.add(new TextAbility(AbilityType.forTrigger(t),
-                    AbilityDescription.applyCasing(normalized)));
+            result.add(new TextAbility(AbilityType.forTrigger(t), normalized));
         }
 
         return result;
-    }
-
-    /** Extract SpellDescription value from a raw SVar string like "DB$ Foo | SpellDescription$ Bar | …". */
-    static String parseSpellDesc(String svarContent) {
-        if (svarContent == null || svarContent.isEmpty()) return null;
-        for (String part : svarContent.split(" \\| ")) {
-            String trimmed = part.trim();
-            if (trimmed.startsWith("SpellDescription$")) {
-                return trimmed.substring("SpellDescription$".length()).trim();
-            }
-        }
-        return null;
     }
 }
