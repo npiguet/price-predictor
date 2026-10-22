@@ -145,10 +145,6 @@ final class RewriteTally {
         }
     }
 
-    synchronized long records() {
-        return records;
-    }
-
     /** The rendered summary, its own method so a test can read it. */
     synchronized String summary() {
         StringBuilder out = new StringBuilder();

@@ -2,6 +2,7 @@ package com.pricepredictor.connector.effects;
 
 import forge.game.GameEntity;
 import forge.game.ability.AbilityUtils;
+import forge.game.ability.ApiType;
 import forge.game.card.Card;
 import forge.game.combat.Combat;
 import forge.game.player.Player;
@@ -24,9 +25,9 @@ import java.util.function.Function;
  * its own {@code SpellAbility}: the parameters it was scripted with, and for
  * some, a result remembered on the host.
  *
- * <p>Keyed by API name rather than by {@code ApiType} so a Forge rename costs a
- * missing event rather than a compile error, and so this file needs no import
- * of an enum whose members move. The names are pinned by
+ * <p>Keyed by API name rather than by {@code ApiType} member so a Forge rename
+ * costs a missing event rather than a compile error, and so this file names no
+ * member of an enum whose members move. The names are pinned by
  * {@code test_every_effect_api_maps_to_an_event} on the Python side.
  *
  * <p>An API absent from this table emits nothing. That is the right default:
@@ -367,9 +368,11 @@ final class ApiEvents {
      * state kept in lockstep with this one, and that second state would
      * itself have to be pushed unconditionally to stay balanced, which is
      * this design again with extra steps.
+     *
+     * @param rules the rule for each API, {@link #ruleFor} outside a test
      */
-    static Object before(SpellAbility sa) {
-        Rule rule = ruleFor(sa);
+    static Object before(SpellAbility sa, Function<ApiType, Rule> rules) {
+        Rule rule = sa == null ? null : rules.apply(sa.getApi());
         if (rule == null || rule.memo() == null) {
             return null;
         }
@@ -383,9 +386,13 @@ final class ApiEvents {
         }
     }
 
-    /** The event this clause promises, or null when its API promises none. */
-    static EffectEvent after(SpellAbility sa, Object memo) {
-        Rule rule = ruleFor(sa);
+    /**
+     * The event this clause promises, or null when its API promises none.
+     *
+     * @param rules the rule for each API, {@link #ruleFor} outside a test
+     */
+    static EffectEvent after(SpellAbility sa, Object memo, Function<ApiType, Rule> rules) {
+        Rule rule = sa == null ? null : rules.apply(sa.getApi());
         if (rule == null) {
             return null;
         }
@@ -429,11 +436,6 @@ final class ApiEvents {
         }
     }
 
-    /** Package-private seam for this hook's own test; production code never calls it. */
-    static void resetEmitterFailureLatchForTest() {
-        EMITTER_FAILURE_REPORTED.set(false);
-    }
-
     /** Set the first time any rule's memo throws, so the line below prints once. */
     private static final AtomicBoolean MEMO_FAILURE_REPORTED = new AtomicBoolean(false);
 
@@ -467,71 +469,16 @@ final class ApiEvents {
         }
     }
 
-    /** Package-private seam for this hook's own test; production code never calls it. */
-    static void resetMemoFailureLatchForTest() {
-        MEMO_FAILURE_REPORTED.set(false);
-    }
-
     /**
-     * Package-private seam for {@code ApiEventsTest}'s {@code choice_made}
-     * completeness guard: every live {@code RULES} key whose declared event
-     * type is {@code choice_made}, read off the table itself rather than
-     * hand-copied, so a new one wired in later is picked up automatically
-     * instead of the guard quietly checking a stale list.
-     */
-    static java.util.Set<String> choiceMadeApiKeysForTest() {
-        java.util.Set<String> keys = new java.util.TreeSet<>();
-        for (Map.Entry<String, Rule> entry : RULES.entrySet()) {
-            if (EffectEvent.CHOICE_MADE.equals(entry.getValue().eventType())) {
-                keys.add(entry.getKey());
-            }
-        }
-        return keys;
-    }
-
-    /**
-     * Test-only override, consulted ahead of {@link #RULES} so this hook's
-     * own test can force one API's {@link Memo} to throw without a Forge
-     * state that genuinely fails.
+     * The rule for an API, or null when it promises no event.
      *
-     * <p>No real script is known to make a memo throw: {@code
-     * AbilityUtils.getDefinedPlayers}/{@code getDefinedCards} degrade to an
-     * empty list for every unrecognized {@code Defined$} token this branch's
-     * own review found rather than throwing, so there is no real card to
-     * reach for -- and reaching for one anyway would risk exactly the trap
-     * this branch's own test bar warns against, a test that hand-feeds the
-     * code a state the engine never produces. This mirrors {@code
-     * EffectRecordClauseHookTest}'s {@code ThrowingListener} on the sibling
-     * hook in the forge repo: a deliberately-throwing test double standing
-     * in for a fault the engine could produce, used to prove the container
-     * around it, not to prove anything about the fault itself.
-     *
-     * <p>Keyed by API name, not global, so a test can make one clause of a
-     * multi-clause chain fail while its sibling keeps using the real rule
-     * from {@link #RULES} unmodified -- the shape {@code
-     * nestedClausesDoNotCrossTheirMemos} already established for the
-     * non-throwing case. Empty in production; nothing but
-     * {@code ClauseContractTest} calls the setter below.
+     * <p>What {@link #before} and {@link #after} are handed outside a test.
+     * A caller hands them its own lookup instead to stand a rule that throws
+     * in for a real one: no real script is known to make a memo or an emitter
+     * throw, so that is the only way to prove the containment around them.
      */
-    private static final Map<String, Rule> RULE_OVERRIDES_FOR_TEST = new java.util.HashMap<>();
-
-    /** Package-private seam for this hook's own test; production code never calls it. */
-    static void setRuleOverrideForTest(String apiName, Rule rule) {
-        RULE_OVERRIDES_FOR_TEST.put(apiName, rule);
-    }
-
-    /** Package-private seam for this hook's own test; production code never calls it. */
-    static void clearRuleOverridesForTest() {
-        RULE_OVERRIDES_FOR_TEST.clear();
-    }
-
-    private static Rule ruleFor(SpellAbility sa) {
-        if (sa == null || sa.getApi() == null) {
-            return null;
-        }
-        String name = sa.getApi().name();
-        Rule override = RULE_OVERRIDES_FOR_TEST.get(name);
-        return override != null ? override : RULES.get(name);
+    static Rule ruleFor(ApiType api) {
+        return api == null ? null : RULES.get(api.name());
     }
 
     private static int amount(SpellAbility sa, Card host, String key, String fallback) {

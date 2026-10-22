@@ -2,7 +2,6 @@ package com.pricepredictor.connector.effects;
 
 import com.pricepredictor.connector.ForgeExtension;
 import forge.card.MagicColor;
-import forge.game.GameEntity;
 import forge.game.ability.AbilityFactory;
 import forge.game.ability.AbilityKey;
 import forge.game.ability.ApiType;
@@ -30,8 +29,6 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.lang.reflect.Field;
-import java.lang.reflect.InvocationHandler;
-import java.lang.reflect.Proxy;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -179,8 +176,8 @@ class RecordCharacterizationTest {
         Card angel = board.battlefield("Serra Angel", board.opponent);
 
         List<String> records = records(board, CAPS, (bracket, collectors) -> {
-            ReplacementListenerShape listener =
-                    proxy(ReplacementListenerShape.class, collectors.rewriteHandler());
+            HookShapes.Replacement listener =
+                    HookShapes.proxy(HookShapes.Replacement.class, collectors.rewriteHandler());
 
             ReplacementEffect exile = rest.getReplacementEffects().iterator().next();
             SpellAbility ran = exile.ensureAbility();
@@ -224,8 +221,8 @@ class RecordCharacterizationTest {
                 .getTriggers().iterator().next();
 
         List<String> records = records(board, CAPS, (bracket, collectors) -> {
-            TriggerListenerShape listener =
-                    proxy(TriggerListenerShape.class, collectors.triggerFireHandler());
+            HookShapes.TriggerFire listener =
+                    HookShapes.proxy(HookShapes.TriggerFire.class, collectors.triggerFireHandler());
             Trigger entered = warden.getTriggers().iterator().next();
 
             Map<AbilityKey, Object> bearsEntered = AbilityKey.newMap();
@@ -297,11 +294,11 @@ class RecordCharacterizationTest {
 
         List<String> records = records(board, CAPS, (bracket, collectors) -> {
             collectors.setRandomSeatPlayerId(SnapshotBuilder.playerId(opponent));
-            proxy(PlayabilityListenerShape.class, collectors.playabilityHandler())
+            HookShapes.proxy(HookShapes.Playability.class, collectors.playabilityHandler())
                     .onCandidate(bolt);
 
-            CombatLegalityListenerShape listener = proxy(
-                    CombatLegalityListenerShape.class, collectors.combatLegalityHandler());
+            HookShapes.CombatLegality listener = HookShapes.proxy(
+                    HookShapes.CombatLegality.class, collectors.combatLegalityHandler());
             listener.onAttackersDeclarable(
                     you, opponent, List.of(bears, elves), List.of(bears));
             listener.onBlockersDeclarable(
@@ -520,30 +517,4 @@ class RecordCharacterizationTest {
         board.game.fireEvent(new GameEventTurnPhase(board.you, PhaseType.MAIN2, ""));
     }
 
-    @SuppressWarnings("unchecked")
-    private static <T> T proxy(Class<T> shape, InvocationHandler handler) {
-        return (T) Proxy.newProxyInstance(shape.getClassLoader(), new Class<?>[]{shape}, handler);
-    }
-
-    /** The patched engine's listeners, argument for argument; the handlers read them by position. */
-    private interface ReplacementListenerShape {
-        void onReplacement(ReplacementEffect effect, Map<AbilityKey, Object> before,
-                Map<AbilityKey, Object> after, ReplacementResult result, SpellAbility replacedBy);
-    }
-
-    private interface TriggerListenerShape {
-        void onConditionEvaluated(Trigger trigger, Map<AbilityKey, Object> runParams, boolean fired);
-    }
-
-    private interface PlayabilityListenerShape {
-        void onCandidate(SpellAbility candidate);
-    }
-
-    private interface CombatLegalityListenerShape {
-        void onAttackersDeclarable(Player decider, GameEntity defender,
-                List<Card> candidates, List<Card> legal);
-
-        void onBlockersDeclarable(Player decider, Card attacker,
-                List<Card> candidates, List<Card> legal, int minBlockers);
-    }
 }

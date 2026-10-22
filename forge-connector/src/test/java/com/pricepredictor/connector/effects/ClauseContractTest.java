@@ -2,17 +2,15 @@ package com.pricepredictor.connector.effects;
 
 import com.pricepredictor.connector.ForgeExtension;
 import forge.game.ability.AbilityFactory;
+import forge.game.ability.ApiType;
 import forge.game.card.Card;
 import forge.game.player.Player;
 import forge.game.spellability.SpellAbility;
-import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.io.TempDir;
 
-import java.io.ByteArrayOutputStream;
-import java.io.PrintStream;
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
 import java.nio.file.Path;
@@ -23,7 +21,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * The clause hook's argument order, and the shape Forge declares it in.
+ * The clause hook's argument order.
  *
  * <p>The connector never links against {@code AbilityUtils.EffectRecordClauseListener}
  * — it is installed as a dynamic proxy over whatever the patched checkout
@@ -56,59 +54,16 @@ class ClauseContractTest {
      * one), so both are reset here.
      */
     @BeforeEach
-    void resetEmitterFailureLatch() {
-        ApiEvents.resetEmitterFailureLatchForTest();
-        ApiEvents.resetMemoFailureLatchForTest();
+    void resetFailureLatches() {
+        TestLatches.reset(ApiEvents.class, "EMITTER_FAILURE_REPORTED");
+        TestLatches.reset(ApiEvents.class, "MEMO_FAILURE_REPORTED");
     }
 
-    /**
-     * Forge's listener, copied argument for argument.
-     *
-     * <p>Copied rather than referenced on purpose: the connector compiles
-     * against stock Forge, where this interface does not exist at all, and a
-     * test that imported it would stop the whole module building on an
-     * unpatched checkout. {@link #theStandInIsForgesOwnDeclaration} is what
-     * keeps the copy true.
-     */
-    public interface ListenerShape {
-        void onClauseResolving(SpellAbility clause);
-
-        void onClauseResolved(SpellAbility clause, boolean threw);
-    }
-
-    private static Method methodNamed(Class<?> shape, String name) {
-        for (Method method : shape.getMethods()) {
-            if (method.getName().equals(name)) {
-                return method;
-            }
-        }
-        throw new AssertionError(shape + " declares no " + name);
+    private static Method clauseMethod(String name) {
+        return HookShapes.method(HookShapes.Clause.class, name);
     }
 
     // ── the argument order, pinned ──────────────────────────────────────
-
-    /**
-     * The stand-in above is what Forge declares, position by position, for
-     * both halves of the listener.
-     *
-     * <p>Reflective, so an unpatched checkout skips the assertion rather than
-     * failing it — the same degradation every hook lookup makes.
-     */
-    @Test
-    void theStandInIsForgesOwnDeclaration() {
-        PatchHooks.Lookup setter = PatchHooks.find(
-                PatchHooks.ABILITY_UTILS, "setEffectRecordClauseListener");
-        Assumptions.assumeTrue(setter.present(), "the checkout lacks the clause hook");
-        Class<?> declared = setter.method().getParameterTypes()[0];
-        for (String name : List.of("onClauseResolving", "onClauseResolved")) {
-            Class<?>[] theirs = methodNamed(declared, name).getParameterTypes();
-            Class<?>[] ours = methodNamed(ListenerShape.class, name).getParameterTypes();
-            assertEquals(ours.length, theirs.length, name + " arity");
-            for (int i = 0; i < theirs.length; i++) {
-                assertEquals(ours[i], theirs[i], name + " argument " + i);
-            }
-        }
-    }
 
     /**
      * Two real, distinguishable arguments in, and each one read off its own
@@ -155,7 +110,7 @@ class ClauseContractTest {
         List<String> records = ShardRun.records(tempDir, TestCards.game(), (bracket, collector) -> {
             InvocationHandler handler = collector.clauseHandler();
             bracket.beginBracket(sa);
-            handler.invoke(null, methodNamed(ListenerShape.class, "onClauseResolved"),
+            handler.invoke(null, clauseMethod("onClauseResolved"),
                     new Object[]{Boolean.FALSE, sa});
             bracket.endBracket(sa.getId(), false);
             bracket.flushHeldResolution();
@@ -203,13 +158,13 @@ class ClauseContractTest {
         List<String> records = ShardRun.records(tempDir, TestCards.game(), (bracket, collector) -> {
             InvocationHandler handler = collector.clauseHandler();
             bracket.beginBracket(outer);
-            handler.invoke(null, methodNamed(ListenerShape.class, "onClauseResolving"),
+            handler.invoke(null, clauseMethod("onClauseResolving"),
                     new Object[]{outer});
-            handler.invoke(null, methodNamed(ListenerShape.class, "onClauseResolving"),
+            handler.invoke(null, clauseMethod("onClauseResolving"),
                     new Object[]{inner});
-            handler.invoke(null, methodNamed(ListenerShape.class, "onClauseResolved"),
+            handler.invoke(null, clauseMethod("onClauseResolved"),
                     new Object[]{inner, false});
-            handler.invoke(null, methodNamed(ListenerShape.class, "onClauseResolved"),
+            handler.invoke(null, clauseMethod("onClauseResolved"),
                     new Object[]{outer, false});
             bracket.endBracket(outer.getId(), false);
             bracket.flushHeldResolution();
@@ -235,7 +190,7 @@ class ClauseContractTest {
      * a fork's clause's own host card already carries a different
      * {@code Game} than this collector's.
      *
-     * <p>Companion to {@code PatchedCollectorTest
+     * <p>Companion to {@code OutcomeHandlerTest
      * .anOutcomeFromAnotherGameDoesNotReachThisGamesBracket}, which covers
      * the same fix on the outcome hook's half.
      */
@@ -251,9 +206,9 @@ class ClauseContractTest {
         List<String> records = ShardRun.records(tempDir, TestCards.game(), (bracket, collector) -> {
             InvocationHandler handler = collector.clauseHandler();
             bracket.beginBracket(forkAbility);
-            handler.invoke(null, methodNamed(ListenerShape.class, "onClauseResolving"),
+            handler.invoke(null, clauseMethod("onClauseResolving"),
                     new Object[]{forkAbility});
-            handler.invoke(null, methodNamed(ListenerShape.class, "onClauseResolved"),
+            handler.invoke(null, clauseMethod("onClauseResolved"),
                     new Object[]{forkAbility, false});
             bracket.endBracket(forkAbility.getId(), false);
             bracket.flushHeldResolution();
@@ -271,9 +226,9 @@ class ClauseContractTest {
      * deque for the clauses around it.
      *
      * <p>Same shape as {@link #nestedClausesDoNotCrossTheirMemos}, except the
-     * inner clause's memo throws -- forced through {@link
-     * ApiEvents#setRuleOverrideForTest}, a seam built for exactly this (see
-     * its own javadoc): no real script is known to make
+     * inner clause's memo throws -- forced by handing the clause handler a
+     * rule lookup that answers a throwing rule for {@code SkipTurn} and the
+     * real one for everything else: no real script is known to make
      * {@code AbilityUtils.getDefinedPlayers}/{@code getDefinedCards} throw --
      * every unrecognized input degrades to an empty list instead -- so there
      * is no real card this could be pinned to without hand-feeding the code a
@@ -287,8 +242,8 @@ class ClauseContractTest {
      * and before {@link ApiEvents#before}'s own fix, it is exactly what
      * swallows the throw <em>before</em> {@code clauseMemos.push(...)} runs
      * -- the missing push this test exists to catch. Before the fix: the
-     * inner clause's {@code onClauseResolving} throws out of {@code
-     * ApiEvents.before(inner)} before its push runs, so the inner clause's
+     * inner clause's {@code onClauseResolving} throws out of {@link
+     * ApiEvents#before} before its push runs, so the inner clause's
      * own {@code onClauseResolved} pops the OUTER clause's memo instead of
      * its own missing one, and the outer's own pop then reads an empty deque
      * and gets {@code null} -- so this asserts the OUTER clause's event, the
@@ -310,46 +265,38 @@ class ClauseContractTest {
         inner.resetTargets();
         inner.getTargets().add(innerTarget);
 
-        ApiEvents.setRuleOverrideForTest("SkipTurn", new ApiEvents.Rule(
+        ApiEvents.Rule throwingMemo = new ApiEvents.Rule(
                 EffectEvent.TURN_SKIPPED,
                 (sa, host) -> {
                     throw new IllegalStateException("boom (memo)");
                 },
-                (sa, host, memo) -> new EffectEvent(EffectEvent.TURN_SKIPPED)));
+                (sa, host, memo) -> new EffectEvent(EffectEvent.TURN_SKIPPED));
 
-        ByteArrayOutputStream captured = new ByteArrayOutputStream();
-        PrintStream originalErr = System.err;
-        List<String> records;
-        try {
-            records = ShardRun.records(tempDir, TestCards.game(), (bracket, collector) -> {
-                InvocationHandler handler = collector.clauseHandler();
-                System.setErr(new PrintStream(captured, true));
-                try {
-                    bracket.beginBracket(outer);
-                    resolvingContained(handler, outer);
-                    resolvingContained(handler, inner);
-                    handler.invoke(null, methodNamed(ListenerShape.class, "onClauseResolved"),
-                            new Object[]{inner, false});
-                    handler.invoke(null, methodNamed(ListenerShape.class, "onClauseResolved"),
-                            new Object[]{outer, false});
-                    bracket.endBracket(outer.getId(), false);
-                    bracket.flushHeldResolution();
-                } finally {
-                    System.setErr(originalErr);
-                }
-            });
-        } finally {
-            ApiEvents.clearRuleOverridesForTest();
-        }
+        StringBuilder stderr = new StringBuilder();
+        List<String> records = ShardRun.records(tempDir, TestCards.game(), (bracket, collector) -> {
+            InvocationHandler handler = collector.clauseHandler(
+                    api -> api == ApiType.SkipTurn ? throwingMemo : ApiEvents.ruleFor(api));
+            stderr.append(StdStreams.captureStderr(() -> {
+                bracket.beginBracket(outer);
+                resolvingContained(handler, outer);
+                resolvingContained(handler, inner);
+                handler.invoke(null, clauseMethod("onClauseResolved"),
+                        new Object[]{inner, false});
+                handler.invoke(null, clauseMethod("onClauseResolved"),
+                        new Object[]{outer, false});
+                bracket.endBracket(outer.getId(), false);
+                bracket.flushHeldResolution();
+            }));
+        });
 
         String effectHalf = records.get(1);
         assertTrue(effectHalf.contains("\"type\":\"turn_added\",\"subjects\":[\""
                 + SnapshotBuilder.playerId(outerTarget) + "\"]"),
                 "the outer clause's own event must be unaffected by the inner "
                         + "clause's memo failure: " + effectHalf);
-        assertTrue(captured.toString().contains("boom (memo)"),
+        assertTrue(stderr.toString().contains("boom (memo)"),
                 "the memo's failure must be reported, not swallowed silently: "
-                        + captured);
+                        + stderr);
     }
 
     /**
@@ -363,7 +310,7 @@ class ClauseContractTest {
     private static void resolvingContained(InvocationHandler handler, SpellAbility clause)
             throws Throwable {
         try {
-            handler.invoke(null, methodNamed(ListenerShape.class, "onClauseResolving"),
+            handler.invoke(null, clauseMethod("onClauseResolving"),
                     new Object[]{clause});
         } catch (RuntimeException e) {
             // Mirrors AbilityUtils.notifyClauseResolving's own containment,
@@ -382,9 +329,9 @@ class ClauseContractTest {
         List<String> records = ShardRun.records(tempDir, TestCards.game(), (bracket, collector) -> {
             InvocationHandler handler = collector.clauseHandler();
             bracket.beginBracket(sa);
-            handler.invoke(null, methodNamed(ListenerShape.class, "onClauseResolving"),
+            handler.invoke(null, clauseMethod("onClauseResolving"),
                     new Object[]{sa});
-            handler.invoke(null, methodNamed(ListenerShape.class, "onClauseResolved"),
+            handler.invoke(null, clauseMethod("onClauseResolved"),
                     new Object[]{sa, threw});
             bracket.endBracket(sa.getId(), false);
             bracket.flushHeldResolution();
