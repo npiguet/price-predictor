@@ -28,8 +28,8 @@ import java.util.Map;
  * <p>"Letter-keyed" describes the tree; it does not generate it. Forge files
  * {@code +2 Mace} under {@code p/}, {@code 1996 World Champion} under
  * {@code n/}, {@code P. Joven and Chandler} under {@code j/}, and every
- * unreleased card under {@code upcoming/} whatever its initial — 86 files at
- * the time of writing. The converter walks the tree and keys each sidecar by
+ * unreleased card under {@code upcoming/} whatever its initial. The converter
+ * walks the tree and keys each sidecar by
  * the path it read the file from, so a collector that <em>derives</em> a path
  * instead disagrees with the sidecar for exactly those cards, and the mis-join
  * is silent: only a {@code keyword} key is checked against its sidecar, so a

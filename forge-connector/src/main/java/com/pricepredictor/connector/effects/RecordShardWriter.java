@@ -20,16 +20,15 @@ import java.util.zip.GZIPOutputStream;
  * match-outcome row, so concurrent appends would interleave mid-record; and a
  * shard per <b>JVM lifetime</b> rather than per worker index because the
  * supervisor recycles the longest-running worker every status interval and
- * restarts crashed ones — hundreds of JVMs over an overnight run. The two
+ * restarts crashed ones, so one worker index is many JVMs over a run. The two
  * counters below restart at zero with the JVM, so without a lifetime token a
- * restart reissues ids the previous JVM already used and dozens of unrelated
- * games merge under one game_id.
+ * restart reissues ids the previous JVM already used and unrelated games
+ * merge under one game_id.
  *
  * <p>Compressed because the corpus is the run's real cost on disk: a game
- * produces a few hundred records and several megabytes of JSON, so an overnight
- * run fills a disk long before it satisfies gate 2. These records compress
- * roughly tenfold — they are highly repetitive JSON, the same keys and the same
- * board described over and over.
+ * produces megabytes of JSON, so an uncompressed run fills a disk long before
+ * it satisfies gate 2. These records compress well — they are highly
+ * repetitive JSON, the same keys and the same board described over and over.
  *
  * <p>The file is a <b>concatenation of complete gzip members</b>, one per block
  * of {@link #BLOCK_RECORDS} records, which is what keeps it appendable and
@@ -41,7 +40,7 @@ import java.util.zip.GZIPOutputStream;
  *
  * <p>The cost is that a crash loses the block in flight rather than one line.
  * That is bounded by {@code BLOCK_RECORDS} and is worth it: these JVMs crash on
- * long games, but a few hundred records out of hundreds of thousands is noise.
+ * long games, but one block is a small share of what a run collects.
  *
  * <p>Owns the two counters the record ids are built from. Both carry the shard
  * token — worker index and lifetime — because workers count independently and
