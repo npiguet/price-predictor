@@ -4,6 +4,7 @@ import com.pricepredictor.connector.Ability;
 import com.pricepredictor.connector.AbilityDescription;
 import com.pricepredictor.connector.AbilityType;
 import forge.game.CardTraitBase;
+import forge.game.spellability.AbilitySub;
 import forge.game.spellability.SpellAbility;
 
 import java.util.ArrayList;
@@ -58,31 +59,8 @@ public record CharmAbility(String descriptionText, List<Ability> subAbilities) i
         var choices = sa.getAdditionalAbilityList("Choices");
         if (choices != null) {
             for (int modeIndex = 0; modeIndex < choices.size(); modeIndex++) {
-                var choice = choices.get(modeIndex);
-                String choiceDesc = SpellAbilityUtils.findParamInChain(choice, "SpellDescription");
-                if (choiceDesc != null) {
-                    choiceDesc = AbilityDescription.stripReminderText(choiceDesc);
-                }
-                // Tiered charms (e.g. Vincent's Limit Break): the ability name lives in
-                // PrecostDesc on the choice SA.  Prepend it so the option text matches oracle.
-                String precostDesc = choice.getParam("PrecostDesc");
-                if (precostDesc != null && !precostDesc.isEmpty()) {
-                    choiceDesc = choiceDesc != null && !choiceDesc.isEmpty()
-                            ? precostDesc + " \u2014 " + choiceDesc
-                            : precostDesc;
-                }
-                String modeCost = choice.getParam("ModeCost");
-                if (modeCost != null && !modeCost.isEmpty()) {
-                    String costToken = manaCostSymbols(modeCost);
-                    choiceDesc = choiceDesc != null && !choiceDesc.isEmpty()
-                            ? costToken + " \u2014 " + choiceDesc
-                            : costToken;
-                }
-                String pawprint = choice.getParam("Pawprint");
-                if (pawprint != null) {
-                    choiceDesc = "{P}".repeat(Integer.parseInt(pawprint))
-                            + " \u2014 " + choiceDesc;
-                }
+                String choiceDesc = optionText(choices.get(modeIndex));
+                if (choiceDesc == null) continue;
                 choiceSubs.add(new OptionAbility(
                         AbilityDescription.applyCasing(choiceDesc), modeIndex, sa, null));
             }
@@ -186,14 +164,47 @@ public record CharmAbility(String descriptionText, List<Ability> subAbilities) i
         var choices = sa.getAdditionalAbilityList("Choices");
         if (choices == null) return options;
         for (int modeIndex = 0; modeIndex < choices.size(); modeIndex++) {
-            var choice = choices.get(modeIndex);
-            String desc = SpellAbilityUtils.findParamInChain(choice, "SpellDescription");
-            if (desc != null) desc = AbilityDescription.stripReminderText(desc);
-            if (desc == null || desc.isEmpty()) continue;
+            String desc = optionText(choices.get(modeIndex));
+            if (desc == null) continue;
             options.add(new OptionAbility(
                     AbilityDescription.applyCasing(desc), modeIndex, sa, owner));
         }
         return options;
+    }
+
+    /**
+     * The text of one mode's {@code option} line, or null when the mode has
+     * none to print.
+     *
+     * <p>A mode's own description is prefixed by whatever the card prints ahead
+     * of it: a tiered charm's ability name ({@code PrecostDesc}, e.g. Vincent's
+     * Limit Break), its additional cost ({@code ModeCost}), and its pawprint
+     * cost. Both a modal spell and a triggered charm render modes through here,
+     * so the two cannot disagree on what a mode line says.
+     */
+    static String optionText(AbilitySub choice) {
+        String desc = SpellAbilityUtils.findParamInChain(choice, "SpellDescription");
+        if (desc != null) desc = AbilityDescription.stripReminderText(desc);
+        desc = prefixed(choice.getParam("PrecostDesc"), desc);
+        String modeCost = choice.getParam("ModeCost");
+        if (modeCost != null && !modeCost.isEmpty()) {
+            desc = prefixed(manaCostSymbols(modeCost), desc);
+        }
+        int pawprints = parseSimpleInt(choice.getParam("Pawprint"));
+        if (pawprints > 0) {
+            desc = prefixed("{P}".repeat(pawprints), desc);
+        }
+        return desc == null || desc.isEmpty() ? null : desc;
+    }
+
+    /**
+     * {@code prefix — desc}, or whichever of the two is present on its own.
+     * A null or empty prefix leaves {@code desc} as it was.
+     */
+    static String prefixed(String prefix, String desc) {
+        if (prefix == null || prefix.isEmpty()) return desc;
+        if (desc == null || desc.isEmpty()) return prefix;
+        return prefix + " \u2014 " + desc;
     }
 
     /** {@link #optionsFrom(SpellAbility, CardTraitBase)} with the owner unknown. */

@@ -732,13 +732,50 @@ class RulesParserTest {
     }
 
     @Test
-    void charmChoiceWithNoDescriptionAnywhere_throws() {
-        assertThrows(Exception.class, () -> convert(
+    void charmChoiceWithNoDescriptionAnywhereIsLeftOut() {
+        // A mode with nothing to print has no option line, rather than
+        // failing the whole card's conversion.
+        var options = allOptions(convert(
                 "Name:Bad Charm", "ManaCost:1 U", "Types:Sorcery",
                 "A:SP$ Charm | Choices$ DBNoop,DBDraw",
                 "SVar:DBNoop:DB$ Pump | Defined$ Self | NumAtt$ 0 | NumDef$ 0",
                 "SVar:DBDraw:DB$ Draw | NumCards$ 1 | SpellDescription$ Draw a card.",
-                "Oracle:"));
+                "Oracle:").faces().get(0));
+        assertEquals(1, options.size(), "Only the described mode prints: " + options);
+        assertEquals("draw a card.", options.get(0).descriptionText());
+    }
+
+    @Test
+    void pawprintModeWithNoDescriptionPrintsItsCostAlone() {
+        var options = allOptions(convert(
+                "Name:Paw Charm", "ManaCost:1 G", "Types:Sorcery",
+                "A:SP$ Charm | Pawprint$ 3 | Choices$ DBNoop,DBDraw",
+                "SVar:DBNoop:DB$ Pump | Defined$ Self | NumAtt$ 0 | NumDef$ 0 | Pawprint$ 2",
+                "SVar:DBDraw:DB$ Draw | NumCards$ 1 | Pawprint$ 1 | SpellDescription$ Draw a card.",
+                "Oracle:").faces().get(0));
+        assertEquals(2, options.size(), "Both modes print: " + options);
+        assertEquals("{P}{P}", options.get(0).descriptionText());
+        assertEquals("{P} \u2014 draw a card.", options.get(1).descriptionText());
+    }
+
+    @Test
+    void aTriggeredCharmPrefixesItsModesLikeAModalSpell() {
+        // A trigger's modes come through optionsFrom rather than
+        // fromSpellAbility, and print the same mode-cost prefix.
+        CardFace card = convert(
+                "Name:Costly Trigger", "ManaCost:2 W", "Types:Creature Human",
+                "PT:2/2",
+                "T:Mode$ ChangesZone | Origin$ Any | Destination$ Battlefield"
+                        + " | ValidCard$ Card.Self | Execute$ TrigCharm"
+                        + " | TriggerDescription$ When CARDNAME enters, ABILITY",
+                "SVar:TrigCharm:DB$ Charm | Choices$ DBDraw,DBGain",
+                "SVar:DBDraw:DB$ Draw | NumCards$ 1 | ModeCost$ 1 W | SpellDescription$ Draw a card.",
+                "SVar:DBGain:DB$ GainLife | LifeAmount$ 3 | SpellDescription$ Gain 3 life.",
+                "Oracle:").faces().get(0);
+        var options = allOptions(card);
+        assertEquals(2, options.size(), "Both modes print: " + card.abilities());
+        assertEquals("{1}{W} \u2014 draw a card.", options.get(0).descriptionText());
+        assertEquals("gain 3 life.", options.get(1).descriptionText());
     }
 
     @Test
