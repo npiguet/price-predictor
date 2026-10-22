@@ -5,6 +5,7 @@ import com.pricepredictor.connector.BatchConverter;
 import com.pricepredictor.connector.ForgeEnvironmentInitializer;
 import com.pricepredictor.connector.ForgeExtension;
 import com.pricepredictor.connector.MultiCard;
+import com.pricepredictor.connector.RenderedLine;
 import com.pricepredictor.connector.RulesParser;
 import forge.game.card.CardState;
 import forge.game.keyword.KeywordInterface;
@@ -45,8 +46,7 @@ class ProvenanceSidecarTest {
     Path tempDir;
 
     private record Converted(MultiCard card, List<String> lines,
-                             List<Ability> owners, List<Integer> faceOfLine,
-                             ProvenanceSidecar sidecar) {
+                             List<Ability> owners, ProvenanceSidecar sidecar) {
     }
 
     private Converted convert(String relativePath) {
@@ -71,13 +71,13 @@ class ProvenanceSidecarTest {
                                     String fileName) {
         RulesParser.ParsedCard parsed =
                 parser.parseScript(source, fileName, scriptFile);
-        List<Ability> owners = new ArrayList<>();
-        List<Integer> faceOfLine = new ArrayList<>();
-        List<String> lines = parsed.card().renderLines(owners, faceOfLine);
+        List<RenderedLine> rendered = parsed.card().renderLines();
         ProvenanceSidecar sidecar = ProvenanceSidecar.build(
-                parsed.card().faces().get(0).name(), scriptFile, parsed.card(),
-                lines, owners, faceOfLine, parsed.recorders());
-        return new Converted(parsed.card(), lines, owners, faceOfLine, sidecar);
+                parsed.card().faces().get(0).name(), scriptFile,
+                rendered, parsed.recorders());
+        return new Converted(parsed.card(),
+                rendered.stream().map(RenderedLine::text).toList(),
+                rendered.stream().map(RenderedLine::owner).toList(), sidecar);
     }
 
     // ── the text must not change ────────────────────────────────────────

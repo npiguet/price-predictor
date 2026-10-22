@@ -34,54 +34,31 @@ public record MultiCard(String layout, List<CardFace> faces) {
 
     /** Format the complete card as text output. */
     public String formatText() {
-        return String.join("\n", renderLines(null, null));
+        return RenderedLine.join(renderLines());
     }
 
     /**
-     * Render the card one output line at a time, optionally recording which
-     * ability and which face produced each line.
+     * Render the card one output line at a time, each line carrying the
+     * ability and the face that produced it.
      *
      * <p>{@code formatText} delegates here, so a sidecar's line indices always
      * index the file that was written rather than a parallel rendering.
-     *
-     * @param owners     collects the producing ability per line, null for
-     *                   header and separator lines; may be null to skip
-     * @param faceOfLine collects the face ordinal per line, -1 for lines
-     *                   outside any face; may be null to skip
      */
-    public List<String> renderLines(List<Ability> owners, List<Integer> faceOfLine) {
-        List<String> lines = new ArrayList<>();
+    public List<RenderedLine> renderLines() {
         if (layout == null) {
-            appendFace(lines, owners, faceOfLine, 0);
-            return lines;
+            return faces.get(0).renderLines(0);
         }
-
-        lines.add("layout: " + layout);
-        if (owners != null) owners.add(null);
-        if (faceOfLine != null) faceOfLine.add(-1);
-
+        List<RenderedLine> lines = new ArrayList<>();
+        lines.add(new RenderedLine("layout: " + layout, null, -1));
         for (int i = 0; i < faces.size(); i++) {
             if (i > 0) {
                 // The blank/ALTERNATE/blank separator between faces.
                 for (String separator : List.of("", "ALTERNATE", "")) {
-                    lines.add(separator);
-                    if (owners != null) owners.add(null);
-                    if (faceOfLine != null) faceOfLine.add(-1);
+                    lines.add(new RenderedLine(separator, null, -1));
                 }
             }
-            appendFace(lines, owners, faceOfLine, i);
+            lines.addAll(faces.get(i).renderLines(i));
         }
         return lines;
-    }
-
-    private void appendFace(List<String> lines, List<Ability> owners,
-                            List<Integer> faceOfLine, int faceIndex) {
-        int before = lines.size();
-        lines.addAll(faces.get(faceIndex).renderLines(owners));
-        if (faceOfLine != null) {
-            for (int i = before; i < lines.size(); i++) {
-                faceOfLine.add(faceIndex);
-            }
-        }
     }
 }

@@ -2,7 +2,6 @@ package com.pricepredictor.connector;
 
 import com.esotericsoftware.minlog.Log;
 import com.pricepredictor.connector.effects.MissingSVarReport;
-import com.pricepredictor.connector.effects.ProvenanceRecorder;
 import com.pricepredictor.connector.effects.ProvenanceSidecar;
 import com.pricepredictor.connector.effects.SourceTree;
 
@@ -96,10 +95,8 @@ public class BatchConverter {
                         converter.parseScript(lines, filename, scriptKeyPath);
                 MultiCard result = parsed.card();
 
-                List<Ability> owners = new ArrayList<>();
-                List<Integer> faceOfLine = new ArrayList<>();
-                List<String> renderedLines = result.renderLines(owners, faceOfLine);
-                String output = String.join("\n", renderedLines);
+                List<RenderedLine> renderedLines = result.renderLines();
+                String output = RenderedLine.join(renderedLines);
 
                 Path outputFile = outputPath.resolve(relativePath);
                 Files.createDirectories(outputFile.getParent());
@@ -108,8 +105,8 @@ public class BatchConverter {
                 }
 
                 ProvenanceSidecar sidecar = ProvenanceSidecar.build(
-                        result.faces().get(0).name(), scriptKeyPath, result,
-                        renderedLines, owners, faceOfLine, parsed.recorders());
+                        result.faces().get(0).name(), scriptKeyPath,
+                        renderedLines, parsed.recorders());
                 Files.writeString(sidecarPathFor(outputFile), sidecar.toJson());
                 succeeded++;
             } catch (Throwable t) {

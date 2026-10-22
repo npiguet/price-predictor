@@ -38,44 +38,41 @@ public record CardFace(
 
     /** Format as text output. */
     public String formatText() {
-        return String.join("\n", renderLines(null));
+        return RenderedLine.join(renderLines(0));
     }
 
     /**
-     * Render this face one output line at a time, optionally recording which
-     * ability produced each line.
+     * Render this face one output line at a time, each line carrying the
+     * ability that produced it — none for the header lines.
      *
      * <p>{@code formatText} delegates here, so the sidecar's line indices always
      * describe the file that was actually written.
      *
-     * @param owners collects one entry per line — null for the header lines,
-     *               which belong to no ability — or null to skip the recording
+     * @param face this face's ordinal within its card
      */
-    public List<String> renderLines(List<Ability> owners) {
-        List<String> lines = new ArrayList<>();
-        addHeader(lines, owners, "name: " + name);
-        if (manaCost != null) addHeader(lines, owners, "mana cost: " + manaCost);
-        addHeader(lines, owners, "types: " + types);
+    public List<RenderedLine> renderLines(int face) {
+        List<RenderedLine> lines = new ArrayList<>();
+        addHeader(lines, face, "name: " + name);
+        if (manaCost != null) addHeader(lines, face, "mana cost: " + manaCost);
+        addHeader(lines, face, "types: " + types);
         if (powerToughness != null) {
-            addHeader(lines, owners, "power toughness: " + powerToughness);
+            addHeader(lines, face, "power toughness: " + powerToughness);
         }
-        if (loyalty != null) addHeader(lines, owners, "loyalty: " + loyalty);
-        if (defense != null) addHeader(lines, owners, "defense: " + defense);
-        if (colors != null) addHeader(lines, owners, "colors: " + colors);
-        if (text != null) addHeader(lines, owners, "text: " + text);
+        if (loyalty != null) addHeader(lines, face, "loyalty: " + loyalty);
+        if (defense != null) addHeader(lines, face, "defense: " + defense);
+        if (colors != null) addHeader(lines, face, "colors: " + colors);
+        if (text != null) addHeader(lines, face, "text: " + text);
 
         ActionCounter counter = new ActionCounter(0);
         for (Ability ability : abilities) {
-            ability.appendBlock(counter, lines, owners);
+            ability.appendBlock(counter, face, lines);
         }
         return lines;
     }
 
-    private static void addHeader(List<String> lines, List<Ability> owners,
-                                  String rendered) {
+    private static void addHeader(List<RenderedLine> lines, int face, String rendered) {
         for (String line : rendered.split("\n", -1)) {
-            lines.add(line);
-            if (owners != null) owners.add(null);
+            lines.add(new RenderedLine(line, null, face));
         }
     }
 }
