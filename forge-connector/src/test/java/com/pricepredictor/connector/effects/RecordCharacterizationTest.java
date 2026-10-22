@@ -10,6 +10,9 @@ import forge.game.ability.SpellAbilityEffect;
 import forge.game.ability.effects.CharmEffect;
 import forge.game.card.Card;
 import forge.game.combat.Combat;
+import forge.game.event.GameEventCardDamaged;
+import forge.game.event.GameEventPlayerDamaged;
+import forge.game.event.GameEventPlayerLivesChanged;
 import forge.game.event.GameEventTurnPhase;
 import forge.game.mana.Mana;
 import forge.game.phase.PhaseType;
@@ -26,12 +29,14 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.io.TempDir;
 
+import java.lang.reflect.Field;
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Proxy;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.Callable;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -305,6 +310,98 @@ class RecordCharacterizationTest {
 
         Characterization.assertMatches(
                 "record-playability.jsonl", Characterization.recordLines(records));
+    }
+
+    /**
+     * A legality record answering an AI what-if query: {@code what_if} true,
+     * right after {@code random_seat}.
+     *
+     * <p>No collector writes one any more: the engine's declarations are the
+     * only legality source, and they are stamped false. The value stays part
+     * of the record schema, and gen-2 shards carry it, so its rendering is
+     * pinned through the record builder the legality path uses, over the
+     * board's own snapshot.
+     */
+    @Test
+    void aWhatIfLegalityRecord() {
+        CharacterizationBoard board = CharacterizationBoard.empty(PhaseType.MAIN1);
+        board.battlefield("Grizzly Bears", board.you);
+        board.battlefield("Serra Angel", board.opponent);
+
+        String record = new EffectRecord(
+                "run.0-l1.0", "run", RecordShardWriter.timestamp(), GAME_ID,
+                EffectRecord.KIND_PLAYABILITY, AttributionMode.detect())
+                .subkind(EffectRecord.SUBKIND_BLOCKERS)
+                .actor(SnapshotBuilder.playerId(board.opponent))
+                .whatIf(true)
+                .state(new SnapshotBuilder(board.game).toJson(null, List.of()))
+                .toJson();
+
+        Characterization.assertMatches(
+                "record-what-if.jsonl", Characterization.recordLines(List.of(record)));
+    }
+
+    // ── degraded ────────────────────────────────────────────────────────
+
+    /**
+     * A modal spell as a worker without the patch records it: {@code mode}
+     * degraded, one cost half, and one effect half through the root line
+     * holding every mode's bus events, since no clause hook splits them.
+     *
+     * <p>The collector reads its mode from {@link AttributionMode#detect},
+     * which probes the sub-ability hook once per JVM; the probe's answer is
+     * set to degraded while the collector is built, as on a stock checkout,
+     * and put back after. The events are published outside any resolution,
+     * where the sub-ability pointer is empty as it always is unpatched.
+     */
+    @Test
+    void aDegradedWorkersModalResolution() throws Exception {
+        CharacterizationBoard board = CharacterizationBoard.empty(PhaseType.MAIN1);
+        Player you = board.you;
+        Player opponent = board.opponent;
+        Card elves = board.battlefield("Llanowar Elves", opponent);
+        Card confluence = board.game.getAction().moveToStack(
+                board.card("Fiery Confluence", you), null);
+        SpellAbility charm = board.ability(confluence, ApiType.Charm);
+        charm.setActivatingPlayer(you);
+        List<AbilitySub> choices = charm.getAdditionalAbilityList("Choices");
+        List<AbilitySub> chosen = new ArrayList<>(List.of(choices.get(0), choices.get(1)));
+        charm.setChosenList(chosen);
+        CharmEffect.chainAbilities(charm, chosen);
+
+        writer = new RecordShardWriter(tempDir, "run", 0, "l1");
+        try {
+            BusBracketCollector bracket = degraded(
+                    () -> new BusBracketCollector(board.game, writer, GAME_ID));
+            board.game.subscribeToEvents(bracket);
+            bracket.beginBracket(charm);
+            board.game.fireEvent(new GameEventCardDamaged(
+                    elves.getView(), confluence.getView(), 1,
+                    GameEventCardDamaged.DamageType.Normal));
+            board.game.fireEvent(new GameEventPlayerDamaged(
+                    opponent.getView(), confluence.getView(), 2, false, false));
+            board.game.fireEvent(new GameEventPlayerLivesChanged(opponent, 20, 18));
+            bracket.endBracket(charm.getId(), false);
+            bracket.flushHeldResolution();
+        } finally {
+            writer.close();
+        }
+
+        Characterization.assertMatches("record-degraded.jsonl",
+                Characterization.recordLines(ShardRun.readShard(writer.path())));
+    }
+
+    /** Build {@code collector} while the JVM's attribution probe answers degraded. */
+    private static <T> T degraded(Callable<T> collector) throws Exception {
+        Field detected = AttributionMode.class.getDeclaredField("detected");
+        detected.setAccessible(true);
+        Object probed = detected.get(null);
+        detected.set(null, AttributionMode.DEGRADED);
+        try {
+            return collector.call();
+        } finally {
+            detected.set(null, probed);
+        }
     }
 
     // ── combat ──────────────────────────────────────────────────────────
