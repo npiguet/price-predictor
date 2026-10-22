@@ -361,7 +361,7 @@ public final class ForkCollector {
             // resolution: the record's state is the board the ability acted on, and
             // reading it after would hand the model the answer.
             SnapshotBuilder snapshots = new SnapshotBuilder(fork);
-            String state = snapshots.toJson(forked, referencedOf(forked));
+            String state = snapshots.toJson(forked, SnapshotBuilder.referencedOf(forked));
 
             ForcedResolution resolution = forceResolution(fork, forked, actor, snapshots);
             if (resolution == null || resolution.events().isEmpty()) {
@@ -550,7 +550,7 @@ public final class ForkCollector {
                     && forcedKey.equals(ProvenanceKey.resolve(start.charm()).key())) {
                 modes.add(new ModeBoundary(
                         start.option(), sink.events().size(),
-                        snapshots.toJson(ability, referencedOf(ability))));
+                        snapshots.toJson(ability, SnapshotBuilder.referencedOf(ability))));
             }
         });
         try {
@@ -865,13 +865,5 @@ public final class ForkCollector {
             return TURN_UNKNOWN;
         }
         return game.getPhaseHandler().getTurn();
-    }
-
-    private static List<Card> referencedOf(SpellAbility ability) {
-        List<Card> referenced = new ArrayList<>();
-        if (ability != null && ability.getHostCard() != null) {
-            referenced.add(ability.getHostCard());
-        }
-        return referenced;
     }
 }

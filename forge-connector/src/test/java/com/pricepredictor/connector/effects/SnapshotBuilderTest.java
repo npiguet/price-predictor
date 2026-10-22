@@ -1,11 +1,19 @@
 package com.pricepredictor.connector.effects;
 
+import com.pricepredictor.connector.ForgeExtension;
 import forge.game.Game;
+import forge.game.card.Card;
+import forge.game.phase.PhaseType;
+import forge.game.spellability.SpellAbility;
+import forge.game.zone.ZoneType;
+import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -21,7 +29,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * un-spliced state rather than to an error when it stops holding.
  *
  * <p>Neither needs a game: the tier vector is a constant of the builder, and
- * the state's block order is decided by string assembly.
+ * the state's block order is decided by string assembly. The referenced tier,
+ * pinned last, does: a target is a card in some zone.
  */
 class SnapshotBuilderTest {
 
@@ -151,5 +160,43 @@ class SnapshotBuilderTest {
                 SnapshotBuilder.spliceRefs("{\"refs\":{}}", "{}"));
         assertEquals(null, SnapshotBuilder.spliceRefs(null, "{}"));
         assertEquals("s", SnapshotBuilder.spliceRefs("s", null));
+    }
+
+    // ── the referenced tier ─────────────────────────────────────────────
+
+    /**
+     * What an ability's snapshot carries whatever zone it sits in: its host
+     * and the cards it targets.
+     *
+     * <p>One list for the bracket collector and the fork collector, which once
+     * kept one each, the fork's host-only: a forced ability's exiled target was
+     * in no tier at all, so its record named a target the state did not hold.
+     */
+    @Nested
+    @ExtendWith(ForgeExtension.class)
+    class ReferencedTier {
+
+        @Test
+        void anAbilitysTargetsAreReferencedWhereverTheySit() {
+            CharacterizationBoard board = CharacterizationBoard.empty(PhaseType.MAIN1);
+            Card host = board.hand("Pull from Eternity", board.you);
+            SpellAbility pull = board.spell(host, board.you);
+            Card exiled = board.game.getAction().moveTo(
+                    ZoneType.Exile, board.card("Grizzly Bears", board.opponent), null, null);
+            pull.getTargets().add(exiled);
+            pull.getTargets().add(board.opponent);
+
+            List<Card> referenced = SnapshotBuilder.referencedOf(pull);
+
+            assertEquals(List.of(host, exiled), referenced);
+            String state = new SnapshotBuilder(board.game).toJson(pull, referenced);
+            assertTrue(state.contains("{\"id\":\"" + SnapshotBuilder.entityId(exiled)
+                    + "\",\"name\":\"Grizzly Bears\",\"zone\":\"exile\""), state);
+        }
+
+        @Test
+        void noAbilityReferencesNothing() {
+            assertEquals(List.of(), SnapshotBuilder.referencedOf(null));
+        }
     }
 }
