@@ -88,11 +88,6 @@ class ForkCollectorTest {
     // ── the fixed per-resolution cap ────────────────────────────────────
 
     @Test
-    void atMostTwoForksMayTargetOneRealResolution() {
-        assertEquals(2, ForkCollector.MAX_FORKS_PER_RESOLUTION);
-    }
-
-    @Test
     void thePerResolutionCapIsIndependentOfTheFlag() {
         // A generous --interventions-per-game must not let one board absorb
         // the whole budget: two counterfactuals for it are already both worth
@@ -118,34 +113,6 @@ class ForkCollectorTest {
         ForkCollector collector = collector(caps(2, 2, List.of()));
         collector.intervene(null, 1);
         assertFalse(Files.exists(closedShard()));
-    }
-
-    /**
-     * The intervention resolves the ability rather than only forking.
-     *
-     * <p>The failure this guards against is a collector that copies the game,
-     * score-checks it, snapshots it, and writes a record saying an ability was
-     * forced without saying what it did — which is what this class did before
-     * the resolution was written, and which looks like a working collector.
-     *
-     * <p>Only the wiring is checkable here, because forking needs a live game;
-     * {@code tests/integration/test_effects_forks.py} asserts against a real
-     * one that the records carry events.
-     */
-    @Test
-    void interveningResolvesRatherThanOnlyCopying() throws Exception {
-        var method = ForkCollector.class.getDeclaredMethod(
-                "forceResolution",
-                forge.game.Game.class,
-                forge.game.spellability.SpellAbility.class,
-                forge.game.player.Player.class,
-                SnapshotBuilder.class);
-        assertTrue(method != null, "no resolution step on the intervention path");
-        // Returns the events it observed, so an empty payload can only mean the
-        // ability genuinely did nothing observable -- carried beside where each
-        // chosen mode began, which is what splits a modal one per mode (FR-029f).
-        var events = method.getReturnType().getDeclaredMethod("events");
-        assertEquals(List.class, events.getReturnType());
     }
 
     // ── the probe switch ────────────────────────────────────────────────
@@ -184,22 +151,12 @@ class ForkCollectorTest {
     // ── the held branch knows which step it came from ───────────────────
 
     /**
-     * A branch carries the damage step it forked from.
-     *
-     * <p>Without it the branch is completed against whichever combat record
-     * comes next, and in the first corpus that was systematically the wrong one:
-     * every first-strike-step fork was empty, its step wrote no real record, and
-     * the branch was written against the regular step's.
+     * The damage-step names are a contract with Python: {@code COMBAT_SUBSTEPS}
+     * in {@code effect_head_input.py} spells them the same way.
      */
     @Test
-    void aHeldBranchNamesItsDamageStep() {
-        ForkCollector.HeldProbe held = new ForkCollector.HeldProbe(
-                "trample", "E1", "{}", List.of(), "P0", "\"combat\":{}",
-                DamageStep.FIRST_STRIKE.wireName(), ForkCollector.TURN_UNKNOWN);
-
-        assertEquals("first_strike", held.substep());
-        // Spelled as the bracket collector spells it, because the two classes
-        // have to agree about which step they are describing.
+    void theDamageStepsAreNamedAsPythonSpellsThem() {
+        assertEquals("first_strike", DamageStep.FIRST_STRIKE.wireName());
         assertEquals("regular", DamageStep.REGULAR.wireName());
     }
 

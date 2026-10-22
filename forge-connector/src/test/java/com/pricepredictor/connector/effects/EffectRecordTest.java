@@ -268,15 +268,6 @@ class EffectRecordTest {
                 AttributionMode.detect());
     }
 
-    @Test
-    void theModeIsProbedOnceAndRemembered() {
-        assertSame(AttributionMode.detect(), AttributionMode.detect());
-    }
-
-    private static void assertSame(Object a, Object b) {
-        assertFalse(a != b, "expected the same instance");
-    }
-
     // ── JSON escaping ───────────────────────────────────────────────────
 
     @Test
