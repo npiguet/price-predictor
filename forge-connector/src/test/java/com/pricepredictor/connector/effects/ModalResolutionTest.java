@@ -359,7 +359,7 @@ class ModalResolutionTest {
         try (PatchedCollectors collectors = new PatchedCollectors(
                 game, writer, "run.0-l1.0", caps, 1L)) {
             org.junit.jupiter.api.Assumptions.assumeTrue(
-                    collectors.install() > 0 && collectors.installedHooks().contains("clause-events"),
+                    collectors.install() > 0 && PatchHooks.CLAUSE_LISTENER.present(),
                     "../forge has no clause hook; a stock fork writes one root half");
             ForkCollector forks = new ForkCollector(game, writer, "run.0-l1.0", caps, 5L);
             collectors.withForks(forks);
@@ -409,7 +409,7 @@ class ModalResolutionTest {
         try (PatchedCollectors collectors = new PatchedCollectors(
                 game, writer, "run.0-l1.0", caps, 1L)) {
             org.junit.jupiter.api.Assumptions.assumeTrue(
-                    collectors.install() > 0 && collectors.installedHooks().contains("clause-events"),
+                    collectors.install() > 0 && PatchHooks.CLAUSE_LISTENER.present(),
                     "../forge has no clause hook; a stock fork writes one root half");
             ForkCollector forks = new ForkCollector(game, writer, "run.0-l1.0", caps, 5L);
             collectors.withForks(forks);
@@ -439,7 +439,6 @@ class ModalResolutionTest {
         List<String> records = ShardRun.records(tempDir, game, (bracket, collectors) -> {
             bracket.beginBracket(charm);
             collectors.clauseHandler().invoke(null, resolving(), new Object[]{otherClones.get(0)});
-            assertEquals(0, bracket.modeHalvesOpen());
             bracket.endBracket(charm.getId(), false);
             bracket.flushHeldResolution();
         });

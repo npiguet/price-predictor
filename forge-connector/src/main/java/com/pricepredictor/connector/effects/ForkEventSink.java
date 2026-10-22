@@ -113,10 +113,6 @@ final class ForkEventSink extends BusEventReader {
         return Set.copyOf(stateBasedLeaves);
     }
 
-    boolean isEmpty() {
-        return size() == 0;
-    }
-
     private int size() {
         return closed.size() + open.events().size();
     }

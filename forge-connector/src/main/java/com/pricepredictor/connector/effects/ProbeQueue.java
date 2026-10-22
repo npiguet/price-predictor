@@ -26,10 +26,6 @@ final class ProbeQueue {
         return held.isEmpty();
     }
 
-    int size() {
-        return held.size();
-    }
-
     /** The damage step of the oldest branch waiting, which comes first. */
     String oldestSubstep() {
         return held.get(0).substep();

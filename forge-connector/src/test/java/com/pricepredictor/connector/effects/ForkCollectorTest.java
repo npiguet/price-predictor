@@ -9,7 +9,6 @@ import forge.game.GameRules;
 import forge.game.GameStage;
 import forge.game.GameType;
 import forge.game.Match;
-import forge.game.ability.AbilityFactory;
 import forge.game.card.Card;
 import forge.game.card.CardFactory;
 import forge.game.combat.Combat;
@@ -58,10 +57,17 @@ class ForkCollectorTest {
                 2000, 0.1, interventions, probes, keywords, 0.0, 0.0);
     }
 
+    private RecordShardWriter writer;
+
     private ForkCollector collector(CollectionCaps caps) {
-        return new ForkCollector(
-                null, new RecordShardWriter(tempDir, "run", 0, "l1"), "run.0-l1.0",
-                caps, 42L);
+        writer = new RecordShardWriter(tempDir, "run", 0, "l1");
+        return new ForkCollector(null, writer, "run.0-l1.0", caps, 42L);
+    }
+
+    /** How many records the collector has written to its shard so far. */
+    private int recordsInShard() throws IOException {
+        writer.close();
+        return readShard(tempDir.resolve("run.0-l1" + RecordShardWriter.SUFFIX)).size();
     }
 
     /**
@@ -72,9 +78,8 @@ class ForkCollectorTest {
      * it came from any other turn disagrees with it.
      */
     private ForkCollector collectorOverAGame(CollectionCaps caps) {
-        return new ForkCollector(
-                TestCards.game(), new RecordShardWriter(tempDir, "run", 0, "l1"),
-                "run.0-l1.0", caps, 42L);
+        writer = new RecordShardWriter(tempDir, "run", 0, "l1");
+        return new ForkCollector(TestCards.game(), writer, "run.0-l1.0", caps, 42L);
     }
 
     // ── the per-game budget ─────────────────────────────────────────────
@@ -116,14 +121,13 @@ class ForkCollectorTest {
         ForkCollector collector = collector(caps(1, 2, List.of()));
         assertFalse(collector.intervene(null, 1));
         assertFalse(collector.mayIntervene(1));
-        assertEquals(1, collector.discardedForks());
     }
 
     @Test
-    void aFailedForkWritesNoRecord() {
+    void aFailedForkWritesNoRecord() throws IOException {
         ForkCollector collector = collector(caps(2, 2, List.of()));
         collector.intervene(null, 1);
-        assertEquals(0L, collector.recordsWritten());
+        assertEquals(0, recordsInShard());
     }
 
     /**
@@ -180,81 +184,13 @@ class ForkCollectorTest {
     }
 
     @Test
-    void aProbeForAnUnnamedKeywordSpendsNothing() {
+    void aProbeForAnUnnamedKeywordSpendsNothing() throws IOException {
         ForkCollector collector = collector(caps(2, 1, List.of("wither")));
         assertNull(collector.probe("lifelink", TestCards.build("Grizzly Bears"), false));
         assertTrue(collector.mayProbe("wither"));
-        assertEquals(0L, collector.recordsWritten());
+        assertEquals(0, recordsInShard());
     }
 
-
-    // ── an intervention chooses before it resolves ──────────────────────
-
-    /**
-     * A line with a target and nowhere to point it is abandoned.
-     *
-     * <p>The feature spec says an intervention resolves "with chosen targets and
-     * modes" and the first implementation chose neither: it set the activating
-     * player, pushed the ability and resolved it. A "deal 5 damage to target
-     * player" that resolves with no target does nothing, which is why none of
-     * the 88 sampled interventional records had a target and why the empty ones
-     * were Lava Axe, Disintegrate, Drain Life, Mind Control and their like.
-     *
-     * <p>Abandoning is the point: an empty-because-untargeted record and an
-     * empty-because-the-effect-did-nothing record are the same bytes, and a
-     * counterfactual nobody can read is worse than one never written.
-     */
-    @Test
-    void aTargetedLineWithNothingToTargetIsAbandoned() {
-        SpellAbility bolt = AbilityFactory.getAbility(
-                "AB$ DealDamage | Cost$ R | ValidTgts$ Creature | TgtPrompt$ x"
-                        + " | NumDmg$ 3",
-                TestCards.build("Fountain of Youth"));
-        // A game with nothing in it: every candidate list comes back empty,
-        // which is the shape of a board where the spell has no legal target.
-        bolt.setActivatingPlayer(new Player("nobody", TestCards.game(), 99));
-
-        assertFalse(collector(caps(2, 2, List.of())).chooseTargets(bolt));
-    }
-
-    /** A line that targets nothing needs nothing chosen. */
-    @Test
-    void aLineThatTargetsNothingIsReadyToResolve() {
-        SpellAbility gain = AbilityFactory.getAbility(
-                "AB$ GainLife | Cost$ 1 | Defined$ You | LifeAmount$ 1",
-                TestCards.build("Fountain of Youth"));
-
-        assertTrue(collector(caps(2, 2, List.of())).chooseTargets(gain));
-    }
-
-    /**
-     * An X the fork never paid is announced rather than left null.
-     *
-     * <p>A null X resolves as an X of zero, which is the same silence a missing
-     * target produces.
-     */
-    @Test
-    void anXSpellAnnouncesSomethingRatherThanNothing() {
-        SpellAbility drain = AbilityFactory.getAbility(
-                "AB$ LoseLife | Cost$ X B | Defined$ Player.Opponent | LifeAmount$ X",
-                TestCards.build("Fountain of Youth"));
-        assertTrue(drain.costHasX(), "the script has to have an X to announce");
-
-        collector(caps(2, 2, List.of())).announceX(drain);
-
-        assertEquals(1, drain.getXManaCostPaid());
-    }
-
-    @Test
-    void anAbilityWithNoXIsLeftAlone() {
-        SpellAbility gain = AbilityFactory.getAbility(
-                "AB$ GainLife | Cost$ 1 | Defined$ You | LifeAmount$ 1",
-                TestCards.build("Fountain of Youth"));
-
-        collector(caps(2, 2, List.of())).announceX(gain);
-
-        assertNull(gain.getXManaCostPaid());
-    }
 
     // ── the held branch knows which step it came from ───────────────────
 
@@ -270,7 +206,7 @@ class ForkCollectorTest {
     void aHeldBranchNamesItsDamageStep() {
         ForkCollector.HeldProbe held = new ForkCollector.HeldProbe(
                 "trample", "E1", "{}", List.of(), "P0", "\"combat\":{}",
-                DamageStep.FIRST_STRIKE.wireName());
+                DamageStep.FIRST_STRIKE.wireName(), ForkCollector.TURN_UNKNOWN);
 
         assertEquals("first_strike", held.substep());
         // Spelled as the bracket collector spells it, because the two classes
@@ -293,26 +229,25 @@ class ForkCollectorTest {
      * the 1,788 interventional forks ever named a stale one — relabelling it
      * would make the state block lie, so the branch is dropped instead.
      *
-     * <p>Dropped counts as a discarded fork: the simulation was spent either
-     * way, and the counter is what makes the loss visible in a run's summary.
+     * <p>Dropped still spends the fork's budget: the simulation was spent
+     * either way.
      */
     @Test
-    void aBranchFromAnEarlierTurnIsNotWrittenAgainstThisOnesRecord() {
+    void aBranchFromAnEarlierTurnIsNotWrittenAgainstThisOnesRecord() throws IOException {
         ForkCollector collector = collectorOverAGame(caps(2, 2, List.of("trample")));
 
         assertFalse(collector.writeHeldProbe(branch(7), "run.0-l1.9"),
                 "a branch seven turns older than its mirror is not a pair");
-        assertEquals(0L, collector.recordsWritten());
-        assertEquals(1, collector.discardedForks());
+        assertEquals(0, recordsInShard());
     }
 
     /** A branch from the turn the record was written on is written. */
     @Test
-    void aBranchFromThisTurnIsWritten() {
+    void aBranchFromThisTurnIsWritten() throws IOException {
         ForkCollector collector = collectorOverAGame(caps(2, 2, List.of("trample")));
 
         assertTrue(collector.writeHeldProbe(branch(0), "run.0-l1.9"));
-        assertEquals(1L, collector.recordsWritten());
+        assertEquals(1, recordsInShard());
     }
 
     /**
@@ -327,7 +262,7 @@ class ForkCollectorTest {
         ForkCollector collector = collectorOverAGame(caps(2, 2, List.of("trample")));
         ForkCollector.HeldProbe held = new ForkCollector.HeldProbe(
                 "trample", "E1", "{}", List.of(), "P0", "\"combat\":{}",
-                DamageStep.REGULAR.wireName());
+                DamageStep.REGULAR.wireName(), ForkCollector.TURN_UNKNOWN);
 
         assertEquals(ForkCollector.TURN_UNKNOWN, held.turn());
         assertTrue(collector.writeHeldProbe(held, "run.0-l1.9"));

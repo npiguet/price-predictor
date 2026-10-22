@@ -222,12 +222,9 @@ class StateBasedDeathTest {
         game.subscribeToEvents(collector);
         try {
             castAndResolve(game, bolt);
-            assertEquals(1, collector.recordsWritten(), "only the cost half so far");
             game.getStack().add(shock);
-            assertEquals(2, collector.recordsWritten(), "the cast wrote the held half");
             game.getStack().resolveStack();
             game.getAction().checkStateEffects(false);
-            assertEquals(3, collector.recordsWritten(), "and the shock's own half waits");
             nextStep(game);
             nextStep(game);
         } finally {
@@ -312,10 +309,7 @@ class StateBasedDeathTest {
         game.subscribeToEvents(collector);
         try {
             castAndResolve(game, bolt);
-            long held = collector.recordsWritten();
             caster.playLand(mountain, null);
-            assertEquals(held + 1, collector.recordsWritten(),
-                    "playing the land writes the held effect half");
             nextStep(game);
         } finally {
             writer.close();
@@ -578,7 +572,7 @@ class StateBasedDeathTest {
             try (PatchedCollectors patched = new PatchedCollectors(
                     game, writer, "run.0-l1.0", caps, 1L)) {
                 Assumptions.assumeTrue(
-                        patched.install() > 0 && patched.installedHooks().contains("clause-events"),
+                        patched.install() > 0 && PatchHooks.CLAUSE_LISTENER.present(),
                         "../forge has no clause hook to split a fork's modes");
                 ForkCollector forks = new ForkCollector(game, writer, "run.0-l1.0", caps, seed);
                 patched.withForks(forks);

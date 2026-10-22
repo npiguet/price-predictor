@@ -10,7 +10,6 @@ import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.time.Instant;
 import java.util.concurrent.ThreadLocalRandom;
-import java.util.regex.Pattern;
 import java.util.zip.GZIPOutputStream;
 
 /**
@@ -60,9 +59,6 @@ public final class RecordShardWriter implements AutoCloseable {
     static final int BLOCK_RECORDS = 256;
 
     public static final String SUFFIX = ".jsonl.gz";
-
-    /** A lifetime token's alphabet: no dot and no hyphen, so an id still splits cleanly. */
-    private static final Pattern LIFETIME = Pattern.compile("[0-9a-z]{1,16}");
 
     private final String runId;
     /** {@code {worker}-{lifetime}}: this shard's identity and the middle segment of every id it issues. */
@@ -118,11 +114,6 @@ public final class RecordShardWriter implements AutoCloseable {
                 + Integer.toString(
                         ThreadLocalRandom.current()
                                 .nextInt(36 * 36 * 36, 36 * 36 * 36 * 36), 36);
-    }
-
-    /** Whether {@code token} is safe to embed in a shard name and an id. */
-    static boolean isValidLifetime(String token) {
-        return token != null && LIFETIME.matcher(token).matches();
     }
 
     /** ISO 8601 UTC, the timestamp format every corpus in this repo uses. */
