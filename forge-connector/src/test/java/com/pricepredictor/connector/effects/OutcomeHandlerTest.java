@@ -42,18 +42,6 @@ class OutcomeHandlerTest {
 
     // ── the argument order ──────────────────────────────────────────────
 
-    /**
-     * Forge's outcome listener, copied argument for argument rather than
-     * imported: the connector compiles against stock Forge, where
-     * {@code EffectRecordOutcomes.EffectRecordOutcomeListener} does not
-     * exist, and a test that imported it would stop this module building on
-     * an unpatched checkout. See {@code ClauseContractTest.ListenerShape} for
-     * the same pattern on the clause hook.
-     */
-    public interface OutcomeListenerShape {
-        void onOutcome(SpellAbility sa, String eventType, Map<String, Object> params);
-    }
-
     @BeforeEach
     void resetUnknownOutcomeTypeLatch() throws ReflectiveOperationException {
         // Static, and shared with the production path: without a reset here,
@@ -64,34 +52,8 @@ class OutcomeHandlerTest {
         ((java.util.concurrent.atomic.AtomicBoolean) latch.get(null)).set(false);
     }
 
-    private static Method methodNamed(Class<?> shape, String name) {
-        for (Method method : shape.getMethods()) {
-            if (method.getName().equals(name)) {
-                return method;
-            }
-        }
-        throw new AssertionError(shape + " declares no " + name);
-    }
-
-    /**
-     * The stand-in above is what Forge declares, position by position.
-     *
-     * <p>Reflective, so an unpatched checkout skips the assertion rather than
-     * failing it -- the same degradation every hook lookup makes.
-     */
-    @Test
-    void theOutcomeStandInIsForgesOwnDeclaration() {
-        PatchHooks.Lookup setter = PatchHooks.find(
-                PatchHooks.EFFECT_RECORD_OUTCOMES, "setEffectRecordOutcomeListener");
-        Assumptions.assumeTrue(setter.present(), "the checkout lacks the outcome hook");
-        Class<?> declared = setter.method().getParameterTypes()[0];
-        Class<?>[] theirs = methodNamed(declared, "onOutcome").getParameterTypes();
-        Class<?>[] ours = methodNamed(OutcomeListenerShape.class, "onOutcome").getParameterTypes();
-        assertEquals(ours.length, theirs.length, "onOutcome arity");
-        for (int i = 0; i < theirs.length; i++) {
-            assertEquals(ours[i], theirs[i], "onOutcome argument " + i);
-        }
-    }
+    private static final Method ON_OUTCOME =
+            HookShapes.method(HookShapes.Outcome.class, "onOutcome");
 
     /**
      * The hook binds by argument position, and no compiler checks that. A
@@ -99,8 +61,8 @@ class OutcomeHandlerTest {
      * rather than in a corpus -- which is why this uses a real, distinct
      * {@link SpellAbility} rather than null for position 0: a null would not
      * notice a swap between the ability and either of the other two
-     * arguments, only {@link #theOutcomeStandInIsForgesOwnDeclaration} would,
-     * and that test is reflective and skips on an unpatched checkout.
+     * arguments, only {@code PatchHooksTest.eachStandInIsForgesOwnDeclaration}
+     * would, and that test is reflective and skips on an unpatched checkout.
      */
     @Test
     void anOutcomeReportBecomesAnEventOfThatType() throws Throwable {
@@ -108,7 +70,7 @@ class OutcomeHandlerTest {
         PatchedCollectors collectors = recording(tempDir);
 
         collectors.outcomeHandler().invoke(null,
-                methodNamed(OutcomeListenerShape.class, "onOutcome"),
+                ON_OUTCOME,
                 new Object[]{sa, "vote_taken", Map.of("tally", Map.of("beast", 2))});
 
         EffectEvent written = collectors.lastClauseEvent();
@@ -127,7 +89,7 @@ class OutcomeHandlerTest {
         PatchedCollectors collectors = recording(tempDir);
 
         collectors.outcomeHandler().invoke(null,
-                methodNamed(OutcomeListenerShape.class, "onOutcome"),
+                ON_OUTCOME,
                 new Object[]{sa, "coin_flipped", Map.of("won", true)});
 
         EffectEvent written = collectors.lastClauseEvent();
@@ -149,7 +111,7 @@ class OutcomeHandlerTest {
         PatchedCollectors collectors = recording(tempDir);
 
         collectors.outcomeHandler().invoke(null,
-                methodNamed(OutcomeListenerShape.class, "onOutcome"),
+                ON_OUTCOME,
                 new Object[]{sa, "token_created", Map.of("sample", bat, "count", 2)});
 
         EffectEvent written = collectors.lastClauseEvent();
@@ -179,7 +141,7 @@ class OutcomeHandlerTest {
         Card creature = TestCards.build("Grizzly Bears");
         Player player = new Player("recipient", TestCards.game(), 93201);
         PatchedCollectors collectors = recording(tempDir);
-        Method onOutcome = methodNamed(OutcomeListenerShape.class, "onOutcome");
+        Method onOutcome = ON_OUTCOME;
 
         collectors.outcomeHandler().invoke(null, onOutcome,
                 new Object[]{null, "damage_prevented",
@@ -209,7 +171,7 @@ class OutcomeHandlerTest {
         Player first = new Player("first", TestCards.game(), 93202);
         Player second = new Player("second", TestCards.game(), 93203);
         PatchedCollectors collectors = recording(tempDir);
-        Method onOutcome = methodNamed(OutcomeListenerShape.class, "onOutcome");
+        Method onOutcome = ON_OUTCOME;
 
         collectors.outcomeHandler().invoke(null, onOutcome,
                 new Object[]{null, "card_revealed",
@@ -251,7 +213,7 @@ class OutcomeHandlerTest {
         PatchedCollectors collectors = recording(tempDir);
 
         collectors.outcomeHandler().invoke(null,
-                methodNamed(OutcomeListenerShape.class, "onOutcome"),
+                ON_OUTCOME,
                 new Object[]{sa, "restriction_change",
                         Map.of("restriction", "goad", "value", true,
                                 "subjects", List.of(goaded1, goaded2))});
@@ -281,7 +243,7 @@ class OutcomeHandlerTest {
     @Test
     void anUnrecognizedOutcomeTypeWritesNoEventAndIsReportedOnce() throws Throwable {
         PatchedCollectors collectors = recording(tempDir);
-        Method onOutcome = methodNamed(OutcomeListenerShape.class, "onOutcome");
+        Method onOutcome = ON_OUTCOME;
 
         ByteArrayOutputStream captured = new ByteArrayOutputStream();
         PrintStream original = System.err;
@@ -319,7 +281,7 @@ class OutcomeHandlerTest {
         PatchedCollectors collectors = recording(tempDir);
 
         collectors.outcomeHandler().invoke(null,
-                methodNamed(OutcomeListenerShape.class, "onOutcome"),
+                ON_OUTCOME,
                 new Object[]{null, "damage_prevented",
                         Map.of("amount", 3, "source", source)});
 
@@ -366,7 +328,7 @@ class OutcomeHandlerTest {
             bracket.beginBracket(liveAbility);
 
             collectors.outcomeHandler().invoke(null,
-                    methodNamed(OutcomeListenerShape.class, "onOutcome"),
+                    ON_OUTCOME,
                     new Object[]{forkAbility, "vote_taken", Map.of("tally", Map.of("beast", 2))});
 
             assertNotNull(collectors.lastClauseEvent(),
@@ -423,7 +385,7 @@ class OutcomeHandlerTest {
         Game game = TestBoard.twoPlayerGame(PhaseType.COMBAT_DAMAGE);
         List<String> records = ShardRun.records(tempDir, game, (bracket, collectors) -> {
             collectors.outcomeHandler().invoke(null,
-                    methodNamed(OutcomeListenerShape.class, "onOutcome"),
+                    ON_OUTCOME,
                     new Object[]{null, "damage_prevented", Map.of("amount", 3)});
 
             // Flushes the combat bracket the null-ability report above opened,
@@ -491,7 +453,7 @@ class OutcomeHandlerTest {
                         if ("onClauseResolving".equals(method.getName())) {
                             try {
                                 collectors.outcomeHandler().invoke(null,
-                                        methodNamed(OutcomeListenerShape.class, "onOutcome"),
+                                        ON_OUTCOME,
                                         new Object[]{null, "damage_prevented", Map.of("amount", 3)});
                             } catch (Throwable t) {
                                 throw new RuntimeException(t);
@@ -542,7 +504,7 @@ class OutcomeHandlerTest {
                         if ("onClauseResolving".equals(method.getName())) {
                             try {
                                 collectors.outcomeHandler().invoke(null,
-                                        methodNamed(OutcomeListenerShape.class, "onOutcome"),
+                                        ON_OUTCOME,
                                         new Object[]{null, "damage_prevented", Map.of("amount", 3)});
                             } catch (Throwable t) {
                                 throw new RuntimeException(t);
@@ -590,7 +552,7 @@ class OutcomeHandlerTest {
             flag.set(true);
             try {
                 collectors.outcomeHandler().invoke(null,
-                        methodNamed(OutcomeListenerShape.class, "onOutcome"),
+                        ON_OUTCOME,
                         new Object[]{null, "damage_prevented", Map.of("amount", 3)});
             } finally {
                 flag.set(false);

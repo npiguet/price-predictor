@@ -45,19 +45,8 @@ class ModalResolutionTest {
     private static final String STOCK_FORK =
             "to split a fork's modes; a stock fork writes one root half";
 
-    /** Forge's clause listener, argument for argument; see {@code ClauseContractTest}. */
-    interface ClauseListenerShape {
-        void onClauseResolving(SpellAbility clause);
-
-        void onClauseResolved(SpellAbility clause, boolean threw);
-    }
-
     private static Method resolving() {
-        try {
-            return ClauseListenerShape.class.getMethod("onClauseResolving", SpellAbility.class);
-        } catch (NoSuchMethodException e) {
-            throw new AssertionError(e);
-        }
+        return HookShapes.method(HookShapes.Clause.class, "onClauseResolving");
     }
 
     /**

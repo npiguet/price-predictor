@@ -18,7 +18,6 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.IOException;
-import java.lang.reflect.Proxy;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
@@ -890,10 +889,8 @@ class BusBracketCollectorTest {
     void theConfirmHookIsReadForTheAnswerItCarries() throws IOException {
         BusBracketCollector collector = collector();
         SpellAbility bolt = damageAbility();
-        ConfirmListener listener = (ConfirmListener) Proxy.newProxyInstance(
-                ConfirmListener.class.getClassLoader(),
-                new Class<?>[]{ConfirmListener.class},
-                collector.confirmHandler());
+        HookShapes.Confirm listener = HookShapes.proxy(
+                HookShapes.Confirm.class, collector.confirmHandler());
 
         collector.beginBracket(bolt);
         listener.onConfirm(bolt, true);
@@ -909,10 +906,8 @@ class BusBracketCollectorTest {
     void aRefusalDeliveredThroughTheHookReachesTheRecord() throws IOException {
         BusBracketCollector collector = collector();
         SpellAbility bolt = damageAbility();
-        ConfirmListener listener = (ConfirmListener) Proxy.newProxyInstance(
-                ConfirmListener.class.getClassLoader(),
-                new Class<?>[]{ConfirmListener.class},
-                collector.confirmHandler());
+        HookShapes.Confirm listener = HookShapes.proxy(
+                HookShapes.Confirm.class, collector.confirmHandler());
 
         collector.beginBracket(bolt);
         listener.onConfirm(bolt, false);
@@ -951,10 +946,8 @@ class BusBracketCollectorTest {
 
         BusBracketCollector collector = collector();
         SpellAbility bolt = damageAbility();
-        ConfirmListener listener = (ConfirmListener) Proxy.newProxyInstance(
-                ConfirmListener.class.getClassLoader(),
-                new Class<?>[]{ConfirmListener.class},
-                collector.confirmHandler());
+        HookShapes.Confirm listener = HookShapes.proxy(
+                HookShapes.Confirm.class, collector.confirmHandler());
 
         collector.beginBracket(bolt);
         // A fork's own confirmation, declined -- must not touch this bracket.
@@ -965,16 +958,5 @@ class BusBracketCollectorTest {
         assertTrue(written().get(0).contains("\"outcome\":\"resolved\""),
                 "a fork's own declined confirmation must not mark the live "
                         + "bracket's ability declined: " + written());
-    }
-
-    /**
-     * The interface the patch declares, restated here for the proxy.
-     *
-     * <p>Not imported: this module compiles against stock Forge, where it does
-     * not exist. That is the same reason the collector installs the real one
-     * reflectively.
-     */
-    private interface ConfirmListener {
-        void onConfirm(SpellAbility sa, boolean confirmed);
     }
 }

@@ -10,7 +10,6 @@ import forge.card.RemoveType;
 import forge.card.StateChangedType;
 import forge.card.WordChangedType;
 import forge.game.Game;
-import forge.game.GameEntity;
 import forge.game.ability.AbilityFactory;
 import forge.game.card.Card;
 import forge.game.combat.Combat;
@@ -18,7 +17,6 @@ import forge.game.phase.PhaseType;
 import forge.game.player.Player;
 import forge.game.spellability.SpellAbility;
 import forge.game.trigger.Trigger;
-import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.io.TempDir;
@@ -37,7 +35,6 @@ import java.util.Set;
 import static com.pricepredictor.connector.effects.TestCollectors.caps;
 import static com.pricepredictor.connector.effects.TestCollectors.recording;
 import static com.pricepredictor.connector.effects.TestCollectors.unwired;
-import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -434,35 +431,16 @@ class PatchedCollectorTest {
 
     // ── final-fix-3.md item 2: the other four handlers ───────────────────
 
-    private interface TriggerFireListenerShape {
-        void onConditionEvaluated(Trigger trigger, Map<Object, Object> runParams, boolean fired);
-    }
-
-    private interface PlayabilityListenerShape {
-        void onCandidate(SpellAbility candidate);
-    }
-
-    /** Forge's {@code CombatLegalityObserver.EffectRecordCombatListener}, position by position. */
-    private interface CombatLegalityListenerShape {
-        void onAttackersDeclarable(Player decider, GameEntity defender,
-                List<Card> candidates, List<Card> legal);
-
-        void onBlockersDeclarable(Player decider, Card attacker,
-                List<Card> candidates, List<Card> legal, int minBlockers);
-    }
-
-    private interface ManaListenerShape {
-        void onManaProduced(SpellAbility ability, Player player, String produced);
-    }
-
-    private static Method methodNamed(Class<?> shape, String name) {
-        for (Method method : shape.getMethods()) {
-            if (method.getName().equals(name)) {
-                return method;
-            }
-        }
-        throw new AssertionError(shape + " declares no " + name);
-    }
+    private static final Method ON_CONDITION_EVALUATED =
+            HookShapes.method(HookShapes.TriggerFire.class, "onConditionEvaluated");
+    private static final Method ON_CANDIDATE =
+            HookShapes.method(HookShapes.Playability.class, "onCandidate");
+    private static final Method ON_ATTACKERS_DECLARABLE =
+            HookShapes.method(HookShapes.CombatLegality.class, "onAttackersDeclarable");
+    private static final Method ON_BLOCKERS_DECLARABLE =
+            HookShapes.method(HookShapes.CombatLegality.class, "onBlockersDeclarable");
+    private static final Method ON_MANA_PRODUCED =
+            HookShapes.method(HookShapes.Mana.class, "onManaProduced");
 
     /**
      * final-fix-3.md item 2: {@code triggerFireHandler} had no game check at
@@ -477,7 +455,7 @@ class PatchedCollectorTest {
 
         Path shard = ShardRun.shardOf(tempDir, TestCards.game(), (bracket, collectors) ->
                 collectors.triggerFireHandler().invoke(null,
-                        methodNamed(TriggerFireListenerShape.class, "onConditionEvaluated"),
+                        ON_CONDITION_EVALUATED,
                         new Object[]{forkTrigger, Map.of(), true}));
 
         assertFalse(Files.exists(shard),
@@ -497,7 +475,7 @@ class PatchedCollectorTest {
 
         Path shard = ShardRun.shardOf(tempDir, TestCards.game(), caps(0, 1.0),
                 (bracket, collectors) -> collectors.playabilityHandler().invoke(null,
-                        methodNamed(PlayabilityListenerShape.class, "onCandidate"),
+                        ON_CANDIDATE,
                         new Object[]{forkCandidate}));
 
         assertFalse(Files.exists(shard),
@@ -517,7 +495,7 @@ class PatchedCollectorTest {
 
         Path shard = ShardRun.shardOf(tempDir, TestCards.game(), (bracket, collectors) ->
                 collectors.combatLegalityHandler().invoke(null,
-                        methodNamed(CombatLegalityListenerShape.class, "onAttackersDeclarable"),
+                        ON_ATTACKERS_DECLARABLE,
                         new Object[]{null, forkDefender, List.of(candidate), List.of(candidate)}));
 
         assertFalse(Files.exists(shard), "another game's defender must not land in the live shard");
@@ -538,7 +516,7 @@ class PatchedCollectorTest {
 
         Path shard = ShardRun.shardOf(tempDir, TestCards.game(), (bracket, collectors) ->
                 collectors.manaHandler().invoke(null,
-                        methodNamed(ManaListenerShape.class, "onManaProduced"),
+                        ON_MANA_PRODUCED,
                         new Object[]{forkAbility, forkPlayer, "G"}));
 
         assertFalse(Files.exists(shard),
@@ -565,7 +543,7 @@ class PatchedCollectorTest {
 
         List<String> lines = ShardRun.records(tempDir, TestCards.game(), (bracket, collectors) ->
                 collectors.triggerFireHandler().invoke(null,
-                        methodNamed(TriggerFireListenerShape.class, "onConditionEvaluated"),
+                        ON_CONDITION_EVALUATED,
                         new Object[]{liveTrigger, Map.of(), true}));
         assertTrue(lines.stream().anyMatch(l -> l.contains("\"kind\":\"trigger\"")),
                 "a live trigger evaluation must reach the shard: " + lines);
@@ -583,7 +561,7 @@ class PatchedCollectorTest {
         // uninformative as the vacuous one item 3 exists to close.
         List<String> lines = ShardRun.records(tempDir, TestCards.game(), caps(0, 1.0),
                 (bracket, collectors) -> collectors.playabilityHandler().invoke(null,
-                        methodNamed(PlayabilityListenerShape.class, "onCandidate"),
+                        ON_CANDIDATE,
                         new Object[]{liveCandidate}));
         assertTrue(lines.stream().anyMatch(l -> l.contains("\"kind\":\"playability\"")),
                 "a live playability candidate must reach the shard: " + lines);
@@ -596,7 +574,7 @@ class PatchedCollectorTest {
 
         List<String> lines = ShardRun.records(tempDir, TestCards.game(), (bracket, collectors) ->
                 collectors.combatLegalityHandler().invoke(null,
-                        methodNamed(CombatLegalityListenerShape.class, "onAttackersDeclarable"),
+                        ON_ATTACKERS_DECLARABLE,
                         new Object[]{null, liveDefender, List.of(candidate), List.of(candidate)}));
         assertTrue(lines.stream().anyMatch(l -> l.contains("\"subkind\":\"attackers\"")),
                 "a live defender's legality answer must reach the shard: " + lines);
@@ -613,7 +591,7 @@ class PatchedCollectorTest {
         // called when the run closes the collectors, writes them out.
         List<String> lines = ShardRun.records(tempDir, TestCards.game(), (bracket, collectors) ->
                 collectors.manaHandler().invoke(null,
-                        methodNamed(ManaListenerShape.class, "onManaProduced"),
+                        ON_MANA_PRODUCED,
                         new Object[]{liveAbility, livePlayer, "G"}));
         assertTrue(lines.stream().anyMatch(l -> l.contains("mana_produced")),
                 "live mana production must reach the shard: " + lines);
@@ -656,7 +634,7 @@ class PatchedCollectorTest {
 
         Path solo = ShardRun.shardOf(tempDir.resolve("solo"), TestCards.game(), halfRate,
                 (bracket, collectors) -> collectors.playabilityHandler().invoke(null,
-                        methodNamed(PlayabilityListenerShape.class, "onCandidate"),
+                        ON_CANDIDATE,
                         new Object[]{liveCandidate}));
         boolean soloAdmitted = admitsAPlayabilityRecord(solo);
 
@@ -666,10 +644,10 @@ class PatchedCollectorTest {
         Path paired = ShardRun.shardOf(tempDir.resolve("paired"), TestCards.game(), halfRate,
                 (bracket, collectors) -> {
                     collectors.playabilityHandler().invoke(null,
-                            methodNamed(PlayabilityListenerShape.class, "onCandidate"),
+                            ON_CANDIDATE,
                             new Object[]{forkCandidate});
                     collectors.playabilityHandler().invoke(null,
-                            methodNamed(PlayabilityListenerShape.class, "onCandidate"),
+                            ON_CANDIDATE,
                             new Object[]{liveCandidate});
                 });
         boolean pairedAdmitted = admitsAPlayabilityRecord(paired);
@@ -714,7 +692,7 @@ class PatchedCollectorTest {
 
         List<String> lines = ShardRun.records(tempDir, game, (bracket, collectors) -> {
             collectors.combatLegalityHandler().invoke(null,
-                    methodNamed(CombatLegalityListenerShape.class, "onAttackersDeclarable"),
+                    ON_ATTACKERS_DECLARABLE,
                     new Object[]{active, other, List.of(ready, tapped), List.of(ready)});
         });
 
@@ -746,7 +724,7 @@ class PatchedCollectorTest {
 
         List<String> lines = ShardRun.records(tempDir, game, (bracket, collectors) -> {
             collectors.combatLegalityHandler().invoke(null,
-                    methodNamed(CombatLegalityListenerShape.class, "onAttackersDeclarable"),
+                    ON_ATTACKERS_DECLARABLE,
                     new Object[]{other, active, List.of(theirs), List.of(theirs)});
         });
 
@@ -775,7 +753,7 @@ class PatchedCollectorTest {
 
         List<String> lines = ShardRun.records(tempDir, game, (bracket, collectors) -> {
             collectors.combatLegalityHandler().invoke(null,
-                    methodNamed(CombatLegalityListenerShape.class, "onBlockersDeclarable"),
+                    ON_BLOCKERS_DECLARABLE,
                     new Object[]{blocking, attacker, List.of(blocker), List.of(blocker), 1});
         });
 
@@ -803,7 +781,7 @@ class PatchedCollectorTest {
         Card mine = TestBoard.inPlay(game, active, "Grizzly Bears");
 
         List<String> lines = ShardRun.records(tempDir, game, (bracket, collectors) -> {
-            Method declarable = methodNamed(CombatLegalityListenerShape.class, "onAttackersDeclarable");
+            Method declarable = ON_ATTACKERS_DECLARABLE;
             for (int turn = 0; turn < 20; turn++) {
                 // A life total that moves is enough to make each snapshot new.
                 active.setLife(20 - turn, null);
@@ -831,30 +809,13 @@ class PatchedCollectorTest {
         List<String> lines = ShardRun.records(tempDir, game, (bracket, collectors) -> {
             collectors.setRandomSeatPlayerId(SnapshotBuilder.playerId(active));
             collectors.combatLegalityHandler().invoke(null,
-                    methodNamed(CombatLegalityListenerShape.class, "onAttackersDeclarable"),
+                    ON_ATTACKERS_DECLARABLE,
                     new Object[]{active, other, List.of(mine), List.of(mine)});
         });
 
         List<String> records = recordsOf(lines);
         assertEquals(1, records.size(), records.toString());
         assertTrue(records.get(0).contains("\"random_seat\":true"), records.get(0));
-    }
-
-    /**
-     * The combat stand-in is what Forge declares, position by position.
-     * Reflective, so an unpatched checkout skips the assertion.
-     */
-    @Test
-    void theCombatLegalityStandInIsForgesOwnDeclaration() {
-        PatchHooks.Lookup setter = PatchHooks.find(
-                PatchHooks.COMBAT_LEGALITY_OBSERVER, "setEffectRecordCombatListener");
-        Assumptions.assumeTrue(setter.present(), "the checkout lacks the combat hook");
-        Class<?> declared = setter.method().getParameterTypes()[0];
-        for (String name : List.of("onAttackersDeclarable", "onBlockersDeclarable")) {
-            Class<?>[] theirs = methodNamed(declared, name).getParameterTypes();
-            Class<?>[] ours = methodNamed(CombatLegalityListenerShape.class, name).getParameterTypes();
-            assertArrayEquals(ours, theirs, name);
-        }
     }
 
     /**
@@ -872,7 +833,7 @@ class PatchedCollectorTest {
 
         List<String> lines = ShardRun.records(tempDir, game, caps(0, 1.0), (bracket, collectors) -> {
             collectors.playabilityHandler().invoke(null,
-                    methodNamed(PlayabilityListenerShape.class, "onCandidate"),
+                    ON_CANDIDATE,
                     new Object[]{candidate});
         });
 

@@ -41,17 +41,8 @@ class OutcomeVocabularyContractTest {
     @TempDir
     Path tempDir;
 
-    /**
-     * Forge's outcome listener, copied rather than imported: the connector
-     * compiles against stock Forge, where the listener type does not exist.
-     */
-    public interface OutcomeListenerShape {
-        void onOutcome(SpellAbility sa, String eventType, Map<String, Object> params);
-    }
-
-    private static Method onOutcome() throws NoSuchMethodException {
-        return OutcomeListenerShape.class.getMethod(
-                "onOutcome", SpellAbility.class, String.class, Map.class);
+    private static Method onOutcome() {
+        return HookShapes.method(HookShapes.Outcome.class, "onOutcome");
     }
 
     private static Stream<String> engineOutcomeTypes() throws Exception {

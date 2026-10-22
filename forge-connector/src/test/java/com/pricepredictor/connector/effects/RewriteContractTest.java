@@ -8,7 +8,6 @@ import forge.game.replacement.ReplacementEffect;
 import forge.game.replacement.ReplacementResult;
 import forge.game.spellability.SpellAbility;
 import forge.game.zone.ZoneType;
-import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.io.TempDir;
@@ -37,8 +36,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * argument order is a runtime contract with no compiler behind it. A swap or an
  * insertion on the Forge side would not fail a build; it would fail a corpus,
  * silently, eight hours in. These tests are what stands in for the compiler:
- * they call the handler through a stand-in interface that is a literal copy of
- * Forge's declaration, and they check that copy against the real one.
+ * they call the handler through {@link HookShapes.Replacement}, a literal copy
+ * of Forge's declaration that {@code PatchHooksTest} checks against the real
+ * one.
  *
  * <p>Beside that, the shape the contract fixed: one record per replacement
  * including the negatives, {@code outgoing} null exactly where nothing was
@@ -51,68 +51,8 @@ class RewriteContractTest {
     @TempDir
     Path tempDir;
 
-    /**
-     * Forge's listener, copied argument for argument.
-     *
-     * <p>Copied rather than referenced on purpose: the connector compiles
-     * against stock Forge, where this interface does not exist at all, and a
-     * test that imported it would stop the whole module building on an
-     * unpatched checkout. {@link #theStandInIsForgesOwnDeclaration} is what
-     * keeps the copy true.
-     */
-    public interface ListenerShape {
-        void onReplacement(ReplacementEffect effect, Map<AbilityKey, Object> before,
-                Map<AbilityKey, Object> after, ReplacementResult result,
-                SpellAbility replacedBy);
-    }
-
-    /** The same listener before the result and the substituted ability. */
-    public interface OldListenerShape {
-        void onReplacement(ReplacementEffect effect, Map<AbilityKey, Object> before,
-                Map<AbilityKey, Object> after);
-    }
-
     private static Method onReplacement(Class<?> shape) {
-        for (Method method : shape.getMethods()) {
-            if (method.getName().equals("onReplacement")) {
-                return method;
-            }
-        }
-        throw new AssertionError(shape + " declares no onReplacement");
-    }
-
-    // ── the argument order, pinned ──────────────────────────────────────
-
-    /**
-     * The stand-in above is what Forge declares, position by position.
-     *
-     * <p>The one test here that a Forge-side signature drift fails. Both arities
-     * are accepted because the connector must run against either — a jar built
-     * before the widening still hands over three arguments — but the prefix is
-     * not negotiable: {@code effect}, {@code before} and {@code after} keep
-     * their positions and their types in both, which is the whole reason the
-     * widening could be made without reinstalling anything.
-     *
-     * <p>Reflective, so an unpatched checkout skips the assertion rather than
-     * failing it. That is the same degradation every hook lookup makes, and the
-     * integration test's mode assertion is what says whether it happened.
-     */
-    @Test
-    void theStandInIsForgesOwnDeclaration() {
-        PatchHooks.Lookup setter = PatchHooks.find(
-                PatchHooks.REPLACEMENT_HANDLER, "setEffectRecordListener");
-        Assumptions.assumeTrue(setter.present(), "the checkout lacks the replacement hook");
-        Class<?> declared = setter.method().getParameterTypes()[0];
-        Class<?>[] theirs = onReplacement(declared).getParameterTypes();
-        Class<?>[] ours = onReplacement(ListenerShape.class).getParameterTypes();
-
-        assertTrue(theirs.length == 3 || theirs.length == 5,
-                "the listener takes three arguments or five, not "
-                        + theirs.length + "; an argument added anywhere but the "
-                        + "end moves the ones the handler reads by position");
-        for (int i = 0; i < theirs.length; i++) {
-            assertEquals(ours[i], theirs[i], "argument " + i + " of onReplacement");
-        }
+        return HookShapes.method(shape, "onReplacement");
     }
 
     // ── one record per replacement, whatever the result ─────────────────
@@ -281,7 +221,7 @@ class RewriteContractTest {
 
         String line = oneRecordFrom(new Object[]{
                 replacement, before, after, ReplacementResult.Prevented, ran},
-                ListenerShape.class);
+                HookShapes.Replacement.class);
 
         assertTrue(line.contains("\"to_zone\":\"graveyard\""), line);
         assertTrue(line.contains("\"to_zone\":\"exile\""), line);
@@ -305,7 +245,7 @@ class RewriteContractTest {
         params.put(AbilityKey.Card, card);
 
         String line = oneRecordFrom(
-                new Object[]{null, params, params}, OldListenerShape.class);
+                new Object[]{null, params, params}, HookShapes.OlderReplacement.class);
 
         assertTrue(line.contains("\"result\":null"), line);
         assertTrue(line.contains("\"replaced_by\":[]"), line);
@@ -327,7 +267,7 @@ class RewriteContractTest {
 
         String line = oneRecordFrom(new Object[]{
                 null, params, params, ReplacementResult.NotReplaced, null},
-                ListenerShape.class);
+                HookShapes.Replacement.class);
 
         assertTrue(line.contains("\"kind\":\"rewrite\""), line);
         assertTrue(line.contains("\"result\":\"not_replaced\""), line);
@@ -358,7 +298,7 @@ class RewriteContractTest {
                 "Card", forkHost, "Destination", ZoneType.Graveyard);
 
         Path shard = ShardRun.shardOf(tempDir, TestCards.game(), (bracket, collector) ->
-                collector.rewriteHandler().invoke(null, onReplacement(ListenerShape.class),
+                collector.rewriteHandler().invoke(null, onReplacement(HookShapes.Replacement.class),
                         new Object[]{
                                 forkReplacement, params, params, ReplacementResult.Replaced, null}));
 

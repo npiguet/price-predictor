@@ -5,7 +5,6 @@ import forge.game.ability.AbilityFactory;
 import forge.game.card.Card;
 import forge.game.player.Player;
 import forge.game.spellability.SpellAbility;
-import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -23,7 +22,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * The clause hook's argument order, and the shape Forge declares it in.
+ * The clause hook's argument order.
  *
  * <p>The connector never links against {@code AbilityUtils.EffectRecordClauseListener}
  * — it is installed as a dynamic proxy over whatever the patched checkout
@@ -61,54 +60,11 @@ class ClauseContractTest {
         ApiEvents.resetMemoFailureLatchForTest();
     }
 
-    /**
-     * Forge's listener, copied argument for argument.
-     *
-     * <p>Copied rather than referenced on purpose: the connector compiles
-     * against stock Forge, where this interface does not exist at all, and a
-     * test that imported it would stop the whole module building on an
-     * unpatched checkout. {@link #theStandInIsForgesOwnDeclaration} is what
-     * keeps the copy true.
-     */
-    public interface ListenerShape {
-        void onClauseResolving(SpellAbility clause);
-
-        void onClauseResolved(SpellAbility clause, boolean threw);
-    }
-
-    private static Method methodNamed(Class<?> shape, String name) {
-        for (Method method : shape.getMethods()) {
-            if (method.getName().equals(name)) {
-                return method;
-            }
-        }
-        throw new AssertionError(shape + " declares no " + name);
+    private static Method clauseMethod(String name) {
+        return HookShapes.method(HookShapes.Clause.class, name);
     }
 
     // ── the argument order, pinned ──────────────────────────────────────
-
-    /**
-     * The stand-in above is what Forge declares, position by position, for
-     * both halves of the listener.
-     *
-     * <p>Reflective, so an unpatched checkout skips the assertion rather than
-     * failing it — the same degradation every hook lookup makes.
-     */
-    @Test
-    void theStandInIsForgesOwnDeclaration() {
-        PatchHooks.Lookup setter = PatchHooks.find(
-                PatchHooks.ABILITY_UTILS, "setEffectRecordClauseListener");
-        Assumptions.assumeTrue(setter.present(), "the checkout lacks the clause hook");
-        Class<?> declared = setter.method().getParameterTypes()[0];
-        for (String name : List.of("onClauseResolving", "onClauseResolved")) {
-            Class<?>[] theirs = methodNamed(declared, name).getParameterTypes();
-            Class<?>[] ours = methodNamed(ListenerShape.class, name).getParameterTypes();
-            assertEquals(ours.length, theirs.length, name + " arity");
-            for (int i = 0; i < theirs.length; i++) {
-                assertEquals(ours[i], theirs[i], name + " argument " + i);
-            }
-        }
-    }
 
     /**
      * Two real, distinguishable arguments in, and each one read off its own
@@ -155,7 +111,7 @@ class ClauseContractTest {
         List<String> records = ShardRun.records(tempDir, TestCards.game(), (bracket, collector) -> {
             InvocationHandler handler = collector.clauseHandler();
             bracket.beginBracket(sa);
-            handler.invoke(null, methodNamed(ListenerShape.class, "onClauseResolved"),
+            handler.invoke(null, clauseMethod("onClauseResolved"),
                     new Object[]{Boolean.FALSE, sa});
             bracket.endBracket(sa.getId(), false);
             bracket.flushHeldResolution();
@@ -203,13 +159,13 @@ class ClauseContractTest {
         List<String> records = ShardRun.records(tempDir, TestCards.game(), (bracket, collector) -> {
             InvocationHandler handler = collector.clauseHandler();
             bracket.beginBracket(outer);
-            handler.invoke(null, methodNamed(ListenerShape.class, "onClauseResolving"),
+            handler.invoke(null, clauseMethod("onClauseResolving"),
                     new Object[]{outer});
-            handler.invoke(null, methodNamed(ListenerShape.class, "onClauseResolving"),
+            handler.invoke(null, clauseMethod("onClauseResolving"),
                     new Object[]{inner});
-            handler.invoke(null, methodNamed(ListenerShape.class, "onClauseResolved"),
+            handler.invoke(null, clauseMethod("onClauseResolved"),
                     new Object[]{inner, false});
-            handler.invoke(null, methodNamed(ListenerShape.class, "onClauseResolved"),
+            handler.invoke(null, clauseMethod("onClauseResolved"),
                     new Object[]{outer, false});
             bracket.endBracket(outer.getId(), false);
             bracket.flushHeldResolution();
@@ -251,9 +207,9 @@ class ClauseContractTest {
         List<String> records = ShardRun.records(tempDir, TestCards.game(), (bracket, collector) -> {
             InvocationHandler handler = collector.clauseHandler();
             bracket.beginBracket(forkAbility);
-            handler.invoke(null, methodNamed(ListenerShape.class, "onClauseResolving"),
+            handler.invoke(null, clauseMethod("onClauseResolving"),
                     new Object[]{forkAbility});
-            handler.invoke(null, methodNamed(ListenerShape.class, "onClauseResolved"),
+            handler.invoke(null, clauseMethod("onClauseResolved"),
                     new Object[]{forkAbility, false});
             bracket.endBracket(forkAbility.getId(), false);
             bracket.flushHeldResolution();
@@ -328,9 +284,9 @@ class ClauseContractTest {
                     bracket.beginBracket(outer);
                     resolvingContained(handler, outer);
                     resolvingContained(handler, inner);
-                    handler.invoke(null, methodNamed(ListenerShape.class, "onClauseResolved"),
+                    handler.invoke(null, clauseMethod("onClauseResolved"),
                             new Object[]{inner, false});
-                    handler.invoke(null, methodNamed(ListenerShape.class, "onClauseResolved"),
+                    handler.invoke(null, clauseMethod("onClauseResolved"),
                             new Object[]{outer, false});
                     bracket.endBracket(outer.getId(), false);
                     bracket.flushHeldResolution();
@@ -363,7 +319,7 @@ class ClauseContractTest {
     private static void resolvingContained(InvocationHandler handler, SpellAbility clause)
             throws Throwable {
         try {
-            handler.invoke(null, methodNamed(ListenerShape.class, "onClauseResolving"),
+            handler.invoke(null, clauseMethod("onClauseResolving"),
                     new Object[]{clause});
         } catch (RuntimeException e) {
             // Mirrors AbilityUtils.notifyClauseResolving's own containment,
@@ -382,9 +338,9 @@ class ClauseContractTest {
         List<String> records = ShardRun.records(tempDir, TestCards.game(), (bracket, collector) -> {
             InvocationHandler handler = collector.clauseHandler();
             bracket.beginBracket(sa);
-            handler.invoke(null, methodNamed(ListenerShape.class, "onClauseResolving"),
+            handler.invoke(null, clauseMethod("onClauseResolving"),
                     new Object[]{sa});
-            handler.invoke(null, methodNamed(ListenerShape.class, "onClauseResolved"),
+            handler.invoke(null, clauseMethod("onClauseResolved"),
                     new Object[]{sa, threw});
             bracket.endBracket(sa.getId(), false);
             bracket.flushHeldResolution();
