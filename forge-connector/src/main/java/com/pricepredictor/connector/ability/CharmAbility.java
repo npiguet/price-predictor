@@ -157,7 +157,9 @@ public record CharmAbility(String descriptionText, List<Ability> subAbilities) i
      *
      * @param owner the trait that executes the charm, so each option can be
      *              attributed to that trait's line rather than to whichever
-     *              trigger last claimed a charm SVar two chapters share
+     *              trigger last claimed a charm SVar two chapters share; null
+     *              when one line stands for several triggers, so each option
+     *              belongs to whichever of them executes the charm
      */
     public static List<Ability> optionsFrom(SpellAbility sa, CardTraitBase owner) {
         List<Ability> options = new ArrayList<>();
@@ -207,8 +209,31 @@ public record CharmAbility(String descriptionText, List<Ability> subAbilities) i
         return prefix + " \u2014 " + desc;
     }
 
-    /** {@link #optionsFrom(SpellAbility, CardTraitBase)} with the owner unknown. */
-    public static List<Ability> optionsFrom(SpellAbility sa) {
-        return optionsFrom(sa, null);
+    /** A trait description with its charm spelled out: the header line and the mode lines. */
+    public record Expanded(String description, List<Ability> options) {
+    }
+
+    /**
+     * Spell out the {@code ABILITY} placeholder of a trait whose effect is a
+     * charm.
+     *
+     * <p>Forge writes {@code "When CARDNAME enters, ABILITY"} and fills the
+     * placeholder from the charm at runtime. Here it becomes the charm's
+     * "choose N" header — "choose one" when the count is an expression — and
+     * the modes become the trait's option lines.
+     *
+     * @param desc  the raw description holding the placeholder
+     * @param owner the trait that executes the charm, or null (see
+     *              {@link #optionsFrom(SpellAbility, CardTraitBase)})
+     * @return the normalized description, null if nothing is left of it, and
+     *         the option lines
+     */
+    public static Expanded expandPlaceholder(String desc, SpellAbility charm,
+                                             CardTraitBase owner) {
+        String header = synthesizeCharmHeader(charm);
+        if (header == null) header = "choose one";
+        return new Expanded(
+                AbilityDescription.normalize(desc.replace("ABILITY", header)),
+                optionsFrom(charm, owner));
     }
 }

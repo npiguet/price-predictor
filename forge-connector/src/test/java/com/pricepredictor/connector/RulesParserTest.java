@@ -1116,7 +1116,7 @@ class RulesParserTest {
     void repeatSubAbilityDescriptionIsIncluded() {
         // March of Souls: main SA destroys all creatures, then a RepeatEach SVar per player
         // creates spirit tokens. The spirit-token text lives in a RepeatSubAbility SVar and
-        // must be concatenated into the single spell line via collectChainText (formatBlock).
+        // must be rendered as part of the single spell's effect tree.
         CardFace card = face("m/march_of_souls.txt");
         var spells = abilitiesOfType(card, AbilityType.SPELL);
         assertEquals(1, spells.size(), "Should have exactly one SPELL: " + card.abilities());
@@ -1782,7 +1782,7 @@ class RulesParserTest {
         var spells = abilitiesOfType(card, AbilityType.SPELL);
         assertEquals(1, spells.size(), "Should have 1 SPELL: " + card.abilities());
         // The single SPELL ability has a nested sub-ability chain representing all 3 effects.
-        // collectChainText must produce all 3 repetitions (not deduplicated away).
+        // Rendering must produce all 3 repetitions (not deduplicated away).
         String formatted = card.formatText();
         // Count occurrences of "+3/+3" — must appear 3 times
         int count = 0, idx = 0;

@@ -26,49 +26,33 @@ public record TriggeredAbilityEntry(AbilityType type, String descriptionText, Li
         // Skip keyword-associated triggers except for Tribute's "if tribute wasn't paid" ability.
         // Most keyword triggers merely restate the keyword (already output by StandardKeyword),
         // but Tribute's TrigNotTribute trigger is a distinct oracle ability.
+        if (trigger.getKeyword() != null
+                && trigger.getKeyword().getKeyword() != Keyword.TRIBUTE) return null;
+        String rawDesc = trigger.getParam("TriggerDescription");
+        String normalized = AbilityDescription.normalize(rawDesc);
+        if (normalized == null) return null;
+        AbilityType type = AbilityType.forTrigger(trigger);
         if (trigger.getKeyword() != null) {
-            if (trigger.getKeyword().getKeyword() != Keyword.TRIBUTE) return null;
             // For Tribute, TriggerDescription is the full oracle text (built directly from
             // TrigNotTribute's SpellDescription), so the execute chain would duplicate it.
             // Return with empty children — the description is self-contained.
-            String normalized = AbilityDescription.normalize(trigger.getParam("TriggerDescription"));
-            if (normalized == null) return null;
-            AbilityType effectiveType = trigger.isStatic() ? AbilityType.REPLACEMENT : AbilityType.TRIGGERED;
-            return new TriggeredAbilityEntry(effectiveType, normalized, List.of());
+            return new TriggeredAbilityEntry(type, normalized, List.of());
         }
-        String normalized = AbilityDescription.normalize(trigger.getParam("TriggerDescription"));
-        if (normalized == null) return null;
-        AbilityType effectiveType = trigger.isStatic()
-                ? AbilityType.REPLACEMENT : AbilityType.TRIGGERED;
 
         SpellAbility execute = trigger.getOverridingAbility();
+        boolean placeholder = rawDesc.contains("ABILITY");
 
-        // If the raw TriggerDescription contains the "ABILITY" placeholder and the
-        // execute SVar is a Charm (choose-one), expand it: replace the placeholder
-        // with "choose one —" and attach the charm choices as OPTION sub-abilities.
-        String rawDesc = trigger.getParam("TriggerDescription");
-        if (rawDesc != null && rawDesc.contains("ABILITY")
-                && execute != null && execute.getApi() == ApiType.Charm) {
-            String charmHeader = CharmAbility.synthesizeCharmHeader(execute);
-            if (charmHeader == null) charmHeader = "choose one";
-            String expanded = rawDesc.replace("ABILITY", charmHeader);
-            normalized = AbilityDescription.normalize(expanded);
-            List<Ability> options = CharmAbility.optionsFrom(execute, trigger);
-            return new TriggeredAbilityEntry(effectiveType, normalized, options);
-        }
-
-        // Handle ImmediateTrigger → Charm anywhere in the execute SubAbility chain
-        // (e.g. Caesar, Hylda: direct; Cemetery Desecrator: ChangeZone → SubAbility → ImmediateTrigger).
-        if (rawDesc != null && rawDesc.contains("ABILITY") && execute != null) {
-            SpellAbility immTrig = findImmediateTriggerWithCharm(execute);
-            if (immTrig != null) {
-                SpellAbility nestedCharm = immTrig.getAdditionalAbility("Execute");
-                String charmHeader = CharmAbility.synthesizeCharmHeader(nestedCharm);
-                if (charmHeader == null) charmHeader = "choose one";
-                String expanded = rawDesc.replace("ABILITY", charmHeader);
-                normalized = AbilityDescription.normalize(expanded);
-                List<Ability> options = CharmAbility.optionsFrom(nestedCharm, trigger);
-                return new TriggeredAbilityEntry(effectiveType, normalized, options);
+        // An ABILITY placeholder whose execute is a Charm, directly or through an
+        // ImmediateTrigger anywhere in its SubAbility chain (Caesar, Hylda: direct;
+        // Cemetery Desecrator: ChangeZone → SubAbility → ImmediateTrigger), is the
+        // charm's header with its choices as OPTION sub-abilities.
+        if (placeholder && execute != null) {
+            SpellAbility charm = execute.getApi() == ApiType.Charm
+                    ? execute : immediateTriggerCharm(execute);
+            if (charm != null) {
+                CharmAbility.Expanded expanded =
+                        CharmAbility.expandPlaceholder(rawDesc, charm, trigger);
+                return new TriggeredAbilityEntry(type, expanded.description(), expanded.options());
             }
         }
 
@@ -81,7 +65,7 @@ public record TriggeredAbilityEntry(AbilityType type, String descriptionText, Li
                 ? DiceOutcomes.of(execute, DiceOutcomes::optionLine) : List.of();
 
         // If ABILITY placeholder remains and dice outcomes were found, replace with dice-roll description.
-        if (rawDesc != null && rawDesc.contains("ABILITY") && !children.isEmpty()) {
+        if (placeholder && !children.isEmpty()) {
             String diceDesc = DiceOutcomes.rollDescription(execute);
             if (diceDesc != null) {
                 normalized = AbilityDescription.normalize(
@@ -98,15 +82,12 @@ public record TriggeredAbilityEntry(AbilityType type, String descriptionText, Li
                 && isTransparentSA(execute)
                 && execute.getApi() != ApiType.ImmediateTrigger
                 && !"ETBReplacement".equals(execute.getParam("Mode"))) {
-            List<Ability> executeChain = SpellEffect.fromChain(execute);
-            if (!executeChain.isEmpty()) {
-                String extra = collectChainText(executeChain.get(0));
-                if (!extra.isEmpty()) {
-                    normalized = normalized + " " + extra;
-                }
+            String extra = SpellAbilityUtils.chainText(execute);
+            if (!extra.isEmpty()) {
+                normalized = normalized + " " + extra;
             }
         }
-        return new TriggeredAbilityEntry(effectiveType, normalized, children);
+        return new TriggeredAbilityEntry(type, normalized, children);
     }
 
     /**
@@ -123,25 +104,15 @@ public record TriggeredAbilityEntry(AbilityType type, String descriptionText, Li
         return true;
     }
 
-    /** Recursively collect and join descriptions from an ability node and all its descendants. */
-    private static String collectChainText(Ability node) {
-        StringBuilder sb = new StringBuilder(node.descriptionText());
-        for (Ability child : node.subAbilities()) {
-            String ct = collectChainText(child);
-            if (!ct.isEmpty()) sb.append(' ').append(ct);
-        }
-        return sb.toString();
-    }
-
     /**
      * Walk the SubAbility chain of {@code sa} to find an ImmediateTrigger whose Execute is a Charm.
-     * Returns that ImmediateTrigger SA, or null if not found.
+     * Returns that Charm, or null if not found.
      */
-    private static SpellAbility findImmediateTriggerWithCharm(SpellAbility sa) {
+    private static SpellAbility immediateTriggerCharm(SpellAbility sa) {
         for (SpellAbility cur = sa; cur != null; cur = cur.getSubAbility()) {
             if (cur.getApi() == ApiType.ImmediateTrigger) {
                 SpellAbility exec = cur.getAdditionalAbility("Execute");
-                if (exec != null && exec.getApi() == ApiType.Charm) return cur;
+                if (exec != null && exec.getApi() == ApiType.Charm) return exec;
             }
         }
         return null;
