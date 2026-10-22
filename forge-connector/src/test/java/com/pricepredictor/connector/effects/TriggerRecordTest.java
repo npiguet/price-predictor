@@ -1,13 +1,12 @@
 package com.pricepredictor.connector.effects;
 
 import com.pricepredictor.connector.ForgeExtension;
-import com.pricepredictor.connector.effects.TestCollectors.FakeTrait;
+import forge.game.CardTraitBase;
 import forge.game.ability.AbilityFactory;
 import forge.game.card.Card;
 import forge.game.card.CounterType;
 import forge.game.spellability.SpellAbility;
 import forge.game.trigger.Trigger;
-import forge.game.trigger.TriggerHandler;
 import forge.game.zone.ZoneType;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -21,6 +20,8 @@ import java.util.Optional;
 
 import static com.pricepredictor.connector.effects.TestCollectors.caps;
 import static com.pricepredictor.connector.effects.TestCollectors.recording;
+import static com.pricepredictor.connector.effects.TestCollectors.replacementOfMode;
+import static com.pricepredictor.connector.effects.TestCollectors.triggerOfMode;
 import static com.pricepredictor.connector.effects.TestCollectors.unwired;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -133,9 +134,15 @@ class TriggerRecordTest {
 
     // ── what a run parameter map says ──────────────────────────────────
 
-    /** The event a trigger record carries, as rendered JSON. */
-    private String eventJson(String mode, Map<String, Object> params) {
-        String json = recording(tempDir).triggerRecord(new FakeTrait(mode), params, true).toJson();
+    /**
+     * The event a trigger record carries, as rendered JSON.
+     *
+     * <p>Handed a replacement too where the mode under test is the
+     * replacement side's spelling: the event is read off the trait's mode and
+     * the parameters, whichever kind of trait carries the mode.
+     */
+    private String eventJson(CardTraitBase trait, Map<String, Object> params) {
+        String json = recording(tempDir).triggerRecord(trait, params, true).toJson();
         int at = json.indexOf("\"payload\":{\"event\":");
         return json.substring(at + 19, json.indexOf(",\"fired\"", at));
     }
@@ -150,7 +157,7 @@ class TriggerRecordTest {
      */
     @Test
     void aMoveNamesTheZonesItWentBetween() {
-        String json = eventJson("Moved", Map.of(
+        String json = eventJson(replacementOfMode("Moved"), Map.of(
                 "Origin", ZoneType.Hand,
                 "Destination", ZoneType.Graveyard,
                 "Card", TestCards.build("Mountain")));
@@ -170,7 +177,7 @@ class TriggerRecordTest {
     @Test
     void oneCardNamedThreeWaysIsOneSubject() {
         Card card = TestCards.build("Mountain");
-        String json = eventJson("Moved", Map.of(
+        String json = eventJson(replacementOfMode("Moved"), Map.of(
                 "Card", card, "CardLKI", card, "Affected", card));
 
         assertEquals(
@@ -190,7 +197,7 @@ class TriggerRecordTest {
     @Test
     void theCauseIsAnEntityRefRatherThanAListOfKeyNames() {
         Card cause = TestCards.build("Lightning Bolt");
-        String json = eventJson("Moved", Map.of(
+        String json = eventJson(replacementOfMode("Moved"), Map.of(
                 "Card", TestCards.build("Mountain"),
                 "Destination", ZoneType.Graveyard,
                 "Cause", cause));
@@ -204,17 +211,17 @@ class TriggerRecordTest {
     /** An unmapped mode carries its mode and says nothing it cannot support. */
     @Test
     void anUnmappedModeCarriesOnlyWhatItKnows() {
-        String json = eventJson("SomethingForgeCallsThis", Map.of());
+        String json = eventJson(triggerOfMode("Exploited"), Map.of());
 
         assertTrue(json.contains("\"type\":\"state_flag_change\""), json);
-        assertTrue(json.contains("\"params\":{\"mode\":\"SomethingForgeCallsThis\"}"),
+        assertTrue(json.contains("\"params\":{\"mode\":\"Exploited\"}"),
                 json);
     }
 
     @Test
     void damageIsReadAsAnAmountACombatFlagAndASource() {
         Card source = TestCards.build("Lightning Bolt");
-        String json = eventJson("DamageDone", Map.of(
+        String json = eventJson(triggerOfMode("DamageDone"), Map.of(
                 "DamageAmount", 3,
                 "IsCombatDamage", Boolean.FALSE,
                 "DamageSource", source,
@@ -229,7 +236,7 @@ class TriggerRecordTest {
     /** Prevention arrives through the damage keys and is not damage dealt. */
     @Test
     void preventedDamageIsNotRecordedAsDamageDealt() {
-        String json = eventJson("DamageDone", Map.of(
+        String json = eventJson(triggerOfMode("DamageDone"), Map.of(
                 "PreventedAmount", 2,
                 "Affected", TestCards.build("Mountain")));
 
@@ -249,7 +256,7 @@ class TriggerRecordTest {
         com.google.common.collect.Multiset<CounterType> counters =
                 com.google.common.collect.LinkedHashMultiset.create();
         counters.add(CounterType.getType("P1P1"), 2);
-        String json = eventJson("CounterAdded", Map.of(
+        String json = eventJson(triggerOfMode("CounterAdded"), Map.of(
                 "CounterMap", Map.of(Optional.empty(), counters),
                 "Affected", TestCards.build("Mountain")));
 
@@ -264,7 +271,7 @@ class TriggerRecordTest {
     /** The replacement side's word for a life total is read as one. */
     @Test
     void theReplacementSpellingOfALifeAmountIsStillADelta() {
-        String json = eventJson("LifeReduced", Map.of(
+        String json = eventJson(replacementOfMode("LifeReduced"), Map.of(
                 "Affected", TestCards.build("Mountain"), "Amount", 4));
 
         assertTrue(json.contains("\"type\":\"life_change\""), json);
@@ -432,20 +439,6 @@ class TriggerRecordTest {
     }
 
     // ── the cause channel ───────────────────────────────────────────────
-
-    /**
-     * A trigger of a chosen mode, on a host card the mode does not care about.
-     *
-     * <p>Parsed rather than taken off a real card, because what is under test
-     * is the reading of one mode's run parameters and finding a printed card
-     * per mode would tie the test to the set list.
-     */
-    private static Trigger triggerOfMode(String mode) {
-        return TriggerHandler.parseTrigger(
-                "Mode$ " + mode + " | TriggerZones$ Battlefield"
-                        + " | TriggerDescription$ under test",
-                TestCards.build("Paralyze"), true);
-    }
 
     private static String eventOf(PatchedCollectors collector, Trigger trigger,
             Map<String, Object> runParams) {

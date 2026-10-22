@@ -1892,15 +1892,16 @@ public final class PatchedCollectors implements AutoCloseable {
      * adding to it, and a {@code =} with nothing after it turns the entity
      * colourless.
      *
-     * <p>Reflective on both components, because the record they belong to is the
-     * patch's own nested type and this side cannot name it.
+     * <p>Reflective on both components, because the record they belong to is
+     * private in the stock Forge this side compiles against; the patch makes it
+     * public.
      */
     static void colorTokens(Object change, Contribution into) {
         // Both components or neither: a half-read entry would report a colour
         // change as a replacement, which is the one reading that is never safe
         // to guess at.
-        if (!(PatchHooks.read(change, "additional") instanceof Boolean additional)
-                || !(PatchHooks.read(change, "color") instanceof ColorSet colors)) {
+        if (!(PatchHooks.COLOR_CHANGE_ADDITIONAL.read(change) instanceof Boolean additional)
+                || !(PatchHooks.COLOR_CHANGE_COLORS.read(change) instanceof ColorSet colors)) {
             return;
         }
         List<String> letters = SnapshotBuilder.colorLetters(colors);
@@ -1924,11 +1925,11 @@ public final class PatchedCollectors implements AutoCloseable {
      * overwriting its name or it does not -- {@code newName} is null on
      * every entry that only ever set {@code addNonLegendaryCreatureNames}.
      *
-     * <p>Reflective, because the record it belongs to is the patch's own
-     * nested type and this side cannot name it.
+     * <p>Reflective for the reason {@link #colorTokens} is: the record is
+     * private in stock Forge.
      */
     static void nameTokens(Object change, Contribution into) {
-        if (PatchHooks.read(change, "newName") instanceof String name) {
+        if (PatchHooks.NAME_CHANGE_NAME.read(change) instanceof String name) {
             into.name(name);
         }
     }

@@ -523,14 +523,14 @@ final class RunParamNormalizer {
     /**
      * A trigger's or replacement's mode.
      *
-     * <p>Read directly off the two trait types, whose {@code getMode} stock
-     * Forge already has, because this runs at least once per trigger
-     * evaluation; anything else carrying the accessor is read by name.
+     * <p>Null for anything else. The trigger and rewrite listeners declare
+     * these two types for the trait, so anything else is a signature that
+     * drifted, and its record carries no mode rather than a guessed one.
      */
     static String modeOf(Object trait) {
         Object mode = trait instanceof Trigger trigger ? trigger.getMode()
                 : trait instanceof ReplacementEffect replacement ? replacement.getMode()
-                : PatchHooks.read(trait, "getMode");
+                : null;
         return mode == null ? null : String.valueOf(mode);
     }
 

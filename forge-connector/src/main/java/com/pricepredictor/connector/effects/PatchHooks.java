@@ -179,6 +179,24 @@ public final class PatchHooks {
             "the outcomes an effect computes and discards: a coin's "
             + "result, a clash's winner, a vote's tally, a pile's size");
 
+    /**
+     * The components of the two layer records {@link #CHANGED_COLORS_BY_STATIC}
+     * and {@link #CHANGED_NAMES} hand out.
+     *
+     * <p>Not in {@link #REQUIRED}, because a lookup cannot tell them from stock
+     * Forge's: the records exist there too, private, and a record's accessors
+     * are public whatever the record's own access, so {@link #find} would
+     * report them present on a checkout where reading them fails. What the
+     * patch changes is the records' visibility, and the two accessors that
+     * return them are what imply it.
+     */
+    static final Hook COLOR_CHANGE_ADDITIONAL = new Hook(CARD + "$CardColor", "additional",
+            "whether a continuous contribution adds its colours or sets them");
+    static final Hook COLOR_CHANGE_COLORS = new Hook(CARD + "$CardColor", "color",
+            "a continuous contribution's colours");
+    static final Hook NAME_CHANGE_NAME = new Hook(CARD + "$CardChangedName", "newName",
+            "a continuous contribution's name");
+
     static {
         REQUIRED = List.of(
                 SUB_ABILITY, TRIGGER_LISTENER, REPLACEMENT_LISTENER, CLAUSE_LISTENER,
