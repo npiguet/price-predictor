@@ -28,10 +28,10 @@ class ProvenanceKeyCharacterizationTest {
     void theRecordAndSidecarFormsOfEachKeyShape() {
         CharacterizationBoard board = CharacterizationBoard.empty(PhaseType.MAIN1);
 
-        ProvenanceKey printed = ProvenanceKey.resolve(
+        ProvenanceKey printed = ProvenanceResolver.resolve(
                 board.spell(board.hand("Lightning Bolt", board.you), board.you)).key();
         Card treasure = board.token("c_a_treasure_sac", board.you);
-        ProvenanceKey token = ProvenanceKey.resolve(
+        ProvenanceKey token = ProvenanceResolver.resolve(
                 board.ability(treasure, ApiType.Mana)).key();
         SpellAbility charm = board.ability(board.hand("Boros Charm", board.you), ApiType.Charm);
         charm.setActivatingPlayer(board.you);
@@ -39,7 +39,7 @@ class ProvenanceKeyCharacterizationTest {
                 List.of(charm.getAdditionalAbilityList("Choices").get(2)));
         charm.setChosenList(chosen);
         CharmEffect.chainAbilities(charm, chosen);
-        ProvenanceKey mode = ProvenanceKey.resolve(charm.getSubAbility()).key();
+        ProvenanceKey mode = ProvenanceResolver.resolve(charm.getSubAbility()).key();
 
         StringBuilder text = new StringBuilder();
         for (Labelled shape : List.of(

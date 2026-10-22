@@ -82,7 +82,7 @@ final class TriggerChannel {
         EffectEvent event = RunParamNormalizer.describeParams(trait, runParams);
         return context.newRecord(RecordKind.TRIGGER)
                 .actor(live.controllerOf(source))
-                .ability(ProvenanceKey.resolve(acting))
+                .ability(ProvenanceResolver.resolve(acting))
                 .state(live.snapshots().ofTrait(source, event).render())
                 .payload("{\"event\":" + event.toJson()
                         + ",\"fired\":" + fired + "}");

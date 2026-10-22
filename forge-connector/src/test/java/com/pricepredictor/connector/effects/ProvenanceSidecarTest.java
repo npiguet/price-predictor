@@ -408,7 +408,7 @@ class ProvenanceSidecarTest {
      * disagreement.
      *
      * <p>The runtime resolver keys a flashback or cycling ability to
-     * {@code keyword@N} through {@link ProvenanceKey#keywordIndex}. If the
+     * {@code keyword@N} through {@link FaceOrder#keywordIndex}. If the
      * converter numbers the same keywords by any other rule, every such record
      * names a key that is in neither {@code lines} nor {@code dropped_keys},
      * which is the sidecar contract's fail-loudly case — a whole collection run
@@ -430,7 +430,7 @@ class ProvenanceSidecarTest {
         Map<String, Integer> sharedOrdinal = new LinkedHashMap<>();
         for (KeywordInterface keyword : state.getIntrinsicKeywords()) {
             sharedOrdinal.put(keyword.getOriginal(),
-                    ProvenanceKey.keywordIndex(state, keyword));
+                    FaceOrder.keywordIndex(state, keyword));
         }
         assertEquals(5, sharedOrdinal.size(),
                 "Blast from the Past prints five keywords");
@@ -448,9 +448,9 @@ class ProvenanceSidecarTest {
                 assertEquals(expected, key.indexWithinKind(),
                         "the sidecar numbered \"" + line.script().scriptText()
                                 + "\" as keyword@" + key.indexWithinKind()
-                                + " but ProvenanceKey.keywordIndex says keyword@"
+                                + " but FaceOrder.keywordIndex says keyword@"
                                 + expected + ". RulesParser.parseFace must compute"
-                                + " the ordinal with ProvenanceKey.keywordIndex("
+                                + " the ordinal with FaceOrder.keywordIndex("
                                 + "card.getCurrentState(), ki) rather than with a"
                                 + " running counter over card.getKeywords(), or"
                                 + " every keyword record in the next corpus names"

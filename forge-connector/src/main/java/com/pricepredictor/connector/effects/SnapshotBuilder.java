@@ -428,7 +428,7 @@ public final class SnapshotBuilder {
         if (!card.isToken()) {
             return null;
         }
-        String stem = ProvenanceKey.tokenScriptStemOf(card);
+        String stem = ScriptLocator.tokenScriptStemOf(card);
         return stem != null ? stem : card.getName();
     }
 
@@ -640,7 +640,7 @@ public final class SnapshotBuilder {
     private static void addKeys(Set<ProvenanceKey> into, Iterable<?> lines) {
         for (Object line : lines) {
             if (line instanceof SpellAbility sa) {
-                ProvenanceKey key = ProvenanceKey.of(sa);
+                ProvenanceKey key = ProvenanceResolver.of(sa);
                 if (key != null) {
                     into.add(key);
                 }

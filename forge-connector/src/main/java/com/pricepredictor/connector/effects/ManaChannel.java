@@ -65,7 +65,7 @@ final class ManaChannel {
             // board it was actually produced on.
             EffectRecord record = context.newResolution(Moment.RESOLUTION)
                     .actor(player)
-                    .ability(ProvenanceKey.resolve(ability))
+                    .ability(ProvenanceResolver.resolve(ability))
                     .state(live.snapshots().ofBoard().render())
                     .payload(EffectRecord.eventsPayload(List.of(event)));
             reservoir.hold(key, slot, record);

@@ -74,11 +74,11 @@ class ModalResolutionTest {
         SpellAbility charm = charmOf(game, game.getPlayers().get(0), "Boros Charm");
         List<AbilitySub> clones = TestBoard.chain(charm, 0, 2);
 
-        ProvenanceKey root = ProvenanceKey.resolve(charm).key();
+        ProvenanceKey root = ProvenanceResolver.resolve(charm).key();
         assertNotNull(root);
         assertNull(root.option(), "the charm itself is the root line");
-        assertEquals(root.withOption(0), ProvenanceKey.resolve(clones.get(0)).key());
-        assertEquals(root.withOption(2), ProvenanceKey.resolve(clones.get(1)).key());
+        assertEquals(root.withOption(0), ProvenanceResolver.resolve(clones.get(0)).key());
+        assertEquals(root.withOption(2), ProvenanceResolver.resolve(clones.get(1)).key());
     }
 
     /** A mode's own sub-abilities resolve under the mode, and open no mode of their own. */
@@ -92,8 +92,8 @@ class ModalResolutionTest {
         AbilitySub mode = clones.get(0);
         AbilitySub pump = clones.get(1);
 
-        ProvenanceKey root = ProvenanceKey.resolve(charm).key();
-        assertEquals(root.withOption(0), ProvenanceKey.resolve(pump).key());
+        ProvenanceKey root = ProvenanceResolver.resolve(charm).key();
+        assertEquals(root.withOption(0), ProvenanceResolver.resolve(pump).key());
         assertNotNull(CharmModes.modeStartOf(mode));
         assertNull(CharmModes.modeStartOf(pump), "a sub-ability of a mode opens nothing");
     }
@@ -274,7 +274,7 @@ class ModalResolutionTest {
         assertTrue(fork.wrote(), "the forced resolution observed something");
         List<String> records = fork.records();
         assertEquals(3, records.size(), records.toString());
-        ProvenanceKey root = ProvenanceKey.resolve(charm).key();
+        ProvenanceKey root = ProvenanceResolver.resolve(charm).key();
         for (String record : records) {
             assertTrue(record.contains("\"interventional\":true"), record);
             assertFalse(record.contains("\"link_id\":\""), "a forced half has no partner: " + record);

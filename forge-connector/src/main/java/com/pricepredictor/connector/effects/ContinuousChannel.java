@@ -91,7 +91,7 @@ final class ContinuousChannel {
         for (LayerContributions.Contribution contribution : contributions) {
             rendered.add(contribution.toJson());
         }
-        ProvenanceKey.Resolved acting = ProvenanceKey.resolve(source);
+        ProvenanceKey.Resolved acting = ProvenanceResolver.resolve(source);
         String state = live.snapshots().ofBoardWithout(staticId).render();
         String payload = "{\"contributions\":" + rendered
                 + ",\"board_hash\":" + Json.string(boardHash) + "}";

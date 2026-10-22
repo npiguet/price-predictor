@@ -289,7 +289,7 @@ public final class PlayabilityChannel {
      * is to blame.
      */
     private static String forbiddenJson(Card card, StaticAbility responsible) {
-        ProvenanceKey key = responsible == null ? null : ProvenanceKey.of(responsible);
+        ProvenanceKey key = responsible == null ? null : ProvenanceResolver.of(responsible);
         return "{\"entity\":" + Json.string(SnapshotBuilder.entityId(card))
                 + ",\"responsible_static\":["
                 + (key == null ? "" : key.toJson()) + "]}";

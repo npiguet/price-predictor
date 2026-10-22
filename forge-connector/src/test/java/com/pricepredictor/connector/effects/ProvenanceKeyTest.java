@@ -96,12 +96,12 @@ class ProvenanceKeyTest {
     void aStackCopyOfAnActivatedAbilityKeysToTheLineItCameFrom() {
         Card fountain = card("Fountain of Youth");
         SpellAbility printed = scriptedSpell(fountain.getCurrentState(), "GainLife");
-        ProvenanceKey expected = ProvenanceKey.of(printed);
+        ProvenanceKey expected = ProvenanceResolver.of(printed);
 
         assertNotNull(expected, "the pristine ability must key");
         assertEquals("cardsfolder/f/fountain_of_youth.txt", expected.scriptFile());
         assertEquals(TraitKind.SPELL, expected.traitKind());
-        assertEquals(expected, ProvenanceKey.of(asStackCopy(printed)));
+        assertEquals(expected, ProvenanceResolver.of(asStackCopy(printed)));
     }
 
     /**
@@ -134,7 +134,7 @@ class ProvenanceKeyTest {
         SpellAbility orphan = printed.copy(printed.getHostCard(), null, false, true);
 
         assertNull(orphan.getOriginalAbility(), "this shape carries no back-reference");
-        assertEquals(ProvenanceKey.of(printed), ProvenanceKey.of(orphan));
+        assertEquals(ProvenanceResolver.of(printed), ProvenanceResolver.of(orphan));
     }
 
     /**
@@ -152,7 +152,7 @@ class ProvenanceKeyTest {
         state.addSpellAbility(printed.copy(twin, null, false, true));
 
         SpellAbility orphan = printed.copy(twin, null, false, true);
-        assertNull(ProvenanceKey.of(orphan),
+        assertNull(ProvenanceResolver.of(orphan),
                 "two same-shape members must produce no key rather than a guess");
     }
 
@@ -175,7 +175,7 @@ class ProvenanceKeyTest {
             Trigger trigger = triggers.get(i);
             WrappedAbility wrapped =
                     new WrappedAbility(trigger, trigger.ensureAbility(), null);
-            ProvenanceKey key = ProvenanceKey.of(wrapped);
+            ProvenanceKey key = ProvenanceResolver.of(wrapped);
 
             assertNotNull(key, "wrapped trigger " + i + " must key");
             assertEquals("cardsfolder/p/paralyze.txt", key.scriptFile());
@@ -197,7 +197,7 @@ class ProvenanceKeyTest {
         SpellAbility execute = trigger.ensureAbility();
         execute.setTrigger(trigger);
 
-        ProvenanceKey key = ProvenanceKey.of(execute);
+        ProvenanceKey key = ProvenanceResolver.of(execute);
         assertNotNull(key);
         assertEquals("cardsfolder/b/brass_man.txt", key.scriptFile());
         assertEquals(TraitKind.TRIGGER, key.traitKind());
@@ -208,7 +208,7 @@ class ProvenanceKeyTest {
     @Test
     void aReplacementEffectKeysToItsPrintedLine() {
         Card paralyze = card("Paralyze");
-        ProvenanceKey key = ProvenanceKey.of(
+        ProvenanceKey key = ProvenanceResolver.of(
                 paralyze.getCurrentState().getReplacementEffects().iterator().next());
 
         assertNotNull(key);
@@ -233,7 +233,7 @@ class ProvenanceKeyTest {
                 "the front face is the one that is up");
 
         SpellAbility fight = scriptedSpell(back, "Fight");
-        ProvenanceKey key = ProvenanceKey.of(fight);
+        ProvenanceKey key = ProvenanceResolver.of(fight);
 
         assertNotNull(key);
         assertEquals("cardsfolder/d/daybreak_ranger_nightfall_predator.txt",
@@ -248,7 +248,7 @@ class ProvenanceKeyTest {
         Card werewolf = card("Daybreak Ranger");
         SpellAbility damage =
                 scriptedSpell(werewolf.getState(CardStateName.Original), "DealDamage");
-        ProvenanceKey key = ProvenanceKey.of(damage);
+        ProvenanceKey key = ProvenanceResolver.of(damage);
 
         assertNotNull(key);
         assertEquals(0, key.face());
@@ -263,7 +263,7 @@ class ProvenanceKeyTest {
         SpellAbility fight =
                 scriptedSpell(werewolf.getState(CardStateName.Backside), "Fight");
 
-        assertEquals(ProvenanceKey.of(fight), ProvenanceKey.of(asStackCopy(fight)));
+        assertEquals(ProvenanceResolver.of(fight), ProvenanceResolver.of(asStackCopy(fight)));
     }
 
     // ── tokens ──────────────────────────────────────────────────────────
@@ -277,7 +277,7 @@ class ProvenanceKeyTest {
     void aTokensAbilityKeysIntoTheTokenTree() {
         Card food = token("c_a_food_sac");
         SpellAbility gainLife = scriptedSpell(food.getCurrentState(), "GainLife");
-        ProvenanceKey key = ProvenanceKey.of(gainLife);
+        ProvenanceKey key = ProvenanceResolver.of(gainLife);
 
         assertNotNull(key);
         assertEquals("tokenscripts/c_a_food_sac.txt", key.scriptFile());
@@ -291,8 +291,8 @@ class ProvenanceKeyTest {
         Card food = token("c_a_food_sac");
         SpellAbility gainLife = scriptedSpell(food.getCurrentState(), "GainLife");
 
-        assertEquals(ProvenanceKey.of(gainLife),
-                ProvenanceKey.of(asStackCopy(gainLife)));
+        assertEquals(ProvenanceResolver.of(gainLife),
+                ProvenanceResolver.of(asStackCopy(gainLife)));
     }
 
     /**
@@ -307,7 +307,7 @@ class ProvenanceKeyTest {
         Card copy = TestCards.copiedToken("c_a_food_sac");
 
         assertNull(copy.getPaperCard(), "the fixture must reproduce the copier's shape");
-        assertEquals("tokenscripts/c_a_food_sac.txt", ProvenanceKey.scriptFileOf(copy));
+        assertEquals("tokenscripts/c_a_food_sac.txt", ScriptLocator.scriptFileOf(copy));
     }
 
     /** And a real card's copy is not mistaken for a token: no image-key path for it. */
@@ -318,7 +318,7 @@ class ProvenanceKeyTest {
         copy.setName(bolt.getName());
         copy.setImageKey(bolt.getImageKey());
 
-        assertEquals("cardsfolder/l/lightning_bolt.txt", ProvenanceKey.scriptFileOf(copy));
+        assertEquals("cardsfolder/l/lightning_bolt.txt", ScriptLocator.scriptFileOf(copy));
     }
 
     /** A token image key the database does not know is not turned into a path. */
@@ -329,7 +329,7 @@ class ProvenanceKeyTest {
 
         // Falls through to the name-derived cardsfolder path, exactly as before
         // this change; what must not happen is a fabricated tokenscripts path.
-        assertEquals("cardsfolder/f/food_token.txt", ProvenanceKey.scriptFileOf(copy));
+        assertEquals("cardsfolder/f/food_token.txt", ScriptLocator.scriptFileOf(copy));
     }
 
     /**
@@ -343,11 +343,11 @@ class ProvenanceKeyTest {
     void aNullOrEmptyImageKeyFallsThroughToTheCardTreeWithoutThrowing() {
         Card withNullKey = TestCards.copiedToken("c_a_food_sac");
         withNullKey.setImageKey(null);
-        assertEquals("cardsfolder/f/food_token.txt", ProvenanceKey.scriptFileOf(withNullKey));
+        assertEquals("cardsfolder/f/food_token.txt", ScriptLocator.scriptFileOf(withNullKey));
 
         Card withEmptyKey = TestCards.copiedToken("c_a_food_sac");
         withEmptyKey.setImageKey("");
-        assertEquals("cardsfolder/f/food_token.txt", ProvenanceKey.scriptFileOf(withEmptyKey));
+        assertEquals("cardsfolder/f/food_token.txt", ScriptLocator.scriptFileOf(withEmptyKey));
     }
 
     /**
@@ -364,7 +364,7 @@ class ProvenanceKeyTest {
         copy.setName("Lightning Bolt");
         copy.setImageKey(card("Lightning Bolt").getImageKey());
 
-        assertEquals("cardsfolder/l/lightning_bolt.txt", ProvenanceKey.scriptFileOf(copy));
+        assertEquals("cardsfolder/l/lightning_bolt.txt", ScriptLocator.scriptFileOf(copy));
     }
 
     // ── engine-built command-zone cards ─────────────────────────────────
@@ -384,7 +384,7 @@ class ProvenanceKeyTest {
                 "DB$ Draw | Defined$ You | NumCards$ 1", monarch);
         monarch.getCurrentState().addSpellAbility(draw);
 
-        ProvenanceKey.Resolved resolved = ProvenanceKey.resolve(draw);
+        ProvenanceKey.Resolved resolved = ProvenanceResolver.resolve(draw);
 
         assertNull(resolved.key(),
                 "an engine-built card names no script file in any tree");
@@ -409,7 +409,7 @@ class ProvenanceKeyTest {
                 "DB$ GainLife | Defined$ You | LifeAmount$ 1", effect);
         effect.getCurrentState().addSpellAbility(onEffect);
 
-        assertEquals(ProvenanceKey.of(creator), ProvenanceKey.of(onEffect));
+        assertEquals(ProvenanceResolver.of(creator), ProvenanceResolver.of(onEffect));
     }
 
     // ── keyword-derived abilities ───────────────────────────────────────
@@ -429,7 +429,7 @@ class ProvenanceKeyTest {
         Map<String, Integer> ordinals = new LinkedHashMap<>();
         for (KeywordInterface keyword : state.getIntrinsicKeywords()) {
             ordinals.put(keyword.getOriginal().split("[: ]")[0],
-                    ProvenanceKey.keywordIndex(state, keyword));
+                    FaceOrder.keywordIndex(state, keyword));
         }
 
         assertEquals(Map.of("Buyback", 0, "Cycling", 1, "Flashback", 2,
@@ -449,7 +449,7 @@ class ProvenanceKeyTest {
         KeywordInterface flashback = flashbackOf(blast.getCurrentState());
 
         assertEquals(-1,
-                ProvenanceKey.keywordIndex(bear.getCurrentState(), flashback),
+                FaceOrder.keywordIndex(bear.getCurrentState(), flashback),
                 "a keyword the card does not print has no ordinal on it");
     }
 
@@ -473,10 +473,10 @@ class ProvenanceKeyTest {
         SpellAbility derived = spell.copy(blast, null, false, true);
         derived.setKeyword(flashback);
 
-        ProvenanceKey key = ProvenanceKey.of(derived);
+        ProvenanceKey key = ProvenanceResolver.of(derived);
         assertNotNull(key, "a keyword-derived ability must key");
         assertEquals(TraitKind.KEYWORD, key.traitKind());
-        assertEquals(ProvenanceKey.keywordIndex(state, flashback),
+        assertEquals(FaceOrder.keywordIndex(state, flashback),
                 key.indexWithinKind());
         assertEquals("cardsfolder/b/blast_from_the_past.txt", key.scriptFile());
     }
@@ -491,7 +491,7 @@ class ProvenanceKeyTest {
         SpellAbility detached = printed.copy(fountain, null, false, true);
         detached.setCardState(null);
 
-        ProvenanceKey.Resolved resolved = ProvenanceKey.resolve(detached);
+        ProvenanceKey.Resolved resolved = ProvenanceResolver.resolve(detached);
         assertNull(resolved.key());
         assertEquals(UnresolvedReason.NO_CARD_STATE, resolved.reason());
     }
@@ -500,7 +500,7 @@ class ProvenanceKeyTest {
     @Test
     void aResolvedKeyCarriesNoReason() {
         Card fountain = card("Fountain of Youth");
-        ProvenanceKey.Resolved resolved = ProvenanceKey.resolve(
+        ProvenanceKey.Resolved resolved = ProvenanceResolver.resolve(
                 scriptedSpell(fountain.getCurrentState(), "GainLife"));
 
         assertNotNull(resolved.key());
@@ -518,7 +518,7 @@ class ProvenanceKeyTest {
      */
     @Test
     void nothingAtAllIsAnUnknownKindRatherThanAResolverFailure() {
-        ProvenanceKey.Resolved resolved = ProvenanceKey.resolve(null);
+        ProvenanceKey.Resolved resolved = ProvenanceResolver.resolve(null);
 
         assertNull(resolved.key());
         assertEquals(UnresolvedReason.UNKNOWN_KIND, resolved.reason());
@@ -537,7 +537,7 @@ class ProvenanceKeyTest {
     @Test
     void aCardTheTreeFilesUnderAnotherLetterKeysToWhereItReallyIs() {
         Card mace = card("+2 Mace");
-        ProvenanceKey key = ProvenanceKey.of(
+        ProvenanceKey key = ProvenanceResolver.of(
                 mace.getCurrentState().getStaticAbilities().iterator().next());
 
         assertNotNull(key);
@@ -552,7 +552,7 @@ class ProvenanceKeyTest {
     @Test
     void theKeyedPathIsTheOneTheConverterWouldHaveWritten() {
         Card mace = card("+2 Mace");
-        String path = ProvenanceKey.scriptFileOf(mace);
+        String path = ScriptLocator.scriptFileOf(mace);
 
         assertEquals(SourceTree.CARDSFOLDER + "/"
                         + SourceTree.relativePathIn(
@@ -580,7 +580,7 @@ class ProvenanceKeyTest {
                 donor.getCurrentState().getStaticAbilities().iterator().next();
         Card recipient = card("Metallic Sliver");
 
-        ProvenanceKey key = ProvenanceKey.of(
+        ProvenanceKey key = ProvenanceResolver.of(
                 grantedKeywordTrigger(recipient, "Poisonous:1", grantor));
 
         assertNotNull(key, "a granted keyword's trigger must key to its donor");
@@ -588,9 +588,9 @@ class ProvenanceKeyTest {
         // teach the model that Metallic Sliver, a vanilla 1/1, prints a poison
         // trigger, which is worse than naming no line at all.
         assertEquals("cardsfolder/v/virulent_sliver.txt", key.scriptFile());
-        assertNotEquals(ProvenanceKey.scriptFileOf(recipient), key.scriptFile());
+        assertNotEquals(ScriptLocator.scriptFileOf(recipient), key.scriptFile());
         assertEquals(TraitKind.STATIC, key.traitKind());
-        assertEquals(ProvenanceKey.of(grantor), key);
+        assertEquals(ProvenanceResolver.of(grantor), key);
     }
 
     /** The engine's own path for handing a keyword to another permanent. */
@@ -618,10 +618,10 @@ class ProvenanceKeyTest {
         Card fountain = card("Fountain of Youth");
         SpellAbility spawner = scriptedSpell(fountain.getCurrentState(), "GainLife");
 
-        ProvenanceKey key = ProvenanceKey.of(delayedTriggerSpawnedBy(spawner));
+        ProvenanceKey key = ProvenanceResolver.of(delayedTriggerSpawnedBy(spawner));
 
         assertNotNull(key, "a delayed trigger must key to its spawner");
-        assertEquals(ProvenanceKey.of(spawner), key);
+        assertEquals(ProvenanceResolver.of(spawner), key);
         assertEquals(TraitKind.SPELL, key.traitKind());
     }
 
@@ -639,7 +639,7 @@ class ProvenanceKeyTest {
         SpellAbility execute = printed.ensureAbility();
         execute.setTrigger(printed);
 
-        ProvenanceKey key = ProvenanceKey.of(delayedTriggerSpawnedBy(execute));
+        ProvenanceKey key = ProvenanceResolver.of(delayedTriggerSpawnedBy(execute));
 
         assertNotNull(key);
         assertEquals("cardsfolder/b/brass_man.txt", key.scriptFile());
@@ -664,7 +664,7 @@ class ProvenanceKeyTest {
     void aReflexiveTriggersExecuteKeysToThePrintedTriggerLine() {
         Card numa = card("Numa, Joraga Chieftain");
         Trigger printed = numa.getCurrentState().getTriggers().iterator().next();
-        ProvenanceKey expected = ProvenanceKey.of(printed);
+        ProvenanceKey expected = ProvenanceResolver.of(printed);
         assertNotNull(expected, "the printed T: line must key");
 
         SpellAbility payCost = printed.ensureAbility();
@@ -673,7 +673,7 @@ class ProvenanceKeyTest {
         SpellAbility execute = reflexive.ensureAbility();
         execute.setTrigger(reflexive);
 
-        assertEquals(expected, ProvenanceKey.of(execute));
+        assertEquals(expected, ProvenanceResolver.of(execute));
         assertEquals(TraitKind.TRIGGER, expected.traitKind());
     }
 
@@ -715,7 +715,7 @@ class ProvenanceKeyTest {
     void aCostVariantCopyOfAPermanentSpellKeysToThePrintedSpell() {
         Card adept = card("Silvergill Adept");
         SpellAbility printed = adept.getCurrentState().getFirstSpellAbility();
-        ProvenanceKey expected = ProvenanceKey.of(printed);
+        ProvenanceKey expected = ProvenanceResolver.of(printed);
         assertNotNull(expected, "the pristine permanent spell must key");
 
         SpellAbility variant = printed.copy(adept, null, false, true);
@@ -724,7 +724,7 @@ class ProvenanceKeyTest {
                 "a cost variant carries no back-reference; that is the case under test");
         assertTrue(printed.getOriginalMapParams().isEmpty(),
                 "a permanent spell has no script parameters to fingerprint");
-        assertEquals(expected, ProvenanceKey.of(variant));
+        assertEquals(expected, ProvenanceResolver.of(variant));
     }
 
     /**
@@ -764,13 +764,13 @@ class ProvenanceKeyTest {
         Card plains = card("Plains");
         Trigger granted = grantedFromSVar(genju, plains, "PseudoLifelink", animate);
 
-        ProvenanceKey key = ProvenanceKey.of(granted);
+        ProvenanceKey key = ProvenanceResolver.of(granted);
 
         assertNotNull(key, "the aura's own Animate line granted this trigger");
-        assertEquals(ProvenanceKey.of(animate), key);
+        assertEquals(ProvenanceResolver.of(animate), key);
         // Never the creature that received it, which prints no such line.
         assertEquals("cardsfolder/g/genju_of_the_fields.txt", key.scriptFile());
-        assertNotEquals(ProvenanceKey.scriptFileOf(plains), key.scriptFile());
+        assertNotEquals(ScriptLocator.scriptFileOf(plains), key.scriptFile());
         assertEquals(TraitKind.SPELL, key.traitKind());
     }
 
@@ -793,9 +793,9 @@ class ProvenanceKeyTest {
         Trigger granted = recipient.getTriggerForStaticAbility(
                 aura.getCurrentState().getSVar(grantor.getParam("AddTrigger")), grantor);
 
-        ProvenanceKey key = ProvenanceKey.of(granted);
+        ProvenanceKey key = ProvenanceResolver.of(granted);
         assertNotNull(key);
-        assertEquals(ProvenanceKey.of(grantor), key);
+        assertEquals(ProvenanceResolver.of(grantor), key);
         assertEquals("cardsfolder/c/commanding_presence.txt", key.scriptFile());
         assertEquals(TraitKind.STATIC, key.traitKind());
     }
@@ -813,7 +813,7 @@ class ProvenanceKeyTest {
         Trigger granted = grantedFromSVar(genju, card("Plains"), "PseudoLifelink", animate);
         state.setSVar("PseudoLifelinkTwin", state.getSVar("PseudoLifelink"));
 
-        ProvenanceKey.Resolved resolved = ProvenanceKey.resolve(granted);
+        ProvenanceKey.Resolved resolved = ProvenanceResolver.resolve(granted);
 
         assertNull(resolved.key(), "two SVars parse the same; neither is the answer");
         assertEquals(UnresolvedReason.GRANTED_TRAIT, resolved.reason());
@@ -836,7 +836,7 @@ class ProvenanceKeyTest {
                 "Mode$ Phase | Phase$ End Of Turn | TriggerDescription$ Assembled inline.",
                 card("Plains"), false, animate);
 
-        ProvenanceKey.Resolved resolved = ProvenanceKey.resolve(granted);
+        ProvenanceKey.Resolved resolved = ProvenanceResolver.resolve(granted);
 
         assertNull(resolved.key(), "no SVar of the donor carries this text");
         assertEquals(UnresolvedReason.GRANTED_TRAIT, resolved.reason());
@@ -852,7 +852,7 @@ class ProvenanceKeyTest {
                 card("Plains"), false, animate);
 
         assertEquals("cardsfolder/g/genju_of_the_fields.txt",
-                ProvenanceKey.scriptFileOf(granted.getCardState().getCard()),
+                ScriptLocator.scriptFileOf(granted.getCardState().getCard()),
                 "the donor's state is what Forge points a granted trait at");
     }
 
@@ -875,7 +875,7 @@ class ProvenanceKeyTest {
         Card recipient = card("Metallic Sliver");
         Trigger granted = grantedKeywordTrigger(recipient, "Poisonous:1", null);
 
-        ProvenanceKey.Resolved resolved = ProvenanceKey.resolve(granted);
+        ProvenanceKey.Resolved resolved = ProvenanceResolver.resolve(granted);
 
         assertNull(resolved.key(), "the recipient prints no such keyword");
         assertEquals(UnresolvedReason.GRANTED_KEYWORD, resolved.reason());
@@ -893,7 +893,7 @@ class ProvenanceKeyTest {
                 "DB$ GainLife | Defined$ You | LifeAmount$ 99", fountain);
         stray.setCardState(fountain.getCurrentState());
 
-        ProvenanceKey.Resolved resolved = ProvenanceKey.resolve(stray);
+        ProvenanceKey.Resolved resolved = ProvenanceResolver.resolve(stray);
 
         assertNull(resolved.key());
         assertEquals(UnresolvedReason.UNINDEXABLE, resolved.reason());
