@@ -606,7 +606,7 @@ public final class BusBracketCollector extends BusEventReader {
     /**
      * An event an effect API described rather than the bus announced.
      *
-     * <p>Package-private because {@code PatchedCollectors} owns the clause hook
+     * <p>Package-private because {@link ClauseOutcomeRouter} owns the clause hook
      * and this collector owns the open bracket: the event belongs to whatever
      * resolution is in flight, which only this class knows.
      */

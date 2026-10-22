@@ -816,7 +816,7 @@ class BusBracketCollectorTest {
      * <p>Companion to {@code OutcomeHandlerTest
      * .anOutcomeFromAnotherGameDoesNotReachThisGamesBracket} and {@code
      * ClauseContractTest.aClauseFromAnotherGameDoesNotReachThisGamesBracket},
-     * which cover the same fix on {@code PatchedCollectors}'s two hooks; this
+     * which cover the same fix on {@code ClauseOutcomeRouter}'s two hooks; this
      * one is on {@code BusBracketCollector} because {@code confirmHandler} is
      * declared there instead.
      */

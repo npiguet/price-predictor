@@ -175,7 +175,7 @@ class RecordCharacterizationTest {
 
         List<String> records = records(board, CAPS, (bracket, collectors) -> {
             HookShapes.Replacement listener =
-                    HookShapes.proxy(HookShapes.Replacement.class, collectors.rewriteHandler());
+                    HookShapes.proxy(HookShapes.Replacement.class, collectors.rewrites().handler());
 
             ReplacementEffect exile = rest.getReplacementEffects().iterator().next();
             SpellAbility ran = exile.ensureAbility();
