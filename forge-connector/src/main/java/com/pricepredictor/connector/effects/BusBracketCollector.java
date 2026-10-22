@@ -3,7 +3,6 @@ package com.pricepredictor.connector.effects;
 import com.google.common.eventbus.Subscribe;
 import forge.game.Game;
 import forge.game.card.Card;
-import forge.game.zone.ZoneType;
 import forge.game.event.GameEventCardChangeZone;
 import forge.game.event.GameEventCombatEnded;
 import forge.game.event.GameEventGameFinished;
@@ -517,9 +516,7 @@ public final class BusBracketCollector extends BusEventReader {
      *         case it goes nowhere else
      */
     private boolean holdAsConsequence(GameEventCardChangeZone event, EffectEvent moved) {
-        if (held == null || event.from() == null
-                || event.from().zoneType() != ZoneType.Battlefield
-                || !game.getTracker().isFrozen()) {
+        if (held == null || !isStateBasedLeave(event)) {
             return false;
         }
         List<Set<String>> touched = new ArrayList<>();

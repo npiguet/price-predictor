@@ -3,9 +3,7 @@ package com.pricepredictor.connector.effects;
 import forge.game.Game;
 import forge.game.event.GameEventCardChangeZone;
 import forge.game.spellability.SpellAbility;
-import forge.game.zone.ZoneType;
 
-import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
@@ -17,13 +15,14 @@ import java.util.Set;
  * one, because a real game interleaves them. A fork has no such problem: it is
  * created, one ability is forced to resolve or one damage step is dealt, and it
  * is thrown away, so every event the bus publishes in that window belongs to
- * that one thing. Appending them flat is the whole job.
+ * that one thing. Filing them flat is the whole job.
  *
  * <p>The events are read by {@link BusEventReader}, the same reader the bracket
- * collector uses, so an interventional or probe record and an observed one
+ * collector uses, and filed into an {@link EventBuffer}, the same buffer its
+ * brackets use, so an interventional or probe record and an observed one
  * describe the same outcome the same way: the same subscriptions, the same
- * shaping, and the same cause the bus names for a damage, a poison or a
- * radiation counter.
+ * shaping, the same cause the bus names for a damage, a poison or a
+ * radiation counter, and a repeated state transition filed once.
  *
  * <p>Every event is stamped by {@link EventAttribution} on its way in, for the
  * same reason: {@code attributed_to} and {@code duration} are how a reader asks
@@ -50,7 +49,7 @@ final class ForkEventSink extends BusEventReader {
      * against the observed combat record's.
      */
     private final boolean combatDamage;
-    private final List<EffectEvent> events = new ArrayList<>();
+    private final EventBuffer events = new EventBuffer();
     /** Positions in {@link #events} of moves off the battlefield during a state-based check. */
     private final Set<Integer> stateBasedLeaves = new LinkedHashSet<>();
 
@@ -72,13 +71,13 @@ final class ForkEventSink extends BusEventReader {
     }
 
     List<EffectEvent> events() {
-        return List.copyOf(events);
+        return List.copyOf(events.events());
     }
 
     /**
      * Where in {@link #events()} a permanent left the battlefield while a
-     * state-based check was running, read as the fork's view tracker being
-     * frozen, the way {@code BusBracketCollector.holdAsConsequence} reads it.
+     * state-based check was running, by the reading the bracket collector
+     * takes too ({@link #isStateBasedLeave}).
      */
     Set<Integer> stateBasedLeaves() {
         return Set.copyOf(stateBasedLeaves);
@@ -106,19 +105,25 @@ final class ForkEventSink extends BusEventReader {
      */
     @Override
     void fileOutcome(EffectEvent event, String namedCause) {
-        events.add(EventAttribution.stamp(event, acting, namedCause));
+        file(event, namedCause);
     }
 
+    /**
+     * A death the forced resolution left behind is marked where it was filed,
+     * so a modal fork can file it by the live rule.
+     *
+     * <p>Marked only when it was filed: a repeat the buffer refused has no
+     * position, and the next free one belongs to whatever is filed next.
+     */
     @Override
     void fileMove(GameEventCardChangeZone event, EffectEvent moved) {
-        if (event.from() != null
-                && event.from().zoneType() == ZoneType.Battlefield
-                && game != null && game.getTracker().isFrozen()) {
-            // A state-based check is running -- the same reading the live
-            // collector takes -- so this is a death the forced resolution
-            // left behind, which a modal fork files by the live rule.
-            stateBasedLeaves.add(events.size());
+        int at = events.events().size();
+        if (file(moved, null) && isStateBasedLeave(event)) {
+            stateBasedLeaves.add(at);
         }
-        fileOutcome(moved, null);
+    }
+
+    private boolean file(EffectEvent event, String namedCause) {
+        return events.file(EventAttribution.stamp(event, acting, namedCause));
     }
 }
