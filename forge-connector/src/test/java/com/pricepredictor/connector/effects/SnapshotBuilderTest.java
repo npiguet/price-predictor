@@ -11,7 +11,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
 import java.lang.reflect.Constructor;
-import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -127,17 +126,18 @@ class SnapshotBuilderTest {
             pull.getTargets().add(exiled);
             pull.getTargets().add(board.opponent);
 
-            List<Card> referenced = SnapshotBuilder.referencedOf(pull);
+            String state = new SnapshotBuilder(board.game).ofResolving(pull).render();
 
-            assertEquals(List.of(host, exiled), referenced);
-            String state = new SnapshotBuilder(board.game).ofAbility(pull, referenced).render();
             assertTrue(state.contains("{\"id\":\"" + SnapshotBuilder.entityId(exiled)
                     + "\",\"name\":\"Grizzly Bears\",\"zone\":\"exile\""), state);
         }
 
         @Test
         void noAbilityReferencesNothing() {
-            assertEquals(List.of(), SnapshotBuilder.referencedOf(null));
+            CharacterizationBoard board = CharacterizationBoard.empty(PhaseType.MAIN1);
+            SnapshotBuilder snapshots = new SnapshotBuilder(board.game);
+
+            assertEquals(snapshots.ofBoard().render(), snapshots.ofResolving(null).render());
         }
     }
 }
