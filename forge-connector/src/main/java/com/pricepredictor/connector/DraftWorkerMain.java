@@ -90,11 +90,7 @@ public class DraftWorkerMain {
                 new FileOutputStream(FileDescriptor.out), true, StandardCharsets.UTF_8);
         System.setOut(System.err);
 
-        String agentMixSpec = System.getProperty("draft.agent.mix");
-        if (agentMixSpec == null || agentMixSpec.isBlank()) {
-            System.err.println("Error: -Ddraft.agent.mix system property is required");
-            System.exit(2);
-        }
+        String agentMixSpec = WorkerProperties.require("draft.agent.mix");
         String setCode = System.getProperty("draft.set");  // null => random per draft
         Set<String> externalAgents = parseExternalAgents(
                 System.getProperty("draft.external.agents"));
@@ -123,47 +119,74 @@ public class DraftWorkerMain {
         // hooks, which standard sets do not trigger).
         BoosterDraft context = BoosterDraft.createDraft(LimitedPoolType.Full);
 
-        long count = 0;
-        while (true) {
-            String draftId = UUID.randomUUID().toString();
-            try {
-                String draftSet = (setCode != null)
-                        ? setCode
-                        : eligibleSets.get(random.nextInt(eligibleSets.size()));
-                String line = generateDraft(
-                        context, draftSet, mix, random, out, stdin, externalAgents,
-                        draftId, requiredAgent);
-                if (line != null) {
-                    out.println(line);
-                    out.flush();
-                    count++;
-                    if (count % 10 == 0) {
-                        System.err.println("Worker: " + count + " drafts generated");
+        final List<String> sets = eligibleSets;
+        WorkerLoop.runUntilBroken(
+                () -> {
+                    String draftSet = (setCode != null)
+                            ? setCode
+                            : sets.get(random.nextInt(sets.size()));
+                    DraftResult result;
+                    try {
+                        result = generateDraft(
+                                context, draftSet, mix, random, out, stdin, externalAgents,
+                                UUID.randomUUID().toString(), requiredAgent);
+                    } catch (WorkerInputClosed e) {
+                        // The supervisor closed our stdin (it stopped or crashed); exit
+                        // so it can restart a fresh worker if it still wants more drafts.
+                        System.err.println("Pick channel closed: " + e.getMessage());
+                        System.exit(0);
+                        return WorkerLoop.Outcome.ABANDONED;  // unreachable
                     }
-                }
-            } catch (WorkerInputClosed e) {
-                // The supervisor closed our stdin (it stopped or crashed); exit so
-                // it can restart a fresh worker if it still wants more drafts.
-                System.err.println("Pick channel closed: " + e.getMessage());
-                System.exit(0);
-            } catch (Exception e) {
-                System.err.println("Error generating draft: " + e.getMessage());
-                e.printStackTrace(System.err);
-                // Continue on non-fatal errors; fatal errors propagate and the
-                // supervisor restarts the worker.
-            }
+                    return emit(result, draftSet, out);
+                },
+                // stderr: stdout carries nothing but the protocol's sentinel lines.
+                new WorkerLoop.Progress(
+                        System.err, 10, "drafts generated", "Error generating draft"));
+    }
+
+    /** Write a completed draft's transcript; say why a skipped one produced none. */
+    static WorkerLoop.Outcome emit(DraftResult result, String setCode, PrintStream out) {
+        if (result instanceof DraftResult.Completed completed) {
+            out.println(completed.line());
+            out.flush();
+            return WorkerLoop.Outcome.COMPLETED;
         }
+        if (result instanceof DraftResult.Skipped skipped) {
+            System.err.println("Skipped a draft of " + setCode + ": " + skipped.reason());
+            return WorkerLoop.Outcome.SKIPPED;
+        }
+        return WorkerLoop.Outcome.ABANDONED;
+    }
+
+    /**
+     * What one {@link #generateDraft} call came to.
+     *
+     * <p>Three outcomes rather than a nullable line, because two of them must
+     * be told apart: a skip is the worker's own doing and will recur — a set
+     * with no booster template skips every draft — so the worker loop counts
+     * it as a failure, while an abandoned draft is the supervisor's (it aborted,
+     * or its response was malformed and it has been told) and counts as neither.
+     */
+    sealed interface DraftResult {
+        /** A full transcript, sentinel included, ready for stdout. */
+        record Completed(String line) implements DraftResult {}
+
+        /** No draft was attempted, for {@code reason}. */
+        record Skipped(String reason) implements DraftResult {}
+
+        /** The draft was dropped part-way: the supervisor aborted it, or has been told why. */
+        record Abandoned() implements DraftResult {}
     }
 
     /** Backward-compatible overload: a Forge-only draft (no external seats). */
-    static String generateDraft(
+    static DraftResult generateDraft(
             BoosterDraft context, String setCode, AgentMix mix, Random random) {
         return generateDraft(context, setCode, mix, random, null, null,
                 Collections.emptySet(), UUID.randomUUID().toString(), null);
     }
 
     /** Backward-compatible overload: no required-agent constraint. */
-    static String generateDraft(
+    static DraftResult generateDraft(
             BoosterDraft context, String setCode, AgentMix mix, Random random,
             PrintStream out, BufferedReader stdin, Set<String> externalAgents,
             String draftId) {
@@ -194,18 +217,16 @@ public class DraftWorkerMain {
     }
 
     /**
-     * Run one full pod draft and return its sentinel-prefixed transcript line,
-     * or {@code null} if the draft was not produced uniformly (skipped) or was
-     * abandoned (a model-seat pick fault). On a worker-detected fault this emits
-     * a {@code <<DRAFT-ABANDONED>>} line via {@code out} first.
+     * Run one full pod draft. On a worker-detected pick fault this emits a
+     * {@code <<DRAFT-ABANDONED>>} line via {@code out} first.
      */
-    static String generateDraft(
+    static DraftResult generateDraft(
             BoosterDraft context, String setCode, AgentMix mix, Random random,
             PrintStream out, BufferedReader stdin, Set<String> externalAgents,
             String draftId, String requiredAgent) {
         SealedTemplate template = boosterTemplate(setCode);
         if (template == null) {
-            return null;
+            return new DraftResult.Skipped("no booster template for set " + setCode);
         }
 
         // Generate all boosters: booster index k = (pack-1) * POD_SIZE + openingSeat.
@@ -217,12 +238,13 @@ public class DraftWorkerMain {
                 packSize = cards.size();
             } else if (cards.size() != packSize) {
                 // Non-uniform pack size breaks the reconstruction geometry; skip.
-                return null;
+                return new DraftResult.Skipped("boosters of " + cards.size() + " and "
+                        + packSize + " cards; the transcript geometry needs one size");
             }
             boosters[k] = new DraftPack(cards, k);
         }
         if (packSize <= 0) {
-            return null;
+            return new DraftResult.Skipped("empty boosters");
         }
 
         // One AI seat per pod position; agents sampled per draft (FR-006).
@@ -271,17 +293,18 @@ public class DraftWorkerMain {
             }
         } catch (DraftAbortedException e) {
             // Supervisor-initiated abandonment (it already knows); drop silently.
-            return null;
+            return new DraftResult.Abandoned();
         } catch (DraftAbandonedException e) {
             // Worker-detected fault: tell the supervisor (it logs + counts it).
             if (out != null) {
                 out.println(formatAbandoned(draftId, e.getMessage()));
                 out.flush();
             }
-            return null;
+            return new DraftResult.Abandoned();
         }
 
-        return SENTINEL + toJson(draftId, setCode, boosters, picksByBooster, agents);
+        return new DraftResult.Completed(
+                SENTINEL + toJson(draftId, setCode, boosters, picksByBooster, agents));
     }
 
     private static SealedTemplate boosterTemplate(String setCode) {

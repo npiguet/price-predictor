@@ -5,7 +5,6 @@ import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Random;
-import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -121,7 +120,7 @@ class MatchGeneratorRoutingTest {
         // missing one turns the round back into sealed self-play in silence.
         MatchGenerator generator = new MatchGenerator(
                 List.of("RVR"), null, null, RUN_ID, emptyIndex(), emptyIndex(), 1,
-                new Random(7), Set.of(), true);
+                new Random(7), HoldoutCards.NONE, true);
 
         for (int i = 0; i < 100; i++) {
             assertTrue(generator.rollIsFileSample(),
@@ -133,7 +132,7 @@ class MatchGeneratorRoutingTest {
     void withoutDecksOnlyTheRollStillMixes() {
         MatchGenerator generator = new MatchGenerator(
                 List.of("RVR"), null, null, RUN_ID, null, emptyIndex(), 4,
-                new Random(7), Set.of(), false);
+                new Random(7), HoldoutCards.NONE, false);
 
         boolean sawForgeMethod = false;
         for (int i = 0; i < 200; i++) {
@@ -167,7 +166,7 @@ class MatchGeneratorRoutingTest {
                 new GeneratedDeck("coverage", "OTHERSET", List.of("Forest"))));
         MatchGenerator generator = new MatchGenerator(
                 List.of("RVR"), null, null, RUN_ID, emptyIndex(), sideB, 1,
-                new Random(7), Set.of(), true);
+                new Random(7), HoldoutCards.NONE, true);
 
         IllegalStateException ex = assertThrows(IllegalStateException.class,
                 () -> generator.pickDeckB("COVERAGE", List.of("Llanowar Elves")));
@@ -185,7 +184,7 @@ class MatchGeneratorRoutingTest {
         // success the entire time.
         IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
                 () -> new MatchGenerator(ELIGIBLE, new DeckBuilder(), new GamePlayer(),
-                        RUN_ID, emptyIndex(), null, 1, new Random(0), Set.of(), true));
+                        RUN_ID, emptyIndex(), null, 1, new Random(0), HoldoutCards.NONE, true));
         assertTrue(ex.getMessage().contains("decksOnly"));
     }
 
@@ -197,7 +196,7 @@ class MatchGeneratorRoutingTest {
         // deck the round never asked for.
         IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
                 () -> new MatchGenerator(ELIGIBLE, new DeckBuilder(), new GamePlayer(),
-                        RUN_ID, null, emptyIndex(), 1, new Random(0), Set.of(), true));
+                        RUN_ID, null, emptyIndex(), 1, new Random(0), HoldoutCards.NONE, true));
         assertTrue(ex.getMessage().contains("decksOnly"));
     }
 
@@ -205,7 +204,7 @@ class MatchGeneratorRoutingTest {
     void bothIndicesPresentIsTheOnlyDecksOnlyConfiguration() {
         assertDoesNotThrow(() -> new MatchGenerator(
                 ELIGIBLE, new DeckBuilder(), new GamePlayer(), RUN_ID,
-                emptyIndex(), emptyIndex(), 1, new Random(0), Set.of(), true));
+                emptyIndex(), emptyIndex(), 1, new Random(0), HoldoutCards.NONE, true));
     }
 
     @Test
@@ -214,6 +213,6 @@ class MatchGeneratorRoutingTest {
         // must keep working.
         assertDoesNotThrow(() -> new MatchGenerator(
                 ELIGIBLE, new DeckBuilder(), new GamePlayer(), RUN_ID,
-                null, emptyIndex(), 4, new Random(0), Set.of(), false));
+                null, emptyIndex(), 4, new Random(0), HoldoutCards.NONE, false));
     }
 }

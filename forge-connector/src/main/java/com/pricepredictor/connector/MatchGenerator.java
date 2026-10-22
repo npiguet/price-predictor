@@ -7,15 +7,11 @@ import forge.deck.Deck;
 import forge.item.PaperCard;
 import forge.item.SealedTemplate;
 import forge.util.MyRandom;
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
 
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
-import java.util.Set;
 
 /**
  * Generates one complete sealed match outcome per call.
@@ -74,7 +70,7 @@ public class MatchGenerator {
     private final GeneratedDecksIndex sideBIndex;
     private final int sideBWeight;
     private final Random random;
-    private final Set<String> excludedCards;
+    private final HoldoutCards excludedCards;
     private final boolean decksOnly;
 
     public MatchGenerator(
@@ -99,7 +95,7 @@ public class MatchGenerator {
             int sideBWeight,
             Random random) {
         this(eligibleSetCodes, deckBuilder, gamePlayer, runId, sideAIndex,
-                sideBIndex, sideBWeight, random, excludedCardsFromProperties(), false);
+                sideBIndex, sideBWeight, random, HoldoutCards.fromSystemProperty(), false);
     }
 
     MatchGenerator(
@@ -111,7 +107,7 @@ public class MatchGenerator {
             GeneratedDecksIndex sideBIndex,
             int sideBWeight,
             Random random,
-            Set<String> excludedCards,
+            HoldoutCards excludedCards,
             boolean decksOnly) {
         if (eligibleSetCodes.isEmpty()) {
             throw new IllegalArgumentException("Eligible set list must not be empty");
@@ -147,7 +143,7 @@ public class MatchGenerator {
         this.sideBIndex = sideBIndex;
         this.sideBWeight = sideBWeight;
         this.random = random;
-        this.excludedCards = Set.copyOf(excludedCards);
+        this.excludedCards = excludedCards;
         this.decksOnly = decksOnly;
     }
 
@@ -403,32 +399,6 @@ public class MatchGenerator {
         // every collected effect record is played from, and a second copy of
         // the redraw rule here would be the copy that silently stopped matching.
         return new PoolGenerator().openPool(template, excludedCards);
-    }
-
-    /**
-     * Card names no booster may contain, from {@code -Dsealed.exclude.cards}.
-     *
-     * <p>A depleted run: with these absent from every pool, no collected game
-     * holds a held-out card and none has to be discarded from the effect
-     * model's training corpus. Absent property means an ordinary full-strength
-     * run, which is what supplies the card-disjoint validation stratum.
-     */
-    static Set<String> excludedCardsFromProperties() {
-        String path = System.getProperty("sealed.exclude.cards");
-        if (path == null || path.isBlank()) {
-            return Set.of();
-        }
-        try {
-            return Set.copyOf(Files.readAllLines(Path.of(path.trim())).stream()
-                    .map(String::trim)
-                    .filter(line -> !line.isEmpty())
-                    .toList());
-        } catch (IOException e) {
-            throw new IllegalStateException(
-                    "Cannot read -Dsealed.exclude.cards=" + path
-                            + ". A depleted run that silently fell back to full-strength "
-                            + "pools would put held-out cards in training games.", e);
-        }
     }
 
     /**

@@ -23,13 +23,8 @@ import java.nio.file.Path;
 public class VariantSidecarMain {
 
     public static void main(String[] args) {
-        String variantsPath = "output/effects/variant-scripts/";
-
-        for (int i = 0; i < args.length; i++) {
-            if ("--variants-path".equals(args[i]) && i + 1 < args.length) {
-                variantsPath = args[++i];
-            }
-        }
+        String variantsPath = ToolMain.args(args, "--variants-path")
+                .get("--variants-path", "output/effects/variant-scripts/");
 
         Path variants = Path.of(variantsPath);
         if (!Files.isDirectory(variants)) {
@@ -37,7 +32,7 @@ public class VariantSidecarMain {
             System.exit(1);
         }
 
-        try {
+        ToolMain.run(() -> {
             // Staged, not bare: the loadable list below has to be taken from a
             // card database that actually holds the variants, and it is the
             // same database a worker will build.
@@ -58,12 +53,7 @@ public class VariantSidecarMain {
             System.out.println(
                     "  Loadable:     " + loadable + " of " + result.totalFiles()
                             + " (written to " + LOADABLE_FILE + ")");
-            System.exit(0);
-        } catch (Exception e) {
-            System.err.println("Fatal error: " + e.getMessage());
-            e.printStackTrace();
-            System.exit(1);
-        }
+        });
     }
 
     /** Where the names Forge's card database accepted are written. */

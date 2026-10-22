@@ -148,7 +148,7 @@ class MatchGeneratorTest {
 
         MatchGenerator generator = new MatchGenerator(
                 List.of("RVR"), null, null, TEST_RUN_ID, null, null, 0,
-                new Random(42), excluded, false);
+                new Random(42), HoldoutCards.of(excluded), false);
 
         List<PaperCard> pool = generator.generatePool("RVR");
 
@@ -163,7 +163,7 @@ class MatchGeneratorTest {
     void generatePoolWithoutExclusionsIsFullStrength() {
         MatchGenerator generator = new MatchGenerator(
                 List.of("RVR"), null, null, TEST_RUN_ID, null, null, 0,
-                new Random(42), Set.of(), false);
+                new Random(42), HoldoutCards.NONE, false);
 
         assertTrue(generator.generatePool("RVR").size() >= 70,
                 "Full-strength pool too small");
@@ -196,7 +196,7 @@ class MatchGeneratorTest {
         // deck-A card list.
         MatchGenerator generator = new MatchGenerator(
                 List.of("RVR"), null, null, TEST_RUN_ID, mirrorOnly, mirrorOnly, 1,
-                new Random(7), Set.of(), true);
+                new Random(7), HoldoutCards.NONE, true);
 
         MatchGenerator.DeckSelection b = assertDoesNotThrow(
                 () -> generator.pickDeckB("COVERAGE", List.of("Llanowar Elves")),

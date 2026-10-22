@@ -64,7 +64,7 @@ class PoolGeneratorTest {
         List<String> reference = generator.generate("RVR", 1).get(0);
         Set<String> excluded = Set.copyOf(reference.subList(0, 10));
 
-        List<String> pool = generator.generate("RVR", 1, excluded).get(0);
+        List<String> pool = generator.generate("RVR", 1, HoldoutCards.of(excluded)).get(0);
 
         for (String cardName : pool) {
             assertFalse(excluded.contains(cardName),
@@ -81,7 +81,7 @@ class PoolGeneratorTest {
         List<String> reference = generator.generate("RVR", 1).get(0);
         Set<String> excluded = Set.copyOf(reference.subList(0, 10));
 
-        List<String> pool = generator.generate("RVR", 1, excluded).get(0);
+        List<String> pool = generator.generate("RVR", 1, HoldoutCards.of(excluded)).get(0);
 
         assertTrue(pool.size() >= 70, "Depleted pool too small: " + pool.size());
         assertTrue(pool.size() <= 100, "Depleted pool too large: " + pool.size());
@@ -100,7 +100,7 @@ class PoolGeneratorTest {
                 .map(name -> name.toLowerCase(java.util.Locale.ROOT))
                 .collect(java.util.stream.Collectors.toSet());
 
-        List<String> pool = generator.generate("RVR", 1, lowercased).get(0);
+        List<String> pool = generator.generate("RVR", 1, HoldoutCards.of(lowercased)).get(0);
 
         for (String cardName : pool) {
             assertFalse(lowercased.contains(cardName.toLowerCase(java.util.Locale.ROOT)),
@@ -111,7 +111,7 @@ class PoolGeneratorTest {
     @Test
     void generatePoolWithNoExclusionsIsTheOrdinaryPool() {
         PoolGenerator generator = new PoolGenerator();
-        List<String> pool = generator.generate("RVR", 1, Set.of()).get(0);
+        List<String> pool = generator.generate("RVR", 1, HoldoutCards.NONE).get(0);
         assertTrue(pool.size() >= 70, "Pool too small: " + pool.size());
     }
 

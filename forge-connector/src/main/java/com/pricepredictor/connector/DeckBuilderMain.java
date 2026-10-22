@@ -37,13 +37,17 @@ public class DeckBuilderMain {
         PrintStream realOut = System.out;
         System.setOut(System.err);
 
-        ForgeEnvironmentInitializer.initialize();
+        ToolMain.run(() -> {
+            ForgeEnvironmentInitializer.initialize();
+            buildAll(realOut);
+        });
+    }
 
+    /** One deck line on {@code out} per pool line on stdin. */
+    private static void buildAll(PrintStream out) throws java.io.IOException {
         DeckBuilder deckBuilder = new DeckBuilder();
-
         try (BufferedReader reader = new BufferedReader(
                 new InputStreamReader(System.in, StandardCharsets.UTF_8))) {
-
             String line;
             while ((line = reader.readLine()) != null) {
                 line = line.trim();
@@ -52,16 +56,9 @@ public class DeckBuilderMain {
                 List<PaperCard> pool = DeckMaterializer.resolve(CardNameList.parse(line),
                         DeckMaterializer.UnresolvedPolicy.FAIL, UNRESOLVED_POOL);
                 Deck deck = deckBuilder.buildStandard(pool);
-                realOut.println(deckToLine(deck));
-                realOut.flush();
+                out.println(deckToLine(deck));
+                out.flush();
             }
-
-            System.exit(0);
-
-        } catch (Exception e) {
-            System.err.println("Fatal error: " + e.getMessage());
-            e.printStackTrace(System.err);
-            System.exit(1);
         }
     }
 

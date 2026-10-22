@@ -11,7 +11,6 @@ import forge.game.card.Card;
 import forge.game.card.CardFactory;
 import forge.item.PaperCard;
 
-import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -43,29 +42,18 @@ public class CastabilityMain {
     public static final String UNCASTABLE = "uncastable";
 
     public static void main(String[] args) {
-        Path cardsFile = null;
-        Path output = null;
-        Path cardsPath = Path.of("output/cardsfolder");
-
-        for (int i = 0; i < args.length; i++) {
-            switch (args[i]) {
-                case "--cards" -> {
-                    if (i + 1 < args.length) cardsFile = Path.of(args[++i]);
-                }
-                case "--output" -> {
-                    if (i + 1 < args.length) output = Path.of(args[++i]);
-                }
-                case "--cards-path" -> {
-                    if (i + 1 < args.length) cardsPath = Path.of(args[++i]);
-                }
-            }
-        }
-        if (cardsFile == null || output == null) {
+        ToolMain.Args cli = ToolMain.args(args, "--cards", "--output", "--cards-path");
+        String cardsArg = cli.get("--cards");
+        String outputArg = cli.get("--output");
+        Path cardsPath = Path.of(cli.get("--cards-path", "output/cardsfolder"));
+        if (cardsArg == null || outputArg == null) {
             System.err.println("Error: --cards and --output are required");
             System.exit(2);
         }
+        Path cardsFile = Path.of(cardsArg);
+        Path output = Path.of(outputArg);
 
-        try {
+        ToolMain.run(() -> {
             ForgeEnvironmentInitializer.initialize();
             List<String> names = Files.readAllLines(cardsFile, StandardCharsets.UTF_8)
                     .stream().map(String::trim).filter(s -> !s.isEmpty()).toList();
@@ -81,12 +69,7 @@ public class CastabilityMain {
                             + " castable, " + (verdicts.size() - castable)
                             + " uncastable. Output: " + output
                             + " (cards from " + cardsPath + ")");
-            System.exit(0);
-        } catch (IOException | RuntimeException e) {
-            System.err.println("Fatal error: " + e.getMessage());
-            e.printStackTrace();
-            System.exit(1);
-        }
+        });
     }
 
     /** One verdict per name Forge recognizes; names it does not are omitted. */

@@ -1757,6 +1757,14 @@ def run_evaluate_scorer(args: argparse.Namespace) -> int:
     if args.resume and not args.work_dir:
         print("Error: --resume requires --work-dir", file=sys.stderr)
         return 2
+    # The Java worker refuses an even best-of at startup, and the evaluation
+    # supervisor restarts a worker that exits: caught here, or never caught.
+    if args.best_of < 1 or args.best_of % 2 == 0:
+        print(
+            f"Error: --best-of must be a positive odd integer, got: {args.best_of}",
+            file=sys.stderr,
+        )
+        return 2
 
     config = EvaluateScorerConfig(
         checkpoint=Path(args.checkpoint),

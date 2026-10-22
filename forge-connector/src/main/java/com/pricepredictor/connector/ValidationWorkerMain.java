@@ -19,18 +19,8 @@ import java.nio.file.Path;
 public class ValidationWorkerMain {
 
     public static void main(String[] args) {
-        String matchesFileProp = System.getProperty("matches.file");
-        if (matchesFileProp == null) {
-            System.err.println("Error: -Dmatches.file system property is required");
-            System.exit(2);
-        }
-
-        int bestOf = 3;
-        try {
-            bestOf = Integer.parseInt(System.getProperty("best.of", "3"));
-        } catch (NumberFormatException e) {
-            System.err.println("Warning: invalid -Dbest.of value, using 3");
-        }
+        String matchesFileProp = WorkerProperties.require("matches.file");
+        int bestOf = WorkerProperties.bestOf("best.of", 3);
 
         Path matchesFile = Path.of(matchesFileProp);
         Path outcomesFile = Path.of(matchesFileProp + "-outcomes.txt");

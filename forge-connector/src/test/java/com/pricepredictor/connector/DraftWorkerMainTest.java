@@ -138,8 +138,8 @@ class DraftWorkerMainTest {
         BoosterDraft context = BoosterDraft.createDraft(LimitedPoolType.Full);
         DraftWorkerMain.AgentMix mix = DraftWorkerMain.AgentMix.parse("forge-full:1");
 
-        String line = DraftWorkerMain.generateDraft(context, setCode, mix, new Random(0));
-        assertNotNull(line, "draft should produce a transcript for " + setCode);
+        String line = completedLine(
+                DraftWorkerMain.generateDraft(context, setCode, mix, new Random(0)));
         assertTrue(line.startsWith(DraftWorkerMain.SENTINEL), "line must start with sentinel");
         assertFalse(line.substring(DraftWorkerMain.SENTINEL.length()).contains("\n"),
                 "transcript must be a single newline-free line");
@@ -151,6 +151,30 @@ class DraftWorkerMainTest {
         assertTrue(json.contains("\"draft_id\""));
         // Each booster has a non-empty drained picks array.
         assertEquals(24, countOccurrences(json, "\"picks\":["), "every booster lists picks");
+    }
+
+    private static String completedLine(DraftWorkerMain.DraftResult result) {
+        DraftWorkerMain.DraftResult.Completed completed = assertInstanceOf(
+                DraftWorkerMain.DraftResult.Completed.class, result,
+                "the draft should produce a transcript");
+        return completed.line();
+    }
+
+    @Test
+    void aSetWithNoBoosterTemplateIsSkippedNamingTheSet() {
+        // Returned rather than thrown, so the worker loop must count it: a bad
+        // -Ddraft.set once skipped every draft in silence, forever.
+        BoosterDraft context = BoosterDraft.createDraft(LimitedPoolType.Full);
+        DraftWorkerMain.AgentMix mix = DraftWorkerMain.AgentMix.parse("forge-full:1");
+
+        DraftWorkerMain.DraftResult result =
+                DraftWorkerMain.generateDraft(context, "NOT-A-SET", mix, new Random(0));
+
+        DraftWorkerMain.DraftResult.Skipped skipped =
+                assertInstanceOf(DraftWorkerMain.DraftResult.Skipped.class, result);
+        assertTrue(skipped.reason().contains("NOT-A-SET"), skipped.reason());
+        assertEquals(WorkerLoop.Outcome.SKIPPED,
+                DraftWorkerMain.emit(result, "NOT-A-SET", System.out));
     }
 
     private static int countOccurrences(String haystack, String needle) {
@@ -207,12 +231,12 @@ class DraftWorkerMainTest {
 
         BoosterDraft context = BoosterDraft.createDraft(LimitedPoolType.Full);
         DraftWorkerMain.AgentMix mix = DraftWorkerMain.AgentMix.parse("draft-agent:1");
-        String line = DraftWorkerMain.generateDraft(
+        DraftWorkerMain.DraftResult result = DraftWorkerMain.generateDraft(
                 context, setCode, mix, new Random(0), out, stdin,
                 Set.of("draft-agent"), "test-draft");
         out.close();  // signal the responder EOF
 
-        assertNotNull(line, "model-piloted draft should produce a transcript");
+        String line = completedLine(result);
         assertTrue(line.startsWith(DraftWorkerMain.SENTINEL));
         String json = line.substring(DraftWorkerMain.SENTINEL.length());
         assertTrue(json.contains("\"draft_id\":\"test-draft\""));
