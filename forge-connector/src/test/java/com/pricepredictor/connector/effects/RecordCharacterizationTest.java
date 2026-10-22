@@ -471,7 +471,7 @@ class RecordCharacterizationTest {
     /** What a test does with a game's two collectors. */
     @FunctionalInterface
     private interface Body {
-        void run(BusBracketCollector bracket, TestCollectors.Channels collectors) throws Throwable;
+        void run(BusBracketCollector bracket, Channels collectors) throws Throwable;
     }
 
     private RecordShardWriter writer;
@@ -495,7 +495,7 @@ class RecordCharacterizationTest {
             BusBracketCollector bracket = new BusBracketCollector(
                     board.game, TestCollectors.context(writer, GAME_ID, randomSeatPlayerId),
                     recordId -> { });
-            try (TestCollectors.Channels collectors = TestCollectors.Channels.of(
+            try (Channels collectors = Channels.of(
                     board.game, TestCollectors.context(writer, GAME_ID, randomSeatPlayerId),
                     caps, 1L, bracket)) {
                 body.run(bracket, collectors);

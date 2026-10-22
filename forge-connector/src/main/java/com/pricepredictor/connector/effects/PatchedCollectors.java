@@ -4,7 +4,6 @@ import forge.game.Game;
 
 import java.lang.reflect.InvocationHandler;
 import java.util.List;
-import java.util.Random;
 import java.util.function.Supplier;
 
 /**
@@ -27,8 +26,9 @@ import java.util.function.Supplier;
  * they fire once per combat rather than once per candidate).
  *
  * <p><b>One sampling stream per game.</b> The trigger negatives, the decision
- * sample and the mana reservoir all draw from the one {@link Random} built
- * here, so what one channel draws shifts every later draw of the others. That
+ * sample and the mana reservoir all draw from the one {@code Random} their
+ * {@link Channels} are built over, so what one channel draws shifts every
+ * later draw of the others. That
  * is why each hook checks the game a report comes from before it can draw: a
  * fork's report that drew and was then dropped would re-randomise the live
  * game's sample. <b>One dedup set per game</b> likewise, shared by every
@@ -37,12 +37,7 @@ import java.util.function.Supplier;
 final class PatchedCollectors implements AutoCloseable {
 
     private final CollectorContext context;
-    private final RewriteChannel rewrites;
-    private final TriggerChannel triggers;
-    private final PlayabilityChannel playability;
-    private final ManaChannel mana;
-    private final ClauseOutcomeRouter clauses;
-    private final ContinuousChannel continuous;
+    private final Channels channels;
 
     /** A hook this collector installs a listener on. */
     private record Listener(PatchHooks.Hook hook, Supplier<InvocationHandler> handler) {
@@ -58,37 +53,28 @@ final class PatchedCollectors implements AutoCloseable {
     PatchedCollectors(
             Game game, CollectorContext context, CollectionCaps caps, long seed,
             BusBracketCollector bracket) {
-        LiveGame live = new LiveGame(game);
-        RecordDedup dedup = new RecordDedup();
-        Random sampler = new Random(GameRecording.scramble(seed));
         this.context = context;
-        this.rewrites = new RewriteChannel(live, context, dedup);
-        this.triggers = new TriggerChannel(
-                live, context, dedup, new TriggerNegativeSampler(sampler));
-        this.playability = new PlayabilityChannel(
-                live, context, dedup, sampler, caps.playabilityRate());
-        this.mana = new ManaChannel(
-                live, context, new ManaReservoir(caps.manaCap(), sampler));
-        this.clauses = new ClauseOutcomeRouter(live, bracket);
-        this.continuous = new ContinuousChannel(live, context, dedup);
+        this.channels = Channels.of(game, context, caps, seed, bracket);
         this.listeners = List.of(
-                new Listener(PatchHooks.REPLACEMENT_LISTENER, rewrites::handler),
-                new Listener(PatchHooks.TRIGGER_LISTENER, triggers::handler),
-                new Listener(PatchHooks.PLAYABILITY_LISTENER, playability::decisionHandler),
-                new Listener(PatchHooks.MANA_LISTENER, mana::handler),
-                new Listener(PatchHooks.COMBAT_LISTENER, playability::legalityHandler),
-                new Listener(PatchHooks.CLAUSE_LISTENER, clauses::clauseHandler),
-                new Listener(PatchHooks.OUTCOME_LISTENER, clauses::outcomeHandler));
+                new Listener(PatchHooks.REPLACEMENT_LISTENER, channels.rewrites()::handler),
+                new Listener(PatchHooks.TRIGGER_LISTENER, channels.triggers()::handler),
+                new Listener(PatchHooks.PLAYABILITY_LISTENER,
+                        channels.playability()::decisionHandler),
+                new Listener(PatchHooks.MANA_LISTENER, channels.mana()::handler),
+                new Listener(PatchHooks.COMBAT_LISTENER,
+                        channels.playability()::legalityHandler),
+                new Listener(PatchHooks.CLAUSE_LISTENER, channels.clauses()::clauseHandler),
+                new Listener(PatchHooks.OUTCOME_LISTENER, channels.clauses()::outcomeHandler));
     }
 
     /** The decision and legality channel, which the random seat also writes through. */
     PlayabilityChannel playability() {
-        return playability;
+        return channels.playability();
     }
 
     /** The continuous channel, collected at each phase boundary rather than on a hook. */
     ContinuousChannel continuous() {
-        return continuous;
+        return channels.continuous();
     }
 
     /**
@@ -119,17 +105,13 @@ final class PatchedCollectors implements AutoCloseable {
     @Override
     public void close() {
         try {
-            // Before the hooks come down: this is the last moment the game can
-            // be said to have ended, and the mana reservoir is only decided then.
-            mana.flush();
+            // Before the hooks come down: the channels write what they hold
+            // at the end of the game.
+            channels.close();
         } finally {
             for (Listener listener : listeners) {
                 listener.hook().uninstall();
             }
-            // Last, and outside the hook teardown: the question the tally
-            // answers is about the run, so it is asked once per game whatever
-            // the game did.
-            RewriteChannel.JVM_REWRITES.endOfGame();
         }
     }
 }
