@@ -79,8 +79,8 @@ public record ProvenanceKey(
      * <p>The reason is the whole point of the type. An empty {@code ability}
      * array on a record cannot separate "no printed line exists, correctly" —
      * the Monarch, a dungeon, an engine-built effect card — from "the resolver
-     * regressed", and a corpus where 3.1% of resolution records named no line
-     * could not be asked which it was. The reason is written to the record's
+     * regressed", and a corpus with many records naming no line could not be
+     * asked which it was. The reason is written to the record's
      * {@code ability_unresolved}, which is collection metadata and never a
      * model input.
      */

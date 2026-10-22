@@ -241,8 +241,7 @@ public final class SnapshotBuilder {
      *
      * <p>Counted over untapped permanents' mana abilities, one per ability that
      * can produce the colour. It is what separates a board that can answer a
-     * threat from one that only looks like it can, and the field had been
-     * written as zero for every colour since the snapshot was first built.
+     * threat from one that only looks like it can.
      *
      * <p>An ability that makes one mana of any colour counts once for each, so
      * the numbers are an upper bound rather than a sum that can be spent.
@@ -273,8 +272,8 @@ public final class SnapshotBuilder {
      *
      * <p>The engine keeps what left the battlefield, not what died, so a
      * bounced or exiled creature counts here too. It is a close reading of a
-     * condition many triggers ask about and the field had been a constant zero;
-     * an exact count would need a hook where the death is decided.
+     * condition many triggers ask about; an exact count would need a hook where
+     * the death is decided.
      */
     private int creaturesLost(Player player) {
         int count = 0;
@@ -495,7 +494,7 @@ public final class SnapshotBuilder {
         if (combat.isBlocking(card)) {
             // The other half of blocked_by. Without it a blocker's own entry
             // says only that it is somewhere in a combat, so the flag the head
-            // reads for "is this creature blocking" was always false — and the
+            // reads for "is this creature blocking" would always be false — and the
             // blocking relationship is what trample and deathtouch act through.
             for (Card attacker : combat.getAttackersBlockedBy(card)) {
                 blocking.add(Json.string(entityId(attacker)));

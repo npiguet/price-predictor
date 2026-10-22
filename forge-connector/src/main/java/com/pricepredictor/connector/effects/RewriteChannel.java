@@ -85,10 +85,10 @@ final class RewriteChannel {
      * <p><b>Every replacement writes a record, including the ones that declined.</b>
      * A substitution leaves the map untouched and so looks exactly like a
      * replacement that did nothing. The result argument is what tells those
-     * apart, so no rewrite record is uninformative: a {@code not_replaced} is this channel's
-     * negative, the same role a non-fired evaluation plays on the trigger
-     * channel, and it is what teaches when a replacement applies rather than
-     * only what it does when it has.
+     * apart, so no rewrite record is uninformative: a {@code not_replaced} is
+     * this channel's negative, the same role a non-fired evaluation plays on
+     * the trigger channel, and it is what teaches when a replacement applies
+     * rather than only what it does when it has.
      *
      * @param result     Forge's {@code ReplacementResult}, or null where the
      *                   replacement threw or the listener predates the argument
