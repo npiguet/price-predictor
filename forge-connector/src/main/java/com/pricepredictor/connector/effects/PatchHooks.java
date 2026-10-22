@@ -4,7 +4,11 @@ import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Reaches the engine patch's hooks without linking against them.
@@ -192,8 +196,27 @@ public final class PatchHooks {
         }
     }
 
+    /**
+     * Every lookup made so far, absent ones included, by owner and name.
+     *
+     * <p>The classpath is fixed for the life of the JVM, so an answer never
+     * changes, and the sub-ability pointer is read through here for every
+     * event the collectors stamp.
+     */
+    private static final Map<String, Lookup> LOOKUPS = new ConcurrentHashMap<>();
+
     /** Find a static method by owner and name, or report it absent. */
     public static Lookup find(String className, String methodName) {
+        String key = className + '#' + methodName;
+        Lookup known = LOOKUPS.get(key);
+        if (known == null) {
+            known = lookUp(className, methodName);
+            LOOKUPS.putIfAbsent(key, known);
+        }
+        return known;
+    }
+
+    private static Lookup lookUp(String className, String methodName) {
         try {
             Class<?> owner = Class.forName(className);
             for (Method method : owner.getMethods()) {
@@ -274,13 +297,65 @@ public final class PatchHooks {
     public static Object invokeStatic(
             String className, String methodName, Class<?>[] parameterTypes,
             Object... args) {
-        try {
-            Method method = Class.forName(className)
-                    .getMethod(methodName, parameterTypes);
-            return method.invoke(null, args);
-        } catch (ReflectiveOperationException | LinkageError | RuntimeException e) {
+        String key = className + '#' + methodName + Arrays.toString(parameterTypes);
+        Optional<Method> method = STATIC_OVERLOADS.get(key);
+        if (method == null) {
+            method = staticOverload(className, methodName, parameterTypes);
+            STATIC_OVERLOADS.putIfAbsent(key, method);
+        }
+        if (method.isEmpty()) {
             return null;
         }
+        try {
+            return method.get().invoke(null, args);
+        } catch (ReflectiveOperationException | RuntimeException e) {
+            return null;
+        }
+    }
+
+    /** {@link #invokeStatic}'s lookups, by owner, name and parameter types. */
+    private static final Map<String, Optional<Method>> STATIC_OVERLOADS =
+            new ConcurrentHashMap<>();
+
+    private static Optional<Method> staticOverload(
+            String className, String methodName, Class<?>[] parameterTypes) {
+        try {
+            return Optional.of(Class.forName(className).getMethod(methodName, parameterTypes));
+        } catch (ReflectiveOperationException | LinkageError | RuntimeException e) {
+            return Optional.empty();
+        }
+    }
+
+    /**
+     * Public methods by receiver class, absent ones included, keyed by name
+     * and parameter types.
+     *
+     * <p>A class's methods never change, and {@link #read} runs for every
+     * entity of every snapshot.
+     */
+    private static final ClassValue<Map<String, Optional<Method>>> INSTANCE_METHODS =
+            new ClassValue<>() {
+                @Override
+                protected Map<String, Optional<Method>> computeValue(Class<?> type) {
+                    return new ConcurrentHashMap<>();
+                }
+            };
+
+    /** A public method of {@code type}, or null when it has none of that shape. */
+    private static Method instanceMethod(
+            Class<?> type, String methodName, Class<?>... parameterTypes) {
+        Map<String, Optional<Method>> methods = INSTANCE_METHODS.get(type);
+        String key = methodName + Arrays.toString(parameterTypes);
+        Optional<Method> method = methods.get(key);
+        if (method == null) {
+            try {
+                method = Optional.of(type.getMethod(methodName, parameterTypes));
+            } catch (ReflectiveOperationException | LinkageError | RuntimeException e) {
+                method = Optional.empty();
+            }
+            methods.putIfAbsent(key, method);
+        }
+        return method.orElse(null);
     }
 
     /**
@@ -296,8 +371,12 @@ public final class PatchHooks {
         if (target == null) {
             return null;
         }
+        Method method = instanceMethod(target.getClass(), methodName);
+        if (method == null) {
+            return null;
+        }
         try {
-            return target.getClass().getMethod(methodName).invoke(target);
+            return method.invoke(target);
         } catch (ReflectiveOperationException | LinkageError | RuntimeException e) {
             return null;
         }
@@ -308,10 +387,12 @@ public final class PatchHooks {
         if (target == null) {
             return null;
         }
+        Method method = instanceMethod(target.getClass(), methodName, long.class);
+        if (method == null) {
+            return null;
+        }
         try {
-            return target.getClass()
-                    .getMethod(methodName, long.class)
-                    .invoke(target, argument);
+            return method.invoke(target, argument);
         } catch (ReflectiveOperationException | LinkageError | RuntimeException e) {
             return null;
         }

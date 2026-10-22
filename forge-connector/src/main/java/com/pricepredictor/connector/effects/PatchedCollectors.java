@@ -14,8 +14,10 @@ import forge.game.card.Card;
 import forge.game.keyword.KeywordInterface;
 import forge.game.keyword.KeywordsChange;
 import forge.game.player.Player;
+import forge.game.replacement.ReplacementEffect;
 import forge.game.spellability.SpellAbility;
 import forge.game.staticability.StaticAbility;
+import forge.game.trigger.Trigger;
 import forge.game.zone.ZoneType;
 import org.apache.commons.lang3.tuple.Pair;
 
@@ -3070,9 +3072,17 @@ public final class PatchedCollectors implements AutoCloseable {
         return null;
     }
 
-    /** A trigger's or replacement's mode, by whichever accessor it has. */
+    /**
+     * A trigger's or replacement's mode.
+     *
+     * <p>Read directly off the two trait types, whose {@code getMode} stock
+     * Forge already has, because this runs at least once per trigger
+     * evaluation; anything else carrying the accessor is read by name.
+     */
     private static String modeOf(Object trait) {
-        Object mode = PatchHooks.read(trait, "getMode");
+        Object mode = trait instanceof Trigger trigger ? trigger.getMode()
+                : trait instanceof ReplacementEffect replacement ? replacement.getMode()
+                : PatchHooks.read(trait, "getMode");
         return mode == null ? null : String.valueOf(mode);
     }
 
