@@ -361,7 +361,9 @@ def validation_strata() -> None:
     for r in range(8):
         for c in range(6):
             _game_tile(ax, 0.3 + c * 0.74, 10.4 - r * 0.6, where.get((r, c)))
-    text(ax, 0.3, 5.4, "Held-out texts are picked by a hash of each\ntext's masked "
+    text(ax, 0.3, 5.95, "outline: rose, the card-disjoint stratum;\nviolet, hashed to the "
+         "game-disjoint one", size=8.3, colour=MUTED, ha="left", va="top", linespacing=1.3)
+    text(ax, 0.3, 5.0, "Held-out texts are picked by a hash of each\ntext's masked "
          "template; a card carrying one\nis a held-out card. Training games are "
          "played\nwithout any held-out card, and a separate\ncollection plays them.",
          size=8.3, colour=SOFT, ha="left", va="top", linespacing=1.3)
