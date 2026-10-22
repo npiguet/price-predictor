@@ -549,7 +549,7 @@ public final class ForkCollector {
             if (start != null && forcedKey != null
                     && forcedKey.equals(ProvenanceKey.resolve(start.charm()).key())) {
                 modes.add(new ModeBoundary(
-                        start.option(), sink.events().size(),
+                        start.option(), sink.beginMode(),
                         snapshots.toJson(ability, SnapshotBuilder.referencedOf(ability))));
             }
         });

@@ -274,6 +274,28 @@ class ForkEventSinkTest {
         assertEquals(List.of(EffectEvent.TAPPED), types(sink));
     }
 
+    /**
+     * Repeats are recognised within one chosen mode, as the live bracket
+     * recognises them within one mode's half: a transition repeated by the
+     * next mode is that mode's own event and is kept. What is filed before
+     * the first mode's clause shares the first mode's half, as it does live.
+     */
+    @Test
+    void aRepeatIsRecognisedWithinOneModeOnly() {
+        ForkEventSink sink = ForkEventSink.forIntervention(null, null);
+        Card bears = TestCards.build("Grizzly Bears");
+        GameEventCardTapped tap = new GameEventCardTapped(bears, true);
+
+        sink.onTapped(tap);
+        assertEquals(1, sink.beginMode());
+        sink.onTapped(tap);
+        assertEquals(1, sink.beginMode());
+        sink.onTapped(tap);
+        sink.onTapped(tap);
+
+        assertEquals(List.of(EffectEvent.TAPPED, EffectEvent.TAPPED), types(sink));
+    }
+
     /** A quantitative repeat is two occurrences, and both are kept. */
     @Test
     void aRepeatedDamageIsKept() {

@@ -4,6 +4,7 @@ import forge.game.Game;
 import forge.game.event.GameEventCardChangeZone;
 import forge.game.spellability.SpellAbility;
 
+import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
@@ -22,7 +23,8 @@ import java.util.Set;
  * brackets use, so an interventional or probe record and an observed one
  * describe the same outcome the same way: the same subscriptions, the same
  * shaping, the same cause the bus names for a damage, a poison or a
- * radiation counter, and a repeated state transition filed once.
+ * radiation counter, and a state transition repeated within one record —
+ * the whole fork, or one chosen mode's half — filed once.
  *
  * <p>Every event is stamped by {@link EventAttribution} on its way in, for the
  * same reason: {@code attributed_to} and {@code duration} are how a reader asks
@@ -49,8 +51,16 @@ final class ForkEventSink extends BusEventReader {
      * against the observed combat record's.
      */
     private final boolean combatDamage;
-    private final EventBuffer events = new EventBuffer();
-    /** Positions in {@link #events} of moves off the battlefield during a state-based check. */
+    /** The events of the modes already closed, in order. */
+    private final List<EffectEvent> closed = new ArrayList<>();
+    /**
+     * The events of the open span: the whole fork, or the chosen mode now
+     * resolving, which is the unit a repeat is recognised within, as it is
+     * a mode's half on the live side.
+     */
+    private final EventBuffer open = new EventBuffer();
+    private boolean modeOpen;
+    /** Positions in {@link #events()} of moves off the battlefield during a state-based check. */
     private final Set<Integer> stateBasedLeaves = new LinkedHashSet<>();
 
     private ForkEventSink(Game fork, SpellAbility acting, boolean combatDamage) {
@@ -71,7 +81,27 @@ final class ForkEventSink extends BusEventReader {
     }
 
     List<EffectEvent> events() {
-        return List.copyOf(events.events());
+        List<EffectEvent> all = new ArrayList<>(closed);
+        all.addAll(open.events());
+        return List.copyOf(all);
+    }
+
+    /**
+     * A chosen mode's first clause is resolving: close the previous mode's
+     * span, so a repeat is recognised within one mode, as the live bracket
+     * recognises it within one mode's half.
+     *
+     * <p>The first mode closes nothing: what was filed before its clause
+     * shares its span, as it shares the first half live.
+     *
+     * @return the position in {@link #events()} of the mode's first event
+     */
+    int beginMode() {
+        if (modeOpen) {
+            closed.addAll(open.drain());
+        }
+        modeOpen = true;
+        return size();
     }
 
     /**
@@ -84,7 +114,11 @@ final class ForkEventSink extends BusEventReader {
     }
 
     boolean isEmpty() {
-        return events.isEmpty();
+        return size() == 0;
+    }
+
+    private int size() {
+        return closed.size() + open.events().size();
     }
 
     @Override
@@ -117,13 +151,13 @@ final class ForkEventSink extends BusEventReader {
      */
     @Override
     void fileMove(GameEventCardChangeZone event, EffectEvent moved) {
-        int at = events.events().size();
+        int at = size();
         if (file(moved, null) && isStateBasedLeave(event)) {
             stateBasedLeaves.add(at);
         }
     }
 
     private boolean file(EffectEvent event, String namedCause) {
-        return events.file(EventAttribution.stamp(event, acting, namedCause));
+        return open.file(EventAttribution.stamp(event, acting, namedCause));
     }
 }
