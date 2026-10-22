@@ -4,6 +4,7 @@ import com.pricepredictor.connector.ForgeExtension;
 import forge.game.Game;
 import forge.game.card.Card;
 import forge.game.card.CounterEnumType;
+import forge.game.event.GameEventCardChangeZone;
 import forge.game.event.GameEventCardRegenerated;
 import forge.game.event.GameEventDayTimeChanged;
 import forge.game.event.GameEventGameOutcome;
@@ -12,6 +13,8 @@ import forge.game.event.GameEventPlayerRadiation;
 import forge.game.event.GameEventShuffle;
 import forge.game.event.GameEventSpeedChanged;
 import forge.game.player.Player;
+import forge.game.zone.Zone;
+import forge.game.zone.ZoneType;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
@@ -198,5 +201,21 @@ class BusEventsTest {
         EffectEvent built = BusEvents.gameOutcome(event, game);
 
         assertEquals(List.of(SnapshotBuilder.playerId(first)), built.subjects());
+    }
+
+    /**
+     * A card put onto the stack is a cast, not an outcome of one.
+     *
+     * <p>It has a record already -- the activation half, with what was paid. As a
+     * zone_change it lands in whichever bracket is open, so an opponent's
+     * response reads as something the resolving ability did; it was 54% of the
+     * whole channel.
+     */
+    @Test
+    void aMoveOntoTheStackIsNotRecordedAsAnOutcome() {
+        assertNull(BusEvents.cardMoved(new GameEventCardChangeZone(
+                TestCards.build("Lightning Bolt"),
+                new Zone(ZoneType.Hand, TestCards.game()),
+                new Zone(ZoneType.Stack, TestCards.game()))));
     }
 }

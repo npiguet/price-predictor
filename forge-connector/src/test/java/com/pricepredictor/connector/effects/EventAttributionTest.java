@@ -11,8 +11,10 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -174,5 +176,22 @@ class EventAttributionTest {
         String json = EventAttribution.stamp(
                 new EffectEvent(EffectEvent.PT_CHANGE).subject("E1"), pump, pump).toJson();
         assertTrue(json.contains("\"duration\":\"end_of_turn\""), json);
+    }
+
+    /**
+     * With nothing resolving and nothing named, the record says nothing.
+     *
+     * <p>An honest absence rather than a placeholder: Forge genuinely names no
+     * causer for a turn-based action, and a reader can act on the difference.
+     */
+    @Test
+    void anEventNothingCausedCarriesNoCause() {
+        assertNull(EventAttribution.cause(null, null));
+
+        String json = EventAttribution.stamp(
+                new EffectEvent(EffectEvent.UNTAPPED).subject("E7"), null, null)
+                .toJson();
+
+        assertFalse(json.contains("cause"), json);
     }
 }
