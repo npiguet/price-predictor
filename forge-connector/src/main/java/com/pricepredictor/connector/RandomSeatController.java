@@ -1,6 +1,6 @@
 package com.pricepredictor.connector;
 
-import com.pricepredictor.connector.effects.PatchedCollectors;
+import com.pricepredictor.connector.effects.PlayabilityChannel;
 import com.pricepredictor.connector.effects.PlayabilityVerdict;
 import com.pricepredictor.connector.effects.RandomChoices;
 import forge.LobbyPlayer;
@@ -54,7 +54,7 @@ import java.util.Random;
  *
  * <p>When a draw succeeds the AI's decision code does not run, so the hook
  * that would have written the {@code decision} records never fires; the seat
- * writes them itself through {@link PatchedCollectors}' public emitter, from
+ * writes them itself through {@link PlayabilityChannel}'s public emitter, from
  * the candidates it drew from (FR-022d). The {@code attackers} and
  * {@code blockers} records need no such help: the engine reports combat
  * legality from the turn-based declaration itself, before any controller
@@ -69,7 +69,7 @@ public final class RandomSeatController extends PlayerControllerAi {
     /** The game this seat plays for real, or null for a fork's clone. */
     private Game liveGame;
     /** Where the seat's own records go, or null when the run collects none. */
-    private PatchedCollectors collectors;
+    private PlayabilityChannel decisions;
 
     /** The play the last successful draw picked, until it is played. */
     private SpellAbility randomlyDrawn;
@@ -89,18 +89,18 @@ public final class RandomSeatController extends PlayerControllerAi {
 
     /**
      * Make this seat live for {@code game}, writing its own records to
-     * {@code collectors}.
+     * {@code decisions}.
      *
      * <p>Called by {@link GamePlayer} after {@code match.createGame()}, which
      * is the first moment both exist. A controller never attached — the one
      * a fork clones — stays an ordinary AI.
      *
-     * @param collectors null when the run writes no effect records; the seat
-     *                   still plays at random, it just reports nothing
+     * @param decisions null when the run writes no effect records; the seat
+     *                  still plays at random, it just reports nothing
      */
-    public void attach(Game game, PatchedCollectors collectors) {
+    public void attach(Game game, PlayabilityChannel decisions) {
         this.liveGame = game;
-        this.collectors = collectors;
+        this.decisions = decisions;
     }
 
     /** Whether this controller is the live seat rather than a fork's copy. */
@@ -206,8 +206,8 @@ public final class RandomSeatController extends PlayerControllerAi {
                 // AI would have skipped the same way; it is not playable.
                 continue;
             }
-            if (collectors != null) {
-                collectors.recordCandidate(player, sa, () -> verdict);
+            if (decisions != null) {
+                decisions.recordCandidate(player, sa, () -> verdict);
             }
             if (verdict.canPlay() && timing && verdict.affordable() && verdict.hasLegalTarget()) {
                 playable.add(sa);

@@ -115,8 +115,8 @@ public final class GameRecording implements AutoCloseable {
     }
 
     /** Where the random seat writes the decisions its own draws made (FR-022d). */
-    public PatchedCollectors playability() {
-        return patched;
+    public PlayabilityChannel playability() {
+        return patched.playability();
     }
 
     /**

@@ -9,7 +9,6 @@ import forge.card.StateChangedType;
 import forge.card.WordChangedType;
 import forge.game.CardTraitBase;
 import forge.game.Game;
-import forge.game.GameEntity;
 import forge.game.ability.ApiType;
 import forge.game.card.Card;
 import forge.game.keyword.KeywordInterface;
@@ -18,13 +17,11 @@ import forge.game.player.Player;
 import forge.game.replacement.ReplacementEffect;
 import forge.game.spellability.SpellAbility;
 import forge.game.staticability.StaticAbility;
-import forge.game.trigger.Trigger;
 import forge.game.zone.ZoneType;
 import org.apache.commons.lang3.tuple.Pair;
 
 import java.lang.reflect.InvocationHandler;
 import java.util.ArrayDeque;
-import java.util.ArrayList;
 import java.util.Deque;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -65,7 +62,6 @@ public final class PatchedCollectors implements AutoCloseable {
     private final CollectorContext context;
     private final SnapshotBuilder snapshots;
     private final AttributionMode mode;
-    private final CollectionCaps caps;
 
     /** The sampled mana records, held until the game ends. */
     private final ManaReservoir manaReservoir;
@@ -83,6 +79,7 @@ public final class PatchedCollectors implements AutoCloseable {
     private final Map<Long, StaticAbility> staticsById = new HashMap<>();
     private final java.util.Random sampler;
     private final TriggerChannel triggers;
+    private final PlayabilityChannel playability;
 
     /**
      * Whether the engine can say what a card would be without one static.
@@ -109,7 +106,6 @@ public final class PatchedCollectors implements AutoCloseable {
             BusBracketCollector bracket) {
         this.live = new LiveGame(game);
         this.context = context;
-        this.caps = caps;
         this.snapshots = live.snapshots();
         this.mode = context.mode();
         this.sampler = new java.util.Random(GameRecording.scramble(seed));
@@ -117,12 +113,14 @@ public final class PatchedCollectors implements AutoCloseable {
         this.bracket = bracket;
         this.triggers = new TriggerChannel(
                 live, context, dedup, new TriggerNegativeSampler(sampler));
+        this.playability = new PlayabilityChannel(
+                live, context, dedup, sampler, caps.playabilityRate());
         this.listeners = List.of(
                 new Listener(PatchHooks.REPLACEMENT_LISTENER, this::rewriteHandler),
                 new Listener(PatchHooks.TRIGGER_LISTENER, triggers::handler),
-                new Listener(PatchHooks.PLAYABILITY_LISTENER, this::playabilityHandler),
+                new Listener(PatchHooks.PLAYABILITY_LISTENER, playability::decisionHandler),
                 new Listener(PatchHooks.MANA_LISTENER, this::manaHandler),
-                new Listener(PatchHooks.COMBAT_LISTENER, this::combatLegalityHandler),
+                new Listener(PatchHooks.COMBAT_LISTENER, playability::legalityHandler),
                 new Listener(PatchHooks.CLAUSE_LISTENER, this::clauseHandler),
                 new Listener(PatchHooks.OUTCOME_LISTENER, this::outcomeHandler));
     }
@@ -130,6 +128,11 @@ public final class PatchedCollectors implements AutoCloseable {
     /** The trigger-condition channel. */
     TriggerChannel triggers() {
         return triggers;
+    }
+
+    /** The decision and legality channel, which the random seat also writes through. */
+    PlayabilityChannel playability() {
+        return playability;
     }
 
     /**
@@ -263,7 +266,7 @@ public final class PatchedCollectors implements AutoCloseable {
         // replacement is printed on -- what the field carries that `ability`
         // does not is that an ability ran at all, and the rarer case where the
         // overriding ability was granted from somewhere else.
-        List<ProvenanceKey> ranKeys = ran == null ? List.of() : keysOf(ran);
+        List<ProvenanceKey> ranKeys = ran == null ? List.of() : ProvenanceKey.keysOf(ran);
         String wireResult = EffectRecord.rewriteResult(result);
         JVM_REWRITES.record(
                 RunParamNormalizer.modeOf(trait), wireResult, outgoing != null,
@@ -278,341 +281,6 @@ public final class PatchedCollectors implements AutoCloseable {
 
     /** The worker's rewrite tally, shared by every game it plays. */
     static final RewriteTally JVM_REWRITES = new RewriteTally();
-
-    // ── playability records ─────────────────────────────────────────────
-
-    /**
-     * Rules-level verdicts only.
-     *
-     * <p>The AI's policy judgments never reach a record: they are its opinion
-     * rather than the game's rules, and training on them would teach the model
-     * Forge's play style instead of Magic. So the hook hands over only the
-     * candidate, and the verdict is {@link PlayabilityVerdict}'s, computed here
-     * after the sampler draw. A patch that still passes three verdict booleans
-     * after the candidate has them ignored: they were computed by the AI's own
-     * cost check, which is policy.
-     *
-     * <p>Sampled at {@code --playability-rate} because the AI evaluates every
-     * candidate at every priority, which would otherwise swamp the corpus. The
-     * {@code attackers} and {@code blockers} subkinds are always logged: they
-     * fire once per combat, not once per candidate.
-     *
-     * <p>Package-private rather than private, the same reason {@link
-     * #rewriteHandler()} is: this hook's own game-identity test calls it with
-     * a synthesized argument array.
-     */
-    InvocationHandler playabilityHandler() {
-        return PatchHooks.PLAYABILITY_LISTENER.listener((callback, args) -> {
-            // Checked before the sampler draw below, not after -- a fork's own candidates are
-            // evaluated for playability too (ForkCollector.forceResolution's
-            // chooseTargets, and GameSimulator's own AI decisions, both ask the
-            // same AiController this hook is installed on), and letting one
-            // consume from the shared `sampler` before being dropped would
-            // re-randomise the live sample stream for every other subkind that
-            // draws from it (trigger negatives, the mana reservoir) --
-            // exactly the cost the trigger hook's own identity check already
-            // avoids by running first. A null candidate is let through: its
-            // record names no ability either way.
-            SpellAbility candidate = args.get(0, SpellAbility.class);
-            if (candidate != null && !live.owns(candidate)) {
-                return;
-            }
-            recordCandidate(deciderOf(candidate), candidate,
-                    () -> PlayabilityVerdict.of(candidate));
-        });
-    }
-
-    /**
-     * The player a candidate ability belongs to (FR-030a).
-     *
-     * <p>The activator, which the AI sets before it evaluates; failing that
-     * the host's controller. Null for a candidate with neither, which the
-     * record then spells as the active player, the way gen-1 spelled every
-     * decision record.
-     */
-    private static Player deciderOf(SpellAbility candidate) {
-        if (candidate == null) {
-            return null;
-        }
-        if (candidate.getActivatingPlayer() != null) {
-            return candidate.getActivatingPlayer();
-        }
-        Card host = candidate.getHostCard();
-        return host == null ? null : host.getController();
-    }
-
-    /**
-     * One {@code decision} record, for a candidate someone evaluated.
-     *
-     * <p>Public because the random seat writes its own (FR-022d): when its
-     * draw succeeds the AI's evaluation never runs, so the hook that would
-     * have written this never fires, and the seat reports the candidates it
-     * drew from through the same door. Sampled at {@code --playability-rate}
-     * and de-duplicated here, so both callers get the same treatment.
-     *
-     * <p>The verdict is asked for only once the candidate is sampled in, so a
-     * candidate the sampler drops costs no rules check. A candidate whose
-     * check throws is one the engine cannot evaluate on this board, the way
-     * the random seat treats it, and is not recorded.
-     *
-     * @param decider the candidate's controller, written as {@code actor_player}
-     */
-    public void recordCandidate(
-            Player decider, SpellAbility candidate, Supplier<PlayabilityVerdict> verdictOf) {
-        if (sampler.nextDouble() > caps.playabilityRate()) {
-            return;
-        }
-        PlayabilityVerdict verdict;
-        try {
-            verdict = verdictOf.get();
-        } catch (RuntimeException e) {
-            return;
-        }
-        // Snapshot defensively: a verdict can be abandoned mid-evaluation,
-        // and the legality check mutates the checked ability's targets, so
-        // nothing here may keep a reference to the ability object. Read now,
-        // into values: what the ability says at this instant is safe to
-        // keep, and without it the record names no ability at all.
-        List<ProvenanceKey> candidateKeys = List.of();
-        StringJoiner legalTargets = new StringJoiner(",", "[", "]");
-        String manaCost = null;
-        if (candidate != null) {
-            candidateKeys = keysOf(candidate);
-            for (String id : legalTargetsOf(candidate)) {
-                legalTargets.add(Json.string(id));
-            }
-            if (candidate.getPayCosts() != null) {
-                manaCost = String.valueOf(
-                        candidate.getPayCosts().getTotalMana());
-            }
-        }
-        // The candidate goes into the snapshot: refs.source was null on all
-        // 11.2 million playability records, so a decision record did not say
-        // which card the candidate was even on except through its key.
-        String state = snapshots.ofAbility(
-                candidate,
-                candidate == null || candidate.getHostCard() == null
-                        ? List.of() : List.of(candidate.getHostCard())).render();
-        String payload = "{\"candidates\":[{"
-                        + "\"ability\":" + ProvenanceKey.toJsonArray(candidateKeys)
-                        + ",\"verdict\":{\"can_play\":" + verdict.canPlay()
-                        + ",\"affordable\":" + verdict.affordable()
-                        + ",\"has_legal_target\":" + verdict.hasLegalTarget() + "}"
-                        + ",\"legal_targets\":" + legalTargets
-                        + ",\"cost_after_adjustment\":"
-                        + (manaCost == null
-                                ? "{}"
-                                : "{\"mana\":" + Json.string(manaCost) + "}")
-                        // responsible_static needs a cantBeCastStatic hook
-                        // that does not exist; the attacker and blocker
-                        // subkinds carry theirs, this one does not.
-                        + ",\"responsible_static\":[]}]}";
-        // The decision path had no dedup at all, and every duplicate
-        // playability record measured in the first corpus was this subkind:
-        // the AI re-asks the same question about the same board, and the
-        // answer repeats verbatim.
-        if (!dedup.allowDistinct(PlayabilitySubkind.DECISION.wireName(), payload, state)) {
-            return;
-        }
-        emit(context.newPlayability(PlayabilitySubkind.DECISION)
-                .actor(live.playerIdOrActive(decider))
-                .state(state)
-                .payload(payload));
-    }
-
-    /** Legal-target refs one decision may carry before the payload is capped. */
-    private static final int MAX_LEGAL_TARGETS = 32;
-
-    /**
-     * What the rules allowed this candidate to target, not what the AI picked.
-     *
-     * <p>The field was read off {@code getTargets()}, which is the chosen set --
-     * so it was present on 1.8% of candidates and, where it was present, meant
-     * the wrong thing. The per-entity target-legality head is specified to train
-     * on the legal set, and an AI's choice is a policy judgment the spec keeps
-     * out of the corpus.
-     *
-     * <p>Capped, because a wide board can make this list longer than the record
-     * around it.
-     */
-    private static List<String> legalTargetsOf(SpellAbility candidate) {
-        if (!candidate.usesTargeting() || candidate.getTargetRestrictions() == null) {
-            return List.of();
-        }
-        List<String> ids = new ArrayList<>();
-        for (GameEntity entity
-                : candidate.getTargetRestrictions().getAllCandidates(candidate)) {
-            Refs.ofAny(entity).ifPresent(ids::add);
-            if (ids.size() >= MAX_LEGAL_TARGETS) {
-                break;
-            }
-        }
-        return ids;
-    }
-
-    // ── playability records: the legality subkinds ──────────────────────
-
-    /**
-     * The legal attacker and blocker sets, and what keeps the rest out.
-     *
-     * <p>The eighth sampling class, and the only one that says what the rules
-     * *forbid* rather than what happened.
-     *
-     * <p>Asked by the engine's turn-based actions just before a player
-     * declares, once per defender and once per attacker coming at the
-     * defending player, so every record is a real declaration whoever
-     * controls the seat — the AI, the random seat or a human — and is stamped
-     * {@code what_if=false}. The engine names the deciding player, every
-     * creature that player controls is a candidate, and the legal set comes
-     * from the rules alone, against a combat holding the attackers and no
-     * blocks yet.
-     *
-     * <p>Deduplicated on payload and snapshot (FR-028): a board on which
-     * nothing moved between two declarations answers the same question the
-     * same way, and two records that would be byte-identical carry one
-     * observation once.
-     *
-     * <p>Package-private rather than private, the same reason
-     * {@link #rewriteHandler()} already is: this hook's own game-identity
-     * test calls it with a synthesized argument array.
-     */
-    InvocationHandler combatLegalityHandler() {
-        return PatchHooks.COMBAT_LISTENER.listener((callback, args) -> {
-            // No CardTraitBase here: the defender or attacker is the
-            // GameEntity itself, so identity comes straight off it rather
-            // than through a host card. A wrong-typed or null entity is left
-            // to recordAttackers/recordBlockers, which tolerate both.
-            Player decider = args.get(0, Player.class);
-            GameEntity declaredAgainst = args.get(1, GameEntity.class);
-            if (declaredAgainst != null && !live.owns(declaredAgainst)) {
-                return;
-            }
-            switch (callback) {
-                case ON_ATTACKERS_DECLARABLE -> recordAttackers(
-                        decider, declaredAgainst, asCards(args.get(2)), asCards(args.get(3)));
-                case ON_BLOCKERS_DECLARABLE -> {
-                    Integer min = args.get(4, Integer.class);
-                    recordBlockers(
-                            decider, args.get(1, Card.class),
-                            asCards(args.get(2)), asCards(args.get(3)),
-                            min == null ? 0 : min);
-                }
-            }
-        });
-    }
-
-    /**
-     * One {@code attackers} record: who may attack this defender, and what
-     * keeps the rest out.
-     *
-     * <p>De-duplicated by FR-028, keyed on the snapshot as well as the
-     * answer, so the same answer on a board that moved is kept.
-     *
-     * @param decider the attacking player the engine names, written as
-     *                {@code actor_player}
-     */
-    void recordAttackers(
-            Player decider, GameEntity defender, List<Card> candidates,
-            List<Card> legal) {
-        if (candidates == null || candidates.isEmpty()) {
-            return;
-        }
-        StringJoiner attackers = new StringJoiner(",", "[", "]");
-        for (Card card : legal) {
-            attackers.add(Json.string(SnapshotBuilder.entityId(card)));
-        }
-        StringJoiner forbidden = new StringJoiner(",", "[", "]");
-        for (Card card : candidates) {
-            if (legal.contains(card)) {
-                continue;
-            }
-            forbidden.add(forbiddenJson(
-                    card, defender == null ? null : cantAttackStatic(card, defender)));
-        }
-        String payload = "{\"legal_attackers\":" + attackers
-                + ",\"forbidden\":" + forbidden + "}";
-        emitLegality(PlayabilitySubkind.ATTACKERS, decider, payload);
-    }
-
-    /**
-     * One {@code blockers} record: who may block this attacker, how many it
-     * takes, and what keeps the rest out. The sibling of
-     * {@link #recordAttackers} in every respect.
-     *
-     * @param decider the defending player the engine names (FR-030a) —
-     *                gen-1 wrote the attacking player here, and a gen-2 shard
-     *                is what tells a reader which meaning it holds
-     */
-    void recordBlockers(
-            Player decider, Card attacker, List<Card> candidates, List<Card> legal,
-            int minBlockers) {
-        if (attacker == null || candidates == null || candidates.isEmpty()) {
-            return;
-        }
-        StringJoiner blockers = new StringJoiner(",", "[", "]");
-        for (Card card : legal) {
-            blockers.add(Json.string(SnapshotBuilder.entityId(card)));
-        }
-        StringJoiner forbidden = new StringJoiner(",", "[", "]");
-        for (Card card : candidates) {
-            if (legal.contains(card)) {
-                continue;
-            }
-            forbidden.add(forbiddenJson(card, cantBlockByStatic(attacker, card)));
-        }
-        String payload = "{\"anchor_attacker\":"
-                + Json.string(SnapshotBuilder.entityId(attacker))
-                + ",\"legal_blockers\":" + blockers
-                + ",\"forbidden\":" + forbidden
-                + ",\"min_blockers\":" + minBlockers + "}";
-        emitLegality(PlayabilitySubkind.BLOCKERS, decider, payload);
-    }
-
-    private void emitLegality(PlayabilitySubkind subkind, Player decider, String payload) {
-        String state = snapshots.ofBoard().render();
-        // Keyed on the snapshot as well as the payload (FR-028): the same
-        // answer on a board that moved is a second observation, which a
-        // payload-only key would drop as a repeat of the first.
-        if (!dedup.allowDistinct(subkind.wireName(), payload, state)) {
-            return;
-        }
-        emit(context.newPlayability(subkind)
-                .actor(live.playerIdOrActive(decider))
-                .whatIf(false)
-                .state(state)
-                .payload(payload));
-    }
-
-    /**
-     * One entity kept out of a legal set, and the static responsible.
-     *
-     * <p>The static is often absent, and that is a real answer rather than a
-     * gap: a creature that is tapped, or summoning sick, or has "can't attack"
-     * printed on it, is stopped by the rules themselves and no static ability
-     * is to blame.
-     */
-    private static String forbiddenJson(Card card, StaticAbility responsible) {
-        ProvenanceKey key = responsible == null ? null : ProvenanceKey.of(responsible);
-        return "{\"entity\":" + Json.string(SnapshotBuilder.entityId(card))
-                + ",\"responsible_static\":["
-                + (key == null ? "" : key.toJson()) + "]}";
-    }
-
-    /** Reflective, because the engine exposes these only on a patched checkout. */
-    private static StaticAbility cantAttackStatic(Card attacker, GameEntity defender) {
-        return (StaticAbility) PatchHooks.CANT_ATTACK_STATIC.invoke(
-                new Class<?>[]{Card.class, GameEntity.class}, attacker, defender);
-    }
-
-    private static StaticAbility cantBlockByStatic(Card attacker, Card blocker) {
-        return (StaticAbility) PatchHooks.CANT_BLOCK_BY_STATIC.invoke(
-                new Class<?>[]{Card.class, Card.class}, attacker, blocker);
-    }
-
-    @SuppressWarnings("unchecked")
-    private static List<Card> asCards(Object value) {
-        return value instanceof List<?> list ? (List<Card>) list : List.of();
-    }
 
     // ── clause events (an API's own parameters) ─────────────────────────
 
@@ -1326,22 +994,6 @@ public final class PatchedCollectors implements AutoCloseable {
      */
     public boolean allowContinuousRecord(String staticKey, String boardHash) {
         return coalescedBoards.add(staticKey + "@" + boardHash);
-    }
-
-    // ── plumbing ────────────────────────────────────────────────────────
-
-    /**
-     * The printed line a runtime trait came from, as a list of at most one.
-     *
-     * <p>For the payload fields that carry keys but no reason — a playability
-     * candidate, a rewrite's {@code replaced_by}. A record's own acting line
-     * goes through {@link ProvenanceKey#resolve} instead, keeping the reason
-     * there is no key: an empty {@code ability} with nothing beside it cannot
-     * separate "this card has no printed line anywhere" from "the resolver
-     * regressed".
-     */
-    static List<ProvenanceKey> keysOf(CardTraitBase trait) {
-        return ProvenanceKey.resolve(trait).keys();
     }
 
     private void emit(EffectRecord record) {

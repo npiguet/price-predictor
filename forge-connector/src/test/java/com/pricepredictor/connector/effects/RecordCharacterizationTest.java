@@ -292,11 +292,11 @@ class RecordCharacterizationTest {
 
         List<String> records = records(board, CAPS, SnapshotBuilder.playerId(opponent),
                 (bracket, collectors) -> {
-            HookShapes.proxy(HookShapes.Playability.class, collectors.playabilityHandler())
+            HookShapes.proxy(HookShapes.Playability.class, collectors.playability().decisionHandler())
                     .onCandidate(bolt);
 
             HookShapes.CombatLegality listener = HookShapes.proxy(
-                    HookShapes.CombatLegality.class, collectors.combatLegalityHandler());
+                    HookShapes.CombatLegality.class, collectors.playability().legalityHandler());
             listener.onAttackersDeclarable(
                     you, opponent, List.of(bears, elves), List.of(bears));
             listener.onBlockersDeclarable(

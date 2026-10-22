@@ -739,6 +739,19 @@ public record ProvenanceKey(
         return originals.indexOf(original);
     }
 
+    /**
+     * The printed line a runtime trait came from, as a list of at most one.
+     *
+     * <p>For the payload fields that carry keys but no reason — a playability
+     * candidate, a rewrite's {@code replaced_by}. A record's own acting line
+     * goes through {@link #resolve} instead, keeping the reason there is no
+     * key: an empty {@code ability} with nothing beside it cannot separate
+     * "this card has no printed line anywhere" from "the resolver regressed".
+     */
+    static List<ProvenanceKey> keysOf(CardTraitBase trait) {
+        return resolve(trait).keys();
+    }
+
     /** Keys as the JSON array a record carries them in. */
     public static String toJsonArray(List<ProvenanceKey> keys) {
         StringJoiner joiner = new StringJoiner(",", "[", "]");
