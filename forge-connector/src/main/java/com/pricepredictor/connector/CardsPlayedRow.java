@@ -14,7 +14,10 @@ import java.util.Objects;
  * cards_played_B;cards_not_played_A;cards_not_played_B;winner;starter}
  *
  * <p>Card list columns are pipe-separated and may be empty (encoded as the
- * empty string between two {@code ;}). Multiplicities are preserved.
+ * empty string between two {@code ;}). Each is a set of distinct names, with
+ * basic lands excluded: a card is listed once however many copies the deck
+ * holds or were played, and for each side the played and not-played columns
+ * are disjoint, a card with any copy played appearing only in the played one.
  *
  * @param timestamp        When the parent match was recorded (UTC). Same value across all games of one match.
  * @param runId            UUID identifying the supervisor invocation that produced the parent match.
