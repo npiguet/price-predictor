@@ -2,6 +2,7 @@ package com.pricepredictor.connector.effects;
 
 import com.pricepredictor.connector.ForgeExtension;
 import forge.game.ability.AbilityFactory;
+import forge.game.ability.ApiType;
 import forge.game.card.Card;
 import forge.game.player.Player;
 import forge.game.spellability.SpellAbility;
@@ -53,9 +54,9 @@ class ClauseContractTest {
      * one), so both are reset here.
      */
     @BeforeEach
-    void resetEmitterFailureLatch() {
-        ApiEvents.resetEmitterFailureLatchForTest();
-        ApiEvents.resetMemoFailureLatchForTest();
+    void resetFailureLatches() {
+        TestLatches.reset(ApiEvents.class, "EMITTER_FAILURE_REPORTED");
+        TestLatches.reset(ApiEvents.class, "MEMO_FAILURE_REPORTED");
     }
 
     private static Method clauseMethod(String name) {
@@ -225,9 +226,9 @@ class ClauseContractTest {
      * deque for the clauses around it.
      *
      * <p>Same shape as {@link #nestedClausesDoNotCrossTheirMemos}, except the
-     * inner clause's memo throws -- forced through {@link
-     * ApiEvents#setRuleOverrideForTest}, a seam built for exactly this (see
-     * its own javadoc): no real script is known to make
+     * inner clause's memo throws -- forced by handing the clause handler a
+     * rule lookup that answers a throwing rule for {@code SkipTurn} and the
+     * real one for everything else: no real script is known to make
      * {@code AbilityUtils.getDefinedPlayers}/{@code getDefinedCards} throw --
      * every unrecognized input degrades to an empty list instead -- so there
      * is no real card this could be pinned to without hand-feeding the code a
@@ -241,8 +242,8 @@ class ClauseContractTest {
      * and before {@link ApiEvents#before}'s own fix, it is exactly what
      * swallows the throw <em>before</em> {@code clauseMemos.push(...)} runs
      * -- the missing push this test exists to catch. Before the fix: the
-     * inner clause's {@code onClauseResolving} throws out of {@code
-     * ApiEvents.before(inner)} before its push runs, so the inner clause's
+     * inner clause's {@code onClauseResolving} throws out of {@link
+     * ApiEvents#before} before its push runs, so the inner clause's
      * own {@code onClauseResolved} pops the OUTER clause's memo instead of
      * its own missing one, and the outer's own pop then reads an empty deque
      * and gets {@code null} -- so this asserts the OUTER clause's event, the
@@ -264,33 +265,29 @@ class ClauseContractTest {
         inner.resetTargets();
         inner.getTargets().add(innerTarget);
 
-        ApiEvents.setRuleOverrideForTest("SkipTurn", new ApiEvents.Rule(
+        ApiEvents.Rule throwingMemo = new ApiEvents.Rule(
                 EffectEvent.TURN_SKIPPED,
                 (sa, host) -> {
                     throw new IllegalStateException("boom (memo)");
                 },
-                (sa, host, memo) -> new EffectEvent(EffectEvent.TURN_SKIPPED)));
+                (sa, host, memo) -> new EffectEvent(EffectEvent.TURN_SKIPPED));
 
         StringBuilder stderr = new StringBuilder();
-        List<String> records;
-        try {
-            records = ShardRun.records(tempDir, TestCards.game(), (bracket, collector) -> {
-                InvocationHandler handler = collector.clauseHandler();
-                stderr.append(StdStreams.captureStderr(() -> {
-                    bracket.beginBracket(outer);
-                    resolvingContained(handler, outer);
-                    resolvingContained(handler, inner);
-                    handler.invoke(null, clauseMethod("onClauseResolved"),
-                            new Object[]{inner, false});
-                    handler.invoke(null, clauseMethod("onClauseResolved"),
-                            new Object[]{outer, false});
-                    bracket.endBracket(outer.getId(), false);
-                    bracket.flushHeldResolution();
-                }));
-            });
-        } finally {
-            ApiEvents.clearRuleOverridesForTest();
-        }
+        List<String> records = ShardRun.records(tempDir, TestCards.game(), (bracket, collector) -> {
+            InvocationHandler handler = collector.clauseHandler(
+                    api -> api == ApiType.SkipTurn ? throwingMemo : ApiEvents.ruleFor(api));
+            stderr.append(StdStreams.captureStderr(() -> {
+                bracket.beginBracket(outer);
+                resolvingContained(handler, outer);
+                resolvingContained(handler, inner);
+                handler.invoke(null, clauseMethod("onClauseResolved"),
+                        new Object[]{inner, false});
+                handler.invoke(null, clauseMethod("onClauseResolved"),
+                        new Object[]{outer, false});
+                bracket.endBracket(outer.getId(), false);
+                bracket.flushHeldResolution();
+            }));
+        });
 
         String effectHalf = records.get(1);
         assertTrue(effectHalf.contains("\"type\":\"turn_added\",\"subjects\":[\""

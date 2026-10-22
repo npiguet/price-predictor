@@ -10,6 +10,7 @@ import forge.card.WordChangedType;
 import forge.game.CardTraitBase;
 import forge.game.Game;
 import forge.game.GameEntity;
+import forge.game.ability.ApiType;
 import forge.game.card.Card;
 import forge.game.keyword.KeywordInterface;
 import forge.game.keyword.KeywordsChange;
@@ -33,7 +34,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.StringJoiner;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.function.Supplier;
+import java.util.function.Function;
 import java.util.function.Supplier;
 
 /**
@@ -1364,6 +1365,14 @@ public final class PatchedCollectors implements AutoCloseable {
      * this with a synthesized argument array in the compiler's place.
      */
     InvocationHandler clauseHandler() {
+        return clauseHandler(ApiEvents::ruleFor);
+    }
+
+    /**
+     * The same, building each clause's event from the rules {@code rules}
+     * names, so a test can stand a rule that throws in for one API.
+     */
+    InvocationHandler clauseHandler(Function<ApiType, ApiEvents.Rule> rules) {
         return (proxy, method, args) -> {
             if (args == null || args.length == 0
                     || !(args[0] instanceof SpellAbility clause)) {
@@ -1371,7 +1380,7 @@ public final class PatchedCollectors implements AutoCloseable {
             }
             if ("onClauseResolving".equals(method.getName())) {
                 clauseMemos.get().push(
-                        java.util.Optional.ofNullable(ApiEvents.before(clause)));
+                        java.util.Optional.ofNullable(ApiEvents.before(clause, rules)));
                 // A chosen mode's first clause is where a modal resolution is
                 // cut into per-mode halves (FR-029a): the live bracket opens
                 // the next half here, and a fork running on this thread marks
@@ -1402,31 +1411,13 @@ public final class PatchedCollectors implements AutoCloseable {
                 return null;
             }
             if (bracket != null && belongsToLiveGame(clause)) {
-                bracket.recordClauseEvent(ApiEvents.after(clause, memo));
+                bracket.recordClauseEvent(ApiEvents.after(clause, memo, rules));
             }
             return null;
         };
     }
 
     // ── outcome records (what an effect computed and discarded) ─────────
-
-    /**
-     * The last event {@link #outcomeHandler()} built, whether or not a
-     * bracket was wired to receive it.
-     *
-     * <p>{@link #outcomeHandler()} always forwards to {@link #bracket} the
-     * way {@link #clauseHandler()} does, so this field is not part of the
-     * production path -- it exists only so the argument-order contract can be
-     * pinned by this hook's own test without also standing up a {@code Game}
-     * and a {@code BusBracketCollector} the way {@code ClauseContractTest}
-     * does for the clause hook.
-     */
-    private EffectEvent lastClauseEvent;
-
-    /** The last event {@link #outcomeHandler()} built, for this hook's own test. */
-    EffectEvent lastClauseEvent() {
-        return lastClauseEvent;
-    }
 
     /**
      * The outcome types an effect is allowed to name, built from the
@@ -1568,7 +1559,6 @@ public final class PatchedCollectors implements AutoCloseable {
                     event.param(String.valueOf(entry.getKey()), entry.getValue());
                 }
             }
-            lastClauseEvent = event;
             boolean liveGame = args[0] instanceof SpellAbility sa
                     ? belongsToLiveGame(sa)
                     : nullAbilityOutcomeBelongsToLiveGame();

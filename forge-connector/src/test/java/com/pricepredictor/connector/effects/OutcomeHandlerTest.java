@@ -17,15 +17,14 @@ import org.junit.jupiter.api.io.TempDir;
 import java.lang.reflect.Method;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-import static com.pricepredictor.connector.effects.TestCollectors.recording;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -38,20 +37,20 @@ class OutcomeHandlerTest {
     @TempDir
     Path tempDir;
 
-    // ── the argument order ──────────────────────────────────────────────
-
+    /**
+     * Static, and shared with the production path: without a reset here,
+     * whichever test trips it first leaves every test after it in this class
+     * unable to see its own "did this print" outcome.
+     */
     @BeforeEach
-    void resetUnknownOutcomeTypeLatch() throws ReflectiveOperationException {
-        // Static, and shared with the production path: without a reset here,
-        // whichever test trips it first leaves every test after it in this
-        // class unable to see its own "did this print" outcome.
-        var latch = PatchedCollectors.class.getDeclaredField("UNKNOWN_OUTCOME_TYPE_REPORTED");
-        latch.setAccessible(true);
-        ((java.util.concurrent.atomic.AtomicBoolean) latch.get(null)).set(false);
+    void resetUnknownOutcomeTypeLatch() {
+        TestLatches.reset(PatchedCollectors.class, "UNKNOWN_OUTCOME_TYPE_REPORTED");
     }
 
     private static final Method ON_OUTCOME =
             HookShapes.method(HookShapes.Outcome.class, "onOutcome");
+
+    // ── the argument order ──────────────────────────────────────────────
 
     /**
      * The hook binds by argument position, and no compiler checks that. A
@@ -65,15 +64,12 @@ class OutcomeHandlerTest {
     @Test
     void anOutcomeReportBecomesAnEventOfThatType() throws Throwable {
         SpellAbility sa = TestCards.scriptedAbility("Alchemist's Gambit", "AddTurn");
-        PatchedCollectors collectors = recording(tempDir);
 
-        collectors.outcomeHandler().invoke(null,
-                ON_OUTCOME,
+        String written = onlyEvent(
                 new Object[]{sa, "vote_taken", Map.of("tally", Map.of("beast", 2))});
 
-        EffectEvent written = collectors.lastClauseEvent();
-        assertEquals("vote_taken", written.type());
-        assertEquals(Map.of("beast", 2), written.params().get("tally"));
+        assertTrue(written.startsWith("{\"type\":\"vote_taken\""), written);
+        assertTrue(written.contains("\"tally\":{\"beast\":2}"), written);
     }
 
     /**
@@ -84,16 +80,12 @@ class OutcomeHandlerTest {
     @Test
     void anOutcomeNamingNoSubjectsHasNone() throws Throwable {
         SpellAbility sa = TestCards.scriptedAbility("Alchemist's Gambit", "AddTurn");
-        PatchedCollectors collectors = recording(tempDir);
 
-        collectors.outcomeHandler().invoke(null,
-                ON_OUTCOME,
-                new Object[]{sa, "coin_flipped", Map.of("won", true)});
+        String written = onlyEvent(new Object[]{sa, "coin_flipped", Map.of("won", true)});
 
-        EffectEvent written = collectors.lastClauseEvent();
-        assertEquals("coin_flipped", written.type());
-        assertEquals(List.of(), written.subjects(),
-                "the acting host is not a subject: " + written.toJson());
+        assertTrue(written.startsWith("{\"type\":\"coin_flipped\""), written);
+        assertTrue(written.contains("\"subjects\":[]"),
+                "the acting host is not a subject: " + written);
     }
 
     /**
@@ -106,28 +98,22 @@ class OutcomeHandlerTest {
     void aTokenSampleBecomesItsScriptIdAndCharacteristics() throws Throwable {
         Card bat = TestCards.token("b_1_1_bat_flying");
         SpellAbility sa = TestCards.scriptedAbility("Alchemist's Gambit", "AddTurn");
-        PatchedCollectors collectors = recording(tempDir);
 
-        collectors.outcomeHandler().invoke(null,
-                ON_OUTCOME,
+        String written = onlyEvent(
                 new Object[]{sa, "token_created", Map.of("sample", bat, "count", 2)});
 
-        EffectEvent written = collectors.lastClauseEvent();
-        assertEquals("token_created", written.type());
+        assertTrue(written.startsWith("{\"type\":\"token_created\""), written);
         assertEquals(Set.of("token_script_id", "characteristics", "count"),
-                written.params().keySet(), written.toJson());
-        assertEquals("b_1_1_bat_flying", written.params().get("token_script_id"));
-        assertEquals(SnapshotBuilder.tokenScriptIdOf(bat), written.params().get("token_script_id"));
-        assertEquals(2, written.params().get("count"));
-        @SuppressWarnings("unchecked")
-        Map<String, Object> traits = (Map<String, Object>) written.params().get("characteristics");
-        assertEquals(1, traits.get("power"));
-        assertEquals(1, traits.get("toughness"));
-        assertEquals(bat.getType().toString(), traits.get("types"));
-        assertEquals(List.of("flying"), traits.get("keywords"));
-        assertEquals(SnapshotBuilder.keywordNames(bat.getKeywords()), traits.get("keywords"));
-        assertFalse(written.toJson().contains("sample"), written.toJson());
-        assertEquals(List.of(), written.subjects());
+                paramKeys(written), written);
+        assertEquals("b_1_1_bat_flying", SnapshotBuilder.tokenScriptIdOf(bat));
+        assertTrue(written.contains("\"token_script_id\":\"b_1_1_bat_flying\""), written);
+        assertTrue(written.contains("\"count\":2"), written);
+        assertEquals(List.of("flying"), SnapshotBuilder.keywordNames(bat.getKeywords()));
+        assertTrue(written.contains("\"characteristics\":{\"power\":1,\"toughness\":1,"
+                + "\"types\":" + Json.string(bat.getType().toString())
+                + ",\"keywords\":[\"flying\"]}"), written);
+        assertFalse(written.contains("sample"), written);
+        assertTrue(written.contains("\"subjects\":[]"), written);
     }
 
     /**
@@ -138,26 +124,22 @@ class OutcomeHandlerTest {
     void damagePreventedNamesItsRecipient() throws Throwable {
         Card creature = TestCards.build("Grizzly Bears");
         Player player = new Player("recipient", TestCards.game(), 93201);
-        PatchedCollectors collectors = recording(tempDir);
-        Method onOutcome = ON_OUTCOME;
 
-        collectors.outcomeHandler().invoke(null, onOutcome,
+        List<String> events = outcomeEvents(
                 new Object[]{null, "damage_prevented",
-                        Map.of("amount", 2, "subjects", List.of(creature))});
-        assertEquals(List.of(SnapshotBuilder.entityId(creature)),
-                collectors.lastClauseEvent().subjects());
-        assertNull(collectors.lastClauseEvent().params().get("subjects"));
-
-        collectors.outcomeHandler().invoke(null, onOutcome,
+                        Map.of("amount", 2, "subjects", List.of(creature))},
                 new Object[]{null, "damage_prevented",
-                        Map.of("amount", 2, "subjects", List.of(player))});
-        assertEquals(List.of(SnapshotBuilder.playerId(player)),
-                collectors.lastClauseEvent().subjects());
-
-        collectors.outcomeHandler().invoke(null, onOutcome,
+                        Map.of("amount", 2, "subjects", List.of(player))},
                 new Object[]{null, "damage_prevented",
                         Map.of("amount", 2, "subjects", List.of())});
-        assertEquals(List.of(), collectors.lastClauseEvent().subjects());
+
+        assertEquals(3, events.size(), events.toString());
+        assertTrue(events.get(0).contains("\"subjects\":"
+                + Json.stringArray(List.of(SnapshotBuilder.entityId(creature)))), events.get(0));
+        assertEquals(Set.of("amount"), paramKeys(events.get(0)), events.get(0));
+        assertTrue(events.get(1).contains("\"subjects\":"
+                + Json.stringArray(List.of(SnapshotBuilder.playerId(player)))), events.get(1));
+        assertTrue(events.get(2).contains("\"subjects\":[]"), events.get(2));
     }
 
     /**
@@ -168,22 +150,21 @@ class OutcomeHandlerTest {
     void cardRevealedNamesTheLibrariesItCameFrom() throws Throwable {
         Player first = new Player("first", TestCards.game(), 93202);
         Player second = new Player("second", TestCards.game(), 93203);
-        PatchedCollectors collectors = recording(tempDir);
-        Method onOutcome = ON_OUTCOME;
 
-        collectors.outcomeHandler().invoke(null, onOutcome,
+        List<String> events = outcomeEvents(
                 new Object[]{null, "card_revealed",
                         Map.of("count", 2, "from_zone", "Library",
-                                "subjects", List.of(first, second))});
-        EffectEvent fromLibraries = collectors.lastClauseEvent();
-        assertEquals(List.of(SnapshotBuilder.playerId(first), SnapshotBuilder.playerId(second)),
-                fromLibraries.subjects());
-        assertEquals(Set.of("count", "from_zone"), fromLibraries.params().keySet());
-
-        collectors.outcomeHandler().invoke(null, onOutcome,
+                                "subjects", List.of(first, second))},
                 new Object[]{null, "card_revealed",
                         Map.of("count", 1, "from_zone", "Hand", "subjects", List.of())});
-        assertEquals(List.of(), collectors.lastClauseEvent().subjects());
+
+        assertEquals(2, events.size(), events.toString());
+        String fromLibraries = events.get(0);
+        assertTrue(fromLibraries.contains("\"subjects\":" + Json.stringArray(List.of(
+                SnapshotBuilder.playerId(first), SnapshotBuilder.playerId(second)))),
+                fromLibraries);
+        assertEquals(Set.of("count", "from_zone"), paramKeys(fromLibraries), fromLibraries);
+        assertTrue(events.get(1).contains("\"subjects\":[]"), events.get(1));
     }
 
     /**
@@ -197,34 +178,30 @@ class OutcomeHandlerTest {
      * Python side. The handler converts it to the event's own top-level
      * subject refs instead.
      *
-     * <p>Exact match, not {@code containsAll}: {@code restriction_change}'s
+     * <p>Exact match, not a containment check: {@code restriction_change}'s
      * acting card (the host, "Alchemist's Gambit" here) must not appear in
      * the subject list alongside the two cards actually goaded, and
-     * {@code containsAll} cannot tell "exactly these two" from "these two,
-     * plus an extra false one".
+     * containment cannot tell "exactly these two" from "these two, plus an
+     * extra false one".
      */
     @Test
     void restrictionChangeSubjectsBecomeEventSubjectsNotAParam() throws Throwable {
         Card goaded1 = TestCards.build("Sol Ring");
         Card goaded2 = TestCards.build("Mox Pearl");
         SpellAbility sa = TestCards.scriptedAbility("Alchemist's Gambit", "AddTurn");
-        PatchedCollectors collectors = recording(tempDir);
 
-        collectors.outcomeHandler().invoke(null,
-                ON_OUTCOME,
-                new Object[]{sa, "restriction_change",
-                        Map.of("restriction", "goad", "value", true,
-                                "subjects", List.of(goaded1, goaded2))});
+        String written = onlyEvent(new Object[]{sa, "restriction_change",
+                Map.of("restriction", "goad", "value", true,
+                        "subjects", List.of(goaded1, goaded2))});
 
-        EffectEvent written = collectors.lastClauseEvent();
-        assertEquals("restriction_change", written.type());
-        assertEquals("goad", written.params().get("restriction"));
-        assertEquals(Boolean.TRUE, written.params().get("value"));
-        assertNull(written.params().get("subjects"), "subjects must not leak into params");
-        assertEquals(List.of(
-                SnapshotBuilder.entityId(goaded1), SnapshotBuilder.entityId(goaded2)),
-                written.subjects(),
-                "exactly the two goaded cards -- not the acting host as well");
+        assertTrue(written.startsWith("{\"type\":\"restriction_change\""), written);
+        assertEquals(Set.of("restriction", "value"), paramKeys(written),
+                "subjects must not leak into params: " + written);
+        assertTrue(written.contains("\"restriction\":\"goad\""), written);
+        assertTrue(written.contains("\"value\":true"), written);
+        assertTrue(written.contains("\"subjects\":" + Json.stringArray(List.of(
+                SnapshotBuilder.entityId(goaded1), SnapshotBuilder.entityId(goaded2)))),
+                "exactly the two goaded cards -- not the acting host as well: " + written);
     }
 
     /**
@@ -240,18 +217,21 @@ class OutcomeHandlerTest {
      */
     @Test
     void anUnrecognizedOutcomeTypeWritesNoEventAndIsReportedOnce() throws Throwable {
-        PatchedCollectors collectors = recording(tempDir);
-
-        String output = StdStreams.captureStderr(() -> {
-            collectors.outcomeHandler().invoke(null, ON_OUTCOME,
-                    new Object[]{null, "dungeon_entered", Map.of()});
-            collectors.outcomeHandler().invoke(null, ON_OUTCOME,
-                    new Object[]{null, "dungeon_entered", Map.of()});
-            collectors.outcomeHandler().invoke(null, ON_OUTCOME,
-                    new Object[]{null, "another_unknown_type", Map.of()});
+        StringBuilder stderr = new StringBuilder();
+        Path shard = ShardRun.shardOf(tempDir, TestCards.game(), (bracket, collectors) -> {
+            stderr.append(StdStreams.captureStderr(() -> {
+                collectors.outcomeHandler().invoke(null, ON_OUTCOME,
+                        new Object[]{null, "dungeon_entered", Map.of()});
+                collectors.outcomeHandler().invoke(null, ON_OUTCOME,
+                        new Object[]{null, "dungeon_entered", Map.of()});
+                collectors.outcomeHandler().invoke(null, ON_OUTCOME,
+                        new Object[]{null, "another_unknown_type", Map.of()});
+            }));
+            bracket.finishGame(Set.of());
         });
 
-        assertNull(collectors.lastClauseEvent(), "an unrecognized type must not become an event");
+        assertFalse(Files.exists(shard), "an unrecognized type must not become an event");
+        String output = stderr.toString();
         long lineCount = output.isBlank() ? 0 : output.strip().lines().count();
         assertEquals(1, lineCount, "exactly one report despite three unrecognized types: " + output);
         assertTrue(output.contains("dungeon_entered"), "the report names the first unrecognized type: " + output);
@@ -269,18 +249,14 @@ class OutcomeHandlerTest {
     @Test
     void damagePreventedSourceBecomesAnEntityRef() throws Throwable {
         Card source = TestCards.build("Grizzly Bears");
-        PatchedCollectors collectors = recording(tempDir);
 
-        collectors.outcomeHandler().invoke(null,
-                ON_OUTCOME,
-                new Object[]{null, "damage_prevented",
-                        Map.of("amount", 3, "source", source)});
+        String written = onlyEvent(new Object[]{null, "damage_prevented",
+                Map.of("amount", 3, "source", source)});
 
-        EffectEvent written = collectors.lastClauseEvent();
-        assertEquals("damage_prevented", written.type());
-        assertEquals(3, written.params().get("amount"));
-        assertEquals(SnapshotBuilder.entityId(source), written.params().get("source"),
-                "a ref like damage_dealt's, not a display name");
+        assertTrue(written.startsWith("{\"type\":\"damage_prevented\""), written);
+        assertTrue(written.contains("\"amount\":3"), written);
+        assertTrue(written.contains("\"source\":" + Json.string(SnapshotBuilder.entityId(source))),
+                "a ref like damage_dealt's, not a display name: " + written);
     }
 
     // ── F2: another game's ability must not reach this game's bracket ────
@@ -302,11 +278,10 @@ class OutcomeHandlerTest {
      * clause hook -- {@code ClauseContractTest} covers the clause hook's own
      * half of the same fix.
      *
-     * <p>{@code lastClauseEvent()} is asserted non-null first: it is set
-     * unconditionally, before the (now gated) delivery to the bracket, so
-     * this also proves the event was genuinely built and rejected by the
-     * game-identity check -- not merely never reached because of some other,
-     * unrelated failure this test would then wrongly credit to the fix.
+     * <p>The same report for a live ability follows it into the same bracket
+     * and is written, so the fork's is refused by the game-identity check
+     * rather than lost to some other failure this test would then wrongly
+     * credit to it.
      */
     @Test
     void anOutcomeFromAnotherGameDoesNotReachThisGamesBracket() throws Throwable {
@@ -318,22 +293,118 @@ class OutcomeHandlerTest {
         List<String> records = ShardRun.records(tempDir, TestCards.game(), (bracket, collectors) -> {
             bracket.beginBracket(liveAbility);
 
-            collectors.outcomeHandler().invoke(null,
-                    ON_OUTCOME,
+            collectors.outcomeHandler().invoke(null, ON_OUTCOME,
                     new Object[]{forkAbility, "vote_taken", Map.of("tally", Map.of("beast", 2))});
-
-            assertNotNull(collectors.lastClauseEvent(),
-                    "the event must still be built -- only its delivery to "
-                            + "the live bracket is gated");
-            assertEquals("vote_taken", collectors.lastClauseEvent().type());
+            collectors.outcomeHandler().invoke(null, ON_OUTCOME,
+                    new Object[]{liveAbility, "vote_taken", Map.of("tally", Map.of("cat", 1))});
 
             bracket.endBracket(liveAbility.getId(), false);
             bracket.flushHeldResolution();
         });
 
         String shard = String.join("\n", records);
-        assertFalse(shard.contains("vote_taken"),
+        assertFalse(shard.contains("beast"),
                 "a fork's outcome must not land in the live game's record: " + shard);
+        assertTrue(shard.contains("\"tally\":{\"cat\":1}"),
+                "the live ability's own outcome is written beside it: " + shard);
+    }
+
+    // ── the shard, read back ────────────────────────────────────────────
+
+    /**
+     * The one event the outcome hook filed for {@code report}, as the shard
+     * records it.
+     */
+    private String onlyEvent(Object[] report) throws Throwable {
+        List<String> events = outcomeEvents(report);
+        assertEquals(1, events.size(), events.toString());
+        return events.get(0);
+    }
+
+    /**
+     * The events the outcome hook filed for these reports, in order, as the
+     * shard records them.
+     *
+     * <p>No resolution is open around them, as around the engine's own choke
+     * points: the events wait as the game's orphans and the end of the game
+     * writes them in a record of their own, with no bracket to stamp a cause
+     * on them.
+     */
+    private List<String> outcomeEvents(Object[]... reports) throws Throwable {
+        List<String> records = ShardRun.records(tempDir, TestCards.game(), (bracket, collectors) -> {
+            for (Object[] report : reports) {
+                collectors.outcomeHandler().invoke(null, ON_OUTCOME, report);
+            }
+            bracket.finishGame(Set.of());
+        });
+        assertEquals(1, records.size(), records.toString());
+        return eventsOf(records.get(0));
+    }
+
+    /** Each object of a record's {@code events} array, in order. */
+    private static List<String> eventsOf(String record) {
+        String opening = "\"events\":[";
+        int at = record.indexOf(opening);
+        assertTrue(at >= 0, record);
+        List<String> events = new ArrayList<>();
+        int depth = 0;
+        int start = -1;
+        for (int i = at + opening.length(); i < record.length(); i++) {
+            char c = record.charAt(i);
+            if (c == '"') {
+                i = closingQuote(record, i);
+            } else if (c == '{' || c == '[') {
+                if (depth++ == 0) {
+                    start = i;
+                }
+            } else if (c == '}' || c == ']') {
+                if (depth == 0) {
+                    return events;
+                }
+                if (--depth == 0) {
+                    events.add(record.substring(start, i + 1));
+                }
+            }
+        }
+        throw new AssertionError("an unterminated events array: " + record);
+    }
+
+    /** The keys of an event's {@code params} object. */
+    private static Set<String> paramKeys(String event) {
+        String opening = "\"params\":{";
+        int at = event.indexOf(opening);
+        assertTrue(at >= 0, event);
+        Set<String> keys = new HashSet<>();
+        int depth = 0;
+        for (int i = at + opening.length(); i < event.length(); i++) {
+            char c = event.charAt(i);
+            if (c == '"') {
+                int end = closingQuote(event, i);
+                if (depth == 0 && event.charAt(end + 1) == ':') {
+                    keys.add(event.substring(i + 1, end));
+                }
+                i = end;
+            } else if (c == '{' || c == '[') {
+                depth++;
+            } else if (c == '}' || c == ']') {
+                if (depth-- == 0) {
+                    return keys;
+                }
+            }
+        }
+        throw new AssertionError("an unterminated params object: " + event);
+    }
+
+    /** Where the string literal opening at {@code at} closes. */
+    private static int closingQuote(String json, int at) {
+        for (int i = at + 1; i < json.length(); i++) {
+            if (json.charAt(i) == '\\') {
+                i++;
+            } else if (json.charAt(i) == '"') {
+                return i;
+            }
+        }
+        throw new AssertionError("an unterminated string: " + json);
     }
 
     // ── final-fix-3.md item 1 / final-fix-4.md item 1: a null-ability ────
@@ -349,14 +420,9 @@ class OutcomeHandlerTest {
      * which silently dropped both channels on the live game, not just on a
      * fork.
      *
-     * <p>Every pre-existing null-ability outcome test (e.g. {@code
-     * damagePreventedSourceBecomesAnEntityRef} above) asserts on {@link
-     * PatchedCollectors#lastClauseEvent()}, which is set unconditionally
-     * above the delivery gate and so cannot see this class of bug -- that is
-     * exactly why 689/689 stayed green while the channel was dead. This
-     * asserts on what actually reaches the shard instead, the way {@link
-     * #anOutcomeFromAnotherGameDoesNotReachThisGamesBracket} already does for
-     * the ability-bearing case.
+     * <p>Asserted on what reaches the shard, as every test here is: an event
+     * read off the handler before its delivery gate cannot see this class of
+     * bug, which is how the channel went dead unnoticed.
      *
      * <p>final-fix-4.md item 1: replaces the previous version of this test,
      * which opened a resolution bracket for an ability nothing was actually
@@ -375,8 +441,7 @@ class OutcomeHandlerTest {
         // mid combat-damage would route every other test's events there too.
         Game game = TestBoard.twoPlayerGame(PhaseType.COMBAT_DAMAGE);
         List<String> records = ShardRun.records(tempDir, game, (bracket, collectors) -> {
-            collectors.outcomeHandler().invoke(null,
-                    ON_OUTCOME,
+            collectors.outcomeHandler().invoke(null, ON_OUTCOME,
                     new Object[]{null, "damage_prevented", Map.of("amount", 3)});
 
             // Flushes the combat bracket the null-ability report above opened,
@@ -443,8 +508,7 @@ class OutcomeHandlerTest {
                     "setEffectRecordClauseListener", (proxy, method, args) -> {
                         if ("onClauseResolving".equals(method.getName())) {
                             try {
-                                collectors.outcomeHandler().invoke(null,
-                                        ON_OUTCOME,
+                                collectors.outcomeHandler().invoke(null, ON_OUTCOME,
                                         new Object[]{null, "damage_prevented", Map.of("amount", 3)});
                             } catch (Throwable t) {
                                 throw new RuntimeException(t);
@@ -494,8 +558,7 @@ class OutcomeHandlerTest {
                     "setEffectRecordClauseListener", (proxy, method, args) -> {
                         if ("onClauseResolving".equals(method.getName())) {
                             try {
-                                collectors.outcomeHandler().invoke(null,
-                                        ON_OUTCOME,
+                                collectors.outcomeHandler().invoke(null, ON_OUTCOME,
                                         new Object[]{null, "damage_prevented", Map.of("amount", 3)});
                             } catch (Throwable t) {
                                 throw new RuntimeException(t);
@@ -535,31 +598,35 @@ class OutcomeHandlerTest {
      */
     @Test
     void aNullAbilityOutcomeFromAProbesOwnCombatDoesNotReachTheLiveShard() throws Throwable {
-        Path shard = ShardRun.shardOf(tempDir, TestCards.game(), (bracket, collectors) -> {
+        List<String> records = ShardRun.records(tempDir, TestCards.game(), (bracket, collectors) -> {
             var forkRunning = ForkCollector.class.getDeclaredField("FORK_RUNNING");
             forkRunning.setAccessible(true);
             @SuppressWarnings("unchecked")
             ThreadLocal<Boolean> flag = (ThreadLocal<Boolean>) forkRunning.get(null);
             flag.set(true);
             try {
-                collectors.outcomeHandler().invoke(null,
-                        ON_OUTCOME,
+                collectors.outcomeHandler().invoke(null, ON_OUTCOME,
                         new Object[]{null, "damage_prevented", Map.of("amount", 3)});
             } finally {
                 flag.set(false);
             }
 
-            assertNotNull(collectors.lastClauseEvent(),
-                    "the event must still be built -- only its delivery to "
-                            + "the live bracket is gated");
+            // The same report with no fork running is admitted, so the one
+            // above was built and refused rather than lost on the way.
+            collectors.outcomeHandler().invoke(null, ON_OUTCOME,
+                    new Object[]{null, "damage_prevented", Map.of("amount", 4)});
 
-            // The event reaches the bracket's buffer, which only a flush
+            // The events reach the bracket's buffer, which only a flush
             // writes; without one the shard is empty whether or not the gate
             // exists.
             bracket.finishGame(Set.of());
         });
 
-        assertFalse(Files.exists(shard),
-                "a probe's own combat-damage report must not land in the live game's record");
+        String shard = String.join("\n", records);
+        assertFalse(shard.contains("\"amount\":3"),
+                "a probe's own combat-damage report must not land in the live game's record: "
+                        + shard);
+        assertTrue(shard.contains("\"amount\":4"),
+                "the live report beside it is written: " + shard);
     }
 }
