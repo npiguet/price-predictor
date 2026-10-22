@@ -96,7 +96,7 @@ class MatchWorkerMainTest {
     private static CardsPlayedRow cardsPlayedRow() {
         return new CardsPlayedRow(
                 TS, RUN_ID, "RVR", "forge-best", "gen-2",
-                List.of("X"), List.of("Y"), List.of(), List.of(), 'A', 'B');
+                List.of("X"), List.of("Y"), List.of(), List.of(), Side.A, Side.B);
     }
 
     /** A two-game match result, built without Forge or a live game. */

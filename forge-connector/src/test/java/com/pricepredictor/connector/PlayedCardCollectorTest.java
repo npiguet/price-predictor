@@ -64,21 +64,21 @@ class PlayedCardCollectorTest {
 
     @Test
     void mapsLobbyNameToSide() {
-        // GamePlayer constants: p1 → A, p2 → B.
-        assertEquals('A', PlayedCardCollector.lobbyNameToSide("p1"));
-        assertEquals('B', PlayedCardCollector.lobbyNameToSide("p2"));
+        assertEquals(Side.A, Side.ofLobbyName("p1"));
+        assertEquals(Side.B, Side.ofLobbyName("p2"));
     }
 
     @Test
     void unknownLobbyNameThrows() {
-        assertThrows(IllegalArgumentException.class,
-                () -> PlayedCardCollector.lobbyNameToSide("nobody"));
+        // Never a default to B: a card or a game credited to the wrong deck
+        // is a corrupt row.
+        assertThrows(IllegalArgumentException.class, () -> Side.ofLobbyName("nobody"));
     }
 
     @Test
     void getCardsReturnsEmptyListForUnknownSide() {
         PlayedCardCollector collector = new PlayedCardCollector();
-        assertTrue(collector.getCards('A').isEmpty());
-        assertTrue(collector.getCards('B').isEmpty());
+        assertTrue(collector.getCards(Side.A).isEmpty());
+        assertTrue(collector.getCards(Side.B).isEmpty());
     }
 }

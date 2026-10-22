@@ -32,6 +32,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.Random;
 import java.util.zip.GZIPInputStream;
 
@@ -434,10 +435,11 @@ class RandomSeatControllerTest {
         int a = 0;
         int b = 0;
         for (int i = 0; i < draws; i++) {
-            switch (GamePlayer.drawRandomSeat(caps, random)) {
-                case A -> a++;
-                case B -> b++;
-                default -> { }
+            Optional<Side> seat = GamePlayer.drawRandomSeat(caps, random);
+            if (seat.equals(Optional.of(Side.A))) {
+                a++;
+            } else if (seat.equals(Optional.of(Side.B))) {
+                b++;
             }
         }
         double share = (a + b) / (double) draws;
@@ -449,7 +451,7 @@ class RandomSeatControllerTest {
     void aShareOfZeroSeatsNobody() {
         Random random = new Random(1L);
         for (int i = 0; i < 1000; i++) {
-            assertEquals(GamePlayer.RandomSeat.NONE,
+            assertEquals(Optional.empty(),
                     GamePlayer.drawRandomSeat(CollectionCaps.defaults(), random));
         }
     }

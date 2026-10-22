@@ -15,6 +15,8 @@ import forge.game.player.RegisteredPlayer;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
+import java.util.Optional;
 
 /**
  * Plays a sealed match between two decks using Forge's AI and reports per-game detail.
@@ -22,9 +24,6 @@ import java.util.List;
  * <p>{@link ForgeEnvironmentInitializer#initialize()} must have been called before use.
  */
 public class GamePlayer {
-
-    static final String LOBBY_NAME_A = "p1";
-    static final String LOBBY_NAME_B = "p2";
 
     private final int gamesPerMatch;
 
@@ -44,17 +43,13 @@ public class GamePlayer {
      * preserved).
      */
     public record GameOutcome(
-            String winner,
-            String playFirst,
+            Side winner,
+            Side playFirst,
             List<String> cardsPlayedA,
             List<String> cardsPlayedB) {
         public GameOutcome {
-            if (!"A".equals(winner) && !"B".equals(winner)) {
-                throw new IllegalArgumentException("winner must be 'A' or 'B', got " + winner);
-            }
-            if (!"A".equals(playFirst) && !"B".equals(playFirst)) {
-                throw new IllegalArgumentException("playFirst must be 'A' or 'B', got " + playFirst);
-            }
+            Objects.requireNonNull(winner, "winner");
+            Objects.requireNonNull(playFirst, "playFirst");
             cardsPlayedA = List.copyOf(cardsPlayedA);
             cardsPlayedB = List.copyOf(cardsPlayedB);
         }
@@ -94,7 +89,7 @@ public class GamePlayer {
 
         /** Games deck A won. */
         public int winsA() {
-            return (int) games.stream().filter(g -> "A".equals(g.winner())).count();
+            return (int) games.stream().filter(g -> g.winner() == Side.A).count();
         }
 
         /** Games deck B won. */
@@ -102,9 +97,6 @@ public class GamePlayer {
             return games.size() - winsA();
         }
     }
-
-    /** Which seat, if any, the match's random seat takes. */
-    enum RandomSeat { NONE, A, B }
 
     /** Create a player with the default best-of-3 match format. */
     public GamePlayer() {
@@ -148,7 +140,7 @@ public class GamePlayer {
      * playing a match.
      */
     static List<RegisteredPlayer> registeredPlayers(Deck deckA, Deck deckB) {
-        return registeredPlayers(deckA, deckB, RandomSeat.NONE, 0.0, null);
+        return registeredPlayers(deckA, deckB, Optional.empty(), 0.0, null);
     }
 
     /**
@@ -162,30 +154,33 @@ public class GamePlayer {
      *              draw their own seeds from; unused when the seat is none
      */
     static List<RegisteredPlayer> registeredPlayers(
-            Deck deckA, Deck deckB, RandomSeat randomSeat, double probability,
+            Deck deckA, Deck deckB, Optional<Side> randomSeat, double probability,
             java.util.Random seeds) {
-        LobbyPlayerAi seatA = randomSeat == RandomSeat.A
-                ? new RandomSeatLobbyPlayer(LOBBY_NAME_A, probability, seeds)
-                : new LobbyPlayerAi(LOBBY_NAME_A, null);
-        LobbyPlayerAi seatB = randomSeat == RandomSeat.B
-                ? new RandomSeatLobbyPlayer(LOBBY_NAME_B, probability, seeds)
-                : new LobbyPlayerAi(LOBBY_NAME_B, null);
         return List.of(
-                new RegisteredPlayer(deckA).setPlayer(seatA),
-                new RegisteredPlayer(deckB).setPlayer(seatB)
+                new RegisteredPlayer(deckA).setPlayer(
+                        seat(Side.A, randomSeat, probability, seeds)),
+                new RegisteredPlayer(deckB).setPlayer(
+                        seat(Side.B, randomSeat, probability, seeds))
         );
     }
 
+    private static LobbyPlayerAi seat(
+            Side side, Optional<Side> randomSeat, double probability, java.util.Random seeds) {
+        return randomSeat.equals(Optional.of(side))
+                ? new RandomSeatLobbyPlayer(side.lobbyName(), probability, seeds)
+                : new LobbyPlayerAi(side.lobbyName(), null);
+    }
+
     /**
-     * Which seat this match gives to the random seat, drawn per match: the
-     * share decides whether, a coin decides which (FR-021).
+     * Which seat this match gives to the random seat, if any, drawn per
+     * match: the share decides whether, a coin decides which (FR-021).
      */
-    static RandomSeat drawRandomSeat(
+    static Optional<Side> drawRandomSeat(
             PatchedCollectors.CollectionCaps caps, java.util.Random matchRandom) {
         if (!caps.randomSeatEnabled() || matchRandom.nextDouble() >= caps.randomSeatShare()) {
-            return RandomSeat.NONE;
+            return Optional.empty();
         }
-        return matchRandom.nextBoolean() ? RandomSeat.A : RandomSeat.B;
+        return Optional.of(matchRandom.nextBoolean() ? Side.A : Side.B);
     }
 
     /**
@@ -209,7 +204,7 @@ public class GamePlayer {
         // a linear function of its seed.
         java.util.Random matchRandom =
                 new java.util.Random(PatchedCollectors.scramble(startMillis));
-        RandomSeat randomSeat = drawRandomSeat(caps, matchRandom);
+        Optional<Side> randomSeat = drawRandomSeat(caps, matchRandom);
         var players = registeredPlayers(
                 deckA, deckB, randomSeat, caps.randomSeatProbability(), matchRandom);
 
@@ -292,20 +287,19 @@ public class GamePlayer {
             if (winningLobby == null) {
                 continue;
             }
-            String winner = LOBBY_NAME_A.equals(winningLobby.getName()) ? "A" : "B";
-
-            var startingPlayer = game.getStartingPlayer();
-            String playFirst = (startingPlayer != null
-                    && LOBBY_NAME_A.equals(startingPlayer.getLobbyPlayer().getName()))
-                    ? "A" : "B";
+            // A name neither side registered throws rather than defaulting to
+            // B: a game credited to the wrong deck is a corrupt row.
+            Side winner = Side.ofLobbyName(winningLobby.getName());
+            Side playFirst = Side.ofLobbyName(
+                    game.getStartingPlayer().getLobbyPlayer().getName());
 
             outcomes.add(new GameOutcome(
                     winner, playFirst,
-                    collector.getCards('A'), collector.getCards('B')));
+                    collector.getCards(Side.A), collector.getCards(Side.B)));
         }
 
         int durationSeconds = (int) ((System.currentTimeMillis() - startMillis) / 1000);
-        return new PlayedMatch(outcomes, durationSeconds, randomSeat != RandomSeat.NONE);
+        return new PlayedMatch(outcomes, durationSeconds, randomSeat.isPresent());
     }
 
     /** The game's random seat, by its controller, or null when it has none. */

@@ -35,38 +35,56 @@ class DeckBuilderTest {
     @Test
     void methodSelectionDistributionApproximatesWeights() {
         DeckBuilder builder = new DeckBuilder();
-        int[] counts = new int[5]; // index 1-4
+        java.util.Map<BuildMethod, Integer> counts = new java.util.EnumMap<>(BuildMethod.class);
 
         int trials = 1000;
         for (int i = 0; i < trials; i++) {
-            int method = builder.selectMethod();
-            counts[method]++;
+            counts.merge(builder.selectMethod(), 1, Integer::sum);
         }
 
-        // Method 1: ~40% (expect 350-450)
-        assertTrue(counts[1] >= 300 && counts[1] <= 500,
-                "Method 1 should be ~40%, got " + counts[1] + "/" + trials);
-        // Method 2: ~30% (expect 250-350)
-        assertTrue(counts[2] >= 200 && counts[2] <= 400,
-                "Method 2 should be ~30%, got " + counts[2] + "/" + trials);
-        // Method 3: ~20% (expect 150-250)
-        assertTrue(counts[3] >= 100 && counts[3] <= 300,
-                "Method 3 should be ~20%, got " + counts[3] + "/" + trials);
-        // Method 4: ~10% (expect 50-150)
-        assertTrue(counts[4] >= 30 && counts[4] <= 200,
-                "Method 4 should be ~10%, got " + counts[4] + "/" + trials);
+        // forge-best: ~40% (expect 350-450)
+        int best = counts.getOrDefault(BuildMethod.FORGE_BEST, 0);
+        assertTrue(best >= 300 && best <= 500,
+                "forge-best should be ~40%, got " + best + "/" + trials);
+        // forge-3sub: ~30% (expect 250-350)
+        int sub3 = counts.getOrDefault(BuildMethod.FORGE_3SUB, 0);
+        assertTrue(sub3 >= 200 && sub3 <= 400,
+                "forge-3sub should be ~30%, got " + sub3 + "/" + trials);
+        // forge-8sub: ~20% (expect 150-250)
+        int sub8 = counts.getOrDefault(BuildMethod.FORGE_8SUB, 0);
+        assertTrue(sub8 >= 100 && sub8 <= 300,
+                "forge-8sub should be ~20%, got " + sub8 + "/" + trials);
+        // random: ~10% (expect 50-150)
+        int random = counts.getOrDefault(BuildMethod.RANDOM, 0);
+        assertTrue(random >= 30 && random <= 200,
+                "random should be ~10%, got " + random + "/" + trials);
     }
 
     @Test
     void allMethodsEventuallySelected() {
         DeckBuilder builder = new DeckBuilder();
-        Set<Integer> seen = new HashSet<>();
+        Set<BuildMethod> seen = new HashSet<>();
 
         for (int i = 0; i < 500 && seen.size() < 4; i++) {
             seen.add(builder.selectMethod());
         }
 
-        assertEquals(Set.of(1, 2, 3, 4), seen, "All 4 methods should appear within 500 trials");
+        assertEquals(Set.of(BuildMethod.values()), seen,
+                "All 4 methods should appear within 500 trials");
+    }
+
+    @Test
+    void theRollThresholdsAreTheWeightsCumulated() {
+        // 4:3:2:1 over a total of 10: the same cuts a literal {0.4, 0.7, 0.9}
+        // table drew, so the corpus's method mix is unchanged.
+        assertEquals(10, BuildMethod.TOTAL_WEIGHT);
+        assertEquals(BuildMethod.FORGE_BEST, BuildMethod.forRoll(Math.nextDown(0.4)));
+        assertEquals(BuildMethod.FORGE_3SUB, BuildMethod.forRoll(0.4));
+        assertEquals(BuildMethod.FORGE_3SUB, BuildMethod.forRoll(Math.nextDown(0.7)));
+        assertEquals(BuildMethod.FORGE_8SUB, BuildMethod.forRoll(0.7));
+        assertEquals(BuildMethod.FORGE_8SUB, BuildMethod.forRoll(Math.nextDown(0.9)));
+        assertEquals(BuildMethod.RANDOM, BuildMethod.forRoll(0.9));
+        assertEquals(BuildMethod.RANDOM, BuildMethod.forRoll(Math.nextDown(1.0)));
     }
 
     // ── Method 1: Standard Build ───────────────────────────────────────────────
@@ -298,15 +316,9 @@ class DeckBuilderTest {
 
         // Collect method tags across many invocations; we expect all four tags to appear
         // with the 4:3:2:1 weighting, so over 40 runs all four should be present.
-        Set<String> seen = new HashSet<>();
+        Set<BuildMethod> seen = new HashSet<>();
         for (int i = 0; i < 40; i++) {
             DeckBuilder.BuiltDeck built = builder.buildDeck(new ArrayList<>(pool));
-            assertTrue(Set.of(
-                    DeckBuilder.METHOD_FORGE_BEST,
-                    DeckBuilder.METHOD_FORGE_3SUB,
-                    DeckBuilder.METHOD_FORGE_8SUB,
-                    DeckBuilder.METHOD_RANDOM
-            ).contains(built.method()), "unexpected method tag: " + built.method());
             seen.add(built.method());
         }
         assertEquals(4, seen.size(),

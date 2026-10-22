@@ -17,6 +17,7 @@ import java.nio.file.Path;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.StringJoiner;
 
 /**
@@ -38,8 +39,21 @@ import java.util.StringJoiner;
  */
 public class CastabilityMain {
 
-    public static final String CASTABLE = "castable";
-    public static final String UNCASTABLE = "uncastable";
+    /** A card's answer; {@link #wireName()} is what the Python side reads. */
+    enum Verdict {
+        CASTABLE("castable"),
+        UNCASTABLE("uncastable");
+
+        private final String wireName;
+
+        Verdict(String wireName) {
+            this.wireName = wireName;
+        }
+
+        String wireName() {
+            return wireName;
+        }
+    }
 
     public static void main(String[] args) {
         ToolMain.Args cli = ToolMain.args(args, "--cards", "--output", "--cards-path");
@@ -57,13 +71,13 @@ public class CastabilityMain {
             ForgeEnvironmentInitializer.initialize();
             List<String> names = Files.readAllLines(cardsFile, StandardCharsets.UTF_8)
                     .stream().map(String::trim).filter(s -> !s.isEmpty()).toList();
-            Map<String, String> verdicts = consult(names);
+            Map<String, Verdict> verdicts = consult(names);
             if (output.getParent() != null) {
                 Files.createDirectories(output.getParent());
             }
             Files.writeString(output, render(verdicts), StandardCharsets.UTF_8);
             long castable = verdicts.values().stream()
-                    .filter(CASTABLE::equals).count();
+                    .filter(Verdict.CASTABLE::equals).count();
             System.out.println(
                     "Consulted " + verdicts.size() + " cards: " + castable
                             + " castable, " + (verdicts.size() - castable)
@@ -73,13 +87,10 @@ public class CastabilityMain {
     }
 
     /** One verdict per name Forge recognizes; names it does not are omitted. */
-    static Map<String, String> consult(List<String> names) {
-        Map<String, String> verdicts = new LinkedHashMap<>();
+    static Map<String, Verdict> consult(List<String> names) {
+        Map<String, Verdict> verdicts = new LinkedHashMap<>();
         for (String name : names) {
-            String verdict = verdictFor(name);
-            if (verdict != null) {
-                verdicts.put(name, verdict);
-            }
+            verdictFor(name).ifPresent(verdict -> verdicts.put(name, verdict));
         }
         return verdicts;
     }
@@ -105,22 +116,22 @@ public class CastabilityMain {
      * {@link RulesParser}: with no game at all, three cards' ability setup
      * throws and would be misread as uncastable.
      */
-    private static String verdictFor(String name) {
+    private static Optional<Verdict> verdictFor(String name) {
         // allowAltNames: a double-faced card's back-face name still names the
         // card the coverage unit is keyed on.
         CardRules rules = forge.model.FModel.getMagicDb().getCommonCards()
                 .getRules(name, true);
         if (rules == null) {
-            return null;
+            return Optional.empty();
         }
         try {
             PaperCard paper = new PaperCard(rules, "UNK", CardRarity.Common);
             Game game = ConsultGame.INSTANCE;
             Card card = CardFactory.getCard(paper, null, game.nextCardId(), game);
-            return card.getSpells().isEmpty() ? UNCASTABLE : CASTABLE;
+            return Optional.of(card.getSpells().isEmpty() ? Verdict.UNCASTABLE : Verdict.CASTABLE);
         } catch (RuntimeException e) {
             // A card Forge cannot even instantiate certainly cannot be cast.
-            return UNCASTABLE;
+            return Optional.of(Verdict.UNCASTABLE);
         }
     }
 
@@ -135,10 +146,11 @@ public class CastabilityMain {
         }
     }
 
-    static String render(Map<String, String> verdicts) {
+    static String render(Map<String, Verdict> verdicts) {
         StringJoiner joiner = new StringJoiner(",", "{", "}");
-        for (Map.Entry<String, String> entry : verdicts.entrySet()) {
-            joiner.add(Json.string(entry.getKey()) + ":" + Json.string(entry.getValue()));
+        for (Map.Entry<String, Verdict> entry : verdicts.entrySet()) {
+            joiner.add(Json.string(entry.getKey()) + ":"
+                    + Json.string(entry.getValue().wireName()));
         }
         return joiner.toString();
     }

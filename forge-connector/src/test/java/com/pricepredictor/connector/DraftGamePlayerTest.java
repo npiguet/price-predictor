@@ -18,7 +18,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
  */
 class DraftGamePlayerTest {
 
-    private static GamePlayer.GameOutcome game(String winner, String playFirst) {
+    private static GamePlayer.GameOutcome game(Side winner, Side playFirst) {
         return new GamePlayer.GameOutcome(winner, playFirst, List.of(), List.of());
     }
 
@@ -30,17 +30,17 @@ class DraftGamePlayerTest {
 
     @Test
     void winnerSequenceIsOneCharPerGame() {
-        assertEquals("ABA", match(game("A", "A"), game("B", "B"), game("A", "A")).winnerSequence());
+        assertEquals("ABA", match(game(Side.A, Side.A), game(Side.B, Side.B), game(Side.A, Side.A)).winnerSequence());
     }
 
     @Test
     void playSequenceIsOneCharPerGame() {
-        assertEquals("BAB", match(game("A", "B"), game("B", "A"), game("A", "B")).playSequence());
+        assertEquals("BAB", match(game(Side.A, Side.B), game(Side.B, Side.A), game(Side.A, Side.B)).playSequence());
     }
 
     @Test
     void sequencesHaveEqualLength() {
-        GamePlayer.PlayedMatch played = match(game("A", "B"), game("A", "A"));
+        GamePlayer.PlayedMatch played = match(game(Side.A, Side.B), game(Side.A, Side.A));
 
         assertEquals(
                 played.winnerSequence().length(),
@@ -49,14 +49,14 @@ class DraftGamePlayerTest {
 
     @Test
     void aBestOfOneMatchIsASingleChar() {
-        assertEquals("B", match(game("B", "A")).winnerSequence());
+        assertEquals("B", match(game(Side.B, Side.A)).winnerSequence());
     }
 
     // ── Row construction ────────────────────────────────────────────
 
     @Test
     void rowCarriesLabelsSetAndSequences() {
-        GamePlayer.PlayedMatch played = match(game("A", "A"), game("A", "B"));
+        GamePlayer.PlayedMatch played = match(game(Side.A, Side.A), game(Side.A, Side.B));
 
         MatchResult result = new MatchResult(
                 Instant.parse("2026-08-11T00:00:00Z"),
@@ -81,7 +81,7 @@ class DraftGamePlayerTest {
     @Test
     void winCountsDeriveFromTheSequence() {
         GamePlayer.PlayedMatch played =
-                match(game("A", "A"), game("B", "B"), game("A", "A"));
+                match(game(Side.A, Side.A), game(Side.B, Side.B), game(Side.A, Side.A));
 
         MatchResult result = new MatchResult(
                 Instant.parse("2026-08-11T00:00:00Z"),

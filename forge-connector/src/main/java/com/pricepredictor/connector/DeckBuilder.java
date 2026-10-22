@@ -22,15 +22,8 @@ import java.util.List;
 import java.util.Random;
 
 /**
- * Builds a 40-card sealed deck from a booster pool using one of four weighted methods.
- *
- * <p>Method weights: 1=40%, 2=30%, 3=20%, 4=10%.
- * <ul>
- *   <li>Method 1: Standard Forge sealed deck builder</li>
- *   <li>Method 2: Forge builder + 3 spell swaps + land rebalance</li>
- *   <li>Method 3: Forge builder + 8 spell swaps + land rebalance</li>
- *   <li>Method 4: 23 random spells + land rebalance</li>
- * </ul>
+ * Builds a 40-card sealed deck from a booster pool using one of the four
+ * weighted {@link BuildMethod}s.
  *
  * <p>"Nonland card" means a spell (creature, instant, sorcery, enchantment, artifact,
  * planeswalker) — cards whose type line does not include "Land". Non-basic lands (dual
@@ -40,16 +33,18 @@ import java.util.Random;
  */
 public class DeckBuilder {
 
-    public static final String METHOD_FORGE_BEST = "forge-best";
-    public static final String METHOD_FORGE_3SUB = "forge-3sub";
-    public static final String METHOD_FORGE_8SUB = "forge-8sub";
-    public static final String METHOD_RANDOM = "random";
+    static final int DECK_SIZE = 40;
 
-    private static final double[] METHOD_THRESHOLDS = {0.4, 0.7, 0.9, 1.0};
+    /** Spells {@link BuildMethod#RANDOM} draws: a typical 23-spell, 17-land deck. */
+    static final int RANDOM_DECK_SPELLS = 23;
+
+    /** Where basics come from when no spell's set prints them; GRN always does. */
+    static final String FALLBACK_BASIC_LAND_SET = "GRN";
+
     private final Random random;
 
-    /** A constructed deck together with the method tag that produced it. */
-    public record BuiltDeck(Deck deck, String method) {}
+    /** A constructed deck together with the method that produced it. */
+    public record BuiltDeck(Deck deck, BuildMethod method) {}
 
     public DeckBuilder() {
         this.random = MyRandom.getRandom();
@@ -68,24 +63,17 @@ public class DeckBuilder {
      * @return the 40-card deck and its method tag
      */
     public BuiltDeck buildDeck(List<PaperCard> pool) {
-        int method = selectMethod();
-        return switch (method) {
-            case 1 -> new BuiltDeck(buildStandard(pool), METHOD_FORGE_BEST);
-            case 2 -> new BuiltDeck(buildWithSwaps(pool, 3), METHOD_FORGE_3SUB);
-            case 3 -> new BuiltDeck(buildWithSwaps(pool, 8), METHOD_FORGE_8SUB);
-            case 4 -> new BuiltDeck(buildRandom(pool), METHOD_RANDOM);
-            default -> throw new IllegalStateException("Unexpected method: " + method);
+        BuildMethod method = selectMethod();
+        Deck deck = switch (method) {
+            case FORGE_BEST -> buildStandard(pool);
+            case FORGE_3SUB, FORGE_8SUB -> buildWithSwaps(pool, method.swaps());
+            case RANDOM -> buildRandom(pool);
         };
+        return new BuiltDeck(deck, method);
     }
 
-    int selectMethod() {
-        double roll = random.nextDouble();
-        for (int i = 0; i < METHOD_THRESHOLDS.length; i++) {
-            if (roll < METHOD_THRESHOLDS[i]) {
-                return i + 1;
-            }
-        }
-        return 4;
+    BuildMethod selectMethod() {
+        return BuildMethod.forRoll(random.nextDouble());
     }
 
     Deck buildStandard(List<PaperCard> pool) {
@@ -183,7 +171,7 @@ public class DeckBuilder {
             }
         }
 
-        int pickCount = Math.min(23, spellPool.size());
+        int pickCount = Math.min(RANDOM_DECK_SPELLS, spellPool.size());
         List<PaperCard> chosen = new ArrayList<>(pickCount);
         List<PaperCard> mutablePool = new ArrayList<>(spellPool);
         for (int i = 0; i < pickCount; i++) {
@@ -208,11 +196,11 @@ public class DeckBuilder {
      * @return 40-card Deck
      */
     Deck rebalanceLands(List<PaperCard> spells, List<PaperCard> nonbasicLands) {
-        int basicLandsNeeded = 40 - spells.size() - nonbasicLands.size();
+        int basicLandsNeeded = DECK_SIZE - spells.size() - nonbasicLands.size();
 
         // Count WUBRG mana pips across spells to determine basic land proportions.
         // Non-basic lands are intentionally excluded — they have no mana cost.
-        int[] pips = new int[5]; // W=0, U=1, B=2, R=3, G=4
+        int[] pips = new int[MagicColor.WUBRG.length]; // W=0, U=1, B=2, R=3, G=4
         for (PaperCard card : spells) {
             ManaCost mc = card.getRules().getMainPart().getManaCost();
             for (ManaCostShard shard : mc) {
@@ -228,10 +216,10 @@ public class DeckBuilder {
         if (totalPips == 0) {
             // Colorless deck: distribute equally across all five types
             Arrays.fill(pips, 1);
-            totalPips = 5;
+            totalPips = pips.length;
         }
 
-        // Source basic land cards from a set in the spell pool, fallback to GRN
+        // Source basic land cards from a set in the spell pool, else the fallback
         String setCode = findBasicLandSet(spells);
 
         // Distribute basic land slots proportionally (greedy, WUBRG order;
@@ -240,7 +228,7 @@ public class DeckBuilder {
         int remaining = basicLandsNeeded;
         int remainingPips = totalPips;
 
-        for (int i = 0; i < 5; i++) {
+        for (int i = 0; i < pips.length; i++) {
             if (pips[i] == 0 || remaining == 0) continue;
             int count = (remainingPips == pips[i])
                     ? remaining
@@ -272,6 +260,6 @@ public class DeckBuilder {
                 return card.getEdition();
             }
         }
-        return "GRN"; // fallback: Guilds of Ravnica always has basic lands
+        return FALLBACK_BASIC_LAND_SET;
     }
 }

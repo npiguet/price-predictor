@@ -59,12 +59,7 @@ class MatchGeneratorTest {
 
         MatchResult result = generator.generateMatch().matchResult();
 
-        List<String> allowed = List.of(
-                DeckBuilder.METHOD_FORGE_BEST,
-                DeckBuilder.METHOD_FORGE_3SUB,
-                DeckBuilder.METHOD_FORGE_8SUB,
-                DeckBuilder.METHOD_RANDOM
-        );
+        List<String> allowed = List.of("forge-best", "forge-3sub", "forge-8sub", "random");
         assertTrue(allowed.contains(result.methodA()),
                 "methodA must be one of the phase-0 tags, got: " + result.methodA());
         assertTrue(allowed.contains(result.methodB()),

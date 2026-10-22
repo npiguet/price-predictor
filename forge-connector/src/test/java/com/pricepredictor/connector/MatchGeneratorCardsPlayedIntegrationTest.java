@@ -53,9 +53,9 @@ class MatchGeneratorCardsPlayedIntegrationTest {
             assertEquals(parent.setCode(), row.setCode());
             assertEquals(parent.methodA(), row.methodA());
             assertEquals(parent.methodB(), row.methodB());
-            assertEquals(parent.games().charAt(i), row.winner(),
+            assertEquals(String.valueOf(parent.games().charAt(i)), row.winner().toString(),
                     "winner at index " + i + " must align with parent games string");
-            assertEquals(parent.play().charAt(i), row.starter(),
+            assertEquals(String.valueOf(parent.play().charAt(i)), row.starter().toString(),
                     "starter at index " + i + " must align with parent play string");
         }
     }

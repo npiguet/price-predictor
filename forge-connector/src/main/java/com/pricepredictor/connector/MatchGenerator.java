@@ -11,6 +11,7 @@ import forge.util.MyRandom;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.Random;
 
 /**
@@ -58,9 +59,6 @@ import java.util.Random;
 public class MatchGenerator {
 
     private static final int BOOSTERS_PER_POOL = 6;
-
-    /** Total weight of the 4 Forge deck-build methods (4 + 3 + 2 + 1). */
-    static final int FORGE_METHODS_TOTAL_WEIGHT = 10;
 
     private final List<String> eligibleSetCodes;
     private final DeckBuilder deckBuilder;
@@ -257,8 +255,8 @@ public class MatchGenerator {
                 playedB,
                 deckMinusPlayed(deckASet, playedA),
                 deckMinusPlayed(deckBSet, playedB),
-                g.winner().charAt(0),
-                g.playFirst().charAt(0));
+                g.winner(),
+                g.playFirst());
     }
 
     private static java.util.LinkedHashSet<String> distinctNonBasic(List<String> deck) {
@@ -313,7 +311,7 @@ public class MatchGenerator {
     /**
      * Pick deck B for a match whose deck A has the given set code and card
      * list. Roll between the 4 Forge methods (weights 4:3:2:1, total
-     * {@link #FORGE_METHODS_TOTAL_WEIGHT}) and — if {@code sideBIndex} is
+     * {@link BuildMethod#TOTAL_WEIGHT}) and — if {@code sideBIndex} is
      * present — sampling from the index (weight {@code sideBWeight}). The
      * file-sample branch falls back to Forge methods when no non-mirror
      * candidate exists for {@code setCode} — <b>except</b> under
@@ -332,15 +330,15 @@ public class MatchGenerator {
      */
     DeckSelection pickDeckB(String setCode, List<String> deckACards) {
         if (sideBIndex != null && rollIsFileSample()) {
-            GeneratedDeck pick = sideBIndex.randomDeckFromSet(
+            Optional<GeneratedDeck> pick = sideBIndex.randomDeckFromSet(
                     setCode, deckACards, random);
-            if (pick != null) {
-                return DeckSelection.fromFile(pick, setCode, decksOnly);
+            if (pick.isPresent()) {
+                return DeckSelection.fromFile(pick.get(), setCode, decksOnly);
             }
             if (decksOnly) {
-                GeneratedDeck mirror = sideBIndex.randomAnyDeckFromSet(setCode, random);
-                if (mirror != null) {
-                    return DeckSelection.fromFile(mirror, setCode, decksOnly);
+                Optional<GeneratedDeck> mirror = sideBIndex.randomAnyDeckFromSet(setCode, random);
+                if (mirror.isPresent()) {
+                    return DeckSelection.fromFile(mirror.get(), setCode, decksOnly);
                 }
                 // Not reachable from CollectorSupervisor, which always points
                 // both sides at the same file: a decks-only side-B index with
@@ -366,7 +364,8 @@ public class MatchGenerator {
         List<PaperCard> pool = generatePool(setCode);
         DeckBuilder.BuiltDeck built = deckBuilder.buildDeck(pool);
         return new DeckSelection(
-                built.deck(), DeckMaterializer.names(built.deck()), built.method(), setCode);
+                built.deck(), DeckMaterializer.names(built.deck()), built.method().label(),
+                setCode);
     }
 
     /**
@@ -384,7 +383,7 @@ public class MatchGenerator {
         if (decksOnly) {
             return true;
         }
-        double total = FORGE_METHODS_TOTAL_WEIGHT + sideBWeight;
+        double total = BuildMethod.TOTAL_WEIGHT + sideBWeight;
         return random.nextDouble() < sideBWeight / total;
     }
 
