@@ -106,8 +106,7 @@ Flags live on every collecting supervisor (`match-outcomes`, `collect-coverage`,
 | Flag | Default | Meaning |
 |---|---|---|
 | `--mana-cap` | 1 | cap on resolution records per unique (mana ability, mana produced) pair, per game |
-| `--playability-rate` | 0.1 | fraction of `decision`-subkind logging points sampled; `attackers`/`blockers` records are sampled at `--legality-rate` instead |
-| `--legality-rate` | 0 | fraction of the AI's what-if legality queries kept; real attack and block declarations are always written |
+| `--playability-rate` | 0.1 | fraction of `decision`-subkind logging points sampled; `attackers`/`blockers` records are not sampled: every real attack and block declaration is written, and no what-if query is |
 | `--interventions-per-game` | 2 | interventional resolutions per game |
 | `--probes-per-game` | 2 | damage-step probe forks per game (only for keywords whose canary failed — § Evaluation, gate 2) |
 | `--probe-keywords` | all eight damage-step keywords (`first_strike,double_strike,deathtouch,lifelink,trample,indestructible,wither,infect`) | the keywords to probe, comma-separated; an empty string disables probes |
