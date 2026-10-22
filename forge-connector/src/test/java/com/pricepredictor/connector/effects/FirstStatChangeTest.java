@@ -1,7 +1,6 @@
 package com.pricepredictor.connector.effects;
 
 import com.pricepredictor.connector.ForgeExtension;
-import com.pricepredictor.connector.effects.PatchedCollectors.CollectionCaps;
 import forge.StaticData;
 import forge.ai.LobbyPlayerAi;
 import forge.deck.Deck;

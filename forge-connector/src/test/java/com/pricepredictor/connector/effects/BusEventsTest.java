@@ -148,7 +148,7 @@ class BusEventsTest {
 
     /**
      * A real two-player game, each seat a distinct lobby name -- the shape
-     * {@code GamePlayer.registeredPlayers} itself builds, minus the deck.
+     * {@code GamePlayer} registers for a match, minus the decks.
      */
     private static Game twoPlayerGame(String nameA, String nameB) {
         List<RegisteredPlayer> players = List.of(

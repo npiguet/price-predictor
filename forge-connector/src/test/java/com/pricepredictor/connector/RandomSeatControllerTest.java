@@ -1,7 +1,7 @@
 package com.pricepredictor.connector;
 
 import com.pricepredictor.connector.effects.PatchedCollectors;
-import com.pricepredictor.connector.effects.PatchedCollectors.CollectionCaps;
+import com.pricepredictor.connector.effects.CollectionCaps;
 import com.pricepredictor.connector.effects.RecordShardWriter;
 import com.pricepredictor.connector.effects.SnapshotBuilder;
 import forge.StaticData;

@@ -243,8 +243,9 @@ final class BusEvents {
      * Forge's own outcome names no separate cause of the win.
      *
      * <p>Two players sharing a lobby name is not a shape this connector's own
-     * worker setup produces -- {@code GamePlayer.LOBBY_NAME_A}/{@code _B} are
-     * always distinct strings -- but nothing enforces that in general, so a
+     * worker setup produces -- the two seats' lobby names ({@code
+     * Side.lobbyName()}) are always distinct strings -- but nothing enforces
+     * that in general, so a
      * collision is broken by taking the first match in {@code
      * game.getPlayers()}'s own order rather than guessing further.
      */

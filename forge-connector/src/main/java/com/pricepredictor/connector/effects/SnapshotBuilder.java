@@ -258,7 +258,7 @@ public final class SnapshotBuilder {
                 + Json.string(priority == null ? null : playerId(priority))
                 + ",\"stack_size\":" + game.getStack().size()
                 + ",\"combat_substep\":" + Json.string(combatSubstep())
-                + ",\"emblems\":" + keyJson(emblems()) + "}";
+                + ",\"emblems\":" + ProvenanceKey.toJsonArray(emblems()) + "}";
     }
 
     /**
@@ -269,19 +269,13 @@ public final class SnapshotBuilder {
      * about an effect that changes every turn of the rest of the game.
      */
     private List<ProvenanceKey> emblems() {
-        List<ProvenanceKey> keys = new ArrayList<>();
+        Set<ProvenanceKey> keys = new LinkedHashSet<>();
         for (Card card : game.getCardsIn(ZoneType.Command)) {
-            if (!card.isEmblem()) {
-                continue;
-            }
-            for (SpellAbility sa : card.getSpellAbilities()) {
-                ProvenanceKey key = ProvenanceKey.of(sa);
-                if (key != null && !keys.contains(key)) {
-                    keys.add(key);
-                }
+            if (card.isEmblem()) {
+                addKeys(keys, card.getSpellAbilities());
             }
         }
-        return keys;
+        return List.copyOf(keys);
     }
 
     /**
@@ -412,11 +406,11 @@ public final class SnapshotBuilder {
             if (staticId == null) {
                 return null;
             }
-            if (!(PatchHooks.read(card, "getTypeWithout", staticId)
+            if (!(PatchHooks.read(card, PatchHooks.TYPE_WITHOUT.method(), staticId)
                             instanceof CardTypeView type)
-                    || !(PatchHooks.read(card, "getColorWithout", staticId)
+                    || !(PatchHooks.read(card, PatchHooks.COLOR_WITHOUT.method(), staticId)
                             instanceof ColorSet colors)
-                    || !(PatchHooks.read(card, "getKeywordsWithout", staticId)
+                    || !(PatchHooks.read(card, PatchHooks.KEYWORDS_WITHOUT.method(), staticId)
                             instanceof Iterable<?> keywords)) {
                 return null;
             }
@@ -447,10 +441,11 @@ public final class SnapshotBuilder {
                 + ",\"copy_source\":" + Json.string(copySourceOf(card))
                 + ",\"token_script_id\":"
                 + Json.string(tokenScriptIdOf(card))
-                + ",\"types\":" + typeJson(card, without)
-                + ",\"subtypes\":" + subtypeJson(card, without)
-                + ",\"supertypes\":" + supertypeJson(card, without)
-                + ",\"colors\":" + colorJson(card, without)
+                + ",\"types\":" + typeNamesJson(typeOf(card, without).getCoreTypes())
+                + ",\"subtypes\":" + typeNamesJson(typeOf(card, without).getSubtypes())
+                + ",\"supertypes\":" + typeNamesJson(typeOf(card, without).getSupertypes())
+                + ",\"colors\":" + Json.stringArray(
+                        colorLetters(without == null ? card.getColor() : without.colors()))
                 + ",\"mana_value\":" + card.getCMC()
                 + ",\"pt\":" + ptJson(card, without)
                 + ",\"tapped\":" + card.isTapped()
@@ -461,9 +456,9 @@ public final class SnapshotBuilder {
                 + ",\"attached_to\":"
                 + Json.string(attached == null ? null : entityId(attached))
                 + ",\"face_down\":" + card.isFaceDown()
-                + ",\"granted_attached\":" + keyJson(grantedAttached(card))
+                + ",\"granted_attached\":" + ProvenanceKey.toJsonArray(grantedAttached(card))
                 + ",\"granted_temporary\":" + grantedTemporaryJson(card, without)
-                + ",\"printed\":" + keyJson(printedKeys(card))
+                + ",\"printed\":" + ProvenanceKey.toJsonArray(printedKeys(card))
                 + ",\"stack_extras\":" + stackExtrasJson(card) + "}";
     }
 
@@ -561,7 +556,7 @@ public final class SnapshotBuilder {
     private String grantedTemporaryJson(Card card, Suppressed without) {
         return "{\"keywords\":" + Json.stringArray(keywordNames(
                         without == null ? card.getKeywords() : without.keywords()))
-                + ",\"abilities\":" + keyJson(grantedTemporaryAbilities(card)) + "}";
+                + ",\"abilities\":" + ProvenanceKey.toJsonArray(grantedTemporaryAbilities(card)) + "}";
     }
 
     /**
@@ -591,26 +586,17 @@ public final class SnapshotBuilder {
      * grant is part of what happened to it.
      */
     private List<ProvenanceKey> grantedTemporaryAbilities(Card card) {
-        List<ProvenanceKey> keys = new ArrayList<>();
         Object changes = PatchHooks.read(card, "getChangedCardTraits");
         if (!(changes instanceof com.google.common.collect.Table<?, ?, ?> table)) {
-            return keys;
+            return List.of();
         }
+        Set<ProvenanceKey> keys = new LinkedHashSet<>();
         for (Object value : table.values()) {
-            Object abilities = PatchHooks.read(value, "getAbilities");
-            if (!(abilities instanceof Iterable<?> granted)) {
-                continue;
-            }
-            for (Object ability : granted) {
-                if (ability instanceof SpellAbility sa) {
-                    ProvenanceKey key = ProvenanceKey.of(sa);
-                    if (key != null && !keys.contains(key)) {
-                        keys.add(key);
-                    }
-                }
+            if (PatchHooks.read(value, "getAbilities") instanceof Iterable<?> granted) {
+                addKeys(keys, granted);
             }
         }
-        return keys;
+        return List.copyOf(keys);
     }
 
     /** Which face is up, as an index; 0 is the printed front. */
@@ -674,14 +660,9 @@ public final class SnapshotBuilder {
 
     /** Printed lines, as provenance keys into the card's own script. */
     private List<ProvenanceKey> printedKeys(Card card) {
-        List<ProvenanceKey> keys = new ArrayList<>();
-        for (SpellAbility sa : card.getSpellAbilities()) {
-            ProvenanceKey key = ProvenanceKey.of(sa);
-            if (key != null && !keys.contains(key)) {
-                keys.add(key);
-            }
-        }
-        return keys;
+        Set<ProvenanceKey> keys = new LinkedHashSet<>();
+        addKeys(keys, card.getSpellAbilities());
+        return List.copyOf(keys);
     }
 
     /**
@@ -693,61 +674,36 @@ public final class SnapshotBuilder {
      * end of turn is part of what happened to it rather than what it is.
      */
     private List<ProvenanceKey> grantedAttached(Card card) {
-        List<ProvenanceKey> keys = new ArrayList<>();
+        Set<ProvenanceKey> keys = new LinkedHashSet<>();
         for (Card attachment : card.getAttachedCards()) {
-            for (SpellAbility sa : attachment.getSpellAbilities()) {
+            addKeys(keys, attachment.getSpellAbilities());
+        }
+        return List.copyOf(keys);
+    }
+
+    /** Add every line's key that has one and is not already listed. */
+    private static void addKeys(Set<ProvenanceKey> into, Iterable<?> lines) {
+        for (Object line : lines) {
+            if (line instanceof SpellAbility sa) {
                 ProvenanceKey key = ProvenanceKey.of(sa);
-                if (key != null && !keys.contains(key)) {
-                    keys.add(key);
+                if (key != null) {
+                    into.add(key);
                 }
             }
         }
-        return keys;
-    }
-
-    private static String keyJson(List<ProvenanceKey> keys) {
-        StringJoiner joiner = new StringJoiner(",", "[", "]");
-        for (ProvenanceKey key : keys) {
-            joiner.add(key.toJson());
-        }
-        return joiner.toString();
     }
 
     private static CardTypeView typeOf(Card card, Suppressed without) {
         return without == null ? card.getType() : without.type();
     }
 
-    private String typeJson(Card card, Suppressed without) {
-        StringJoiner joiner = new StringJoiner(",", "[", "]");
-        for (var type : typeOf(card, without).getCoreTypes()) {
-            joiner.add(Json.string(typeName(type)));
+    /** One part of a type line, as the snapshot's names. */
+    private static String typeNamesJson(Iterable<?> types) {
+        List<String> names = new ArrayList<>();
+        for (Object type : types) {
+            names.add(typeName(type));
         }
-        return joiner.toString();
-    }
-
-    private String subtypeJson(Card card, Suppressed without) {
-        StringJoiner joiner = new StringJoiner(",", "[", "]");
-        for (String subtype : typeOf(card, without).getSubtypes()) {
-            joiner.add(Json.string(typeName(subtype)));
-        }
-        return joiner.toString();
-    }
-
-    private String supertypeJson(Card card, Suppressed without) {
-        StringJoiner joiner = new StringJoiner(",", "[", "]");
-        for (var supertype : typeOf(card, without).getSupertypes()) {
-            joiner.add(Json.string(typeName(supertype)));
-        }
-        return joiner.toString();
-    }
-
-    private String colorJson(Card card, Suppressed without) {
-        StringJoiner joiner = new StringJoiner(",", "[", "]");
-        for (String color
-                : colorLetters(without == null ? card.getColor() : without.colors())) {
-            joiner.add(Json.string(color));
-        }
-        return joiner.toString();
+        return Json.stringArray(names);
     }
 
     /**

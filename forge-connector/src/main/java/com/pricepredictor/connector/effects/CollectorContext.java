@@ -56,7 +56,7 @@ final class CollectorContext {
         return new EffectRecord(recordId, writer.runId(), timestamp, gameId, kind, mode);
     }
 
-    /** An id for a record that will be built later, from {@link #newRecord(String, String, String)}. */
+    /** An id for a record built later, by {@link #newRecord(String, String, String)}. */
     String nextRecordId() {
         return writer.nextRecordId();
     }

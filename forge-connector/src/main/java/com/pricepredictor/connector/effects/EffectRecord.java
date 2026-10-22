@@ -291,23 +291,40 @@ public final class EffectRecord {
     }
 
     String abilityJson() {
-        if (ability == null) {
-            return "null";
-        }
-        StringJoiner joiner = new StringJoiner(",", "[", "]");
-        for (ProvenanceKey key : ability) {
-            joiner.add(key.toJson());
-        }
-        return joiner.toString();
+        return ability == null ? "null" : ProvenanceKey.toJsonArray(ability);
     }
 
-    /** ``{"events": [...]}`` — a resolution effect half or a combat step. */
+    /** ``{"events": [...]}`` — a resolution effect half. */
     public static String eventsPayload(List<EffectEvent> events) {
+        return "{\"events\":" + eventArray(events) + "}";
+    }
+
+    /**
+     * ``{<combat fields>, "events": [...]}`` — an observed damage step, its
+     * combat rendered by {@link CombatShape#fields}.
+     */
+    static String combatPayload(String combatFields, List<EffectEvent> events) {
+        return "{" + combatFields + ",\"events\":" + eventArray(events) + "}";
+    }
+
+    /**
+     * A damage-step probe's combat payload, which also names what it
+     * perturbed: the keyword it stripped and the creature it stripped it from.
+     */
+    static String probePayload(
+            String combatFields, List<EffectEvent> events, String keyword, String carrier) {
+        return "{" + combatFields
+                + ",\"events\":" + eventArray(events)
+                + ",\"probed_keyword\":" + Json.string(keyword)
+                + ",\"probed_entity\":" + Json.string(carrier) + "}";
+    }
+
+    private static String eventArray(List<EffectEvent> events) {
         StringJoiner joiner = new StringJoiner(",", "[", "]");
         for (EffectEvent event : events) {
             joiner.add(event.toJson());
         }
-        return "{\"events\":" + joiner + "}";
+        return joiner.toString();
     }
 
     /**
@@ -338,12 +355,7 @@ public final class EffectRecord {
     public static String rewritePayload(
             EffectEvent incoming, EffectEvent outgoing, String result,
             List<ProvenanceKey> replacedBy) {
-        StringJoiner keys = new StringJoiner(",", "[", "]");
-        if (replacedBy != null) {
-            for (ProvenanceKey key : replacedBy) {
-                keys.add(key.toJson());
-            }
-        }
+        String keys = ProvenanceKey.toJsonArray(replacedBy == null ? List.of() : replacedBy);
         return "{\"incoming\":" + incoming.toJson()
                 + ",\"outgoing\":" + (outgoing == null ? "null" : outgoing.toJson())
                 + ",\"result\":" + Json.string(result)

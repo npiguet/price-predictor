@@ -1,7 +1,6 @@
 package com.pricepredictor.connector.effects;
 
 import com.pricepredictor.connector.ForgeExtension;
-import com.pricepredictor.connector.effects.PatchedCollectors.CollectionCaps;
 import forge.StaticData;
 import forge.ai.LobbyPlayerAi;
 import forge.deck.Deck;
@@ -413,6 +412,10 @@ class ForkCollectorTest {
         String onTheDreadmaw = damageTo(held.events(), dreadmaw).toJson();
         assertTrue(record.contains(onTheDreadmaw),
                 "the branch renders " + onTheDreadmaw + " and the observed record " + record);
+        // The stripped keyword is the branch's input, not something its step did.
+        assertTrue(held.events().stream()
+                        .noneMatch(e -> EffectEvent.KEYWORD_CHANGE.equals(e.type())),
+                held.events().stream().map(EffectEvent::toJson).toList().toString());
     }
 
     private static EffectEvent damageTo(List<EffectEvent> events, Card card) {

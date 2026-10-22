@@ -60,6 +60,16 @@ public final class PatchHooks {
             return find(owner, method).present();
         }
 
+        /** Install a listener on this setter, or do nothing; see {@link PatchHooks#install}. */
+        boolean install(InvocationHandler handler) {
+            return PatchHooks.install(owner, method, handler);
+        }
+
+        /** Remove the listener this setter holds, or do nothing. */
+        void uninstall() {
+            PatchHooks.uninstall(owner, method);
+        }
+
         @Override
         public String toString() {
             return owner.substring(owner.lastIndexOf('.') + 1) + "." + method;
@@ -97,48 +107,67 @@ public final class PatchHooks {
      * than assuming them, because a partly-current patch must degrade the way an
      * absent one does instead of throwing inside a dynamic proxy.
      */
-    public static final List<Hook> REQUIRED = List.of(
-            new Hook(ABILITY_UTILS, "getEffectRecordSubAbility",
-                    "per-clause attribution: an event's attributed_to; this is "
-                    + "the hook mode detection probes"),
-            new Hook(TRIGGER_HANDLER, "setEffectRecordTriggerListener",
-                    "trigger records, fired and not"),
-            new Hook(REPLACEMENT_HANDLER, "setEffectRecordListener",
-                    "rewrite records: the event a replacement received, what it "
-                    + "rewrote in place, which of the five ReplacementResults "
-                    + "it returned and which ability stood in for the event"),
-            new Hook(ABILITY_UTILS, "setEffectRecordClauseListener",
-                    "the events an effect API describes but the bus never announces"),
-            new Hook(AI_CONTROLLER, "setEffectRecordPlayabilityListener",
-                    "playability records, the decision subkind"),
-            new Hook(COMBAT_LEGALITY_OBSERVER, "setEffectRecordCombatListener",
-                    "the playability record's attackers and blockers subkinds"),
-            new Hook(CANT_ATTACK_BLOCK, "cantAttackStatic",
-                    "each forbidden attacker's responsible_static"),
-            new Hook(CANT_ATTACK_BLOCK, "cantBlockByStatic",
-                    "each forbidden blocker's responsible_static"),
-            new Hook(ABILITY_MANA_PART, "setEffectRecordManaListener",
-                    "mana records, and with them the role-polarity probe"),
-            new Hook(CARD, "getChangedCardTypesByStatic",
-                    "a continuous contribution's types"),
-            new Hook(CARD, "getChangedCardColorsByStatic",
-                    "a continuous contribution's colors"),
-            new Hook(CARD, "getTypeWithout",
-                    "removing the acting static's types from a continuous snapshot"),
-            new Hook(CARD, "getColorWithout",
-                    "removing the acting static's colours from a continuous snapshot"),
-            new Hook(CARD, "getKeywordsWithout",
-                    "removing the acting static's keywords from a continuous snapshot"),
-            new Hook(CARD, "getChangedCardNames",
-                    "a continuous contribution's name"),
-            new Hook(COMBAT, "getAssignedDamage",
-                    "a combat record's assignment_choices"),
-            new Hook(PLAYER_CONTROLLER_AI, "setEffectRecordConfirmListener",
-                    "the declined outcome: an optional effect the controller "
-                    + "was offered and turned down"),
-            new Hook(EFFECT_RECORD_OUTCOMES, "setEffectRecordOutcomeListener",
-                    "the outcomes an effect computes and discards: a coin's "
-                    + "result, a clash's winner, a vote's tally, a pile's size"));
+    public static final List<Hook> REQUIRED;
+
+    /** The resolving clause, and the hook mode detection probes. */
+    static final Hook SUB_ABILITY = new Hook(ABILITY_UTILS, "getEffectRecordSubAbility",
+            "per-clause attribution: an event's attributed_to; this is "
+            + "the hook mode detection probes");
+    static final Hook TRIGGER_LISTENER = new Hook(
+            TRIGGER_HANDLER, "setEffectRecordTriggerListener",
+            "trigger records, fired and not");
+    static final Hook REPLACEMENT_LISTENER = new Hook(
+            REPLACEMENT_HANDLER, "setEffectRecordListener",
+            "rewrite records: the event a replacement received, what it "
+            + "rewrote in place, which of the five ReplacementResults "
+            + "it returned and which ability stood in for the event");
+    static final Hook CLAUSE_LISTENER = new Hook(
+            ABILITY_UTILS, "setEffectRecordClauseListener",
+            "the events an effect API describes but the bus never announces");
+    static final Hook PLAYABILITY_LISTENER = new Hook(
+            AI_CONTROLLER, "setEffectRecordPlayabilityListener",
+            "playability records, the decision subkind");
+    static final Hook COMBAT_LISTENER = new Hook(
+            COMBAT_LEGALITY_OBSERVER, "setEffectRecordCombatListener",
+            "the playability record's attackers and blockers subkinds");
+    static final Hook CANT_ATTACK_STATIC = new Hook(CANT_ATTACK_BLOCK, "cantAttackStatic",
+            "each forbidden attacker's responsible_static");
+    static final Hook CANT_BLOCK_BY_STATIC = new Hook(CANT_ATTACK_BLOCK, "cantBlockByStatic",
+            "each forbidden blocker's responsible_static");
+    static final Hook MANA_LISTENER = new Hook(
+            ABILITY_MANA_PART, "setEffectRecordManaListener",
+            "mana records, and with them the role-polarity probe");
+    static final Hook CHANGED_TYPES_BY_STATIC = new Hook(CARD, "getChangedCardTypesByStatic",
+            "a continuous contribution's types");
+    static final Hook CHANGED_COLORS_BY_STATIC = new Hook(CARD, "getChangedCardColorsByStatic",
+            "a continuous contribution's colors");
+    static final Hook TYPE_WITHOUT = new Hook(CARD, "getTypeWithout",
+            "removing the acting static's types from a continuous snapshot");
+    static final Hook COLOR_WITHOUT = new Hook(CARD, "getColorWithout",
+            "removing the acting static's colours from a continuous snapshot");
+    static final Hook KEYWORDS_WITHOUT = new Hook(CARD, "getKeywordsWithout",
+            "removing the acting static's keywords from a continuous snapshot");
+    static final Hook CHANGED_NAMES = new Hook(CARD, "getChangedCardNames",
+            "a continuous contribution's name");
+    static final Hook ASSIGNED_DAMAGE = new Hook(COMBAT, "getAssignedDamage",
+            "a combat record's assignment_choices");
+    static final Hook CONFIRM_LISTENER = new Hook(
+            PLAYER_CONTROLLER_AI, "setEffectRecordConfirmListener",
+            "the declined outcome: an optional effect the controller "
+            + "was offered and turned down");
+    static final Hook OUTCOME_LISTENER = new Hook(
+            EFFECT_RECORD_OUTCOMES, "setEffectRecordOutcomeListener",
+            "the outcomes an effect computes and discards: a coin's "
+            + "result, a clash's winner, a vote's tally, a pile's size");
+
+    static {
+        REQUIRED = List.of(
+                SUB_ABILITY, TRIGGER_LISTENER, REPLACEMENT_LISTENER, CLAUSE_LISTENER,
+                PLAYABILITY_LISTENER, COMBAT_LISTENER, CANT_ATTACK_STATIC,
+                CANT_BLOCK_BY_STATIC, MANA_LISTENER, CHANGED_TYPES_BY_STATIC,
+                CHANGED_COLORS_BY_STATIC, TYPE_WITHOUT, COLOR_WITHOUT, KEYWORDS_WITHOUT,
+                CHANGED_NAMES, ASSIGNED_DAMAGE, CONFIRM_LISTENER, OUTCOME_LISTENER);
+    }
 
     /**
      * The hooks whose listener has thrown in this JVM, which the engine has
@@ -410,6 +439,6 @@ public final class PatchHooks {
 
     /** The sub-ability currently resolving, when the pointer hook is present. */
     public static Object currentSubAbility() {
-        return readStatic(ABILITY_UTILS, "getEffectRecordSubAbility");
+        return readStatic(SUB_ABILITY.owner(), SUB_ABILITY.method());
     }
 }

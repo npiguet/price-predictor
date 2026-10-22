@@ -1,5 +1,6 @@
 package com.pricepredictor.connector;
 
+import com.pricepredictor.connector.effects.CollectionCaps;
 import com.pricepredictor.connector.effects.BusBracketCollector;
 import com.pricepredictor.connector.effects.ForkCollector;
 import com.pricepredictor.connector.effects.PatchedCollectors;
@@ -153,7 +154,7 @@ public class GamePlayer {
      * share decides whether, a coin decides which (FR-021).
      */
     static RandomSeat drawRandomSeat(
-            PatchedCollectors.CollectionCaps caps, java.util.Random matchRandom) {
+            CollectionCaps caps, java.util.Random matchRandom) {
         if (!caps.randomSeatEnabled() || matchRandom.nextDouble() >= caps.randomSeatShare()) {
             return RandomSeat.NONE;
         }
@@ -173,8 +174,8 @@ public class GamePlayer {
         long startMillis = System.currentTimeMillis();
         // Read once per match rather than per game: the supervisor sets them
         // when it spawns the worker and they do not change under it.
-        PatchedCollectors.CollectionCaps caps =
-                PatchedCollectors.CollectionCaps.fromSystemProperties();
+        CollectionCaps caps =
+                CollectionCaps.fromSystemProperties();
         // The match's own seeded source, scrambled for the reason the
         // collectors' sampler is: consecutive matches start milliseconds
         // apart, and a linear congruential generator's first draw is nearly
@@ -209,41 +210,7 @@ public class GamePlayer {
             String randomSeatPlayerId = seat == null
                     ? null : SnapshotBuilder.playerId(seat.getPlayer());
             if (effectRecords != null) {
-                // One collector per game, with the game's own id: records join
-                // to a checkpoint's recorded split by game_id, so the id has to
-                // change when the game does. Both collectors share that id —
-                // they describe the same game.
-                String gameId = effectRecords.nextGameId();
-                BusBracketCollector bracket = new BusBracketCollector(
-                        game, effectRecords, gameId);
-                bracket.setRandomSeatPlayerId(randomSeatPlayerId);
-                game.subscribeToEvents(bracket);
-                // The patched collectors reach the engine through static
-                // listeners, so they are installed for the life of one game and
-                // uninstalled after it. On a stock checkout install() finds no
-                // hook and the game plays exactly as it did before.
-                patched = new PatchedCollectors(
-                        game, effectRecords, gameId, caps, gameSeed);
-                patched.setRandomSeatPlayerId(randomSeatPlayerId);
-                // Where an effect API's own parameters describe its outcome,
-                // the clause hook files the event through the same bracket
-                // the bus-derived events land in.
-                patched.withBracket(bracket);
-                if (caps.interventionsPerGame() > 0 || caps.probesEnabled()) {
-                    // Stage three. Nothing is copied unless a budget says so,
-                    // because a fork costs a game copy and a stack resolution.
-                    patched.withForks(new ForkCollector(
-                            game, effectRecords, gameId, caps, gameSeed));
-                }
-                gameSeed++;
-                // A probe forks before the damage step and cannot know which
-                // combat record it mirrors until that record is written.
-                final PatchedCollectors withProbes = patched;
-                bracket.onCombatRecord(withProbes::writeHeldProbes);
-                patched.install();
-                // Continuous effects are read off the layer tables at a phase
-                // boundary, which is the cheapest moment the board is stable.
-                game.subscribeToEvents(patched.phaseBridge());
+                patched = wireCollectors(game, caps, gameSeed++, randomSeatPlayerId);
             }
             if (seat != null) {
                 // Live from here: a fork's clone of this seat is never
@@ -278,6 +245,50 @@ public class GamePlayer {
 
         int durationSeconds = (int) ((System.currentTimeMillis() - startMillis) / 1000);
         return new PlayedMatch(outcomes, durationSeconds, randomSeat != RandomSeat.NONE);
+    }
+
+    /**
+     * Subscribe and install the effect-record collectors for one game.
+     *
+     * @param gameSeed seeds the patched collectors' sampling, so a worker's
+     *                 games sample independently of one another
+     * @return the patched collectors, which the caller closes when the game ends
+     */
+    private PatchedCollectors wireCollectors(
+            forge.game.Game game, CollectionCaps caps, long gameSeed,
+            String randomSeatPlayerId) {
+        // One collector per game, with the game's own id: records join to a
+        // checkpoint's recorded split by game_id, so the id has to change when
+        // the game does. Both collectors share that id — they describe the
+        // same game.
+        String gameId = effectRecords.nextGameId();
+        BusBracketCollector bracket = new BusBracketCollector(game, effectRecords, gameId);
+        bracket.setRandomSeatPlayerId(randomSeatPlayerId);
+        game.subscribeToEvents(bracket);
+        // The patched collectors reach the engine through static listeners,
+        // so they are installed for the life of one game and uninstalled after
+        // it. On a stock checkout install() finds no hook and the game plays
+        // exactly as it did before.
+        PatchedCollectors patched = new PatchedCollectors(
+                game, effectRecords, gameId, caps, gameSeed);
+        patched.setRandomSeatPlayerId(randomSeatPlayerId);
+        // Where an effect API's own parameters describe its outcome, the
+        // clause hook files the event through the same bracket the
+        // bus-derived events land in.
+        patched.withBracket(bracket);
+        if (caps.interventionsPerGame() > 0 || caps.probesEnabled()) {
+            // Stage three. Nothing is copied unless a budget says so, because
+            // a fork costs a game copy and a stack resolution.
+            patched.withForks(new ForkCollector(game, effectRecords, gameId, caps, gameSeed));
+        }
+        // A probe forks before the damage step and cannot know which combat
+        // record it mirrors until that record is written.
+        bracket.onCombatRecord(patched::writeHeldProbes);
+        patched.install();
+        // Continuous effects are read off the layer tables at a phase
+        // boundary, which is the cheapest moment the board is stable.
+        game.subscribeToEvents(patched.phaseBridge());
+        return patched;
     }
 
     /** The game's random seat, by its controller, or null when it has none. */

@@ -1,8 +1,8 @@
 package com.pricepredictor.connector;
 
+import com.pricepredictor.connector.effects.CollectionCaps;
 import com.pricepredictor.connector.effects.AttributionMode;
 import com.pricepredictor.connector.effects.PatchHooks;
-import com.pricepredictor.connector.effects.PatchedCollectors;
 import com.pricepredictor.connector.effects.RecordShardWriter;
 import forge.util.MyRandom;
 
@@ -276,8 +276,8 @@ public class MatchWorkerMain {
             // reads "patched" while a channel this run meant to collect is
             // quietly empty. This is what names that.
             System.out.println(PatchHooks.report());
-            PatchedCollectors.CollectionCaps caps =
-                    PatchedCollectors.CollectionCaps.fromSystemProperties();
+            CollectionCaps caps =
+                    CollectionCaps.fromSystemProperties();
             if (caps.randomSeatEnabled()) {
                 // Named at startup the way the probe state is: a run whose
                 // random-seat matches wrote no sealed rows is a run someone

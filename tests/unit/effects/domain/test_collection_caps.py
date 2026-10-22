@@ -169,7 +169,7 @@ class TestTheManaCap:
 _JAVA_CAPS = (
     Path(__file__).resolve().parents[4]
     / "forge-connector" / "src" / "main" / "java" / "com" / "pricepredictor"
-    / "connector" / "effects" / "PatchedCollectors.java"
+    / "connector" / "effects" / "CollectionCaps.java"
 )
 
 

@@ -1,7 +1,6 @@
 package com.pricepredictor.connector.effects;
 
 import com.pricepredictor.connector.ForgeExtension;
-import com.pricepredictor.connector.effects.PatchedCollectors.CollectionCaps;
 import com.pricepredictor.connector.effects.PatchedCollectors.Contribution;
 import forge.card.CardChangedType;
 import forge.card.CardType;
@@ -1166,7 +1165,7 @@ class PatchedCollectorTest {
      */
     @Test
     void aRecordWithNoOutgoingNamesTheParametersTheNormaliserDidNotRead() {
-        PatchedCollectors.RewriteTally tally = new PatchedCollectors.RewriteTally();
+        RewriteTally tally = new RewriteTally();
         Card card = TestCards.build("Mountain");
         tally.record("Moved", "replaced", false, false,
                 Map.of("Card", card, "LibraryPosition", 0),
@@ -1181,7 +1180,7 @@ class PatchedCollectorTest {
     /** And one that moved nothing at all is not counted against the reader. */
     @Test
     void aRecordThatMovedNothingIsNoNormaliserGap() {
-        PatchedCollectors.RewriteTally tally = new PatchedCollectors.RewriteTally();
+        RewriteTally tally = new RewriteTally();
         Map<String, Object> same = Map.of("Card", TestCards.build("Mountain"));
         tally.record("Untap", "skipped", false, false, same, same);
 
@@ -1201,7 +1200,7 @@ class PatchedCollectorTest {
      */
     @Test
     void theSummaryLeadsWithTheVolumeAndTheResults() {
-        PatchedCollectors.RewriteTally tally = new PatchedCollectors.RewriteTally();
+        RewriteTally tally = new RewriteTally();
         Map<String, Object> same = Map.of("Card", TestCards.build("Mountain"));
         tally.record("Moved", "updated", true, true, same, same);
         for (int i = 0; i < 9; i++) {
@@ -1220,7 +1219,7 @@ class PatchedCollectorTest {
     /** A listener that never learnt the result says so rather than guessing. */
     @Test
     void aResultlessRecordIsItsOwnRowInTheBreakdown() {
-        PatchedCollectors.RewriteTally tally = new PatchedCollectors.RewriteTally();
+        RewriteTally tally = new RewriteTally();
         Map<String, Object> same = Map.of("Card", TestCards.build("Mountain"));
         tally.record("Moved", null, false, false, same, same);
 
@@ -1235,7 +1234,7 @@ class PatchedCollectorTest {
      */
     @Test
     void aGameWithNoReplacementPrintsNothing() {
-        PatchedCollectors.RewriteTally tally = new PatchedCollectors.RewriteTally();
+        RewriteTally tally = new RewriteTally();
         java.io.PrintStream out = System.out;
         java.io.ByteArrayOutputStream captured = new java.io.ByteArrayOutputStream();
         System.setOut(new java.io.PrintStream(captured));
@@ -1749,7 +1748,7 @@ class PatchedCollectorTest {
      */
     @Test
     void theTallySeparatesAnUnreadableChangeFromNoChange() {
-        PatchedCollectors.RewriteTally tally = new PatchedCollectors.RewriteTally();
+        RewriteTally tally = new RewriteTally();
 
         tally.record("Moved", "replaced", false, true,
                 Map.of("Destination", "Battlefield"),
