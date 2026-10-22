@@ -138,7 +138,7 @@ class ModalResolutionTest {
             collectors.clauses().clauseHandler().invoke(null, resolving(), new Object[]{clones.get(1)});
             bracket.recordClauseEvent(new EffectEvent(EffectEvent.KEYWORD_CHANGE));
             bracket.endBracket(charm.getId(), false);
-            bracket.flushHeldResolution();
+            bracket.onNextAction();
         });
 
         assertEquals(3, records.size(), records.toString());
@@ -176,7 +176,7 @@ class ModalResolutionTest {
                 collectors.clauses().clauseHandler().invoke(null, resolving(), new Object[]{clone});
             }
             bracket.endBracket(charm.getId(), false);
-            bracket.flushHeldResolution();
+            bracket.onNextAction();
         });
 
         assertEquals(4, records.size(), records.toString());
@@ -202,7 +202,7 @@ class ModalResolutionTest {
             collectors.clauses().clauseHandler().invoke(null, resolving(), new Object[]{clones.get(1)});
             bracket.recordClauseEvent(new EffectEvent(EffectEvent.KEYWORD_CHANGE));
             bracket.endBracket(charm.getId(), false);
-            bracket.flushHeldResolution();
+            bracket.onNextAction();
         });
 
         assertEquals(3, records.size(), records.toString());
@@ -231,7 +231,7 @@ class ModalResolutionTest {
             bracket.recordClauseEvent(new EffectEvent(EffectEvent.DAMAGE_DEALT).param("amount", 4));
             bracket.recordClauseEvent(new EffectEvent(EffectEvent.KEYWORD_CHANGE));
             bracket.endBracket(charm.getId(), false);
-            bracket.flushHeldResolution();
+            bracket.onNextAction();
         });
 
         assertEquals(2, records.size(), records.toString());
@@ -327,7 +327,7 @@ class ModalResolutionTest {
             bracket.beginBracket(charm);
             collectors.clauses().clauseHandler().invoke(null, resolving(), new Object[]{otherClones.get(0)});
             bracket.endBracket(charm.getId(), false);
-            bracket.flushHeldResolution();
+            bracket.onNextAction();
         });
 
         assertEquals(2, records.size(), records.toString());

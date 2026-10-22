@@ -3,10 +3,10 @@ package com.pricepredictor.connector.effects;
 import com.google.common.eventbus.Subscribe;
 import forge.game.Game;
 import forge.game.card.Card;
+import forge.game.combat.Combat;
 import forge.game.event.GameEventCardChangeZone;
 import forge.game.event.GameEventCombatEnded;
 import forge.game.event.GameEventGameFinished;
-import forge.game.event.GameEventGameOutcome;
 import forge.game.event.GameEventLandPlayed;
 import forge.game.event.GameEventSpellAbilityCast;
 import forge.game.event.GameEventSpellResolved;
@@ -54,12 +54,93 @@ public final class BusBracketCollector extends BusEventReader {
     private final CollectorContext context;
     private final SnapshotBuilder snapshots;
 
-    /** The ability the open bracket attributes to, or null between brackets. */
-    private SpellAbility resolving;
-    private ProvenanceKey.Resolved resolvingKeys = ProvenanceKey.Resolved.UNKNOWN;
-    private String resolvingActor;
-    private Snapshot openBracketState;
+    /** The resolution the open bracket attributes to, or null between brackets. */
+    private OpenResolution open;
+
+    /**
+     * What the bus filed since the bracket last opened or emptied.
+     *
+     * <p>Outlives {@link #open}: an event that arrives with nothing resolving
+     * lands here too, where {@link #flushOrphanedEvents} finds it if the game
+     * ends before a cast or a resolution empties the buffer again.
+     */
     private final EventBuffer bracketEvents = new EventBuffer();
+
+    /** The chosen modes of the open modal resolution. */
+    private final ModeSplit modes = new ModeSplit();
+
+    /** The resolution waiting for its consequences, or null when none is. */
+    private HeldResolution held;
+
+    private final PendingActivations pending = new PendingActivations();
+
+    /** The damage step's combat being gathered, or null outside one. */
+    private CombatBracket combat;
+
+    /**
+     * Whether this damage step's combat record has been written because
+     * something used the stack after the damage.
+     *
+     * <p>A damage step has a priority window after its damage, in which
+     * combat-damage triggers and anything cast resolve. Their events are
+     * theirs, not the combat's, so the first bracket to open in the step writes
+     * the combat record, and nothing after it joins one. Reset at the next
+     * phase.
+     */
+    private boolean combatWindowClosed;
+
+    /** Told each combat record's id, for a probe that mirrors it. */
+    private final java.util.function.Consumer<String> onCombatRecord;
+
+    /**
+     * The ability a bracket attributes to, from the cast that opened it until
+     * a resolution closes it or another cast takes the slot over.
+     *
+     * <p>A cast whose stack top holds no ability opens none: the slot is
+     * empty, exactly as between brackets.
+     */
+    private static final class OpenResolution {
+        private final SpellAbility ability;
+        private final ProvenanceKey.Resolved keys;
+        private final String actor;
+        /** The board at the cast, paired at the resolution with the refs read then. */
+        private final Snapshot state;
+
+        /**
+         * Whether the controller turned something down while this bracket was open.
+         *
+         * <p>Scoped to the bracket rather than matched against the declined
+         * ability's id, because Forge resolves a copy of the ability it was handed
+         * and an id comparison would silently never match — the same reason
+         * {@link EventAttribution} counts a clause upward from the pointer instead
+         * of downward from the root. What keeps the flag from over-claiming is the
+         * second half of the test in {@link BusBracketCollector#wasDeclined}: a
+         * resolution that produced any outcome at all is {@code resolved} however
+         * many optional clauses inside it were declined.
+         */
+        private boolean declined;
+
+        private OpenResolution(
+                SpellAbility ability, ProvenanceKey.Resolved keys, String actor, Snapshot state) {
+            this.ability = ability;
+            this.keys = keys;
+            this.actor = actor;
+            this.state = state;
+        }
+
+        /** Whether this is the bracket of the ability the engine names by id. */
+        boolean is(int abilityId) {
+            return ability.getId() == abilityId;
+        }
+
+        /**
+         * Whether a clause is on this resolution's card; see
+         * {@link BusBracketCollector#beginMode}.
+         */
+        boolean hosts(SpellAbility clause) {
+            return clause != null && clause.getHostCard() == ability.getHostCard();
+        }
+    }
 
     /**
      * One chosen mode of the open modal resolution, once its first clause has
@@ -83,10 +164,60 @@ public final class BusBracketCollector extends BusEventReader {
         }
     }
 
-    /** The modes of the open resolution whose halves are complete, in order. */
-    private final List<ModeHalf> modeHalves = new ArrayList<>();
-    /** The mode whose clauses are resolving now, or null outside one. */
-    private ModeHalf openMode;
+    /**
+     * A modal resolution's chosen modes, split at each mode's first clause.
+     *
+     * <p>Emptied only when a resolution closes the bracket, not when a cast
+     * takes the slot over: a cast in the middle of a mode inherits the split,
+     * so its own resolution closes the open mode and writes the split's halves
+     * under its own key with the charm's options.
+     */
+    private static final class ModeSplit {
+        /** The modes whose halves are complete, in order. */
+        private final List<ModeHalf> complete = new ArrayList<>();
+        /** The mode whose clauses are resolving now, or null outside one. */
+        private ModeHalf current;
+
+        /** Complete the current mode's half and open one for the next mode. */
+        void begin(Integer option, Snapshot state, EventBuffer bracketEvents) {
+            close(bracketEvents);
+            current = new ModeHalf(option, state);
+        }
+
+        /** Move the bracket's events into the current mode's half and complete it. */
+        void close(EventBuffer bracketEvents) {
+            if (current == null) {
+                return;
+            }
+            current.events.addAll(bracketEvents.drain());
+            complete.add(current);
+            current = null;
+        }
+
+        /** Whether no mode's half is complete: the resolution writes one root half. */
+        boolean isEmpty() {
+            return complete.isEmpty();
+        }
+
+        /** Whether any complete half holds an event. */
+        boolean anyEvents() {
+            for (ModeHalf half : complete) {
+                if (!half.events.isEmpty()) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        List<ModeHalf> complete() {
+            return complete;
+        }
+
+        void clear() {
+            complete.clear();
+            current = null;
+        }
+    }
 
     /**
      * One effect half that has finished resolving and is not written yet.
@@ -131,18 +262,16 @@ public final class BusBracketCollector extends BusEventReader {
      * the step ends, held it 61% of the time.
      *
      * <p>So the halves are held from the resolution until the next real
-     * action begins — a bracket opening for a cast or a trigger, another
-     * resolution ending, a combat bracket opening, a step or phase boundary,
-     * a land played, the end of the game — and written then, exactly once.
+     * action begins ({@link #onNextAction}) — a bracket opening for a cast or
+     * a trigger, another resolution ending, a combat bracket opening, a step
+     * or phase boundary, a land played, the end of the game — and written
+     * then, exactly once.
      *
      * @param root the resolved ability, which the deaths are stamped against
      */
     private record HeldResolution(
             SpellAbility root, String actor, String linkId, List<HeldHalf> halves) {
     }
-
-    /** The resolution waiting for its consequences, or null when none is. */
-    private HeldResolution held;
 
     /**
      * Casts whose outcome is not known yet, oldest first.
@@ -152,41 +281,89 @@ public final class BusBracketCollector extends BusEventReader {
      * the newest end. Nothing here has been written yet — see
      * {@link PendingActivation} for why the record has to wait.
      */
-    private final List<PendingActivation> pendingActivations = new ArrayList<>();
+    private static final class PendingActivations {
+        private final List<PendingActivation> casts = new ArrayList<>();
 
-    /** Combat damage accumulates into its own bracket, closed at the phase end. */
-    private final EventBuffer combatEvents = new EventBuffer();
-    /** The step's combat, read when its bracket opens rather than at flush. */
-    private CombatShape combatShape = CombatShape.empty();
+        void add(PendingActivation cast) {
+            casts.add(cast);
+        }
+
+        boolean isEmpty() {
+            return casts.isEmpty();
+        }
+
+        /** The held cast for an ability id, newest first. */
+        Optional<PendingActivation> find(int abilityId) {
+            for (int i = casts.size() - 1; i >= 0; i--) {
+                if (casts.get(i).abilityId() == abilityId) {
+                    return Optional.of(casts.get(i));
+                }
+            }
+            return Optional.empty();
+        }
+
+        /** The held cast for an ability id, no longer held. */
+        Optional<PendingActivation> settle(int abilityId) {
+            Optional<PendingActivation> found = find(abilityId);
+            found.ifPresent(casts::remove);
+            return found;
+        }
+
+        /** Every held cast the stack no longer holds, oldest first, no longer held. */
+        List<PendingActivation> removeAbsent(Set<Integer> onStack) {
+            List<PendingActivation> removed = new ArrayList<>();
+            for (Iterator<PendingActivation> it = casts.iterator(); it.hasNext();) {
+                PendingActivation cast = it.next();
+                if (!onStack.contains(cast.abilityId())) {
+                    it.remove();
+                    removed.add(cast);
+                }
+            }
+            return removed;
+        }
+
+        /** Every held cast, oldest first, none of them held any longer. */
+        List<PendingActivation> removeAll() {
+            List<PendingActivation> all = List.copyOf(casts);
+            casts.clear();
+            return all;
+        }
+    }
+
     /**
-     * Whether this damage step's combat record has been written because
-     * something used the stack after the damage.
+     * One damage step's combat, from the first event dealt in it until the
+     * step ends or something uses the stack.
      *
-     * <p>A damage step has a priority window after its damage, in which
-     * combat-damage triggers and anything cast resolve. Their events are
-     * theirs, not the combat's, so the first bracket to open in the step writes
-     * the combat record, and nothing after it joins one. Reset at the next
-     * phase.
+     * <p>The structure is read when the bracket opens rather than at the
+     * flush, because the flush happens at the phase boundary — after the
+     * damage has been dealt and the creatures it killed have left. Read there,
+     * an attacker that traded with its blocker is in neither list, and the
+     * record describes a combat nobody fought. Read here it matches the
+     * snapshot beside it, which is taken in the same call.
      */
-    private boolean combatWindowClosed;
-    private String combatState;
+    private static final class CombatBracket {
+        private final String state;
+        private final CombatShape shape;
+        private final EventBuffer events = new EventBuffer();
 
-    /**
-     * Whether the controller turned something down while this bracket was open.
-     *
-     * <p>Scoped to the bracket rather than matched against the declined
-     * ability's id, because Forge resolves a copy of the ability it was handed
-     * and an id comparison would silently never match — the same reason
-     * {@link EventAttribution} counts a clause upward from the pointer instead
-     * of downward from the root. What keeps the flag from over-claiming is the
-     * second half of the test in {@link #endBracket}: a resolution that
-     * produced any outcome at all is {@code resolved} however many optional
-     * clauses inside it were declined.
-     */
-    private boolean bracketDeclined;
+        private CombatBracket(String state, Combat combat) {
+            this.state = state;
+            // Nothing has died yet, so this is the moment the attackers and
+            // blockers are all still in combat. The assignment is Forge's copy of
+            // this step's, taken before any replacement, so it reads the same
+            // whenever in the step it is read.
+            this.shape = CombatShape.of(combat);
+            shape.addAssignment(combat);
+        }
 
-    /** Told each combat record's id, for a probe that mirrors it. */
-    private final java.util.function.Consumer<String> onCombatRecord;
+        void file(EffectEvent event) {
+            events.file(event);
+        }
+
+        String payload() {
+            return EffectRecord.combatPayload(shape.fields(), events.events());
+        }
+    }
 
     /**
      * @param onCombatRecord told the id of each {@code combat} record as it is
@@ -245,21 +422,18 @@ public final class BusBracketCollector extends BusEventReader {
     void beginBracket(SpellAbility ability) {
         // A cast, an activation or a trigger reaching the stack is the next
         // action: whatever the held resolution killed has died by now.
-        flushHeldResolution();
+        onNextAction();
         // And whatever the combat damage killed: state-based actions run
         // before anything goes on the stack.
-        if (inCombatDamageStep()) {
-            flushCombat();
-            combatWindowClosed = true;
-        }
+        closeCombatWindow();
         openBracket(ability);
-        if (ability == null) {
+        if (open == null) {
             return;
         }
-        pendingActivations.add(new PendingActivation(
+        pending.add(new PendingActivation(
                 ability.getId(), context.nextRecordId(),
                 RecordShardWriter.timestamp(), EffectRecord.costsJson(ability),
-                actorOf(ability), ProvenanceKey.resolve(ability), openBracketState.render(),
+                open.actor, open.keys, open.state.render(),
                 context.gameId() + ".link." + ability.getId(), targetCount(ability)));
     }
 
@@ -299,13 +473,13 @@ public final class BusBracketCollector extends BusEventReader {
         // Another resolution has run since the held one ended, so the held
         // one's state-based check is over: what dies after this is this
         // resolution's doing, or a mix nobody can untangle.
-        flushHeldResolution();
+        onNextAction();
         // The bracket is a single slot, so a spell cast in response to another
         // takes it over: when the outer one finally resolves the events that
         // belong to it were never gathered. The cost half is still stamped with
         // its real outcome; what it must not do is issue a link to an effect
         // half nobody is going to write.
-        boolean bracketIsThisAbility = resolving != null && resolving.getId() == abilityId;
+        boolean bracketIsThisAbility = open != null && open.is(abilityId);
         boolean declined = bracketIsThisAbility && !fizzled && wasDeclined();
         boolean writesEffectHalf = bracketIsThisAbility && !fizzled && !declined;
 
@@ -317,7 +491,7 @@ public final class BusBracketCollector extends BusEventReader {
         if (bracketIsThisAbility) {
             // The last mode's half closes with the resolution, since no next
             // mode's first clause comes to close it.
-            closeOpenMode();
+            modes.close(bracketEvents);
         }
         if (writesEffectHalf) {
             holdEffectHalves(link);
@@ -325,7 +499,9 @@ public final class BusBracketCollector extends BusEventReader {
 
         if (bracketIsThisAbility) {
             closeBracket();
-        } else if (resolving == null) {
+        } else if (open == null) {
+            // Only the buffer: the open mode, if a cast took the slot over
+            // in the middle of one, waits for a resolution that closes it.
             bracketEvents.clear();
         }
     }
@@ -340,8 +516,8 @@ public final class BusBracketCollector extends BusEventReader {
             return ActivationOutcome.DECLINED;
         }
         return outcomeOf(
-                findPending(abilityId).map(PendingActivation::targetsAtCast).orElse(0),
-                bracketIsThisAbility ? resolving : null);
+                pending.find(abilityId).map(PendingActivation::targetsAtCast).orElse(0),
+                bracketIsThisAbility ? open.ability : null);
     }
 
     /**
@@ -351,13 +527,13 @@ public final class BusBracketCollector extends BusEventReader {
      * happened yet. See {@link HeldResolution}.
      */
     private void holdEffectHalves(String link) {
-        if (modeHalves.isEmpty()) {
-            held = new HeldResolution(resolving, resolvingActor, link, List.of(HeldHalf.of(
-                    context.nextRecordId(), resolvingKeys,
+        if (modes.isEmpty()) {
+            held = new HeldResolution(open.ability, open.actor, link, List.of(HeldHalf.of(
+                    context.nextRecordId(), open.keys,
                     // Modes, X and the named card are set while the ability
                     // resolves, so the block that carries them is re-read here
                     // and paired with the board captured at the cast.
-                    openBracketState.withRefs(snapshots.refsJson(resolving)).render(),
+                    open.state.withRefs(snapshots.refsJson(open.ability)).render(),
                     bracketEvents.events())));
             return;
         }
@@ -367,14 +543,14 @@ public final class BusBracketCollector extends BusEventReader {
         // produced are its own and nothing else's; a mode that fizzled on its
         // own carries an empty list under its key, which is what the schema
         // says of any resolution that did nothing observable.
-        String refs = snapshots.refsJson(resolving);
+        String refs = snapshots.refsJson(open.ability);
         List<HeldHalf> halves = new ArrayList<>();
-        for (ModeHalf half : modeHalves) {
+        for (ModeHalf half : modes.complete()) {
             halves.add(HeldHalf.of(
-                    context.nextRecordId(), resolvingKeys.withOption(half.option),
+                    context.nextRecordId(), open.keys.withOption(half.option),
                     half.state.withRefs(refs).render(), half.events));
         }
-        held = new HeldResolution(resolving, resolvingActor, link, List.copyOf(halves));
+        held = new HeldResolution(open.ability, open.actor, link, List.copyOf(halves));
     }
 
     /**
@@ -385,18 +561,20 @@ public final class BusBracketCollector extends BusEventReader {
      */
     @Subscribe
     public void onPhase(GameEventTurnPhase event) {
-        flushHeldResolution();
-        flushCombat();
-        combatWindowClosed = false;
+        onStepBoundary();
         // An effect that empties the stack -- ending the turn, ending combat --
         // resolves nothing afterwards, so a phase boundary is the last chance
         // to notice what it swept away.
         reconcilePending();
     }
 
+    /**
+     * The end of combat writes the combat bracket without reopening the
+     * window: the phase change that follows it does that.
+     */
     @Subscribe
     public void onCombatEnded(GameEventCombatEnded event) {
-        flushHeldResolution();
+        onNextAction();
         flushCombat();
     }
 
@@ -411,7 +589,55 @@ public final class BusBracketCollector extends BusEventReader {
      */
     @Subscribe
     public void onLandPlayed(GameEventLandPlayed event) {
-        flushHeldResolution();
+        onNextAction();
+    }
+
+    // ── the two boundaries ──────────────────────────────────────────────
+
+    /**
+     * A new action has begun, so the held resolution's state-based
+     * consequences are over: write its effect halves, if one is held.
+     *
+     * <p>Package-private so a test that ends a resolution by hand can close
+     * the window the way the next action in a real game would.
+     */
+    void onNextAction() {
+        if (held == null) {
+            return;
+        }
+        HeldResolution writing = held;
+        held = null;
+        for (HeldHalf half : writing.halves()) {
+            context.emit(context.newResolution(
+                    Moment.RESOLUTION, half.recordId(), half.timestamp())
+                    .actor(writing.actor())
+                    .ability(half.keys())
+                    .linkId(writing.linkId())
+                    .state(half.state())
+                    .payload(EffectRecord.eventsPayload(half.events().events())));
+        }
+    }
+
+    /**
+     * A step or phase has ended: the step's combat record is written and the
+     * next damage step starts with its window open again.
+     */
+    private void onStepBoundary() {
+        onNextAction();
+        flushCombat();
+        combatWindowClosed = false;
+    }
+
+    /**
+     * Something is going on the stack. In a damage step that ends the
+     * combat's share of the step: the record is written now, and what
+     * resolves for the rest of the step is not the combat's.
+     */
+    private void closeCombatWindow() {
+        if (inCombatDamageStep()) {
+            flushCombat();
+            combatWindowClosed = true;
+        }
     }
 
     // ── outcome events ──────────────────────────────────────────────────
@@ -430,10 +656,9 @@ public final class BusBracketCollector extends BusEventReader {
      */
     @Override
     void fileDamage(EffectEvent damage, String namedCause, boolean combat) {
-        EventAttribution.stamp(damage, resolving, namedCause);
+        EventAttribution.stamp(damage, resolving(), namedCause);
         if (combat) {
-            openCombatBracket();
-            combatEvents.file(damage);
+            fileCombat(damage);
         } else {
             bracketEvents.file(damage);
         }
@@ -544,29 +769,6 @@ public final class BusBracketCollector extends BusEventReader {
         return touchedPerHalf.size() - 1;
     }
 
-    /**
-     * Write the held resolution's effect halves, if one is held.
-     *
-     * <p>Package-private so a test that ends a resolution by hand can close
-     * the window the way the next action in a real game would.
-     */
-    void flushHeldResolution() {
-        if (held == null) {
-            return;
-        }
-        HeldResolution writing = held;
-        held = null;
-        for (HeldHalf half : writing.halves()) {
-            context.emit(context.newResolution(
-                    Moment.RESOLUTION, half.recordId(), half.timestamp())
-                    .actor(writing.actor())
-                    .ability(half.keys())
-                    .linkId(writing.linkId())
-                    .state(half.state())
-                    .payload(EffectRecord.eventsPayload(half.events().events())));
-        }
-    }
-
     // ── plumbing ────────────────────────────────────────────────────────
 
     /**
@@ -594,10 +796,9 @@ public final class BusBracketCollector extends BusEventReader {
         // produced it, how long it lasts and — absent a name off the event
         // itself — what caused it are properties of the bracket it landed in,
         // and only this side knows that.
-        EventAttribution.stamp(event, resolving, namedCause);
+        EventAttribution.stamp(event, resolving(), namedCause);
         if (inCombatDamage()) {
-            openCombatBracket();
-            combatEvents.file(event);
+            fileCombat(event);
         } else {
             bracketEvents.file(event);
         }
@@ -616,24 +817,28 @@ public final class BusBracketCollector extends BusEventReader {
         }
     }
 
+    /** The ability the open bracket attributes to, or null between brackets. */
+    private SpellAbility resolving() {
+        return open == null ? null : open.ability;
+    }
+
+    /**
+     * Give the bracket to {@code ability}, taking it over from any ability
+     * that held it.
+     *
+     * <p>The mode split is left alone; see {@link ModeSplit}.
+     */
     private void openBracket(SpellAbility ability) {
-        this.resolving = ability;
-        this.bracketDeclined = false;
-        this.resolvingKeys = ProvenanceKey.resolve(ability);
-        this.resolvingActor = actorOf(ability);
-        this.openBracketState = snapshots.ofAbility(ability, SnapshotBuilder.referencedOf(ability));
-        this.bracketEvents.clear();
+        open = ability == null ? null : new OpenResolution(
+                ability, ProvenanceKey.resolve(ability), actorOf(ability),
+                snapshots.ofAbility(ability, SnapshotBuilder.referencedOf(ability)));
+        bracketEvents.clear();
     }
 
     private void closeBracket() {
-        this.resolving = null;
-        this.bracketDeclined = false;
-        this.resolvingKeys = ProvenanceKey.Resolved.UNKNOWN;
-        this.resolvingActor = null;
-        this.openBracketState = null;
-        this.bracketEvents.clear();
-        this.modeHalves.clear();
-        this.openMode = null;
+        open = null;
+        bracketEvents.clear();
+        modes.clear();
     }
 
     // ── the modes of a modal resolution ─────────────────────────────────
@@ -658,23 +863,13 @@ public final class BusBracketCollector extends BusEventReader {
      *               {@link CharmModes} could not place
      */
     void beginMode(SpellAbility clause, Integer option) {
-        if (resolving == null || clause == null
-                || clause.getHostCard() != resolving.getHostCard()) {
+        if (open == null || !open.hosts(clause)) {
             return;
         }
-        closeOpenMode();
-        openMode = new ModeHalf(
-                option, snapshots.ofAbility(resolving, SnapshotBuilder.referencedOf(resolving)));
-    }
-
-    /** Move the bracket's events into the open mode's half and file it. */
-    private void closeOpenMode() {
-        if (openMode == null) {
-            return;
-        }
-        openMode.events.addAll(bracketEvents.drain());
-        modeHalves.add(openMode);
-        openMode = null;
+        modes.begin(
+                option,
+                snapshots.ofAbility(open.ability, SnapshotBuilder.referencedOf(open.ability)),
+                bracketEvents);
     }
 
     private static String actorOf(SpellAbility ability) {
@@ -707,16 +902,6 @@ public final class BusBracketCollector extends BusEventReader {
             int targetsAtCast) {
     }
 
-    /** The held cast for an ability id, newest first. */
-    private Optional<PendingActivation> findPending(int abilityId) {
-        for (int i = pendingActivations.size() - 1; i >= 0; i--) {
-            if (pendingActivations.get(i).abilityId() == abilityId) {
-                return Optional.of(pendingActivations.get(i));
-            }
-        }
-        return Optional.empty();
-    }
-
     /**
      * Write a held cost half now that its outcome is known.
      *
@@ -731,12 +916,11 @@ public final class BusBracketCollector extends BusEventReader {
      *         no effect half or nothing was held for this ability
      */
     String settleActivation(int abilityId, ActivationOutcome outcome, boolean linked) {
-        Optional<PendingActivation> found = findPending(abilityId);
+        Optional<PendingActivation> found = pending.settle(abilityId);
         if (found.isEmpty()) {
             return null;
         }
         PendingActivation activation = found.get();
-        pendingActivations.remove(activation);
         emitActivation(activation, outcome, linked);
         return linked ? activation.linkId() : null;
     }
@@ -800,7 +984,7 @@ public final class BusBracketCollector extends BusEventReader {
      * cost was paid and no effect followed.
      */
     private void reconcilePending() {
-        if (pendingActivations.isEmpty()) {
+        if (pending.isEmpty()) {
             return;
         }
         writeOffRemoved(idsOnStack());
@@ -825,17 +1009,11 @@ public final class BusBracketCollector extends BusEventReader {
      * @return how many held casts were written off
      */
     int writeOffRemoved(Set<Integer> onStack) {
-        int removed = 0;
-        for (Iterator<PendingActivation> held = pendingActivations.iterator();
-                held.hasNext();) {
-            PendingActivation activation = held.next();
-            if (!onStack.contains(activation.abilityId())) {
-                held.remove();
-                emitActivation(activation, ActivationOutcome.COUNTERED, false);
-                removed++;
-            }
+        List<PendingActivation> removed = pending.removeAbsent(onStack);
+        for (PendingActivation activation : removed) {
+            emitActivation(activation, ActivationOutcome.COUNTERED, false);
         }
-        return removed;
+        return removed.size();
     }
 
     // ── the end of the game ─────────────────────────────────────────────
@@ -887,24 +1065,23 @@ public final class BusBracketCollector extends BusEventReader {
         // consequences -- player_won is not a permanent leaving the
         // battlefield -- so it stays where flushOrphanedEvents has always put
         // it, in a record of its own after this one.
-        flushHeldResolution();
+        onNextAction();
         flushCombat();
         flushOrphanedEvents();
         writeOffRemoved(onStack);
-        long abandoned = pendingActivations.size();
-        if (abandoned > 0) {
+        List<PendingActivation> abandoned = pending.removeAll();
+        if (!abandoned.isEmpty()) {
             StringJoiner names = new StringJoiner(", ");
-            for (PendingActivation activation : pendingActivations) {
+            for (PendingActivation activation : abandoned) {
                 names.add(activation.linkId());
             }
             System.err.println(
-                    "effect records: " + context.gameId() + " ended with " + abandoned
+                    "effect records: " + context.gameId() + " ended with " + abandoned.size()
                             + " cast(s) still on the stack, dropped because"
                             + " outcome has no member for a game that stopped: "
                             + names);
         }
-        pendingActivations.clear();
-        return abandoned;
+        return abandoned.size();
     }
 
     // ── an offer the controller turned down ─────────────────────────────
@@ -959,8 +1136,8 @@ public final class BusBracketCollector extends BusEventReader {
 
     /** Record a refusal against the open bracket, if there is one. */
     void noteDeclined() {
-        if (resolving != null) {
-            bracketDeclined = true;
+        if (open != null) {
+            open.declined = true;
         }
     }
 
@@ -975,17 +1152,11 @@ public final class BusBracketCollector extends BusEventReader {
      * describes: offered, turned down, and nothing happened.
      */
     private boolean wasDeclined() {
-        if (!bracketDeclined || !bracketEvents.isEmpty()) {
-            return false;
-        }
         // The events of an earlier mode have already moved into its half.
-        for (ModeHalf half : modeHalves) {
-            if (!half.events.isEmpty()) {
-                return false;
-            }
-        }
-        return true;
+        return open.declined && bracketEvents.isEmpty() && !modes.anyEvents();
     }
+
+    // ── combat ──────────────────────────────────────────────────────────
 
     /**
      * Whether the game is in either combat damage step.
@@ -1007,30 +1178,15 @@ public final class BusBracketCollector extends BusEventReader {
         return !combatWindowClosed && inCombatDamageStep();
     }
 
-    /**
-     * Start a damage step's bracket, and capture the combat it is about.
-     *
-     * <p>The structure is read here rather than at the flush, because the flush
-     * happens at the phase boundary — after the damage has been dealt and the
-     * creatures it killed have left. Read there, an attacker that traded with
-     * its blocker is in neither list, and the record describes a combat nobody
-     * fought. Read here it matches the snapshot beside it, which is taken in
-     * the same call.
-     */
-    private void openCombatBracket() {
-        if (combatState != null) {
-            return;
+    /** File an event into the damage step's bracket, opening it first if need be. */
+    private void fileCombat(EffectEvent event) {
+        if (combat == null) {
+            // Combat damage is the next action. Ordinarily the step boundary
+            // before it has written the held resolution already.
+            onNextAction();
+            combat = new CombatBracket(snapshots.ofBoard().render(), game.getCombat());
         }
-        // Combat damage is the next action. Ordinarily the step boundary
-        // before it has written the held resolution already.
-        flushHeldResolution();
-        combatState = snapshots.ofBoard().render();
-        // Nothing has died yet, so this is the moment the attackers and
-        // blockers are all still in combat. The assignment is Forge's copy of
-        // this step's, taken before any replacement, so it reads the same
-        // whenever in the step it is read.
-        combatShape = CombatShape.of(game.getCombat());
-        combatShape.addAssignment(game.getCombat());
+        combat.file(event);
     }
 
     /**
@@ -1041,7 +1197,7 @@ public final class BusBracketCollector extends BusEventReader {
      * happened to be first.
      */
     private void flushCombat() {
-        if (combatState == null) {
+        if (combat == null) {
             return;
         }
         var phase = game.getPhaseHandler();
@@ -1049,16 +1205,14 @@ public final class BusBracketCollector extends BusEventReader {
                 ? null : SnapshotBuilder.playerId(phase.getPlayerTurn());
         EffectRecord record = context.newRecord(RecordKind.COMBAT)
                 .actor(actor)
-                .state(combatState)
-                .payload(combatPayload());
+                .state(combat.state)
+                .payload(combat.payload());
         context.emit(record);
         // A damage-step probe forked before this step and has been holding its
         // branch since: it needs this record's id to say which combat it
         // mirrors, and the id does not exist until the record is written.
         onCombatRecord.accept(record.recordId());
-        combatEvents.clear();
-        combatShape = CombatShape.empty();
-        combatState = null;
+        combat = null;
     }
 
     /**
@@ -1085,27 +1239,25 @@ public final class BusBracketCollector extends BusEventReader {
      * mill-out, a scripted "you lose the game" -- which is most of them.
      *
      * <p>{@code ability} is absent, the same as {@link #flushCombat}'s own
-     * combat record and for the same reason, not a narrower one: {@link
-     * #resolvingKeys} is already this collector's own "nothing resolving"
-     * default here ({@code closeBracket} set it, and nothing since has
-     * touched it), so this writes the same honest answer {@code endBracket}
-     * would write for a bracket that closed with nothing resolving -- a game
-     * outcome genuinely has no acting line, which is a fact about the record,
-     * not a lookup that failed. {@code state} cannot reuse {@link
-     * #openBracketState} (also cleared by {@code closeBracket}), so it is
-     * read fresh, the same null-ability snapshot {@link #openCombatBracket}
-     * takes for its own record.
+     * combat record and for the same reason, not a narrower one: with no
+     * resolution open there is no acting line, so this writes the same honest
+     * answer {@code endBracket} would write for a bracket that closed with
+     * nothing resolving -- a game outcome genuinely has no acting line, which
+     * is a fact about the record, not a lookup that failed. {@code state} is
+     * read fresh, the same null-ability snapshot {@link #fileCombat} takes
+     * for its own record, since the board captured at a cast went with the
+     * resolution that closed.
      *
-     * <p><b>{@code resolving == null} is required, not incidental.</b>
+     * <p><b>{@code open == null} is required, not incidental.</b>
      * {@link #bracketEvents} is non-empty at {@code
      * finishGame()} in two reachable shapes, and only one of them means
      * "nothing was resolving": {@code openBracket(X)} runs at <em>cast</em>
-     * time, not at resolution, so {@code resolving} stays {@code X} for as
+     * time, not at resolution, so the bracket stays open on {@code X} for as
      * long as {@code X} sits on the stack -- and {@code
      * checkStateBasedEffects} runs at the top of every main-loop iteration,
      * the same CR 704.3 mechanism this method's own rescue depends on, so a
      * cast whose own cost payment ends the game (life paid to 0) can leave
-     * {@code X} still {@code resolving}, still on the stack, and never
+     * the bracket open on {@code X}, still on the stack, and never
      * resolved. Writing this method's record in that shape would name
      * {@code X} as the resolving ability in the <em>same</em> {@code
      * finishGame()} call that {@link #writeOffRemoved} separately and
@@ -1115,21 +1267,16 @@ public final class BusBracketCollector extends BusEventReader {
      * resolve. Chosen over keeping the events under some other attribution:
      * whatever {@code X} was doing when the game cut it off is exactly as
      * unfinished as {@code X} itself, so counted-and-dropped (the treatment
-     * {@code pendingActivations} already gets) is the honest answer, not a
-     * partial one salvaged under a different name.
+     * the held casts already get) is the honest answer, not a partial one
+     * salvaged under a different name.
      */
     private void flushOrphanedEvents() {
-        if (resolving != null || bracketEvents.isEmpty()) {
+        if (open != null || bracketEvents.isEmpty()) {
             return;
         }
         context.emit(context.newResolution(Moment.RESOLUTION)
-                .actor(resolvingActor)
-                .ability(resolvingKeys)
+                .ability(ProvenanceKey.Resolved.UNKNOWN)
                 .state(snapshots.ofBoard().render())
                 .payload(EffectRecord.eventsPayload(bracketEvents.drain())));
-    }
-
-    private String combatPayload() {
-        return EffectRecord.combatPayload(combatShape.fields(), combatEvents.events());
     }
 }

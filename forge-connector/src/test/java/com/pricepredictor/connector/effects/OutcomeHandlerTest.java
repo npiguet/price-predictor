@@ -299,7 +299,7 @@ class OutcomeHandlerTest {
                     new Object[]{liveAbility, "vote_taken", Map.of("tally", Map.of("cat", 1))});
 
             bracket.endBracket(liveAbility.getId(), false);
-            bracket.flushHeldResolution();
+            bracket.onNextAction();
         });
 
         String shard = String.join("\n", records);
@@ -523,7 +523,7 @@ class OutcomeHandlerTest {
                 PatchHooks.uninstall(PatchHooks.ABILITY_UTILS, "setEffectRecordClauseListener");
             }
             bracket.endBracket(flushAbility.getId(), false);
-            bracket.flushHeldResolution();
+            bracket.onNextAction();
         });
 
         String shard = String.join("\n", records);
@@ -573,7 +573,7 @@ class OutcomeHandlerTest {
                 PatchHooks.uninstall(PatchHooks.ABILITY_UTILS, "setEffectRecordClauseListener");
             }
             bracket.endBracket(liveAbility.getId(), false);
-            bracket.flushHeldResolution();
+            bracket.onNextAction();
         });
 
         String shard = String.join("\n", records);
