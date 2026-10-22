@@ -105,9 +105,9 @@ class ProvenanceSidecarTest {
             } catch (IOException e) {
                 throw new UncheckedIOException(e);
             }
-            String withoutRecording = parser
-                    .parseScript(source, file.getFileName().toString())
-                    .formatText();
+            String withoutRecording = RenderedLine.join(parser
+                    .parseScript(source, file.getFileName().toString(), null)
+                    .card().renderLines());
             String withRecording = String.join("\n", convert(relativePath).lines());
             assertEquals(withoutRecording, withRecording,
                     "recording provenance changed the converted text of "
@@ -118,7 +118,7 @@ class ProvenanceSidecarTest {
     @Test
     void renderedLinesJoinBackToTheFormattedText() {
         Converted converted = convert("s/serra_angel.txt");
-        assertEquals(converted.card().formatText(),
+        assertEquals(RenderedLine.join(converted.card().renderLines()),
                 String.join("\n", converted.lines()));
     }
 

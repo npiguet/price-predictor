@@ -68,13 +68,13 @@ class OutputFormatterTest {
     @Test
     void nonActionableTypesHaveNoBrackets() {
         Ability staticAbility = new TextAbility(AbilityType.STATIC, "flying");
-        assertEquals("static: flying", staticAbility.formatLine());
+        assertEquals("static: flying", staticAbility.formatLine(null));
 
         Ability triggered = new TextAbility(AbilityType.TRIGGERED, "when this enters, gain 3 life.");
-        assertEquals("triggered: when this enters, gain 3 life.", triggered.formatLine());
+        assertEquals("triggered: when this enters, gain 3 life.", triggered.formatLine(null));
 
         Ability staticLine = new TextAbility(AbilityType.STATIC, "creatures you control get +1/+1.");
-        assertEquals("static: creatures you control get +1/+1.", staticLine.formatLine());
+        assertEquals("static: creatures you control get +1/+1.", staticLine.formatLine(null));
     }
 
     @Test

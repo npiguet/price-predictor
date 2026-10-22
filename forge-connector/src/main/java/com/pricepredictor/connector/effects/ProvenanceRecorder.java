@@ -242,11 +242,6 @@ public final class ProvenanceRecorder {
         return byAbility.get(ability);
     }
 
-    /** Every key declared on this face, in declaration order. */
-    public Set<ProvenanceKey> declaredKeys() {
-        return declared;
-    }
-
     /** Keys that no surviving ability claims — the deduplicated traits. */
     public List<ProvenanceKey> droppedKeys(Iterable<Ability> surviving) {
         Set<ProvenanceKey> claimed = new LinkedHashSet<>();

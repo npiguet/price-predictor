@@ -72,13 +72,6 @@ public class RulesParser {
         return missingSVars;
     }
 
-    /**
-     * Parse a card script and build domain objects for all faces.
-     */
-    public MultiCard parseScript(List<String> scriptLines, String filename) {
-        return parseScript(scriptLines, filename, null).card();
-    }
-
     /** A parsed card together with the per-face provenance recorders. */
     public record ParsedCard(MultiCard card, List<ProvenanceRecorder> recorders) {
     }

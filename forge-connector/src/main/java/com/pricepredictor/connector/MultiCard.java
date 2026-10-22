@@ -33,7 +33,7 @@ public record MultiCard(String layout, List<CardFace> faces) {
     }
 
     /** Format the complete card as text output. */
-    public String formatText() {
+    String formatText() {
         return RenderedLine.join(renderLines());
     }
 

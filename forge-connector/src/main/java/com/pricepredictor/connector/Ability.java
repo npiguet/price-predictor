@@ -20,10 +20,6 @@ public interface Ability {
         return prefix + ": " + descriptionText();
     }
 
-    default String formatLine() {
-        return formatLine(null);
-    }
-
     /**
      * Render this ability and its sub-abilities one output line per element,
      * each line carrying the ability that produced it.

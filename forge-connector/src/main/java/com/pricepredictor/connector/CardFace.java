@@ -37,7 +37,7 @@ public record CardFace(
     }
 
     /** Format as text output. */
-    public String formatText() {
+    String formatText() {
         return RenderedLine.join(renderLines(0));
     }
 
