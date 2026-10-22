@@ -298,7 +298,7 @@ announcement — in **two distinct sub-shapes**, not one, which an earlier draft
 
 Two further candidates surfaced by the same measurement, `regenerated` and `library_shuffled`, turned out
 **not** to belong in this table on closer reading, in two different directions. `"Regenerated"` in the mode
-table (`PatchedCollectors.java:2831`) matches no real `TriggerType` or `ReplacementType` member at all —
+table (`RunParamNormalizer`) matches no real `TriggerType` or `ReplacementType` member at all —
 `grep -ic regen` returns 0 in both enums — so it is not "live code, different purpose" but a **dead
 reference**, the same defect shape as `damage_prevented`/`spell_copied`. `"Shuffled"` (for
 `library_shuffled`) *is* a real trigger mode, so that half of the original claim held; the type was
@@ -611,7 +611,7 @@ above are covered by one of them:
 - **An ability-, replacement- or trigger-bearing argument**: `ClauseOutcomeRouter.clauseHandler()`,
   `outcomeHandler()` (when the reporting ability is non-null), `RewriteChannel.handler()`, `TriggerChannel.handler()`,
   `ManaChannel.handler()`, `PlayabilityChannel.decisionHandler()` and `legalityHandler()`, and `BusBracketCollector
-  .confirmHandler()`, each check the acting argument's own game identity — `belongsToLiveGame`, one
+  .confirmHandler()`, each check the acting argument's own game identity — `LiveGame.owns` (`confirmHandler()` applies the same test through its own private copy), one
   overload keyed on `CardTraitBase.getHostCard()` (covers `SpellAbility`, `ReplacementEffect` and
   `Trigger`, which is why the rewrite and trigger-fire hooks share it with the clause/outcome hooks rather
   than needing their own), one keyed on `GameEntity` directly (the combat-legality hook's
@@ -622,7 +622,7 @@ above are covered by one of them:
   across all eight listeners (final-fix-4.md item 4 corrects this section, which previously said the
   opposite): for the six handlers keyed on `CardTraitBase.getHostCard()`, an argument of the *wrong type*
   (not a `SpellAbility`/`ReplacementEffect`/`Trigger` at all) is left alone, but a `CardTraitBase` of the
-  right type with *no host card* is dropped — `belongsToLiveGame` returns `false` for a null host exactly
+  right type with *no host card* is dropped — `LiveGame.owns` returns `false` for a null host exactly
   as it does for a different game, and the surrounding `instanceof` pattern only lets the wrong-type case
   through uncompared. `combatLegalityHandler`'s `GameEntity` overload has no equivalent right-type-but-
   unidentifiable case at all — every real `Card`/`Player` carries a `Game` — so it fails open only on the

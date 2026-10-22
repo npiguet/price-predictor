@@ -227,7 +227,7 @@ CardFace
     ├─ Emit property lines (name, mana cost, types, power toughness, loyalty, defense, colors, text)
     │
     └─ Create ActionCounter(0), for each ability:
-        └─ ability.formatBlock(counter):
+        └─ ability.appendBlock(counter, face, lines):
             ├─ ordinal > 0 → use ordinal as action number (class levels)
             ├─ type.isActionable() → use counter.next() as action number
             └─ otherwise → no action number
