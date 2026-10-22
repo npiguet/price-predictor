@@ -100,7 +100,7 @@ public record ProvenanceSidecar(
                     // the file agree word for word.
                     owner.type().getOutputPrefix(),
                     source == null ? List.of() : List.copyOf(source.keys()),
-                    source == null ? TraitScript.of(null) : source.script(),
+                    source == null ? TraitScript.EMPTY : source.script(),
                     RoleSpans.of(
                             prose(renderedLines.get(i).text()),
                             owner.type() == AbilityType.ACTIVATED)));

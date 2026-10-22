@@ -13,6 +13,7 @@ import forge.game.replacement.ReplacementEffect;
 import forge.game.replacement.ReplacementResult;
 import forge.game.spellability.SpellAbility;
 import forge.game.zone.ZoneType;
+import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.io.TempDir;
@@ -110,9 +111,7 @@ class RewriteContractTest {
     void theStandInIsForgesOwnDeclaration() {
         PatchHooks.Lookup setter = PatchHooks.find(
                 PatchHooks.REPLACEMENT_HANDLER, "setEffectRecordListener");
-        if (!setter.present()) {
-            return;
-        }
+        Assumptions.assumeTrue(setter.present(), "the checkout lacks the replacement hook");
         Class<?> declared = setter.method().getParameterTypes()[0];
         Class<?>[] theirs = onReplacement(declared).getParameterTypes();
         Class<?>[] ours = onReplacement(ListenerShape.class).getParameterTypes();

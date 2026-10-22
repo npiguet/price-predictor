@@ -2,6 +2,7 @@ package com.pricepredictor.connector.effects;
 
 import java.text.Normalizer;
 import java.util.Locale;
+import java.util.regex.Pattern;
 
 /**
  * Card name to on-disk filename, mirroring the Python
@@ -33,6 +34,9 @@ public final class CardFilenames {
     /** Alchemy/Arena rebalanced cards live in this directory rather than a letter one. */
     public static final String REBALANCED_DIR = "rebalanced";
 
+    private static final Pattern COMBINING_MARKS = Pattern.compile("\\p{M}+");
+    private static final Pattern UNDERSCORE_RUN = Pattern.compile("_+");
+
     /**
      * The filename stem for a card name, without extension or directory.
      *
@@ -42,8 +46,8 @@ public final class CardFilenames {
      * Forge's own filename convention.
      */
     public static String sanitize(String name) {
-        String ascii = Normalizer.normalize(name, Normalizer.Form.NFKD)
-                .replaceAll("\\p{M}+", "");
+        String ascii = COMBINING_MARKS.matcher(
+                Normalizer.normalize(name, Normalizer.Form.NFKD)).replaceAll("");
         String sanitized = ascii.toLowerCase(Locale.ROOT)
                 .replace(" // ", "_")
                 .replace(" ", "_")
@@ -57,7 +61,7 @@ public final class CardFilenames {
                 .replace(".", "")
                 .replace("-", "_")
                 .replace("/", "");
-        sanitized = sanitized.replaceAll("_+", "_");
+        sanitized = UNDERSCORE_RUN.matcher(sanitized).replaceAll("_");
         return trimUnderscores(sanitized);
     }
 

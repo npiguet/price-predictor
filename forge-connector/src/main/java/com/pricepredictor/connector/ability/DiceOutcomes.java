@@ -79,7 +79,7 @@ public final class DiceOutcomes {
             if (rawDesc == null || rawDesc.isEmpty()) continue;
             String normalized = AbilityDescription.normalize(AbilityDescription.replaceVert(rawDesc));
             if (normalized != null) {
-                result.add(factory.apply(AbilityDescription.applyCasing(normalized)));
+                result.add(factory.apply(normalized));
             }
         }
         return result;

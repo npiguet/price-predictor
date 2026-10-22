@@ -10,12 +10,15 @@ import forge.game.spellability.SpellAbility;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.regex.Pattern;
 
 /**
  * Charm ability with nested OPTION sub-abilities. If the charm has no description,
  * the factory returns the choices as top-level OPTION abilities instead.
  */
 public record CharmAbility(String descriptionText, List<Ability> subAbilities) implements Ability {
+
+    private static final Pattern TRAILING_EM_DASH = Pattern.compile("\\s*\u2014\\s*$");
 
     public CharmAbility {
         Objects.requireNonNull(subAbilities);
@@ -32,7 +35,7 @@ public record CharmAbility(String descriptionText, List<Ability> subAbilities) i
         if (charmDesc != null && !charmDesc.isEmpty()) {
             charmDesc = AbilityDescription.stripReminderText(charmDesc);
             // Strip trailing em-dash (oracle/SpellDescription often ends with " —")
-            charmDesc = charmDesc.replaceAll("\\s*\u2014\\s*$", "").trim();
+            charmDesc = TRAILING_EM_DASH.matcher(charmDesc).replaceAll("").trim();
         }
         if ((charmDesc == null || charmDesc.isEmpty()) && sa.hasParam("Pawprint")) {
             String total = sa.getParam("Pawprint");
@@ -54,17 +57,7 @@ public record CharmAbility(String descriptionText, List<Ability> subAbilities) i
             charmDesc = synthesizeCharmHeader(sa);
         }
 
-        // Collect charm choices as sub-abilities
-        List<Ability> choiceSubs = new ArrayList<>();
-        var choices = sa.getAdditionalAbilityList("Choices");
-        if (choices != null) {
-            for (int modeIndex = 0; modeIndex < choices.size(); modeIndex++) {
-                String choiceDesc = optionText(choices.get(modeIndex));
-                if (choiceDesc == null) continue;
-                choiceSubs.add(new OptionAbility(
-                        AbilityDescription.applyCasing(choiceDesc), modeIndex, sa, null));
-            }
-        }
+        List<Ability> choiceSubs = optionsFrom(sa, null);
 
         List<Ability> result = new ArrayList<>();
         if (charmDesc != null && !charmDesc.isEmpty()) {

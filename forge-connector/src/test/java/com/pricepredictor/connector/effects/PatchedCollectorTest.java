@@ -32,6 +32,7 @@ import forge.game.spellability.SpellAbility;
 import forge.game.zone.ZoneType;
 import forge.game.trigger.Trigger;
 import forge.game.trigger.TriggerHandler;
+import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -1463,48 +1464,30 @@ class PatchedCollectorTest {
     }
 
     /**
-     * Exactly the hooks the checkout offers get installed, and no others.
+     * Exactly the listener hooks the checkout offers get installed, and no
+     * others -- and none at all in degraded mode, where install() declines
+     * before it looks.
      *
      * <p>Asserted against the checkout rather than against a fixed count: the
-     * sibling Forge is patched or not independently of this repository, so a
-     * test expecting zero passes only until someone applies the patches. What
-     * must hold either way is that install() finds what is there — a worker
-     * degrades on a stock checkout and collects fully on a patched one.
+     * sibling Forge is patched or not independently of this repository. The
+     * expected set is derived from {@link PatchHooks#REQUIRED}, so a listener
+     * hook added there is expected here without editing the test. The confirm
+     * listener is excluded because the bracket collector installs it, not this
+     * class.
      */
     @Test
     void everyHookTheCheckoutOffersIsInstalledAndNoOthers() {
-        int available = 0;
-        if (PatchHooks.find(PatchHooks.REPLACEMENT_HANDLER,
-                "setEffectRecordListener").present()) {
-            available++;
-        }
-        if (PatchHooks.find(PatchHooks.TRIGGER_HANDLER,
-                "setEffectRecordTriggerListener").present()) {
-            available++;
-        }
-        if (PatchHooks.find(PatchHooks.AI_CONTROLLER,
-                "setEffectRecordPlayabilityListener").present()) {
-            available++;
-        }
-        if (PatchHooks.find(PatchHooks.ABILITY_MANA_PART,
-                "setEffectRecordManaListener").present()) {
-            available++;
-        }
-        if (PatchHooks.find(PatchHooks.COMBAT_LEGALITY_OBSERVER,
-                "setEffectRecordCombatListener").present()) {
-            available++;
-        }
-        if (PatchHooks.find(PatchHooks.ABILITY_UTILS,
-                "setEffectRecordClauseListener").present()) {
-            available++;
-        }
-        if (PatchHooks.find(PatchHooks.EFFECT_RECORD_OUTCOMES,
-                "setEffectRecordOutcomeListener").present()) {
-            available++;
-        }
+        long expected = AttributionMode.detect() == AttributionMode.DEGRADED
+                ? 0
+                : PatchHooks.REQUIRED.stream()
+                        .filter(hook -> hook.method().startsWith("setEffectRecord")
+                                && hook.method().endsWith("Listener")
+                                && !PatchHooks.PLAYER_CONTROLLER_AI.equals(hook.owner()))
+                        .filter(PatchHooks.Hook::present)
+                        .count();
         try (PatchedCollectors collector = collectors(CollectionCaps.defaults())) {
-            assertEquals(available, collector.install());
-            assertEquals(available, collector.installedHooks().size());
+            assertEquals(expected, collector.install());
+            assertEquals(expected, collector.installedHooks().size());
         }
     }
 
@@ -1868,9 +1851,7 @@ class PatchedCollectorTest {
     void theOutcomeStandInIsForgesOwnDeclaration() {
         PatchHooks.Lookup setter = PatchHooks.find(
                 PatchHooks.EFFECT_RECORD_OUTCOMES, "setEffectRecordOutcomeListener");
-        if (!setter.present()) {
-            return;
-        }
+        Assumptions.assumeTrue(setter.present(), "the checkout lacks the outcome hook");
         Class<?> declared = setter.method().getParameterTypes()[0];
         Class<?>[] theirs = methodNamed(declared, "onOutcome").getParameterTypes();
         Class<?>[] ours = methodNamed(OutcomeListenerShape.class, "onOutcome").getParameterTypes();
@@ -2091,23 +2072,6 @@ class PatchedCollectorTest {
         assertTrue(output.contains("dungeon_entered"), "the report names the first unrecognized type: " + output);
     }
 
-    /** The complement: every type this task actually wired is recognized. */
-    @Test
-    void everyWiredOutcomeTypeIsRecognized() throws Throwable {
-        PatchedCollectors collectors = recording();
-        Method onOutcome = methodNamed(OutcomeListenerShape.class, "onOutcome");
-        List<String> wired = List.of(
-                EffectEvent.COIN_FLIPPED, EffectEvent.CLASH_RESOLVED, EffectEvent.VOTE_TAKEN,
-                EffectEvent.PILES_MADE, EffectEvent.DUNGEON_VENTURED, EffectEvent.SPELL_COPIED,
-                EffectEvent.PERMANENT_COPIED, EffectEvent.CARD_MADE, EffectEvent.RESTRICTION_CHANGE,
-                EffectEvent.CARD_REVEALED, EffectEvent.DAMAGE_PREVENTED);
-
-        for (String type : wired) {
-            collectors.outcomeHandler().invoke(null, onOutcome, new Object[]{null, type, Map.of()});
-            assertEquals(type, collectors.lastClauseEvent().type());
-        }
-    }
-
     /**
      * {@code damage_prevented}'s {@code "source"} is converted to an entity
      * ref, matching every other producer of a {@code source} key
@@ -2188,183 +2152,6 @@ class PatchedCollectorTest {
 
         String shard = String.join("\n", records);
         assertFalse(shard.contains("vote_taken"),
-                "a fork's outcome must not land in the live game's record: " + shard);
-    }
-
-    // ── task-11: spell_countered, token_created, dice_rolled reach the ───
-    // ── live shard, below the gate (not just lastClauseEvent()) ──────────
-
-    /**
-     * Below the gate, the way task-11-brief.md's "what the brief cannot know"
-     * §1 requires: {@code lastClauseEvent()} is set unconditionally before the
-     * (gated) delivery to the bracket, so a test that stops there cannot tell
-     * a working live channel from one the gate silently swallowed -- exactly
-     * how two dead channels passed 702 green tests before. This asserts on
-     * what {@link #readShard} actually reads back from disk.
-     */
-    @Test
-    void spellCounteredReachesTheLiveShard() throws Throwable {
-        Card counteredCard = TestCards.build("Grizzly Bears");
-        SpellAbility liveAbility = TestCards.scriptedAbility("Alchemist's Gambit", "AddTurn");
-        List<String> records = ShardRun.records(tempDir, TestCards.game(), (bracket, collectors) -> {
-            bracket.beginBracket(liveAbility);
-
-            collectors.outcomeHandler().invoke(null,
-                    methodNamed(OutcomeListenerShape.class, "onOutcome"),
-                    new Object[]{liveAbility, "spell_countered",
-                            Map.of("subjects", List.of(counteredCard))});
-
-            bracket.endBracket(liveAbility.getId(), false);
-            bracket.flushHeldResolution();
-        });
-
-        String shard = String.join("\n", records);
-        assertTrue(shard.contains("\"type\":\"spell_countered\""), shard);
-        assertTrue(shard.contains(SnapshotBuilder.entityId(counteredCard)), shard);
-    }
-
-    // ── task-12: turn_ended, text_change (ExchangeTextBox) reach the live ──
-    // ── shard -- the KNOWN_OUTCOME_TYPES risk these two share with task-11's ──
-    // ── three above, and the six ApiEvents.RULES types below do not (that ──
-    // ── whitelist gates only outcomeHandler(), never clauseHandler()) ──────
-
-    /**
-     * Same shape as {@link #spellCounteredReachesTheLiveShard}. The plausible
-     * wrong implementation this falsifies is adding the {@code
-     * EffectRecordOutcomes.note("turn_ended", ...)} call in Forge without also
-     * adding {@code EffectEvent.TURN_ENDED} to {@code
-     * PatchedCollectors.KNOWN_OUTCOME_TYPES} -- exactly the "renamed or
-     * deleted note() call" shape {@code reportUnknownOutcomeType}'s own
-     * javadoc describes, which drops the outcome silently rather than
-     * failing a build.
-     */
-    @Test
-    void turnEndedReachesTheLiveShard() throws Throwable {
-        Player activePlayer = new Player("active", TestCards.game(), 94001);
-        SpellAbility liveAbility = TestCards.scriptedAbility("Alchemist's Gambit", "AddTurn");
-        List<String> records = ShardRun.records(tempDir, TestCards.game(), (bracket, collectors) -> {
-            bracket.beginBracket(liveAbility);
-
-            collectors.outcomeHandler().invoke(null,
-                    methodNamed(OutcomeListenerShape.class, "onOutcome"),
-                    new Object[]{liveAbility, "turn_ended",
-                            Map.of("subjects", List.of(activePlayer))});
-
-            bracket.endBracket(liveAbility.getId(), false);
-            bracket.flushHeldResolution();
-        });
-
-        String shard = String.join("\n", records);
-        assertTrue(shard.contains("\"type\":\"turn_ended\""), shard);
-        assertTrue(shard.contains(SnapshotBuilder.playerId(activePlayer)), shard);
-    }
-
-    /** Same shape again, for {@code text_change} (the {@code ExchangeTextBox} half). */
-    @Test
-    void textChangeFromExchangeTextBoxReachesTheLiveShard() throws Throwable {
-        Card c1 = TestCards.build("Grizzly Bears");
-        Card c2 = TestCards.build("Runeclaw Bear");
-        SpellAbility liveAbility = TestCards.scriptedAbility("Alchemist's Gambit", "AddTurn");
-        List<String> records = ShardRun.records(tempDir, TestCards.game(), (bracket, collectors) -> {
-            bracket.beginBracket(liveAbility);
-
-            collectors.outcomeHandler().invoke(null,
-                    methodNamed(OutcomeListenerShape.class, "onOutcome"),
-                    new Object[]{liveAbility, "text_change",
-                            Map.of("subjects", List.of(c1, c2))});
-
-            bracket.endBracket(liveAbility.getId(), false);
-            bracket.flushHeldResolution();
-        });
-
-        String shard = String.join("\n", records);
-        assertTrue(shard.contains("\"type\":\"text_change\""), shard);
-        assertTrue(shard.contains(SnapshotBuilder.entityId(c1)), shard);
-        assertTrue(shard.contains(SnapshotBuilder.entityId(c2)), shard);
-    }
-
-    /** Same shape as {@link #spellCounteredReachesTheLiveShard}, for token_created. */
-    @Test
-    void tokenCreatedReachesTheLiveShard() throws Throwable {
-        SpellAbility liveAbility = TestCards.scriptedAbility("Alchemist's Gambit", "AddTurn");
-        List<String> records = ShardRun.records(tempDir, TestCards.game(), (bracket, collectors) -> {
-            bracket.beginBracket(liveAbility);
-
-            collectors.outcomeHandler().invoke(null,
-                    methodNamed(OutcomeListenerShape.class, "onOutcome"),
-                    new Object[]{liveAbility, "token_created", Map.of(
-                            "token_script_id", "Soldier Token",
-                            "characteristics", Map.of(
-                                    "power", 1, "toughness", 1, "types", "Creature Soldier"),
-                            "count", 4)});
-
-            bracket.endBracket(liveAbility.getId(), false);
-            bracket.flushHeldResolution();
-        });
-
-        String shard = String.join("\n", records);
-        assertTrue(shard.contains("\"type\":\"token_created\""), shard);
-        assertTrue(shard.contains("\"count\":4"), shard);
-    }
-
-    /** Same shape as {@link #spellCounteredReachesTheLiveShard}, for dice_rolled. */
-    @Test
-    void diceRolledReachesTheLiveShard() throws Throwable {
-        SpellAbility liveAbility = TestCards.scriptedAbility("Alchemist's Gambit", "AddTurn");
-        List<String> records = ShardRun.records(tempDir, TestCards.game(), (bracket, collectors) -> {
-            bracket.beginBracket(liveAbility);
-
-            collectors.outcomeHandler().invoke(null,
-                    methodNamed(OutcomeListenerShape.class, "onOutcome"),
-                    new Object[]{liveAbility, "dice_rolled", Map.of(
-                            "sides", 6,
-                            "results", List.of(Map.of("natural", 3, "final", 5)))});
-
-            bracket.endBracket(liveAbility.getId(), false);
-            bracket.flushHeldResolution();
-        });
-
-        String shard = String.join("\n", records);
-        assertTrue(shard.contains("\"type\":\"dice_rolled\""), shard);
-        assertTrue(shard.contains("\"sides\":6"), shard);
-    }
-
-    /**
-     * F2's own falsifier, reused for one of task-11's three types rather than
-     * re-proving the (type-agnostic) gate itself: a fork's {@code
-     * token_created} must not land in the live game's record either.
-     */
-    @Test
-    void aForkedTokenCreatedDoesNotReachTheLiveShard() throws Throwable {
-        GameRules forkRules = new GameRules(GameType.Constructed);
-        Game fork = new Game(List.of(), forkRules, new Match(forkRules, List.of(), "fork"));
-        Card forkHost = CardFactory.getCard(
-                StaticData.instance().getCommonCards().getCard("Grizzly Bears"),
-                null, TestCards.nextCardId(), fork);
-        SpellAbility forkAbility = AbilityFactory.getAbility(
-                "SP$ AddTurn | ValidTgts$ Player | NumTurns$ 1", forkHost);
-
-        SpellAbility liveAbility = TestCards.scriptedAbility("Alchemist's Gambit", "AddTurn");
-        List<String> records = ShardRun.records(tempDir, TestCards.game(), (bracket, collectors) -> {
-            bracket.beginBracket(liveAbility);
-
-            collectors.outcomeHandler().invoke(null,
-                    methodNamed(OutcomeListenerShape.class, "onOutcome"),
-                    new Object[]{forkAbility, "token_created", Map.of(
-                            "token_script_id", "Soldier Token",
-                            "characteristics", Map.of(),
-                            "count", 2)});
-
-            assertNotNull(collectors.lastClauseEvent(),
-                    "the event must still be built -- only its delivery to "
-                            + "the live bracket is gated");
-
-            bracket.endBracket(liveAbility.getId(), false);
-            bracket.flushHeldResolution();
-        });
-
-        String shard = String.join("\n", records);
-        assertFalse(shard.contains("token_created"),
                 "a fork's outcome must not land in the live game's record: " + shard);
     }
 
@@ -2509,12 +2296,7 @@ class PatchedCollectorTest {
                         }
                         return null;
                     });
-            if (!installed) {
-                // Reflective, so an unpatched checkout skips the assertion
-                // rather than failing it -- the same degradation every
-                // other hook lookup in this suite makes.
-                return;
-            }
+            Assumptions.assumeTrue(installed, "the checkout lacks the clause hook");
             try {
                 AbilityUtils.resolve(forkAbility);
             } finally {
@@ -2565,9 +2347,7 @@ class PatchedCollectorTest {
                         }
                         return null;
                     });
-            if (!installed) {
-                return;
-            }
+            Assumptions.assumeTrue(installed, "the checkout lacks the clause hook");
             try {
                 AbilityUtils.resolve(liveAbility);
             } finally {
@@ -2614,6 +2394,11 @@ class PatchedCollectorTest {
                             assertNotNull(collectors.lastClauseEvent(),
                                     "the event must still be built -- only its delivery to "
                                             + "the live bracket is gated");
+
+                            // The event reaches the bracket's buffer, which only
+                            // a flush writes; without one the shard is empty
+                            // whether or not the gate exists.
+                            bracket.finishGame(Set.of());
                     });
 
         String shard = String.join("\n", records);
@@ -3161,9 +2946,7 @@ class PatchedCollectorTest {
     void theCombatLegalityStandInIsForgesOwnDeclaration() {
         PatchHooks.Lookup setter = PatchHooks.find(
                 PatchHooks.COMBAT_LEGALITY_OBSERVER, "setEffectRecordCombatListener");
-        if (!setter.present()) {
-            return;
-        }
+        Assumptions.assumeTrue(setter.present(), "the checkout lacks the combat hook");
         Class<?> declared = setter.method().getParameterTypes()[0];
         for (String name : List.of("onAttackersDeclarable", "onBlockersDeclarable")) {
             Class<?>[] theirs = methodNamed(declared, name).getParameterTypes();

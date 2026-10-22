@@ -5,7 +5,7 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * A card face owns its identity fields and abilities, and can format itself as text.
+ * A card face owns its identity fields and abilities, and renders itself as output lines.
  */
 public record CardFace(
         String name,
@@ -36,17 +36,12 @@ public record CardFace(
                 colors, text, replacement);
     }
 
-    /** Format as text output. */
-    String formatText() {
-        return RenderedLine.join(renderLines(0));
-    }
-
     /**
      * Render this face one output line at a time, each line carrying the
      * ability that produced it — none for the header lines.
      *
-     * <p>{@code formatText} delegates here, so the sidecar's line indices always
-     * describe the file that was actually written.
+     * <p>The converted file is these lines joined, so the sidecar's line
+     * indices always describe the file that was actually written.
      *
      * @param face this face's ordinal within its card
      */

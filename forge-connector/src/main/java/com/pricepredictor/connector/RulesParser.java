@@ -11,6 +11,7 @@ import com.pricepredictor.connector.ability.DiceOutcomes;
 import com.pricepredictor.connector.ability.EtbReplacementAbility;
 import com.pricepredictor.connector.ability.GiftKeyword;
 import com.pricepredictor.connector.ability.HauntKeyword;
+import com.pricepredictor.connector.ability.KeywordSpec;
 import com.pricepredictor.connector.ability.ReplacementAbilityEntry;
 import com.pricepredictor.connector.ability.SpellAdditionalCost;
 import com.pricepredictor.connector.ability.SpellEffect;
@@ -50,12 +51,17 @@ import java.util.Map;
 import java.util.Set;
 import java.util.function.BiConsumer;
 import java.util.function.Function;
+import java.util.regex.Pattern;
 
 /**
  * Parses Forge card scripts into domain objects (MultiCard/CardFace/Ability).
  * Acts as a router, delegating to variant Ability implementations in the ability sub-package.
  */
 public class RulesParser {
+
+    /** A {@code [Developer's note: …]} bracket: Forge-internal metadata, not oracle content. */
+    private static final Pattern DEVELOPER_NOTE =
+            Pattern.compile("(?i)\\[Developer's note:[^]]*]");
 
     private final CardRules.Reader reader = new CardRules.Reader();
     private int nextCardId = 1;
@@ -308,61 +314,105 @@ public class RulesParser {
         }
     }
 
+    /** Where the spell phase sends one of a face's spell abilities. */
+    private enum SpellRoute {
+        /**
+         * A keyword's own spell. It renders as the keyword line, so that line
+         * claims this trait's key rather than dropping it.
+         */
+        KEYWORD_SPELL,
+        /**
+         * An Adventure or Omen spell met while parsing the main face: it
+         * belongs to the Secondary state and is parsed with that face.
+         */
+        OTHER_FACE,
+        CHARM,
+        /** A spell cast for an alternative cost ({@code NonBasicSpell}). */
+        ALT_COST,
+        /**
+         * A mana ability of a face with basic land types. The synthetic land
+         * mana line renders it once in canonical form; CardFactory's fully
+         * resolved card lists it among the spell abilities as well, so
+         * rendering it here would count it twice.
+         */
+        LAND_MANA,
+        ACTIVATED,
+        /**
+         * A spell ability that is also a trigger (ImmediateTrigger) or a
+         * replacement effect (ETBReplacement), and is rendered by that phase
+         * rather than twice.
+         */
+        DUPLICATE_TRAIT,
+        SPELL,
+        /** Anything else: it renders no line, but is still attributed. */
+        UNRENDERED
+    }
+
     private void parseSpellAbilities(FaceParse p) {
         boolean isAlternateFace = p.face.getType().hasSubtype("Adventure")
                 || p.face.getType().hasSubtype("Omen");
         int spellIndex = -1;
         for (SpellAbility sa : p.card.getSpellAbilities()) {
             spellIndex++;
-            int before = p.abilities.size();
-            // Declared before the skips below, so a trait the parser passes over
-            // lands in dropped_keys rather than failing the join: it is still
-            // live at runtime and a record can still name it.
+            // Declared before any route skips the trait, so a trait the parser
+            // passes over lands in dropped_keys rather than failing the join:
+            // it is still live at runtime and a record can still name it.
             ProvenanceKey spellKey = p.key(ProvenanceKey.KIND_SPELL, spellIndex);
             p.recorder.declare(spellKey);
-            if (sa.getKeyword() != null) {
-                // A keyword's own spell renders as the keyword line, so that
-                // line claims this trait's key rather than dropping it.
-                p.recorder.attributeToKeyword(spellKey, sa, sa.getKeyword().getOriginal());
-                continue;
-            }
-            // Adventure/Omen SAs belong to the Secondary state; skip them when processing the main face.
-            // We check both sa.isAdventure()/isOmen() (which tests the SA's own CardStateName) and
-            // the state-name mismatch (fallback in case getCardStateName() cannot resolve the type).
-            if (!isAlternateFace) {
-                if (sa.isAdventure() || sa.isOmen()) continue;
-                if (sa.getCardState() != null
-                        && sa.getCardState().getStateName() == CardStateName.Secondary) continue;
-            }
-            if (sa.getApi() == ApiType.Charm) {
-                p.abilities.addAll(CharmAbility.fromSpellAbility(sa));
-            } else if (sa.isSpell() && "True".equals(sa.getParam("NonBasicSpell"))) {
-                addIfNotNull(p.abilities, AlternateCostSpell.of(sa));
-            } else if (sa.isActivatedAbility()) {
-                // Skip mana abilities for faces that have basic-land subtypes: the
-                // synthetic land mana line adds them in a canonical format.
-                // With FModel initialization, CardFactory produces fully-resolved
-                // Card objects that include these mana abilities in SpellAbilities,
-                // so without this guard they would be double-counted.
-                if (sa.isManaAbility() && p.landManaDescription != null) {
+            SpellRoute route = classifySpell(sa, p, isAlternateFace);
+            switch (route) {
+                case KEYWORD_SPELL ->
+                        p.recorder.attributeToKeyword(spellKey, sa, sa.getKeyword().getOriginal());
+                case OTHER_FACE, DUPLICATE_TRAIT -> { }
+                case LAND_MANA -> {
                     p.landManaAbilities.add(sa);
                     p.landManaKeys.add(spellKey);
-                    continue;
                 }
-                addIfNotNull(p.abilities, ActivatedAbilityEntry.of(sa));
-            } else if (sa.isSpell()) {
-                // Skip SAs that are handled by the triggers or replacements phases.
-                // ImmediateTrigger SAs fire immediately on enter and are also registered
-                // as triggers; ETBReplacement SAs are also replacement effects.
-                // Both appear in card.getSpellAbilities() AND in getTriggers()/
-                // getReplacementEffects(), so without this guard they double-emit.
-                if (sa.getApi() == ApiType.ImmediateTrigger) continue;
-                if ("ETBReplacement".equals(sa.getParam("Mode"))) continue;
-                addIfNotNull(p.abilities, SpellAdditionalCost.of(sa));
-                p.abilities.addAll(SpellEffect.fromChain(sa));
-                p.abilities.addAll(DiceOutcomes.of(sa, text -> new SpellEffect(text, List.of())));
+                case CHARM, ALT_COST, ACTIVATED, SPELL, UNRENDERED -> {
+                    int before = p.abilities.size();
+                    renderSpell(route, sa, p.abilities);
+                    p.recorder.attribute(p.since(before), spellKey, sa);
+                }
             }
-            p.recorder.attribute(p.since(before), spellKey, sa);
+        }
+    }
+
+    private static SpellRoute classifySpell(SpellAbility sa, FaceParse p,
+                                            boolean isAlternateFace) {
+        if (sa.getKeyword() != null) return SpellRoute.KEYWORD_SPELL;
+        // Both the SA's own Adventure/Omen flag and its state name are asked:
+        // the state name is the fallback when the flag cannot resolve the type.
+        if (!isAlternateFace && (sa.isAdventure() || sa.isOmen()
+                || (sa.getCardState() != null
+                        && sa.getCardState().getStateName() == CardStateName.Secondary))) {
+            return SpellRoute.OTHER_FACE;
+        }
+        if (sa.getApi() == ApiType.Charm) return SpellRoute.CHARM;
+        if (sa.isSpell() && "True".equals(sa.getParam("NonBasicSpell"))) return SpellRoute.ALT_COST;
+        if (sa.isActivatedAbility()) {
+            return sa.isManaAbility() && p.landManaDescription != null
+                    ? SpellRoute.LAND_MANA : SpellRoute.ACTIVATED;
+        }
+        if (sa.isSpell()) {
+            return sa.getApi() == ApiType.ImmediateTrigger
+                    || "ETBReplacement".equals(sa.getParam("Mode"))
+                    ? SpellRoute.DUPLICATE_TRAIT : SpellRoute.SPELL;
+        }
+        return SpellRoute.UNRENDERED;
+    }
+
+    /** Append the lines a rendering route makes of {@code sa}. */
+    private static void renderSpell(SpellRoute route, SpellAbility sa, List<Ability> out) {
+        switch (route) {
+            case CHARM -> out.addAll(CharmAbility.fromSpellAbility(sa));
+            case ALT_COST -> addIfNotNull(out, AlternateCostSpell.of(sa));
+            case ACTIVATED -> addIfNotNull(out, ActivatedAbilityEntry.of(sa));
+            case SPELL -> {
+                addIfNotNull(out, SpellAdditionalCost.of(sa));
+                out.addAll(SpellEffect.fromChain(sa));
+                out.addAll(DiceOutcomes.of(sa, text -> new SpellEffect(text, List.of())));
+            }
+            default -> { }
         }
     }
 
@@ -464,8 +514,7 @@ public class RulesParser {
 
         String text = Strings.emptyToNull(face.getNonAbilityText());
         if (text != null) {
-            // Strip [Developer's note: …] brackets — Forge-internal metadata, not oracle content.
-            text = text.replaceAll("(?i)\\[Developer's note:[^]]*]", "").strip();
+            text = DEVELOPER_NOTE.matcher(text).replaceAll("").strip();
             if (text.isEmpty()) text = null;
         }
         if (text != null) text = AbilityDescription.applyCasing(text);
@@ -553,8 +602,7 @@ public class RulesParser {
                 }
             }
             if (header == null) continue;
-            visits.add(new TriggeredAbilityEntry(AbilityType.TRIGGERED,
-                    AbilityDescription.applyCasing(header), children));
+            visits.add(new TriggeredAbilityEntry(AbilityType.TRIGGERED, header, children));
         }
         return visits;
     }
@@ -576,7 +624,7 @@ public class RulesParser {
      * Chancellor-cycle cards where the named SVar lacks a SpellDescription.
      */
     private static Ability openingEffectAbility(KeywordInterface ki) {
-        String svarName = ki.getOriginal().split(":", 3)[1];
+        String svarName = new KeywordSpec(ki.getOriginal()).part(1);
         Card hostCard = ki.getHostCard();
         if (hostCard == null) return null;
         String desc = null;
@@ -589,8 +637,7 @@ public class RulesParser {
             if (revealSa != null) desc = revealSa.getParam("SpellDescription");
         }
         String normalized = AbilityDescription.normalize(desc);
-        return normalized == null ? null
-                : new TextAbility(AbilityType.TRIGGERED, AbilityDescription.applyCasing(normalized));
+        return normalized == null ? null : new TextAbility(AbilityType.TRIGGERED, normalized);
     }
 
     private List<Ability> applyClassPostProcessing(List<Ability> abilities,
@@ -663,7 +710,7 @@ public class RulesParser {
 
     private static String buildAlternateAdditionalCostDescription(String original) {
         List<String> costs = new ArrayList<>();
-        for (String costPart : original.split(":", 2)[1].split(":")) {
+        for (String costPart : new KeywordSpec(original).rest(1).split(":")) {
             Cost cost = new Cost(costPart, false);
             String costText = cost.toSimpleString();
             costs.add((cost.isOnlyManaCost() ? "pay " : "")
