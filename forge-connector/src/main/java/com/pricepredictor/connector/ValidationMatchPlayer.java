@@ -7,6 +7,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.util.List;
+import java.util.stream.Stream;
 
 /**
  * Reads a validation matches file, plays each match, and writes outcomes.
@@ -89,12 +90,14 @@ public class ValidationMatchPlayer {
                 StandardOpenOption.CREATE, StandardOpenOption.APPEND);
     }
 
-    static long countCompletedMatches(Path outcomesFile) {
+    /**
+     * An unreadable outcomes file must not read as "nothing completed": the worker would
+     * replay every match and append duplicate rows, breaking the positional pairing.
+     */
+    static long countCompletedMatches(Path outcomesFile) throws IOException {
         if (!Files.exists(outcomesFile)) return 0;
-        try {
-            return Files.lines(outcomesFile).filter(l -> !l.isBlank()).count();
-        } catch (IOException e) {
-            return 0;
+        try (Stream<String> lines = Files.lines(outcomesFile)) {
+            return lines.filter(l -> !l.isBlank()).count();
         }
     }
 }
