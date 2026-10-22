@@ -41,7 +41,7 @@ public final class HauntKeyword {
             String original = ki.getOriginal(); // "Haunt:SvarName"
             if (original.contains(":")) {
                 String svarName = original.substring(original.indexOf(':') + 1);
-                effectDesc = parseSpellDesc(card.getSVar(svarName));
+                effectDesc = SpellAbilityUtils.svarParam(card.getSVar(svarName), "SpellDescription");
             }
         }
 
@@ -90,17 +90,5 @@ public final class HauntKeyword {
         }
 
         return result;
-    }
-
-    /** Extract SpellDescription value from a raw SVar string like "DB$ Foo | SpellDescription$ Bar | …". */
-    static String parseSpellDesc(String svarContent) {
-        if (svarContent == null || svarContent.isEmpty()) return null;
-        for (String part : svarContent.split(" \\| ")) {
-            String trimmed = part.trim();
-            if (trimmed.startsWith("SpellDescription$")) {
-                return trimmed.substring("SpellDescription$".length()).trim();
-            }
-        }
-        return null;
     }
 }

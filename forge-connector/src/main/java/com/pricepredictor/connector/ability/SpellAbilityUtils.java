@@ -2,11 +2,12 @@ package com.pricepredictor.connector.ability;
 
 import com.pricepredictor.connector.Ability;
 import forge.game.spellability.SpellAbility;
+import forge.util.FileSection;
 
 import java.util.List;
 
 /**
- * Utility methods for walking SpellAbility chains.
+ * Utility methods for walking SpellAbility chains and reading their SVars.
  */
 final class SpellAbilityUtils {
 
@@ -26,6 +27,19 @@ final class SpellAbilityUtils {
             sub = sub.getSubAbility();
         }
         return null;
+    }
+
+    /**
+     * The value of {@code key} in an SVar's {@code Key$ value | …} text, or
+     * null when the text is null or has no such parameter.
+     *
+     * <p>Parsed the way Forge parses the SVar itself, so one key cannot match
+     * inside another, as {@code Description$} does inside
+     * {@code SpellDescription$} under a substring search.
+     */
+    static String svarParam(String svarText, String key) {
+        if (svarText == null) return null;
+        return FileSection.parseToMap(svarText, FileSection.DOLLAR_SIGN_KV_SEPARATOR).get(key);
     }
 
     /**

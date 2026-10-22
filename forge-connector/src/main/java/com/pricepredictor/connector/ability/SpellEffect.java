@@ -184,17 +184,11 @@ public record SpellEffect(String descriptionText, List<Ability> subAbilities) im
     }
 
     /**
-     * Parse a "Key$ value | ..." SVar text and extract the value for the given key.
-     * Strips reminder text, normalizes casing; returns null if absent or empty.
+     * The normalized value of {@code paramName} in a "Key$ value | ..." SVar
+     * text, or null if absent or empty.
      */
     private static String extractParam(String svarText, String paramName) {
-        String key = paramName + "$ ";
-        int idx = svarText.indexOf(key);
-        if (idx < 0) return null;
-        int start = idx + key.length();
-        int end = svarText.indexOf(" |", start);
-        String raw = end >= 0 ? svarText.substring(start, end).trim() : svarText.substring(start).trim();
-        return AbilityDescription.normalize(raw);
+        return AbilityDescription.normalize(SpellAbilityUtils.svarParam(svarText, paramName));
     }
 
 }
