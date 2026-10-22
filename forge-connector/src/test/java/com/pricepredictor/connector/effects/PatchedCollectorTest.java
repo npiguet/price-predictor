@@ -2389,34 +2389,32 @@ class PatchedCollectorTest {
      */
     @Test
     void aNullAbilityOutcomeFromAProbesOwnCombatDoesNotReachTheLiveShard() throws Throwable {
-        List<String> records = ShardRun.records(tempDir, TestCards.game(), (bracket, collectors) -> {
-            
-                            var forkRunning = ForkCollector.class.getDeclaredField("FORK_RUNNING");
-                            forkRunning.setAccessible(true);
-                            @SuppressWarnings("unchecked")
-                            ThreadLocal<Boolean> flag = (ThreadLocal<Boolean>) forkRunning.get(null);
-                            flag.set(true);
-                            try {
-                                collectors.outcomeHandler().invoke(null,
-                                        methodNamed(OutcomeListenerShape.class, "onOutcome"),
-                                        new Object[]{null, "damage_prevented", Map.of("amount", 3)});
-                            } finally {
-                                flag.set(false);
-                            }
-            
-                            assertNotNull(collectors.lastClauseEvent(),
-                                    "the event must still be built -- only its delivery to "
-                                            + "the live bracket is gated");
+        Path shard = ShardRun.shardOf(tempDir, TestCards.game(), (bracket, collectors) -> {
+            var forkRunning = ForkCollector.class.getDeclaredField("FORK_RUNNING");
+            forkRunning.setAccessible(true);
+            @SuppressWarnings("unchecked")
+            ThreadLocal<Boolean> flag = (ThreadLocal<Boolean>) forkRunning.get(null);
+            flag.set(true);
+            try {
+                collectors.outcomeHandler().invoke(null,
+                        methodNamed(OutcomeListenerShape.class, "onOutcome"),
+                        new Object[]{null, "damage_prevented", Map.of("amount", 3)});
+            } finally {
+                flag.set(false);
+            }
 
-                            // The event reaches the bracket's buffer, which only
-                            // a flush writes; without one the shard is empty
-                            // whether or not the gate exists.
-                            bracket.finishGame(Set.of());
-                    });
+            assertNotNull(collectors.lastClauseEvent(),
+                    "the event must still be built -- only its delivery to "
+                            + "the live bracket is gated");
 
-        String shard = String.join("\n", records);
-        assertFalse(shard.contains("damage_prevented"),
-                "a probe's own combat-damage report must not land in the live game's record: " + shard);
+            // The event reaches the bracket's buffer, which only a flush
+            // writes; without one the shard is empty whether or not the gate
+            // exists.
+            bracket.finishGame(Set.of());
+        });
+
+        assertFalse(Files.exists(shard),
+                "a probe's own combat-damage report must not land in the live game's record");
     }
 
     // ── final-fix-3.md item 2: the other four handlers ───────────────────
