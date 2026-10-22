@@ -29,9 +29,9 @@ import static org.junit.jupiter.api.Assertions.*;
 /**
  * Tests for {@link DraftWorkerMain}.
  *
- * <p>The pure helpers (agent-mix parsing, JSON escaping, random-override
- * fraction) need no Forge; the full-draft transcript test drives Forge's draft
- * AI and is the reason the class is tagged "integration".
+ * <p>Every test drives Forge's draft AI, which is why the class is tagged
+ * "integration"; the pure helpers are covered by {@link AgentMixTest} and
+ * {@link DraftAgentTest}.
  */
 @Tag("integration")
 @ExtendWith(ForgeExtension.class)
@@ -97,38 +97,6 @@ class DraftWorkerMainTest {
         return new DraftPickProtocol.PickChannel(
                 new PrintStream(new ByteArrayOutputStream()),
                 new BufferedReader(new StringReader("")), Set.of());
-    }
-
-    // ── Pure helpers ──────────────────────────────────────────────────────────
-
-    @Test
-    void randomOverrideFractionByAgent() {
-        assertEquals(0.0, DraftAgent.randomOverrideFraction("forge-full"));
-        assertEquals(0.30, DraftAgent.randomOverrideFraction("forge-r30"));
-        assertEquals(1.0, DraftAgent.randomOverrideFraction("forge-r100"));
-        assertEquals(0.0, DraftAgent.randomOverrideFraction("unknown"));
-    }
-
-    @Test
-    void agentMixSamplesByWeight() {
-        AgentMix mix = AgentMix.parse("forge-full:9,forge-r100:1");
-        Random random = new Random(42);
-        int full = 0;
-        int trials = 5000;
-        for (int i = 0; i < trials; i++) {
-            if (mix.sample(random).equals("forge-full")) {
-                full++;
-            }
-        }
-        double share = (double) full / trials;
-        assertTrue(share > 0.85 && share < 0.95, "forge-full share ~0.9, got " + share);
-    }
-
-    @Test
-    void agentMixRejectsMalformed() {
-        assertThrows(IllegalArgumentException.class, () -> AgentMix.parse("forge-full"));
-        assertThrows(IllegalArgumentException.class, () -> AgentMix.parse("forge-full:0"));
-        assertThrows(NumberFormatException.class, () -> AgentMix.parse("forge-full:x"));
     }
 
     // ── Forge-driven full draft ───────────────────────────────────────────────

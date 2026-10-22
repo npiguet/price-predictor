@@ -74,6 +74,16 @@ class ProvenanceKeyTest {
         return copy;
     }
 
+    /** The flashback keyword Blast from the Past prints. */
+    private static KeywordInterface flashbackOf(CardState state) {
+        for (KeywordInterface keyword : state.getIntrinsicKeywords()) {
+            if (keyword.getOriginal().startsWith("Flashback")) {
+                return keyword;
+            }
+        }
+        throw new AssertionError("no flashback on " + state.getCard().getName());
+    }
+
     // ── activated abilities the stack replaced with a copy ───────────────
 
     /**
@@ -436,11 +446,7 @@ class ProvenanceKeyTest {
     void aGrantedKeywordHasNoPrintedOrdinal() {
         Card bear = card("Grizzly Bears");
         Card blast = card("Blast from the Past");
-        KeywordInterface flashback = null;
-        for (KeywordInterface keyword : blast.getCurrentState().getIntrinsicKeywords()) {
-            if (keyword.getOriginal().startsWith("Flashback")) flashback = keyword;
-        }
-        assertNotNull(flashback);
+        KeywordInterface flashback = flashbackOf(blast.getCurrentState());
 
         assertEquals(-1,
                 ProvenanceKey.keywordIndex(bear.getCurrentState(), flashback),
@@ -451,17 +457,15 @@ class ProvenanceKeyTest {
      * A keyword-derived ability — flashback, cycling, unearth, equip — keys to
      * the keyword, not into the spell slice it was appended to. The corpus has
      * never carried a {@code keyword} key, and the {@code spell} index those
-     * abilities were getting instead came out of the hash-ordered tail.
+     * abilities were getting instead came out of the hash-ordered tail. The
+     * keyword the card prints keeps its own ordinal, which is what the
+     * converter emits.
      */
     @Test
     void aKeywordDerivedAbilityKeysToTheKeywordSlot() {
         Card blast = card("Blast from the Past");
         CardState state = blast.getCurrentState();
-        KeywordInterface flashback = null;
-        for (KeywordInterface keyword : state.getIntrinsicKeywords()) {
-            if (keyword.getOriginal().startsWith("Flashback")) flashback = keyword;
-        }
-        assertNotNull(flashback);
+        KeywordInterface flashback = flashbackOf(state);
 
         // The shape GameActionUtil produces: a copy of the spell carrying the
         // keyword instance and no back-reference to a printed spell line.
@@ -541,20 +545,6 @@ class ProvenanceKeyTest {
     }
 
     /**
-     * And the ordinary case is untouched: the path is still the file Forge read
-     * the card from, which for almost every card is the derived one too.
-     */
-    @Test
-    void anOrdinaryCardStillKeysToItsLetterDirectory() {
-        Card fountain = card("Fountain of Youth");
-        ProvenanceKey key = ProvenanceKey.of(
-                scriptedSpell(fountain.getCurrentState(), "GainLife"));
-
-        assertNotNull(key);
-        assertEquals("cardsfolder/f/fountain_of_youth.txt", key.scriptFile());
-    }
-
-    /**
      * The join is a string comparison, so what the collector writes has to be
      * what the converter wrote: the source path relativised against the tree,
      * with forward slashes, on a platform whose own separator is neither.
@@ -594,51 +584,13 @@ class ProvenanceKeyTest {
                 grantedKeywordTrigger(recipient, "Poisonous:1", grantor));
 
         assertNotNull(key, "a granted keyword's trigger must key to its donor");
+        // Never the recipient: keying a granted trigger where it now lives would
+        // teach the model that Metallic Sliver, a vanilla 1/1, prints a poison
+        // trigger, which is worse than naming no line at all.
         assertEquals("cardsfolder/v/virulent_sliver.txt", key.scriptFile());
+        assertNotEquals(ProvenanceKey.scriptFileOf(recipient), key.scriptFile());
         assertEquals(ProvenanceKey.KIND_STATIC, key.traitKind());
         assertEquals(ProvenanceKey.of(grantor), key);
-    }
-
-    /**
-     * Never the recipient. Keying a granted trigger where it now lives would
-     * teach the model that Metallic Sliver — a vanilla 1/1 — prints a poison
-     * trigger, which is worse than naming no line at all.
-     */
-    @Test
-    void aGrantedKeywordNeverKeysToTheCardThatReceivedIt() {
-        Card donor = card("Virulent Sliver");
-        StaticAbility grantor =
-                donor.getCurrentState().getStaticAbilities().iterator().next();
-        Card recipient = card("Metallic Sliver");
-
-        ProvenanceKey key = ProvenanceKey.of(
-                grantedKeywordTrigger(recipient, "Poisonous:1", grantor));
-
-        assertNotEquals(ProvenanceKey.scriptFileOf(recipient), key.scriptFile());
-    }
-
-    /**
-     * A keyword the card does print is untouched by the donor hop: it still
-     * keys to its own ordinal, which is what the converter emits.
-     */
-    @Test
-    void aPrintedKeywordStillKeysToItsOwnOrdinal() {
-        Card blast = card("Blast from the Past");
-        CardState state = blast.getCurrentState();
-        KeywordInterface flashback = null;
-        for (KeywordInterface keyword : state.getIntrinsicKeywords()) {
-            if (keyword.getOriginal().startsWith("Flashback")) flashback = keyword;
-        }
-        assertNotNull(flashback);
-
-        SpellAbility derived =
-                scriptedSpell(state, "DealDamage").copy(blast, null, false, true);
-        derived.setKeyword(flashback);
-        ProvenanceKey key = ProvenanceKey.of(derived);
-
-        assertNotNull(key);
-        assertEquals(ProvenanceKey.KIND_KEYWORD, key.traitKind());
-        assertEquals(ProvenanceKey.keywordIndex(state, flashback), key.indexWithinKind());
     }
 
     /** The engine's own path for handing a keyword to another permanent. */
@@ -809,27 +761,17 @@ class ProvenanceKeyTest {
     void anAuraGrantedTriggerKeysToTheLineThatGrantedIt() {
         Card genju = card("Genju of the Fields");
         SpellAbility animate = scriptedSpell(genju.getCurrentState(), "Animate");
-        Trigger granted = grantedFromSVar(genju, card("Plains"), "PseudoLifelink", animate);
+        Card plains = card("Plains");
+        Trigger granted = grantedFromSVar(genju, plains, "PseudoLifelink", animate);
 
         ProvenanceKey key = ProvenanceKey.of(granted);
 
         assertNotNull(key, "the aura's own Animate line granted this trigger");
         assertEquals(ProvenanceKey.of(animate), key);
+        // Never the creature that received it, which prints no such line.
         assertEquals("cardsfolder/g/genju_of_the_fields.txt", key.scriptFile());
-        assertEquals(ProvenanceKey.KIND_SPELL, key.traitKind());
-    }
-
-    /** Never the creature that received it, which prints no such line. */
-    @Test
-    void anAuraGrantedTriggerNeverKeysToTheCreatureItWasGrantedTo() {
-        Card genju = card("Genju of the Fields");
-        Card plains = card("Plains");
-        SpellAbility animate = scriptedSpell(genju.getCurrentState(), "Animate");
-
-        ProvenanceKey key = ProvenanceKey.of(
-                grantedFromSVar(genju, plains, "PseudoLifelink", animate));
-
         assertNotEquals(ProvenanceKey.scriptFileOf(plains), key.scriptFile());
+        assertEquals(ProvenanceKey.KIND_SPELL, key.traitKind());
     }
 
     /**

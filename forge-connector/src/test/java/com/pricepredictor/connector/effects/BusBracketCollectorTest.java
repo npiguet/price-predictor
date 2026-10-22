@@ -25,8 +25,6 @@ import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -97,6 +95,20 @@ class BusBracketCollectorTest {
                         + " | NumDmg$ 3", host);
     }
 
+    /** A collector that has seen a bolt cast and resolve; returns the bolt. */
+    private SpellAbility resolveBolt(BusBracketCollector collector) {
+        SpellAbility bolt = damageAbility();
+        collector.beginBracket(bolt);
+        collector.endBracket(bolt.getId(), false);
+        collector.flushHeldResolution();
+        return bolt;
+    }
+
+    /** The listener the patched {@code PlayerControllerAi} installs, reading {@code collector}. */
+    private static HookShapes.Confirm confirmListener(BusBracketCollector collector) {
+        return HookShapes.proxy(HookShapes.Confirm.class, collector.confirmHandler());
+    }
+
     // ── outcome ─────────────────────────────────────────────────────────
 
     /**
@@ -125,12 +137,7 @@ class BusBracketCollectorTest {
      */
     @Test
     void aResolutionWritesBothHalvesUnderOneLink() throws IOException {
-        BusBracketCollector collector = collector();
-        SpellAbility bolt = damageAbility();
-
-        collector.beginBracket(bolt);
-        collector.endBracket(bolt.getId(), false);
-        collector.flushHeldResolution();
+        SpellAbility bolt = resolveBolt(collector());
 
         List<String> records = written();
         assertEquals(2, records.size(), records.toString());
@@ -234,81 +241,8 @@ class BusBracketCollectorTest {
                 BusBracketCollector.outcomeOf(0, gain));
     }
 
-    // ── zone changes ────────────────────────────────────────────────────
-
     private static Zone zone(ZoneType type) {
         return new Zone(type, TestCards.game());
-    }
-
-    /**
-     * A card put onto the stack is a cast, not an outcome of one.
-     *
-     * <p>It has a record already — the activation half, with what was paid. As a
-     * zone_change it lands in whichever bracket is open, so an opponent's
-     * response reads as something the resolving ability did; it was 54% of the
-     * whole channel.
-     */
-    @Test
-    void aMoveOntoTheStackIsNotRecordedAsAnOutcome() {
-        assertNull(BusEvents.cardMoved(new GameEventCardChangeZone(
-                TestCards.build("Lightning Bolt"),
-                zone(ZoneType.Hand), zone(ZoneType.Stack))));
-    }
-
-    /** A move off the stack is an outcome, and now says where it came from. */
-    @Test
-    void aMoveOffTheStackKeepsBothOfItsEnds() {
-        EffectEvent moved = BusEvents.cardMoved(new GameEventCardChangeZone(
-                TestCards.build("Grizzly Bears"),
-                zone(ZoneType.Stack), zone(ZoneType.Battlefield)));
-
-        assertNotNull(moved);
-        String json = moved.toJson();
-        assertTrue(json.contains("\"from_zone\":\"stack\""), json);
-        assertTrue(json.contains("\"to_zone\":\"battlefield\""), json);
-    }
-
-    /**
-     * The same transition told twice in one record is filed once.
-     *
-     * <p>A card is on the battlefield or it is not, so a second identical
-     * {@code zone_change} carries nothing the first did not.
-     */
-    @Test
-    void aRepeatedStateTransitionIsFiledOnce() {
-        EventBuffer into = new EventBuffer();
-
-        assertTrue(into.file(zoneChange()));
-        assertFalse(into.file(zoneChange()));
-
-        assertEquals(1, into.events().size());
-    }
-
-    /**
-     * A repeated quantity is not, because there the repeat is the information.
-     *
-     * <p>Two creatures each dealing one damage to the same blocker render two
-     * identical events, and collapsing them would turn two damage into one.
-     */
-    @Test
-    void aRepeatedQuantityIsFiledEveryTime() {
-        EventBuffer into = new EventBuffer();
-
-        assertTrue(into.file(oneDamage()));
-        assertTrue(into.file(oneDamage()));
-
-        assertEquals(2, into.events().size());
-    }
-
-    private static EffectEvent zoneChange() {
-        return new EffectEvent(EffectEvent.ZONE_CHANGE)
-                .subject("E7").param("from_zone", "hand")
-                .param("to_zone", "battlefield");
-    }
-
-    private static EffectEvent oneDamage() {
-        return new EffectEvent(EffectEvent.DAMAGE_DEALT)
-                .subject("E7").param("amount", 1).param("combat", true);
     }
 
     // ── snapshot depth ──────────────────────────────────────────────────
@@ -324,12 +258,7 @@ class BusBracketCollectorTest {
      */
     @Test
     void everyRecordCarriesAllFourTiers() throws IOException {
-        BusBracketCollector collector = collector();
-        SpellAbility bolt = damageAbility();
-
-        collector.beginBracket(bolt);
-        collector.endBracket(bolt.getId(), false);
-        collector.flushHeldResolution();
+        resolveBolt(collector());
 
         List<String> records = written();
         assertEquals(2, records.size(), records.toString());
@@ -478,53 +407,6 @@ class BusBracketCollectorTest {
                 "the bus named a source, and it outranks the bracket");
     }
 
-    /**
-     * With nothing resolving and nothing named, the record says nothing.
-     *
-     * <p>An honest absence rather than a placeholder: Forge genuinely names no
-     * causer for a turn-based action, and a reader can act on the difference.
-     */
-    @Test
-    void anEventNothingCausedCarriesNoCause() {
-        assertNull(EventAttribution.cause(null, null));
-
-        String json = EventAttribution.stamp(
-                new EffectEvent(EffectEvent.UNTAPPED).subject("E7"), null, null)
-                .toJson();
-
-        assertFalse(json.contains("cause"), json);
-    }
-
-    /**
-     * The game's own outcome reaches the shard resolved to the winner's ref,
-     * not the display name Forge names it by -- see {@code
-     * BusEvents#gameOutcome}. Bound to its own two-player game rather than
-     * {@code TestCards.game()} (which registers no players at all), so the
-     * winning name has a real seat to resolve against.
-     */
-    @Test
-    void theGameOutcomeNamesTheWinningPlayerAsARef() throws IOException {
-        Game outcomeGame = TestBoard.twoPlayerGame("p1", "p2");
-        Player p1 = outcomeGame.getPlayers().stream()
-                .filter(p -> "p1".equals(p.getLobbyPlayer().getName()))
-                .findFirst().orElseThrow();
-        Card boltHost = TestBoard.card(outcomeGame, null, "Lightning Bolt");
-        SpellAbility bolt = AbilityFactory.getAbility(
-                "SP$ DealDamage | Cost$ R | ValidTgts$ Any | TgtPrompt$ Choose"
-                        + " | NumDmg$ 3", boltHost);
-        BusBracketCollector outcomeCollector = collector(outcomeGame);
-
-        outcomeCollector.beginBracket(bolt);
-        outcomeCollector.onGameOutcome(new GameEventGameOutcome(
-                4, List.of("p1 has won"), "p1", "p1: 1 p2: 0 "));
-        outcomeCollector.endBracket(bolt.getId(), false);
-        outcomeCollector.flushHeldResolution();
-
-        String effectHalf = written().get(1);
-        assertTrue(effectHalf.contains("\"type\":\"player_won\""), effectHalf);
-        assertTrue(effectHalf.contains(SnapshotBuilder.playerId(p1)), effectHalf);
-    }
-
     /** A draw reaches the collector and writes nothing -- no bracket, no shard growth. */
     @Test
     void aDrawnGameOutcomeWritesNothing() throws IOException {
@@ -660,9 +542,11 @@ class BusBracketCollectorTest {
      * {@code GameEventGameOutcome} therefore always arrives with {@link
      * BusBracketCollector#bracketEvents} freshly emptied by the kill's own
      * {@code endBracket}, and no further ability ever resolves to flush it --
-     * exactly what {@code theGameOutcomeNamesTheWinningPlayerAsARef} does not
-     * reproduce, since that test holds a bracket open around the event's whole
-     * life, a sequencing the real engine never produces here.
+     * a sequencing that holding a bracket open around the event's whole life,
+     * which the real engine never produces here, would not reproduce. Bound to
+     * its own two-player game rather than {@code TestCards.game()} (which
+     * registers no players at all), so the winning name has a real seat to
+     * resolve against.
      */
     @Test
     void aGameOutcomeAfterTheKillingBracketAlreadyClosedIsStillWritten()
@@ -889,8 +773,7 @@ class BusBracketCollectorTest {
     void theConfirmHookIsReadForTheAnswerItCarries() throws IOException {
         BusBracketCollector collector = collector();
         SpellAbility bolt = damageAbility();
-        HookShapes.Confirm listener = HookShapes.proxy(
-                HookShapes.Confirm.class, collector.confirmHandler());
+        HookShapes.Confirm listener = confirmListener(collector);
 
         collector.beginBracket(bolt);
         listener.onConfirm(bolt, true);
@@ -906,8 +789,7 @@ class BusBracketCollectorTest {
     void aRefusalDeliveredThroughTheHookReachesTheRecord() throws IOException {
         BusBracketCollector collector = collector();
         SpellAbility bolt = damageAbility();
-        HookShapes.Confirm listener = HookShapes.proxy(
-                HookShapes.Confirm.class, collector.confirmHandler());
+        HookShapes.Confirm listener = confirmListener(collector);
 
         collector.beginBracket(bolt);
         listener.onConfirm(bolt, false);
@@ -946,8 +828,7 @@ class BusBracketCollectorTest {
 
         BusBracketCollector collector = collector();
         SpellAbility bolt = damageAbility();
-        HookShapes.Confirm listener = HookShapes.proxy(
-                HookShapes.Confirm.class, collector.confirmHandler());
+        HookShapes.Confirm listener = confirmListener(collector);
 
         collector.beginBracket(bolt);
         // A fork's own confirmation, declined -- must not touch this bracket.

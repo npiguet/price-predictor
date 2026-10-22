@@ -15,6 +15,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.EnumSource;
 
 import java.util.List;
@@ -187,14 +188,20 @@ class ApiEventsTest {
      * AddTurnEffect.resolve} iterates {@code getTargetPlayers(sa)}, and
      * {@code ValidTgts$ Opponent} guarantees the targeted player is never the
      * activator: this is the engine's own common case, not an edge one.
+     * {@code SkipTurnEffect} and {@code SkipPhaseEffect} resolve the same way,
+     * so they share the rule shape and this test.
      */
-    @Test
-    void anExtraTurnNamesTheTargetedPlayerNotTheActivator() {
-        SpellAbility sa = AbilityFactory.getAbility(
-                "SP$ AddTurn | ValidTgts$ Opponent | NumTurns$ 1",
-                TestCards.build("Grizzly Bears"));
-        Player activator = new Player("activator", TestCards.game(), 91001);
-        Player targeted = new Player("targeted", TestCards.game(), 91002);
+    @ParameterizedTest(name = "{0}")
+    @CsvSource(delimiter = ';', value = {
+            "an extra turn;     SP$ AddTurn | ValidTgts$ Opponent | NumTurns$ 1;           91001",
+            "a skipped turn;    SP$ SkipTurn | ValidTgts$ Opponent | NumTurns$ 1;          91201",
+            "a skipped phase;   SP$ SkipPhase | ValidTgts$ Opponent | Phase$ BeginCombat;  91301",
+    })
+    void aTurnOrPhaseEffectNamesTheTargetedPlayerNotTheActivator(
+            String ignoredCase, String script, int firstPlayerId) {
+        SpellAbility sa = AbilityFactory.getAbility(script, TestCards.build("Grizzly Bears"));
+        Player activator = new Player("activator", TestCards.game(), firstPlayerId);
+        Player targeted = new Player("targeted", TestCards.game(), firstPlayerId + 1);
         sa.setActivatingPlayer(activator);
         sa.resetTargets();
         sa.getTargets().add(targeted);
@@ -225,40 +232,6 @@ class ApiEventsTest {
         assertEquals(
                 List.of(SnapshotBuilder.playerId(first), SnapshotBuilder.playerId(second)),
                 event.subjects());
-    }
-
-    /** Same rule shape as {@code AddTurn}; {@code SkipTurnEffect.resolve} matches it. */
-    @Test
-    void aSkippedTurnNamesTheTargetedPlayerNotTheActivator() {
-        SpellAbility sa = AbilityFactory.getAbility(
-                "SP$ SkipTurn | ValidTgts$ Opponent | NumTurns$ 1",
-                TestCards.build("Grizzly Bears"));
-        Player activator = new Player("activator", TestCards.game(), 91201);
-        Player targeted = new Player("targeted", TestCards.game(), 91202);
-        sa.setActivatingPlayer(activator);
-        sa.resetTargets();
-        sa.getTargets().add(targeted);
-
-        EffectEvent event = after(sa, before(sa));
-
-        assertEquals(List.of(SnapshotBuilder.playerId(targeted)), event.subjects());
-    }
-
-    /** Same rule shape again; {@code SkipPhaseEffect.resolve} matches it too. */
-    @Test
-    void aSkippedPhaseNamesTheTargetedPlayerNotTheActivator() {
-        SpellAbility sa = AbilityFactory.getAbility(
-                "SP$ SkipPhase | ValidTgts$ Opponent | Phase$ BeginCombat",
-                TestCards.build("Grizzly Bears"));
-        Player activator = new Player("activator", TestCards.game(), 91301);
-        Player targeted = new Player("targeted", TestCards.game(), 91302);
-        sa.setActivatingPlayer(activator);
-        sa.resetTargets();
-        sa.getTargets().add(targeted);
-
-        EffectEvent event = after(sa, before(sa));
-
-        assertEquals(List.of(SnapshotBuilder.playerId(targeted)), event.subjects());
     }
 
     /**
@@ -794,61 +767,31 @@ class ApiEventsTest {
     // ── replacement_applied ───────────────────────────────────────────────
 
     /**
-     * The card whose replacement applied -- the host, not the activator (no
-     * activator is even set here, which is the point: this rule reads
-     * nothing but the host).
+     * Every {@code Replace*} API shares one emitter, which names the card whose
+     * replacement applied -- the host, not the activator (no activator is even
+     * set here, which is the point: this rule reads nothing but the host). This
+     * pins that each of the six is actually keyed in {@code ApiEvents.RULES}
+     * rather than trusting the six hand-written entries agree with each other;
+     * a missing or misspelled key would make {@code ruleFor} return null and
+     * fail with a {@code NullPointerException} on {@code event.type()}.
      */
-    @Test
-    void aReplaceCounterNamesTheHostCard() {
+    @ParameterizedTest(name = "{0}")
+    @CsvSource(delimiter = ';', value = {
+            "ReplaceEffect;      VarName$ DamageAmount | VarValue$ X",
+            "ReplaceCounter;     ValidCounterType$ ENERGY | ChooseCounter$ True | Amount$ 1",
+            "ReplaceDamage;      Amount$ 0",
+            "ReplaceMana;        ReplaceType$ C",
+            "ReplaceSplitDamage; DamageTarget$ Remembered | VarName$ Y",
+            "ReplaceToken;       Type$ ReplaceToken | TokenScript$ c_a_clue_draw",
+    })
+    void aReplaceApiNamesTheHostCardAsReplacementApplied(String api, String minimalParams) {
         SpellAbility sa = AbilityFactory.getAbility(
-                "DB$ ReplaceCounter | ValidCounterType$ ENERGY | ChooseCounter$ True | Amount$ 1",
-                TestCards.build("Grizzly Bears"));
+                "DB$ " + api + " | " + minimalParams, TestCards.build("Grizzly Bears"));
 
         EffectEvent event = after(sa, before(sa));
 
         assertEquals(EffectEvent.REPLACEMENT_APPLIED, event.type());
         assertEquals(List.of(SnapshotBuilder.entityId(sa.getHostCard())), event.subjects());
-    }
-
-    @Test
-    void aReplaceDamageNamesTheHostCard() {
-        SpellAbility sa = AbilityFactory.getAbility(
-                "DB$ ReplaceDamage | Amount$ 0", TestCards.build("Grizzly Bears"));
-
-        EffectEvent event = after(sa, before(sa));
-
-        assertEquals(EffectEvent.REPLACEMENT_APPLIED, event.type());
-        assertEquals(List.of(SnapshotBuilder.entityId(sa.getHostCard())), event.subjects());
-    }
-
-    /**
-     * All six {@code Replace*} APIs share one emitter; this pins that every
-     * one of them is actually keyed in {@code ApiEvents.RULES} rather than
-     * trusting the six hand-written entries agree with each other. A missing
-     * or misspelled key here would make {@code ruleFor} return null and this
-     * would fail with a {@code NullPointerException} on {@code event.type()}.
-     */
-    @Test
-    void allSixReplaceApisMapToReplacementApplied() {
-        Map<String, String> minimalParams = new TreeMap<>();
-        minimalParams.put("ReplaceEffect", "VarName$ DamageAmount | VarValue$ X");
-        minimalParams.put("ReplaceCounter", "ValidCounterType$ ENERGY | ChooseCounter$ True | Amount$ 1");
-        minimalParams.put("ReplaceDamage", "Amount$ 0");
-        minimalParams.put("ReplaceMana", "ReplaceType$ C");
-        minimalParams.put("ReplaceSplitDamage", "DamageTarget$ Remembered | VarName$ Y");
-        minimalParams.put("ReplaceToken", "Type$ ReplaceToken | TokenScript$ c_a_clue_draw");
-
-        for (Map.Entry<String, String> entry : minimalParams.entrySet()) {
-            SpellAbility sa = AbilityFactory.getAbility(
-                    "DB$ " + entry.getKey() + " | " + entry.getValue(),
-                    TestCards.build("Grizzly Bears"));
-
-            EffectEvent event = after(sa, before(sa));
-
-            assertEquals(EffectEvent.REPLACEMENT_APPLIED, event.type(), entry.getKey());
-            assertEquals(List.of(SnapshotBuilder.entityId(sa.getHostCard())), event.subjects(),
-                    entry.getKey());
-        }
     }
 
     // ── monarch_changed ────────────────────────────────────────────────────
@@ -900,6 +843,15 @@ class ApiEventsTest {
 
     // ── ring_tempts ────────────────────────────────────────────────────────
 
+    /**
+     * With no creature to choose, {@code RingTemptsYouEffect.resolve()} still
+     * calls {@code setRingBearer(null)}, which {@code Player.setRingBearer}
+     * makes a no-op (it returns early on null) -- so an existing Ring-bearer
+     * survives a re-temptation and is reported again as the second subject.
+     * This end state is therefore also that shape's. The plausible wrong
+     * implementation this falsifies is one that reads the no-op as an
+     * unconditional clear.
+     */
     @Test
     void ringTemptsNamesTheActivatorAndTheChosenRingBearer() {
         SpellAbility sa = AbilityFactory.getAbility("DB$ RingTemptsYou", TestCards.build("Grizzly Bears"));
@@ -928,7 +880,7 @@ class ApiEventsTest {
      * demonstrate -- {@code getRingBearer()} was null before {@code resolve()}
      * ran and stays null after a no-op call. It does NOT demonstrate "no
      * creatures clears an existing Ring-bearer", which is false; see {@link
-     * #ringTemptsWithNoCreaturesKeepsTheExistingRingBearer} for the shape a
+     * #ringTemptsNamesTheActivatorAndTheChosenRingBearer} for the shape a
      * fresh player cannot reach.
      */
     @Test
@@ -943,39 +895,27 @@ class ApiEventsTest {
         assertEquals(List.of(SnapshotBuilder.playerId(activator)), event.subjects());
     }
 
-    /**
-     * The shape the previous test's fresh {@code Player} cannot reach (fix
-     * round 1, item 4): a player who already has a Ring-bearer, tempted again
-     * with no creatures to choose from. {@code RingTemptsYouEffect.resolve()}
-     * still calls {@code setRingBearer(null)}, and {@code
-     * Player.setRingBearer}'s null check makes that call a no-op -- the old
-     * Ring-bearer survives, and this rule's post-resolution read of {@code
-     * getRingBearer()} reports it again as the second subject. The plausible
-     * wrong implementation this falsifies is one written from the ORIGINAL,
-     * incorrect javadoc above (an unconditional clear): it would report only
-     * the activator here, the same as the true empty-candidate-list case,
-     * and this is the one test in the suite that can tell the two apart.
-     */
-    @Test
-    void ringTemptsWithNoCreaturesKeepsTheExistingRingBearer() {
-        SpellAbility sa = AbilityFactory.getAbility("DB$ RingTemptsYou", TestCards.build("Grizzly Bears"));
-        Player activator = new Player("tempted-keeps-bearer", TestCards.game(), 93103);
-        sa.setActivatingPlayer(activator);
-        Card existingBearer = TestCards.build("Runeclaw Bear");
-        activator.setRingBearer(existingBearer);
+    // ── removed_from_combat: RemoveFromCombat ───────────────────────────────
 
-        // What RingTemptsYouEffect.resolve() calls regardless of whether a
-        // new Ring-bearer was available -- a no-op here, per Player.java.
-        activator.setRingBearer(null);
-        EffectEvent event = after(sa, before(sa));
-
-        assertEquals(EffectEvent.RING_TEMPTS, event.type());
-        assertEquals(
-                List.of(SnapshotBuilder.playerId(activator), SnapshotBuilder.entityId(existingBearer)),
-                event.subjects());
+    /** A combat on {@code game} in which every one of {@code attackers} attacks {@code defender}. */
+    private static Combat combatOf(Game game, int attackerControllerId, Player defender, Card... attackers) {
+        Combat combat = new Combat(new Player("attacker", game, attackerControllerId));
+        game.getPhaseHandler().setCombat(combat);
+        for (Card attacker : attackers) {
+            combat.addAttacker(attacker, defender);
+        }
+        return combat;
     }
 
-    // ── removed_from_combat: RemoveFromCombat ───────────────────────────────
+    /** {@code script} built on {@code host}, with exactly {@code targets} chosen. */
+    private static SpellAbility targeting(String script, Card host, Card... targets) {
+        SpellAbility sa = AbilityFactory.getAbility(script, host);
+        sa.resetTargets();
+        for (Card target : targets) {
+            sa.getTargets().add(target);
+        }
+        return sa;
+    }
 
     /**
      * Two real attacking creatures, both removed -- not a single-entry
@@ -985,20 +925,10 @@ class ApiEventsTest {
     @Test
     void removeFromCombatNamesEveryCreatureActuallyRemoved() {
         Game game = TestBoard.anotherGame();
-        Player attackerCtrl = new Player("attacker", game, 93201);
-        Player defender = new Player("defender", game, 93202);
         Card c1 = TestBoard.cardIn(game, "Grizzly Bears");
         Card c2 = TestBoard.cardIn(game, "Runeclaw Bear");
-        Combat combat = new Combat(attackerCtrl);
-        game.getPhaseHandler().setCombat(combat);
-        combat.addAttacker(c1, defender);
-        combat.addAttacker(c2, defender);
-
-        SpellAbility sa = AbilityFactory.getAbility(
-                "DB$ RemoveFromCombat | ValidTgts$ Creature", c1);
-        sa.resetTargets();
-        sa.getTargets().add(c1);
-        sa.getTargets().add(c2);
+        Combat combat = combatOf(game, 93201, new Player("defender", game, 93202), c1, c2);
+        SpellAbility sa = targeting("DB$ RemoveFromCombat | ValidTgts$ Creature", c1, c1, c2);
 
         Object memo = before(sa);
         combat.removeFromCombat(c1);
@@ -1020,20 +950,10 @@ class ApiEventsTest {
     @Test
     void removeFromCombatNamesOnlyTheCreatureThatWasActuallyRemoved() {
         Game game = TestBoard.anotherGame();
-        Player attackerCtrl = new Player("attacker", game, 93203);
-        Player defender = new Player("defender", game, 93204);
         Card c1 = TestBoard.cardIn(game, "Grizzly Bears");
         Card c2 = TestBoard.cardIn(game, "Runeclaw Bear");
-        Combat combat = new Combat(attackerCtrl);
-        game.getPhaseHandler().setCombat(combat);
-        combat.addAttacker(c1, defender);
-        combat.addAttacker(c2, defender);
-
-        SpellAbility sa = AbilityFactory.getAbility(
-                "DB$ RemoveFromCombat | ValidTgts$ Creature", c1);
-        sa.resetTargets();
-        sa.getTargets().add(c1);
-        sa.getTargets().add(c2);
+        Combat combat = combatOf(game, 93203, new Player("defender", game, 93204), c1, c2);
+        SpellAbility sa = targeting("DB$ RemoveFromCombat | ValidTgts$ Creature", c1, c1, c2);
 
         Object memo = before(sa);
         combat.removeFromCombat(c1);
@@ -1047,89 +967,41 @@ class ApiEventsTest {
     // ── removed_from_combat: ChangeCombatants ───────────────────────────────
 
     /**
-     * {@code addToCombat}'s reselection branch calls {@code
+     * {@code portal_manipulator.txt} is {@code DB$ ChangeCombatants |
+     * ValidTgts$ Creature.attacking | TargetMin$ 0 | TargetMax$ MaxTargets} --
+     * any number of attackers, not just one, so two are reselected here: a
+     * single-entry fixture would not tell "every attacker" from "the first".
+     * The plausible wrong implementation this falsifies is a {@code
+     * reselectedAttackers} that returns on the first matching entry instead of
+     * continuing the loop -- Task 6's shipped defect shape, one API over.
+     *
+     * <p>{@code addToCombat}'s reselection branch calls {@code
      * combat.removeFromCombat(c)} immediately before re-adding the same
      * creature against the new defender (SpellAbilityEffect.java:762) --
      * simulated here with the same two public {@code Combat} calls, not a
      * hand-rolled approximation.
      *
      * <p>{@code ValidTgts$ Creature.attacking} on the ability text, and a
-     * host distinct from the attacker, are load-bearing, not decoration
-     * (fix round 1, item 3): {@code SpellAbility.usesTargeting()} is exactly
-     * {@code targetRestrictions != null}, which {@code AbilityFactory} only
-     * sets when the script declares {@code ValidTgts$}. Without it, {@code
+     * host distinct from the attackers, are load-bearing, not decoration:
+     * {@code SpellAbility.usesTargeting()} is exactly {@code
+     * targetRestrictions != null}, which {@code AbilityFactory} only sets when
+     * the script declares {@code ValidTgts$}. Without it, {@code
      * affectedCards} falls through to its {@code Defined$} branch (default
-     * {@code "Self"} -- the host), and the very first version of this test
-     * built the ability against the attacker itself, so the manually-added
-     * target and the host-fallback named the same card and the test passed
-     * for a reason that had nothing to do with targeting. Caught by the
-     * multi-attacker fixture below, which a same-card host cannot satisfy
-     * even by accident.
-     */
-    @Test
-    void changeCombatantsNamesTheReselectedAttacker() {
-        Game game = TestBoard.anotherGame();
-        Player attackerCtrl = new Player("attacker", game, 93301);
-        Player oldDefender = new Player("old-defender", game, 93302);
-        Player newDefender = new Player("new-defender", game, 93303);
-        Card host = TestBoard.cardIn(game, "Mountain");
-        Card c = TestBoard.cardIn(game, "Grizzly Bears");
-        Combat combat = new Combat(attackerCtrl);
-        game.getPhaseHandler().setCombat(combat);
-        combat.addAttacker(c, oldDefender);
-
-        SpellAbility sa = AbilityFactory.getAbility(
-                "DB$ ChangeCombatants | ValidTgts$ Creature.attacking | Attacking$ True", host);
-        sa.resetTargets();
-        sa.getTargets().add(c);
-
-        Object memo = before(sa);
-        combat.removeFromCombat(c);
-        combat.addAttacker(c, newDefender);
-        EffectEvent event = after(sa, memo);
-
-        assertEquals(EffectEvent.REMOVED_FROM_COMBAT, event.type());
-        assertEquals(List.of(SnapshotBuilder.entityId(c)), event.subjects());
-    }
-
-    /**
-     * {@code portal_manipulator.txt} is {@code DB$ ChangeCombatants |
-     * ValidTgts$ Creature.attacking | TargetMin$ 0 | TargetMax$ MaxTargets} --
-     * any number of attackers, not just one. Both existing {@code
-     * ChangeCombatants} tests above used a single attacker (fix round 1,
-     * item 3); this is the multi-member fixture {@code
-     * removeFromCombatNamesEveryCreatureActuallyRemoved} already has and this
-     * API's own sibling rule lacked. The plausible wrong implementation this
-     * falsifies is a {@code reselectedAttackers} that returns on the first
-     * matching entry instead of continuing the loop -- exactly Task 6's
-     * shipped defect shape, one API over. It is also what actually caught the
-     * host/target coincidence documented on the single-attacker test above:
-     * this test failed with {@code expected: <[E1, E2]> but was: <[E1]>}
-     * against the ORIGINAL fixture (ability built against the first attacker,
-     * no {@code ValidTgts$}) before that fixture was corrected, because
-     * {@code affectedCards} was silently reading {@code Defined$ Self} --
-     * the ability's own host, {@code c1} -- instead of the two manually-added
-     * targets.
+     * {@code "Self"} -- the host), so a host that is itself an attacker would
+     * make the host-fallback and the manually-added targets name the same card
+     * and the test pass for a reason that had nothing to do with targeting.
      */
     @Test
     void changeCombatantsNamesEveryReselectedAttackerNotJustTheFirst() {
         Game game = TestBoard.anotherGame();
-        Player attackerCtrl = new Player("attacker", game, 93306);
         Player oldDefender = new Player("old-defender", game, 93307);
         Player newDefender = new Player("new-defender", game, 93308);
         Card host = TestBoard.cardIn(game, "Mountain");
         Card c1 = TestBoard.cardIn(game, "Grizzly Bears");
         Card c2 = TestBoard.cardIn(game, "Runeclaw Bear");
-        Combat combat = new Combat(attackerCtrl);
-        game.getPhaseHandler().setCombat(combat);
-        combat.addAttacker(c1, oldDefender);
-        combat.addAttacker(c2, oldDefender);
-
-        SpellAbility sa = AbilityFactory.getAbility(
-                "DB$ ChangeCombatants | ValidTgts$ Creature.attacking | Attacking$ True", host);
-        sa.resetTargets();
-        sa.getTargets().add(c1);
-        sa.getTargets().add(c2);
+        Combat combat = combatOf(game, 93306, oldDefender, c1, c2);
+        SpellAbility sa = targeting(
+                "DB$ ChangeCombatants | ValidTgts$ Creature.attacking | Attacking$ True", host, c1, c2);
 
         Object memo = before(sa);
         combat.removeFromCombat(c1);
@@ -1154,18 +1026,11 @@ class ApiEventsTest {
     @Test
     void changeCombatantsNamesNoOneWhenTheDefenderDidNotChange() {
         Game game = TestBoard.anotherGame();
-        Player attackerCtrl = new Player("attacker", game, 93304);
-        Player defender = new Player("defender", game, 93305);
         Card host = TestBoard.cardIn(game, "Mountain");
         Card c = TestBoard.cardIn(game, "Grizzly Bears");
-        Combat combat = new Combat(attackerCtrl);
-        game.getPhaseHandler().setCombat(combat);
-        combat.addAttacker(c, defender);
-
-        SpellAbility sa = AbilityFactory.getAbility(
-                "DB$ ChangeCombatants | ValidTgts$ Creature.attacking | Attacking$ True", host);
-        sa.resetTargets();
-        sa.getTargets().add(c);
+        combatOf(game, 93304, new Player("defender", game, 93305), c);
+        SpellAbility sa = targeting(
+                "DB$ ChangeCombatants | ValidTgts$ Creature.attacking | Attacking$ True", host, c);
 
         Object memo = before(sa);
         // Nothing changes: declined, or reselected the same defender.
