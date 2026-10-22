@@ -2,7 +2,6 @@ package com.pricepredictor.connector.effects;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Objects;
 import java.util.function.Predicate;
 
 /**
@@ -27,7 +26,7 @@ final class ProbeQueue {
     }
 
     /** The damage step of the oldest branch waiting, which comes first. */
-    String oldestSubstep() {
+    DamageStep oldestSubstep() {
         return held.get(0).substep();
     }
 
@@ -35,13 +34,13 @@ final class ProbeQueue {
      * Take the branches of one damage step out of the queue, keeping the rest
      * in order.
      */
-    List<ForkCollector.HeldProbe> take(String substep) {
-        return removeIf(branch -> Objects.equals(branch.substep(), substep));
+    List<ForkCollector.HeldProbe> take(DamageStep substep) {
+        return removeIf(branch -> branch.substep() == substep);
     }
 
     /** Drop the branches of every other damage step, and say how many went. */
-    int discardOtherThan(String substep) {
-        return removeIf(branch -> !Objects.equals(branch.substep(), substep)).size();
+    int discardOtherThan(DamageStep substep) {
+        return removeIf(branch -> branch.substep() != substep).size();
     }
 
     private List<ForkCollector.HeldProbe> removeIf(Predicate<ForkCollector.HeldProbe> test) {

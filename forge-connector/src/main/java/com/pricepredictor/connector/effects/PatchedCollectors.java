@@ -1043,8 +1043,7 @@ public final class PatchedCollectors implements AutoCloseable {
             // survived and were completed against the *regular* step's record.
             return;
         }
-        String substep = step.wireName();
-        discardStaleProbes(substep);
+        discardStaleProbes(step);
         // One keyword per game rather than whichever the battlefield order
         // reaches first. With eight probed keywords and a budget of two, the
         // first corpus probed lifelink and trample eight times each and
@@ -1052,11 +1051,11 @@ public final class PatchedCollectors implements AutoCloseable {
         // gate 2 is a per-keyword decision, so an unprobed keyword gets no
         // check whatever.
         String focus = probeFocus();
-        if (probeCombatants(focus, firstStrike, substep) == 0) {
+        if (probeCombatants(focus, step) == 0) {
             // The focus is a rotation, not a restriction: a game whose combat
             // carries none of it still spends its budget rather than saving it
             // for a keyword that is not there.
-            probeCombatants(null, firstStrike, substep);
+            probeCombatants(null, step);
         }
     }
 
@@ -1086,7 +1085,7 @@ public final class PatchedCollectors implements AutoCloseable {
      * @param focus the one keyword to spend on, or null for any probed one
      * @return how many branches were taken
      */
-    private int probeCombatants(String focus, boolean firstStrike, String substep) {
+    private int probeCombatants(String focus, DamageStep step) {
         int taken = 0;
         for (Card card : game.getCardsIn(ZoneType.Battlefield)) {
             if (!inCombat(card)) {
@@ -1107,7 +1106,7 @@ public final class PatchedCollectors implements AutoCloseable {
                     continue;
                 }
                 ForkCollector.HeldProbe held =
-                        forks.probe(original, card, firstStrike);
+                        forks.probe(original, card, step);
                 if (held != null) {
                     hold(held);
                     taken++;
@@ -1156,7 +1155,7 @@ public final class PatchedCollectors implements AutoCloseable {
      * steps happen, and a first-strike branch is therefore completed against the
      * first-strike record and not against the regular one that follows it.
      * Naming the substep outright is one parameter better and is what
-     * {@link #writeHeldProbes(String, String)} is for.
+     * {@link #writeHeldProbes(String, DamageStep)} is for.
      */
     public void writeHeldProbes(String combatRecordId) {
         if (forks == null || heldProbes.isEmpty()) {
@@ -1174,7 +1173,7 @@ public final class PatchedCollectors implements AutoCloseable {
      * against the regular step's record, so gate 2's real-versus-fork
      * difference compared a step that did not happen with one that did.
      */
-    public void writeHeldProbes(String combatRecordId, String substep) {
+    public void writeHeldProbes(String combatRecordId, DamageStep substep) {
         if (forks == null || heldProbes.isEmpty()) {
             return;
         }
@@ -1191,7 +1190,7 @@ public final class PatchedCollectors implements AutoCloseable {
      * fork's budget is already spent either way, and a mispaired counterfactual
      * is read as a difference the keyword caused.
      */
-    public int discardStaleProbes(String substep) {
+    public int discardStaleProbes(DamageStep substep) {
         return heldProbes.discardOtherThan(substep);
     }
 

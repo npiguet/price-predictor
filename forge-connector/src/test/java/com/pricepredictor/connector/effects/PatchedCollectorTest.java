@@ -331,7 +331,7 @@ class PatchedCollectorTest {
 
     // ── held probe branches ────────────────────────────────────────────
 
-    private static ForkCollector.HeldProbe branch(String substep) {
+    private static ForkCollector.HeldProbe branch(DamageStep substep) {
         return new ForkCollector.HeldProbe(
                 "trample", "E1", "{}", List.of(), "P0", "\"combat\":{}", substep,
                 ForkCollector.TURN_UNKNOWN);
@@ -361,12 +361,12 @@ class PatchedCollectorTest {
     void aBranchIsCompletedOnlyAgainstItsOwnDamageStep() throws Exception {
         try (RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1")) {
             PatchedCollectors collector = withForks(writer);
-            collector.hold(branch(DamageStep.FIRST_STRIKE.wireName()));
-            collector.hold(branch(DamageStep.REGULAR.wireName()));
+            collector.hold(branch(DamageStep.FIRST_STRIKE));
+            collector.hold(branch(DamageStep.REGULAR));
 
-            collector.writeHeldProbes("run.0-l1.9", DamageStep.REGULAR.wireName());
+            collector.writeHeldProbes("run.0-l1.9", DamageStep.REGULAR);
             // The first-strike branch must still be waiting for its own step.
-            collector.writeHeldProbes("run.0-l1.10", DamageStep.FIRST_STRIKE.wireName());
+            collector.writeHeldProbes("run.0-l1.10", DamageStep.FIRST_STRIKE);
         }
 
         List<String> lines = ShardRun.readShard(
@@ -381,13 +381,13 @@ class PatchedCollectorTest {
     void theOldestHeldStepIsTheOneACombatRecordCompletes() throws Exception {
         try (RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1")) {
             PatchedCollectors collector = withForks(writer);
-            collector.hold(branch(DamageStep.FIRST_STRIKE.wireName()));
-            collector.hold(branch(DamageStep.REGULAR.wireName()));
+            collector.hold(branch(DamageStep.FIRST_STRIKE));
+            collector.hold(branch(DamageStep.REGULAR));
 
             collector.writeHeldProbes("run.0-l1.9");
             // One branch is left, and it is the regular step's.
-            collector.writeHeldProbes("run.0-l1.10", DamageStep.FIRST_STRIKE.wireName());
-            collector.writeHeldProbes("run.0-l1.11", DamageStep.REGULAR.wireName());
+            collector.writeHeldProbes("run.0-l1.10", DamageStep.FIRST_STRIKE);
+            collector.writeHeldProbes("run.0-l1.11", DamageStep.REGULAR);
         }
 
         List<String> lines = ShardRun.readShard(
@@ -402,10 +402,10 @@ class PatchedCollectorTest {
     void aBranchFromAStepThatWroteNoRecordIsDropped() throws Exception {
         try (RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1")) {
             PatchedCollectors collector = withForks(writer);
-            collector.hold(branch(DamageStep.FIRST_STRIKE.wireName()));
+            collector.hold(branch(DamageStep.FIRST_STRIKE));
 
-            assertEquals(1, collector.discardStaleProbes(DamageStep.REGULAR.wireName()));
-            collector.writeHeldProbes("run.0-l1.9", DamageStep.FIRST_STRIKE.wireName());
+            assertEquals(1, collector.discardStaleProbes(DamageStep.REGULAR));
+            collector.writeHeldProbes("run.0-l1.9", DamageStep.FIRST_STRIKE);
         }
 
         assertFalse(Files.exists(tempDir.resolve("run.0-l1" + RecordShardWriter.SUFFIX)));
