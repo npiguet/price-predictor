@@ -257,11 +257,7 @@ public final class PatchedCollectors implements AutoCloseable {
      * argument array in the compiler's place.
      */
     InvocationHandler rewriteHandler() {
-        return (proxy, method, args) -> {
-            if (!"onReplacement".equals(method.getName()) || args == null
-                    || args.length < 3) {
-                return null;
-            }
+        return PatchHooks.REPLACEMENT_LISTENER.listener((callback, args) -> {
             // A fork's own replacements resolve through this same JVM-static
             // hook (ForkCollector.forceResolution
             // runs the fork's forced ability through the real resolution
@@ -270,20 +266,18 @@ public final class PatchedCollectors implements AutoCloseable {
             // CardTraitBase with a real host -- so a positively-identified
             // other game is dropped; anything this cannot identify is left
             // alone rather than newly dropped.
-            if (args[0] instanceof CardTraitBase trait && !belongsToLiveGame(trait)) {
-                return null;
+            CardTraitBase trait = args.get(0, CardTraitBase.class);
+            if (trait != null && !belongsToLiveGame(trait)) {
+                return;
             }
             EffectRecord record = rewriteRecord(
-                    args[0], args[1], args[2],
-                    args.length > 3 ? args[3] : null,
-                    args.length > 4 ? args[4] : null);
+                    args.get(0), args.get(1), args.get(2), args.optional(3), args.optional(4));
             if (!allowDistinctRecord(
                     RecordKind.REWRITE.wireName(), record.payloadJson(), record.stateJson())) {
-                return null;
+                return;
             }
             emit(record);
-            return null;
-        };
+        });
     }
 
     /**
@@ -370,41 +364,37 @@ public final class PatchedCollectors implements AutoCloseable {
      * a synthesized argument array.
      */
     InvocationHandler triggerFireHandler() {
-        return (proxy, method, args) -> {
-            if (!"onConditionEvaluated".equals(method.getName()) || args == null
-                    || args.length < 3) {
-                return null;
-            }
+        return PatchHooks.TRIGGER_LISTENER.listener((callback, args) -> {
             // Checked first, before this evaluation can spend any of the mode's negative-sampling budget (offer/keep
             // below) -- a fork's trigger evaluations must not skew the live
             // game's ratio bookkeeping any more than they must reach its
             // shard. args[0] is declared Trigger on Forge's side, always a
             // CardTraitBase with a real host; anything this cannot identify
             // is left alone rather than newly dropped.
-            if (args[0] instanceof CardTraitBase trait && !belongsToLiveGame(trait)) {
-                return null;
+            CardTraitBase trait = args.get(0, CardTraitBase.class);
+            if (trait != null && !belongsToLiveGame(trait)) {
+                return;
             }
-            boolean fired = Boolean.TRUE.equals(args[2]);
-            String mode = RunParamNormalizer.modeOf(args[0]);
+            boolean fired = Boolean.TRUE.equals(args.get(2));
+            String mode = RunParamNormalizer.modeOf(args.get(0));
             if (mode == null) {
                 mode = RunParamNormalizer.UNKNOWN_MODE;
             }
             if (!offerTriggerEvaluation(mode, fired)) {
-                return null;
+                return;
             }
-            EffectRecord record = triggerRecord(args[0], args[1], fired);
+            EffectRecord record = triggerRecord(args.get(0), args.get(1), fired);
             if (!allowDistinctRecord(
                     RecordKind.TRIGGER.wireName(), record.payloadJson(), record.stateJson())
                     || !allowTriggerLine(record.abilityJson(), fired)) {
-                return null;
+                return;
             }
             // Counted only for a record that is actually written, so a
             // suppressed duplicate does not spend the negatives' quota and the
             // ratio holds over what reaches the shard.
             keepTriggerEvaluation(mode, fired);
             emit(record);
-            return null;
-        };
+        });
     }
 
     /** Negatives kept per positive kept, per trigger mode. */
@@ -576,11 +566,7 @@ public final class PatchedCollectors implements AutoCloseable {
      * a synthesized argument array.
      */
     InvocationHandler playabilityHandler() {
-        return (proxy, method, args) -> {
-            if (!"onCandidate".equals(method.getName()) || args == null
-                    || args.length < 1) {
-                return null;
-            }
+        return PatchHooks.PLAYABILITY_LISTENER.listener((callback, args) -> {
             // Checked before the sampler draw below, not after -- a fork's own candidates are
             // evaluated for playability too (ForkCollector.forceResolution's
             // chooseTargets, and GameSimulator's own AI decisions, both ask the
@@ -591,15 +577,13 @@ public final class PatchedCollectors implements AutoCloseable {
             // exactly the cost triggerFireHandler's own identity check already
             // avoids by running first. A null candidate is let through: its
             // record names no ability either way.
-            SpellAbility candidate =
-                    args[0] instanceof SpellAbility sa ? sa : null;
+            SpellAbility candidate = args.get(0, SpellAbility.class);
             if (candidate != null && !belongsToLiveGame(candidate)) {
-                return null;
+                return;
             }
             recordCandidate(deciderOf(candidate), candidate,
                     () -> PlayabilityVerdict.of(candidate));
-            return null;
-        };
+        });
     }
 
     /**
@@ -757,34 +741,28 @@ public final class PatchedCollectors implements AutoCloseable {
      * test calls it with a synthesized argument array.
      */
     InvocationHandler combatLegalityHandler() {
-        return (proxy, method, args) -> {
-            if (args == null) {
-                return null;
-            }
+        return PatchHooks.COMBAT_LISTENER.listener((callback, args) -> {
             // No CardTraitBase here: the defender or attacker is the
             // GameEntity itself, so identity comes straight off it rather
             // than through a host card. A wrong-typed or null entity is left
             // to recordAttackers/recordBlockers, which tolerate both.
-            Player decider = args.length > 0 && args[0] instanceof Player player ? player : null;
-            if ("onAttackersDeclarable".equals(method.getName()) && args.length >= 4) {
-                if (!(args[1] instanceof GameEntity defender) || belongsToLiveGame(defender)) {
-                    recordAttackers(
-                            decider,
-                            args[1] instanceof GameEntity entity ? entity : null,
-                            asCards(args[2]), asCards(args[3]));
-                }
-            } else if ("onBlockersDeclarable".equals(method.getName())
-                    && args.length >= 5) {
-                if (!(args[1] instanceof GameEntity attacker) || belongsToLiveGame(attacker)) {
+            Player decider = args.get(0, Player.class);
+            GameEntity declaredAgainst = args.get(1, GameEntity.class);
+            if (declaredAgainst != null && !belongsToLiveGame(declaredAgainst)) {
+                return;
+            }
+            switch (callback) {
+                case ON_ATTACKERS_DECLARABLE -> recordAttackers(
+                        decider, declaredAgainst, asCards(args.get(2)), asCards(args.get(3)));
+                case ON_BLOCKERS_DECLARABLE -> {
+                    Integer min = args.get(4, Integer.class);
                     recordBlockers(
-                            decider,
-                            args[1] instanceof Card attackerCard ? attackerCard : null,
-                            asCards(args[2]), asCards(args[3]),
-                            args[4] instanceof Integer min ? min : 0);
+                            decider, args.get(1, Card.class),
+                            asCards(args.get(2)), asCards(args.get(3)),
+                            min == null ? 0 : min);
                 }
             }
-            return null;
-        };
+        });
     }
 
     /**
@@ -1368,48 +1346,52 @@ public final class PatchedCollectors implements AutoCloseable {
      * names, so a test can stand a rule that throws in for one API.
      */
     InvocationHandler clauseHandler(Function<ApiType, ApiEvents.Rule> rules) {
-        return (proxy, method, args) -> {
-            if (args == null || args.length == 0
-                    || !(args[0] instanceof SpellAbility clause)) {
-                return null;
+        return PatchHooks.CLAUSE_LISTENER.listener((callback, args) -> {
+            SpellAbility clause = args.get(0, SpellAbility.class);
+            if (clause == null) {
+                return;
             }
-            if ("onClauseResolving".equals(method.getName())) {
-                clauseMemos.get().push(
-                        java.util.Optional.ofNullable(ApiEvents.before(clause, rules)));
-                // A chosen mode's first clause is where a modal resolution is
-                // cut into per-mode halves (FR-029a): the live bracket opens
-                // the next half here, and a fork running on this thread marks
-                // the same boundary in its own event stream. Nested, so
-                // "resolved" cannot delimit modes; "resolving" of the first
-                // clause is the one moment FR-029b's snapshot has to be taken.
-                if (belongsToLiveGame(clause)) {
-                    if (bracket != null) {
-                        CharmModes.ModeStart start = CharmModes.modeStartOf(clause);
-                        if (start != null) {
-                            bracket.beginMode(clause, start.option());
-                        }
-                    }
-                } else {
-                    ForkCollector.noteClauseResolving(clause);
+            switch (callback) {
+                case ON_CLAUSE_RESOLVING -> clauseResolving(clause, rules);
+                case ON_CLAUSE_RESOLVED -> clauseResolved(
+                        clause, Boolean.TRUE.equals(args.optional(1)), rules);
+            }
+        });
+    }
+
+    private void clauseResolving(SpellAbility clause, Function<ApiType, ApiEvents.Rule> rules) {
+        clauseMemos.get().push(
+                java.util.Optional.ofNullable(ApiEvents.before(clause, rules)));
+        // A chosen mode's first clause is where a modal resolution is
+        // cut into per-mode halves (FR-029a): the live bracket opens
+        // the next half here, and a fork running on this thread marks
+        // the same boundary in its own event stream. Nested, so
+        // "resolved" cannot delimit modes; "resolving" of the first
+        // clause is the one moment FR-029b's snapshot has to be taken.
+        if (belongsToLiveGame(clause)) {
+            if (bracket != null) {
+                CharmModes.ModeStart start = CharmModes.modeStartOf(clause);
+                if (start != null) {
+                    bracket.beginMode(clause, start.option());
                 }
-                return null;
             }
-            if (!"onClauseResolved".equals(method.getName())) {
-                return null;
-            }
-            Deque<java.util.Optional<Object>> memos = clauseMemos.get();
-            Object memo = memos.isEmpty() ? null : memos.pop().orElse(null);
-            boolean threw = args.length > 1 && Boolean.TRUE.equals(args[1]);
-            if (threw) {
-                // A clause that threw did not finish, and an event claiming it
-                // did would be a fact the game never contained.
-                return null;
-            }
-            if (bracket != null && belongsToLiveGame(clause)) {
-                bracket.recordClauseEvent(ApiEvents.after(clause, memo, rules));
-            }
-            return null;
-        };
+        } else {
+            ForkCollector.noteClauseResolving(clause);
+        }
+    }
+
+    private void clauseResolved(
+            SpellAbility clause, boolean threw, Function<ApiType, ApiEvents.Rule> rules) {
+        Deque<java.util.Optional<Object>> memos = clauseMemos.get();
+        Object memo = memos.isEmpty() ? null : memos.pop().orElse(null);
+        if (threw) {
+            // A clause that threw did not finish, and an event claiming it
+            // did would be a fact the game never contained.
+            return;
+        }
+        if (bracket != null && belongsToLiveGame(clause)) {
+            bracket.recordClauseEvent(ApiEvents.after(clause, memo, rules));
+        }
     }
 
     // ── outcome records (what an effect computed and discarded) ─────────
@@ -1522,19 +1504,17 @@ public final class PatchedCollectors implements AutoCloseable {
      * {@code ClauseContractTest} calls {@code clauseHandler}.
      */
     InvocationHandler outcomeHandler() {
-        return (proxy, method, args) -> {
-            if (!"onOutcome".equals(method.getName()) || args == null || args.length < 3) {
-                return null;
-            }
-            if (!(args[1] instanceof String type)) {
-                return null;
+        return PatchHooks.OUTCOME_LISTENER.listener((callback, args) -> {
+            String type = args.get(1, String.class);
+            if (type == null) {
+                return;
             }
             if (!KNOWN_OUTCOME_TYPES.contains(type)) {
                 reportUnknownOutcomeType(type);
-                return null;
+                return;
             }
             EffectEvent event = new EffectEvent(type);
-            if (args[2] instanceof Map<?, ?> params) {
+            if (args.get(2) instanceof Map<?, ?> params) {
                 for (Map.Entry<?, ?> entry : params.entrySet()) {
                     if ("subjects".equals(entry.getKey())) {
                         addOutcomeSubjects(event, entry.getValue());
@@ -1554,14 +1534,14 @@ public final class PatchedCollectors implements AutoCloseable {
                     event.param(String.valueOf(entry.getKey()), entry.getValue());
                 }
             }
-            boolean liveGame = args[0] instanceof SpellAbility sa
-                    ? belongsToLiveGame(sa)
+            SpellAbility ability = args.get(0, SpellAbility.class);
+            boolean liveGame = ability != null
+                    ? belongsToLiveGame(ability)
                     : nullAbilityOutcomeBelongsToLiveGame();
             if (bracket != null && liveGame) {
                 bracket.recordClauseEvent(event);
             }
-            return null;
-        };
+        });
     }
 
     /**
@@ -1619,27 +1599,24 @@ public final class PatchedCollectors implements AutoCloseable {
      * a synthesized argument array.
      */
     InvocationHandler manaHandler() {
-        return (proxy, method, args) -> {
-            if (!"onManaProduced".equals(method.getName()) || args == null
-                    || args.length < 3) {
-                return null;
-            }
-            SpellAbility ability = args[0] instanceof SpellAbility sa ? sa : null;
-            String produced = String.valueOf(args[2]);
+        return PatchHooks.MANA_LISTENER.listener((callback, args) -> {
+            SpellAbility ability = args.get(0, SpellAbility.class);
+            String produced = String.valueOf(args.get(2));
             // A fork's own mana abilities can resolve through the inline path
             // too (forceResolution's forced ability,
             // or costs it pays along the way), and this hook is a JVM static
             // like the others.
             if (ability == null || produced.isEmpty() || !belongsToLiveGame(ability)) {
-                return null;
+                return;
             }
             String key = manaAbilityText(ability, produced);
             int slot = manaReservoir.slot(key);
             if (slot < 0) {
-                return null;
+                return;
             }
-            String player = args[1] instanceof Player p
-                    ? SnapshotBuilder.playerId(p) : activePlayerId();
+            Player producer = args.get(1, Player.class);
+            String player = producer != null
+                    ? SnapshotBuilder.playerId(producer) : activePlayerId();
             EffectEvent event = new EffectEvent(EffectEvent.MANA_PRODUCED)
                     .subject(player)
                     .param("mana_by_color", RunParamNormalizer.manaByColor(produced));
@@ -1653,8 +1630,7 @@ public final class PatchedCollectors implements AutoCloseable {
                     .state(snapshots.toJson(null, List.of()))
                     .payload(EffectRecord.eventsPayload(List.of(event)));
             manaReservoir.hold(key, slot, record);
-            return null;
-        };
+        });
     }
 
     /**

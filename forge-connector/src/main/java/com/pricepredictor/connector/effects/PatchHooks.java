@@ -48,12 +48,21 @@ public final class PatchHooks {
     /**
      * One method the engine patch adds, and what having it buys.
      *
-     * @param owner   the Forge class it is declared on
-     * @param method  its name, which is the whole contract — the collectors look
-     *                it up by string and a rename degrades a channel silently
-     * @param unlocks what stops working without it
+     * @param owner     the Forge class it is declared on
+     * @param method    its name, which is the whole contract — the collectors
+     *                  look it up by string and a rename degrades a channel
+     *                  silently
+     * @param unlocks   what stops working without it
+     * @param callbacks for a listener setter, the methods of the listener it
+     *                  takes, which are as much the contract as the setter's
+     *                  own name; empty for every other hook
      */
-    public record Hook(String owner, String method, String unlocks) {
+    public record Hook(String owner, String method, String unlocks, List<Callback> callbacks) {
+
+        /** A hook that takes no listener. */
+        Hook(String owner, String method, String unlocks) {
+            this(owner, method, unlocks, List.of());
+        }
 
         boolean present() {
             return lookUp().isPresent();
@@ -74,6 +83,29 @@ public final class PatchHooks {
             PatchHooks.uninstall(owner, method);
         }
 
+        /**
+         * A handler for this setter's listener, which hands {@code body} each
+         * of the {@link #callbacks} the engine makes.
+         *
+         * <p>Any other method the proxy is asked for, and a callback called
+         * with fewer arguments than its {@link Callback#arity}, answers null
+         * and does nothing, the way an absent hook would: a handler that
+         * threw instead would throw out of the engine's own call.
+         */
+        InvocationHandler listener(ListenerBody body) {
+            return (proxy, invoked, args) -> {
+                for (Callback callback : callbacks) {
+                    if (callback.methodName().equals(invoked.getName())) {
+                        if (args != null && args.length >= callback.arity()) {
+                            body.on(callback, new Args(args));
+                        }
+                        return null;
+                    }
+                }
+                return null;
+            };
+        }
+
         /** Call this static method, or answer null; see {@link PatchHooks#invokeStatic}. */
         Object invoke(Class<?>[] parameterTypes, Object... args) {
             return invokeStatic(owner, method, parameterTypes, args);
@@ -92,6 +124,81 @@ public final class PatchHooks {
         @Override
         public String toString() {
             return owner.substring(owner.lastIndexOf('.') + 1) + "." + method;
+        }
+    }
+
+    /**
+     * One method of a listener interface the patch declares: the name the
+     * engine calls it by, and the arguments a handler needs before it acts.
+     *
+     * <p>The arity is a floor rather than the declared count. A revision that
+     * widened a listener appended its new arguments, and a worker still runs
+     * against an older jar, so a handler reads those through
+     * {@link Args#optional} and the shorter call still reaches it.
+     */
+    enum Callback {
+        ON_REPLACEMENT("onReplacement", 3),
+        ON_CONDITION_EVALUATED("onConditionEvaluated", 3),
+        ON_CANDIDATE("onCandidate", 1),
+        ON_ATTACKERS_DECLARABLE("onAttackersDeclarable", 4),
+        ON_BLOCKERS_DECLARABLE("onBlockersDeclarable", 5),
+        ON_CLAUSE_RESOLVING("onClauseResolving", 1),
+        ON_CLAUSE_RESOLVED("onClauseResolved", 1),
+        ON_MANA_PRODUCED("onManaProduced", 3),
+        ON_CONFIRM("onConfirm", 2),
+        ON_OUTCOME("onOutcome", 3);
+
+        private final String methodName;
+        private final int arity;
+
+        Callback(String methodName, int arity) {
+            this.methodName = methodName;
+            this.arity = arity;
+        }
+
+        String methodName() {
+            return methodName;
+        }
+
+        int arity() {
+            return arity;
+        }
+    }
+
+    /** What a listener does with one callback, once its arguments are there. */
+    @FunctionalInterface
+    interface ListenerBody {
+        void on(Callback callback, Args args);
+    }
+
+    /**
+     * One callback's arguments, read by position.
+     *
+     * <p>By position because nothing here compiles against the listener
+     * interface. A typed read answers null for a value of another type, the
+     * way an {@code instanceof} test does, so a drifted signature costs the
+     * argument rather than throwing out of the engine's call.
+     */
+    static final class Args {
+        private final Object[] values;
+
+        private Args(Object[] values) {
+            this.values = values;
+        }
+
+        /** The argument at {@code index}, which the callback's arity guarantees. */
+        Object get(int index) {
+            return values[index];
+        }
+
+        /** The argument at {@code index} if it is a {@code type}, or null. */
+        <T> T get(int index, Class<T> type) {
+            return type.isInstance(values[index]) ? type.cast(values[index]) : null;
+        }
+
+        /** An argument past the arity, or null where an older jar did not pass it. */
+        Object optional(int index) {
+            return index < values.length ? values[index] : null;
         }
     }
 
@@ -122,8 +229,8 @@ public final class PatchHooks {
      * event; the setter's name did not change, so this list still reports the
      * hook present against either shape. What tells them apart at runtime is the
      * record: an older jar yields a {@code result} of null on every rewrite. The
-     * handlers therefore read the tail arguments by {@code args.length} rather
-     * than assuming them, because a partly-current patch must degrade the way an
+     * handlers therefore read the tail arguments through {@link Args#optional}
+     * rather than assuming them, because a partly-current patch must degrade the way an
      * absent one does instead of throwing inside a dynamic proxy.
      */
     public static final List<Hook> REQUIRED;
@@ -134,28 +241,34 @@ public final class PatchHooks {
             + "the hook mode detection probes");
     static final Hook TRIGGER_LISTENER = new Hook(
             TRIGGER_HANDLER, "setEffectRecordTriggerListener",
-            "trigger records, fired and not");
+            "trigger records, fired and not",
+            List.of(Callback.ON_CONDITION_EVALUATED));
     static final Hook REPLACEMENT_LISTENER = new Hook(
             REPLACEMENT_HANDLER, "setEffectRecordListener",
             "rewrite records: the event a replacement received, what it "
             + "rewrote in place, which of the five ReplacementResults "
-            + "it returned and which ability stood in for the event");
+            + "it returned and which ability stood in for the event",
+            List.of(Callback.ON_REPLACEMENT));
     static final Hook CLAUSE_LISTENER = new Hook(
             ABILITY_UTILS, "setEffectRecordClauseListener",
-            "the events an effect API describes but the bus never announces");
+            "the events an effect API describes but the bus never announces",
+            List.of(Callback.ON_CLAUSE_RESOLVING, Callback.ON_CLAUSE_RESOLVED));
     static final Hook PLAYABILITY_LISTENER = new Hook(
             AI_CONTROLLER, "setEffectRecordPlayabilityListener",
-            "playability records, the decision subkind");
+            "playability records, the decision subkind",
+            List.of(Callback.ON_CANDIDATE));
     static final Hook COMBAT_LISTENER = new Hook(
             COMBAT_LEGALITY_OBSERVER, "setEffectRecordCombatListener",
-            "the playability record's attackers and blockers subkinds");
+            "the playability record's attackers and blockers subkinds",
+            List.of(Callback.ON_ATTACKERS_DECLARABLE, Callback.ON_BLOCKERS_DECLARABLE));
     static final Hook CANT_ATTACK_STATIC = new Hook(CANT_ATTACK_BLOCK, "cantAttackStatic",
             "each forbidden attacker's responsible_static");
     static final Hook CANT_BLOCK_BY_STATIC = new Hook(CANT_ATTACK_BLOCK, "cantBlockByStatic",
             "each forbidden blocker's responsible_static");
     static final Hook MANA_LISTENER = new Hook(
             ABILITY_MANA_PART, "setEffectRecordManaListener",
-            "mana records, and with them the role-polarity probe");
+            "mana records, and with them the role-polarity probe",
+            List.of(Callback.ON_MANA_PRODUCED));
     static final Hook CHANGED_TYPES_BY_STATIC = new Hook(CARD, "getChangedCardTypesByStatic",
             "a continuous contribution's types");
     static final Hook CHANGED_COLORS_BY_STATIC = new Hook(CARD, "getChangedCardColorsByStatic",
@@ -173,11 +286,13 @@ public final class PatchHooks {
     static final Hook CONFIRM_LISTENER = new Hook(
             PLAYER_CONTROLLER_AI, "setEffectRecordConfirmListener",
             "the declined outcome: an optional effect the controller "
-            + "was offered and turned down");
+            + "was offered and turned down",
+            List.of(Callback.ON_CONFIRM));
     static final Hook OUTCOME_LISTENER = new Hook(
             EFFECT_RECORD_OUTCOMES, "setEffectRecordOutcomeListener",
             "the outcomes an effect computes and discards: a coin's "
-            + "result, a clash's winner, a vote's tally, a pile's size");
+            + "result, a clash's winner, a vote's tally, a pile's size",
+            List.of(Callback.ON_OUTCOME));
 
     /**
      * The components of the two layer records {@link #CHANGED_COLORS_BY_STATIC}

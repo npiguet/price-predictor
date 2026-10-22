@@ -12,6 +12,8 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -104,6 +106,36 @@ class PatchHooksTest {
         accepted.addAll(standIn.older());
         assertTrue(accepted.stream().anyMatch(shape -> mismatch(shape, declared).isEmpty()),
                 mismatch(standIn.shape(), declared));
+    }
+
+    /**
+     * Each listener hook names the callbacks its stand-in declares, and reads
+     * none of them past the arguments the oldest accepted shape passes.
+     *
+     * <p>The stand-in is checked against Forge above; this checks the names
+     * the handlers dispatch on against the stand-in, so a callback renamed on
+     * one side and not the other fails here rather than going quiet. Runs on
+     * a stock checkout too, since neither side needs the patch.
+     */
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("com.pricepredictor.connector.effects.HookShapes#declared")
+    void eachListenerHookDeclaresItsStandInsCallbacks(HookShapes.Declared standIn) {
+        List<Class<?>> accepted = new ArrayList<>(List.of(standIn.shape()));
+        accepted.addAll(standIn.older());
+        Set<String> declared = Arrays.stream(standIn.shape().getDeclaredMethods())
+                .map(Method::getName).collect(Collectors.toSet());
+        Set<String> named = standIn.setter().callbacks().stream()
+                .map(PatchHooks.Callback::methodName).collect(Collectors.toSet());
+        assertEquals(declared, named, standIn.setter().toString());
+
+        for (PatchHooks.Callback callback : standIn.setter().callbacks()) {
+            for (Class<?> shape : accepted) {
+                int passed = HookShapes.method(shape, callback.methodName()).getParameterCount();
+                assertTrue(callback.arity() <= passed,
+                        callback + " needs " + callback.arity() + " arguments and "
+                                + shape.getSimpleName() + " passes " + passed);
+            }
+        }
     }
 
     /** How {@code shape} differs from {@code declared}, or empty when it restates it. */
