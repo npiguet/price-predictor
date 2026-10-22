@@ -42,7 +42,8 @@ public final class TestBoard {
     // ── games ───────────────────────────────────────────────────────────
 
     /**
-     * Two AI seats, in {@code phase} of the first seat's turn, not started.
+     * Two AI seats with empty decks, in {@code phase} of the first seat's
+     * turn, not started.
      *
      * <p>Not started means the engine still treats it as being set up: {@code
      * checkStateEffects} returns early and leaves the stack frozen. Use
@@ -61,16 +62,20 @@ public final class TestBoard {
 
     /** Two seats of the caller's choosing, in {@code phase} of the first seat's turn. */
     public static Game twoPlayerGame(PhaseType phase, LobbyPlayer first, LobbyPlayer second) {
-        Game game = twoPlayerGame(first, second);
+        Game game = registered(first, second);
         game.getPhaseHandler().devModeSet(phase, game.getPlayers().get(0));
         return game;
     }
 
     /**
-     * Two seats and no phase at all: the shape {@code GamePlayer} registers for
-     * a match, minus the decks.
+     * Two AI seats under these lobby names and no phase at all: the shape
+     * {@code GamePlayer} registers for a match, minus the decks.
      */
-    public static Game twoPlayerGame(LobbyPlayer first, LobbyPlayer second) {
+    public static Game twoPlayerGame(String first, String second) {
+        return registered(new LobbyPlayerAi(first, null), new LobbyPlayerAi(second, null));
+    }
+
+    private static Game registered(LobbyPlayer first, LobbyPlayer second) {
         Deck deck = new Deck();
         List<RegisteredPlayer> players = List.of(
                 new RegisteredPlayer(deck).setPlayer(first),
@@ -81,9 +86,9 @@ public final class TestBoard {
 
     /**
      * A game with no players that is not {@link TestCards#game()}: what a fork
-     * is to the live game a collector was built over. {@code GameCopier}
-     * builds every copied card against a new {@code Game}, so this is all a
-     * test needs to stand one in.
+     * is to the live game a collector was built over ({@code GameCopier}
+     * builds every copied card against a new {@code Game}), or a game whose
+     * per-game state a test changes without leaking it into the shared one.
      */
     static Game anotherGame() {
         GameRules rules = new GameRules(GameType.Constructed);

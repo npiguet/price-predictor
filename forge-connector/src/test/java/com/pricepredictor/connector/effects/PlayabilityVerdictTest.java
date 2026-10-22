@@ -1,28 +1,17 @@
 package com.pricepredictor.connector.effects;
 
 import com.pricepredictor.connector.ForgeExtension;
-import forge.StaticData;
 import forge.ai.ComputerUtilCost;
-import forge.ai.LobbyPlayerAi;
-import forge.deck.Deck;
 import forge.game.Game;
-import forge.game.GameRules;
-import forge.game.GameType;
-import forge.game.Match;
 import forge.game.ability.AbilityFactory;
 import forge.game.ability.ApiType;
 import forge.game.card.Card;
-import forge.game.card.CardFactory;
 import forge.game.card.CounterEnumType;
 import forge.game.phase.PhaseType;
 import forge.game.player.Player;
-import forge.game.player.RegisteredPlayer;
 import forge.game.spellability.SpellAbility;
-import forge.game.zone.ZoneType;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-
-import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -34,25 +23,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @ExtendWith(ForgeExtension.class)
 class PlayabilityVerdictTest {
 
-    private static Game twoPlayerGame() {
-        Deck deck = new Deck();
-        List<RegisteredPlayer> players = List.of(
-                new RegisteredPlayer(deck).setPlayer(new LobbyPlayerAi("a", null)),
-                new RegisteredPlayer(deck).setPlayer(new LobbyPlayerAi("b", null)));
-        GameRules rules = new GameRules(GameType.Constructed);
-        Game game = new Game(players, rules, new Match(rules, players, "PlayabilityVerdictTest"));
-        game.getPhaseHandler().devModeSet(PhaseType.MAIN1, game.getPlayers().get(0));
-        return game;
-    }
-
-    private static Card inPlay(Game game, Player controller, String name) {
-        Card card = CardFactory.getCard(
-                StaticData.instance().getCommonCards().getCard(name), controller, game);
-        game.getAction().moveToPlay(card, controller, null, null);
-        card.setSickness(false);
-        return card;
-    }
-
     private static SpellAbility abilityOn(Card host, String script) {
         SpellAbility ability = AbilityFactory.getAbility(script, host);
         ability.setActivatingPlayer(host.getController());
@@ -62,9 +32,9 @@ class PlayabilityVerdictTest {
     /** No target has been chosen, which is what the AI leaves when it stops early; the rules still offer one. */
     @Test
     void aTargetTheRulesOfferCountsWhetherOrNotOneWasChosen() {
-        Game game = twoPlayerGame();
+        Game game = TestBoard.twoPlayerGame(PhaseType.MAIN1);
         Player a = game.getPlayers().get(0);
-        Card bears = inPlay(game, a, "Grizzly Bears");
+        Card bears = TestBoard.inPlay(game, a, "Grizzly Bears");
         SpellAbility pump = abilityOn(bears, "AB$ Pump | Cost$ 0 | ValidTgts$ Creature | NumAtt$ +1");
 
         assertTrue(pump.getTargets().isEmpty(), "the board under test has no chosen target");
@@ -74,9 +44,9 @@ class PlayabilityVerdictTest {
     /** And a target the rules do not offer is absent however the ability was left. */
     @Test
     void aTargetTheRulesDoNotOfferIsAbsent() {
-        Game game = twoPlayerGame();
+        Game game = TestBoard.twoPlayerGame(PhaseType.MAIN1);
         Player a = game.getPlayers().get(0);
-        Card bears = inPlay(game, a, "Grizzly Bears");
+        Card bears = TestBoard.inPlay(game, a, "Grizzly Bears");
         SpellAbility destroy = abilityOn(bears, "AB$ Destroy | Cost$ 0 | ValidTgts$ Artifact");
 
         assertFalse(PlayabilityVerdict.of(destroy).hasLegalTarget());
@@ -84,9 +54,7 @@ class PlayabilityVerdictTest {
 
     /** Fiery Intervention: 5 damage to target creature, or destroy target artifact. */
     private static SpellAbility fieryIntervention(Game game, Player owner) {
-        Card card = CardFactory.getCard(
-                StaticData.instance().getCommonCards().getCard("Fiery Intervention"), owner, game);
-        game.getAction().moveTo(ZoneType.Hand, card, null, null);
+        Card card = TestBoard.inHand(game, owner, "Fiery Intervention");
         SpellAbility charm = card.getFirstSpellAbility();
         charm.setActivatingPlayer(owner);
         return charm;
@@ -95,13 +63,13 @@ class PlayabilityVerdictTest {
     /** One choosable mode is all a choose-one charm asks for, and none is too few. */
     @Test
     void aCharmIsPlayableWhenEnoughOfItsModesCanBeChosen() {
-        Game game = twoPlayerGame();
+        Game game = TestBoard.twoPlayerGame(PhaseType.MAIN1);
         Player a = game.getPlayers().get(0);
         SpellAbility charm = fieryIntervention(game, a);
 
         assertFalse(PlayabilityVerdict.of(charm).hasLegalTarget(),
                 "no creature and no artifact: neither mode can be chosen");
-        inPlay(game, a, "Grizzly Bears");
+        TestBoard.inPlay(game, a, "Grizzly Bears");
         assertTrue(PlayabilityVerdict.of(charm).hasLegalTarget(),
                 "a creature makes the damage mode choosable");
     }
@@ -112,9 +80,9 @@ class PlayabilityVerdictTest {
      */
     @Test
     void aCharmIsJudgedByItsOfferedModesNotItsLeftoverChain() {
-        Game game = twoPlayerGame();
+        Game game = TestBoard.twoPlayerGame(PhaseType.MAIN1);
         Player a = game.getPlayers().get(0);
-        inPlay(game, a, "Grizzly Bears");
+        TestBoard.inPlay(game, a, "Grizzly Bears");
         SpellAbility charm = fieryIntervention(game, a);
         charm.setSubAbility(charm.getAdditionalAbilityList("Choices").stream()
                 .filter(mode -> mode.getApi() == ApiType.Destroy).findFirst().orElseThrow());
@@ -128,9 +96,9 @@ class PlayabilityVerdictTest {
      */
     @Test
     void affordabilityIgnoresTheAisReluctanceToSpendAPlaneswalker() {
-        Game game = twoPlayerGame();
+        Game game = TestBoard.twoPlayerGame(PhaseType.MAIN1);
         Player a = game.getPlayers().get(0);
-        Card jace = inPlay(game, a, "Jace Beleren");
+        Card jace = TestBoard.inPlay(game, a, "Jace Beleren");
         jace.setCounters(CounterEnumType.LOYALTY, 1);
         SpellAbility minusOne = jace.getSpellAbilities().stream()
                 .filter(ability -> ability.isPwAbility()
@@ -146,8 +114,8 @@ class PlayabilityVerdictTest {
 
     @Test
     void aCandidateWithNoActivatingPlayerGetsNoVerdict() {
-        Game game = twoPlayerGame();
-        Card bears = inPlay(game, game.getPlayers().get(0), "Grizzly Bears");
+        Game game = TestBoard.twoPlayerGame(PhaseType.MAIN1);
+        Card bears = TestBoard.inPlay(game, game.getPlayers().get(0), "Grizzly Bears");
         SpellAbility pump = AbilityFactory.getAbility("AB$ Pump | Cost$ 0 | NumAtt$ +1", bears);
 
         assertFalse(PlayabilityVerdict.of(pump).canPlay());

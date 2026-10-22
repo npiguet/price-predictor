@@ -1,12 +1,7 @@
 package com.pricepredictor.connector.effects;
 
 import com.pricepredictor.connector.ForgeExtension;
-import forge.ai.LobbyPlayerAi;
-import forge.deck.Deck;
 import forge.game.Game;
-import forge.game.GameRules;
-import forge.game.GameType;
-import forge.game.Match;
 import forge.game.card.Card;
 import forge.game.card.CounterEnumType;
 import forge.game.event.GameEventCardRegenerated;
@@ -17,7 +12,6 @@ import forge.game.event.GameEventPlayerRadiation;
 import forge.game.event.GameEventShuffle;
 import forge.game.event.GameEventSpeedChanged;
 import forge.game.player.Player;
-import forge.game.player.RegisteredPlayer;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
@@ -147,19 +141,6 @@ class BusEventsTest {
     // ── player_won: name resolved back to the real Player, not carried as-is ──
 
     /**
-     * A real two-player game, each seat a distinct lobby name -- the shape
-     * {@code GamePlayer} registers for a match, minus the decks.
-     */
-    private static Game twoPlayerGame(String nameA, String nameB) {
-        List<RegisteredPlayer> players = List.of(
-                new RegisteredPlayer(new Deck()).setPlayer(new LobbyPlayerAi(nameA, null)),
-                new RegisteredPlayer(new Deck()).setPlayer(new LobbyPlayerAi(nameB, null)));
-        GameRules rules = new GameRules(GameType.Constructed);
-        Match match = new Match(rules, players, "bus-events-test");
-        return new Game(players, rules, match);
-    }
-
-    /**
      * {@code computeWinningPlayerName} returns null when {@code
      * GameOutcome.getWinningLobbyPlayer()} does -- a draw -- and a {@code
      * player_won} with no winner would be a false record.
@@ -179,7 +160,7 @@ class BusEventsTest {
      */
     @Test
     void theWinnerResolvesToTheMatchingPlayersRef() {
-        Game game = twoPlayerGame("p1", "p2");
+        Game game = TestBoard.twoPlayerGame("p1", "p2");
         Player p1 = game.getPlayers().stream()
                 .filter(p -> "p1".equals(p.getLobbyPlayer().getName()))
                 .findFirst().orElseThrow();
@@ -195,7 +176,7 @@ class BusEventsTest {
     /** A winning name this game cannot resolve to any seat produces nothing. */
     @Test
     void aWinningNameNoSeatMatchesProducesNoEvent() {
-        Game game = twoPlayerGame("p1", "p2");
+        Game game = TestBoard.twoPlayerGame("p1", "p2");
         GameEventGameOutcome event = new GameEventGameOutcome(
                 4, List.of("nobody has won"), "a name nobody at this table has", "");
 
@@ -209,7 +190,7 @@ class BusEventsTest {
      */
     @Test
     void aSharedLobbyNameResolvesToTheFirstMatchingSeat() {
-        Game game = twoPlayerGame("same", "same");
+        Game game = TestBoard.twoPlayerGame("same", "same");
         Player first = game.getPlayers().get(0);
         GameEventGameOutcome event = new GameEventGameOutcome(
                 4, List.of("same has won"), "same", "");

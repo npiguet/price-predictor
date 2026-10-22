@@ -1,20 +1,11 @@
 package com.pricepredictor.connector.effects;
 
 import com.pricepredictor.connector.ForgeExtension;
-import forge.StaticData;
-import forge.ai.LobbyPlayerAi;
-import forge.deck.Deck;
 import forge.game.Game;
-import forge.game.GameRules;
-import forge.game.GameType;
-import forge.game.Match;
 import forge.game.ability.AbilityFactory;
-import forge.game.ability.ApiType;
 import forge.game.card.Card;
-import forge.game.card.CardFactory;
 import forge.game.phase.PhaseType;
 import forge.game.player.Player;
-import forge.game.player.RegisteredPlayer;
 import forge.game.spellability.AbilitySub;
 import forge.game.spellability.SpellAbility;
 import org.junit.jupiter.api.Test;
@@ -54,47 +45,14 @@ class RandomChoicesTest {
         return new RandomChoices(new Random(PatchedCollectors.scramble(seed)));
     }
 
-    private static Game twoPlayerGame() {
-        Deck deck = new Deck();
-        List<RegisteredPlayer> players = List.of(
-                new RegisteredPlayer(deck).setPlayer(new LobbyPlayerAi("a", null)),
-                new RegisteredPlayer(deck).setPlayer(new LobbyPlayerAi("b", null)));
-        GameRules rules = new GameRules(GameType.Constructed);
-        Game game = new Game(players, rules, new Match(rules, players, "RandomChoicesTest"));
-        game.getPhaseHandler().devModeSet(PhaseType.MAIN1, game.getPlayers().get(0));
-        return game;
-    }
-
-    private static Card cardOf(Game game, Player owner, String name) {
-        return CardFactory.getCard(
-                StaticData.instance().getCommonCards().getCard(name), owner, game);
-    }
-
-    private static Card inPlay(Game game, Player owner, String name) {
-        Card card = cardOf(game, owner, name);
-        game.getAction().moveToPlay(card, owner, null, null);
-        card.setSickness(false);
-        return card;
-    }
-
-    private static SpellAbility charmOf(Card card, Player activator) {
-        for (SpellAbility sa : card.getSpellAbilities()) {
-            if (sa.getApi() == ApiType.Charm) {
-                sa.setActivatingPlayer(activator);
-                return sa;
-            }
-        }
-        throw new AssertionError("no charm on " + card);
-    }
-
     // ── modes ───────────────────────────────────────────────────────────
 
     /** A "choose one" charm draws exactly one mode, and every mode is reachable. */
     @Test
     void aChooseOneCharmDrawsOneModeAndReachesEveryMode() {
-        Game game = twoPlayerGame();
+        Game game = TestBoard.twoPlayerGame(PhaseType.MAIN1);
         Player caster = game.getPlayers().get(0);
-        SpellAbility charm = charmOf(cardOf(game, caster, "Boros Charm"), caster);
+        SpellAbility charm = TestBoard.charmOf(TestBoard.card(game, caster, "Boros Charm"), caster);
         List<AbilitySub> choices = charm.getAdditionalAbilityList("Choices");
 
         Set<Integer> seen = new HashSet<>();
@@ -109,9 +67,9 @@ class RandomChoicesTest {
     /** A count uniform in [MinCharmNum, CharmNum], repeats only where allowed. */
     @Test
     void aMinimumOfZeroAndRepeatsAreHonoured() {
-        Game game = twoPlayerGame();
+        Game game = TestBoard.twoPlayerGame(PhaseType.MAIN1);
         Player caster = game.getPlayers().get(0);
-        Card host = cardOf(game, caster, "Grizzly Bears");
+        Card host = TestBoard.card(game, caster, "Grizzly Bears");
         host.setSVar("A", "DB$ GainLife | Defined$ You | LifeAmount$ 1 | SpellDescription$ a");
         host.setSVar("B", "DB$ GainLife | Defined$ You | LifeAmount$ 2 | SpellDescription$ b");
         SpellAbility charm = AbilityFactory.getAbility(
@@ -142,9 +100,10 @@ class RandomChoicesTest {
     /** A Pawprint charm spends its budget one mode at a time and never overspends. */
     @Test
     void aPawprintCharmDrawsUntilNothingFits() {
-        Game game = twoPlayerGame();
+        Game game = TestBoard.twoPlayerGame(PhaseType.MAIN1);
         Player caster = game.getPlayers().get(0);
-        SpellAbility charm = charmOf(cardOf(game, caster, "Season of Gathering"), caster);
+        SpellAbility charm = TestBoard.charmOf(
+                TestBoard.card(game, caster, "Season of Gathering"), caster);
         int budget = 5;
 
         Set<Integer> spent = new TreeSet<>();
@@ -166,9 +125,9 @@ class RandomChoicesTest {
     /** The fork's form sets the chosen list and chains, so a direct push resolves them. */
     @Test
     void chooseModesSetsTheChosenListAndChains() {
-        Game game = twoPlayerGame();
+        Game game = TestBoard.twoPlayerGame(PhaseType.MAIN1);
         Player caster = game.getPlayers().get(0);
-        SpellAbility charm = charmOf(cardOf(game, caster, "Boros Charm"), caster);
+        SpellAbility charm = TestBoard.charmOf(TestBoard.card(game, caster, "Boros Charm"), caster);
 
         assertTrue(new RandomChoices(new Random(1)).chooseModes(charm));
         assertNotNull(charm.getChosenList());
@@ -190,15 +149,15 @@ class RandomChoicesTest {
     /** "Up to two" over three candidates: a count in {0, 1, 2}, distinct targets. */
     @Test
     void targetCountIsUniformBetweenMinimumAndMaximumAndTargetsAreDistinct() {
-        Game game = twoPlayerGame();
+        Game game = TestBoard.twoPlayerGame(PhaseType.MAIN1);
         Player caster = game.getPlayers().get(0);
         Player other = game.getPlayers().get(1);
-        inPlay(game, other, "Grizzly Bears");
-        inPlay(game, other, "Runeclaw Bear");
-        inPlay(game, other, "Hill Giant");
+        TestBoard.inPlay(game, other, "Grizzly Bears");
+        TestBoard.inPlay(game, other, "Runeclaw Bear");
+        TestBoard.inPlay(game, other, "Hill Giant");
         SpellAbility pump = AbilityFactory.getAbility(
                 "SP$ Pump | ValidTgts$ Creature | TargetMin$ 0 | TargetMax$ 2 | NumAtt$ +1",
-                cardOf(game, caster, "Giant Growth"));
+                TestBoard.card(game, caster, "Giant Growth"));
         pump.setActivatingPlayer(caster);
 
         Set<Integer> counts = new TreeSet<>();
@@ -216,11 +175,11 @@ class RandomChoicesTest {
     /** A clause that cannot reach its minimum is a failed draw, not a silent resolution. */
     @Test
     void aClauseShortOfCandidatesFailsTheDraw() {
-        Game game = twoPlayerGame();
+        Game game = TestBoard.twoPlayerGame(PhaseType.MAIN1);
         Player caster = game.getPlayers().get(0);
         SpellAbility bolt = AbilityFactory.getAbility(
                 "SP$ DealDamage | ValidTgts$ Creature | NumDmg$ 3",
-                cardOf(game, caster, "Lightning Bolt"));
+                TestBoard.card(game, caster, "Lightning Bolt"));
         bolt.setActivatingPlayer(caster);
 
         assertFalse(new RandomChoices(new Random(1)).chooseTargets(bolt));
@@ -245,14 +204,14 @@ class RandomChoicesTest {
      */
     @Test
     void xIsUniformBetweenTheSmallestLegalValueAndWhatTheManaCanPay() {
-        Game game = twoPlayerGame();
+        Game game = TestBoard.twoPlayerGame(PhaseType.MAIN1);
         Player caster = game.getPlayers().get(0);
         for (int i = 0; i < 5; i++) {
-            inPlay(game, caster, "Mountain");
+            TestBoard.inPlay(game, caster, "Mountain");
         }
         SpellAbility drain = AbilityFactory.getAbility(
                 "AB$ DealDamage | Cost$ X R | ValidTgts$ Any | NumDmg$ X",
-                cardOf(game, caster, "Fireball"));
+                TestBoard.card(game, caster, "Fireball"));
         drain.setActivatingPlayer(caster);
 
         Set<Integer> seen = new TreeSet<>();
@@ -276,7 +235,7 @@ class RandomChoicesTest {
 
     @Test
     void anAbilityWithNoXIsLeftAlone() {
-        Player caster = twoPlayerGame().getPlayers().get(0);
+        Player caster = TestBoard.twoPlayerGame(PhaseType.MAIN1).getPlayers().get(0);
         SpellAbility gain = AbilityFactory.getAbility(
                 "AB$ GainLife | Cost$ 1 | Defined$ You | LifeAmount$ 1",
                 TestCards.build("Fountain of Youth"));
