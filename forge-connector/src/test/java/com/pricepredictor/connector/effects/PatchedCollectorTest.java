@@ -82,6 +82,12 @@ class PatchedCollectorTest {
                                 && !PatchHooks.PLAYER_CONTROLLER_AI.equals(hook.owner()))
                         .filter(PatchHooks.Hook::present)
                         .count();
+        // A patched checkout whose hooks all went unfound would agree with a
+        // collector that installs nothing.
+        if (AttributionMode.detect() == AttributionMode.PATCHED) {
+            assertTrue(expected > 0, "a patched checkout offers no listener hook: "
+                    + PatchHooks.report());
+        }
         try (PatchedCollectors collector = unwired(CollectionCaps.defaults())) {
             assertEquals(expected, collector.install());
         }
