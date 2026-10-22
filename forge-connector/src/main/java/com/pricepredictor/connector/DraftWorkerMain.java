@@ -11,8 +11,6 @@ import forge.item.generation.UnOpenedProduct;
 import forge.util.MyRandom;
 
 import java.io.BufferedReader;
-import java.io.FileDescriptor;
-import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.PrintStream;
@@ -80,15 +78,9 @@ public class DraftWorkerMain {
     static final int PACKS = 3;
 
     public static void main(String[] args) {
-        // Bind the sentinel channel to the real stdout FD as UTF-8, then route
-        // everything else printed to System.out (Forge's incidental logging) to
-        // stderr. This guarantees the pipe the supervisor reads carries ONLY our
-        // UTF-8 sentinel lines — no platform-encoded Forge chatter, no
-        // mixed-encoding stream — so Python can decode it as UTF-8 (accented
-        // card names included). Diagnostics keep using System.err.
-        PrintStream out = new PrintStream(
-                new FileOutputStream(FileDescriptor.out), true, StandardCharsets.UTF_8);
-        System.setOut(System.err);
+        // The sentinel channel is UTF-8 so Python can decode accented card
+        // names; diagnostics keep using System.err.
+        PrintStream out = ToolMain.claimStdout();
 
         String agentMixSpec = WorkerProperties.require("draft.agent.mix");
         String setCode = System.getProperty("draft.set");  // null => random per draft

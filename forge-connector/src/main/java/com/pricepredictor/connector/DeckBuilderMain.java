@@ -31,11 +31,10 @@ import java.util.List;
 public class DeckBuilderMain {
 
     public static void main(String[] args) {
-        // Capture real stdout, then redirect System.out to stderr so Forge's
-        // logging (e.g. "Read cards: ...", "Basics[Plains]: ...") doesn't
-        // contaminate the deck output stream consumed by the Python connector.
-        PrintStream realOut = System.out;
-        System.setOut(System.err);
+        // Forge's logging (e.g. "Read cards: ...", "Basics[Plains]: ...") goes to
+        // stderr so it doesn't contaminate the deck output stream consumed by
+        // the Python connector.
+        PrintStream realOut = ToolMain.claimStdout();
 
         ToolMain.run(() -> {
             ForgeEnvironmentInitializer.initialize();
