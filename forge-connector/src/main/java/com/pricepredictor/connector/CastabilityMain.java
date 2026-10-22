@@ -4,9 +4,6 @@ import com.pricepredictor.connector.effects.Json;
 import forge.card.CardRules;
 import forge.card.CardRarity;
 import forge.game.Game;
-import forge.game.GameRules;
-import forge.game.GameType;
-import forge.game.Match;
 import forge.game.card.Card;
 import forge.game.card.CardFactory;
 import forge.item.PaperCard;
@@ -109,10 +106,10 @@ public class CastabilityMain {
      * line: a permanent's {@code SpellPermanent}, a land's {@code LandAbility}.
      * The three-argument {@code getCard(paper, owner, game)} derives the id
      * from the owner and passes -1 for a null one, so an ownerless card has to
-     * be given its id here. The game it is built against is the same
-     * player-less dummy {@code convert} builds every card against in
-     * {@link RulesParser}: with no game at all, three cards' ability setup
-     * throws and would be misread as uncastable.
+     * be given its id here. The game it is built against is the
+     * {@link OfflineGame} {@code convert} builds every card against: with no
+     * game at all, three cards' ability setup throws and would be misread as
+     * uncastable.
      */
     private static Optional<Verdict> verdictFor(String name) {
         // allowAltNames: a double-faced card's back-face name still names the
@@ -124,23 +121,12 @@ public class CastabilityMain {
         }
         try {
             PaperCard paper = new PaperCard(rules, "UNK", CardRarity.Common);
-            Game game = ConsultGame.INSTANCE;
+            Game game = OfflineGame.instance();
             Card card = CardFactory.getCard(paper, null, game.nextCardId(), game);
             return Optional.of(card.getSpells().isEmpty() ? Verdict.UNCASTABLE : Verdict.CASTABLE);
         } catch (RuntimeException e) {
             // A card Forge cannot even instantiate certainly cannot be cast.
             return Optional.of(Verdict.UNCASTABLE);
-        }
-    }
-
-    /** A player-less game to build cards against; created once, on first use. */
-    private static class ConsultGame {
-        static final Game INSTANCE = create();
-
-        private static Game create() {
-            GameRules rules = new GameRules(GameType.Constructed);
-            return new Game(List.of(), rules,
-                    new Match(rules, List.of(), "castability-consult"));
         }
     }
 

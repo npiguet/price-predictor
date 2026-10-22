@@ -1,10 +1,11 @@
 package com.pricepredictor.connector.effects;
 
+import com.pricepredictor.connector.ScriptHeader;
+
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Collections;
-import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -71,12 +72,7 @@ public final class VariantRegistry {
     /** The {@code Name:} a Forge source script declares, or null. */
     private static String nameOf(Path script) {
         try {
-            List<String> lines = Files.readAllLines(script);
-            for (String line : lines) {
-                if (line.startsWith("Name:")) {
-                    return line.substring("Name:".length()).trim();
-                }
-            }
+            return ScriptHeader.of(Files.readAllLines(script)).name();
         } catch (IOException | RuntimeException e) {
             // A script that cannot be read cannot be staged either, so the
             // registry simply does not learn its name.

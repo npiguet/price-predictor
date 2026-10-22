@@ -1,6 +1,7 @@
 package com.pricepredictor.connector;
 
 import forge.game.keyword.Keyword;
+import forge.game.trigger.Trigger;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 
@@ -45,6 +46,15 @@ public enum AbilityType {
 
     public boolean isCostType() {
         return this == ALTERNATE_COST || this == ADDITIONAL_COST || this == COST_REDUCTION;
+    }
+
+    /**
+     * The line kind a trigger renders as: a static trigger is a replacement in
+     * the printed text, since it changes how an event happens rather than
+     * responding to it.
+     */
+    public static AbilityType forTrigger(Trigger trigger) {
+        return trigger.isStatic() ? REPLACEMENT : TRIGGERED;
     }
 
     /** Apply type-specific formatting to a description. Default is identity. */

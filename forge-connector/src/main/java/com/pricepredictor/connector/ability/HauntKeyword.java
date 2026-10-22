@@ -65,16 +65,17 @@ public final class HauntKeyword {
             if (tDesc.contains("ABILITY")) {
                 SpellAbility overrideSa = t.getOverridingAbility();
                 if (overrideSa != null && overrideSa.getApi() == ApiType.Charm) {
-                    // Haunt SVar is a Charm — synthesize "choose one —" header
-                    String charmHeader = CharmAbility.synthesizeCharmHeader(overrideSa);
-                    if (charmHeader == null) charmHeader = "choose one";
-                    tDesc = tDesc.replace("ABILITY", charmHeader);
-                    String normalized2 = AbilityDescription.normalize(tDesc);
+                    // Haunt SVar is a Charm — synthesize "choose one —" header.
+                    // No owner: the triggers are deduplicated by description, so
+                    // the surviving line's options must belong to every trigger
+                    // that shares it (Orzhov Pontiff).
+                    CharmAbility.Expanded expanded =
+                            CharmAbility.expandPlaceholder(tDesc, overrideSa, null);
+                    String normalized2 = expanded.description();
                     if (normalized2 == null || normalized2.isEmpty()) continue;
                     if (!emitted.add(normalized2)) continue;
-                    AbilityType type2 = t.isStatic() ? AbilityType.REPLACEMENT : AbilityType.TRIGGERED;
-                    List<Ability> options = CharmAbility.optionsFrom(overrideSa);
-                    result.add(new TextAbility(type2, AbilityDescription.applyCasing(normalized2), 0, options));
+                    result.add(new TextAbility(AbilityType.forTrigger(t),
+                            AbilityDescription.applyCasing(normalized2), 0, expanded.options()));
                     continue;
                 } else if (effectDesc != null) {
                     tDesc = tDesc.replace("ABILITY", effectDesc);
@@ -85,8 +86,8 @@ public final class HauntKeyword {
             if (normalized == null || normalized.isEmpty()) continue;
             if (!emitted.add(normalized)) continue; // skip duplicates
 
-            AbilityType type = t.isStatic() ? AbilityType.REPLACEMENT : AbilityType.TRIGGERED;
-            result.add(new TextAbility(type, AbilityDescription.applyCasing(normalized)));
+            result.add(new TextAbility(AbilityType.forTrigger(t),
+                    AbilityDescription.applyCasing(normalized)));
         }
 
         return result;

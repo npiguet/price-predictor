@@ -26,6 +26,10 @@ which the JVM salts per run, so the first capture read `{U} or {W}` while the sh
 converter now renders colour-wheel order deterministically, and the golden carries the
 corpus's order.
 
+The synthetic mana lines of `m/mountain.txt` and `t/tundra.txt` were later edited by hand to
+end in a period, when the synthesized land-mana line took the shape of a scripted mana line
+(`{T}: add {W} or {U}.`, with the serial comma from three colours on).
+
 | Script | Why it is here |
 |---|---|
 | `a/anticausal_vestige.txt` | trigger with `Execute$` → `SubAbility$` chain (story 1 scenario 1); `Warp` keyword |
