@@ -1,14 +1,15 @@
 package com.pricepredictor.connector.effects;
 
-import org.junit.jupiter.api.AfterEach;
+import com.pricepredictor.connector.ForgeEnvironmentInitializer;
+import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -72,36 +73,16 @@ class CardFilenamesTest {
     }
 
     @Test
-    void theThreeTreesAreKnownAndTwoAreFlat() {
-        assertEquals(true, SourceTree.isKnown(SourceTree.CARDSFOLDER));
+    void twoOfTheThreeTreesAreFlat() {
         assertEquals(false, SourceTree.isFlat(SourceTree.CARDSFOLDER));
         assertEquals(true, SourceTree.isFlat(SourceTree.TOKENSCRIPTS));
         assertEquals(true, SourceTree.isFlat(SourceTree.VARIANT_SCRIPTS));
-        assertEquals(false, SourceTree.isKnown("cardsfolder-512"));
     }
 
     // -- the tree decides where a card lives ----------------------------
-
-    @AfterEach
-    void forgetTheTemporaryTree() {
-        SourceTree.forgetTrees();
-    }
-
-    /** A tree holding one ordinary card and the three shapes derivation misses. */
-    private static Path tree(Path root) throws IOException {
-        file(root, "a/ajanis_pridemate.txt");
-        file(root, "p/+2_mace.txt");
-        file(root, "n/1996_world_champion.txt");
-        file(root, "upcoming/xenobotanist.txt");
-        SourceTree.useTree(SourceTree.CARDSFOLDER, root);
-        return root;
-    }
-
-    private static void file(Path root, String relative) throws IOException {
-        Path path = root.resolve(relative);
-        Files.createDirectories(path.getParent());
-        Files.writeString(path, "Name:test\n");
-    }
+    //
+    // Asked of Forge's own cardsfolder, the tree the collector reads, so each
+    // case names a file that tree actually holds.
 
     /**
      * The case this lookup exists for. {@code +2 Mace} derives to
@@ -110,36 +91,46 @@ class CardFilenamesTest {
      * path joins to nothing and says nothing about it.
      */
     @Test
-    void aCardTheTreeFilesElsewhereGetsThePathTheTreeUses(@TempDir Path root)
-            throws IOException {
-        tree(root);
+    void aCardTheTreeFilesElsewhereGetsThePathTheTreeUses() {
         assertEquals("cardsfolder/p/+2_mace.txt",
                 CardFilenames.scriptFileForStem(SourceTree.CARDSFOLDER, "+2_mace"));
     }
 
     /** A digit initial is a directory that exists but holds a different card. */
     @Test
-    void aCardFiledUnderALetterItDoesNotStartWithFollowsTheTree(@TempDir Path root)
-            throws IOException {
-        tree(root);
+    void aCardFiledUnderALetterItDoesNotStartWithFollowsTheTree() {
         assertEquals("cardsfolder/n/1996_world_champion.txt",
                 CardFilenames.scriptFileForStem(
                         SourceTree.CARDSFOLDER, "1996_world_champion"));
     }
 
-    /** Unreleased cards sit in one directory whatever their initial. */
+    /**
+     * Unreleased cards sit in one directory whatever their initial.
+     *
+     * <p>Whichever card the tree holds there, because which cards are
+     * unreleased changes with every Forge upgrade.
+     */
     @Test
-    void anUpcomingCardKeepsItsOwnDirectory(@TempDir Path root) throws IOException {
-        tree(root);
-        assertEquals("cardsfolder/upcoming/xenobotanist.txt",
-                CardFilenames.scriptFileForStem(
-                        SourceTree.CARDSFOLDER, "xenobotanist"));
+    void anUpcomingCardKeepsItsOwnDirectory() throws IOException {
+        Path upcoming = ForgeEnvironmentInitializer.findCardsFolder().resolve("upcoming");
+        Assumptions.assumeTrue(Files.isDirectory(upcoming), "this Forge has no upcoming cards");
+        String stem;
+        try (Stream<Path> files = Files.list(upcoming)) {
+            stem = files.map(path -> path.getFileName().toString())
+                    .filter(name -> name.endsWith(".txt"))
+                    .map(name -> name.substring(0, name.length() - ".txt".length()))
+                    .sorted()
+                    .findFirst().orElse(null);
+        }
+        Assumptions.assumeTrue(stem != null, "this Forge has no upcoming cards");
+
+        assertEquals("cardsfolder/upcoming/" + stem + ".txt",
+                CardFilenames.scriptFileForStem(SourceTree.CARDSFOLDER, stem));
     }
 
     /** The cards the convention does describe are untouched by the lookup. */
     @Test
-    void aCardFiledUnderItsInitialIsUnchanged(@TempDir Path root) throws IOException {
-        tree(root);
+    void aCardFiledUnderItsInitialIsUnchanged() {
         assertEquals("cardsfolder/a/ajanis_pridemate.txt",
                 CardFilenames.scriptFile(SourceTree.CARDSFOLDER, "Ajani's Pridemate"));
         assertNull(SourceTree.directoryOf(SourceTree.CARDSFOLDER, "ajanis_pridemate"),
@@ -152,19 +143,20 @@ class CardFilenamesTest {
      * answer left for them.
      */
     @Test
-    void aStemTheTreeDoesNotHoldFallsBackToTheConvention(@TempDir Path root)
-            throws IOException {
-        tree(root);
-        assertEquals("cardsfolder/s/serra_angel.txt",
-                CardFilenames.scriptFile(SourceTree.CARDSFOLDER, "Serra Angel"));
+    void aStemTheTreeDoesNotHoldFallsBackToTheConvention() {
+        assertEquals("cardsfolder/n/no_such_card_was_ever_printed.txt",
+                CardFilenames.scriptFile(
+                        SourceTree.CARDSFOLDER, "No Such Card Was Ever Printed"));
     }
 
-    /** An unlocatable tree must not take the collector down with it. */
+    /**
+     * A tree with nowhere to look must not take the collector down with it:
+     * only {@code cardsfolder} has a root to index, so any other name answers
+     * nothing and the caller keeps the convention.
+     */
     @Test
-    void anAbsentTreeLeavesTheConventionInPlace(@TempDir Path root) {
-        SourceTree.useTree(SourceTree.CARDSFOLDER, root.resolve("no-such-tree"));
-        assertEquals("cardsfolder/s/serra_angel.txt",
-                CardFilenames.scriptFile(SourceTree.CARDSFOLDER, "Serra Angel"));
+    void aTreeWithNoRootAnswersNothing() {
+        assertNull(SourceTree.directoryOf("cardsfolder-512", "+2_mace"));
     }
 
     // -- the path the card reader recorded ------------------------------

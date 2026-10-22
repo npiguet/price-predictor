@@ -50,10 +50,6 @@ public final class SourceTree {
         return TOKENSCRIPTS.equals(tree) || VARIANT_SCRIPTS.equals(tree);
     }
 
-    static boolean isKnown(String tree) {
-        return CARDSFOLDER.equals(tree) || isFlat(tree);
-    }
-
     // -- where a loader says it read a file ------------------------------
 
     /**
@@ -119,25 +115,6 @@ public final class SourceTree {
         return exceptions(tree).get(stem);
     }
 
-    /**
-     * Point a tree at its on-disk root, discarding any index already built.
-     *
-     * <p>A caller that knows where the tree is says so; everything else falls
-     * back to Forge's own {@code cardsfolder}. Tests index a temporary tree
-     * this way rather than the installation's.
-     */
-    public static synchronized void useTree(String tree, Path root) {
-        ROOTS.put(tree, root);
-        INDEXES.remove(tree);
-    }
-
-    /** Forget every installed root and index, so one test cannot bias another. */
-    static synchronized void forgetTrees() {
-        ROOTS.clear();
-        INDEXES.clear();
-    }
-
-    private static final Map<String, Path> ROOTS = new HashMap<>();
     private static final Map<String, Map<String, String>> INDEXES = new HashMap<>();
 
     private static synchronized Map<String, String> exceptions(String tree) {
@@ -149,9 +126,8 @@ public final class SourceTree {
         return index;
     }
 
+    /** Forge's own {@code cardsfolder}; no other tree is letter-keyed. */
     private static Path rootOf(String tree) {
-        Path installed = ROOTS.get(tree);
-        if (installed != null) return installed;
         if (!CARDSFOLDER.equals(tree)) return null;
         try {
             return ForgeEnvironmentInitializer.findCardsFolder();
