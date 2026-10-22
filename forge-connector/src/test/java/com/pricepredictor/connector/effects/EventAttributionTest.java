@@ -145,9 +145,9 @@ class EventAttributionTest {
                 "AB$ GainLife | Cost$ 1 | Defined$ You | LifeAmount$ 1"
                         + " | SubAbility$ DBPump", host);
 
-        assertEquals(EventAttribution.PERMANENT,
+        assertEquals(EventDuration.PERMANENT,
                 EventAttribution.duration(root, root.getSubAbility()));
-        assertEquals(EventAttribution.INSTANT,
+        assertEquals(EventDuration.INSTANT,
                 EventAttribution.duration(root, root));
     }
 
@@ -164,11 +164,11 @@ class EventAttributionTest {
         SpellAbility counter = AbilityFactory.getAbility(
                 "SP$ PutCounter | Defined$ Self | CounterType$ P1P1 | CounterNum$ 1", host);
 
-        assertEquals(EventAttribution.END_OF_TURN,
+        assertEquals(EventDuration.END_OF_TURN,
                 EventAttribution.duration(pump, pump, EffectEvent.PT_CHANGE));
-        assertEquals(EventAttribution.PERMANENT,
+        assertEquals(EventDuration.PERMANENT,
                 EventAttribution.duration(counter, counter, EffectEvent.PT_CHANGE));
-        assertEquals(EventAttribution.INSTANT,
+        assertEquals(EventDuration.INSTANT,
                 EventAttribution.duration(pump, pump, EffectEvent.DAMAGE_DEALT));
 
         String json = EventAttribution.stamp(

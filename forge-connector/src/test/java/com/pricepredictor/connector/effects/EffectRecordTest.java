@@ -261,7 +261,7 @@ class EffectRecordTest {
     @Test
     void aContinuousOutcomeCarriesItsDuration() {
         String json = new EffectEvent(EffectEvent.PT_CHANGE)
-                .subject("E1").duration("end_of_turn").toJson();
+                .subject("E1").duration(EventDuration.END_OF_TURN).toJson();
         assertTrue(json.contains("\"duration\":\"end_of_turn\""), json);
     }
 

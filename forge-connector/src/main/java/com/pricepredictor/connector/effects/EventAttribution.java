@@ -28,11 +28,6 @@ final class EventAttribution {
     private EventAttribution() {
     }
 
-    /** The head's three buckets; the full vocabulary is DURATIONS in Python. */
-    static final String INSTANT = "instant";
-    static final String END_OF_TURN = "end_of_turn";
-    static final String PERMANENT = "permanent";
-
     /**
      * Script durations that outlast the turn.
      *
@@ -147,7 +142,7 @@ final class EventAttribution {
      * duration lives only in Java reads as {@code instant}, which is also the
      * right answer for the many events that do not last at all.
      */
-    static String duration(SpellAbility root, Object pointer) {
+    static EventDuration duration(SpellAbility root, Object pointer) {
         return duration(root, pointer, null);
     }
 
@@ -159,20 +154,21 @@ final class EventAttribution {
      * Forge applies to the resolving clause's API: end of turn for a pump,
      * permanent for a counter.
      */
-    static String duration(SpellAbility root, Object pointer, String eventType) {
+    static EventDuration duration(SpellAbility root, Object pointer, String eventType) {
         String declared = declaredDuration(root, pointer);
         if (declared == null) {
             if (eventType == null || !LASTING_STATE.contains(eventType)) {
-                return INSTANT;
+                return EventDuration.INSTANT;
             }
             String api = apiOf(pointer instanceof SpellAbility resolving ? resolving : root);
-            return api != null && END_OF_TURN_BY_DEFAULT.contains(api) ? END_OF_TURN : PERMANENT;
+            return api != null && END_OF_TURN_BY_DEFAULT.contains(api)
+                    ? EventDuration.END_OF_TURN : EventDuration.PERMANENT;
         }
         String key = declared.toLowerCase(Locale.ROOT);
         if (LASTING.contains(key)) {
-            return PERMANENT;
+            return EventDuration.PERMANENT;
         }
-        return END_OF_TURN;
+        return EventDuration.END_OF_TURN;
     }
 
     /**

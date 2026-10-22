@@ -69,4 +69,11 @@ class WireVocabularyTest {
         assertEquals(List.of("cost", "effect", "trigger-condition", "target-spec"),
                 wireNames(SpanRole.values(), SpanRole::wireName));
     }
+
+    /** {@code DURATIONS} in {@code effect_head_layout.py}, in its order. */
+    @Test
+    void eventDurations() {
+        assertEquals(List.of("instant", "end_of_turn", "permanent"),
+                wireNames(EventDuration.values(), EventDuration::wireName));
+    }
 }
