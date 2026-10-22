@@ -1,6 +1,7 @@
 package com.pricepredictor.connector.effects;
 
 import java.util.Collection;
+import java.util.Map;
 import java.util.StringJoiner;
 
 /**
@@ -50,5 +51,36 @@ public final class Json {
             joiner.add(string(value));
         }
         return joiner.toString();
+    }
+
+    /**
+     * Any value as JSON: a boolean or number bare, a map as an object in its
+     * own iteration order, an iterable as an array, and anything else as the
+     * string literal of its {@code String.valueOf}.
+     *
+     * <p>A null therefore becomes the string {@code "null"}, not JSON null.
+     * Event params nested a null that way into corpora that cannot be
+     * rewritten, and dedup hashes the rendered bytes, so a different spelling
+     * here would split one event into two.
+     */
+    public static String value(Object value) {
+        if (value instanceof Boolean || value instanceof Number) {
+            return String.valueOf(value);
+        }
+        if (value instanceof Map<?, ?> map) {
+            StringJoiner joiner = new StringJoiner(",", "{", "}");
+            for (Map.Entry<?, ?> entry : map.entrySet()) {
+                joiner.add(string(String.valueOf(entry.getKey())) + ":" + value(entry.getValue()));
+            }
+            return joiner.toString();
+        }
+        if (value instanceof Iterable<?> items) {
+            StringJoiner joiner = new StringJoiner(",", "[", "]");
+            for (Object item : items) {
+                joiner.add(value(item));
+            }
+            return joiner.toString();
+        }
+        return string(String.valueOf(value));
     }
 }
