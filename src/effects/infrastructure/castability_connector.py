@@ -31,9 +31,7 @@ _MAIN_CLASS = "com.pricepredictor.connector.CastabilityMain"
 class CastabilityConnector:
     """Runs ``CastabilityMain`` over a card list and reads its verdicts."""
 
-    def consult(
-        self, names: list[str], cards_folder: Path,
-    ) -> dict[str, str]:
+    def consult(self, names: list[str]) -> dict[str, str]:
         """``card name -> "castable" | "uncastable"`` for every name it judged.
 
         A name the worker does not answer for is simply absent, and the caller
@@ -50,11 +48,7 @@ class CastabilityConnector:
                 classpath=build_forge_classpath(
                     include_full_runtime=True, include_dependency_glob=True,
                 ),
-                main_args=[
-                    "--cards", str(request),
-                    "--output", str(response),
-                    "--cards-path", str(cards_folder),
-                ],
+                main_args=["--cards", str(request), "--output", str(response)],
             )
             result = subprocess.run(cmd, check=False)
             if result.returncode != 0 or not response.exists():

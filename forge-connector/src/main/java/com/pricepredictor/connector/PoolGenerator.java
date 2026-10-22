@@ -61,30 +61,6 @@ public class PoolGenerator {
         return pools;
     }
 
-    /**
-     * Generate a single pool as {@link PaperCard}s (basic lands excluded).
-     *
-     * <p>Used by self-play match generation to feed deck B's pool directly into
-     * {@link DeckBuilder#buildDeck(List)}, which requires {@code PaperCard}s.
-     *
-     * @param setCode MTG set code (must not be null)
-     * @return Non-basic-land cards from 6 boosters of the given set.
-     */
-    public List<PaperCard> generatePool(String setCode) {
-        return generatePool(setCode, HoldoutCards.NONE);
-    }
-
-    /**
-     * Generate a single pool as {@link PaperCard}s, depleted of {@code excluded}.
-     *
-     * @param setCode  MTG set code (must not be null)
-     * @param excluded Cards the pool may not contain; {@link HoldoutCards#NONE} for an ordinary pool.
-     * @return Non-basic-land cards from 6 boosters of the given set.
-     */
-    public List<PaperCard> generatePool(String setCode, HoldoutCards excluded) {
-        return openSinglePool(boosterTemplate(setCode), excluded);
-    }
-
     private SealedTemplate boosterTemplate(String setCode) {
         if (setCode == null) {
             throw new IllegalArgumentException("Set code must not be null");

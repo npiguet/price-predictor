@@ -579,7 +579,7 @@ def run(config: CollectCoverageConfig) -> int:
         len(coverage),
     )
 
-    verdicts = consult_castability(sorted(coverage), cards_folder)
+    verdicts = consult_castability(sorted(coverage))
     for name, verdict in verdicts.items():
         if name in coverage:
             coverage[name].verdict = verdict
@@ -614,9 +614,7 @@ def run(config: CollectCoverageConfig) -> int:
     return 130 if interrupted else 0
 
 
-def consult_castability(
-    names: list[str], cards_folder: Path,
-) -> dict[str, ConsultVerdict]:
+def consult_castability(names: list[str]) -> dict[str, ConsultVerdict]:
     """Ask a live Forge whether each card can be cast at all (FR-047).
 
     Needs a game, so it runs in the JVM. A failure to consult leaves every card
@@ -626,7 +624,7 @@ def consult_castability(
     from effects.infrastructure.castability_connector import CastabilityConnector
 
     try:
-        verdicts = CastabilityConnector().consult(names, cards_folder)
+        verdicts = CastabilityConnector().consult(names)
     except (FileNotFoundError, OSError) as exc:
         logger.warning(
             "Castability consult unavailable (%s); every card ranks as "
@@ -787,7 +785,7 @@ def run_text_coverage(config: CollectCoverageConfig) -> int:
         )
         return 1
 
-    verdicts = consult_castability(sorted(present), cards_folder)
+    verdicts = consult_castability(sorted(present))
     coverage = {
         text: TextCoverage(text=text, castable=any(
             verdicts.get(card, ConsultVerdict.UNKNOWN) != ConsultVerdict.UNCASTABLE

@@ -275,14 +275,6 @@ public class MatchWorkerMain {
     }
 
     /**
-     * Record one completed match to whichever of the three writers are wired
-     * up. Factored out of {@link #runForever}'s infinite loop so the
-     * independence this method's contract depends on — the progress line is
-     * written whether or not {@code writer}/{@code cardsPlayedWriter} are
-     * {@code null} — is exercisable by a plain unit test that constructs a
-     * {@link MatchGenerationResult} fixture and never touches Forge.
-     */
-    /**
      * Names, once per match boundary, each effect-record hook that has gone
      * quiet since the last one.
      *
@@ -304,6 +296,14 @@ public class MatchWorkerMain {
         }
     }
 
+    /**
+     * Record one completed match to whichever of the three writers are wired
+     * up. Factored out of {@link #runForever}'s infinite loop so the
+     * independence this method's contract depends on — the progress line is
+     * written whether or not {@code writer}/{@code cardsPlayedWriter} are
+     * {@code null} — is exercisable by a plain unit test that constructs a
+     * {@link MatchGenerationResult} fixture and never touches Forge.
+     */
     static void recordMatch(
             MatchGenerationResult result,
             MatchResultWriter writer,

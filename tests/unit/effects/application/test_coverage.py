@@ -390,7 +390,7 @@ class TestRunClosesTheSupervisor:
         import effects.infrastructure.collector_connector as collector_connector
 
         monkeypatch.setattr(
-            collect_coverage, "consult_castability", lambda names, folder: {},
+            collect_coverage, "consult_castability", lambda names: {},
         )
         supervisor = MagicMock()
         monkeypatch.setattr(
@@ -415,7 +415,7 @@ class TestRunClosesTheSupervisor:
         import effects.infrastructure.collector_connector as collector_connector
 
         monkeypatch.setattr(
-            collect_coverage, "consult_castability", lambda names, folder: {},
+            collect_coverage, "consult_castability", lambda names: {},
         )
         supervisor = MagicMock()
         supervisor.play_round.side_effect = RuntimeError("boom")
@@ -1206,7 +1206,7 @@ class TestNonDeckTypesLeaveTheUnit:
         (tmp_path / "records").mkdir()
         consulted: list[list[str]] = []
 
-        def _consult(names, folder):
+        def _consult(names):
             consulted.append(list(names))
             return {}
 
@@ -1256,7 +1256,7 @@ class TestNonDeckTypesLeaveTheUnit:
         }
         consulted: list[list[str]] = []
 
-        def _consult(names, folder):
+        def _consult(names):
             consulted.append(list(names))
             return {}
 

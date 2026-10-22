@@ -37,10 +37,11 @@ class MatchGeneratorTest {
         assertNotNull(result);
         assertEquals(40, result.deckA().size(), "deckA must be exactly 40 cards");
         assertEquals(40, result.deckB().size(), "deckB must be exactly 40 cards");
-        int total = result.winsA() + result.winsB();
-        assertTrue(total == 2 || total == 3, "wins must sum to 2 or 3, got " + total);
-        assertTrue(result.winsA() >= 0 && result.winsA() <= 2);
-        assertTrue(result.winsB() >= 0 && result.winsB() <= 2);
+        // Best-of-3: two or three games, and no deck wins more than two.
+        String games = result.games();
+        assertTrue(games.length() == 2 || games.length() == 3, "games: " + games);
+        assertTrue(games.chars().filter(c -> c == 'A').count() <= 2, "games: " + games);
+        assertTrue(games.chars().filter(c -> c == 'B').count() <= 2, "games: " + games);
     }
 
     @Test

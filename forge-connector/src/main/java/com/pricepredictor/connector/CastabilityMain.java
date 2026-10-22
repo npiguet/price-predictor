@@ -56,10 +56,9 @@ public class CastabilityMain {
     }
 
     public static void main(String[] args) {
-        ToolMain.Args cli = ToolMain.args(args, "--cards", "--output", "--cards-path");
+        ToolMain.Args cli = ToolMain.args(args, "--cards", "--output");
         String cardsArg = cli.get("--cards");
         String outputArg = cli.get("--output");
-        Path cardsPath = Path.of(cli.get("--cards-path", "output/cardsfolder"));
         if (cardsArg == null || outputArg == null) {
             System.err.println("Error: --cards and --output are required");
             System.exit(2);
@@ -81,8 +80,7 @@ public class CastabilityMain {
             System.out.println(
                     "Consulted " + verdicts.size() + " cards: " + castable
                             + " castable, " + (verdicts.size() - castable)
-                            + " uncastable. Output: " + output
-                            + " (cards from " + cardsPath + ")");
+                            + " uncastable. Output: " + output);
         });
     }
 

@@ -122,17 +122,6 @@ class MatchResultWriterTest {
     }
 
     @Test
-    void winsAandWinsBDerivedFromGamesString() {
-        MatchResult r = sampleResult(deck40("A"), deck40("B"), "ABA", "BAB");
-        assertEquals(2, r.winsA());
-        assertEquals(1, r.winsB());
-
-        MatchResult sweep = sampleResult(deck40("A"), deck40("B"), "BB", "AA");
-        assertEquals(0, sweep.winsA());
-        assertEquals(2, sweep.winsB());
-    }
-
-    @Test
     void invalidGamesStringRejected() {
         // Non-A/B characters are rejected regardless of length.
         assertThrows(IllegalArgumentException.class, () ->
