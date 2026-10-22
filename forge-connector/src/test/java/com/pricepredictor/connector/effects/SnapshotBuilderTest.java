@@ -168,9 +168,10 @@ class SnapshotBuilderTest {
      * What an ability's snapshot carries whatever zone it sits in: its host
      * and the cards it targets.
      *
-     * <p>One list for the bracket collector and the fork collector, which once
-     * kept one each, the fork's host-only: a forced ability's exiled target was
-     * in no tier at all, so its record named a target the state did not hold.
+     * <p>One list for the bracket collector and the fork collector alike: a
+     * target this list leaves out and no other tier sweeps, such as an exiled
+     * card, is in no tier at all, and the record names a target its state
+     * does not hold.
      */
     @Nested
     @ExtendWith(ForgeExtension.class)
