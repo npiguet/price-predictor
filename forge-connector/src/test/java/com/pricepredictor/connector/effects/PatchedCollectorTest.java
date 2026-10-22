@@ -2577,6 +2577,11 @@ class PatchedCollectorTest {
      * ForkCollector#runAsForkForTest} stands in for that call without needing
      * a real combat to fork. No live bracket is open, matching a probe's own
      * timing: like {@code intervene}, it does not run nested inside a live
+
+                // The event reaches the bracket's buffer, which only a flush
+                // writes; without one the shard is empty whether or not the
+                // gate exists.
+                bracket.finishGame(Set.of());
      * resolution.
      */
     @Test
