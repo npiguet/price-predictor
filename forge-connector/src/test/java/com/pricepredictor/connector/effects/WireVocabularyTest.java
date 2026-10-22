@@ -62,4 +62,11 @@ class WireVocabularyTest {
         assertEquals(List.of("keyword", "spell", "trigger", "static", "replacement"),
                 wireNames(TraitKind.values(), TraitKind::wireName));
     }
+
+    /** {@code ROLES} in {@code provenance.py}, in its order. */
+    @Test
+    void spanRoles() {
+        assertEquals(List.of("cost", "effect", "trigger-condition", "target-spec"),
+                wireNames(SpanRole.values(), SpanRole::wireName));
+    }
 }
