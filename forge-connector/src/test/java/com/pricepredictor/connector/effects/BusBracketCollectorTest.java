@@ -665,11 +665,10 @@ class BusBracketCollectorTest {
     /**
      * An optional effect the controller refused is {@code declined}.
      *
-     * <p>The outcome the schema asked for and nothing ever wrote. There is no
-     * bus event for it — an offer nobody took moves no card, deals no damage
-     * and changes no life total — which is exactly why it needed saying: the
-     * record was otherwise identical to one for an effect that was never
-     * offered at all.
+     * <p>There is no bus event for it — an offer nobody took moves no card,
+     * deals no damage and changes no life total — which is exactly why it
+     * needs saying: the record is otherwise identical to one for an effect
+     * that was never offered at all.
      *
      * <p>Partnerless, like a fizzle: {@code declined} is one of the three
      * outcomes the schema says has no effect half, and the Python loader

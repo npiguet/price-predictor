@@ -120,22 +120,20 @@ class RecordShardWriterTest {
 
     // ── identity across worker lifetimes ────────────────────────────────
     //
-    // A regression suite for one defect rather than a description of the
-    // writer: the first collected corpus reused 71-75 % of its record ids and
-    // held 804 distinct game ids for 31,662 games, because both counters live
-    // in one JVM's heap and the supervisor replaces that JVM roughly 530 times
-    // over an eight-hour run. Every test here fails against the pre-lifetime
-    // writer.
+    // Both counters live in one JVM's heap, and the supervisor replaces that
+    // JVM hundreds of times over an overnight run, so without the lifetime
+    // token in the shard name the record ids and game ids of successive JVMs
+    // collide.
     //
-    // The restarts are not the bug and are not going away: the small heap and
+    // The restarts are not the problem and are not going away: the small heap and
     // the timed recycle are deliberate containment for Forge misbehaving late
     // in a JVM's life. The ids have to be correct under them, including for a
     // JVM killed mid-game, which runs no shutdown hook.
 
     @Test
     void aRestartedWorkerReusesNoId() {
-        // The scenario the analysed run hit ~530 times: same run id, same pool
-        // slot, same directory, a new JVM. Both counters start at zero again, so
+        // The scenario every recycle produces: same run id, same pool slot,
+        // same directory, a new JVM. Both counters start at zero again, so
         // only the shard token can keep the ids apart. Record ids and game ids
         // are checked separately because they are separate namespaces — the two
         // counters are independent and a game id may read like a record id.

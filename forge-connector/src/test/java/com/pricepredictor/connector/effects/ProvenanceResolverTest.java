@@ -440,9 +440,6 @@ class ProvenanceResolverTest {
      * recipient's keyword list is not an answer: it is a position in a list of
      * things the card does not print. The static that handed the keyword out is
      * the printed line, and {@code Card.getKeywordForStaticAbility} records it.
-     *
-     * <p>This was the largest single bucket among the 443 records that reported
-     * {@code unindexable} in the smoke corpus.
      */
     @Test
     void aKeywordGrantedByAnotherPermanentKeysToThatPermanentsStatic() {
@@ -499,9 +496,8 @@ class ProvenanceResolverTest {
     /**
      * The same shape spawned from inside a trigger's {@code Execute$} SVar
      * keys one step further, to the {@code T:} line: the SVar is a member of no
-     * slice, so the trigger is what is printed. Two of the smoke corpus's
-     * biggest offenders were exactly this — a token created by a triggered
-     * ability and sacrificed at end of turn.
+     * slice, so the trigger is what is printed: a token created by a triggered
+     * ability and sacrificed at end of turn is this shape.
      */
     @Test
     void aDelayedTriggerSpawnedInsideATriggerKeysToTheTriggerLine() {
@@ -522,14 +518,13 @@ class ProvenanceResolverTest {
      * A reflexive trigger's {@code Execute$} ability keys to the printed
      * {@code T:} line two steps above it.
      *
-     * <p>The largest bucket the smoke corpus reported as {@code unindexable}:
-     * 378 records over 37 cards, all of them the "you may pay {X}. When you do,
-     * ..." shape. What resolves is the reflexive trigger's own execute ability,
+     * <p>The "you may pay {X}. When you do, ..." shape. What resolves is the
+     * reflexive trigger's own execute ability,
      * whose owning trigger {@code ImmediateTriggerEffect} assembles at runtime
      * and which is therefore in no slice — but that trigger carries the ability
-     * that spawned it, and following that reaches the printed line. The
-     * resolver could already follow a {@code Trigger} it was handed directly;
-     * what it could not do was reach the trigger from the ability it owns.
+     * that spawned it, and following that reaches the printed line: the
+     * resolver reaches the trigger from the ability it owns, not only when it
+     * is handed the {@code Trigger} directly.
      */
     @Test
     void aReflexiveTriggersExecuteKeysToThePrintedTriggerLine() {
@@ -624,9 +619,6 @@ class ProvenanceResolverTest {
      * are still in the state, so the lookup Forge did on the way out can be
      * done again backwards: the SVar whose text parses to these parameters, and
      * then the line that names that SVar.
-     *
-     * <p>This shape was half of the 443 records the smoke corpus reported as
-     * {@code unindexable}.
      */
     @Test
     void anAuraGrantedTriggerKeysToTheLineThatGrantedIt() {

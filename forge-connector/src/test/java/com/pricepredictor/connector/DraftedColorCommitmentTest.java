@@ -79,7 +79,7 @@ class DraftedColorCommitmentTest {
     }
 
     /**
-     * The property the fix turns on: the pool alone does not determine the colours, so
+     * The property this turns on: the pool alone does not determine the colours, so
      * {@code buildDrafted} must be handed its picks in pick order.
      */
     @Test

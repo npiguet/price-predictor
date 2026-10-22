@@ -104,7 +104,7 @@ class CardFilenamesTest {
     }
 
     /**
-     * The defect this lookup exists for. {@code +2 Mace} derives to
+     * The case this lookup exists for. {@code +2 Mace} derives to
      * {@code cardsfolder/+/} and Forge files it under {@code p/}, and because
      * only {@code keyword} keys are checked against their sidecar the wrong
      * path joins to nothing and says nothing about it.
@@ -136,7 +136,7 @@ class CardFilenamesTest {
                         SourceTree.CARDSFOLDER, "xenobotanist"));
     }
 
-    /** The 99.7% the convention does describe are untouched by the lookup. */
+    /** The cards the convention does describe are untouched by the lookup. */
     @Test
     void aCardFiledUnderItsInitialIsUnchanged(@TempDir Path root) throws IOException {
         tree(root);

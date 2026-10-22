@@ -36,12 +36,10 @@ class ProbeSchedulerTest {
     /**
      * A branch is completed only against its own damage step.
      *
-     * <p>In the first corpus it was not: a branch forked at the first-strike
-     * step, where nothing was ever assigned, survived that step and was written
-     * against the regular step's record — so the sampled fork record whose phase
-     * was {@code combat_first_strike_damage} carried a {@code mirror_of} whose
-     * phase was {@code combat_damage}, and gate 2's difference compared a step
-     * that did not happen with one that did.
+     * <p>A branch forked at the first-strike step that survived that step and
+     * was written against the regular step's record would carry a
+     * {@code mirror_of} whose phase is {@code combat_damage}, and gate 2's
+     * difference would compare a step that did not happen with one that did.
      */
     @Test
     void aBranchIsCompletedOnlyAgainstItsOwnDamageStep() throws Exception {

@@ -657,7 +657,7 @@ class RulesParserTest {
         assertTrue(activated.get(0).descriptionText().contains("add {G}"));
     }
 
-    // --- Smoke tests: cards that previously caused errors ---
+    // --- Smoke tests: cards whose shapes are error-prone to parse ---
 
     @ParameterizedTest
     @CsvSource({
@@ -1166,8 +1166,8 @@ class RulesParserTest {
 
     @Test
     void activatedAbilitySubChainConcatenatedNotSplit() {
-        // fleshformer: oracle=1 line but converter previously emitted 2 (root + sub-ability).
-        // After fix, sub-ability text must be concatenated into the root line.
+        // fleshformer: oracle=1 line, so the converter must emit 1, not 2 (root + sub-ability):
+        // the sub-ability text is concatenated into the root line.
         CardFace card = face("f/fleshformer.txt");
         var activated = abilitiesOfType(card, AbilityType.ACTIVATED);
         assertEquals(1, activated.size(), "fleshformer should have exactly 1 ACTIVATED: " + card.abilities());
@@ -1217,9 +1217,9 @@ class RulesParserTest {
 
     @Test
     void etbReplacementNoDuplicateSpellLine() {
-        // Sigarda's Splendor: has an ETBReplacement/ImmediateTrigger SVar that is
-        // processed both by the triggers/replacements loop and (incorrectly) by the
-        // spell loop.  After the fix, no ability text should appear twice.
+        // Sigarda's Splendor: has an ETBReplacement/ImmediateTrigger SVar that the
+        // triggers/replacements loop processes and the spell loop must not process
+        // again, so no ability text should appear twice.
         CardFace card = face("s/sigardas_splendor.txt");
         String formatted = rendered(card);
         // Collect all non-header values from formatted output

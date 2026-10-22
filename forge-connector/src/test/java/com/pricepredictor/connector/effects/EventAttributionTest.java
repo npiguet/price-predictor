@@ -39,13 +39,10 @@ class EventAttributionTest {
     /**
      * Each clause of a multi-clause line is its own index.
      *
-     * <p>The engine's pointer was set only around the line the stack resolved,
-     * so every clause after the first was attributed to the root: 298 of 74,952
-     * events carried an {@code attributed_to} at all, and those were the dozen
-     * branching effects that resolve a sub-ability through
-     * {@code AbilityUtils.resolve}. "Put a counter" and "draw a card" are
-     * exactly the distinction the per-entity head learns, so a whole line
-     * attributed to its root teaches neither.
+     * <p>A pointer set only around the line the stack resolved would attribute
+     * every clause after the first to the root. "Put a counter" and "draw a
+     * card" are exactly the distinction the per-entity head learns, so a whole
+     * line attributed to its root teaches neither.
      */
     @Test
     void eachClauseOfAMultiClauseAbilityAttributesToItself() {
@@ -60,11 +57,11 @@ class EventAttributionTest {
     /**
      * The root acting and no pointer at all are different answers.
      *
-     * <p>Both used to be null, which is why the 3.2% of events carrying an
-     * attribution could not be read: a single-clause ability legitimately has
-     * no sub-ability and the root is the right answer, and that looked exactly
-     * like the pointer failing to land. Separating them is what turns the rate
-     * into a measurement instead of a number.
+     * <p>A null for both would make the attribution rate unreadable: a
+     * single-clause ability legitimately has no sub-ability and the root is
+     * the right answer, and that would look exactly like the pointer failing
+     * to land. Separating them is what turns the rate into a measurement
+     * instead of a number.
      */
     @Test
     void theRootActingAndNoPointerAreDifferentAnswers() {

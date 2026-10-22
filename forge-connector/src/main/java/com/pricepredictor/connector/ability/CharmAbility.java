@@ -112,7 +112,7 @@ public record CharmAbility(String descriptionText, List<Ability> subAbilities) i
      * <p>Forge writes a cost space-separated — {@code ModeCost$ 3 W W} — and one
      * pair of braces around the whole of it produces {@code {3 W W}}, which the
      * tokenizer reads as a single symbol because braces delimit an atom. That
-     * put a distinct token in the vocabulary for every multi-shard mode cost,
+     * would put a distinct token in the vocabulary for every multi-shard mode cost,
      * each unrelated to the {@code {3}}, {@code {W}} the rest of the corpus
      * uses. One pair of braces per shard is what a card prints and what every
      * other cost in the converted text already looks like.

@@ -45,9 +45,8 @@ class TriggerNegativeSamplerTest {
     /**
      * The kept negatives track the kept positives, whatever the population is.
      *
-     * <p>The first corpus used a fixed 2% rate and landed at 74:26 rather than
-     * 1:1, because a fixed rate cannot hold a ratio: the true population was
-     * 1:17.7 and it varies by mode, board and turn. Two modes with very
+     * <p>A fixed rate cannot hold a ratio: the population ratio varies by
+     * mode, board and turn. Two modes with very
      * different burst lengths are driven here, and both have to come out level
      * — a fixed rate fails this by construction, at 1:0.8 for the short burst
      * and 1:0.06 for the long one.
@@ -70,13 +69,12 @@ class TriggerNegativeSamplerTest {
     /**
      * The ratio holds over what reaches the shard, not over what was offered.
      *
-     * <p>This is the 58:42 the corpus measured while the unit test above read
-     * 1:1. The difference is here: an offered negative is refused downstream by
-     * the duplicate check or the per-line flood cap far more often than a
-     * positive is, and under the old rate the deficit that leaves standing was
-     * repaid only at {@code deficit / estimated run length} — a lag a game's
-     * handful of firings per mode never works off. Three refusals in four is
-     * harsher than the corpus and the kept sets still come out level.
+     * <p>An offered negative is refused downstream by the duplicate check or
+     * the per-line flood cap far more often than a positive is, and the deficit
+     * that leaves standing has to be repaid by the next evaluation: repaid at a
+     * lagging rate, it is a lag a game's handful of firings per mode never
+     * works off. Three refusals in four is harsher than a real game and the
+     * kept sets still come out level.
      */
     @Test
     void negativesStayLevelEvenWhenMostOfThemAreRefusedDownstream() {

@@ -22,7 +22,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * The whole path a forked combat record takes, run once against the real
  * copier.
  *
- * <p>{@code ProvenanceKeyTest} reproduces {@code GameCopier}'s shape by hand --
+ * <p>{@code ScriptLocatorTest} reproduces {@code GameCopier}'s shape by hand --
  * a bare {@code Card} carrying the original's name and image key and no paper
  * card -- which is the right unit to pin, and the wrong one to trust alone: it
  * asserts what this project believes the copier does. This test asks the copier
@@ -32,9 +32,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *
  * <p>The assertion is on the copy's {@code printed} keys (FR-150): every
  * ability-bearing token in a forked record arrives without a paper card, and
- * before the fix its lines keyed into {@code cardsfolder/f/food_token.txt} --
- * a file that does not exist, so the sidecar join failed loudly and the record
- * carried no ability text at all.
+ * keyed by its name its lines would name {@code cardsfolder/f/food_token.txt}
+ * -- a file that does not exist, so the sidecar join would fail loudly and the
+ * record carry no ability text at all.
  *
  * <p>Its own class rather than {@code ForkCollectorTest}, whose class doc says
  * outright that forking a live game is not its job and whose fixture is a
@@ -45,7 +45,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @ExtendWith(ForgeExtension.class)
 class CopiedTokenProvenanceTest {
 
-    /** The script the Food token is filed under, and the file the bug named. */
+    /** The script the Food token is filed under, and the file a name-derived key would name. */
     private static final String TOKEN_SCRIPT =
             "\"script_file\":\"tokenscripts/c_a_food_sac.txt\"";
     private static final String CARD_SCRIPT = "cardsfolder/f/food_token.txt";

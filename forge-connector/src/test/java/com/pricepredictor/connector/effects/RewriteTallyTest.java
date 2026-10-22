@@ -51,8 +51,7 @@ class RewriteTallyTest {
     /**
      * The headline is the volume and the results, because that is the question.
      *
-     * <p>The channel held 34 records in 1.88M against a 7% share of the
-     * mixture, and the operator needs to know in the first hour whether it
+     * <p>The operator needs to know in the first hour whether the channel
      * filled. A breakdown that is all {@code ?} is a Forge jar whose listener
      * predates the result argument, which reads identically to a wired one on
      * every other line of the summary.
@@ -101,13 +100,12 @@ class RewriteTallyTest {
     /**
      * The tally separates an unreadable change from no change at all.
      *
-     * <p>The smoke run reported 110 drops, {@code Moved=91} among them, and
-     * {@code 69 dropped with no raw parameter difference at all} — three lines
-     * needing arithmetic across them to reach the one fact that decides what to
-     * do next: 62 of Moved's 91 changed nothing whatever, while 29 changed only
-     * the entry-counter table, which {@code zone_change} has no slot for. Those
-     * rows are all written now, so the question is no longer which to drop but
-     * which of them a reader is being short-changed on.
+     * <p>A mode's records split into those that changed nothing whatever and
+     * those whose change has no slot to land in — a {@code Moved} that changed
+     * only the entry-counter table, which {@code zone_change} cannot express.
+     * Every row is written, so the question the tally answers is which of them
+     * a reader is being short-changed on, and it answers it on one line rather
+     * than by arithmetic across three.
      */
     @Test
     void theTallySeparatesAnUnreadableChangeFromNoChange() {
