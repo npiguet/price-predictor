@@ -58,7 +58,7 @@ public final class BusBracketCollector extends BusEventReader {
     private SpellAbility resolving;
     private ProvenanceKey.Resolved resolvingKeys = ProvenanceKey.Resolved.UNKNOWN;
     private String resolvingActor;
-    private String openBracketState;
+    private Snapshot openBracketState;
     private final EventBuffer bracketEvents = new EventBuffer();
 
     /**
@@ -74,10 +74,10 @@ public final class BusBracketCollector extends BusEventReader {
      */
     private static final class ModeHalf {
         private final Integer option;
-        private final String state;
+        private final Snapshot state;
         private final List<EffectEvent> events = new ArrayList<>();
 
-        private ModeHalf(Integer option, String state) {
+        private ModeHalf(Integer option, Snapshot state) {
             this.option = option;
             this.state = state;
         }
@@ -270,7 +270,7 @@ public final class BusBracketCollector extends BusEventReader {
         pendingActivations.add(new PendingActivation(
                 ability.getId(), context.nextRecordId(),
                 RecordShardWriter.timestamp(), EffectRecord.costsJson(ability),
-                actorOf(ability), ProvenanceKey.resolve(ability), openBracketState,
+                actorOf(ability), ProvenanceKey.resolve(ability), openBracketState.render(),
                 context.gameId() + ".link." + ability.getId(), targetCount(ability)));
     }
 
@@ -367,9 +367,8 @@ public final class BusBracketCollector extends BusEventReader {
                     context.nextRecordId(), resolvingKeys,
                     // Modes, X and the named card are set while the ability
                     // resolves, so the block that carries them is re-read here
-                    // and spliced into the board captured at the cast.
-                    SnapshotBuilder.spliceRefs(
-                            openBracketState, snapshots.refsJson(resolving)),
+                    // and paired with the board captured at the cast.
+                    openBracketState.withRefs(snapshots.refsJson(resolving)).render(),
                     bracketEvents.events())));
             return;
         }
@@ -384,7 +383,7 @@ public final class BusBracketCollector extends BusEventReader {
         for (ModeHalf half : modeHalves) {
             halves.add(HeldHalf.of(
                     context.nextRecordId(), resolvingKeys.withOption(half.option),
-                    SnapshotBuilder.spliceRefs(half.state, refs), half.events));
+                    half.state.withRefs(refs).render(), half.events));
         }
         held = new HeldResolution(resolving, resolvingActor, link, List.copyOf(halves));
     }
@@ -633,7 +632,7 @@ public final class BusBracketCollector extends BusEventReader {
         this.bracketDeclined = false;
         this.resolvingKeys = ProvenanceKey.resolve(ability);
         this.resolvingActor = actorOf(ability);
-        this.openBracketState = snapshots.toJson(ability, SnapshotBuilder.referencedOf(ability));
+        this.openBracketState = snapshots.ofAbility(ability, SnapshotBuilder.referencedOf(ability));
         this.bracketEvents.clear();
     }
 
@@ -676,7 +675,7 @@ public final class BusBracketCollector extends BusEventReader {
         }
         closeOpenMode();
         openMode = new ModeHalf(
-                option, snapshots.toJson(resolving, SnapshotBuilder.referencedOf(resolving)));
+                option, snapshots.ofAbility(resolving, SnapshotBuilder.referencedOf(resolving)));
     }
 
     /** Move the bracket's events into the open mode's half and file it. */
@@ -1038,7 +1037,7 @@ public final class BusBracketCollector extends BusEventReader {
         // Combat damage is the next action. Ordinarily the step boundary
         // before it has written the held resolution already.
         flushHeldResolution();
-        combatState = snapshots.toJson(null, List.of());
+        combatState = snapshots.ofBoard().render();
         // Nothing has died yet, so this is the moment the attackers and
         // blockers are all still in combat. The assignment is Forge's copy of
         // this step's, taken before any replacement, so it reads the same
@@ -1141,7 +1140,7 @@ public final class BusBracketCollector extends BusEventReader {
         context.emit(context.newResolution(Moment.RESOLUTION)
                 .actor(resolvingActor)
                 .ability(resolvingKeys)
-                .state(snapshots.toJson(null, List.of()))
+                .state(snapshots.ofBoard().render())
                 .payload(EffectRecord.eventsPayload(bracketEvents.drain())));
     }
 

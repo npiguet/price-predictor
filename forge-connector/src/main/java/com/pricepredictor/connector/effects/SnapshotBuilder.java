@@ -60,61 +60,7 @@ import java.util.StringJoiner;
  */
 public final class SnapshotBuilder {
 
-    /**
-     * The {@code state.tiers} every snapshot carries: all four, always.
-     *
-     * <p>Still written although it never varies, because the record schema is
-     * frozen and older corpora carry shallower vectors, which readers keep
-     * treating as uncollected rather than empty.
-     */
-    static final String TIERS_JSON = "[1,2,3,4]";
-
     private static final char[] COLORS = {'W', 'U', 'B', 'R', 'G'};
-
-    /**
-     * The key the refs block opens with, and the key that follows it.
-     *
-     * <p>Published because a collector that re-reads refs at a later moment than
-     * the rest of the snapshot splices the block back in by these two markers.
-     * They are constants here, and the state is assembled from them in
-     * {@link #stateJson}, so a key reorder that compiles cannot silently break
-     * the splice.
-     */
-    public static final String REFS_KEY = ",\"refs\":";
-    public static final String AFTER_REFS_KEY = ",\"pending_event\":";
-
-    /**
-     * A rendered state with its refs block replaced by a later reading.
-     *
-     * <p>The board must be captured before the ability resolves, but the modes
-     * a charm chose, the X it announced and the card, colour or type its
-     * controller named are set by the engine <b>during</b> resolution — so a
-     * snapshot taken at the cast carries an empty refs block for exactly the
-     * abilities whose choice is the interesting part of the effect. Re-rendering
-     * the whole snapshot at resolution is not the alternative: that would
-     * describe the board the ability had already changed, which is the one thing
-     * a pre-event snapshot must not do.
-     *
-     * <p>Lives here rather than in a collector because the markers it splices
-     * between are this class's, and a second collector doing the same string
-     * edit by hand is how two readings drift. A state missing either marker is
-     * returned unchanged: the splice widens a record, and a caller left with
-     * cast-time refs is better off than one handed a corrupt state.
-     */
-    public static String spliceRefs(String state, String refs) {
-        if (state == null || refs == null) {
-            return state;
-        }
-        int open = state.indexOf(REFS_KEY);
-        if (open < 0) {
-            return state;
-        }
-        int close = state.indexOf(AFTER_REFS_KEY, open + REFS_KEY.length());
-        if (close < 0) {
-            return state;
-        }
-        return state.substring(0, open) + REFS_KEY + refs + state.substring(close);
-    }
 
     private final Game game;
 
@@ -159,107 +105,104 @@ public final class SnapshotBuilder {
     }
 
     /**
-     * Render the snapshot for one record.
+     * The snapshot for a spell ability that acts: its refs name the ability's
+     * host, targets and announced values.
      *
-     * @param acting the ability being recorded, or null for a combat record
-     * @param referenced entities the record points at, carried whatever zone
-     *                   they sit in (tier 1)
+     * @param acting     the ability, or null — a bracket opened for nothing, a
+     *                   legality question with no candidate — whose refs then
+     *                   render empty, as {@link #ofBoard}'s do
+     * @param referenced the cards the record points at, carried whatever zone
+     *                   they sit in (tier 1) — {@link #referencedOf} for an
+     *                   ability being cast or forced, the host alone for a
+     *                   playability candidate, which has no targets yet
      */
-    public String toJson(SpellAbility acting, Iterable<Card> referenced) {
-        return toJson(acting, referenced, null, null, null);
+    Snapshot ofAbility(SpellAbility acting, Iterable<Card> referenced) {
+        return snapshot(referenced, null, acting, null, null);
     }
 
     /**
-     * Render the snapshot for one record, minus one static's contributions.
-     *
-     * @param withoutStatic the id of a static ability whose changes are removed
-     *                      from every entity, or null to show the board as it
-     *                      stands
+     * The snapshot for a record no single line acts in — a damage step, a
+     * legality question, a mana activation, an orphaned outcome — so its refs
+     * block is the empty shape.
      */
-    public String toJson(
-            SpellAbility acting, Iterable<Card> referenced, Long withoutStatic) {
-        return toJson(acting, referenced, withoutStatic, null, null);
+    Snapshot ofBoard() {
+        return snapshot(List.of(), null, null, null, null);
     }
 
     /**
-     * Render the snapshot for a record whose acting line is not a spell ability.
-     *
-     * <p>A trigger and a replacement effect are traits, not {@link SpellAbility}
-     * instances, so neither can be the {@code acting} argument -- but both have a
-     * host card, and that is what {@code refs.source} names: the join that lets
-     * the record say which permanent's text acted. Neither has targets or
-     * announced values at the moment it is recorded, so the rest of the refs
-     * block is legitimately empty.
-     *
-     * <p>Deliberately not an overload of {@code toJson}: a {@code null} literal
-     * at one of the existing call sites would become ambiguous between a
-     * {@link SpellAbility} and a {@link Card}.
+     * The board-only snapshot with one static's contributions removed from
+     * every entity: a {@code continuous} record's state, which must not
+     * already contain the answer the record labels.
      */
-    public String toJsonForTrait(
-            Card sourceCard, Iterable<Card> referenced, EffectEvent pending) {
-        return toJson(null, referenced, null, pending, sourceCard);
+    Snapshot ofBoardWithout(long staticId) {
+        return snapshot(List.of(), staticId, null, null, null);
     }
 
-    private String toJson(
-            SpellAbility acting, Iterable<Card> referenced, Long withoutStatic,
-            EffectEvent pending, Card sourceOverride) {
-        Set<Card> entities = new LinkedHashSet<>();
-        if (referenced != null) {
-            for (Card card : referenced) {
-                if (card != null) {
-                    entities.add(card);
-                }
-            }
-        }
-        // Tier 2: the board and the command zone's effect cards.
-        for (Card card : game.getCardsIn(EnumSet.of(
-                ZoneType.Battlefield, ZoneType.Command))) {
-            entities.add(card);
-        }
-        // Tier 3: the unreferenced stack.
-        for (Card card : game.getCardsIn(ZoneType.Stack)) {
-            entities.add(card);
-        }
-        // Tier 4: unreferenced hands and graveyards.
-        for (Card card : game.getCardsIn(EnumSet.of(
-                ZoneType.Hand, ZoneType.Graveyard))) {
-            entities.add(card);
-        }
+    /**
+     * The snapshot for a trait — a trigger or a replacement — about to handle
+     * an event.
+     *
+     * <p>A trait is not a {@link SpellAbility}, so it cannot be the acting
+     * ability -- but it has a host card, and that is what {@code refs.source}
+     * names: the join that lets the record say which permanent's text acted.
+     * Neither kind has targets or announced values at the moment it is
+     * recorded, so the rest of the refs block is legitimately empty.
+     *
+     * <p>The host is the tier-1 referenced list too. Without it a host outside
+     * every zone the other tiers sweep — one in exile, say — is in no
+     * {@code state.entities}, and {@code refs.source} would name an entity id
+     * the reader cannot follow.
+     *
+     * @param source  the trait's host, or null where the trait has none
+     * @param pending the event as the trait received it
+     */
+    Snapshot ofTrait(Card source, EffectEvent pending) {
+        return snapshot(source == null ? List.of() : List.of(source), null, null, source, pending);
+    }
 
+    /**
+     * The one assembly behind every call shape, private so that no caller
+     * passes the combination of nulls that picks its shape.
+     *
+     * @param withoutStatic the id of a static whose changes are removed from
+     *                      every entity, or null to show the board as it stands
+     * @param source        the host of an acting line that is not a spell
+     *                      ability, or null
+     * @param pending       the event a trait is about to handle, or null
+     */
+    private Snapshot snapshot(
+            Iterable<Card> referenced, Long withoutStatic, SpellAbility acting, Card source,
+            EffectEvent pending) {
         StringJoiner entityJson = new StringJoiner(",", "[", "]");
-        for (Card card : entities) {
+        for (Card card : collectEntities(referenced)) {
             entityJson.add(entityToJson(card, Suppressed.of(card, withoutStatic)));
         }
         StringJoiner playerJson = new StringJoiner(",", "[", "]");
         for (Player player : game.getPlayers()) {
             playerJson.add(playerToJson(player));
         }
-        return stateJson(
+        return new Snapshot(
                 globalToJson(), playerJson.toString(), entityJson.toString(),
-                refsJson(acting, sourceOverride),
-                pending == null ? "null" : pending.toJson(),
-                TIERS_JSON);
+                refsJson(acting, source), pending == null ? "null" : pending.toJson());
     }
 
     /**
-     * The snapshot's blocks, in the order the record schema fixes.
-     *
-     * <p>Assembled here rather than inline so that the one ordering another
-     * collector depends on -- {@link #REFS_KEY} immediately before
-     * {@link #AFTER_REFS_KEY}, with nothing between them but the refs block --
-     * is stated once and can be asserted without a running game. A splice that
-     * finds those two markers missing falls back to the unspliced state, which
-     * is a silent degradation, so the adjacency is the part worth pinning.
+     * Every entity the snapshot carries, tier by tier, each once and in the
+     * first tier that reaches it: the referenced cards wherever they sit (1),
+     * the battlefield and the command zone's effect cards (2), the stack (3),
+     * then hands and graveyards (4).
      */
-    static String stateJson(
-            String global, String players, String entities, String refs,
-            String pendingEvent, String tiers) {
-        return "{\"global\":" + global
-                + ",\"players\":" + players
-                + ",\"entities\":" + entities
-                + REFS_KEY + refs
-                + AFTER_REFS_KEY + pendingEvent
-                + ",\"tiers\":" + tiers + "}";
+    private Set<Card> collectEntities(Iterable<Card> referenced) {
+        Set<Card> entities = new LinkedHashSet<>();
+        for (Card card : referenced) {
+            if (card != null) {
+                entities.add(card);
+            }
+        }
+        entities.addAll(game.getCardsIn(EnumSet.of(ZoneType.Battlefield, ZoneType.Command)));
+        entities.addAll(game.getCardsIn(ZoneType.Stack));
+        entities.addAll(game.getCardsIn(EnumSet.of(ZoneType.Hand, ZoneType.Graveyard)));
+        return entities;
     }
 
     private String globalToJson() {
@@ -444,6 +387,7 @@ public final class SnapshotBuilder {
 
     private String entityToJson(Card card, Suppressed without) {
         Card attached = card.getAttachedTo();
+        CardTypeView type = without == null ? card.getType() : without.type();
         return "{\"id\":" + Json.string(entityId(card))
                 + ",\"name\":" + Json.string(card.getName())
                 + ",\"zone\":" + Json.string(zoneName(card))
@@ -454,9 +398,9 @@ public final class SnapshotBuilder {
                 + ",\"copy_source\":" + Json.string(copySourceOf(card))
                 + ",\"token_script_id\":"
                 + Json.string(tokenScriptIdOf(card))
-                + ",\"types\":" + typeNamesJson(typeOf(card, without).getCoreTypes())
-                + ",\"subtypes\":" + typeNamesJson(typeOf(card, without).getSubtypes())
-                + ",\"supertypes\":" + typeNamesJson(typeOf(card, without).getSupertypes())
+                + ",\"types\":" + typeNamesJson(type.getCoreTypes())
+                + ",\"subtypes\":" + typeNamesJson(type.getSubtypes())
+                + ",\"supertypes\":" + typeNamesJson(type.getSupertypes())
                 + ",\"colors\":" + Json.stringArray(
                         colorLetters(without == null ? card.getColor() : without.colors()))
                 + ",\"mana_value\":" + card.getCMC()
@@ -704,10 +648,6 @@ public final class SnapshotBuilder {
         }
     }
 
-    private static CardTypeView typeOf(Card card, Suppressed without) {
-        return without == null ? card.getType() : without.type();
-    }
-
     /** One part of a type line, as the snapshot's names. */
     private static String typeNamesJson(Iterable<?> types) {
         List<String> names = new ArrayList<>();
@@ -753,14 +693,11 @@ public final class SnapshotBuilder {
     /**
      * Targets, source and announced values for the acting ability.
      *
-     * <p>Public because the refs block is the one part of a snapshot that is not
-     * read at the same moment as the rest. The board has to be captured before
-     * the ability resolves, but a resolution-time choice -- a named card, a
-     * chosen colour -- does not exist until the engine asks for it, so a
-     * collector re-renders this block alone at resolution and splices it back
-     * into the state it already holds.
+     * <p>Readable on its own because the refs block is the one part of a
+     * snapshot that is not read at the same moment as the rest: a collector
+     * re-reads it at resolution and hands it to {@link Snapshot#withRefs}.
      */
-    public String refsJson(SpellAbility acting) {
+    String refsJson(SpellAbility acting) {
         return refsJson(acting, null);
     }
 

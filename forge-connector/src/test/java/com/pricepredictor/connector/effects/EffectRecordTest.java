@@ -238,6 +238,26 @@ class EffectRecordTest {
         assertTrue(json.contains("\"ability_unresolved\":\"unknown_kind\""), json);
     }
 
+    // ── combat payloads ─────────────────────────────────────────────────
+
+    /** A combat with nobody in it still carries all three combat fields. */
+    @Test
+    void anEmptyCombatRendersEveryField() {
+        assertEquals(
+                "{\"attackers\":[],\"blocks\":{},\"assignment_choices\":{},\"events\":[]}",
+                EffectRecord.combatPayload(CombatShape.empty().fields(), List.of()));
+    }
+
+    /** A probe branch's perturbation follows the fields it shares with the record. */
+    @Test
+    void aProbePayloadNamesWhatItPerturbedAfterTheCombat() {
+        assertEquals(
+                "{\"attackers\":[],\"blocks\":{},\"assignment_choices\":{},\"events\":[],"
+                        + "\"probed_keyword\":\"trample\",\"probed_entity\":null}",
+                EffectRecord.probePayload(
+                        CombatShape.empty().fields(), List.of(), "trample", null));
+    }
+
     // ── events ──────────────────────────────────────────────────────────
 
     @Test

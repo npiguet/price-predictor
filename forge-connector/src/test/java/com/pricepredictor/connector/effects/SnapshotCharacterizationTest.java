@@ -23,10 +23,10 @@ import java.util.Map;
  * The state snapshot's rendered bytes, for each way a collector asks for one.
  *
  * <p>Four call shapes reach {@link SnapshotBuilder} in production: an acting
- * spell ability with its host and targets (the bracket's cast, a fork's
- * forced ability, a playability candidate); no acting line at all (combat,
- * the legality subkinds); no acting line minus one static (continuous); and
- * a trait's host with the event it is about to handle (rewrite, trigger).
+ * spell ability with its referenced cards (the bracket's cast, a fork's
+ * forced ability, a playability candidate); the board with no acting line
+ * (combat, the legality subkinds); the board minus one static (continuous);
+ * and a trait's host with the event it is about to handle (rewrite, trigger).
  * Each renders the same board, which carries something in every inclusion
  * tier, so a refactor that drops or reorders any block or field shows here.
  */
@@ -39,7 +39,7 @@ class SnapshotCharacterizationTest {
                 "the expected snapshots were captured against the patched ../forge");
     }
 
-    /** {@code toJson(acting, referenced)}: the stack's bolt, its host and target. */
+    /** {@code ofAbility(acting, referenced)}: the stack's bolt, its host and target. */
     @Test
     void anActingAbilityWithItsReferencedCards() {
         CharacterizationBoard board = CharacterizationBoard.full(PhaseType.MAIN1);
@@ -51,10 +51,10 @@ class SnapshotCharacterizationTest {
         referenced.add(board.game.getCardsIn(ZoneType.Exile).get(0));
 
         Characterization.assertMatches("snapshot-acting-ability.json",
-                new SnapshotBuilder(board.game).toJson(bolt, referenced) + "\n");
+                new SnapshotBuilder(board.game).ofAbility(bolt, referenced).render() + "\n");
     }
 
-    /** {@code toJson(null, List.of())}: a damage step, with blocks declared. */
+    /** {@code ofBoard()}: a damage step, with blocks declared. */
     @Test
     void noActingLineInACombatDamageStep() {
         CharacterizationBoard board = CharacterizationBoard.full(PhaseType.COMBAT_DAMAGE);
@@ -72,10 +72,10 @@ class SnapshotCharacterizationTest {
         board.game.getPhaseHandler().setCombat(combat);
 
         Characterization.assertMatches("snapshot-no-acting-line.json",
-                new SnapshotBuilder(board.game).toJson(null, List.of()) + "\n");
+                new SnapshotBuilder(board.game).ofBoard().render() + "\n");
     }
 
-    /** {@code toJson(null, List.of(), staticId)}: the board minus the anthem. */
+    /** {@code ofBoardWithout(staticId)}: the board minus the anthem. */
     @Test
     void noActingLineWithoutTheAnthem() {
         Assumptions.assumeTrue(PatchedCollectors.CAN_SUPPRESS,
@@ -85,11 +85,11 @@ class SnapshotCharacterizationTest {
                 .getStaticAbilities().iterator().next();
 
         Characterization.assertMatches("snapshot-without-static.json",
-                new SnapshotBuilder(board.game).toJson(null, List.of(), (long) anthem.getId())
+                new SnapshotBuilder(board.game).ofBoardWithout(anthem.getId()).render()
                         + "\n");
     }
 
-    /** {@code toJsonForTrait(source, referenced, pending)}: a trigger about to fire. */
+    /** {@code ofTrait(source, pending)}: a trigger about to fire. */
     @Test
     void aTraitsHostWithThePendingEvent() {
         CharacterizationBoard board = CharacterizationBoard.full(PhaseType.MAIN1);
@@ -101,7 +101,7 @@ class SnapshotCharacterizationTest {
         EffectEvent pending = RunParamNormalizer.describeParams(trigger, runParams);
 
         Characterization.assertMatches("snapshot-for-trait.json",
-                new SnapshotBuilder(board.game).toJsonForTrait(warden, List.of(warden), pending)
+                new SnapshotBuilder(board.game).ofTrait(warden, pending).render()
                         + "\n");
     }
 
@@ -120,6 +120,6 @@ class SnapshotCharacterizationTest {
         board.battlefield("Grizzly Bears", board.you);
 
         Characterization.assertMatches("snapshot-with-emblem.json",
-                new SnapshotBuilder(board.game).toJson(null, List.of()) + "\n");
+                new SnapshotBuilder(board.game).ofBoard().render() + "\n");
     }
 }

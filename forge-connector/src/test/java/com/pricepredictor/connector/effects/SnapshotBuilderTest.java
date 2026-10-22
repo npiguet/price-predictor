@@ -18,16 +18,17 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * The two snapshot properties that a running game cannot check for you.
+ * The snapshot properties that a running game cannot check for you.
  *
- * <p>Both defects these pin were invisible in a fourteen-million-record corpus:
- * a tier vector chosen per call site, which made {@code state.tiers} a perfect
- * proxy for a collection flag the schema bars from being a model input; and the
- * key ordering a resolution-time refs splice depends on, which degrades to the
- * un-spliced state rather than to an error when it stops holding.
+ * <p>The tier vector is the one whose defect was invisible in a
+ * fourteen-million-record corpus: chosen per call site, it made
+ * {@code state.tiers} a perfect proxy for a collection flag the schema bars
+ * from being a model input. Beside it, the state's block order and the
+ * resolution-time refs reading that replaces the cast-time block and nothing
+ * else.
  *
- * <p>Neither needs a game: the tier vector is a constant of the builder, and
- * the state's block order is decided by string assembly. The referenced tier,
+ * <p>None of those needs a game: the tier vector is a constant, and the
+ * blocks are assembled from already-rendered parts. The referenced tier,
  * pinned last, does: a target is a card in some zone.
  */
 class SnapshotBuilderTest {
@@ -55,7 +56,7 @@ class SnapshotBuilderTest {
      */
     @Test
     void everySnapshotDeclaresAllFourTiers() {
-        assertEquals("[1,2,3,4]", SnapshotBuilder.TIERS_JSON);
+        assertEquals("[1,2,3,4]", Snapshot.TIERS_JSON);
     }
 
     // ── refs ────────────────────────────────────────────────────────────
@@ -75,49 +76,31 @@ class SnapshotBuilderTest {
                 new SnapshotBuilder(null).refsJson(null));
     }
 
-    // ── the block order a resolution-time splice depends on ─────────────
+    // ── the state's blocks ──────────────────────────────────────────────
 
     @Test
     void theStateBlocksKeepTheOrderTheSchemaFixes() {
         assertEquals(
                 "{\"global\":G,\"players\":P,\"entities\":E,\"refs\":R,"
-                        + "\"pending_event\":V,\"tiers\":T}",
-                SnapshotBuilder.stateJson("G", "P", "E", "R", "V", "T"));
+                        + "\"pending_event\":V,\"tiers\":[1,2,3,4]}",
+                new Snapshot("G", "P", "E", "R", "V").render());
     }
 
     /**
-     * The splice is one method, not one per collector.
-     *
-     * <p>Two collectors doing the same substring arithmetic by hand is how the
-     * two readings drift, and this one degrades silently rather than failing --
-     * so the arithmetic is stated once and asserted here.
+     * A resolution-time refs reading replaces the cast-time block and leaves
+     * the board it was captured with alone: re-reading the board at resolution
+     * would describe what the ability had already changed.
      */
     @Test
-    void spliceRefsReplacesOnlyTheRefsBlock() {
-        String castTime = SnapshotBuilder.stateJson(
-                "G", "P", "E", "{\"choices\":{}}", "null", "[1,2,3]");
+    void laterRefsReplaceOnlyTheRefsBlock() {
+        Snapshot castTime = new Snapshot("G", "P", "E", "{\"choices\":{}}", "null");
         String resolved = "{\"choices\":{\"chosen_color\":\"U\"}}";
 
         assertEquals(
-                SnapshotBuilder.stateJson("G", "P", "E", resolved, "null", "[1,2,3]"),
-                SnapshotBuilder.spliceRefs(castTime, resolved));
-    }
-
-    /**
-     * A state without both markers comes back untouched.
-     *
-     * <p>The splice widens a record; a caller left with the cast-time refs has
-     * less than it wanted, while one handed a mangled state has a record that
-     * cannot be read at all.
-     */
-    @Test
-    void aStateWithoutBothMarkersIsReturnedUnchanged() {
-        assertEquals("{\"global\":G}",
-                SnapshotBuilder.spliceRefs("{\"global\":G}", "{}"));
-        assertEquals("{\"refs\":{}}",
-                SnapshotBuilder.spliceRefs("{\"refs\":{}}", "{}"));
-        assertEquals(null, SnapshotBuilder.spliceRefs(null, "{}"));
-        assertEquals("s", SnapshotBuilder.spliceRefs("s", null));
+                new Snapshot("G", "P", "E", resolved, "null"),
+                castTime.withRefs(resolved));
+        assertEquals("{\"choices\":{}}", castTime.refs(),
+                "the cast-time snapshot is a value; a later reading makes a new one");
     }
 
     // ── the referenced tier ─────────────────────────────────────────────
@@ -148,7 +131,7 @@ class SnapshotBuilderTest {
             List<Card> referenced = SnapshotBuilder.referencedOf(pull);
 
             assertEquals(List.of(host, exiled), referenced);
-            String state = new SnapshotBuilder(board.game).toJson(pull, referenced);
+            String state = new SnapshotBuilder(board.game).ofAbility(pull, referenced).render();
             assertTrue(state.contains("{\"id\":\"" + SnapshotBuilder.entityId(exiled)
                     + "\",\"name\":\"Grizzly Bears\",\"zone\":\"exile\""), state);
         }

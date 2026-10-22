@@ -333,7 +333,7 @@ class PatchedCollectorTest {
 
     private static ForkCollector.HeldProbe branch(DamageStep substep) {
         return new ForkCollector.HeldProbe(
-                "trample", "E1", "{}", List.of(), "P0", "\"combat\":{}", substep,
+                "trample", "E1", "{}", List.of(), "P0", CombatShape.empty().fields(), substep,
                 ForkCollector.TURN_UNKNOWN);
     }
 

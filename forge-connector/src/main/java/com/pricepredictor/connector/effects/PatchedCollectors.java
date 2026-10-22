@@ -340,7 +340,7 @@ public final class PatchedCollectors implements AutoCloseable {
         return context.newRecord(RecordKind.REWRITE)
                 .actor(controllerOf(source))
                 .ability(ProvenanceKey.resolve(acting))
-                .state(snapshots.toJsonForTrait(source, referencedOf(source), incoming))
+                .state(snapshots.ofTrait(source, incoming).render())
                 .payload(EffectRecord.rewritePayload(
                         incoming, outgoing, wireResult, ranKeys));
     }
@@ -538,7 +538,7 @@ public final class PatchedCollectors implements AutoCloseable {
         return context.newRecord(RecordKind.TRIGGER)
                 .actor(controllerOf(source))
                 .ability(ProvenanceKey.resolve(acting))
-                .state(snapshots.toJsonForTrait(source, referencedOf(source), event))
+                .state(snapshots.ofTrait(source, event).render())
                 .payload("{\"event\":" + event.toJson()
                         + ",\"fired\":" + fired + "}");
     }
@@ -653,10 +653,10 @@ public final class PatchedCollectors implements AutoCloseable {
         // The candidate goes into the snapshot: refs.source was null on all
         // 11.2 million playability records, so a decision record did not say
         // which card the candidate was even on except through its key.
-        String state = snapshots.toJson(
+        String state = snapshots.ofAbility(
                 candidate,
                 candidate == null || candidate.getHostCard() == null
-                        ? List.of() : List.of(candidate.getHostCard()));
+                        ? List.of() : List.of(candidate.getHostCard())).render();
         String payload = "{\"candidates\":[{"
                         + "\"ability\":" + ProvenanceKey.toJsonArray(candidateKeys)
                         + ",\"verdict\":{\"can_play\":" + verdict.canPlay()
@@ -833,7 +833,7 @@ public final class PatchedCollectors implements AutoCloseable {
     }
 
     private void emitLegality(PlayabilitySubkind subkind, Player decider, String payload) {
-        String state = snapshots.toJson(null, List.of());
+        String state = snapshots.ofBoard().render();
         // Keyed on the snapshot as well as the payload (FR-028): the same
         // answer on a board that moved is a second observation, which a
         // payload-only key would drop as a repeat of the first.
@@ -1627,7 +1627,7 @@ public final class PatchedCollectors implements AutoCloseable {
             EffectRecord record = context.newResolution(Moment.RESOLUTION)
                     .actor(player)
                     .ability(ProvenanceKey.resolve(ability))
-                    .state(snapshots.toJson(null, List.of()))
+                    .state(snapshots.ofBoard().render())
                     .payload(EffectRecord.eventsPayload(List.of(event)));
             manaReservoir.hold(key, slot, record);
         });
@@ -1742,7 +1742,7 @@ public final class PatchedCollectors implements AutoCloseable {
                 contributions.add(contribution.toJson());
             }
             ProvenanceKey.Resolved acting = ProvenanceKey.resolve(source);
-            String state = snapshots.toJson(null, List.of(), entry.getKey());
+            String state = snapshots.ofBoardWithout(entry.getKey()).render();
             String payload = "{\"contributions\":" + contributions
                     + ",\"board_hash\":" + Json.string(boardHash) + "}";
             // A second gate behind the per-board one, which cannot see this:
@@ -2040,17 +2040,6 @@ public final class PatchedCollectors implements AutoCloseable {
      */
     static List<ProvenanceKey> keysOf(CardTraitBase trait) {
         return ProvenanceKey.resolve(trait).keys();
-    }
-
-    /**
-     * The trait's host, as the snapshot's tier-1 referenced list.
-     *
-     * <p>Without it a host outside every zone the other tiers sweep — one in
-     * exile, say — is in no {@code state.entities}, and {@code refs.source}
-     * would name an entity id the reader cannot follow.
-     */
-    private static List<Card> referencedOf(Card source) {
-        return source == null ? List.of() : List.of(source);
     }
 
     /**
