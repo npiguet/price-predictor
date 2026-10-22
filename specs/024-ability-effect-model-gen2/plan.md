@@ -253,7 +253,7 @@ Every spec section and its FR range, with its owner. `tasks.md` follows this map
 | Keyword expansion (FR-012…020) | `ability_tokenizer.py`, `KeywordDefinitionMain` + `extract_keyword_definitions.py`, `build_vocab.py`, `build_corpus.py` (FR-015) |
 | Random seat (FR-021…026) | `RandomSeatLobbyPlayer`, `RandomSeatController`, `RandomSpellPlayer`, `RandomChoices`, `GamePlayer`, `MatchWorkerMain`; flags and FR-026 in `sealed/infrastructure/cli.py` |
 | Legality records (FR-027…029) | `PatchedCollectors` emitters |
-| Modal resolutions (FR-029a…029f) | `PatchedCollectors.clauseHandler`, `BusBracketCollector`, `ProvenanceKey.resolve`, `ForkCollector`; `validate_corpus.py` (FR-029d readers) |
+| Modal resolutions (FR-029a…029f) | `PatchedCollectors.clauseHandler`, `BusBracketCollector`, `ProvenanceResolver.resolve`, `ForkCollector`; `validate_corpus.py` (FR-029d readers) |
 | Envelope fields (FR-030…034) | `EffectRecord.java`, `records.py`, `record_io.py` (incl. `shard_generation`), `validate_corpus.py`; schema-compatibility tests; `CLAUDE.md` and both base contracts |
 | Held-out coverage round (FR-035…038) | `collect_coverage.py`, `effects/infrastructure/cli.py` |
 | Holdout (FR-039…043) | `text_holdout.py`, `train_effect_model.text_keyed_holdout`, `holdout_cards.py`, `corpus_manifest.py`, `effect_model_store.SplitProvenance` |

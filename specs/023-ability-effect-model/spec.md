@@ -712,7 +712,7 @@ loss.
   and MUST warn when a directory routes more than none and fewer than 5% of its games.
 - **FR-150**: The collector MUST resolve a token host with no `PaperToken` through its image key
   against the token database before falling back to a `cardsfolder` path
-  (`ProvenanceKey.tokenScriptStemOf`; verified by `CopiedTokenProvenanceTest`).
+  (`ScriptLocator.tokenScriptStemOf`; verified by `CopiedTokenProvenanceTest`).
 - **FR-151**: `build-corpus` MUST remap a provenance key whose script file the converted card tree
   does not hold and whose filename stem names a token script to `tokenscripts/<stem>.txt`, resolving
   the stem by name, then by the carrying entity's colours, core types, supertypes, subtypes and P/T,

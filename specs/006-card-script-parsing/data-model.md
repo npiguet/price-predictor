@@ -124,7 +124,7 @@ Mutable counter for assigning sequential action numbers during output formatting
 | `ActionCounter(int start)` | Initialize counter at given start value |
 | `next()` | Increment and return next value |
 
-Created per-face in `CardFace.formatText()` starting at 0, so first actionable ability gets `[1]`.
+Created per-face in `CardFace.renderLines(face)` starting at 0, so first actionable ability gets `[1]`.
 
 ### AbilityDescription (Utility Class)
 
@@ -219,7 +219,7 @@ Card (in correct state) + ICardFace
     └─ Build CardFace(name, manaCost, types, pt, loyalty, defense, colors, text, abilities)
 ```
 
-### Output formatting: `CardFace.formatText()`
+### Output formatting: `CardFace.renderLines(face)`
 
 ```
 CardFace
@@ -227,7 +227,7 @@ CardFace
     ├─ Emit property lines (name, mana cost, types, power toughness, loyalty, defense, colors, text)
     │
     └─ Create ActionCounter(0), for each ability:
-        └─ ability.formatBlock(counter):
+        └─ ability.appendBlock(counter, face, lines):
             ├─ ordinal > 0 → use ordinal as action number (class levels)
             ├─ type.isActionable() → use counter.next() as action number
             └─ otherwise → no action number
