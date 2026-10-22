@@ -252,7 +252,8 @@ def line_handles(widths, stages=("arm", "A", "B"), no_copies: bool = True) -> li
 
 
 def strip(ax, y: float, values: pd.Series, names: list[str], spread: float = 0.3,
-          muted: bool = False, ms: float = 6.5) -> dict[str, tuple[float, float]]:
+          muted: bool = False, ms: float = 6.5,
+          alpha: float = 1.0) -> dict[str, tuple[float, float]]:
     """One marker per checkpoint at ``y`` plus its fixed offset; returns each point."""
     where = offsets(names, spread)
     points = {}
@@ -264,6 +265,8 @@ def strip(ax, y: float, values: pd.Series, names: list[str], spread: float = 0.3
             style.update(color=EARLIER_GRAY, mec=GRAY, alpha=0.8)
             if style.get("mfc") not in (None, "white"):
                 style["mfc"] = EARLIER_GRAY
+        elif alpha < 1:
+            style["alpha"] = alpha
         ax.plot(values[name], y + where[name], zorder=4, **style)
         points[name] = (values[name], y + where[name])
     return points
@@ -302,13 +305,15 @@ def _death_colourmap() -> matplotlib.colors.ListedColormap:
 
     Built in OKLCh, a perceptually uniform colour space, so the two hues meet at the
     same perceived brightness and the break marks the even-odds line without a jump in
-    brightness. Chroma is lowered only where a colour falls outside the sRGB gamut.
+    brightness. A saturated blue still looks brighter than an orange of the same
+    lightness, so the chroma tapers toward the break, where both hues meet muted.
+    Chroma is lowered further only where a colour falls outside the sRGB gamut.
     """
     colours = []
     for v in np.linspace(0, 1, 256):
         lightness = 0.22 + 0.75 * v
         hue = 255.0 if v < 0.5 else 62.0
-        chroma = 0.16
+        chroma = 0.08 + 0.08 * min(1.0, abs(v - 0.5) / 0.3)
         rgb = _oklch_to_srgb(lightness, chroma, hue)
         while rgb is None:
             chroma -= 0.002
@@ -363,9 +368,14 @@ def training_losses() -> None:
                 d = ep[ep.run == run].sort_values("epoch")
                 if d.empty:
                     continue
-                ax.plot(d.epoch, d[metric], marker="o", ms=2, **run_line(run))
-                best = d.loc[d.card_disjoint.idxmin()]
                 stage = stage_of(run)
+                # Epoch dots would turn the arm's dots and the A run's dashes alike, so only
+                # the solid B run carries them, and the A run's dashes are drawn long.
+                style = run_line(run)
+                if stage == "A":
+                    style["ls"] = (0, (6, 2.5))
+                ax.plot(d.epoch, d[metric], marker="o" if stage == "B" else None, ms=2, **style)
+                best = d.loc[d.card_disjoint.idxmin()]
                 ax.plot(best.epoch, best[metric], STAGE_MARKER[stage], ms=9,
                         color=WIDTH_COLOUR[width], mec="black", mew=0.8, zorder=5)
             ax.set_ylim(*limits[metric])
@@ -380,7 +390,8 @@ def training_losses() -> None:
             if row == len(metrics) - 1:
                 ax.set_xlabel("epoch")
     handles = [Line2D([], [], color=NO_COPIES_GRAY, lw=1.2, label="arm without copies")]
-    handles += [Line2D([], [], color=INK_SOFT, ls=STAGE_LINE[s], lw=1.5, label=STAGE_NAME[s])
+    handles += [Line2D([], [], color=INK_SOFT, lw=1.5, label=STAGE_NAME[s],
+                       ls=(0, (6, 2.5)) if s == "A" else STAGE_LINE[s])
                 for s in ("arm", "A", "B")]
     handles += [Line2D([], [], marker="o", ls="none", ms=8, mfc=INK_SOFT, mec="black",
                        label="large marker: the run's lowest card-disjoint epoch")]
@@ -418,9 +429,10 @@ def loss_noise() -> None:
     for ax, (metric, label) in zip(axes, (("card_disjoint", "card-disjoint loss"),
                                           ("game_disjoint", "game-disjoint loss"),
                                           ("train", "training loss"))):
-        for k, run in enumerate(r for r in ("e64 (earlier inputs)", "e64", "e128")
-                                if r in sd.index):
-            ax.plot(-0.45 + 0.08 * k, sd.loc[run, metric], **checkpoint_marker(run, 6))
+        bare = [r for r in ("e64 (earlier inputs)", "e64", "e128") if r in sd.index]
+        bare_x = [-1.1 + 0.25 * k for k in range(len(bare))]
+        for x, run in zip(bare_x, bare):
+            ax.plot(x, sd.loc[run, metric], **checkpoint_marker(run, 6))
         order = sorted(widths, key=lambda w: -sd.loc[LINES[w][2], metric])
         for width in widths:
             runs = LINES[width]
@@ -434,9 +446,14 @@ def loss_noise() -> None:
             ax.annotate(f"÷{ratio:.1f}", (xs[2], ys[2]), xytext=(9, dy), textcoords="offset points",
                         fontsize=8.5, color=WIDTH_COLOUR[width], va="center", fontweight="bold")
         ax.set_yscale("log")
-        ax.set_xticks([-0.37, 0, 1, 2], ["no\ncopies", "arm", "A run\nfull rate",
-                                         "B run\na tenth"])
-        ax.set_xlim(-0.6, 2.55)
+        # The arms without copies are named one by one, since they share one grey.
+        ax.set_xticks(bare_x + [0, 1, 2], bare + ["arm", "A run\nfull rate", "B run\na tenth"])
+        for tick in ax.get_xticklabels()[:len(bare)]:
+            tick.set(rotation=90, fontsize=7.5, color=INK_SOFT)
+        ax.axvline(-0.35, color=GRAY, lw=0.6)
+        ax.text(-0.75, 0.0105, "without\ncopies", ha="center", va="bottom", fontsize=7.5,
+                color=INK_SOFT)
+        ax.set_xlim(-1.3, 2.55)
         ax.set_title(label)
         ax.grid(axis="x", visible=False)
     axes[0].set_ylabel("standard deviation around the\nfive-epoch moving mean (log scale)")
@@ -446,7 +463,7 @@ def loss_noise() -> None:
     names = [r for r in ("e64 (earlier inputs)", "e64", "e128") if r in sd.index]
     fig.legend(handles=checkpoint_handles(names + [r for w in widths for r in LINES[w]],
                                           fill=False),
-               loc="lower center", ncol=8, bbox_to_anchor=(0.5, -0.1), fontsize=8.5)
+               loc="lower center", ncol=8, bbox_to_anchor=(0.5, -0.29), fontsize=8.5)
     fig.suptitle("Epoch-to-epoch swing of each loss, from epoch 10 on; ÷ is how many times "
                  "smaller the B run's swing is than the A run's.\nRuns B64, B128 and B256 train "
                  "at a tenth of the learning rate", x=0.01, ha="left", y=1.06)
@@ -551,6 +568,11 @@ def probes_vs_loss() -> None:
 
 
 def field_explained() -> None:
+    """Card-disjoint explained deviance per field and epoch, the runs with copies by width.
+
+    The arms' dotted curves overlap before epoch 30, so here they keep their width's full
+    hue rather than the arm's lighter shade; the line style alone marks the stage.
+    """
     fe = csv("fields_by_epoch.csv")
     fields = [("gate", "affected gate"), ("zone_outcome", "zone outcome"),
               ("keywords_gained", "keywords gained"), ("blocker_legal", "blocking legality"),
@@ -563,12 +585,18 @@ def field_explained() -> None:
             for run in LINES[width]:
                 d = fe[(fe.run == run) & (fe.field == field)].sort_values("epoch")
                 if not d.empty:
-                    ax.plot(d.epoch, d.explained_pct, **run_line(run))
+                    style = run_line(run)
+                    if stage_of(run) == "arm":
+                        style.update(color=WIDTH_COLOUR[width], lw=1.2)
+                    ax.plot(d.epoch, d.explained_pct, **style)
                     low = min(low, d.explained_pct.min())
                     widths.add(width)
         ax.set_title(label)
         ax.axhline(0, color=INK_SOFT, lw=0.8)
-        ax.set_ylim(min(-40, 10 * np.floor(low / 10) - 5), 100)
+        bottom = min(-40, 10 * np.floor(low / 10) - 5)
+        ax.set_ylim(bottom, 100)
+        if bottom < -40:
+            ax.set_title(f"{label}  (scale to −{abs(bottom):.0f}, not −40)")
     axes[1][2].text(0.98, 0.04, "below 0: worse than\na constant prediction",
                     transform=axes[1][2].transAxes, ha="right", fontsize=7.5, color=INK_SOFT)
     for ax in axes[:, 0]:
@@ -577,7 +605,8 @@ def field_explained() -> None:
         ax.set_xlabel("epoch")
     fig.legend(handles=line_handles(sorted(widths), no_copies=False), loc="lower center", ncol=6,
                bbox_to_anchor=(0.5, -0.05), fontsize=8.5)
-    fig.suptitle("Card-disjoint explained deviance by field, along the three lethality-copy lines",
+    fig.suptitle("Card-disjoint explained deviance by field, the runs with lethality copies of "
+                 "each width",
                  x=0.01, ha="left", y=0.96)
     save(fig, "fields-explained")
 
@@ -776,6 +805,10 @@ def boundary_by_epoch() -> None:
     save(fig, "boundary-by-epoch")
 
 
+#: The damage sweep's arms without copies, one grey each, lightest the earliest inputs.
+NO_ARMS_GREY = {"e64 (earlier inputs)": "#bdbdbd", "e64": "#8a8a8a", "e128": "#4f4f4f"}
+
+
 def _sweep_panel(ax, s: pd.DataFrame, names: list[str]) -> None:
     """One damage-sweep panel over grey wrong-side quadrants; ✓ marks a curve on the rule."""
     for (x0, x1), (y0, y1) in (((0.5, 3.5), (0.5, 1)), ((3.5, 8.5), (0, 0.5))):
@@ -789,10 +822,13 @@ def _sweep_panel(ax, s: pd.DataFrame, names: list[str]) -> None:
         line = run_line(name)
         style = checkpoint_marker(name, 5.5 if on_rule else 4.5)
         style.update(line, lw=2.2 if on_rule else 1.0)
-        if stage_of(name) in ("none", "gen-1"):
-            # The grey runs without copies tell apart by their dashes instead.
-            style["ls"] = {"e64": "-", "e128": (0, (5, 2)), "gen-1": "-"}.get(name, (0, (1, 1.5)))
-            style["lw"] = 1.4
+        if stage_of(name) == "none":
+            # The grey arms without copies are dotted like every arm and tell apart by
+            # their shade, lightest the earliest inputs.
+            grey = NO_ARMS_GREY.get(name, NO_COPIES_GRAY)
+            style.update(ls=":", lw=1.6, color=grey, mec=darker(grey, 0.25))
+        elif stage_of(name) == "gen-1":
+            style.update(ls="-", lw=1.4)
         ax.plot(d.value, d.prediction, **style,
                 alpha=1.0 if on_rule else 0.55, zorder=3 if on_rule else 2,
                 label=("✓ " if on_rule else "    ") + short(name))
@@ -1001,14 +1037,20 @@ LADDER_TARGETS = {"affordable": "affordable", "pt_until_end_of_turn": "pump last
                   "fires": "trigger fires", "affected": "card affected", "dies": "dies",
                   "may_block": "may block", "damage_taken": "damage taken"}
 #: The rungs, bottom to top of the model, with each one's mark.
-RUNGS = [("0", "rung 0: board alone", dict(marker="s", color=GRAY, mec=GRAY)),
+#: Each rung is drawn as its own name, so that no rung borrows a checkpoint's stage shape.
+RUNGS = [("0", "rung 0: board alone", dict(marker=r"$\mathsf{0}$", color=GRAY, mec=GRAY)),
          ("1w", "rung 1w: board + random vector of e's width",
-          dict(marker="o", color="white", mec=GRAY, mew=1.3)),
-         ("1", "rung 1: board + e", dict(marker="o", color=PURPLE, mec=PURPLE)),
+          dict(marker=r"$\mathsf{1w}$", color=GRAY, mec=GRAY)),
+         ("1", "rung 1: board + e", dict(marker=r"$\mathsf{1}$", color=PURPLE, mec=PURPLE)),
          ("1o", "rung 1o: board + the true values (oracle)",
-          dict(marker="D", color="white", mec=PURPLE, mew=1.3)),
-         ("2", "rung 2: probe on the trunk's vector", dict(marker="D", color=SLATE, mec=SLATE)),
-         ("3", "rung 3: the model's own answer", dict(marker="*", color="black", mec="black"))]
+          dict(marker=r"$\mathsf{1o}$", color=PURPLE_SOFT, mec=PURPLE)),
+         ("2", "rung 2: probe on the trunk's vector",
+          dict(marker=r"$\mathsf{2}$", color=SLATE, mec=SLATE)),
+         ("3", "rung 3: the model's own answer",
+          dict(marker=r"$\mathsf{3}$", color="black", mec="black"))]
+#: A text marker needs more room than a shape to read: two-character names wider still.
+RUNG_MS = {"0": 8, "1": 8, "2": 8, "3": 10, "1w": 13, "1o": 13}
+RUNGS_BY_NAME = {rung: style for rung, _, style in RUNGS}
 #: A share is read only where the oracle rung closes at least this much of the gap.
 ORACLE_FLOOR = 0.5
 
@@ -1064,19 +1106,23 @@ def ladder() -> None:
                 yy = y + (2.5 - k) * step
                 ax.plot([d[rung].min(), d[rung].max()], [yy, yy], color=style["mec"], lw=1.4,
                         alpha=0.55, zorder=2, solid_capstyle="butt")
-                ax.plot(d[rung].median(), yy, ls="none", ms=11 if rung == "3" else 6.5,
-                        zorder=3, **style)
+                ax.plot(d[rung].median(), yy, ls="none", ms=RUNG_MS[rung], mew=0.3, zorder=3,
+                        **style)
             share = d["share"]
             if defined[target]:
                 strip(sax, y, share.clip(-0.4, 1.25), names, spread=0.3, ms=6)
-                for col, mark in (("share_w", dict(marker="|", ms=16, mew=2.2, color=GRAY)),
-                                  ("share_o", dict(marker="D", ms=7, mfc="white", mec=PURPLE,
-                                                   mew=1.4, color=PURPLE))):
+                # The shares rungs 1w and 1o close: a tick across the row named by its rung,
+                # 1w named above the row and 1o below it so that close ticks stay legible.
+                for col, rung, end in (("share_w", "1w", 0.33), ("share_o", "1o", -0.33)):
+                    colour = RUNGS_BY_NAME[rung]["mec"]
                     v = med.loc[target, col]
-                    sax.plot(np.clip(v, -0.37, 1.22), y, ls="none", zorder=5, **mark)
-                    if v < -0.37:
-                        sax.annotate(f"{v:.2f}", (-0.37, y), xytext=(4, -9),
-                                     textcoords="offset points", fontsize=7, color=INK_SOFT)
+                    x = np.clip(v, -0.37, 1.22)
+                    sax.plot([x, x], [y - 0.33, y + 0.33], color=colour, lw=1.6, alpha=0.8,
+                             ls="-" if rung == "1w" else (0, (2, 1.2)), zorder=1.5)
+                    sax.text(x, y + end, rung if v >= -0.37 else f"{rung} at {v:.2f}",
+                             ha="center" if v >= -0.37 else "left", fontsize=7.2,
+                             va="bottom" if end > 0 else "top", color=colour,
+                             fontweight="bold")
                 closes = med.loc[target, "share_o"]
                 closes = f"{closes:.0%}" if closes > 0 else "none"
                 note = (f"oracle rung closes {closes} of the gap:\n"
@@ -1109,12 +1155,12 @@ def ladder() -> None:
     share_ax[1].set_xlabel("share carried by e: (rung 1 − rung 0) / (rung 3 − rung 0)")
     rung_ax[0].set_title("(a) Each rung: median over the checkpoints, line = range", pad=18)
     share_ax[0].set_title("(b) The share e carries, one marker per checkpoint", pad=18)
-    handles = [Line2D([], [], ls="none", ms=11 if r == "3" else 7, label=lab, **style)
+    handles = [Line2D([], [], ls="none", ms=RUNG_MS[r], mew=0.3, label=lab, **style)
                for r, lab, style in RUNGS]
-    handles += [Line2D([], [], marker="|", ls="none", ms=12, mew=2.2, color=GRAY,
-                       label="(b) the share a random vector of e's width closes, median"),
-                Line2D([], [], marker="D", ls="none", ms=7, mfc="white", mec=PURPLE, mew=1.4,
-                       label="(b) the share the oracle rung closes, median"),
+    handles += [Line2D([], [], color=GRAY, lw=1.6,
+                       label="(b) 1w: the share rung 1w closes, median"),
+                Line2D([], [], color=PURPLE, lw=1.6, ls=(0, (2, 1.2)),
+                       label="(b) 1o: the share rung 1o closes, median"),
                 Patch(color="#fbf3dc", label=f"share under 0.9 and the oracle closes under "
                                              f"{ORACLE_FLOOR:.0%} of the gap: share not read")]
     fig.legend(handles=handles, loc="lower left", ncol=3, bbox_to_anchor=(0.03, -0.045),
@@ -1192,9 +1238,11 @@ def line_properties() -> None:
 
 #: Each restriction of the board-abilities ablation and the control it is divided by.
 BOARD_RATIOS = [("attacker_legal", "legality-static", "attack legality: a static restricts"),
-                ("attacker_legal", "legality-keyword", "attack legality: a keyword restricts"),
+                ("attacker_legal", "legality-keyword",
+                 "attack legality: a keyword restricts\n(in the flags: a control)"),
                 ("blocker_legal", "legality-static", "block legality: a static restricts"),
-                ("blocker_legal", "legality-keyword", "block legality: a keyword restricts"),
+                ("blocker_legal", "legality-keyword",
+                 "block legality: a keyword restricts\n(in the flags: a control)"),
                 ("zone_outcome", "resolution-replacement",
                  "zone outcome: a replacement elsewhere"),
                 ("zone_outcome", "resolution-static", "zone outcome: a static elsewhere")]
@@ -1211,7 +1259,9 @@ def board_abilities() -> None:
         d = b[b.field == field].drop_duplicates(["checkpoint", "subset"]).pivot(
             index="checkpoint", columns="subset", values="loss")
         ratio = d[subset] / d[control]
-        ax.axhspan(y - 0.42, y + 0.42, color="#f6f6f6", lw=0, zorder=0)
+        # The keyword rows are controls: the keyword flags show those restrictions.
+        shown = subset == "legality-keyword"
+        ax.axhspan(y - 0.42, y + 0.42, color="#efe9f7" if shown else "#f6f6f6", lw=0, zorder=0)
         strip(ax, y, ratio, names, spread=0.28)
         r = ratio[[n for n in names if n in ratio.index]]
         ax.text(1.0, y + 0.03, f" ×{r.min():.2g} to ×{r.max():.2g}", fontsize=8,
@@ -1229,8 +1279,11 @@ def board_abilities() -> None:
                   "same checkpoint (log scale)")
     ax.legend(handles=checkpoint_handles(names), fontsize=8, loc="upper left",
               bbox_to_anchor=(1.12, 1.0))
-    ax.set_title("A restriction the card slots cannot show: how many times its loss is the "
-                 "unrestricted loss, per checkpoint", pad=16)
+    for tick, (_, subset, _) in zip(ax.get_yticklabels()[::-1], BOARD_RATIOS):
+        tick.set_color(INK_SOFT if subset == "legality-keyword" else INK)
+    ax.set_title("On attack legality a restriction the board snapshot does not list raises every "
+                 "checkpoint's loss,\nand one the keyword flags show lowers it (shaded purple: "
+                 "the flag rows, controls)", pad=16)
     save(fig, "board-abilities")
 
 
@@ -1297,8 +1350,10 @@ def width_summary() -> None:
     sd = loss_noise_table()
     measures = [(ck.card_disjoint, "card-disjoint loss", "lower is better", "card_disjoint"),
                 (ck.game_disjoint, "game-disjoint loss", "lower is better", "game_disjoint"),
-                (probe, "probe mean, game-disjoint", "higher is better", None),
-                (g3.participation_ratio, "participation ratio of e", "directions e uses", None)]
+                (probe, "probe mean, game-disjoint", "higher is better; no noise estimate,\n"
+                 "and the axis spans a few hundredths", None),
+                (g3.participation_ratio, "participation ratio of e",
+                 "directions e uses; no noise estimate", None)]
     fig, axes = plt.subplots(1, 4, figsize=(14, 4.0))
     for ax, (series, title, sense, noise) in zip(axes, measures):
         tops = []
@@ -1328,8 +1383,9 @@ def width_summary() -> None:
         ax.set_xticks(range(3), ["arm", "A run\nfull rate", "B run\na tenth"])
         ax.set_xlim(-0.35, 2.35)
         ax.grid(axis="x", visible=False)
-        ax.set_title(f"{title}\n", fontsize=10)
-        ax.text(0, 1.02, sense, transform=ax.transAxes, fontsize=8.5, color=INK_SOFT)
+        ax.set_title(f"{title}\n\n", fontsize=10)
+        ax.text(0, 1.02, sense, transform=ax.transAxes, fontsize=8.2, color=INK_SOFT,
+                va="bottom")
     handles = [Line2D([], [], color=WIDTH_COLOUR[w], lw=2.5, label=f"{w}-wide e")
                for w in (64, 128, 256)]
     handles += [Line2D([], [], color=INK_SOFT, lw=1.8, marker="o", label="kept epoch (filled)"),
@@ -1341,7 +1397,7 @@ def width_summary() -> None:
                fontsize=8.5)
     fig.suptitle("The three widths at each stage of training, every checkpoint trained with "
                  "lethality copies (▲ arm, ■ A run, ● B run; B256's ◐ is its own lowest epoch, "
-                 "55)", x=0.01, ha="left", y=1.06)
+                 "55)", x=0.01, ha="left", y=1.13)
     fig.subplots_adjust(wspace=0.3)
     save(fig, "width")
 
@@ -1379,6 +1435,11 @@ def other_sweeps() -> None:
     ax2.text(7.9, 1.72, "a fifth of a death per creature", fontsize=8, ha="right",
              color=INK_SOFT)
     ax2.text(5.5, 0.2, "gen-1", fontsize=8, color=GEN1_GRAY)
+    # The rule leaves the scale at three creatures; its value at eight sits at the edge.
+    ax2.annotate("the rule at 8 creatures:\n8 deaths, off the scale", (8, 2.98),
+                 xytext=(8, 2.05), ha="right", va="center", fontsize=8, color=INK,
+                 arrowprops=dict(arrowstyle="-|>", color=INK, lw=1.0, shrinkA=0, shrinkB=0,
+                                 relpos=(1.0, 1.0)))
     ax2.set_xlabel("opposing creatures on the board")
     ax2.set_ylabel("predicted deaths summed over the board")
     ax2.set_title("Board-size sweep, a sweeper in the acting slot")
@@ -1396,8 +1457,9 @@ EVASION_COLUMNS = ["flying", "reach", "horsemanship", "shadow", "artifact", "bla
                    "shares-colour"]
 
 
-def evasion_lifts() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-    """Median lift per cell, the count of checkpoints beating the no-keyword row, the rule.
+def evasion_lifts() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    """Median lift per cell, the count of checkpoints beating the no-keyword row, the rule,
+    and the median of each checkpoint's lift divided by its no-keyword row's lift.
 
     A lift is the predicted chance of a block with the blocker trait divided by the chance
     with no trait, in the same attacker row and checkpoint; the gen-2 record's lift table
@@ -1413,22 +1475,29 @@ def evasion_lifts() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     stack = np.stack([lifts[n].values for n in names])
     median = pd.DataFrame(np.median(stack, axis=0), EVASION_ROWS, EVASION_COLUMNS)
     beats = pd.DataFrame((stack > stack[:, [0], :]).sum(axis=0), EVASION_ROWS, EVASION_COLUMNS)
+    relative = pd.DataFrame(np.median(stack / stack[:, [0], :], axis=0), EVASION_ROWS,
+                            EVASION_COLUMNS)
     rule = g[g.checkpoint == names[-1]].pivot(index="attacker_keyword", columns="blocker_trait",
                                               values="rule_may_block")
-    return median, beats, rule.loc[EVASION_ROWS, EVASION_COLUMNS]
+    return median, beats, rule.loc[EVASION_ROWS, EVASION_COLUMNS], relative
 
 
 def evasion_grid() -> None:
-    """One heatmap of the median lift; the no-keyword row is what each column compares to."""
-    median, beats, rule = evasion_lifts()
+    """One heatmap of the median lift; the no-keyword row is what each column compares to.
+
+    The text is the absolute lift; the colour is the lift against the reference row's in
+    the same column, the comparison every reading of the grid makes, so the reference row
+    itself is neutral.
+    """
+    median, beats, rule, relative = evasion_lifts()
     n = len(gen2(csv("evasion_grid.csv").checkpoint))
     fig, ax = plt.subplots(figsize=(9.2, 7.4))
-    norm = matplotlib.colors.TwoSlopeNorm(0, -2, 4)
-    im = ax.imshow(np.log2(median.values), cmap=DIVERGING_CMAP, norm=norm, aspect="auto")
+    norm = matplotlib.colors.TwoSlopeNorm(0, -1, 3)
+    im = ax.imshow(np.log2(relative.values), cmap=DIVERGING_CMAP, norm=norm, aspect="auto")
     for i, row in enumerate(EVASION_ROWS):
         for j, col in enumerate(EVASION_COLUMNS):
             v = median.loc[row, col]
-            dark = abs(np.log2(v)) > 2.2
+            dark = np.log2(relative.loc[row, col]) > 1.6
             text = f"×{v:.1f}" if v >= 1.95 else f"×{v:.2f}"
             ax.text(j, i - (0.1 if i else 0), text, ha="center", va="center", fontsize=9,
                     fontweight="bold", color="white" if dark else INK)
@@ -1449,14 +1518,14 @@ def evasion_grid() -> None:
     ax.set_ylabel("keyword granted to the attacker")
     ax.grid(False)
     bar = fig.colorbar(im, ax=ax, shrink=0.8, pad=0.02,
-                       label="lift: chance with the trait ÷ chance with no trait, same row")
-    ticks = [-2, -1, 0, 1, 2, 3, 4]
+                       label="colour: the cell's lift ÷ the top row's lift, same column")
+    ticks = [-1, 0, 1, 2, 3]
     bar.set_ticks(ticks, labels=[f"×{2 ** t:g}" for t in ticks])
-    ax.set_title("Evasion: how much a blocker trait lifts the predicted chance of a block,\n"
-                 f"median over {n} checkpoints. Compare each cell with the top row's: n/{n} "
-                 "counts\nthe checkpoints where the trait lifts more against the keyword than "
-                 "against a plain attacker.\n◥ the rule allows the block; ◥ hollow: only when "
-                 "the attacker is black too", fontsize=10, pad=10)
+    ax.set_title("Evasion: how much a blocker trait lifts the predicted chance of a block (the "
+                 f"text),\nmedian over {n} checkpoints. The colour compares each lift with the "
+                 f"top row's in its column;\nn/{n} counts the checkpoints where the trait lifts "
+                 "more against the keyword than against\na plain attacker. ◥ the rule allows the "
+                 "block; ◥ hollow: only when the attacker is black too", fontsize=10, pad=10)
     save(fig, "evasion-grid")
 
 
@@ -1488,12 +1557,16 @@ def evasion_ranking() -> None:
     save(fig, "evasion-ranking")
 
 
-#: Rows resting on fewer items than this are drawn grey: too few to weigh.
+#: Rows resting on fewer items than this are drawn faint: too few to weigh.
 FEW = 20
 
 
 def target_flips() -> None:
-    """Predicted legality of a legal target before and after breaking its one condition."""
+    """The change in predicted legality of a legal target when its one condition breaks.
+
+    One marker per checkpoint at its own after − before, so a checkpoint's two readings
+    never need pairing by eye; the rule's change is −1, from legal to illegal.
+    """
     f = csv("target_flips.csv")
     names = gen2(f.checkpoint)
     flips = f.groupby("flip").targets.max().sort_values(ascending=False)
@@ -1503,19 +1576,16 @@ def target_flips() -> None:
         d = f[f.flip == flip].set_index("checkpoint")
         d = d[~d.index.duplicated()]
         few = flips[flip] < FEW
-        before, after = d.predicted_legal_before, d.predicted_legal_after
-        ax.annotate("", (after[names].median(), y), (before[names].median(), y),
-                    arrowprops=dict(arrowstyle="-|>", color="#cfcfcf", lw=6,
-                                    mutation_scale=16, shrinkA=0, shrinkB=0), zorder=1)
-        where = offsets(names, 0.3)
-        for name in names:
-            ax.plot(before[name], y + where[name], "|", ms=6, mew=1.4, color=GRAY, zorder=2)
-        points = strip(ax, y, after, names, spread=0.3, muted=few)
+        change = d.predicted_legal_after - d.predicted_legal_before
+        median = change[present(names, change.index)].median()
+        ax.plot([median, median], [y - 0.4, y + 0.4], color="#bdbdbd", lw=5, zorder=1,
+                solid_capstyle="butt", alpha=0.45 if few else 1)
+        points = strip(ax, y, change, names, spread=0.3, alpha=0.35 if few else 1.0)
         if flip == "to the opponent" and "e64 (earlier inputs)" in points:
             tag(ax, *points["e64 (earlier inputs)"], "e64 (earlier inputs)", dx=12, dy=8)
         if flip == "loses land" and "e64" in points:
-            tag(ax, *points["e64"], "e64", dx=-12, dy=-6, ha="right")
-    for x, label in ((0, "rule after\nthe flip"), (1, "rule before")):
+            tag(ax, *points["e64"], "e64", dx=12, dy=8)
+    for x, label in ((-1, "the rule:\nlegal to illegal"), (0, "no change")):
         ax.axvline(x, color="black", lw=1.2)
         ax.text(x, len(flips) - 0.45, label, ha="center", va="bottom", fontsize=8)
     labels = []
@@ -1523,12 +1593,12 @@ def target_flips() -> None:
         labels.append(f"{flip}\n{n:,} targets" + ("  (too few to weigh)" if n < FEW else ""))
     ax.set_yticks(range(len(flips)), labels[::-1])
     for tick, (flip, n) in zip(ax.get_yticklabels()[::-1], flips.items()):
-        tick.set_color(GRAY if n < FEW else INK)
+        tick.set_color(INK_SOFT if n < FEW else INK)
     ax.set_ylim(-0.5, len(flips) + 0.15)
-    ax.set_xlim(-0.05, 1.05)
+    ax.set_xlim(-1.08, 0.22)
     ax.grid(axis="y", visible=False)
-    ax.set_xlabel("mean predicted legality of the target: grey ticks before the flip, markers "
-                  "after; the arrow joins the medians")
+    ax.set_xlabel("change in the target's mean predicted legality, after the flip − before; "
+                  "grey bar = the median; faint = too few to weigh")
     ax.legend(handles=checkpoint_handles(names), fontsize=8, loc="upper left",
               bbox_to_anchor=(1.01, 1.0))
     ax.set_title("Breaking the one condition a target restriction states: by the rule the "
@@ -1538,12 +1608,13 @@ def target_flips() -> None:
 
 PIP_CONFIGURATIONS = ["surplus", "one short", "pip missing", "pip missing, +2",
                       "all off colour"]
+#: Each row is named as the probes record's table names it, then described.
 PIP_LABELS = {
-    "surplus": "exact + 2 off-colour lands",
-    "one short": "exact less one land",
-    "pip missing": "same count, one coloured\npip's land off-colour",
-    "pip missing, +2": "pip missing + 2 off-colour\nlands",
-    "all off colour": "same count, every land\noff-colour",
+    "surplus": "surplus: exact + 2 off-colour lands",
+    "one short": "one short: exact less one land",
+    "pip missing": "pip missing: same count, one\ncoloured pip's land off-colour",
+    "pip missing, +2": "pip missing, +2: pip missing\n+ 2 off-colour lands",
+    "all off colour": "all off colour: same count,\nevery land off-colour",
 }
 
 
@@ -1650,18 +1721,29 @@ def zone_outcomes() -> None:
 
 
 def zone_amounts() -> None:
-    """Predicted cards at the affected player as the script's NumCards$ is set 1 to 6."""
+    """Predicted cards at the affected player as the script's NumCards$ is set 1 to 6.
+
+    Seventeen curves per panel tangle, so each checkpoint's curve is drawn faint and each
+    stage's median over its checkpoints bold, in the stage's line style.
+    """
     a = csv("zone_amounts.csv")
     names = gen2(a.checkpoint)
     amounts = list(range(1, 7))
+    columns = [f"amount_{k}" for k in amounts]
     fig, axes = plt.subplots(1, 3, figsize=(12.4, 4.2), sharey=True)
     for ax, api in zip(axes, ("Draw", "Discard", "Mill")):
         d = a[a.api == api].set_index("checkpoint")
         d = d[~d.index.duplicated()]
         for name in names:
             if name in d.index:
-                ax.plot(amounts, [d.loc[name, f"amount_{k}"] for k in amounts],
-                        **run_line(name), alpha=0.9)
+                ax.plot(amounts, [d.loc[name, c] for c in columns], **run_line(name),
+                        alpha=0.35)
+        for stage in ("none", "arm", "A", "B"):
+            members = [n for n in names if n in d.index and stage_of(n) == stage]
+            if members:
+                ax.plot(amounts, d.loc[members, columns].median().values, zorder=4,
+                        color=NO_COPIES_GRAY if stage == "none" else INK,
+                        ls=STAGE_LINE.get(stage, "-"), lw=2.4)
         ax.plot(amounts, amounts, color="black", lw=1.2)
         ax.text(4.95, 5.85, "the script's\nnumber", fontsize=8, ha="right", va="top")
         if api == "Discard" and "e64 (earlier inputs)" in d.index:
@@ -1676,10 +1758,16 @@ def zone_amounts() -> None:
         ax.set_xticks(amounts)
     axes[0].set_ylabel("predicted cards at the affected player")
     widths = sorted({WIDTH_OF[run_of(n)] for n in names if stage_of(n) != "none"})
-    fig.legend(handles=line_handles(widths), loc="lower center", ncol=7,
-               bbox_to_anchor=(0.5, -0.08), fontsize=8.5)
-    fig.suptitle("Does the predicted count follow the number in the script? One line per "
-                 "checkpoint", x=0.01, ha="left", y=1.0)
+    handles = [Line2D([], [], color=WIDTH_COLOUR[w], lw=1.5, alpha=0.5,
+                      label=f"{w}-wide e, one checkpoint") for w in widths]
+    handles += [Line2D([], [], color=INK, ls=STAGE_LINE[s], lw=2.4,
+                       label=f"median, {STAGE_NAME[s]}") for s in ("arm", "A", "B")]
+    handles.append(Line2D([], [], color=NO_COPIES_GRAY, lw=2.4,
+                          label="median, arms without copies"))
+    fig.legend(handles=handles, loc="lower center", ncol=4, bbox_to_anchor=(0.5, -0.14),
+               fontsize=8.5)
+    fig.suptitle("Does the predicted count follow the number in the script? Faint: one curve "
+                 "per checkpoint; bold: each stage's median", x=0.01, ha="left", y=1.0)
     save(fig, "zone-amounts")
 
 
@@ -1789,7 +1877,8 @@ def run_lineage() -> None:
             style.pop("mfc", None)
         return style
 
-    # The probed checkpoints, labelled with the names every other chart uses.
+    # The probed checkpoints, labelled with the names every other chart uses; an arm's
+    # checkpoint is its row's name, so it is labelled by its epoch alone.
     names = {"B256 best": "B256 best, not kept"}
     for _, c in ck.iterrows():
         yy = ys.get(c.run)
@@ -1797,9 +1886,13 @@ def run_lineage() -> None:
             continue
         width = None if runs.loc[c.run].lethality_copies == 0 else int(c.e_width)
         ax.plot(c.epoch, yy, zorder=5, **marker(c.checkpoint, c.role, width))
-        ax.annotate(names.get(c.checkpoint, short(c.checkpoint)), (c.epoch, yy + height / 2),
-                    xytext=(3, 5), textcoords="offset points", ha="left", va="bottom",
-                    fontsize=7.8, color=INK, zorder=6)
+        label = (f"epoch {c.epoch}" if c.checkpoint == c.run
+                 else names.get(c.checkpoint, short(c.checkpoint)))
+        below = c.checkpoint == "B256 best"  # clear of the kept epoch's label beside it
+        # The y axis runs downward: yy − height / 2 is the bar's top edge.
+        ax.annotate(label, (c.epoch, yy + (height if below else -height) / 2),
+                    xytext=(3, -2 if below else 2), textcoords="offset points", ha="left",
+                    va="top" if below else "bottom", fontsize=7.8, color=INK, zorder=6)
     if "B256" in ys and "A256 best" in set(ck.checkpoint):
         kept = int(ck[ck.checkpoint == "A256 best"].epoch.iloc[0])
         ax.plot(kept, ys["B256"], zorder=5, **marker("B256 kept", "best", 256))
@@ -1930,12 +2023,28 @@ SCORECARD_ROWS = [
 ]
 
 
-def scorecard() -> None:
-    """Measure × checkpoint, each row coloured by rank within it (darker is better).
+#: Each measure's distance toward the rule: (value with no knowledge, the rule's value).
+#: A blind predictor's AUC is 0.5, its gate-2 agreement 50%, its death grid off by 0.5
+#: everywhere (it says one half), its counts flat and its retargeted share all at the old
+#: target. The two losses have no rule and are scaled within their row.
+SCORECARD_SCALE = {"probe_mean": (0.5, 1.0), "grid_error": (0.5, 0.0), "sweep_on_rule": (0, 1),
+                   "ping_death": (0.0, 1.0), "gate2_varying": (50, 100),
+                   "evasion_auc": (0.5, 1.0), "control_flip": (0.0, 1.0),
+                   "colour_auc": (0.5, 1.0), "board_slope": (0.0, 1.0),
+                   "zone_slope": (0.0, 1.0), "retarget_stays": (1.0, 0.0)}
 
-    The last row is each checkpoint's mean rank over the measures it has, 1 being the best
-    of every row. ``e64 (earlier inputs)`` scored first and double strike on the wrong
-    damage step, so it has no gate-2 cell.
+
+def scorecard() -> None:
+    """Measure × checkpoint, each cell coloured by how far it goes from a blind predictor
+    toward the rule (darker is closer to the rule).
+
+    A rank colouring would give a row whose checkpoints differ by noise the same contrast
+    as one where they differ by half the scale; the distance toward the rule keeps a row
+    where every checkpoint sits near chance pale. The two losses have no rule and are
+    coloured from the row's worst to its best. The last row is each checkpoint's mean
+    distance toward the rule over the rows that have one. Bold marks every cell that
+    prints the same as the row's best. ``e64 (earlier inputs)`` scored first and double
+    strike on the wrong damage step, so it has no gate-2 cell.
     """
     data = scorecard_measures()
     columns = gen2_checkpoints(data.index)
@@ -1943,15 +2052,18 @@ def scorecard() -> None:
     measures = [m for _, group in SCORECARD_ROWS for m in group if m[0] in data.columns]
     values = data.loc[names]
 
-    def level_of(series: pd.Series, direction: int, fmt: str) -> pd.Series:
-        if fmt == "check":
-            return series.astype(float)
-        rank = (-direction * series).rank(method="min")
-        return 1 - (rank - 1) / max(series.notna().sum() - 1, 1)
+    def level_of(key: str, series: pd.Series, direction: int) -> pd.Series:
+        if key in SCORECARD_SCALE:
+            blind, rule = SCORECARD_SCALE[key]
+            return ((series - blind) / (rule - blind)).clip(0, 1)
+        if key == "toward_rule":
+            return series
+        good = direction * series
+        return (good - good.min()) / max(good.max() - good.min(), 1e-9)
 
-    ranks = pd.DataFrame({key: (-d * values[key]).rank(method="min")
-                          for key, _, d, f in measures if f != "check"})
-    mean_rank = ranks.mean(axis=1)
+    toward_rule = pd.DataFrame({key: level_of(key, values[key], d)
+                                for key, _, d, _ in measures if key in SCORECARD_SCALE})
+    toward_rule = toward_rule.mean(axis=1)
     xs, x, prev = [], 0.0, None
     for width, _, _ in columns:
         if prev is not None and width != prev:
@@ -1970,8 +2082,9 @@ def scorecard() -> None:
             layout.append((y, "measure", row))
             y += 1
         y += 0.2
-    layout.append((y + 0.15, "measure", ("mean_rank", "mean rank over the rows above "
-                                                      "(1 = best in every row)", -1, "{:.1f}")))
+    layout.append((y + 0.15, "measure", ("toward_rule", "mean distance toward the rule, rows "
+                                                        "below the losses (1 = the rule)", +1,
+                                         "{:.2f}")))
     y += 1.15
     fig, ax = plt.subplots(figsize=(12.6, 0.3 * y + 1.6))
     fig.subplots_adjust(left=0.33, right=0.995, top=0.8, bottom=0.04)
@@ -1981,9 +2094,15 @@ def scorecard() -> None:
                     fontweight="bold", color=INK)
             continue
         key, label, direction, fmt = payload
-        row = mean_rank if key == "mean_rank" else values[key]
-        level = level_of(row, direction, fmt)
-        best = (-direction * row).rank(method="min") == 1
+        row = toward_rule if key == "toward_rule" else values[key]
+        level = level_of(key, row, direction)
+
+        def shown(v: float) -> str:
+            text = ("✓" if v >= 0.5 else "✗") if fmt == "check" else fmt.format(v)
+            return text[1:] if fmt == "{:.3f}" and text.startswith("0") else text
+
+        top_value = row.max() if direction > 0 else row.min()
+        best = row.map(lambda v: pd.notna(v) and shown(v) == shown(top_value))
         for name, xx in zip(names, xs):
             v = row.loc[name]
             if pd.isna(v):
@@ -1995,20 +2114,17 @@ def scorecard() -> None:
             ax.add_patch(Rectangle((xx - 0.5, yy - 0.5), 1, 1,
                                    facecolor=BETTER_CMAP(0.04 + 0.86 * lv), edgecolor="white",
                                    lw=1.1))
-            text = ("✓" if v >= 0.5 else "✗") if fmt == "check" else fmt.format(v)
-            if fmt == "{:.3f}" and text.startswith("0"):
-                text = text[1:]
-            ax.text(xx, yy, text, ha="center", va="center", fontsize=8.2,
+            ax.text(xx, yy, shown(v), ha="center", va="center", fontsize=8.2,
                     fontweight="bold" if best.loc[name] and fmt != "check" else "normal",
                     color="white" if lv > 0.55 else INK)
         arrow = "▼" if direction < 0 else "▲"
         ax.text(-0.75, yy, f"{label}  {arrow}", ha="right", va="center", fontsize=8.2,
-                color=INK, fontweight="bold" if key == "mean_rank" else "normal")
+                color=INK, fontweight="bold" if key == "toward_rule" else "normal")
     top = -0.55
     for (width, name, label), xx in zip(columns, xs):
         ax.plot(xx, top - 0.35, clip_on=False, **checkpoint_marker(name, 6))
         ax.text(xx, top - 0.85, label, rotation=90, ha="center", va="bottom", fontsize=8.2,
-                color=INK, fontweight="bold" if name.startswith("B") else "normal")
+                color=INK)
     for width in (64, 128, 256):
         members = [xx for (w, _, _), xx in zip(columns, xs) if w == width]
         if members:
@@ -2020,13 +2136,16 @@ def scorecard() -> None:
     ax.set_xlim(-0.55, xs[-1] + 0.55)
     ax.set_ylim(y - 0.4, top)
     ax.axis("off")
-    ax.annotate("No checkpoint leads everywhere: seven different checkpoints top a row; the "
-                "256-wide continuations rank highest overall, the arms near the bottom",
+    ax.annotate("No checkpoint leads everywhere: eight different checkpoints top a row; the "
+                "256-wide continuations come closest to the rule overall,\nand five of the six "
+                "arms come last",
                 (0.01, top - 7.0), xycoords=("figure fraction", "data"), ha="left",
                 va="bottom", fontsize=11, color=INK, annotation_clip=False)
-    fig.text(0.01, 0.005, "Each row is coloured by rank among the checkpoints, darker = better "
-             "(▲ higher is better, ▼ lower is better); bold = best in the row. – : not "
-             "measured.", fontsize=7.8, color=INK_SOFT)
+    fig.text(0.01, 0.005, "Colour: the share of the way from a blind predictor (AUC 0.5, "
+             "agreement 50%, a flat count, a constant one half) to the rule, darker = closer; "
+             "the two losses, which have no rule,\nrun from the row's worst to its best. "
+             "▲ higher is better, ▼ lower is better; bold = prints the same as the row's best. "
+             "– : not measured.", fontsize=7.8, color=INK_SOFT)
     save(fig, "scorecard")
 
 
@@ -2046,7 +2165,8 @@ def loss_rise_by_field() -> None:
 
     The 47 per-field terms of ``fields_by_epoch.csv`` do not sum to gen-2's total
     card-disjoint loss: about 0.4 to 0.6 of it lies in terms outside them, and the change
-    in that remainder is drawn as its own segment.
+    in that remainder is drawn as its own segment. The bars stack rises and falls apart,
+    so the affected gate's share is printed against the net change, the black tick.
     """
     ep = csv("epochs.csv")
     fe = csv("fields_by_epoch.csv")
@@ -2091,8 +2211,10 @@ def loss_rise_by_field() -> None:
                 neg += v
         if r.low != r["last"]:
             ax.plot([r.total, r.total], [y - 0.36, y + 0.36], color=INK, lw=2)
-            ax.text(max(pos, r.total) + 0.004, y, f"total {r.total:+.3f}", va="center",
+            ax.text(max(pos, r.total) + 0.004, y + 0.1, f"net {r.total:+.3f}", va="center",
                     fontsize=8.4, color=INK, fontweight="bold")
+            ax.text(max(pos, r.total) + 0.004, y - 0.2, f"affected gate {r.gate / r.total:.0%} "
+                    "of net", va="center", fontsize=7.6, color=RISE_GROUPS[0][2])
     ax.set_yticks(range(len(df)),
                   [f"{r.run}   epoch {r.low} → {r['last']}" for _, r in df.iterrows()][::-1])
     for label in ax.get_yticklabels():
@@ -2102,12 +2224,13 @@ def loss_rise_by_field() -> None:
     ax.set_xlim(min(-0.06, df[[k for k, _, _ in RISE_GROUPS]].clip(upper=0).sum(axis=1).min()
                     - 0.01), df.total.max() + 0.07)
     ax.set_xlabel("change in card-disjoint loss from the run's lowest card-disjoint epoch to its "
-                  "last; rises right, falls left, black bar = net")
+                  "last; rises right, falls left, black tick = net change")
     ax.grid(axis="y", visible=False)
     ax.legend(handles=[Patch(color=c, label=label) for _, label, c in RISE_GROUPS],
               loc="upper center", bbox_to_anchor=(0.45, -0.15), ncol=3, fontsize=8)
-    ax.set_title("More than half of every run's late card-disjoint rise is in the affected gate, "
-                 "and poison adds\nthe next-largest part in four runs of five", loc="left",
+    ax.set_title("The affected gate's rise is more than half of every run's net card-disjoint "
+                 "rise; poison's comes\nnext, or level with it in run A128, in every run but A64",
+                 loc="left",
                  fontsize=10.5, x=-0.2)
     save(fig, "loss-rise-by-field")
 
@@ -2161,9 +2284,11 @@ def e_over_random() -> None:
 
     Rung 1 is the MLP probe on the board plus e (board targets, card-disjoint records) or
     on e alone (line properties, held-out lines); rung 1w replaces e with a fixed random
-    vector of the same width. Binary targets are AUC differences, amounts R² differences;
-    the colour doubles an AUC difference so both kinds run from 0, no better than the
-    random vector, to 1, perfect where the control is at chance.
+    vector of the same width. Binary targets are AUC differences, amounts R² differences.
+    The board questions sit on top as a strip, one marker per checkpoint, sorted by their
+    median gain, with the three whose answer the line states shaded. The line properties
+    sit below as a heatmap split by kind, so that a colour always means one unit: the
+    yes/no block runs to the AUC's largest possible gain, 0.5, and the amount block to 1.
     """
     lad = csv("probe_ladder.csv")
     lad = lad[(lad.probe == "mlp") & lad.rung.isin(["1", "1w"])]
@@ -2175,6 +2300,25 @@ def e_over_random() -> None:
         have = set(lad[lad.target == target].stratum)
         return "held-out" if "held-out" in have else "all" if "all" in have else "trained"
 
+    def gains(target: str, board: bool) -> pd.Series:
+        d = lad[(lad.target == target) & (lad.stratum == stratum_for(target, board))]
+        piv = d.pivot_table(index="checkpoint", columns="rung", values="score")
+        if not {"1", "1w"} <= set(piv.columns):
+            return pd.Series(dtype=float)
+        return (piv["1"] - piv["1w"]).dropna()
+
+    targets = [(family, title, t, label, board) for family, title, rows in GAIN_FAMILIES
+               for t, label, board in rows if t in kind.index and not gains(t, board).empty]
+    # The board questions whose answer the line states, against the ones the board decides.
+    stated = {"damage_taken", "pt_until_end_of_turn", "affordable"}
+    board_auc = sorted([r for r in targets if r[4] and kind[r[2]] == "binary"],
+                       key=lambda r: gains(r[2], True).median(), reverse=True)
+    board_r2 = [r for r in targets if r[4] and kind[r[2]] == "amount"]
+    blocks = [("Yes/no line properties: AUC gain × 100",
+               [r for r in targets if not r[4] and kind[r[2]] == "binary"], 0.5),
+              ("Amounts a line states: R² gain × 100",
+               [r for r in targets if not r[4] and kind[r[2]] == "amount"], 1.0)]
+
     columns = [("gen-1", "gen-1", None)] + [(name, label, w) for w, name, label in
                                             gen2_checkpoints(lad.checkpoint)]
     xs, x, prev = [], 0.0, "start"
@@ -2184,63 +2328,94 @@ def e_over_random() -> None:
         xs.append(x)
         x += 1
         prev = width
-    def has_scores(target: str, board: bool) -> bool:
-        d = lad[(lad.target == target) & (lad.stratum == stratum_for(target, board))]
-        return d.score.notna().any()
 
-    layout = []  # (y, kind of row, payload)
+    layout = []  # (y, kind of row, payload) in heatmap row units
     y = 0.0
-    for family, title, targets in GAIN_FAMILIES:
-        present_targets = [t for t in targets if t[0] in kind.index and has_scores(t[0], t[2])]
-        if not present_targets:
+    for block_title, rows, span in blocks:
+        if not rows:
             continue
-        layout.append((y, "family", title))
-        y += 0.85
-        for target, label, board in present_targets:
-            layout.append((y, "target", (target, label, board)))
+        layout.append((y, "block", block_title))
+        y += 1.1
+        family = None
+        for fam, fam_title, target, label, board in rows:
+            if fam != family:
+                layout.append((y, "family", fam_title))
+                y += 0.8
+                family = fam
+            layout.append((y, "target", (target, label, span)))
             y += 1
-        y += 0.25
-    top = -1.25
-    head = 10.4  # data rows above the first family: column labels, width names, title
-    height = 0.215 * (y - top + head) + 0.9
+        y += 0.6
+    unit = 0.215  # inches per heatmap row
+    top, head = -1.25, 7.0  # column labels and width names above the first block
+    strip_rows = len(board_auc) + (len(board_r2) + 0.6 if board_r2 else 0)
+    heights = dict(title=0.85, strip=0.36 * strip_rows + 0.2, strip_foot=0.8,
+                   heat=unit * (y - top + head), foot=1.0)
+    height = sum(heights.values())
     fig = plt.figure(figsize=(9.6, height))
-    ax = fig.add_axes([0.3, 0.9 / height, 0.69, 1 - 1.0 / height])
+
+    # Board questions: one marker per checkpoint, sorted by median gain.
+    strip_bottom = heights["foot"] + heights["heat"] + heights["strip_foot"]
+    sax = fig.add_axes([0.3, strip_bottom / height, 0.52, heights["strip"] / height])
+    names = ["gen-1"] + gen2(lad.checkpoint)
+    rows_y = []
+    yy = 0.0
+    for r in board_auc:
+        rows_y.append((yy, r))
+        yy += 1
+    if board_r2:
+        yy += 0.6
+        rule_y = yy - 0.8
+        for r in board_r2:
+            rows_y.append((yy, r))
+            yy += 1
+    for yy, (_, _, target, label, _) in rows_y:
+        if target in stated:
+            sax.axhspan(yy - 0.45, yy + 0.45, color="#efe9f7", lw=0, zorder=0)
+        strip(sax, yy, gains(target, True), names, spread=0.32, ms=5.5)
+    if board_r2:
+        sax.axhline(rule_y, color=GRAY, lw=0.6)
+    sax.set_yticks([yy for yy, _ in rows_y],
+                   [label + ("  (R²)" if kind[target] == "amount" else "")
+                    for _, (_, _, target, label, _) in rows_y])
+    for tick, (_, (_, _, target, _, _)) in zip(sax.get_yticklabels(), rows_y):
+        tick.set_fontweight("bold" if target == "dies" else "normal")
+    sax.set_ylim(rows_y[-1][0] + 0.55, -0.55)
+    sax.axvline(0, color=INK, lw=0.8)
+    sax.grid(axis="y", visible=False)
+    sax.set_xlabel("rung 1 − rung 1w: AUC gain, or R² gain for damage taken")
+    sax.set_title("Board questions, card-disjoint records, sorted by median gain; shaded: the "
+                  "line states the answer", fontsize=9, fontweight="normal", color=INK_SOFT)
+    sax.legend(handles=checkpoint_handles(names), fontsize=7.6, loc="upper left",
+               bbox_to_anchor=(1.01, 1.02))
+
+    # Line properties: one heatmap block per kind of answer.
+    ax = fig.add_axes([0.3, heights["foot"] / height, 0.69, heights["heat"] / height])
     norm = matplotlib.colors.Normalize(-1, 1)
     for yy, row_kind, payload in layout:
-        if row_kind == "family":
-            ax.text(-0.75, yy + 0.1, payload, ha="right", va="center", fontsize=9,
+        if row_kind == "block":
+            ax.text(-0.75 - 9.0, yy + 0.15, payload, ha="left", va="center", fontsize=9.4,
                     fontweight="bold", color=INK)
             continue
-        target, label, board = payload
-        stratum = stratum_for(target, board)
-        d = lad[(lad.target == target) & (lad.stratum == stratum)]
-        piv = d.pivot_table(index="checkpoint", columns="rung", values="score")
-        amount = kind[target] == "amount"
+        if row_kind == "family":
+            ax.text(-0.75, yy + 0.1, payload, ha="right", va="center", fontsize=8.4,
+                    fontweight="bold", color=INK_SOFT)
+            continue
+        target, label, span = payload
+        diff = gains(target, False)
         for (name, _, _), xx in zip(columns, xs):
-            if name not in piv.index or piv.loc[name].isna().any():
+            if name not in diff.index:
                 ax.add_patch(Rectangle((xx - 0.5, yy - 0.5), 1, 1, facecolor="white",
                                        edgecolor="#eeeeee", lw=0.5))
                 continue
-            diff = piv.loc[name, "1"] - piv.loc[name, "1w"]
-            level = diff if amount else 2 * diff
+            level = diff[name] / span
             ax.add_patch(Rectangle((xx - 0.5, yy - 0.5), 1, 1, facecolor=GAIN_CMAP(norm(level)),
                                    edgecolor="white", lw=0.8))
-            ax.text(xx, yy, f"{100 * diff:.0f}", ha="center", va="center", fontsize=7.4,
+            ax.text(xx, yy, f"{100 * diff[name]:.0f}", ha="center", va="center", fontsize=7.4,
                     color="white" if abs(level) > 0.62 else INK)
-        tag = ("board" if board else "line") + (", R²" if amount else "")
-        ax.text(-0.75, yy, f"{label}  ({tag})", ha="right", va="center", fontsize=8.2,
-                color=INK, fontweight="bold" if target == "dies" else "normal")
-        if target == "dies":
-            ax.add_patch(Rectangle((xs[1] - 0.5, yy - 0.5), xs[-1] - xs[1] + 1, 1, fill=False,
-                                   edgecolor=INK, lw=1.6, zorder=5))
+        ax.text(-0.75, yy, label, ha="right", va="center", fontsize=8.2, color=INK)
     for (name, label, width), xx in zip(columns, xs):
-        colour = shade(WIDTH_COLOUR[width], 1.0) if width else INK_SOFT
-        ax.text(xx, top, label, rotation=90, ha="center", va="bottom", fontsize=8,
-                color=INK, fontweight="bold" if name.startswith("B") else "normal")
-        if name != "gen-1":
-            ax.plot(xx, top + 0.45, clip_on=False, **checkpoint_marker(name, 5.5))
-        else:
-            ax.plot(xx, top + 0.45, "D", color=colour, ms=4.5, clip_on=False)
+        ax.text(xx, top, label, rotation=90, ha="center", va="bottom", fontsize=8, color=INK)
+        ax.plot(xx, top + 0.45, clip_on=False, **checkpoint_marker(name, 5.5))
     for width in (None, 64, 128, 256):
         members = [xx for (_, _, w), xx in zip(columns, xs) if w == width]
         if members:
@@ -2249,28 +2424,24 @@ def e_over_random() -> None:
                     fontweight="bold",
                     color=INK_SOFT if width is None else shade(WIDTH_COLOUR[width], 1.0))
     ax.set_xlim(-0.55, xs[-1] + 0.55)
-    ax.set_ylim(y - 0.3, top - head)
+    ax.set_ylim(y - 0.6, top - head)
     ax.axis("off")
-    ax.annotate("e beats a random vector of its width on what a line states, and barely on "
-                "what the board decides", (0.01, top - 10.3), xycoords=("figure fraction", "data"),
-                ha="left", va="top", fontsize=11, color=INK, annotation_clip=False)
-    ax.annotate("Board questions the line settles (damage taken, pump duration, affordable) "
-                "gain; deaths, blocks, triggers, targets and\nthe affected gate gain 0.13 AUC "
-                "at most. Outlined: on dies at most 0.04, and less than nothing at width 256.",
-                (0.01, top - 9.3),
-                xycoords=("figure fraction", "data"), ha="left", va="top", fontsize=8.6,
-                color=INK_SOFT, annotation_clip=False)
-    cax = fig.add_axes([0.04, 0.6 / height, 0.2, 0.12 / height])
+
+    fig.text(0.01, 1 - 0.12 / height, "e adds far more than a random vector of its width on "
+             "what a line states, and at most 0.13 of AUC\non what the board decides: deaths, "
+             "blocks, triggers, targets and the affected gate",
+             ha="left", va="top", fontsize=10.8, color=INK, fontweight="bold")
+    cax = fig.add_axes([0.07, 0.62 / height, 0.18, 0.1 / height])
     bar = fig.colorbar(matplotlib.cm.ScalarMappable(cmap=GAIN_CMAP, norm=norm), cax=cax,
                        orientation="horizontal", ticks=[-1, 0, 1])
-    bar.ax.set_xticklabels(["worse than\nrandom", "same as\nrandom", "perfect over\nrandom"],
-                           fontsize=7.2)
-    bar.ax.set_title("colour: R² gain, or twice the AUC gain", fontsize=7.6, color=INK_SOFT)
-    fig.text(0.3, 0.12 / height, "Cells: (rung 1 − rung 1w) × 100, MLP probe; board targets on "
-             "card-disjoint records, line properties on held-out lines\n(* trained lines only, "
-             "† all interaction pairs). A random vector's R² falls below zero, so an amount's "
-             "gain can pass 100. gen-1 is probed on its own corpus.", fontsize=7.4,
-             color=INK_SOFT)
+    bar.ax.set_xticklabels(["−50\n−100", "0\n0", "+50\n+100"], fontsize=7.2)
+    bar.ax.set_title("cell colour: gain × 100", fontsize=7.4, color=INK_SOFT)
+    bar.ax.text(-0.13, -0.55, "AUC\nR²", transform=bar.ax.transAxes, ha="right", va="top",
+                fontsize=7.2, color=INK_SOFT)
+    fig.text(0.3, 0.12 / height, "Cells: (rung 1 − rung 1w) × 100, MLP probe, line properties on "
+             "held-out lines (* trained lines only, † all interaction\npairs). A random vector's "
+             "R² falls below zero, so an amount's gain can pass 100. gen-1 is probed on its own "
+             "corpus.", fontsize=7.4, color=INK_SOFT)
     save(fig, "e-over-random")
 
 
@@ -2278,7 +2449,8 @@ def e_over_random() -> None:
 
 
 def ping_gate_edits() -> None:
-    """The gate at the targeted creature of five activated damage records, under six edits."""
+    """The affected gate at the targeted creature of five activated damage records, under six
+    edits, each applied alone to the record as collected."""
     p = csv("ping_gate_edits.csv").set_index("edit")
     labels = {
         "as collected": "as collected",
@@ -2301,11 +2473,18 @@ def ping_gate_edits() -> None:
         ax.axhspan(ys[wording] - 0.42, ys[wording] + 0.42, color="#efe9f7", lw=0, zorder=0)
     if len(hits) < len(edits):
         ax.axhline(min(ys[e] for e in hits) - 0.67, color=GRAY, lw=0.6)
-    offsets = np.linspace(-0.18, 0.18, len(p.columns))
+    offsets = np.linspace(0.2, -0.2, len(p.columns))
+    base = "as collected"
     for k, name in enumerate(p.columns):
         style = checkpoint_marker(name, 7)
-        ax.plot([p.loc[e, name] for e in hits], [ys[e] + offsets[k] for e in hits],
-                color=style["mec"], lw=0.9, alpha=0.45, zorder=2)
+        # Each edit is applied alone to the record as collected: a dumbbell from that value.
+        for edit in edits:
+            if edit == base or base not in p.index:
+                continue
+            y = ys[edit] + offsets[k]
+            ax.plot([p.loc[base, name], p.loc[edit, name]], [y, y], color=style["mec"], lw=1.1,
+                    alpha=0.5, zorder=2)
+            ax.plot(p.loc[base, name], y, "|", color=GRAY, ms=7, mew=1.3, zorder=2)
         ax.plot([p.loc[e, name] for e in edits], [ys[e] + offsets[k] for e in edits], zorder=3,
                 label=short(name), **style)
     ax.axvline(0.5, color=INK, lw=0.8, zorder=1)
@@ -2316,15 +2495,17 @@ def ping_gate_edits() -> None:
     ax.set_xlim(-0.03, 1.03)
     ax.set_ylim(min(ys.values()) - 0.6, len(edits) - 0.4)
     ax.grid(axis="y", visible=False)
-    ax.set_xlabel("mean predicted chance the targeted creature is affected (the gate), "
+    ax.set_xlabel("mean predicted chance the targeted creature is affected (the affected gate), "
                   "five activated damage records; black tick = the rule")
     handles, names = ax.get_legend_handles_labels()
+    handles.append(Line2D([], [], marker="|", color=GRAY, ls="none", ms=8, mew=1.3))
+    names.append("as collected, before the edit")
     handles.append(Line2D([], [], marker="|", color=INK, ls="none", ms=12, mew=2))
     names.append("the rule")
-    ax.legend(handles, names, loc="upper center", bbox_to_anchor=(0.45, -0.2), ncol=5,
+    ax.legend(handles, names, loc="upper center", bbox_to_anchor=(0.45, -0.2), ncol=3,
               fontsize=8.3)
-    ax.set_title("Only rewording \"any target\" as \"target creature\" puts the gate above 0.9 "
-                 "on every checkpoint", loc="left", fontsize=10.5)
+    ax.set_title("Only rewording \"any target\" as \"target creature\" puts the affected gate "
+                 "above 0.9 on every checkpoint read", loc="left", fontsize=10.5)
     save(fig, "ping-gate-edits")
 
 
@@ -2352,9 +2533,10 @@ def planned_block_labels() -> None:
             ("whose snapshot shows blocks the AI had already planned",
              "show blocks the AI had already planned on the board", plan)]),
         ("attackers anchoring a record, per game and turn",
-         "of the {:,} attackers anchoring a record in a game's turn", [
+         "of the {:,} attackers anchoring a record in a game's turn, where the AI's blocking "
+         "code asks\nabout each attacker again at every stage of filling in its plan", [
              ("anchoring more than one real record",
-              "anchor more than one \"real\" decision, one per plan stage", plan)]),
+              "anchor more than one \"real\" decision", plan)]),
     ]
     bars = []
     for total_key, title, parts in groups:
@@ -2364,16 +2546,17 @@ def planned_block_labels() -> None:
         for key, label, colour in parts:
             if key in count:
                 bars.append(("bar", label, count[key] / count[total_key], (count[key], colour)))
-    height = 0.42 * len(bars) + 1.1
+    extra_lines = sum(label.count("\n") for kind, label, _, _ in bars if kind == "title")
+    height = 0.42 * (len(bars) + extra_lines) + 1.45
     fig = plt.figure(figsize=(9.0, height))
-    ax = fig.add_axes([0.43, 0.45 / height, 0.5, 1 - 1.15 / height])
+    ax = fig.add_axes([0.43, 0.8 / height, 0.5, 1 - 1.5 / height])
     y = 0.0
     for kind, label, share, extra in bars:
         if kind == "title":
-            y += 0.2
+            y += 0.2 + 0.2 * label.count("\n")
             ax.text(-0.86, y, label[0].upper() + label[1:], fontsize=9, fontweight="bold",
                     color=INK, va="center")
-            y += 0.7
+            y += 0.7 + 0.2 * label.count("\n")
             continue
         n, colour = extra
         ax.barh(y, 1, height=0.62, color="#eeeeee", lw=0)
@@ -2386,12 +2569,15 @@ def planned_block_labels() -> None:
     ax.set_ylim(y - 0.3, -0.3)
     ax.set_xlim(0, 1)
     ax.axis("off")
-    fig.text(0.005, 1 - 0.12 / height, "Most \"may not block\" labels gen-2 trained on are the "
-             "AI's own block plan; a tapped creature,\na refusal the rules make, is one label in "
-             "fourteen", ha="left", va="top", fontsize=10.5, color=INK)
-    fig.text(0.005, 0.1 / height, "Game-disjoint stratum, decisions the collector counted as "
-             "real. The sub-counts may overlap, so they are not stacked.", fontsize=7.6,
-             color=INK_SOFT)
+    fig.text(0.005, 1 - 0.12 / height, "In the game-disjoint validation stratum, most \"may not "
+             "block\" labels are the AI's own block plan;\na tapped creature, a refusal the rules "
+             "make, is one label in fourteen", ha="left", va="top", fontsize=10.5, color=INK)
+    fig.legend(handles=[Patch(color=plan, label="the AI's block plan"),
+                        Patch(color=rule, label="a refusal the rules make"),
+                        Patch(color=neutral, label="no static ability restricts the creature")],
+               loc="lower left", bbox_to_anchor=(0.0, 0.3 / height), ncol=3, fontsize=8)
+    fig.text(0.005, 0.1 / height, "Decisions the collector counted as real. The sub-counts may "
+             "overlap, so they are not stacked.", fontsize=7.6, color=INK_SOFT)
     save(fig, "planned-block-labels")
 
 
