@@ -22,13 +22,34 @@ class DraftPickProtocolTest {
                 + "," + body + "}";
     }
 
+    private static DraftWorkerMain.PickRequest request(
+            String draftId, int seat, int packNumber, int pickNumber, List<String> pack) {
+        return new DraftWorkerMain.PickRequest(
+                draftId, seat, "draft-agent", 8, packNumber, pickNumber, "BLB", pack);
+    }
+
     // ── Request formatting (data-model §2.1) ─────────────────────────────────
 
     @Test
+    void theRequestLineIsByteForByteTheProtocolLine() {
+        // The supervisor's reader is the contract; pin the whole line, key
+        // order and spacing included.
+        assertEquals("<<DRAFT-PICK-REQUEST>>{\"draft_id\":\"d1\",\"seat\":3,"
+                        + "\"agent\":\"draft-agent\",\"pod_size\":8,\"pack_number\":1,"
+                        + "\"pick_number\":5,\"set_code\":\"BLB\","
+                        + "\"pack\":[\"Card A\",\"Card B\"]}",
+                request("d1", 3, 1, 5, List.of("Card A", "Card B")).toWireLine());
+    }
+
+    @Test
+    void anAbandonedLineNamesTheDraftAndTheReason() {
+        assertEquals("<<DRAFT-ABANDONED>>{\"draft_id\":\"d1\",\"reason\":\"pick 'X' not in held pack\"}",
+                DraftWorkerMain.formatAbandoned("d1", "pick 'X' not in held pack"));
+    }
+
+    @Test
     void formatPickRequestEmitsAllFields() {
-        String line = DraftWorkerMain.formatPickRequest(
-                "d1", 3, "draft-agent", 8, 1, 5, "BLB",
-                List.of("Card A", "Card B"));
+        String line = request("d1", 3, 1, 5, List.of("Card A", "Card B")).toWireLine();
         assertTrue(line.startsWith(DraftWorkerMain.PICK_REQUEST_SENTINEL));
         String json = line.substring(DraftWorkerMain.PICK_REQUEST_SENTINEL.length());
         assertTrue(json.contains("\"draft_id\":\"d1\""));
@@ -43,8 +64,8 @@ class DraftPickProtocolTest {
 
     @Test
     void formatPickRequestEscapesCardNames() {
-        String line = DraftWorkerMain.formatPickRequest(
-                "d1", 0, "a", 8, 1, 1, "TST", List.of("Lim-Dûl's \"Vault\""));
+        String line = new DraftWorkerMain.PickRequest(
+                "d1", 0, "a", 8, 1, 1, "TST", List.of("Lim-Dûl's \"Vault\"")).toWireLine();
         assertTrue(line.contains("Lim-Dûl's \\\"Vault\\\""));  // accented passes, quote escaped
     }
 
@@ -73,7 +94,7 @@ class DraftPickProtocolTest {
         Map<String, Object> resp = DraftWorkerMain.parseResponse(
                 response("d1", 0, 1, 5, "\"pick\":\"Card B\""));
         String name = DraftWorkerMain.resolvePick(
-                resp, "d1", 0, 1, 5, List.of("Card A", "Card B", "Card C"));
+                resp, request("d1", 0, 1, 5, List.of("Card A", "Card B", "Card C")));
         assertEquals("Card B", name);
     }
 
@@ -83,7 +104,7 @@ class DraftPickProtocolTest {
                 response("d1", 0, 1, 5, "\"abort\":true"));
         assertThrows(DraftWorkerMain.DraftAbortedException.class,
                 () -> DraftWorkerMain.resolvePick(
-                        resp, "d1", 0, 1, 5, List.of("Card A")));
+                        resp, request("d1", 0, 1, 5, List.of("Card A"))));
     }
 
     @Test
@@ -92,7 +113,7 @@ class DraftPickProtocolTest {
                 response("d1", 7, 1, 5, "\"pick\":\"Card A\""));  // seat 7 != 0
         assertThrows(DraftWorkerMain.DraftAbandonedException.class,
                 () -> DraftWorkerMain.resolvePick(
-                        resp, "d1", 0, 1, 5, List.of("Card A")));
+                        resp, request("d1", 0, 1, 5, List.of("Card A"))));
     }
 
     @Test
@@ -101,7 +122,7 @@ class DraftPickProtocolTest {
                 response("d1", 0, 1, 5, "\"pick\":\"Not In Pack\""));
         assertThrows(DraftWorkerMain.DraftAbandonedException.class,
                 () -> DraftWorkerMain.resolvePick(
-                        resp, "d1", 0, 1, 5, List.of("Card A", "Card B")));
+                        resp, request("d1", 0, 1, 5, List.of("Card A", "Card B"))));
     }
 
     @Test
@@ -110,7 +131,7 @@ class DraftPickProtocolTest {
                 response("d1", 0, 1, 5, "\"note\":\"none\""));  // neither pick nor abort
         assertThrows(DraftWorkerMain.DraftAbandonedException.class,
                 () -> DraftWorkerMain.resolvePick(
-                        resp, "d1", 0, 1, 5, List.of("Card A")));
+                        resp, request("d1", 0, 1, 5, List.of("Card A"))));
     }
 
     // ── external-agent set parsing ───────────────────────────────────────────

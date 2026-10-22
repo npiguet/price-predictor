@@ -23,11 +23,10 @@ class DeckBuilderTest {
 
     /**
      * Generate a realistic pool from 6 boosters of the given set (no basic lands).
-     * Uses MatchGenerator's pool generator via the default builder factory.
      */
     private static List<PaperCard> realPool(String setCode) {
-        MatchGenerator gen = MatchGenerator.withDefaultBuilders("test-run-id");
-        return gen.generatePool(setCode);
+        return new PoolGenerator().openPool(
+                BoosterTemplates.forSet(setCode).orElseThrow(), HoldoutCards.NONE);
     }
 
     // ── Method Selection Distribution ─────────────────────────────────────────

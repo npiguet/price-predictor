@@ -105,7 +105,7 @@ class MatchWorkerMainTest {
                 TS, RUN_ID, "RVR", "forge-best", "gen-2",
                 deck40("A"), deck40("B"), "AA", "BA", 47);
         List<CardsPlayedRow> rows = List.of(cardsPlayedRow(), cardsPlayedRow());
-        return new MatchGenerationResult(matchResult, rows);
+        return new MatchGenerationResult(matchResult, rows, false);
     }
 
     @Test

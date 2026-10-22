@@ -39,18 +39,6 @@ public class PoolGenerator {
     private static final int MAX_REPLACEMENT_BOOSTERS = 8;
 
     /**
-     * Generate {@code poolCount} sealed pools for the given set code.
-     *
-     * @param setCode   MTG set code (e.g. "RVR", "MH3"). Must not be null.
-     * @param poolCount Number of pools to generate.
-     * @return List of pools; each pool is a list of non-basic-land card names.
-     * @throws IllegalArgumentException if setCode is null or not found in Forge's booster database.
-     */
-    public List<List<String>> generate(String setCode, int poolCount) {
-        return generate(setCode, poolCount, HoldoutCards.NONE);
-    }
-
-    /**
      * Generate {@code poolCount} sealed pools with {@code excluded} depleted out.
      *
      * @param setCode   MTG set code (e.g. "RVR", "MH3"). Must not be null.

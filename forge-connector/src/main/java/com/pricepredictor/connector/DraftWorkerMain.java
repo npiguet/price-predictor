@@ -1,5 +1,6 @@
 package com.pricepredictor.connector;
 
+import com.pricepredictor.connector.effects.Json;
 import forge.gamemodes.limited.BoosterDraft;
 import forge.gamemodes.limited.DraftPack;
 import forge.gamemodes.limited.LimitedPlayerAI;
@@ -94,8 +95,8 @@ public class DraftWorkerMain {
         Set<String> externalAgents = parseExternalAgents(
                 System.getProperty("draft.external.agents"));
         String requiredAgent = System.getProperty("draft.required.agent");
-        BufferedReader stdin = new BufferedReader(
-                new InputStreamReader(System.in, StandardCharsets.UTF_8));
+        PickChannel channel = new PickChannel(out, new BufferedReader(
+                new InputStreamReader(System.in, StandardCharsets.UTF_8)), externalAgents);
 
         AgentMix mix = AgentMix.parse(agentMixSpec);
 
@@ -127,7 +128,7 @@ public class DraftWorkerMain {
                     DraftResult result;
                     try {
                         result = generateDraft(
-                                context, draftSet, mix, random, out, stdin, externalAgents,
+                                context, draftSet, mix, random, channel,
                                 UUID.randomUUID().toString(), requiredAgent);
                     } catch (WorkerInputClosed e) {
                         // The supervisor closed our stdin (it stopped or crashed); exit
@@ -177,20 +178,23 @@ public class DraftWorkerMain {
         record Abandoned() implements DraftResult {}
     }
 
-    /** Backward-compatible overload: a Forge-only draft (no external seats). */
-    static DraftResult generateDraft(
-            BoosterDraft context, String setCode, AgentMix mix, Random random) {
-        return generateDraft(context, setCode, mix, random, null, null,
-                Collections.emptySet(), UUID.randomUUID().toString(), null);
-    }
+    /**
+     * The pick side-channel to the supervisor: where requests are written,
+     * where responses are read, and which agent labels are routed through it.
+     */
+    record PickChannel(PrintStream out, BufferedReader in, Set<String> externalAgents) {
 
-    /** Backward-compatible overload: no required-agent constraint. */
-    static DraftResult generateDraft(
-            BoosterDraft context, String setCode, AgentMix mix, Random random,
-            PrintStream out, BufferedReader stdin, Set<String> externalAgents,
-            String draftId) {
-        return generateDraft(context, setCode, mix, random, out, stdin,
-                externalAgents, draftId, null);
+        /** A Forge-only worker: every seat picks in-process. */
+        static final PickChannel NONE = new PickChannel(null, null, Set.of());
+
+        PickChannel {
+            externalAgents = Set.copyOf(externalAgents);
+        }
+
+        /** Whether a seat drafting as {@code agent} asks the supervisor for its picks. */
+        boolean routes(String agent) {
+            return externalAgents.contains(agent);
+        }
     }
 
     /**
@@ -217,94 +221,150 @@ public class DraftWorkerMain {
 
     /**
      * Run one full pod draft. On a worker-detected pick fault this emits a
-     * {@code <<DRAFT-ABANDONED>>} line via {@code out} first.
+     * {@code <<DRAFT-ABANDONED>>} line via the channel first.
+     *
+     * @param requiredAgent a label at least one seat must carry, or null
      */
     static DraftResult generateDraft(
             BoosterDraft context, String setCode, AgentMix mix, Random random,
-            PrintStream out, BufferedReader stdin, Set<String> externalAgents,
-            String draftId, String requiredAgent) {
-        Optional<SealedTemplate> found = BoosterTemplates.forSet(setCode);
-        if (found.isEmpty()) {
+            PickChannel channel, String draftId, String requiredAgent) {
+        Optional<SealedTemplate> template = BoosterTemplates.forSet(setCode);
+        if (template.isEmpty()) {
             return new DraftResult.Skipped("no booster template for set " + setCode);
         }
-        SealedTemplate template = found.get();
-
-        // Generate all boosters: booster index k = (pack-1) * POD_SIZE + openingSeat.
-        DraftPack[] boosters = new DraftPack[PACKS * POD_SIZE];
-        int packSize = -1;
-        for (int k = 0; k < boosters.length; k++) {
-            List<PaperCard> cards = new ArrayList<>(new UnOpenedProduct(template).get());
-            if (packSize == -1) {
-                packSize = cards.size();
-            } else if (cards.size() != packSize) {
-                // Non-uniform pack size breaks the reconstruction geometry; skip.
-                return new DraftResult.Skipped("boosters of " + cards.size() + " and "
+        DraftPack[] boosters = openBoosters(template.get());
+        int packSize = boosters[0].size();
+        for (DraftPack booster : boosters) {
+            if (booster.size() != packSize) {
+                // A non-uniform pack size breaks the reconstruction geometry.
+                return new DraftResult.Skipped("boosters of " + booster.size() + " and "
                         + packSize + " cards; the transcript geometry needs one size");
             }
-            boosters[k] = new DraftPack(cards, k);
         }
-        if (packSize <= 0) {
+        if (packSize == 0) {
             return new DraftResult.Skipped("empty boosters");
         }
 
-        // One AI seat per pod position; agents sampled per draft (FR-006).
-        List<LimitedPlayerAI> players = new ArrayList<>(POD_SIZE);
-        String[] agents = new String[POD_SIZE];
-        for (int s = 0; s < POD_SIZE; s++) {
-            players.add(new LimitedPlayerAI(s, context));
-            agents[s] = mix.sample(random);
-        }
-        forceRequiredAgent(agents, requiredAgent, random);
-
-        List<List<String>> picksByBooster = new ArrayList<>(boosters.length);
-        for (int k = 0; k < boosters.length; k++) {
-            picksByBooster.add(new ArrayList<>(packSize));
-        }
-
+        PodDraft pod = new PodDraft(context, setCode, draftId, mix, random, channel, packSize);
+        forceRequiredAgent(pod.agents, requiredAgent, random);
         try {
             for (int pack = 1; pack <= PACKS; pack++) {
-                int dir = (pack % 2 == 1) ? 1 : -1;  // pass left on odd packs, right on even
-                DraftPack[] held = new DraftPack[POD_SIZE];
-                for (int o = 0; o < POD_SIZE; o++) {
-                    held[o] = boosters[(pack - 1) * POD_SIZE + o];
-                }
-                for (int pick = 1; pick <= packSize; pick++) {
-                    DraftPack[] nextHeld = new DraftPack[POD_SIZE];
-                    for (int s = 0; s < POD_SIZE; s++) {
-                        DraftPack current = held[s];
-                        LimitedPlayerAI player = players.get(s);
-                        player.receiveOpenedPack(current);  // make it the player's choice pack
-                        PaperCard chosen;
-                        if (externalAgents.contains(agents[s])) {
-                            chosen = requestExternalPick(
-                                    out, stdin, draftId, s, agents[s], setCode,
-                                    pack, pick, current);
-                        } else {
-                            chosen = decidePick(player, current, agents[s], random);
-                        }
-                        picksByBooster.get(current.getId()).add(chosen.getName());
-                        player.draftCard(chosen);
-                        nextHeld[s] = player.passPack();    // pull the pack back out
-                    }
-                    for (int s = 0; s < POD_SIZE; s++) {
-                        held[(s + dir + POD_SIZE) % POD_SIZE] = nextHeld[s];
-                    }
-                }
+                pod.runPack(pack, boosters);
             }
         } catch (DraftAbortedException e) {
             // Supervisor-initiated abandonment (it already knows); drop silently.
             return new DraftResult.Abandoned();
         } catch (DraftAbandonedException e) {
             // Worker-detected fault: tell the supervisor (it logs + counts it).
-            if (out != null) {
-                out.println(formatAbandoned(draftId, e.getMessage()));
-                out.flush();
+            if (channel.out() != null) {
+                channel.out().println(formatAbandoned(draftId, e.getMessage()));
+                channel.out().flush();
             }
             return new DraftResult.Abandoned();
         }
+        return new DraftResult.Completed(SENTINEL + pod.toJson());
+    }
 
-        return new DraftResult.Completed(
-                SENTINEL + toJson(draftId, setCode, boosters, picksByBooster, agents));
+    /** Every booster of the pod: index k = (pack - 1) * POD_SIZE + openingSeat. */
+    private static DraftPack[] openBoosters(SealedTemplate template) {
+        DraftPack[] boosters = new DraftPack[PACKS * POD_SIZE];
+        for (int k = 0; k < boosters.length; k++) {
+            boosters[k] = new DraftPack(new ArrayList<>(new UnOpenedProduct(template).get()), k);
+        }
+        return boosters;
+    }
+
+    /** One draft in progress: the seats, their agents, and every pick so far. */
+    private static final class PodDraft {
+        private final String setCode;
+        private final String draftId;
+        private final Random random;
+        private final PickChannel channel;
+        private final int packSize;
+        private final List<LimitedPlayerAI> players = new ArrayList<>(POD_SIZE);
+        private final String[] agents = new String[POD_SIZE];
+        /** The cards drafted from each booster, by booster index, in pick order. */
+        private final List<List<String>> picksByBooster = new ArrayList<>(PACKS * POD_SIZE);
+
+        PodDraft(BoosterDraft context, String setCode, String draftId, AgentMix mix,
+                 Random random, PickChannel channel, int packSize) {
+            this.setCode = setCode;
+            this.draftId = draftId;
+            this.random = random;
+            this.channel = channel;
+            this.packSize = packSize;
+            // One AI seat per pod position; agents sampled per draft (FR-006).
+            for (int s = 0; s < POD_SIZE; s++) {
+                players.add(new LimitedPlayerAI(s, context));
+                agents[s] = mix.sample(random);
+            }
+            for (int k = 0; k < PACKS * POD_SIZE; k++) {
+                picksByBooster.add(new ArrayList<>(packSize));
+            }
+        }
+
+        /** Drain one pack round: every seat picks, then the packs pass. */
+        void runPack(int pack, DraftPack[] boosters) {
+            int dir = (pack % 2 == 1) ? 1 : -1;  // pass left on odd packs, right on even
+            DraftPack[] held = new DraftPack[POD_SIZE];
+            for (int o = 0; o < POD_SIZE; o++) {
+                held[o] = boosters[(pack - 1) * POD_SIZE + o];
+            }
+            for (int pick = 1; pick <= packSize; pick++) {
+                DraftPack[] nextHeld = new DraftPack[POD_SIZE];
+                for (int s = 0; s < POD_SIZE; s++) {
+                    nextHeld[s] = pickFor(s, pack, pick, held[s]);
+                }
+                for (int s = 0; s < POD_SIZE; s++) {
+                    held[(s + dir + POD_SIZE) % POD_SIZE] = nextHeld[s];
+                }
+            }
+        }
+
+        /** Seat {@code s} picks from {@code current}; returns the pack it passes on. */
+        private DraftPack pickFor(int s, int pack, int pick, DraftPack current) {
+            LimitedPlayerAI player = players.get(s);
+            player.receiveOpenedPack(current);  // make it the player's choice pack
+            PaperCard chosen = channel.routes(agents[s])
+                    ? requestExternalPick(channel, new PickRequest(
+                            draftId, s, agents[s], POD_SIZE, pack, pick, setCode,
+                            namesIn(current)), current)
+                    : decidePick(player, current, agents[s], random);
+            picksByBooster.get(current.getId()).add(chosen.getName());
+            player.draftCard(chosen);
+            return player.passPack();  // pull the pack back out
+        }
+
+        /** The transcript the supervisor reads, without the sentinel. */
+        String toJson() {
+            StringBuilder sb = new StringBuilder(4096);
+            sb.append("{\"draft_id\":\"").append(draftId).append("\",\"boosters\":[");
+            for (int k = 0; k < picksByBooster.size(); k++) {
+                if (k > 0) {
+                    sb.append(',');
+                }
+                sb.append("{\"set_code\":").append(Json.string(setCode))
+                        .append(",\"picks\":").append(Json.stringArray(picksByBooster.get(k)))
+                        .append('}');
+            }
+            sb.append("],\"seats\":[");
+            for (int s = 0; s < agents.length; s++) {
+                if (s > 0) {
+                    sb.append(',');
+                }
+                sb.append("{\"agent\":").append(Json.string(agents[s])).append('}');
+            }
+            sb.append("]}");
+            return sb.toString();
+        }
+    }
+
+    private static List<String> namesIn(DraftPack pack) {
+        List<String> names = new ArrayList<>(pack.size());
+        for (int i = 0; i < pack.size(); i++) {
+            names.add(pack.get(i).getName());
+        }
+        return names;
     }
 
     /**
@@ -355,33 +415,53 @@ public class DraftWorkerMain {
     }
 
     /**
-     * Ask the supervisor for a model-piloted seat's pick. Emits a request, blocks
-     * on stdin for the matching response, validates it, and returns the chosen
-     * card from the held pack.
+     * One outstanding pick request: the seat asking, where it is in the draft,
+     * and the pack it holds. A response must name the same draft, seat, pack
+     * and pick, and choose a card from {@code pack}.
+     */
+    record PickRequest(
+            String draftId, int seat, String agent, int podSize, int packNumber,
+            int pickNumber, String setCode, List<String> pack) {
+
+        PickRequest {
+            pack = List.copyOf(pack);
+        }
+
+        /** The {@code <<DRAFT-PICK-REQUEST>>} line (contracts/pick-protocol.md). */
+        String toWireLine() {
+            return PICK_REQUEST_SENTINEL
+                    + "{\"draft_id\":" + Json.string(draftId)
+                    + ",\"seat\":" + seat
+                    + ",\"agent\":" + Json.string(agent)
+                    + ",\"pod_size\":" + podSize
+                    + ",\"pack_number\":" + packNumber
+                    + ",\"pick_number\":" + pickNumber
+                    + ",\"set_code\":" + Json.string(setCode == null ? "" : setCode)
+                    + ",\"pack\":" + Json.stringArray(pack)
+                    + "}";
+        }
+    }
+
+    /**
+     * Ask the supervisor for a model-piloted seat's pick. Emits the request,
+     * blocks on the channel for the matching response, validates it, and
+     * returns the chosen card from the held pack.
      */
     static PaperCard requestExternalPick(
-            PrintStream out, BufferedReader stdin, String draftId, int seat,
-            String agent, String setCode, int packNumber, int pickNumber,
-            DraftPack pack) {
-        List<String> names = new ArrayList<>(pack.size());
-        for (int i = 0; i < pack.size(); i++) {
-            names.add(pack.get(i).getName());
-        }
-        out.println(formatPickRequest(
-                draftId, seat, agent, POD_SIZE, packNumber, pickNumber, setCode, names));
-        out.flush();
+            PickChannel channel, PickRequest request, DraftPack pack) {
+        channel.out().println(request.toWireLine());
+        channel.out().flush();
 
         String line;
         try {
-            line = readResponseLine(stdin);
+            line = readResponseLine(channel.in());
         } catch (IOException e) {
             throw new WorkerInputClosed("stdin read failed: " + e.getMessage());
         }
         if (line == null) {
             throw new WorkerInputClosed("stdin EOF awaiting pick response");
         }
-        String name = resolvePick(
-                parseResponse(line), draftId, seat, packNumber, pickNumber, names);
+        String name = resolvePick(parseResponse(line), request);
         for (int i = 0; i < pack.size(); i++) {
             if (pack.get(i).getName().equals(name)) {
                 return pack.get(i);
@@ -418,25 +498,23 @@ public class DraftWorkerMain {
      * chosen card name. Throws {@link DraftAbortedException} on {@code abort},
      * {@link DraftAbandonedException} on a routing mismatch or an out-of-pack pick.
      */
-    static String resolvePick(
-            Map<String, Object> response, String draftId, int seat,
-            int packNumber, int pickNumber, List<String> packNames) {
+    static String resolvePick(Map<String, Object> response, PickRequest request) {
         if (Boolean.TRUE.equals(response.get("abort"))) {
             throw new DraftAbortedException();
         }
-        if (!draftId.equals(response.get("draft_id"))
-                || !eqInt(response.get("seat"), seat)
-                || !eqInt(response.get("pack_number"), packNumber)
-                || !eqInt(response.get("pick_number"), pickNumber)) {
+        if (!request.draftId().equals(response.get("draft_id"))
+                || !eqInt(response.get("seat"), request.seat())
+                || !eqInt(response.get("pack_number"), request.packNumber())
+                || !eqInt(response.get("pick_number"), request.pickNumber())) {
             throw new DraftAbandonedException(
-                    "response routing mismatch at seat " + seat + " pack "
-                            + packNumber + " pick " + pickNumber);
+                    "response routing mismatch at seat " + request.seat() + " pack "
+                            + request.packNumber() + " pick " + request.pickNumber());
         }
         Object pick = response.get("pick");
         if (!(pick instanceof String)) {
             throw new DraftAbandonedException("response carried no pick");
         }
-        if (!packNames.contains(pick)) {
+        if (!request.pack().contains(pick)) {
             throw new DraftAbandonedException("pick '" + pick + "' not in held pack");
         }
         return (String) pick;
@@ -460,32 +538,9 @@ public class DraftWorkerMain {
         return labels;
     }
 
-    static String formatPickRequest(
-            String draftId, int seat, String agent, int podSize, int packNumber,
-            int pickNumber, String setCode, List<String> pack) {
-        StringBuilder sb = new StringBuilder(256);
-        sb.append(PICK_REQUEST_SENTINEL)
-                .append("{\"draft_id\":\"").append(jsonEscape(draftId))
-                .append("\",\"seat\":").append(seat)
-                .append(",\"agent\":\"").append(jsonEscape(agent))
-                .append("\",\"pod_size\":").append(podSize)
-                .append(",\"pack_number\":").append(packNumber)
-                .append(",\"pick_number\":").append(pickNumber)
-                .append(",\"set_code\":\"").append(jsonEscape(setCode == null ? "" : setCode))
-                .append("\",\"pack\":[");
-        for (int i = 0; i < pack.size(); i++) {
-            if (i > 0) {
-                sb.append(',');
-            }
-            sb.append('"').append(jsonEscape(pack.get(i))).append('"');
-        }
-        sb.append("]}");
-        return sb.toString();
-    }
-
     static String formatAbandoned(String draftId, String reason) {
-        return ABANDONED_SENTINEL + "{\"draft_id\":\"" + jsonEscape(draftId)
-                + "\",\"reason\":\"" + jsonEscape(reason == null ? "" : reason) + "\"}";
+        return ABANDONED_SENTINEL + "{\"draft_id\":" + Json.string(draftId)
+                + ",\"reason\":" + Json.string(reason == null ? "" : reason) + "}";
     }
 
     /** Minimal parser for a flat JSON object (string/integer/boolean/null values). */
@@ -583,58 +638,6 @@ public class DraftWorkerMain {
             }
         }
         throw new IllegalArgumentException("unterminated string");
-    }
-
-    private static String toJson(
-            String draftId, String setCode, DraftPack[] boosters,
-            List<List<String>> picksByBooster, String[] agents) {
-        StringBuilder sb = new StringBuilder(4096);
-        sb.append("{\"draft_id\":\"").append(draftId).append("\",\"boosters\":[");
-        for (int k = 0; k < boosters.length; k++) {
-            if (k > 0) {
-                sb.append(',');
-            }
-            sb.append("{\"set_code\":\"").append(jsonEscape(setCode)).append("\",\"picks\":[");
-            List<String> picks = picksByBooster.get(k);
-            for (int j = 0; j < picks.size(); j++) {
-                if (j > 0) {
-                    sb.append(',');
-                }
-                sb.append('"').append(jsonEscape(picks.get(j))).append('"');
-            }
-            sb.append("]}");
-        }
-        sb.append("],\"seats\":[");
-        for (int s = 0; s < agents.length; s++) {
-            if (s > 0) {
-                sb.append(',');
-            }
-            sb.append("{\"agent\":\"").append(jsonEscape(agents[s])).append("\"}");
-        }
-        sb.append("]}");
-        return sb.toString();
-    }
-
-    static String jsonEscape(String value) {
-        StringBuilder sb = new StringBuilder(value.length() + 8);
-        for (int i = 0; i < value.length(); i++) {
-            char c = value.charAt(i);
-            switch (c) {
-                case '"' -> sb.append("\\\"");
-                case '\\' -> sb.append("\\\\");
-                case '\n' -> sb.append("\\n");
-                case '\r' -> sb.append("\\r");
-                case '\t' -> sb.append("\\t");
-                default -> {
-                    if (c < 0x20) {
-                        sb.append(String.format("\\u%04x", (int) c));
-                    } else {
-                        sb.append(c);
-                    }
-                }
-            }
-        }
-        return sb.toString();
     }
 
     /** Weighted categorical over agent labels, parsed from {@code label:weight,...}. */

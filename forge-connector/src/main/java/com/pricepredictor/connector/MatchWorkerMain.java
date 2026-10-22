@@ -4,7 +4,6 @@ import com.pricepredictor.connector.effects.AttributionMode;
 import com.pricepredictor.connector.effects.PatchHooks;
 import com.pricepredictor.connector.effects.PatchedCollectors;
 import com.pricepredictor.connector.effects.RecordShardWriter;
-import forge.util.MyRandom;
 
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -209,8 +208,8 @@ public class MatchWorkerMain {
         List<String> eligibleSets = MatchGenerator.computeEligibleSets();
         System.out.println("Eligible sets: " + eligibleSets.size());
 
-        GeneratedDecksIndex sideAIndex = loadIndex(config.sideADecksFile(), "side-A");
-        GeneratedDecksIndex sideBIndex = loadIndex(config.sideBDecksFile(), "side-B");
+        MatchGenerator.DeckSource sideA = loadDecks(config.sideADecksFile(), "side-A");
+        MatchGenerator.DeckSource sideB = loadDecks(config.sideBDecksFile(), "side-B");
 
         // In records-only mode neither sealed writer is constructed at all —
         // not constructed-and-unused, so there is no path by which a coverage
@@ -255,17 +254,14 @@ public class MatchWorkerMain {
             Runtime.getRuntime().addShutdownHook(new Thread(toFlush::close));
         }
 
-        // The public 7-arg constructor has no decksOnly parameter (it must
-        // keep working unchanged for `sealed match-outcomes`), so a decks-only
-        // run goes through the full constructor directly, supplying the same
-        // random source and exclusion set the shorter constructors default to.
         SilencedHookReport silencedHookReport = new SilencedHookReport();
-        MatchGenerator generator = new MatchGenerator(
-                eligibleSets, new DeckBuilder(),
-                new GamePlayer(config.bestOf(), effectRecords), config.runId(),
-                sideAIndex, sideBIndex, config.sideBWeight(),
-                MyRandom.getRandom(), HoldoutCards.fromSystemProperty(),
-                config.decksOnly());
+        MatchGenerator generator = MatchGenerator.builder(eligibleSets, config.runId())
+                .gamePlayer(new GamePlayer(config.bestOf(), effectRecords))
+                .sideA(sideA)
+                .sideB(sideB, config.sideBWeight())
+                .excludedCards(HoldoutCards.fromSystemProperty())
+                .decksOnly(config.decksOnly())
+                .build();
 
         WorkerLoop.runUntilBroken(
                 () -> {
@@ -348,16 +344,17 @@ public class MatchWorkerMain {
         return parent.resolve("cards-played.txt");
     }
 
-    private static GeneratedDecksIndex loadIndex(String pathProp, String label) {
+    /** Forge-built decks when no file is named; exits 2 on a file that does not load. */
+    private static MatchGenerator.DeckSource loadDecks(String pathProp, String label) {
         if (pathProp == null) {
-            return null;
+            return MatchGenerator.DeckSource.FORGE_BUILT;
         }
         Path path = Path.of(pathProp);
         System.out.println("Loading " + label + " decks from " + path);
         try {
             GeneratedDecksIndex index = GeneratedDecksIndex.load(path);
             System.out.println("Loaded " + index.size() + " " + label + " decks.");
-            return index;
+            return new MatchGenerator.DeckSource.FileSampled(index);
         } catch (Exception e) {
             System.err.println(
                     "Error loading " + label + " decks file: " + e.getMessage());

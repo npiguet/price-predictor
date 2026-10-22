@@ -11,6 +11,7 @@ import forge.util.MyRandom;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Random;
 
@@ -21,22 +22,21 @@ import java.util.Random;
  * and deck B, with a same-set constraint: deck B is always built from a pool
  * (or sampled from a deck file) matching deck A's set code.
  *
- * <p><b>Side-A source</b> (controlled by {@code sideAIndex}):
+ * <p><b>Side-A source</b> (a {@link DeckSource}):
  * <ul>
- *   <li>{@code null} (default): pick a random eligible set, generate a fresh
- *       6-booster pool, and call {@link DeckBuilder#buildDeck} which rolls
- *       the 4 Forge methods with weights 4:3:2:1.</li>
- *   <li>non-{@code null}: sample a deck uniformly at random from the index;
- *       the deck's recorded {@code label} becomes {@code method_A}.</li>
+ *   <li>{@link DeckSource.ForgeBuilt} (default): pick a random eligible set,
+ *       generate a fresh 6-booster pool, and call {@link DeckBuilder#buildDeck}
+ *       which rolls the 4 Forge methods with weights 4:3:2:1.</li>
+ *   <li>{@link DeckSource.FileSampled}: sample a deck uniformly at random from
+ *       the index; the deck's recorded {@code label} becomes {@code method_A}.</li>
  * </ul>
  *
- * <p><b>Side-B source</b> (controlled by {@code sideBIndex} +
- * {@code sideBWeight}):
+ * <p><b>Side-B source</b> (a {@link DeckSource} and {@code sideBWeight}):
  * <ul>
- *   <li>{@code sideBIndex == null}: deck B is always Forge-built from a
+ *   <li>{@link DeckSource.ForgeBuilt}: deck B is always Forge-built from a
  *       fresh pool of deck A's set, via {@link DeckBuilder#buildDeck}
  *       (weights 4:3:2:1).</li>
- *   <li>{@code sideBIndex != null}: roll between Forge methods (weights
+ *   <li>{@link DeckSource.FileSampled}: roll between Forge methods (weights
  *       4:3:2:1, total 10) and sampling from the index (weight
  *       {@code sideBWeight}). On the file-sample branch, {@link
  *       GeneratedDecksIndex#randomDeckFromSet} filters to deck A's set code
@@ -58,115 +58,148 @@ import java.util.Random;
  */
 public class MatchGenerator {
 
-    private static final int BOOSTERS_PER_POOL = 6;
+    /** Where one side's decks come from. */
+    sealed interface DeckSource {
+
+        /** Built by {@link DeckBuilder#buildDeck} from a fresh 6-booster pool. */
+        record ForgeBuilt() implements DeckSource {}
+
+        /** Sampled from a generated-decks file; each deck's label is its method tag. */
+        record FileSampled(GeneratedDecksIndex index) implements DeckSource {
+            public FileSampled {
+                Objects.requireNonNull(index, "index");
+            }
+        }
+
+        DeckSource FORGE_BUILT = new ForgeBuilt();
+    }
 
     private final List<String> eligibleSetCodes;
     private final DeckBuilder deckBuilder;
     private final GamePlayer gamePlayer;
     private final String runId;
-    private final GeneratedDecksIndex sideAIndex;
-    private final GeneratedDecksIndex sideBIndex;
+    private final DeckSource sideA;
+    private final DeckSource sideB;
     private final int sideBWeight;
     private final Random random;
     private final HoldoutCards excludedCards;
     private final boolean decksOnly;
 
-    public MatchGenerator(
-            List<String> eligibleSetCodes,
-            DeckBuilder deckBuilder,
-            GamePlayer gamePlayer,
-            String runId,
-            GeneratedDecksIndex sideAIndex,
-            GeneratedDecksIndex sideBIndex,
-            int sideBWeight) {
-        this(eligibleSetCodes, deckBuilder, gamePlayer, runId,
-                sideAIndex, sideBIndex, sideBWeight, MyRandom.getRandom());
-    }
-
-    MatchGenerator(
-            List<String> eligibleSetCodes,
-            DeckBuilder deckBuilder,
-            GamePlayer gamePlayer,
-            String runId,
-            GeneratedDecksIndex sideAIndex,
-            GeneratedDecksIndex sideBIndex,
-            int sideBWeight,
-            Random random) {
-        this(eligibleSetCodes, deckBuilder, gamePlayer, runId, sideAIndex,
-                sideBIndex, sideBWeight, random, HoldoutCards.fromSystemProperty(), false);
-    }
-
-    MatchGenerator(
-            List<String> eligibleSetCodes,
-            DeckBuilder deckBuilder,
-            GamePlayer gamePlayer,
-            String runId,
-            GeneratedDecksIndex sideAIndex,
-            GeneratedDecksIndex sideBIndex,
-            int sideBWeight,
-            Random random,
-            HoldoutCards excludedCards,
-            boolean decksOnly) {
-        if (eligibleSetCodes.isEmpty()) {
+    private MatchGenerator(Builder builder) {
+        if (builder.eligibleSetCodes.isEmpty()) {
             throw new IllegalArgumentException("Eligible set list must not be empty");
         }
-        if (runId == null || runId.isBlank()) {
+        if (builder.runId == null || builder.runId.isBlank()) {
             throw new IllegalArgumentException("runId must be non-empty");
         }
-        if (sideBIndex != null && sideBWeight < 1) {
+        if (builder.sideB instanceof DeckSource.FileSampled && builder.sideBWeight < 1) {
             throw new IllegalArgumentException(
-                    "sideBWeight must be >= 1 when sideBIndex is provided, got: " + sideBWeight);
+                    "sideBWeight must be >= 1 when side B samples a decks file, got: "
+                            + builder.sideBWeight);
         }
-        if (decksOnly && (sideAIndex == null || sideBIndex == null)) {
+        boolean sideAFromFile = builder.sideA instanceof DeckSource.FileSampled;
+        boolean sideBFromFile = builder.sideB instanceof DeckSource.FileSampled;
+        if (builder.decksOnly && !(sideAFromFile && sideBFromFile)) {
             // Both holes are silent, which is why they are refused rather
-            // than tolerated. With sideBIndex null, rollIsFileSample()
+            // than tolerated. With side B Forge-built, rollIsFileSample()
             // returns false for every match and the whole round plays
-            // ordinary sealed self-play while reporting success. With
-            // sideAIndex null there is no exception anywhere: pickDeckA
-            // builds deck A from a fresh Forge pool of a random eligible
-            // set, so half of every match is a deck the round never asked
-            // for.
+            // ordinary sealed self-play while reporting success. With side A
+            // Forge-built there is no exception anywhere: pickDeckA builds
+            // deck A from a fresh Forge pool of a random eligible set, so
+            // half of every match is a deck the round never asked for.
             throw new IllegalArgumentException(
-                    "decksOnly requires a decks index on both sides, got sideAIndex="
-                            + (sideAIndex == null ? "null" : "present")
-                            + ", sideBIndex=" + (sideBIndex == null ? "null" : "present")
-                            + ". A missing index does not fail a decks-only match, it "
+                    "decksOnly requires a decks file on both sides, got side A "
+                            + (sideAFromFile ? "from a file" : "Forge-built")
+                            + ", side B " + (sideBFromFile ? "from a file" : "Forge-built")
+                            + ". A missing file does not fail a decks-only match, it "
                             + "quietly turns it back into sealed self-play.");
         }
-        this.eligibleSetCodes = List.copyOf(eligibleSetCodes);
-        this.deckBuilder = deckBuilder;
-        this.gamePlayer = gamePlayer;
-        this.runId = runId;
-        this.sideAIndex = sideAIndex;
-        this.sideBIndex = sideBIndex;
-        this.sideBWeight = sideBWeight;
-        this.random = random;
-        this.excludedCards = excludedCards;
-        this.decksOnly = decksOnly;
+        this.eligibleSetCodes = List.copyOf(builder.eligibleSetCodes);
+        this.deckBuilder = builder.deckBuilder;
+        this.gamePlayer = builder.gamePlayer;
+        this.runId = builder.runId;
+        this.sideA = builder.sideA;
+        this.sideB = builder.sideB;
+        this.sideBWeight = builder.sideBWeight;
+        this.random = builder.random;
+        this.excludedCards = builder.excludedCards;
+        this.decksOnly = builder.decksOnly;
     }
 
     /**
-     * Phase-0 default constructor: no file sources on either side. Equivalent
-     * to the pre-flag Phase-0 behavior — pick a random eligible set, build
-     * both decks via {@link DeckBuilder}.
+     * A generator for {@code runId} drawing Forge-built decks from
+     * {@code eligibleSetCodes}; the builder's setters change what differs.
      */
-    public static MatchGenerator phaseZero(
-            List<String> eligibleSetCodes,
-            DeckBuilder deckBuilder,
-            GamePlayer gamePlayer,
-            String runId) {
-        return new MatchGenerator(eligibleSetCodes, deckBuilder, gamePlayer, runId,
-                null, null, 0);
+    static Builder builder(List<String> eligibleSetCodes, String runId) {
+        return new Builder(eligibleSetCodes, runId);
     }
 
     /**
-     * Convenience factory: Phase-0 with default {@link DeckBuilder} and
-     * {@link GamePlayer}, computing the eligible-set list from Forge's
-     * {@code StaticData}. Used by integration tests that don't care about
-     * the file-source flags.
+     * How a generator is configured. Every setting but the eligible sets and
+     * the run id has a default: Forge-built decks on both sides, no holdout,
+     * not decks-only, a default {@link DeckBuilder}, a best-of-3
+     * {@link GamePlayer} with no effect records, and Forge's shared random.
      */
-    public static MatchGenerator withDefaultBuilders(String runId) {
-        return phaseZero(computeEligibleSets(), new DeckBuilder(), new GamePlayer(), runId);
+    static final class Builder {
+        private final List<String> eligibleSetCodes;
+        private final String runId;
+        private DeckBuilder deckBuilder = new DeckBuilder();
+        private GamePlayer gamePlayer = new GamePlayer(3);
+        private DeckSource sideA = DeckSource.FORGE_BUILT;
+        private DeckSource sideB = DeckSource.FORGE_BUILT;
+        private int sideBWeight;
+        private Random random = MyRandom.getRandom();
+        private HoldoutCards excludedCards = HoldoutCards.NONE;
+        private boolean decksOnly;
+
+        private Builder(List<String> eligibleSetCodes, String runId) {
+            this.eligibleSetCodes = eligibleSetCodes;
+            this.runId = runId;
+        }
+
+        Builder deckBuilder(DeckBuilder deckBuilder) {
+            this.deckBuilder = deckBuilder;
+            return this;
+        }
+
+        Builder gamePlayer(GamePlayer gamePlayer) {
+            this.gamePlayer = gamePlayer;
+            return this;
+        }
+
+        Builder sideA(DeckSource sideA) {
+            this.sideA = sideA;
+            return this;
+        }
+
+        /**
+         * Side B's source, and when it samples a decks file, that file's
+         * weight against the Forge methods' {@link BuildMethod#TOTAL_WEIGHT}.
+         */
+        Builder sideB(DeckSource sideB, int weight) {
+            this.sideB = sideB;
+            this.sideBWeight = weight;
+            return this;
+        }
+
+        Builder random(Random random) {
+            this.random = random;
+            return this;
+        }
+
+        Builder excludedCards(HoldoutCards excludedCards) {
+            this.excludedCards = excludedCards;
+            return this;
+        }
+
+        Builder decksOnly(boolean decksOnly) {
+            this.decksOnly = decksOnly;
+            return this;
+        }
+
+        MatchGenerator build() {
+            return new MatchGenerator(this);
+        }
     }
 
     /**
@@ -295,24 +328,24 @@ public class MatchGenerator {
     );
 
     /**
-     * Pick deck A. When {@code sideAIndex} is null, roll the 4 Forge methods
-     * on a fresh pool from a random eligible set. When non-null, sample
+     * Pick deck A. Forge-built: roll the 4 Forge methods
+     * on a fresh pool from a random eligible set. From a file: sample
      * uniformly from the index.
      */
     DeckSelection pickDeckA() {
-        if (sideAIndex == null) {
-            String setCode = eligibleSetCodes.get(random.nextInt(eligibleSetCodes.size()));
-            return forgeBuilt(setCode);
+        if (sideA instanceof DeckSource.FileSampled file) {
+            GeneratedDeck sampled = file.index().randomDeck(random);
+            return DeckSelection.fromFile(sampled, sampled.setCode(), decksOnly);
         }
-        GeneratedDeck sampled = sideAIndex.randomDeck(random);
-        return DeckSelection.fromFile(sampled, sampled.setCode(), decksOnly);
+        String setCode = eligibleSetCodes.get(random.nextInt(eligibleSetCodes.size()));
+        return forgeBuilt(setCode);
     }
 
     /**
      * Pick deck B for a match whose deck A has the given set code and card
      * list. Roll between the 4 Forge methods (weights 4:3:2:1, total
-     * {@link BuildMethod#TOTAL_WEIGHT}) and — if {@code sideBIndex} is
-     * present — sampling from the index (weight {@code sideBWeight}). The
+     * {@link BuildMethod#TOTAL_WEIGHT}) and — if side B samples a decks
+     * file — sampling from it (weight {@code sideBWeight}). The
      * file-sample branch falls back to Forge methods when no non-mirror
      * candidate exists for {@code setCode} — <b>except</b> under
      * {@code decksOnly}, which has no Forge-legal fallback to reach (its set
@@ -329,14 +362,15 @@ public class MatchGenerator {
      * coverage or variant round requires.
      */
     DeckSelection pickDeckB(String setCode, List<String> deckACards) {
-        if (sideBIndex != null && rollIsFileSample()) {
-            Optional<GeneratedDeck> pick = sideBIndex.randomDeckFromSet(
+        if (sideB instanceof DeckSource.FileSampled file && rollIsFileSample()) {
+            Optional<GeneratedDeck> pick = file.index().randomDeckFromSet(
                     setCode, deckACards, random);
             if (pick.isPresent()) {
                 return DeckSelection.fromFile(pick.get(), setCode, decksOnly);
             }
             if (decksOnly) {
-                Optional<GeneratedDeck> mirror = sideBIndex.randomAnyDeckFromSet(setCode, random);
+                Optional<GeneratedDeck> mirror =
+                        file.index().randomAnyDeckFromSet(setCode, random);
                 if (mirror.isPresent()) {
                     return DeckSelection.fromFile(mirror.get(), setCode, decksOnly);
                 }
@@ -370,12 +404,12 @@ public class MatchGenerator {
 
     /**
      * Roll {@code true} with probability {@code sideBWeight / (10 + sideBWeight)}
-     * — the "sample from sideBIndex" branch. Always returns {@code false}
-     * when {@code sideBIndex} is null, and always returns {@code true} (once
-     * an index is present) when {@code decksOnly} is set.
+     * — the "sample from side B's file" branch. Always returns {@code false}
+     * when side B is Forge-built, and always returns {@code true} (once
+     * side B has a file) when {@code decksOnly} is set.
      */
     boolean rollIsFileSample() {
-        if (sideBIndex == null) {
+        if (!(sideB instanceof DeckSource.FileSampled)) {
             return false;
         }
         // A decks-only round has no set to open a booster for: both sides come

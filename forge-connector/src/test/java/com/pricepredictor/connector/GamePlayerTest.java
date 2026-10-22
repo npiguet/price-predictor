@@ -9,6 +9,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 
 import java.lang.reflect.Field;
 import java.util.List;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -40,7 +41,7 @@ class GamePlayerTest {
     @Test
     void theRegisteredPlayersCarryNoAiOption() throws ReflectiveOperationException {
         List<RegisteredPlayer> players =
-                GamePlayer.registeredPlayers(new Deck(), new Deck());
+                GamePlayer.registeredPlayers(new Deck(), new Deck(), Optional.empty(), 0.0, null);
 
         assertTrue(players.size() >= 2, "expected both seats: " + players);
         for (RegisteredPlayer registered : players) {

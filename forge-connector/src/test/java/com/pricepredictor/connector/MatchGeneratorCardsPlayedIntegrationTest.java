@@ -29,7 +29,7 @@ class MatchGeneratorCardsPlayedIntegrationTest {
 
     @Test
     void returnsOneRowPerPlayedGame() {
-        MatchGenerator generator = MatchGenerator.withDefaultBuilders(TEST_RUN_ID);
+        MatchGenerator generator = MatchGeneratorTest.sealedSelfPlay();
 
         MatchGenerationResult result = generator.generateMatch();
 
@@ -42,7 +42,7 @@ class MatchGeneratorCardsPlayedIntegrationTest {
 
     @Test
     void rowsCarryParentMetadata() {
-        MatchGenerator generator = MatchGenerator.withDefaultBuilders(TEST_RUN_ID);
+        MatchGenerator generator = MatchGeneratorTest.sealedSelfPlay();
 
         MatchGenerationResult result = generator.generateMatch();
         MatchResult parent = result.matchResult();
@@ -62,7 +62,7 @@ class MatchGeneratorCardsPlayedIntegrationTest {
 
     @Test
     void basicLandsAbsentFromAllListColumns() {
-        MatchGenerator generator = MatchGenerator.withDefaultBuilders(TEST_RUN_ID);
+        MatchGenerator generator = MatchGeneratorTest.sealedSelfPlay();
         MatchGenerationResult result = generator.generateMatch();
 
         for (CardsPlayedRow row : result.cardsPlayedRows()) {
@@ -75,7 +75,7 @@ class MatchGeneratorCardsPlayedIntegrationTest {
 
     @Test
     void unionEqualsDistinctNonBasicsAndIsDisjoint() {
-        MatchGenerator generator = MatchGenerator.withDefaultBuilders(TEST_RUN_ID);
+        MatchGenerator generator = MatchGeneratorTest.sealedSelfPlay();
         MatchGenerationResult result = generator.generateMatch();
         MatchResult parent = result.matchResult();
 

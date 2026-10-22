@@ -64,11 +64,6 @@ public class GamePlayer {
      */
     public record PlayedMatch(List<GameOutcome> games, int durationSeconds, boolean randomSeat) {
 
-        /** An ordinary two-AI match. */
-        public PlayedMatch(List<GameOutcome> games, int durationSeconds) {
-            this(games, durationSeconds, false);
-        }
-
         /** Per-game winner sequence, e.g. {@code "ABA"}: the {@code games} field of a match row. */
         public String winnerSequence() {
             StringBuilder sb = new StringBuilder(games.size());
@@ -98,11 +93,6 @@ public class GamePlayer {
         }
     }
 
-    /** Create a player with the default best-of-3 match format. */
-    public GamePlayer() {
-        this(3);
-    }
-
     /** Create a player with a configurable best-of-K match format. */
     public GamePlayer(int gamesPerMatch) {
         this(gamesPerMatch, null);
@@ -120,7 +110,8 @@ public class GamePlayer {
     }
 
     /**
-     * The two AI-controlled seats a match registers.
+     * The two AI-controlled seats a match registers, one of them possibly the
+     * random seat (FR-021).
      *
      * <p>Both {@link LobbyPlayerAi} instances are built with a null
      * {@code Set<AIOption>}, which matters beyond style: {@code AiController}
@@ -136,19 +127,12 @@ public class GamePlayer {
      * the only thing that would notice a future edit passing an
      * {@code AIOption} here.
      *
-     * <p>Package-private so that test can call it directly rather than
-     * playing a match.
-     */
-    static List<RegisteredPlayer> registeredPlayers(Deck deckA, Deck deckB) {
-        return registeredPlayers(deckA, deckB, Optional.empty(), 0.0, null);
-    }
-
-    /**
-     * The two seats, one of them possibly the random seat (FR-021).
-     *
      * <p>The random seat is a {@link RandomSeatLobbyPlayer}, which is a
      * {@code LobbyPlayerAi} built with the same null option set as the
-     * ordinary seats, so the simulation-mode guard above holds for it too.
+     * ordinary seats, so the simulation-mode guard holds for it too.
+     *
+     * <p>Package-private so that test can call it directly rather than
+     * playing a match.
      *
      * @param seeds the match's seeded source the random seat's controllers
      *              draw their own seeds from; unused when the seat is none

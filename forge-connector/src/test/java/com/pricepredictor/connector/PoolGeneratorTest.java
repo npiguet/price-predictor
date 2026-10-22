@@ -20,21 +20,21 @@ class PoolGeneratorTest {
     @Test
     void generateReturnsCorrectPoolCount() {
         PoolGenerator generator = new PoolGenerator();
-        List<List<String>> pools = generator.generate("RVR", 5);
+        List<List<String>> pools = generator.generate("RVR", 5, HoldoutCards.NONE);
         assertEquals(5, pools.size());
     }
 
     @Test
     void generateSinglePool() {
         PoolGenerator generator = new PoolGenerator();
-        List<List<String>> pools = generator.generate("RVR", 1);
+        List<List<String>> pools = generator.generate("RVR", 1, HoldoutCards.NONE);
         assertEquals(1, pools.size());
     }
 
     @Test
     void generatePoolContainsNoBasicLands() {
         PoolGenerator generator = new PoolGenerator();
-        List<List<String>> pools = generator.generate("RVR", 3);
+        List<List<String>> pools = generator.generate("RVR", 3, HoldoutCards.NONE);
         for (List<String> pool : pools) {
             for (String cardName : pool) {
                 assertFalse(BASIC_LAND_NAMES.contains(cardName),
@@ -46,7 +46,7 @@ class PoolGeneratorTest {
     @Test
     void generatePoolHasExpectedSize() {
         PoolGenerator generator = new PoolGenerator();
-        List<List<String>> pools = generator.generate("RVR", 1);
+        List<List<String>> pools = generator.generate("RVR", 1, HoldoutCards.NONE);
         List<String> pool = pools.get(0);
         // 6 boosters × ~14–15 non-land cards = 84–90 cards
         assertTrue(pool.size() >= 70,
@@ -61,7 +61,7 @@ class PoolGeneratorTest {
         // point is that the training corpus can be collected without discarding
         // the games those cards appear in.
         PoolGenerator generator = new PoolGenerator();
-        List<String> reference = generator.generate("RVR", 1).get(0);
+        List<String> reference = generator.generate("RVR", 1, HoldoutCards.NONE).get(0);
         Set<String> excluded = Set.copyOf(reference.subList(0, 10));
 
         List<String> pool = generator.generate("RVR", 1, HoldoutCards.of(excluded)).get(0);
@@ -78,7 +78,7 @@ class PoolGeneratorTest {
         // would build a different deck, and the depleted corpus is supposed to
         // differ from the full-strength one only in which cards exist.
         PoolGenerator generator = new PoolGenerator();
-        List<String> reference = generator.generate("RVR", 1).get(0);
+        List<String> reference = generator.generate("RVR", 1, HoldoutCards.NONE).get(0);
         Set<String> excluded = Set.copyOf(reference.subList(0, 10));
 
         List<String> pool = generator.generate("RVR", 1, HoldoutCards.of(excluded)).get(0);
@@ -95,7 +95,7 @@ class PoolGeneratorTest {
         // matched nothing, and a run told to deplete its pools silently
         // depleted none of them.
         PoolGenerator generator = new PoolGenerator();
-        List<String> reference = generator.generate("RVR", 1).get(0);
+        List<String> reference = generator.generate("RVR", 1, HoldoutCards.NONE).get(0);
         Set<String> lowercased = reference.subList(0, 10).stream()
                 .map(name -> name.toLowerCase(java.util.Locale.ROOT))
                 .collect(java.util.stream.Collectors.toSet());
@@ -118,19 +118,19 @@ class PoolGeneratorTest {
     @Test
     void generateZeroPoolsReturnsEmptyList() {
         PoolGenerator generator = new PoolGenerator();
-        List<List<String>> pools = generator.generate("RVR", 0);
+        List<List<String>> pools = generator.generate("RVR", 0, HoldoutCards.NONE);
         assertEquals(0, pools.size());
     }
 
     @Test
     void generateThrowsForNullSetCode() {
         PoolGenerator generator = new PoolGenerator();
-        assertThrows(IllegalArgumentException.class, () -> generator.generate(null, 1));
+        assertThrows(IllegalArgumentException.class, () -> generator.generate(null, 1, HoldoutCards.NONE));
     }
 
     @Test
     void generateThrowsForUnknownSetCode() {
         PoolGenerator generator = new PoolGenerator();
-        assertThrows(IllegalArgumentException.class, () -> generator.generate("XXXXUNKNOWN", 1));
+        assertThrows(IllegalArgumentException.class, () -> generator.generate("XXXXUNKNOWN", 1, HoldoutCards.NONE));
     }
 }

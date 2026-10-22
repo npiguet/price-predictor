@@ -23,7 +23,7 @@ class DraftGamePlayerTest {
     }
 
     private static GamePlayer.PlayedMatch match(GamePlayer.GameOutcome... games) {
-        return new GamePlayer.PlayedMatch(List.of(games), 87);
+        return new GamePlayer.PlayedMatch(List.of(games), 87, false);
     }
 
     // ── Per-game sequences ──────────────────────────────────────────
@@ -100,7 +100,7 @@ class DraftGamePlayerTest {
     void aMatchWithNoGamesCannotBecomeARow() {
         // GamePlayer skips draws and aborted games, so a match can end up empty.
         // MatchResult rejects it rather than letting a blank row reach the corpus.
-        GamePlayer.PlayedMatch empty = new GamePlayer.PlayedMatch(List.of(), 0);
+        GamePlayer.PlayedMatch empty = new GamePlayer.PlayedMatch(List.of(), 0, false);
 
         assertThrows(IllegalArgumentException.class, () -> new MatchResult(
                 Instant.parse("2026-08-11T00:00:00Z"),

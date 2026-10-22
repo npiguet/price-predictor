@@ -2,6 +2,7 @@ package com.pricepredictor.connector;
 
 import forge.StaticData;
 import forge.card.CardEdition;
+import forge.card.CardType;
 import forge.card.MagicColor;
 import forge.card.mana.ManaCost;
 import forge.card.mana.ManaCostShard;
@@ -104,62 +105,65 @@ public class DeckBuilder {
     }
 
     Deck buildWithSwaps(List<PaperCard> pool, int swapCount) {
-        // 1. Build standard deck
-        List<PaperCard> poolCopy = new ArrayList<>(pool);
-        Deck standardDeck = new SealedDeckBuilder(poolCopy).buildDeck();
+        List<PaperCard> standard = buildStandard(pool).getMain().toFlatList();
+        // Basic lands are dropped from both halves: they are rebalanced to the
+        // swapped spells' pips at the end.
+        NonBasics chosen = NonBasics.of(standard);
+        NonBasics remaining = NonBasics.of(poolMinus(pool, standard));
+        swapTypeMatched(chosen, remaining, swapCount);
+        return rebalanceLands(chosen.spells(), chosen.lands());
+    }
 
-        // 2. Partition standard deck into spells and non-basic lands (discard basic lands)
-        List<PaperCard> spellsInDeck = new ArrayList<>();
-        List<PaperCard> nonbasicLandsInDeck = new ArrayList<>();
-        for (PaperCard card : standardDeck.getMain().toFlatList()) {
-            if (card.getRules().getMainPart().getType().isBasicLand()) {
-                // discard — will rebalance basic lands after swaps
-            } else if (card.getRules().getMainPart().getType().isLand()) {
-                nonbasicLandsInDeck.add(card);
-            } else {
-                spellsInDeck.add(card);
+    /**
+     * A card list's nonbasic cards split by type: spells, and nonbasic lands.
+     * Both lists are mutable, so a swap can move cards between them in place.
+     */
+    record NonBasics(List<PaperCard> spells, List<PaperCard> lands) {
+
+        static NonBasics of(List<PaperCard> cards) {
+            NonBasics split = new NonBasics(new ArrayList<>(), new ArrayList<>());
+            for (PaperCard card : cards) {
+                CardType type = card.getRules().getMainPart().getType();
+                if (type.isBasicLand()) {
+                    continue;
+                }
+                (type.isLand() ? split.lands : split.spells).add(card);
             }
+            return split;
         }
 
-        // 3. Remaining pool = original pool minus all selected deck cards
-        List<PaperCard> remainingPool = new ArrayList<>(pool);
-        for (PaperCard deckCard : standardDeck.getMain().toFlatList()) {
-            remainingPool.remove(deckCard);
+        int size() {
+            return spells.size() + lands.size();
         }
-        // Split remaining pool by type (pool has no basic lands)
-        List<PaperCard> spellsRemaining = new ArrayList<>();
-        List<PaperCard> nonbasicLandsRemaining = new ArrayList<>();
-        for (PaperCard card : remainingPool) {
-            if (card.getRules().getMainPart().getType().isLand()) {
-                nonbasicLandsRemaining.add(card);
-            } else {
-                spellsRemaining.add(card);
+    }
+
+    /** {@code pool} with one copy of each of {@code taken} removed. */
+    private static List<PaperCard> poolMinus(List<PaperCard> pool, List<PaperCard> taken) {
+        List<PaperCard> remaining = new ArrayList<>(pool);
+        for (PaperCard card : taken) {
+            remaining.remove(card);
+        }
+        return remaining;
+    }
+
+    /**
+     * Swap {@code swapCount} of {@code chosen}'s cards for {@code remaining}'s,
+     * spells only for spells and nonbasic lands only for nonbasic lands. Each
+     * swap picks uniformly from all of {@code chosen}; a pick whose type has no
+     * replacement left still uses up a swap.
+     */
+    private void swapTypeMatched(NonBasics chosen, NonBasics remaining, int swapCount) {
+        for (int swapsLeft = swapCount; swapsLeft > 0 && chosen.size() > 0; swapsLeft--) {
+            int pick = random.nextInt(chosen.size());
+            boolean spell = pick < chosen.spells().size();
+            List<PaperCard> from = spell ? chosen.spells() : chosen.lands();
+            List<PaperCard> replacements = spell ? remaining.spells() : remaining.lands();
+            if (replacements.isEmpty()) {
+                continue;
             }
+            from.remove(spell ? pick : pick - chosen.spells().size());
+            from.add(replacements.remove(random.nextInt(replacements.size())));
         }
-
-        // 4. Type-matched swaps: spells swap with spells, non-basic lands with non-basic lands.
-        // Each swap picks randomly from all deck non-basics, then replaces from the matching pool.
-        List<PaperCard> chosenSpells = new ArrayList<>(spellsInDeck);
-        List<PaperCard> chosenNonbasics = new ArrayList<>(nonbasicLandsInDeck);
-        int swapsLeft = swapCount;
-        while (swapsLeft > 0) {
-            int totalSwappable = chosenSpells.size() + chosenNonbasics.size();
-            if (totalSwappable == 0) break;
-            int pick = random.nextInt(totalSwappable);
-            if (pick < chosenSpells.size()) {
-                if (spellsRemaining.isEmpty()) { swapsLeft--; continue; }
-                chosenSpells.remove(pick);
-                chosenSpells.add(spellsRemaining.remove(random.nextInt(spellsRemaining.size())));
-            } else {
-                if (nonbasicLandsRemaining.isEmpty()) { swapsLeft--; continue; }
-                chosenNonbasics.remove(pick - chosenSpells.size());
-                chosenNonbasics.add(nonbasicLandsRemaining.remove(random.nextInt(nonbasicLandsRemaining.size())));
-            }
-            swapsLeft--;
-        }
-
-        // 5. Rebalance basic lands based on spell pip counts; keep non-basic lands
-        return rebalanceLands(chosenSpells, chosenNonbasics);
     }
 
     Deck buildRandom(List<PaperCard> pool) {
