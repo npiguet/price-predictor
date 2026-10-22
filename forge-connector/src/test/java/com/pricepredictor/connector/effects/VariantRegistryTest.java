@@ -1,7 +1,5 @@
 package com.pricepredictor.connector.effects;
 
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -25,11 +23,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class VariantRegistryTest {
 
-    @BeforeEach
-    @AfterEach
-    void reset() {
-        VariantRegistry.clear();
-    }
+    // The registry is JVM-wide, so each test names its variants uniquely.
 
     @Test
     void anUnregisteredNameIsNotAVariant() {
@@ -44,7 +38,6 @@ class VariantRegistryTest {
 
         VariantRegistry.registerAll(dir);
 
-        assertEquals(2, VariantRegistry.size());
         assertTrue(VariantRegistry.isVariant("Lightning Bolt Variant 0"));
         assertTrue(VariantRegistry.isVariant("Shock Variant 1"));
         assertFalse(VariantRegistry.isVariant("Lightning Bolt"));
@@ -52,28 +45,31 @@ class VariantRegistryTest {
 
     @Test
     void aNonScriptFileIsIgnored(@TempDir Path dir) throws IOException {
-        write(dir, "lightning_bolt_variant_0.txt", "Lightning Bolt Variant 0");
-        Files.writeString(
-                dir.resolve("lightning_bolt_variant_0.provenance.json"), "{}");
+        write(dir, "bolt_variant_2.txt", "Bolt Variant 2");
+        Files.writeString(dir.resolve("bolt_variant_2.provenance.json"),
+                "{\"card\": \"Sidecar Not A Script\"}");
+        Files.writeString(dir.resolve("loadable.lst"), "Listed Not A Script\n");
 
         VariantRegistry.registerAll(dir);
 
-        assertEquals(1, VariantRegistry.size());
+        assertTrue(VariantRegistry.isVariant("Bolt Variant 2"));
+        assertFalse(VariantRegistry.isVariant("Listed Not A Script"));
     }
 
     @Test
     void aMissingDirectoryRegistersNothing(@TempDir Path dir) {
         VariantRegistry.registerAll(dir.resolve("absent"));
-        assertEquals(0, VariantRegistry.size());
+        assertFalse(VariantRegistry.isVariant("Absent Variant 3"));
     }
 
     @Test
-    void aVariantKeyNamesTheVariantTree() {
-        VariantRegistry.register("Lightning Bolt Variant 0");
+    void aVariantKeyNamesTheVariantTree(@TempDir Path dir) throws IOException {
+        write(dir, "lightning_bolt_variant_4.txt", "Lightning Bolt Variant 4");
+        VariantRegistry.registerAll(dir);
         assertEquals(
-                "variant-scripts/lightning_bolt_variant_0.txt",
+                "variant-scripts/lightning_bolt_variant_4.txt",
                 CardFilenames.scriptFile(
-                        SourceTree.VARIANT_SCRIPTS, "Lightning Bolt Variant 0"));
+                        SourceTree.VARIANT_SCRIPTS, "Lightning Bolt Variant 4"));
     }
 
     private static void write(Path dir, String file, String name)

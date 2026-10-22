@@ -42,12 +42,7 @@ public class VariantSidecarMain {
                     variants, variants, SourceTree.VARIANT_SCRIPTS, false);
 
             System.out.println("Variant sidecars written:");
-            System.out.println("  Total files:  " + result.totalFiles());
-            System.out.println("  Succeeded:    " + result.succeeded());
-            System.out.println("  Warnings:     " + result.warningCount());
-            for (String warning : result.warnings()) {
-                System.out.println("  " + warning);
-            }
+            result.report(System.out, SourceTree.VARIANT_SCRIPTS);
 
             int loadable = writeLoadableNames(variants);
             System.out.println(
@@ -79,19 +74,14 @@ public class VariantSidecarMain {
      */
     private static int writeLoadableNames(Path variants) throws java.io.IOException {
         java.util.List<String> accepted = new java.util.ArrayList<>();
-        try (var scripts = Files.walk(variants)) {
-            for (Path script : scripts.filter(Files::isRegularFile).toList()) {
-                if (!script.toString().endsWith(".txt")) {
-                    continue;
-                }
-                String name = ScriptHeader.of(Files.readAllLines(script)).name();
-                if (name == null) {
-                    continue;
-                }
-                if (forge.model.FModel.getMagicDb().getCommonCards()
-                        .getCard(name) != null) {
-                    accepted.add(name);
-                }
+        for (Path script : ScriptFiles.under(variants)) {
+            String name = ScriptHeader.of(Files.readAllLines(script)).name();
+            if (name == null) {
+                continue;
+            }
+            if (forge.model.FModel.getMagicDb().getCommonCards()
+                    .getCard(name) != null) {
+                accepted.add(name);
             }
         }
         java.util.Collections.sort(accepted);

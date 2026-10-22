@@ -1,5 +1,6 @@
 package com.pricepredictor.connector.effects;
 
+import com.pricepredictor.connector.ScriptFiles;
 import com.pricepredictor.connector.ScriptHeader;
 
 import java.io.IOException;
@@ -36,11 +37,9 @@ public final class VariantRegistry {
         if (!Files.isDirectory(source)) {
             return;
         }
-        try (var scripts = Files.walk(source)) {
-            for (Path script : scripts.filter(Files::isRegularFile).toList()) {
-                if (script.toString().endsWith(".txt")) {
-                    register(nameOf(script));
-                }
+        try {
+            for (Path script : ScriptFiles.under(source)) {
+                register(nameOf(script));
             }
         } catch (IOException e) {
             System.err.println(
@@ -50,7 +49,7 @@ public final class VariantRegistry {
         }
     }
 
-    public static void register(String cardName) {
+    private static void register(String cardName) {
         if (cardName != null && !cardName.isEmpty()) {
             NAMES.add(cardName);
         }
@@ -58,15 +57,6 @@ public final class VariantRegistry {
 
     public static boolean isVariant(String cardName) {
         return cardName != null && NAMES.contains(cardName);
-    }
-
-    public static int size() {
-        return NAMES.size();
-    }
-
-    /** Test seam: the registry is JVM-wide static state. */
-    public static void clear() {
-        NAMES.clear();
     }
 
     /** The {@code Name:} a Forge source script declares, or null. */

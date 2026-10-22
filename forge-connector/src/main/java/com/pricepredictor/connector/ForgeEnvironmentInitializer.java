@@ -118,16 +118,11 @@ public class ForgeEnvironmentInitializer {
             Files.createDirectories(target);
             int removed = clearPreviouslyStaged(target);
             java.util.List<String> staged = new java.util.ArrayList<>();
-            try (var scripts = Files.walk(source)) {
-                for (Path script : scripts.filter(Files::isRegularFile).toList()) {
-                    if (!script.toString().endsWith(".txt")) {
-                        continue;
-                    }
-                    Files.copy(
-                            script, target.resolve(script.getFileName()),
-                            java.nio.file.StandardCopyOption.REPLACE_EXISTING);
-                    staged.add(script.getFileName().toString());
-                }
+            for (Path script : ScriptFiles.under(source)) {
+                Files.copy(
+                        script, target.resolve(script.getFileName()),
+                        java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                staged.add(script.getFileName().toString());
             }
             Files.write(target.resolve(STAGED_MANIFEST), staged);
             System.out.println(
