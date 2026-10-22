@@ -52,4 +52,14 @@ class WireVocabularyTest {
                 List.of("resolved", "fizzled", "partially_fizzled", "declined", "countered"),
                 wireNames(ActivationOutcome.values(), ActivationOutcome::wireName));
     }
+
+    /**
+     * A key's {@code trait_kind}: the sidecar and the records join on it, and
+     * {@code validate_corpus.py} buckets keys by the {@code keyword} spelling.
+     */
+    @Test
+    void traitKinds() {
+        assertEquals(List.of("keyword", "spell", "trigger", "static", "replacement"),
+                wireNames(TraitKind.values(), TraitKind::wireName));
+    }
 }

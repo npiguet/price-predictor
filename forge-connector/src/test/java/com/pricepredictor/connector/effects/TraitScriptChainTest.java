@@ -131,7 +131,7 @@ class TraitScriptChainTest {
                 root.script().scriptText());
         assertEquals("Charm", root.script().apiType());
         assertEquals(List.of(new ProvenanceKey(
-                        "cardsfolder/c/cryptic_command.txt", 0, ProvenanceKey.KIND_SPELL, 0)),
+                        "cardsfolder/c/cryptic_command.txt", 0, TraitKind.SPELL, 0)),
                 root.provenance());
     }
 
@@ -145,7 +145,7 @@ class TraitScriptChainTest {
         for (int i = 0; i < options.size(); i++) {
             ProvenanceSidecar.Line option = options.get(i);
             assertEquals(List.of(new ProvenanceKey("cardsfolder/c/cryptic_command.txt",
-                            0, ProvenanceKey.KIND_SPELL, 0, i)),
+                            0, TraitKind.SPELL, 0, i)),
                     option.provenance(), "mode " + i);
             assertEquals(apis.get(i), option.script().apiType(), "mode " + i);
             String text = option.script().scriptText();
@@ -290,7 +290,7 @@ class TraitScriptChainTest {
     void aDescriptionlessCharmDropsItsRootKeyAndKeysItsModes() {
         Converted doomsday = convert("d/doomsday_confluence.txt");
         ProvenanceKey root = new ProvenanceKey(
-                "cardsfolder/d/doomsday_confluence.txt", 0, ProvenanceKey.KIND_SPELL, 0);
+                "cardsfolder/d/doomsday_confluence.txt", 0, TraitKind.SPELL, 0);
 
         assertTrue(linesOfKind(doomsday, "spell").isEmpty(), doomsday.lines().toString());
         assertTrue(doomsday.sidecar().droppedKeys().contains(root),
@@ -330,7 +330,7 @@ class TraitScriptChainTest {
         assertTrue(text.endsWith(" [SEG] SV1: Choices$ SV2,SV3 | DB$ Charm"),
                 "the charm names its modes and inlines none: " + text);
         ProvenanceKey root = new ProvenanceKey(
-                "cardsfolder/a/abiding_grace.txt", 0, ProvenanceKey.KIND_TRIGGER, 0);
+                "cardsfolder/a/abiding_grace.txt", 0, TraitKind.TRIGGER, 0);
         assertEquals(List.of(root), trigger.provenance());
 
         List<ProvenanceSidecar.Line> options = linesOfKind(grace, "option");
@@ -359,8 +359,8 @@ class TraitScriptChainTest {
             for (ProvenanceKey key : keys) {
                 assertEquals(Integer.valueOf(i), key.option(), "mode " + i + ": " + keys);
             }
-            assertTrue(keys.contains(new ProvenanceKey(file, 0, ProvenanceKey.KIND_TRIGGER, 0, i)), keys.toString());
-            assertTrue(keys.contains(new ProvenanceKey(file, 0, ProvenanceKey.KIND_KEYWORD, 0, i)), keys.toString());
+            assertTrue(keys.contains(new ProvenanceKey(file, 0, TraitKind.TRIGGER, 0, i)), keys.toString());
+            assertTrue(keys.contains(new ProvenanceKey(file, 0, TraitKind.KEYWORD, 0, i)), keys.toString());
             assertEquals(apis.get(i), options.get(i).script().apiType());
         }
     }
@@ -480,8 +480,8 @@ class TraitScriptChainTest {
         for (int i = 0; i < options.size(); i++) {
             String file = "cardsfolder/a/appa_loyal_sky_bison.txt";
             List<ProvenanceKey> keys = options.get(i).provenance();
-            assertTrue(keys.contains(new ProvenanceKey(file, 0, ProvenanceKey.KIND_TRIGGER, 0, i)), keys.toString());
-            assertTrue(keys.contains(new ProvenanceKey(file, 0, ProvenanceKey.KIND_TRIGGER, 1, i)), keys.toString());
+            assertTrue(keys.contains(new ProvenanceKey(file, 0, TraitKind.TRIGGER, 0, i)), keys.toString());
+            assertTrue(keys.contains(new ProvenanceKey(file, 0, TraitKind.TRIGGER, 1, i)), keys.toString());
         }
     }
 }

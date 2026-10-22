@@ -9,7 +9,6 @@ import forge.game.card.Card;
 import forge.game.card.CardState;
 import forge.card.GamePieceType;
 import forge.game.keyword.KeywordInterface;
-import forge.game.replacement.ReplacementEffect;
 import forge.game.spellability.SpellAbility;
 import forge.game.staticability.StaticAbility;
 import forge.game.trigger.Trigger;
@@ -53,16 +52,10 @@ import java.util.function.Predicate;
 public record ProvenanceKey(
         String scriptFile,
         int face,
-        String traitKind,
+        TraitKind traitKind,
         int indexWithinKind,
         Integer option
 ) {
-
-    public static final String KIND_KEYWORD = "keyword";
-    public static final String KIND_SPELL = "spell";
-    public static final String KIND_TRIGGER = "trigger";
-    public static final String KIND_STATIC = "static";
-    public static final String KIND_REPLACEMENT = "replacement";
 
     public ProvenanceKey {
         Objects.requireNonNull(scriptFile, "scriptFile");
@@ -73,7 +66,7 @@ public record ProvenanceKey(
     }
 
     /** A root key: the trait itself rather than one of its modes. */
-    public ProvenanceKey(String scriptFile, int face, String traitKind, int indexWithinKind) {
+    public ProvenanceKey(String scriptFile, int face, TraitKind traitKind, int indexWithinKind) {
         this(scriptFile, face, traitKind, indexWithinKind, null);
     }
 
@@ -89,7 +82,7 @@ public record ProvenanceKey(
     public String describe() {
         StringBuilder sb = new StringBuilder()
                 .append('(').append(scriptFile).append(") face").append(face)
-                .append('/').append(traitKind).append('[').append(indexWithinKind).append(']');
+                .append('/').append(traitKind.wireName()).append('[').append(indexWithinKind).append(']');
         if (option != null) {
             sb.append("/option").append(option);
         }
@@ -99,15 +92,6 @@ public record ProvenanceKey(
     /** The root this key names: itself, or the charm a mode key belongs to. */
     ProvenanceKey root() {
         return option == null ? this : new ProvenanceKey(scriptFile, face, traitKind, indexWithinKind);
-    }
-
-    /** The trait kind a runtime object belongs to, or null if it is none of them. */
-    public static String kindOf(CardTraitBase trait) {
-        if (trait instanceof Trigger) return KIND_TRIGGER;
-        if (trait instanceof ReplacementEffect) return KIND_REPLACEMENT;
-        if (trait instanceof StaticAbility) return KIND_STATIC;
-        if (trait instanceof SpellAbility) return KIND_SPELL;
-        return null;
     }
 
     /**
@@ -379,12 +363,8 @@ public record ProvenanceKey(
     /** The one printed line of {@code state} that names {@code svar}, or null. */
     private static CardTraitBase soleLineNaming(CardState state, String svar) {
         List<CardTraitBase> lines = new ArrayList<>();
-        for (String kind : List.of(
-                KIND_SPELL, KIND_TRIGGER, KIND_STATIC, KIND_REPLACEMENT)) {
-            Iterable<? extends CardTraitBase> slice = slice(state, kind);
-            if (slice != null) {
-                slice.forEach(lines::add);
-            }
+        for (TraitKind kind : TraitKind.values()) {
+            kind.slice(state).forEach(lines::add);
         }
         return sole(lines, line -> namesSVar(line, svar));
     }
@@ -484,7 +464,7 @@ public record ProvenanceKey(
             // grantor hop has already been tried, so this is the granted one.
             return UnresolvedReason.GRANTED_KEYWORD;
         }
-        if (kindOf(trait) == null) {
+        if (TraitKind.of(trait) == null) {
             return UnresolvedReason.UNKNOWN_KIND;
         }
         if (trait.isCopiedTrait()) {
@@ -535,10 +515,10 @@ public record ProvenanceKey(
             return index < 0 ? null : new ProvenanceKey(
                     scriptFileOf(host),
                     faceIndex(host, state.getStateName()),
-                    KIND_KEYWORD,
+                    TraitKind.KEYWORD,
                     index);
         }
-        String kind = kindOf(trait);
+        TraitKind kind = TraitKind.of(trait);
         if (kind == null) return null;
         int index = indexWithin(state, trait, kind);
         if (index < 0) index = indexLike(state, trait, kind);
@@ -565,10 +545,9 @@ public record ProvenanceKey(
      * refuses: a record with no key is still trainable through its state and
      * payload, while a record with the wrong key silently trains the wrong line.
      */
-    private static int indexIfUnique(CardState state, CardTraitBase trait, String kind) {
-        Iterable<? extends CardTraitBase> slice = slice(state, kind);
-        return slice == null ? -1
-                : soleIndex(slice, candidate -> candidate.getClass() == trait.getClass());
+    private static int indexIfUnique(CardState state, CardTraitBase trait, TraitKind kind) {
+        return soleIndex(kind.slice(state),
+                candidate -> candidate.getClass() == trait.getClass());
     }
 
     /**
@@ -584,9 +563,8 @@ public record ProvenanceKey(
      * still trainable through its state and payload, while a record with the
      * wrong key silently trains the wrong line.
      */
-    private static int indexLike(CardState state, CardTraitBase trait, String kind) {
-        Iterable<? extends CardTraitBase> slice = slice(state, kind);
-        if (slice == null) return -1;
+    private static int indexLike(CardState state, CardTraitBase trait, TraitKind kind) {
+        Iterable<? extends CardTraitBase> slice = kind.slice(state);
         Map<String, String> want = trait.getOriginalMapParams();
         if (want == null || want.isEmpty()) return indexIfUnique(state, trait, kind);
         return soleIndex(slice, candidate -> candidate.getClass() == trait.getClass()
@@ -688,30 +666,10 @@ public record ProvenanceKey(
         }
     }
 
-    /**
-     * The state's trait list for one kind, in declaration order.
-     *
-     * <p>Printed traits occupy the head of every slice — a state builds each
-     * list from its own parsed traits and only then appends the keyword-derived
-     * and runtime-granted ones — which is why an index into a slice is stable
-     * across processes for a scripted line.
-     */
-    private static Iterable<? extends CardTraitBase> slice(CardState state, String kind) {
-        return switch (kind) {
-            case KIND_TRIGGER -> state.getTriggers();
-            case KIND_REPLACEMENT -> state.getReplacementEffects();
-            case KIND_STATIC -> state.getStaticAbilities();
-            case KIND_SPELL -> state.getSpellAbilities();
-            default -> null;
-        };
-    }
-
     /** Index of {@code trait} within its kind's slice of {@code state}'s trait list. */
-    private static int indexWithin(CardState state, CardTraitBase trait, String kind) {
-        Iterable<? extends CardTraitBase> slice = slice(state, kind);
-        if (slice == null) return -1;
+    private static int indexWithin(CardState state, CardTraitBase trait, TraitKind kind) {
         int index = 0;
-        for (CardTraitBase candidate : slice) {
+        for (CardTraitBase candidate : kind.slice(state)) {
             if (candidate == trait) return index;
             index++;
         }
@@ -794,7 +752,7 @@ public record ProvenanceKey(
     public String toJson() {
         return "{\"script_file\":" + Json.string(scriptFile)
                 + ",\"face\":" + face
-                + ",\"trait_kind\":" + Json.string(traitKind)
+                + ",\"trait_kind\":" + Json.string(traitKind.wireName())
                 + ",\"index_within_kind\":" + indexWithinKind
                 + optionJson() + "}";
     }
@@ -802,7 +760,7 @@ public record ProvenanceKey(
     /** The JSON object form used inside a sidecar, where the file is in the header. */
     public String toSidecarJson() {
         return "{\"face\":" + face
-                + ",\"trait_kind\":" + Json.string(traitKind)
+                + ",\"trait_kind\":" + Json.string(traitKind.wireName())
                 + ",\"index_within_kind\":" + indexWithinKind
                 + optionJson() + "}";
     }

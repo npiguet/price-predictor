@@ -160,7 +160,7 @@ class EffectRecordTest {
         String json = record(RecordKind.TRIGGER)
                 .ability(new ProvenanceKey.Resolved(new ProvenanceKey(
                         "cardsfolder/g/grave_titan.txt", 0,
-                        ProvenanceKey.KIND_TRIGGER, 0), null))
+                        TraitKind.TRIGGER, 0), null))
                 .toJson();
 
         assertFalse(json.contains("\"ability\":null"), json);
@@ -174,7 +174,7 @@ class EffectRecordTest {
         String json = record(RecordKind.REWRITE)
                 .ability(new ProvenanceKey.Resolved(new ProvenanceKey(
                         "cardsfolder/p/paralyze.txt", 0,
-                        ProvenanceKey.KIND_REPLACEMENT, 0), null))
+                        TraitKind.REPLACEMENT, 0), null))
                 .toJson();
 
         assertTrue(json.contains("\"trait_kind\":\"replacement\""), json);
@@ -221,7 +221,7 @@ class EffectRecordTest {
         String json = record(RecordKind.TRIGGER)
                 .ability(new ProvenanceKey.Resolved(new ProvenanceKey(
                         "cardsfolder/g/grave_titan.txt", 0,
-                        ProvenanceKey.KIND_TRIGGER, 0), null))
+                        TraitKind.TRIGGER, 0), null))
                 .toJson();
 
         assertTrue(json.contains("cardsfolder/g/grave_titan.txt"), json);
