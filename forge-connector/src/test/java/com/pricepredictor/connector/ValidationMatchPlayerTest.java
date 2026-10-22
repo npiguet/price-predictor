@@ -1,6 +1,7 @@
 package com.pricepredictor.connector;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.IOException;
@@ -10,65 +11,69 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+/**
+ * The outcomes file a validation worker writes: one row per input line, in
+ * input order, which is how the supervisor pairs each outcome with its match.
+ *
+ * <p>Every match here names cards Forge does not know, so it is refused before
+ * a game is played and fills its row with {@code 0;0}; a played match's row is
+ * {@link ValidationMatchPlayerIntegrationTest}'s.
+ */
+@ExtendWith(ForgeExtension.class)
 class ValidationMatchPlayerTest {
 
-    @Test
-    void parsesValidationMatchLine() {
-        String line = "CardA|CardB|CardC;DeckD|DeckE|DeckF";
-        ValidationMatchPlayer.ParsedMatch match = ValidationMatchPlayer.parseLine(line);
-        assertEquals(List.of("CardA", "CardB", "CardC"), match.deckANames());
-        assertEquals(List.of("DeckD", "DeckE", "DeckF"), match.deckBNames());
+    /** A match whose decks cannot be built. */
+    private static final String UNPLAYABLE = "No Such Card|Not A Card;Fake Card|Not One Either";
+
+    @TempDir
+    Path tmp;
+
+    private final ValidationMatchPlayer player = new ValidationMatchPlayer(new GamePlayer(1));
+
+    private List<String> outcomesAfter(List<String> matches, Path outcomes) throws IOException {
+        Path matchesFile = tmp.resolve("matches.txt");
+        Files.write(matchesFile, matches);
+        player.processAll(matchesFile, outcomes);
+        return Files.readAllLines(outcomes);
     }
 
     @Test
-    void parseDeckWithSpaces() {
-        String line = "Lightning Bolt|Mountain;Llanowar Elves|Forest";
-        ValidationMatchPlayer.ParsedMatch match = ValidationMatchPlayer.parseLine(line);
-        assertEquals("Lightning Bolt", match.deckANames().get(0));
-        assertEquals("Mountain", match.deckANames().get(1));
-        assertEquals("Llanowar Elves", match.deckBNames().get(0));
+    void aMatchThatCannotBePlayedStillWritesItsRow() throws IOException {
+        assertEquals(List.of("0;0", "0;0"),
+                outcomesAfter(List.of(UNPLAYABLE, UNPLAYABLE), tmp.resolve("outcomes.txt")));
     }
 
     @Test
-    void writesOutcomeFormat(@TempDir Path tmp) throws IOException {
+    void aLineWithNoDeckBStillWritesItsRow() throws IOException {
+        assertEquals(List.of("0;0"),
+                outcomesAfter(List.of("Lightning Bolt|Mountain"), tmp.resolve("outcomes.txt")));
+    }
+
+    @Test
+    void crashRecoverySkipsCompletedMatches() throws IOException {
         Path outcomes = tmp.resolve("outcomes.txt");
-        ValidationMatchPlayer.appendOutcome(outcomes, 2, 1);
-        List<String> lines = Files.readAllLines(outcomes);
-        assertEquals(1, lines.size());
-        assertEquals("2;1", lines.get(0));
-    }
-
-    @Test
-    void appendsMultipleOutcomes(@TempDir Path tmp) throws IOException {
-        Path outcomes = tmp.resolve("outcomes.txt");
-        ValidationMatchPlayer.appendOutcome(outcomes, 2, 0);
-        ValidationMatchPlayer.appendOutcome(outcomes, 1, 2);
-        List<String> lines = Files.readAllLines(outcomes);
-        assertEquals(2, lines.size());
-        assertEquals("2;0", lines.get(0));
-        assertEquals("1;2", lines.get(1));
-    }
-
-    @Test
-    void crashRecoverySkipsCompletedMatches(@TempDir Path tmp) throws IOException {
-        Path outcomes = tmp.resolve("outcomes.txt");
-        // Simulate 2 already-completed matches
+        // Two matches already completed before the restart.
         Files.writeString(outcomes, "2;0\n1;2\n");
 
-        long completed = ValidationMatchPlayer.countCompletedMatches(outcomes);
-        assertEquals(2, completed);
+        assertEquals(List.of("2;0", "1;2", "0;0"),
+                outcomesAfter(List.of(UNPLAYABLE, UNPLAYABLE, UNPLAYABLE), outcomes));
     }
 
     @Test
-    void crashRecoveryNoFileReturnsZero(@TempDir Path tmp) throws IOException {
-        Path outcomes = tmp.resolve("nonexistent.txt");
-        long completed = ValidationMatchPlayer.countCompletedMatches(outcomes);
-        assertEquals(0, completed);
+    void aCompletedFileIsLeftAsItIs() throws IOException {
+        Path outcomes = tmp.resolve("outcomes.txt");
+        Files.writeString(outcomes, "2;0\n1;2\n");
+
+        assertEquals(List.of("2;0", "1;2"), outcomesAfter(List.of(UNPLAYABLE, UNPLAYABLE), outcomes));
     }
 
     @Test
-    void crashRecoveryUnreadableFileThrowsInsteadOfReplayingMatches(@TempDir Path tmp) {
+    void crashRecoveryUnreadableFileThrowsInsteadOfReplayingMatches() throws IOException {
         // A directory exists but cannot be read as a file; reporting 0 would replay every match.
-        assertThrows(IOException.class, () -> ValidationMatchPlayer.countCompletedMatches(tmp));
+        Path matchesFile = tmp.resolve("matches.txt");
+        Files.write(matchesFile, List.of(UNPLAYABLE));
+        Path outcomes = Files.createDirectory(tmp.resolve("outcomes"));
+
+        assertThrows(IOException.class, () -> player.processAll(matchesFile, outcomes));
     }
 }

@@ -75,16 +75,14 @@ public class ValidationMatchPlayer {
             "A validation match scores the deck a builder chose, so playing it short "
                     + "would score a deck that builder never built.";
 
-    // ── Static helpers (package-visible for testing) ────────────────
+    private record ParsedMatch(List<String> deckANames, List<String> deckBNames) {}
 
-    record ParsedMatch(List<String> deckANames, List<String> deckBNames) {}
-
-    static ParsedMatch parseLine(String line) {
+    private static ParsedMatch parseLine(String line) {
         String[] parts = line.split(";", 2);
         return new ParsedMatch(CardNameList.parse(parts[0]), CardNameList.parse(parts[1]));
     }
 
-    static void appendOutcome(Path outcomesFile, int winsA, int winsB) throws IOException {
+    private static void appendOutcome(Path outcomesFile, int winsA, int winsB) throws IOException {
         String line = winsA + ";" + winsB + "\n";
         Files.writeString(outcomesFile, line,
                 StandardOpenOption.CREATE, StandardOpenOption.APPEND);
@@ -94,7 +92,7 @@ public class ValidationMatchPlayer {
      * An unreadable outcomes file must not read as "nothing completed": the worker would
      * replay every match and append duplicate rows, breaking the positional pairing.
      */
-    static long countCompletedMatches(Path outcomesFile) throws IOException {
+    private static long countCompletedMatches(Path outcomesFile) throws IOException {
         if (!Files.exists(outcomesFile)) return 0;
         try (Stream<String> lines = Files.lines(outcomesFile)) {
             return lines.filter(l -> !l.isBlank()).count();
