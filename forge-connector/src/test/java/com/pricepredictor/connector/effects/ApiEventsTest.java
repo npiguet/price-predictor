@@ -238,8 +238,8 @@ class ApiEventsTest {
      * {@code AddPhaseEffect.resolve} reads {@code sa.getActivatingPlayer()}
      * exclusively and has no targeting or {@code Defined$} concept -- unlike
      * its three siblings above, the activator genuinely is the subject here,
-     * and this pins that the fix was not generalized to a rule that never
-     * needed it.
+     * and this pins that their targeting rule does not reach an API that has
+     * none.
      */
     @Test
     void anAddedPhaseNamesTheActivator() {
@@ -294,7 +294,7 @@ class ApiEventsTest {
         assertEquals(List.of(SnapshotBuilder.playerId(targeted)), event.subjects());
     }
 
-    // ── Task 8: choices, healed damage, granted abilities, retargets ────
+    // ── choices, healed damage, granted abilities, retargets ────────────
 
     @Test
     void aChosenColourIsAChoice() {
@@ -310,28 +310,23 @@ class ApiEventsTest {
     }
 
     /**
-     * {@code choice()}'s first branch checks {@code host.hasChosenColor()}.
-     * The brief's original draft checked {@code host.getChosenColor() !=
-     * null} instead; {@code Card.getChosenColor()} never returns {@code
-     * null} for an unset colour -- it returns {@code ""} -- so that check is
-     * always true and would report <em>every</em> clause routed through
-     * {@code choice()} as a colour choice, this one included, regardless of
-     * which of the {@code choice_made} APIs actually ran.
+     * {@code choice()}'s first branch checks {@code host.hasChosenColor()},
+     * not {@code host.getChosenColor() != null}: {@code
+     * Card.getChosenColor()} never returns {@code null} for an unset colour --
+     * it returns {@code ""} -- so that check is always true and would report
+     * <em>every</em> clause routed through {@code choice()} as a colour
+     * choice, this one included, regardless of which of the {@code
+     * choice_made} APIs actually ran.
      *
      * <p>This is also the only single-API test in the suite that exercises a
-     * {@code choice_kind} other than {@code "color"}, so it is what would
-     * catch that regression on its own (the broader {@code
-     * everyChoiceMadeApiHasAReadableChoice} guard below would too, across
-     * every branch at once).
+     * {@code choice_kind} other than {@code "color"}, so it catches that on
+     * its own (the broader {@code everyChoiceMadeApiHasAReadableChoice} guard
+     * below would too, across every branch at once).
      *
-     * <p>Originally pointed at {@code ChooseSector}: fix round 1 removed that
-     * rule (see the comment in {@code ApiEvents.RULES} above {@code
-     * HealDamage} -- {@code event_schema.py} excludes it as unreachable in
-     * this corpus's sealed/draft pools), so this now points at {@code
-     * ChooseDirection} instead, which stayed. {@code
-     * ChooseDirectionEffect.resolve()} always calls {@code
-     * setChosenDirection}, verified directly against {@code
-     * ChooseDirectionEffect.java} rather than assumed.
+     * <p>{@code ChooseDirection} rather than {@code ChooseSector}, which has
+     * no rule (see the comment in {@code ApiEvents.RULES} above {@code
+     * HealDamage}). {@code ChooseDirectionEffect.resolve()} always calls
+     * {@code setChosenDirection}.
      */
     @Test
     void aChosenDirectionIsAChoiceNotAMiscolouredOne() {
@@ -346,8 +341,7 @@ class ApiEventsTest {
     }
 
     /**
-     * The general form of the bug class in the test above and in Ruling
-     * R18's missed branches: for every {@code RULES} entry the schema
+     * The general form of the test above: for every {@code RULES} entry the schema
      * declares as {@code choice_made} (fixture keys asserted equal to every
      * {@code ApiType} whose rule emits {@code choice_made}, read live off the
      * table rather than hand-counted), simulate that API's own effect class writing its
@@ -358,10 +352,9 @@ class ApiEventsTest {
      * assertions, if a fixture exists but the matching {@code choice()}
      * branch does not -- the moment either half drifts from the other.
      *
-     * <p>{@code ChooseSector} is deliberately not a key here: fix round 1
-     * removed it from {@code RULES} entirely (see the comment there), so no
-     * rule emits {@code choice_made} for it either -- not an exemption carved
-     * out of this test.
+     * <p>{@code ChooseSector} is deliberately not a key here: it has no rule
+     * in {@code RULES} (see the comment there), so no rule emits {@code
+     * choice_made} for it either -- not an exemption carved out of this test.
      *
      * <p>Each fixture calls the exact setter that API's real effect class
      * calls: {@code ChooseColorEffect.setChosenColors}, {@code
@@ -435,24 +428,18 @@ class ApiEventsTest {
     /**
      * HealDamageEffect calls healDamage() and leaves zero behind, so the amount
      * exists only before the clause. This is the case the before-half of the
-     * hook was added for.
+     * hook exists for.
      *
-     * <p>Rewritten in fix round 2 (task-8-fix-2.md, Finding 1). The original
-     * version called {@code sa.resetTargets(); sa.getTargets().add(target);}
-     * directly on the {@code HealDamage} clause -- a state the real engine
-     * never produces for this API: {@code HealDamageEffect.resolve()} reads
+     * <p>The {@code HealDamage} clause itself carries no targets, because the
+     * real engine never gives it any: {@code HealDamageEffect.resolve()} reads
      * its cards through {@code SpellAbilityEffect.getTargetCards(sa)}, which
      * only consults {@code sa.getTargets()} when {@code sa.usesTargeting()}
      * is true, and neither real cardsfolder usage declares any targeting on
-     * the {@code HealDamage} clause itself -- {@code pyramids.txt}'s is
-     * {@code Defined$ ReplacedCard}, {@code wolverine_fierce_fighter.txt}'s
-     * is {@code Defined$ ReplacedTarget}. The old test was internally
-     * consistent and would still have passed with {@code DAMAGE_BEFORE}
-     * reading {@code sa.getTargets()} unconditionally, which is exactly the
-     * bug: confirmed by reverting {@code ApiEvents}'s fix and re-running
-     * this rewritten test first -- it failed with {@code amount=0} against
-     * {@code assertEquals(3, ...)}, the same silent-wrong-zero the finding
-     * describes, before the fix was applied.
+     * the {@code HealDamage} clause -- {@code pyramids.txt}'s is {@code
+     * Defined$ ReplacedCard}, {@code wolverine_fierce_fighter.txt}'s is
+     * {@code Defined$ ReplacedTarget}. Targets added straight onto the clause
+     * would let a {@code DAMAGE_BEFORE} that reads {@code sa.getTargets()}
+     * unconditionally pass.
      *
      * <p>Builds the shape production actually uses instead: no {@code
      * ValidTgts$}/{@code Tgt$} on the {@code HealDamage} clause itself
@@ -546,22 +533,18 @@ class ApiEventsTest {
     }
 
     /**
-     * Finding 2 (task-8-fix-2.md): redirecting a burn spell at a
+     * Redirecting a burn spell at a
      * <em>player</em> is the classic use of {@code ChangeTargets} --
      * Deflection, Misdirection and Bolt Bend are all real, and all reach
      * {@code ChangeTargetsEffect}'s default "choose any new legal target"
      * branch (no {@code RandomTarget}/{@code DefinedMagnet}/{@code
      * ChangeSingleTarget} param), which can retarget at a player as readily
-     * as a card. The original {@code retargeted()} iterated only {@code
+     * as a card. A {@code retargeted()} iterating only {@code
      * getTargetCards()}, which {@code TargetChoices} filters to {@code Card}
-     * instances -- a {@code Player} target was silently dropped, and the
-     * event still fired with {@code targets: []}, so the channel looked
+     * instances, would drop a {@code Player} target silently, and the event
+     * would still fire with {@code targets: []}, so the channel would look
      * wired while reporting nothing distinguishable from "retargeted at
      * nothing."
-     *
-     * <p>Confirmed this failed against the pre-fix code before fixing it:
-     * {@code event.params().get("targets")} was {@code []}, not the
-     * targeted player's id.
      */
     @Test
     void changeTargetsNamesARetargetedPlayerNotJustCards() {
@@ -582,16 +565,14 @@ class ApiEventsTest {
     }
 
     /**
-     * Finding 3, minor (task-8-fix-2.md): {@code ChooseNumberEffect.java:90}
+     * {@code ChooseNumberEffect.java:90}
      * calls {@code setChosenNumber(chosen, true)} -- the secret variant that
      * skips the trackable view update -- when {@code Secretly$} is set and
      * {@code KeepSecret$} is not. The general guard's {@code ChooseNumber}
      * fixture only exercises the plain setter; both variants write the same
      * {@code chosenNumber} field
-     * ({@code setChosenNumber(int, boolean)}), so {@code choice()} was
-     * already correct either way -- this is coverage for that claim, not a
-     * fix for a bug, and it passes unchanged on both sides of this round's
-     * other two fixes.
+     * ({@code setChosenNumber(int, boolean)}), so {@code choice()} reads
+     * either -- this is coverage for that claim.
      */
     @Test
     void aSecretlyChosenNumberIsStillAChoice() {
@@ -712,7 +693,7 @@ class ApiEventsTest {
         assertFalse(output.contains("the emitter for"), output);
     }
 
-    // ── Task 12: the eight highest-reach unemitted types ─────────────────
+    // ── the eight highest-reach types the bus does not emit ──────────────
     //
     // The combat tests below build their cards in a game of their own, not
     // TestCards.game(): combat state (PhaseHandler.setCombat) is per-Game and
@@ -872,8 +853,7 @@ class ApiEventsTest {
      * {@code chooseSingleEntityForEffect} returns {@code null} on an empty
      * candidate list (no creatures to become the Ring-bearer), and {@code
      * RingTemptsYouEffect.resolve()} calls {@code setRingBearer(null)}
-     * either way -- but {@code Player.setRingBearer} (fix round 1, item 4:
-     * corrected from an earlier, wrong version of this javadoc) is {@code if
+     * either way -- but {@code Player.setRingBearer} is {@code if
      * (bearer == null) return;}, a no-op, not an unconditional clear. This
      * fresh {@code Player} never had a Ring-bearer to begin with, so it
      * reports only the activator for a reason this test can actually
@@ -919,8 +899,7 @@ class ApiEventsTest {
 
     /**
      * Two real attacking creatures, both removed -- not a single-entry
-     * fixture where "first only" and "both" would agree (Task 6's shipped
-     * defect shape).
+     * fixture where "first only" and "both" would agree.
      */
     @Test
     void removeFromCombatNamesEveryCreatureActuallyRemoved() {
@@ -973,7 +952,7 @@ class ApiEventsTest {
      * single-entry fixture would not tell "every attacker" from "the first".
      * The plausible wrong implementation this falsifies is a {@code
      * reselectedAttackers} that returns on the first matching entry instead of
-     * continuing the loop -- Task 6's shipped defect shape, one API over.
+     * continuing the loop.
      *
      * <p>{@code addToCombat}'s reselection branch calls {@code
      * combat.removeFromCombat(c)} immediately before re-adding the same
@@ -1128,8 +1107,7 @@ class ApiEventsTest {
      * SpellAbility} itself, not as a {@code Card} -- {@code getTargetCards()}
      * filters to {@code Card.class} instances and would see nothing -- so
      * {@code cardsFromTargets}'s {@code getTargetSpells()} union is the only
-     * path that can name a subject here (fix round 1, item 4, correcting an
-     * earlier javadoc that called this union dead). Built the way {@code
+     * path that can name a subject here, so the union is not dead code. Built the way {@code
      * changeTargetsNamesWhatTheRetargetedSpellPointsAtNow} already builds a
      * "spell on the stack" target: a real, distinct {@code SpellAbility}
      * added to {@code sa}'s own targets via {@code TargetChoices.add(GameObject)}'s

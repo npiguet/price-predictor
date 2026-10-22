@@ -28,32 +28,27 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * The four things a bus record could not say.
+ * What a bus record has to say, and the wiring that makes it say it.
  *
- * <p>Each of these was measured on a 55,296-record corpus collected from the
- * previous version of this collector, and each was a wiring gap rather than a
- * format one: {@code outcome} was the literal {@code resolved} on all 4,989
- * activation records and 6.1% of link halves had no partner; 54% of
- * {@code zone_change} events said {@code to_zone=stack} and 13.68% of events in
- * a record repeated another one in it; {@code combat} and {@code resolution}
- * records were snapshotted one tier shallower than every other kind; and
- * {@code refs.modes} was filled on 125 records out of 55,296.
+ * <p>Each of these is a wiring property rather than a format one: the cost
+ * half's {@code outcome} is what became of the spell, and its {@code link_id}
+ * always has a partner; a move onto the stack is no {@code zone_change}, and
+ * no event in a record repeats another; {@code combat} and {@code resolution}
+ * records are snapshotted as deep as every other kind; and {@code refs.modes}
+ * is read at the resolution, where it is set.
  *
- * <p>Three more were measured on the 463,360-record smoke corpus that followed:
- * not one of the 107,265 bus-derived events named what caused it, so two
- * attackers each dealing 1 damage to the same player rendered byte-identically
- * — 2,193 of the corpus's 3,780 duplicated events; nothing subscribed
- * {@code GameEventGameFinished}, so a cast still on the stack when the game
- * ended vanished with no record and no count, and the combat that decided the
- * game was never flushed at all; and {@code declined} was written on nothing,
- * so an optional effect the controller refused read exactly like one that did
- * something.
+ * <p>And three more: a bus-derived event names what caused it, so two
+ * attackers each dealing 1 damage to the same player render apart; the end of
+ * the game writes what it would otherwise cut off — the combat that decided
+ * the game, and a count of the casts still on the stack; and {@code declined}
+ * is written when the controller refuses an optional effect, which otherwise
+ * reads exactly like one that did something.
  *
  * <p>The bus itself is not exercised here — driving Forge's event bus needs a
  * running match, which is the integration test's job. What is exercised is
  * everything below the two lines that read the stack, against real abilities
  * built by {@code AbilityFactory} from real cards, which is where all of these
- * defects lived.
+ * properties live.
  */
 @ExtendWith(ForgeExtension.class)
 class BusBracketCollectorTest {
@@ -114,10 +109,9 @@ class BusBracketCollectorTest {
     /**
      * A cast writes nothing yet, because its outcome is not knowable yet.
      *
-     * <p>This is the whole defect in one assertion. The cost half carries
-     * {@code outcome}, and whether a spell resolved, fizzled or was countered
-     * does not exist at the moment it is cast — so a record written here can
-     * only say a literal, which is what all 4,989 activation records said.
+     * <p>The cost half carries {@code outcome}, and whether a spell resolved,
+     * fizzled or was countered does not exist at the moment it is cast — so a
+     * record written here could only say a literal.
      */
     @Test
     void aCastIsHeldRatherThanWrittenWithAGuessedOutcome() {
@@ -273,8 +267,7 @@ class BusBracketCollectorTest {
      * The effect half's refs are read when the bracket closes, not at the cast.
      *
      * <p>A charm's chosen mode, an announced X and a named card are set by the
-     * engine while the ability resolves. Read at the cast they are all absent,
-     * which is why {@code refs.modes} was filled on 125 records out of 55,296;
+     * engine while the ability resolves. Read at the cast they are all absent;
      * read here they are there, on a board that is still the pre-event one.
      */
     @Test
@@ -303,10 +296,10 @@ class BusBracketCollectorTest {
     /**
      * A damage event names the creature that dealt it, not the open bracket.
      *
-     * <p>The source is on the bus event and was being dropped. It is what makes
-     * two attackers each dealing 1 damage to the same blocker two events rather
-     * than one line printed twice — and, on its own, the answer to "which
-     * permanent caused this damage", which the corpus did not carry at all.
+     * <p>The source is on the bus event. It is what makes two attackers each
+     * dealing 1 damage to the same blocker two events rather than one line
+     * printed twice — and, on its own, the answer to "which permanent caused
+     * this damage", which nothing else in the record carries.
      */
     @Test
     void damageNamesThePermanentThatDealtIt() throws IOException {
@@ -445,9 +438,9 @@ class BusBracketCollectorTest {
     }
 
     /**
-     * Task 11 fix round 2, item 1. The sibling
+     * The sibling
      * {@link #aCastStillOnTheStackAtTheEndIsCountedRatherThanGivenAnOutcome}
-     * pins the counting half of this already, but never files anything into
+     * pins the counting half of this, but never files anything into
      * {@link BusBracketCollector#bracketEvents} while the bracket is open, so
      * it cannot catch {@code flushOrphanedEvents()} writing a record anyway.
      *
@@ -457,8 +450,8 @@ class BusBracketCollectorTest {
      * own cost payment reaching 0 life, in the shape this stands in for). An
      * event fires while that bracket is still open, then the game ends with
      * {@code bolt} still on the stack. The only honest record of {@code bolt}
-     * is "abandoned, never resolved" -- exactly what {@code writeOffRemoved}
-     * already writes via {@code abandoned} -- not a second, contradictory
+     * is "abandoned, never resolved" -- exactly what {@code finishGame}
+     * reports via {@code abandoned} -- not a second, contradictory
      * {@code kind:resolution} record naming {@code bolt} as having resolved.
      */
     @Test
@@ -504,7 +497,7 @@ class BusBracketCollectorTest {
     }
 
     /**
-     * The combat that ended the game is written, where it used to be dropped.
+     * The combat that ended the game is written.
      *
      * <p>A damage step's bracket closes at a phase boundary, and a game that
      * ends in combat damage never reaches one: {@code PhaseHandler.mainLoopStep}
@@ -532,7 +525,7 @@ class BusBracketCollectorTest {
     }
 
     /**
-     * Task 11 fix round 1, C1. The real sequencing for an ordinary non-combat
+     * The real sequencing for an ordinary non-combat
      * kill: the killing ability's own bracket opens, resolves and closes --
      * writing and clearing its own effect half -- and only afterwards, with no
      * bracket open, does the state-based check discover the game is over
@@ -799,10 +792,10 @@ class BusBracketCollectorTest {
         assertTrue(written().get(0).contains("\"outcome\":\"declined\""));
     }
 
-    // ── final-fix-3.md item 2: another game's confirmation ──────────────
+    // ── another game's confirmation ─────────────────────────────────────
 
     /**
-     * final-fix-3.md item 2: a refusal reported for an ability belonging to a
+     * A refusal reported for an ability belonging to a
      * DIFFERENT {@code Game} -- exactly {@code ForkCollector.forceResolution}'s
      * shape, since {@code GameSimulator.resolveStack} runs the forced ability
      * through the same {@code PlayerControllerAi.confirmAction}/{@code
@@ -816,7 +809,7 @@ class BusBracketCollectorTest {
      * <p>Companion to {@code OutcomeHandlerTest
      * .anOutcomeFromAnotherGameDoesNotReachThisGamesBracket} and {@code
      * ClauseContractTest.aClauseFromAnotherGameDoesNotReachThisGamesBracket},
-     * which cover the same fix on {@code ClauseOutcomeRouter}'s two hooks; this
+     * which cover the same check on {@code ClauseOutcomeRouter}'s two hooks; this
      * one is on {@code BusBracketCollector} because {@code confirmHandler} is
      * declared there instead.
      */

@@ -27,13 +27,11 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 /**
  * Four bus events Forge already fires, read the way the schema names them.
  *
- * <p>Energy is the one that mattered: it is a player counter, so it arrives on
- * {@code GameEventPlayerCounters} rather than an event of its own, and nothing
- * had ever subscribed to that event — the reason a corpus of ten million
- * records held no energy at all and an Aether Hub resolution reads as an
- * ability that does nothing. Radiation, speed and day/night are each on a
- * dedicated event and were in exactly the same state: declared in the
- * vocabulary, reachable on the bus, and never read.
+ * <p>Energy is the subtle one: it is a player counter, so it arrives on
+ * {@code GameEventPlayerCounters} rather than an event of its own, and
+ * without a subscriber there an Aether Hub resolution reads as an ability
+ * that does nothing. Radiation, speed and day/night are each on a dedicated
+ * event: declared in the vocabulary, reachable on the bus, and read here.
  */
 @ExtendWith(ForgeExtension.class)
 class BusEventsTest {
@@ -42,9 +40,7 @@ class BusEventsTest {
 
     /**
      * Energy is a player counter, so it arrives on the counters event and not on
-     * one of its own. Nothing subscribed to that event, which is why a corpus of
-     * ten million records contains no energy at all and Aether Hub reads as an
-     * ability that does nothing.
+     * one of its own. Unread, Aether Hub reads as an ability that does nothing.
      */
     @Test
     void anEnergyCounterBecomesAnEnergyChangeEvent() {
@@ -158,8 +154,9 @@ class BusEventsTest {
     /**
      * The winner is a NAME on the event, and every other subject on this
      * branch is a ref -- resolved back to the real {@link Player} by matching
-     * {@code getLobbyPlayer().getName()}, the same defect shape Task 7 shipped
-     * once already ({@code damage_prevented.source}).
+     * {@code getLobbyPlayer().getName()}; a name left unresolved would break
+     * the ref convention the way an unresolved {@code damage_prevented.source}
+     * would.
      */
     @Test
     void theWinnerResolvesToTheMatchingPlayersRef() {
@@ -208,8 +205,7 @@ class BusEventsTest {
      *
      * <p>It has a record already -- the activation half, with what was paid. As a
      * zone_change it lands in whichever bracket is open, so an opponent's
-     * response reads as something the resolving ability did; it was 54% of the
-     * whole channel.
+     * response reads as something the resolving ability did.
      */
     @Test
     void aMoveOntoTheStackIsNotRecordedAsAnOutcome() {

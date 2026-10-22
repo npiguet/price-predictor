@@ -259,24 +259,23 @@ class OutcomeHandlerTest {
                 "a ref like damage_dealt's, not a display name: " + written);
     }
 
-    // ── F2: another game's ability must not reach this game's bracket ────
+    // ── another game's ability must not reach this game's bracket ────────
 
     /**
-     * F2: an outcome reported for an ability that belongs to a DIFFERENT
+     * An outcome reported for an ability that belongs to a DIFFERENT
      * {@code Game} -- exactly the shape {@code ForkCollector.forceResolution}
      * produces, since {@code GameSimulator.resolveStack} runs the real
      * resolution pipeline against a {@code GameCopier} clone under
      * {@code AIOption.USE_FULL_SIMULATION} regardless of how this game's own
-     * lobby seats were registered (ruling R31) -- must not reach the live
+     * lobby seats were registered -- must not reach the live
      * game's bracket. {@code GameCopier} builds every copied {@code Card}
      * against a new {@code Game} object, so a fork's ability's own host card
      * already carries a different {@code Game} than this collector's.
      *
-     * <p>{@code vote_taken} and {@code coin_flipped} (the concrete types
-     * named in final-fix-1.md F2) are both outcome-hook types, so this
-     * exercises {@link ClauseOutcomeRouter#outcomeHandler()} rather than the
-     * clause hook -- {@code ClauseContractTest} covers the clause hook's own
-     * half of the same fix.
+     * <p>{@code vote_taken} and {@code coin_flipped} are both outcome-hook
+     * types, so this exercises {@link ClauseOutcomeRouter#outcomeHandler()}
+     * rather than the clause hook -- {@code ClauseContractTest} covers the
+     * clause hook's own half of the same check.
      *
      * <p>The same report for a live ability follows it into the same bracket
      * and is written, so the fork's is refused by the game-identity check
@@ -407,28 +406,25 @@ class OutcomeHandlerTest {
         throw new AssertionError("an unterminated string: " + json);
     }
 
-    // ── final-fix-3.md item 1 / final-fix-4.md item 1: a null-ability ────
-    // ── outcome's own game signal, at the shapes production reaches ──────
+    // ── a null-ability outcome's own game signal, at the shapes ──────────
+    // ── production reaches ───────────────────────────────────────────────
 
     /**
-     * The critical regression. {@code GameAction.reveal}'s {@code
-     * card_revealed} and {@code ReplacementHandler}'s {@code
-     * damage_prevented} (rulings R10, R11/R12) report through {@code
+     * {@code GameAction.reveal}'s {@code card_revealed} and {@code
+     * ReplacementHandler}'s {@code damage_prevented} report through {@code
      * EffectRecordOutcomes.note} with a literal {@code null} ability,
-     * <em>always</em> -- F2's {@code args[0] instanceof SpellAbility} gate
-     * (final-fix-1.md) makes that {@code instanceof} false unconditionally,
-     * which silently dropped both channels on the live game, not just on a
-     * fork.
+     * <em>always</em> -- so a game-identity gate on {@code args[0] instanceof
+     * SpellAbility} alone would drop both channels on the live game, not just
+     * on a fork.
      *
      * <p>Asserted on what reaches the shard, as every test here is: an event
-     * read off the handler before its delivery gate cannot see this class of
-     * bug, which is how the channel went dead unnoticed.
+     * read off the handler before its delivery gate cannot see a channel that
+     * dies at the gate.
      *
-     * <p>final-fix-4.md item 1: replaces the previous version of this test,
-     * which opened a resolution bracket for an ability nothing was actually
-     * resolving -- a synthetic composite ("pointer null" and "bracket open")
-     * production never produces. Real combat damage reaches this method with
-     * <em>no</em> bracket open at all, which is the shape used here.
+     * <p>Real combat damage reaches this method with <em>no</em> bracket open
+     * at all, which is the shape used here, rather than a bracket open for an
+     * ability nothing is resolving ("pointer null" and "bracket open"), a
+     * composite production never produces.
      */
     @Test
     void aNullAbilityOutcomeDuringLiveCombatDamageReachesTheShard() throws Throwable {
@@ -457,16 +453,13 @@ class OutcomeHandlerTest {
     }
 
     /**
-     * final-fix-4.md item 1 (Critical guard gap): pins the resolving-clause
-     * pointer branch directly, which nothing did before this test existed.
-     * {@code return !ForkCollector.isForkRunningOnThisThread();} -- the exact
-     * single-signal version the report built and discarded to demonstrate the
-     * naive-fail-open trap -- passed every test in this class, because no
-     * test ever set the pointer: the combat-damage test above leaves it null
-     * by construction, and the probe test below only ever exercises the flag.
-     * So did dropping the {@link LiveGame#owns(CardTraitBase)}
-     * delegate and returning {@code true} whenever the pointer is merely
-     * non-null. This resolves a real ability -- through {@code
+     * Pins the resolving-clause pointer branch directly. The combat-damage
+     * test above leaves the pointer null by construction, and the probe test
+     * below only exercises the flag, so without this one a single-signal
+     * {@code return !ForkCollector.isForkRunningOnThisThread();} would pass
+     * every test in this class, as would dropping the {@link
+     * LiveGame#owns(CardTraitBase)} delegate and returning {@code true}
+     * whenever the pointer is merely non-null. This resolves a real ability -- through {@code
      * AbilityUtils.resolve}, not a synthesized call -- so the pointer is
      * genuinely set the way {@code ForkCollector.forceResolution}'s own
      * forced ability sets it, and installs a real {@code
@@ -479,9 +472,8 @@ class OutcomeHandlerTest {
      * around the fork's resolution, purely so the buffered event has
      * somewhere to flush to -- {@code BusBracketCollector} only ever writes
      * {@code bracketEvents} on a matching {@code endBracket}, discarding them
-     * unflushed otherwise (confirmed by hand: this test read back an empty
-     * shard under both the correct implementation and the naive one before
-     * this bracket was added, which is not evidence of anything). This
+     * unflushed otherwise, and an empty shard would read the same under the
+     * correct implementation and the naive one. This
      * mirrors {@code anOutcomeFromAnotherGameDoesNotReachThisGamesBracket}'s
      * own live bracket, opened for the same reason. It answers a different
      * question than which ability the pointer names: the pointer is set (and
