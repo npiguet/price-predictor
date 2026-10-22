@@ -51,12 +51,11 @@ import java.util.StringJoiner;
  * in whatever zone it sits (1), the global state, the battlefield and
  * command-zone effect cards (2), the unreferenced stack (3), and unreferenced
  * hands and graveyards (4). The depth is the same on every record, whatever
- * collector or run wrote it, because a depth that varied made
- * {@code state.tiers} a proxy for how a record was collected: interventional
- * forks once rendered four tiers while every other collector rendered two or
- * three, so tier 4 identified {@code interventional} exactly, and a flag the
- * schema bars from ever being a model input had a perfect proxy sitting in the
- * state.
+ * collector or run wrote it, because a depth that varies makes
+ * {@code state.tiers} a proxy for how a record was collected: a tier only the
+ * interventional forks rendered would identify {@code interventional} exactly,
+ * and a flag the schema bars from ever being a model input would have a
+ * perfect proxy sitting in the state.
  */
 public final class SnapshotBuilder {
 

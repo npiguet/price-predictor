@@ -52,9 +52,9 @@ final class LayerContributions {
             for (KeywordInterface keyword : cell.getValue().getKeywords()) {
                 into.keyword(keyword.getOriginal());
             }
-            // The same channel's other half. A static that takes a keyword
-            // away had no path to keywords_lost, which is a head field, so
-            // "loses flying" and "does nothing" recorded identically.
+            // The same channel's other half, and the only path to
+            // keywords_lost, which is a head field: without it a static that
+            // takes a keyword away records "loses flying" as "does nothing".
             for (String removed : cell.getValue().getRemoveKeywords()) {
                 into.keyword("-" + removed);
             }
