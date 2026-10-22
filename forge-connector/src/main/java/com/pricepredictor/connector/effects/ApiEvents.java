@@ -834,11 +834,7 @@ final class ApiEvents {
                     continue;
                 }
                 for (GameEntity target : changed.getTargets().getTargetEntities()) {
-                    if (target instanceof Card card) {
-                        targets.add(SnapshotBuilder.entityId(card));
-                    } else if (target instanceof Player player) {
-                        targets.add(SnapshotBuilder.playerId(player));
-                    }
+                    Refs.ofAny(target).ifPresent(targets::add);
                 }
             }
         }

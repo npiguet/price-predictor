@@ -1,6 +1,5 @@
 package com.pricepredictor.connector.effects;
 
-import java.lang.reflect.Method;
 
 /**
  * Whether this JVM's Forge carries the attribution patch.

@@ -1087,4 +1087,28 @@ class ProvenanceKeyTest {
 
         assertEquals(reasons.size(), new java.util.HashSet<>(reasons).size());
     }
+
+    /** A resolution names a line or says why it has none, never both nor neither. */
+    @Test
+    void aResolutionIsALineOrAReason() {
+        ProvenanceKey key = new ProvenanceKey(
+                "cardsfolder/c/cryptic_command.txt", 0, ProvenanceKey.KIND_SPELL, 0);
+
+        org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class,
+                () -> new ProvenanceKey.Resolved(key, ProvenanceKey.UNRESOLVED_UNKNOWN_KIND));
+        org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class,
+                () -> new ProvenanceKey.Resolved(null, null));
+    }
+
+    /** A mode's option goes onto a line, and leaves a reason alone. */
+    @Test
+    void anOptionKeysTheModeOfALineAndLeavesAReasonAlone() {
+        ProvenanceKey key = new ProvenanceKey(
+                "cardsfolder/c/cryptic_command.txt", 0, ProvenanceKey.KIND_SPELL, 0);
+        ProvenanceKey.Resolved line = new ProvenanceKey.Resolved(key, null);
+
+        assertEquals(key.withOption(2), line.withOption(2).key());
+        assertEquals(line, line.withOption(null));
+        assertEquals(ProvenanceKey.Resolved.UNKNOWN, ProvenanceKey.Resolved.UNKNOWN.withOption(2));
+    }
 }

@@ -94,36 +94,36 @@ final class BusEvents {
     }
 
     private static String cardRef(CardView view) {
-        return view == null ? null : "E" + view.getId();
+        return view == null ? null : Refs.of(view);
     }
 
     private static String playerRef(PlayerView view) {
-        return view == null ? null : "P" + view.getId();
+        return view == null ? null : Refs.of(view);
     }
 
     static EffectEvent cardDamaged(GameEventCardDamaged event, boolean combat) {
         return new EffectEvent(EffectEvent.DAMAGE_DEALT)
-                .subject("E" + event.card().getId())
+                .subject(Refs.of(event.card()))
                 .param("amount", event.amount())
                 .param("combat", combat);
     }
 
     static EffectEvent playerDamaged(GameEventPlayerDamaged event) {
         return new EffectEvent(EffectEvent.DAMAGE_DEALT)
-                .subject("P" + event.target().getId())
+                .subject(Refs.of(event.target()))
                 .param("amount", event.amount())
                 .param("combat", event.combat());
     }
 
     static EffectEvent lifeChanged(GameEventPlayerLivesChanged event) {
         return new EffectEvent(EffectEvent.LIFE_CHANGE)
-                .subject("P" + event.player().getId())
+                .subject(Refs.of(event.player()))
                 .param("delta", event.newLives() - event.oldLives());
     }
 
     static EffectEvent poisoned(GameEventPlayerPoisoned event) {
         return new EffectEvent(EffectEvent.POISON_CHANGE)
-                .subject("P" + event.receiver().getId())
+                .subject(Refs.of(event.receiver()))
                 .param("delta", event.amount());
     }
 
@@ -159,19 +159,19 @@ final class BusEvents {
             return null;
         }
         return new EffectEvent(EffectEvent.ENERGY_CHANGE)
-                .subject("P" + event.receiver().getId())
+                .subject(Refs.of(event.receiver()))
                 .param("delta", event.amount() - event.oldValue());
     }
 
     static EffectEvent radiation(GameEventPlayerRadiation event) {
         return new EffectEvent(EffectEvent.RADIATION_CHANGE)
-                .subject("P" + event.receiver().getId())
+                .subject(Refs.of(event.receiver()))
                 .param("delta", event.change());
     }
 
     static EffectEvent speed(GameEventSpeedChanged event) {
         return new EffectEvent(EffectEvent.SPEED_CHANGED)
-                .subject("P" + event.player().getId())
+                .subject(Refs.of(event.player()))
                 .param("delta", event.newValue() - event.oldValue());
     }
 
@@ -265,7 +265,7 @@ final class BusEvents {
 
     static EffectEvent counters(GameEventCardCounters event) {
         return new EffectEvent(EffectEvent.COUNTER_CHANGE)
-                .subject("E" + event.card().getId())
+                .subject(Refs.of(event.card()))
                 .param("counter_type", event.type().getName().toUpperCase(Locale.ROOT))
                 .param("delta", event.newValue() - event.oldValue());
     }
@@ -273,7 +273,7 @@ final class BusEvents {
     static EffectEvent tapped(GameEventCardTapped event) {
         return new EffectEvent(
                 event.tapped() ? EffectEvent.TAPPED : EffectEvent.UNTAPPED)
-                .subject("E" + event.card().getId());
+                .subject(Refs.of(event.card()));
     }
 
     /**
@@ -317,7 +317,7 @@ final class BusEvents {
             return null;
         }
         return new EffectEvent(EffectEvent.ZONE_CHANGE)
-                .subject("E" + event.card().getId())
+                .subject(Refs.of(event.card()))
                 .param("from_zone", from)
                 .param("to_zone", to);
     }
@@ -364,7 +364,7 @@ final class BusEvents {
             return null;
         }
         return new EffectEvent(type)
-                .subject("P" + event.card().getOwner().getId())
+                .subject(Refs.of(event.card().getOwner()))
                 .param("count", 1);
     }
 
@@ -376,7 +376,7 @@ final class BusEvents {
         boolean attaching = event.newTarget() != null;
         return new EffectEvent(
                 attaching ? EffectEvent.ATTACHED : EffectEvent.UNATTACHED)
-                .subject("E" + event.equipment().getId());
+                .subject(Refs.of(event.equipment()));
     }
 
     /**
@@ -390,7 +390,7 @@ final class BusEvents {
         if (event.player() == null || count <= 0) {
             return List.of();
         }
-        String player = "P" + event.player().getId();
+        String player = Refs.of(event.player());
         return List.of(
                 new EffectEvent(EffectEvent.CARD_LOOKED_AT)
                         .subject(player).param("count", count),
@@ -404,7 +404,7 @@ final class BusEvents {
         if (event.player() == null || count <= 0) {
             return List.of();
         }
-        String player = "P" + event.player().getId();
+        String player = Refs.of(event.player());
         List<EffectEvent> events = new ArrayList<>();
         events.add(new EffectEvent(EffectEvent.CARD_LOOKED_AT)
                 .subject(player).param("count", count));

@@ -4,7 +4,6 @@ import forge.ImageKeys;
 import forge.StaticData;
 import forge.card.CardRules;
 import forge.card.CardStateName;
-import forge.card.ICardFace;
 import forge.game.CardTraitBase;
 import forge.game.card.Card;
 import forge.game.card.CardState;
@@ -81,6 +80,20 @@ public record ProvenanceKey(
         return new ProvenanceKey(scriptFile, face, traitKind, indexWithinKind, option);
     }
 
+    /**
+     * The key for a report a person reads, such as an undefined SVar's:
+     * {@code (cardsfolder/a/abrade.txt) face0/spell[0]/option1}.
+     */
+    public String describe() {
+        StringBuilder sb = new StringBuilder()
+                .append('(').append(scriptFile).append(") face").append(face)
+                .append('/').append(traitKind).append('[').append(indexWithinKind).append(']');
+        if (option != null) {
+            sb.append("/option").append(option);
+        }
+        return sb.toString();
+    }
+
     /** The root this key names: itself, or the charm a mode key belongs to. */
     public ProvenanceKey root() {
         return option == null ? this : new ProvenanceKey(scriptFile, face, traitKind, indexWithinKind);
@@ -107,6 +120,29 @@ public record ProvenanceKey(
      * model input.
      */
     public record Resolved(ProvenanceKey key, String reason) {
+
+        /**
+         * No line, for a trait that is none of the kinds a printed line can be,
+         * or no trait at all.
+         */
+        public static final Resolved UNKNOWN = new Resolved(null, UNRESOLVED_UNKNOWN_KIND);
+
+        public Resolved {
+            if ((key == null) == (reason == null)) {
+                throw new IllegalArgumentException(
+                        "exactly one of a key and a reason: " + key + ", " + reason);
+            }
+        }
+
+        /**
+         * The same line's mode at {@code option}, or this when there is no
+         * option or no line to give it to: a mode nothing could place keeps
+         * the root key, and a reason stays a reason.
+         */
+        public Resolved withOption(Integer option) {
+            return option == null || key == null
+                    ? this : new Resolved(key.withOption(option), null);
+        }
 
         /** The acting-line list a record carries: the key, or nothing. */
         public List<ProvenanceKey> keys() {
@@ -246,11 +282,7 @@ public record ProvenanceKey(
      */
     public static Resolved resolve(CardTraitBase trait) {
         Resolved root = resolveRoot(trait);
-        if (root.key() == null) {
-            return root;
-        }
-        Integer option = CharmModes.optionOf(trait);
-        return option == null ? root : new Resolved(root.key().withOption(option), null);
+        return root.key() == null ? root : root.withOption(CharmModes.optionOf(trait));
     }
 
     private static Resolved resolveRoot(CardTraitBase trait) {
@@ -258,7 +290,7 @@ public record ProvenanceKey(
             // Not a resolver failure: a hook whose signature drifted hands the
             // collector something that is not a trait at all, and nothing that
             // is not one of the five kinds can name a printed line.
-            return new Resolved(null, UNRESOLVED_UNKNOWN_KIND);
+            return Resolved.UNKNOWN;
         }
         Set<CardTraitBase> seen =
                 Collections.newSetFromMap(new IdentityHashMap<>());

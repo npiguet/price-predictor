@@ -1386,10 +1386,10 @@ class PatchedCollectorTest {
     void aBranchIsCompletedOnlyAgainstItsOwnDamageStep() {
         try (RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1")) {
             PatchedCollectors collector = withForks(writer);
-            collector.hold(branch(ForkCollector.SUBSTEP_FIRST_STRIKE));
-            collector.hold(branch(ForkCollector.SUBSTEP_REGULAR));
+            collector.hold(branch(DamageStep.FIRST_STRIKE.wireName()));
+            collector.hold(branch(DamageStep.REGULAR.wireName()));
 
-            collector.writeHeldProbes("run.0-l1.9", ForkCollector.SUBSTEP_REGULAR);
+            collector.writeHeldProbes("run.0-l1.9", DamageStep.REGULAR.wireName());
 
             assertEquals(1L, collector.recordsWritten());
             assertEquals(1, collector.heldProbeCount(),
@@ -1402,8 +1402,8 @@ class PatchedCollectorTest {
     void theOldestHeldStepIsTheOneACombatRecordCompletes() {
         try (RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1")) {
             PatchedCollectors collector = withForks(writer);
-            collector.hold(branch(ForkCollector.SUBSTEP_FIRST_STRIKE));
-            collector.hold(branch(ForkCollector.SUBSTEP_REGULAR));
+            collector.hold(branch(DamageStep.FIRST_STRIKE.wireName()));
+            collector.hold(branch(DamageStep.REGULAR.wireName()));
 
             collector.writeHeldProbes("run.0-l1.9");
 
@@ -1417,9 +1417,9 @@ class PatchedCollectorTest {
     void aBranchFromAStepThatWroteNoRecordIsDropped() {
         try (RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1")) {
             PatchedCollectors collector = withForks(writer);
-            collector.hold(branch(ForkCollector.SUBSTEP_FIRST_STRIKE));
+            collector.hold(branch(DamageStep.FIRST_STRIKE.wireName()));
 
-            assertEquals(1, collector.discardStaleProbes(ForkCollector.SUBSTEP_REGULAR));
+            assertEquals(1, collector.discardStaleProbes(DamageStep.REGULAR.wireName()));
             assertEquals(0, collector.heldProbeCount());
             assertEquals(0L, collector.recordsWritten());
         }

@@ -60,7 +60,7 @@ import java.util.function.Supplier;
 public final class PatchedCollectors implements AutoCloseable {
 
     private final Game game;
-    private final RecordShardWriter writer;
+    private final CollectorContext context;
     private final SnapshotBuilder snapshots;
     private final AttributionMode mode;
     private final String gameId;
@@ -107,8 +107,6 @@ public final class PatchedCollectors implements AutoCloseable {
     static final boolean CAN_SUPPRESS = PatchHooks.present(
             "forge.game.card.Card",
             "getTypeWithout", "getColorWithout", "getKeywordsWithout");
-
-    private long recordsWritten;
 
     /** The caps and budgets every collecting supervisor shares (FR-028). */
     public record CollectionCaps(
@@ -217,11 +215,11 @@ public final class PatchedCollectors implements AutoCloseable {
             Game game, RecordShardWriter writer, String gameId,
             CollectionCaps caps, long seed) {
         this.game = game;
-        this.writer = writer;
+        this.context = new CollectorContext(writer, gameId);
         this.gameId = gameId;
         this.caps = caps;
         this.snapshots = new SnapshotBuilder(game);
-        this.mode = AttributionMode.detect();
+        this.mode = context.mode();
         this.sampler = new java.util.Random(scramble(seed));
     }
 
@@ -254,7 +252,7 @@ public final class PatchedCollectors implements AutoCloseable {
     public void withForks(ForkCollector forks) {
         this.forks = forks;
         if (forks != null) {
-            forks.setRandomSeatPlayerId(randomSeatPlayerId);
+            forks.setRandomSeatPlayerId(context.randomSeatPlayerId());
         }
     }
 
@@ -271,7 +269,7 @@ public final class PatchedCollectors implements AutoCloseable {
     }
 
     public long recordsWritten() {
-        return recordsWritten + (forks == null ? 0 : forks.recordsWritten());
+        return context.recordsWritten() + (forks == null ? 0 : forks.recordsWritten());
     }
 
     /**
@@ -486,12 +484,9 @@ public final class PatchedCollectors implements AutoCloseable {
         JVM_REWRITES.record(
                 modeOf(trait), wireResult, outgoing != null, !ranKeys.isEmpty(),
                 before, after);
-        return new EffectRecord(
-                writer.nextRecordId(), writer.runId(),
-                RecordShardWriter.timestamp(), gameId,
-                EffectRecord.KIND_REWRITE, mode)
+        return context.newRecord(EffectRecord.KIND_REWRITE)
                 .actor(controllerOf(source))
-                .ability(resolveKey(acting))
+                .ability(ProvenanceKey.resolve(acting))
                 .state(snapshots.toJsonForTrait(source, referencedOf(source), incoming))
                 .payload(EffectRecord.rewritePayload(
                         incoming, outgoing, wireResult, ranKeys));
@@ -878,12 +873,9 @@ public final class PatchedCollectors implements AutoCloseable {
         CardTraitBase acting = trait instanceof CardTraitBase ctb ? ctb : null;
         Card source = acting == null ? null : acting.getHostCard();
         EffectEvent event = describeParams(trait, runParams);
-        return new EffectRecord(
-                writer.nextRecordId(), writer.runId(),
-                RecordShardWriter.timestamp(), gameId,
-                EffectRecord.KIND_TRIGGER, mode)
+        return context.newRecord(EffectRecord.KIND_TRIGGER)
                 .actor(controllerOf(source))
-                .ability(resolveKey(acting))
+                .ability(ProvenanceKey.resolve(acting))
                 .state(snapshots.toJsonForTrait(source, referencedOf(source), event))
                 .payload("{\"event\":" + event.toJson()
                         + ",\"fired\":" + fired + "}");
@@ -1029,14 +1021,11 @@ public final class PatchedCollectors implements AutoCloseable {
         // playability record measured in the first corpus was this subkind:
         // the AI re-asks the same question about the same board, and the
         // answer repeats verbatim.
-        if (!allowDistinctRecord("decision", payload, state)) {
+        if (!allowDistinctRecord(EffectRecord.SUBKIND_DECISION, payload, state)) {
             return;
         }
-        emit(new EffectRecord(
-                writer.nextRecordId(), writer.runId(),
-                RecordShardWriter.timestamp(), gameId,
-                EffectRecord.KIND_PLAYABILITY, mode)
-                .subkind("decision")
+        emit(context.newRecord(EffectRecord.KIND_PLAYABILITY)
+                .subkind(EffectRecord.SUBKIND_DECISION)
                 .actor(playerIdOrActive(decider))
                 .state(state)
                 .payload(payload));
@@ -1064,13 +1053,7 @@ public final class PatchedCollectors implements AutoCloseable {
         List<String> ids = new ArrayList<>();
         for (GameEntity entity
                 : candidate.getTargetRestrictions().getAllCandidates(candidate)) {
-            String id = entity instanceof Card card
-                    ? SnapshotBuilder.entityId(card)
-                    : entity instanceof Player player
-                            ? SnapshotBuilder.playerId(player) : null;
-            if (id != null) {
-                ids.add(id);
-            }
+            Refs.ofAny(entity).ifPresent(ids::add);
             if (ids.size() >= MAX_LEGAL_TARGETS) {
                 break;
             }
@@ -1165,7 +1148,7 @@ public final class PatchedCollectors implements AutoCloseable {
         }
         String payload = "{\"legal_attackers\":" + attackers
                 + ",\"forbidden\":" + forbidden + "}";
-        emitLegality("attackers", decider, payload);
+        emitLegality(EffectRecord.SUBKIND_ATTACKERS, decider, payload);
     }
 
     /**
@@ -1199,7 +1182,7 @@ public final class PatchedCollectors implements AutoCloseable {
                 + ",\"legal_blockers\":" + blockers
                 + ",\"forbidden\":" + forbidden
                 + ",\"min_blockers\":" + minBlockers + "}";
-        emitLegality("blockers", decider, payload);
+        emitLegality(EffectRecord.SUBKIND_BLOCKERS, decider, payload);
     }
 
     private void emitLegality(String subkind, Player decider, String payload) {
@@ -1207,10 +1190,7 @@ public final class PatchedCollectors implements AutoCloseable {
         if (!allowLegalityRecord(subkind, payload, state)) {
             return;
         }
-        emit(new EffectRecord(
-                writer.nextRecordId(), writer.runId(),
-                RecordShardWriter.timestamp(), gameId,
-                EffectRecord.KIND_PLAYABILITY, mode)
+        emit(context.newRecord(EffectRecord.KIND_PLAYABILITY)
                 .subkind(subkind)
                 .actor(playerIdOrActive(decider))
                 .whatIf(false)
@@ -1389,15 +1369,11 @@ public final class PatchedCollectors implements AutoCloseable {
         if (forks == null || !caps.probesEnabled() || mode == AttributionMode.DEGRADED) {
             return;
         }
-        var phase = game.getPhaseHandler();
-        if (phase == null || phase.getPhase() == null) {
+        DamageStep step = DamageStep.of(game.getPhaseHandler());
+        if (step == null) {
             return;
         }
-        String step = phase.getPhase().toString();
-        if (!step.contains("COMBAT_DAMAGE") && !step.contains("FIRST_STRIKE_DAMAGE")) {
-            return;
-        }
-        boolean firstStrike = step.contains("FIRST_STRIKE");
+        boolean firstStrike = step == DamageStep.FIRST_STRIKE;
         if (firstStrike && !anyFirstStriker()) {
             // Forge always enters the first-strike step and skips it when no
             // combatant has first or double strike, so the phase event alone is
@@ -1409,8 +1385,7 @@ public final class PatchedCollectors implements AutoCloseable {
             // survived and were completed against the *regular* step's record.
             return;
         }
-        String substep = firstStrike
-                ? ForkCollector.SUBSTEP_FIRST_STRIKE : ForkCollector.SUBSTEP_REGULAR;
+        String substep = step.wireName();
         discardStaleProbes(substep);
         // One keyword per game rather than whichever the battlefield order
         // reaches first. With eight probed keywords and a budget of two, the
@@ -1999,11 +1974,7 @@ public final class PatchedCollectors implements AutoCloseable {
             return;
         }
         for (Object subject : subjects) {
-            if (subject instanceof Card card) {
-                event.subject(SnapshotBuilder.entityId(card));
-            } else if (subject instanceof Player player) {
-                event.subject(SnapshotBuilder.playerId(player));
-            }
+            Refs.ofAny(subject).ifPresent(event::subject);
         }
     }
 
@@ -2030,13 +2001,7 @@ public final class PatchedCollectors implements AutoCloseable {
      * than being silently dropped.
      */
     private static Object outcomeRefOf(Object value) {
-        if (value instanceof Card card) {
-            return SnapshotBuilder.entityId(card);
-        }
-        if (value instanceof Player player) {
-            return SnapshotBuilder.playerId(player);
-        }
-        return value;
+        return Refs.ofAny(value).<Object>map(ref -> ref).orElse(value);
     }
 
     // ── mana records ────────────────────────────────────────────────────
@@ -2082,13 +2047,10 @@ public final class PatchedCollectors implements AutoCloseable {
             // until the game ends. The state is snapshotted here, at the moment
             // the mana was made, so a record that does survive describes the
             // board it was actually produced on.
-            EffectRecord record = new EffectRecord(
-                    writer.nextRecordId(), writer.runId(),
-                    RecordShardWriter.timestamp(), gameId,
-                    EffectRecord.KIND_RESOLUTION, mode)
-                    .moment("resolution")
+            EffectRecord record = context.newRecord(EffectRecord.KIND_RESOLUTION)
+                    .moment(EffectRecord.MOMENT_RESOLUTION)
                     .actor(player)
-                    .ability(resolveKey(ability))
+                    .ability(ProvenanceKey.resolve(ability))
                     .state(snapshots.toJson(null, List.of()))
                     .payload("{\"events\":[" + event.toJson() + "]}");
             List<EffectRecord> held =
@@ -2287,10 +2249,7 @@ public final class PatchedCollectors implements AutoCloseable {
             if (!allowDistinctRecord("continuous", payload, state)) {
                 continue;
             }
-            emit(new EffectRecord(
-                    writer.nextRecordId(), writer.runId(),
-                    RecordShardWriter.timestamp(), gameId,
-                    EffectRecord.KIND_CONTINUOUS, mode)
+            emit(context.newRecord(EffectRecord.KIND_CONTINUOUS)
                     .actor(SnapshotBuilder.playerId(source.getHostCard().getController()))
                     .ability(acting)
                     .state(state)
@@ -3060,16 +3019,10 @@ public final class PatchedCollectors implements AutoCloseable {
      * left the pending-event overlay with nothing to attach to.
      */
     private static String subjectOf(Object value) {
-        if (value instanceof Card card) {
-            return SnapshotBuilder.entityId(card);
-        }
-        if (value instanceof Player player) {
-            return SnapshotBuilder.playerId(player);
-        }
         if (value instanceof SpellAbility ability && ability.getHostCard() != null) {
             return SnapshotBuilder.entityId(ability.getHostCard());
         }
-        return null;
+        return Refs.ofAny(value).orElse(null);
     }
 
     /**
@@ -3192,31 +3145,17 @@ public final class PatchedCollectors implements AutoCloseable {
     }
 
     /**
-     * The printed line a runtime trait came from, as a one-element list.
+     * The printed line a runtime trait came from, as a list of at most one.
      *
-     * <p>Takes a {@link CardTraitBase} rather than a {@link SpellAbility}
-     * because a trigger and a replacement effect are traits too, and both hooks
-     * hand the collector the trait object itself — which is what the trigger and
-     * rewrite handlers were dropping. A null key is not an error, so a record
-     * whose line cannot be attributed still carries its host card and its
-     * snapshot rather than being suppressed.
+     * <p>For the payload fields that carry keys but no reason — a playability
+     * candidate, a rewrite's {@code replaced_by}. A record's own acting line
+     * goes through {@link ProvenanceKey#resolve} instead, keeping the reason
+     * there is no key: an empty {@code ability} with nothing beside it cannot
+     * separate "this card has no printed line anywhere" from "the resolver
+     * regressed".
      */
     static List<ProvenanceKey> keysOf(CardTraitBase trait) {
-        return resolveKey(trait).keys();
-    }
-
-    /**
-     * The same lookup, keeping the reason there was no key.
-     *
-     * <p>What every record-envelope call site wants. {@link #keysOf} throws the
-     * reason away, which is how every record with no acting line came to spell
-     * it {@code ability: []} and say nothing more — leaving "this card has no
-     * printed line anywhere" and "the resolver regressed" as the same row. The
-     * list form survives only for the playability payload, where the keys go
-     * into a candidate list that has no field to carry a reason.
-     */
-    static ProvenanceKey.Resolved resolveKey(CardTraitBase trait) {
-        return ProvenanceKey.resolve(trait);
+        return ProvenanceKey.resolve(trait).keys();
     }
 
     /**
@@ -3255,26 +3194,19 @@ public final class PatchedCollectors implements AutoCloseable {
     }
 
     /**
-     * The match's random seat, as a player id, or null when it has none.
+     * Name the match's random seat; the fork collector learns it too.
      *
-     * <p>Every record is stamped against it at the write (FR-030), the mana
-     * reservoir's held records included: the seat is fixed for the game, so
-     * the stamp reads the same whenever it is applied.
+     * <p>The mana reservoir's held records are stamped against it when they are
+     * written, like every other record: the seat is fixed for the game.
      */
-    private String randomSeatPlayerId;
-
-    /** Name the match's random seat; the fork collector learns it too. */
     public void setRandomSeatPlayerId(String playerId) {
-        this.randomSeatPlayerId = playerId;
+        context.setRandomSeatPlayerId(playerId);
         if (forks != null) {
             forks.setRandomSeatPlayerId(playerId);
         }
     }
 
     private void emit(EffectRecord record) {
-        record.randomSeat(
-                randomSeatPlayerId != null && randomSeatPlayerId.equals(record.actorPlayer()));
-        writer.write(record.toJson());
-        recordsWritten++;
+        context.emit(record);
     }
 }

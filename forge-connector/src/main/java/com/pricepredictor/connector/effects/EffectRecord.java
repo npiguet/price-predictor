@@ -44,6 +44,13 @@ public final class EffectRecord {
     public static final String MOMENT_ACTIVATION = "activation";
     public static final String MOMENT_RESOLUTION = "resolution";
 
+    /** A candidate the AI weighed at priority, with the verdict on it. */
+    public static final String SUBKIND_DECISION = "decision";
+    /** Who may attack, declared at the attackers step. */
+    public static final String SUBKIND_ATTACKERS = "attackers";
+    /** Who may block an attacker, declared at the blockers step. */
+    public static final String SUBKIND_BLOCKERS = "blockers";
+
     public static final String OUTCOME_RESOLVED = "resolved";
     public static final String OUTCOME_FIZZLED = "fizzled";
     public static final String OUTCOME_PARTIALLY_FIZZLED = "partially_fizzled";

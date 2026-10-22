@@ -49,15 +49,6 @@ public final class ForkCollector {
     public static final int MAX_FORKS_PER_RESOLUTION = 2;
 
     /**
-     * The two damage steps, spelled as the bracket collector spells them.
-     *
-     * <p>A held branch and the real record it mirrors must agree about which
-     * step they describe, and the two are written by different classes.
-     */
-    public static final String SUBSTEP_FIRST_STRIKE = "first_strike";
-    public static final String SUBSTEP_REGULAR = "regular";
-
-    /**
      * No turn could be read, so the pairing guard stands down.
      *
      * <p>A collector with no live game — the unit tests' shape — has no turn
@@ -153,31 +144,24 @@ public final class ForkCollector {
     }
 
     private final Game game;
-    private final RecordShardWriter writer;
-    private final String gameId;
-    private final AttributionMode mode;
+    private final CollectorContext context;
     private final int interventionsPerGame;
     private final int probesPerGame;
     private final List<String> probeKeywords;
     private final Random random;
     /** The draws a forced resolution makes, over the same seeded source. */
     private final RandomChoices choices;
-    /** The match's random seat, for the {@code random_seat} stamp, or null. */
-    private String randomSeatPlayerId;
 
     private int interventionsUsed;
     private int probesUsed;
     private final Map<Integer, Integer> forksPerResolution = new HashMap<>();
     private int discarded;
-    private long recordsWritten;
 
     public ForkCollector(
             Game game, RecordShardWriter writer, String gameId,
             PatchedCollectors.CollectionCaps caps, long seed) {
         this.game = game;
-        this.writer = writer;
-        this.gameId = gameId;
-        this.mode = AttributionMode.detect();
+        this.context = new CollectorContext(writer, gameId);
         this.interventionsPerGame = caps.interventionsPerGame();
         this.probesPerGame = caps.probesPerGame();
         this.probeKeywords = List.copyOf(caps.probeKeywords());
@@ -191,12 +175,12 @@ public final class ForkCollector {
     }
 
     public long recordsWritten() {
-        return recordsWritten;
+        return context.recordsWritten();
     }
 
     /** Name the match's random seat; every record this writes is stamped against it. */
     public void setRandomSeatPlayerId(String playerId) {
-        this.randomSeatPlayerId = playerId;
+        context.setRandomSeatPlayerId(playerId);
     }
 
     /** Forks created and thrown away rather than written: a copy the score
@@ -371,10 +355,10 @@ public final class ForkCollector {
             // names a printed line, which the copy shares — but keying off
             // the copy would make the record's identity depend on a game
             // that no longer exists.
-            ProvenanceKey.Resolved keys = keysOf(ability);
+            ProvenanceKey.Resolved keys = ProvenanceKey.resolve(ability);
             String actorId = SnapshotBuilder.playerId(perspective);
             if (resolution.modes().isEmpty()) {
-                emit(forkedHalf(actorId, keys, state, resolution.events()));
+                context.emit(forkedHalf(actorId, keys, state, resolution.events()));
                 return true;
             }
             // A modal resolution: one effect half per chosen mode, by the same
@@ -387,10 +371,9 @@ public final class ForkCollector {
                     resolution.events(), modes, resolution.stateBasedLeaves());
             for (int i = 0; i < modes.size(); i++) {
                 ModeBoundary boundary = modes.get(i);
-                ProvenanceKey.Resolved modeKeys = boundary.option() == null || keys.key() == null
-                        ? keys
-                        : new ProvenanceKey.Resolved(keys.key().withOption(boundary.option()), null);
-                emit(forkedHalf(actorId, modeKeys, boundary.state(), halves.get(i)));
+                context.emit(forkedHalf(
+                        actorId, keys.withOption(boundary.option()), boundary.state(),
+                        halves.get(i)));
             }
             return true;
         } finally {
@@ -405,10 +388,7 @@ public final class ForkCollector {
     private EffectRecord forkedHalf(
             String actorId, ProvenanceKey.Resolved keys, String state,
             List<EffectEvent> events) {
-        return new EffectRecord(
-                writer.nextRecordId(), writer.runId(),
-                RecordShardWriter.timestamp(), gameId,
-                EffectRecord.KIND_RESOLUTION, mode)
+        return context.newRecord(EffectRecord.KIND_RESOLUTION)
                 .moment(EffectRecord.MOMENT_RESOLUTION)
                 .interventional(true)
                 .fork(true)
@@ -643,10 +623,7 @@ public final class ForkCollector {
             return false;
         }
         probesUsed++;
-        emit(new EffectRecord(
-                writer.nextRecordId(), writer.runId(),
-                RecordShardWriter.timestamp(), gameId,
-                EffectRecord.KIND_COMBAT, mode)
+        context.emit(context.newRecord(EffectRecord.KIND_COMBAT)
                 .fork(true)
                 .interventional(false)
                 .mirrorOf(mirrorOfRecordId)
@@ -761,7 +738,7 @@ public final class ForkCollector {
                     PatchedCollectors.normalizeKeyword(keyword),
                     SnapshotBuilder.entityId(carrier), state, sink.events(),
                     SnapshotBuilder.playerId(perspective), shape.fields(),
-                    firstStrike ? SUBSTEP_FIRST_STRIKE : SUBSTEP_REGULAR,
+                    (firstStrike ? DamageStep.FIRST_STRIKE : DamageStep.REGULAR).wireName(),
                     // The *live* game's turn, which is also the fork's: the copier
                     // carries the counter across (GameCopier hands it to
                     // devModeSet), and the corpus agrees -- not one of the 1,788
@@ -870,10 +847,7 @@ public final class ForkCollector {
                             + "; its own damage step wrote no record");
             return false;
         }
-        emit(new EffectRecord(
-                writer.nextRecordId(), writer.runId(),
-                RecordShardWriter.timestamp(), gameId,
-                EffectRecord.KIND_COMBAT, mode)
+        context.emit(context.newRecord(EffectRecord.KIND_COMBAT)
                 .fork(true)
                 .interventional(false)
                 .mirrorOf(mirrorOfRecordId)
@@ -912,28 +886,11 @@ public final class ForkCollector {
         return game.getPhaseHandler().getTurn();
     }
 
-    /** The acting line, or the reason there is none — see the sibling in
-     *  {@link BusBracketCollector}: a fork's record is as entitled to say why
-     *  it has no line as a real one. */
-    private static ProvenanceKey.Resolved keysOf(SpellAbility ability) {
-        if (ability == null) {
-            return new ProvenanceKey.Resolved(null, ProvenanceKey.UNRESOLVED_UNKNOWN_KIND);
-        }
-        return ProvenanceKey.resolve(ability);
-    }
-
     private static List<Card> referencedOf(SpellAbility ability) {
         List<Card> referenced = new ArrayList<>();
         if (ability != null && ability.getHostCard() != null) {
             referenced.add(ability.getHostCard());
         }
         return referenced;
-    }
-
-    private void emit(EffectRecord record) {
-        record.randomSeat(
-                randomSeatPlayerId != null && randomSeatPlayerId.equals(record.actorPlayer()));
-        writer.write(record.toJson());
-        recordsWritten++;
     }
 }

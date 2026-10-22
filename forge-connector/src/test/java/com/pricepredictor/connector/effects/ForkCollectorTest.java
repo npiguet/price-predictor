@@ -278,12 +278,12 @@ class ForkCollectorTest {
     void aHeldBranchNamesItsDamageStep() {
         ForkCollector.HeldProbe held = new ForkCollector.HeldProbe(
                 "trample", "E1", "{}", List.of(), "P0", "\"combat\":{}",
-                ForkCollector.SUBSTEP_FIRST_STRIKE);
+                DamageStep.FIRST_STRIKE.wireName());
 
         assertEquals("first_strike", held.substep());
         // Spelled as the bracket collector spells it, because the two classes
         // have to agree about which step they are describing.
-        assertEquals("regular", ForkCollector.SUBSTEP_REGULAR);
+        assertEquals("regular", DamageStep.REGULAR.wireName());
     }
 
     // ── the held branch knows *when* it came from ───────────────────────
@@ -335,7 +335,7 @@ class ForkCollectorTest {
         ForkCollector collector = collectorOverAGame(caps(2, 2, List.of("trample")));
         ForkCollector.HeldProbe held = new ForkCollector.HeldProbe(
                 "trample", "E1", "{}", List.of(), "P0", "\"combat\":{}",
-                ForkCollector.SUBSTEP_REGULAR);
+                DamageStep.REGULAR.wireName());
 
         assertEquals(ForkCollector.TURN_UNKNOWN, held.turn());
         assertTrue(collector.writeHeldProbe(held, "run.0-l1.9"));
@@ -345,7 +345,7 @@ class ForkCollectorTest {
     private static ForkCollector.HeldProbe branch(int turn) {
         return new ForkCollector.HeldProbe(
                 "trample", "E1", "{}", List.of(), "P0", "\"combat\":{}",
-                ForkCollector.SUBSTEP_REGULAR, turn);
+                DamageStep.REGULAR.wireName(), turn);
     }
 
     // ── the seeded source ───────────────────────────────────────────────

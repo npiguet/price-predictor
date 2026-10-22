@@ -122,11 +122,11 @@ public final class SnapshotBuilder {
 
     /** The entity id an event's subject and the snapshot both use. */
     public static String entityId(Card card) {
-        return "E" + card.getId();
+        return Refs.of(card);
     }
 
     public static String playerId(Player player) {
-        return "P" + player.getId();
+        return Refs.of(player);
     }
 
     /**
@@ -348,18 +348,8 @@ public final class SnapshotBuilder {
      * indistinguishable.
      */
     private String combatSubstep() {
-        var phase = game.getPhaseHandler();
-        if (phase.getPhase() == null) {
-            return null;
-        }
-        String name = phase.getPhase().toString();
-        if (name.contains("FIRST_STRIKE")) {
-            return "first_strike";
-        }
-        if (name.contains("COMBAT_DAMAGE")) {
-            return "regular";
-        }
-        return null;
+        DamageStep step = DamageStep.of(game.getPhaseHandler());
+        return step == null ? null : step.wireName();
     }
 
     private String playerToJson(Player player) {
@@ -663,9 +653,7 @@ public final class SnapshotBuilder {
         int chosen = 0;
         for (GameEntity target : onStack.getTargets().getTargetEntities()) {
             chosen++;
-            String id = target instanceof Card targeted
-                    ? entityId(targeted)
-                    : target instanceof Player player ? playerId(player) : null;
+            String id = Refs.ofAny(target).orElse(null);
             if (id == null) {
                 continue;
             }
@@ -824,11 +812,7 @@ public final class SnapshotBuilder {
             }
             if (acting.getTargets() != null) {
                 for (var target : acting.getTargets()) {
-                    if (target instanceof Card card) {
-                        targets.add(Json.string(entityId(card)));
-                    } else if (target instanceof Player player) {
-                        targets.add(Json.string(playerId(player)));
-                    }
+                    Refs.ofAny(target).ifPresent(ref -> targets.add(Json.string(ref)));
                 }
             }
             x = acting.getXManaCostPaid();
