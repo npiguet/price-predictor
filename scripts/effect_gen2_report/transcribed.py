@@ -122,6 +122,19 @@ TABLES = {
         [["gen-1, field terms (its whole loss)", 3.72, 3.49, 3.35, 3.29, 3.13],
          ["e64 (earlier inputs), field terms", 3.73, 3.59, 3.46, 3.48, None],
          ["e64, field terms", 3.89, 3.72, 3.47, 3.53, 3.27]]),
+    # The rarity table's texts grouped into rule families: by Forge API type, trigger mode
+    # or keyword. Source: the gen-2 record's rarity-weight section, on gen-1's corpus.
+    "rule_families.csv": (
+        ["rule family", "distinct texts", "games"],
+        [["ChangesZone triggers", 5393, 312514],
+         ["Pump", 1989, 73949],
+         ["DealDamage", 1224, 66343],
+         ["Flying", 608, 20153],
+         ["Suspend", 52, 3095],
+         ["Ninjutsu", 22, 738],
+         ["Cascade", 11, 1052],
+         ["Dredge", 7, 602],
+         ["Cypher", 0, 0]]),
     "toughness_sweep_records.csv": (
         ["record", "damage", "kind"], TOUGHNESS_SWEEP_RECORDS),
     # The toughness sweep's five activated damage records, unedited toughness: the mean

@@ -1131,6 +1131,8 @@ LINE_TARGETS = [("tap_cost", "tap cost"), ("sacrifice_cost", "sacrifice cost"),
 LINE_AMOUNTS = [("cost_total", "total mana cost"), ("damage", "damage amount"),
                 ("counters_placed", "counters placed"), ("power_change", "power change"),
                 ("toughness_change", "toughness change")]
+#: The probes record's state-dependence label, drawn below the amounts.
+LINE_STATE = [("spread", "outcome spread\nacross boards")]
 
 
 def line_properties() -> None:
@@ -1144,8 +1146,13 @@ def line_properties() -> None:
     fig, axes = plt.subplots(1, 2, figsize=(12.4, 7.2),
                              gridspec_kw={"width_ratios": [1, 1.15], "wspace": 0.38})
     for ax, targets, lo, chance in ((axes[0], LINE_TARGETS, 0.42, 0.5),
-                                    (axes[1], LINE_AMOUNTS, -0.55, 0.0)):
+                                    (axes[1], LINE_AMOUNTS + LINE_STATE, -0.55, 0.0)):
         targets = [t for t in targets if t[0] in set(d.target)]
+        if targets[-1] in LINE_STATE:
+            # The outcome spread is a label of the text's outcomes, not a stated amount.
+            ax.axhline(0.5, color=INK_SOFT, lw=0.8)
+            ax.text(1.0, 0.47, "state dependence", fontsize=7.8, color=INK_SOFT,
+                    style="italic", va="top", ha="right")
         for i, (target, label) in enumerate(targets):
             y = len(targets) - 1 - i
             ax.axhspan(y - 0.45, y + 0.45, color="#f6f6f6" if i % 2 else "white", lw=0,
@@ -2388,6 +2395,511 @@ def planned_block_labels() -> None:
     save(fig, "planned-block-labels")
 
 
+# ── the damage sweep on a triggered ability ────────────────────────────────
+
+
+def damage_sweep_triggered() -> None:
+    """The damage sweep on 20 triggered damage abilities, laid out as the spell's sweep.
+
+    The sweep sets every literal ``NumDmg$`` of the acting text, which on a trigger sits
+    in the sub-ability its ``Execute$`` names; the trigger's description keeps the amount
+    it was collected with. The target's toughness is fixed at 4, so the rule's step is
+    between 3 and 4 damage, as on the spell.
+    """
+    s = csv("sweeps.csv")
+    s = s[s.sweep == "damage_triggered"]
+    available = set(s.checkpoint)
+    panels = [("without lethality copies", None, present(
+        ["e64 (earlier inputs)", "e64", "e128"], available))]
+    for width in (64, 128, 256):
+        names = [n for n in gen2(available, copies_only=True) if WIDTH_OF[run_of(n)] == width]
+        if names:
+            panels.append((f"{width}-wide e, with copies", width, names))
+    fig, axes = plt.subplots(2, 2, figsize=(12, 7.4), sharex=True, sharey=True)
+    for ax, (title, width, names) in zip(axes.flat, panels):
+        _sweep_panel(ax, s, names)
+        ax.set_title(title, color=WIDTH_COLOUR.get(width, INK))
+    for ax in list(axes.flat)[len(panels):]:
+        ax.axis("off")
+    for ax in axes[1]:
+        ax.set_xlabel("NumDmg$ in the trigger's sub-ability line")
+    for ax in axes[:, 0]:
+        ax.set_ylabel("predicted death,\ntoughness-4 target")
+    fig.subplots_adjust(wspace=0.55, hspace=0.25)
+    fig.suptitle("Damage sweep on a triggered ability, whose amount sits in a sub-ability's "
+                 "script line: with copies, every checkpoint's\npredicted death rises with it. "
+                 "The rule kills from 4 damage up. ✓ and bold: every point on the rule's side "
+                 "of an even chance\n(dotted ▲ arm, dashed ■ A run, solid ● B run; filled the "
+                 "kept epoch, hollow the last)", x=0.01, ha="left", y=1.0)
+    save(fig, "damage-sweep-triggered")
+
+
+# ── what a linear probe reads from e: gen-1 against gen-2 ──────────────────
+
+#: The embedding-probe targets transcribed for gen-1, with each one's label.
+EMBEDDING_ROWS = [("API type", "API type", "accuracy"), ("line kind", "line kind", "accuracy"),
+                  ("cost_mana", "mana cost", "R²"), ("amt_damage", "damage amount", "R²"),
+                  ("amt_counters", "counters amount", "R²"), ("amt_life", "life amount", "R²"),
+                  ("amt_cards", "cards amount", "R²"), ("amt_power", "power amount", "R²")]
+
+
+def embedding_probes_gen1() -> None:
+    """Linear probes on e, all texts, for gen-1 and every gen-2 checkpoint; the
+    participation ratio beneath.
+
+    Gen-1's row in ``embedding_probes.csv`` holds exactly the eight targets drawn here.
+    """
+    e = csv("embedding_probes.csv")
+    g3 = csv("gate3.csv").set_index("checkpoint")
+    names = ["gen-1"] + gen2(e.checkpoint)
+    score = e.pivot_table(index="target", columns="checkpoint", values="score")
+    fig = plt.figure(figsize=(11.2, 7.6))
+    grid = fig.add_gridspec(2, 1, height_ratios=[len(EMBEDDING_ROWS), 1.25], hspace=0.32)
+    ax, pax = fig.add_subplot(grid[0]), fig.add_subplot(grid[1])
+    for i, (target, label, metric) in enumerate(EMBEDDING_ROWS):
+        y = len(EMBEDDING_ROWS) - 1 - i
+        ax.axhspan(y - 0.45, y + 0.45, color="#f6f6f6" if i % 2 else "white", lw=0, zorder=0)
+        strip(ax, y, score.loc[target], names, spread=0.36, ms=6)
+        gen2_values = score.loc[target, [n for n in names if n != "gen-1"]]
+        ax.text(1.01, y, f"gen-1 {score.loc[target, 'gen-1']:.2f}\ngen-2 "
+                f"{gen2_values.min():.2f} to {gen2_values.max():.2f}",
+                transform=ax.get_yaxis_transform(), fontsize=7.8, color=INK_SOFT,
+                va="center", linespacing=1.25)
+    ax.set_yticks(range(len(EMBEDDING_ROWS)),
+                  [f"{label}, {metric}" for _, label, metric in EMBEDDING_ROWS][::-1])
+    ax.set_ylim(-0.5, len(EMBEDDING_ROWS) - 0.5)
+    ax.set_xlim(0, 1)
+    ax.grid(axis="y", visible=False)
+    ax.set_xlabel("linear probe on e, all texts: accuracy for the two kinds, R² for the "
+                  "cost and the amounts")
+    ax.set_title("What a linear probe reads from e", pad=10)
+    pr = g3.participation_ratio
+    strip(pax, 0, pr, names, spread=0.3, ms=6)
+    gen2_pr = pr[[n for n in names if n != "gen-1"]]
+    pax.text(1.01, 0, f"gen-1 {pr['gen-1']:.2f}\ngen-2 {gen2_pr.min():.2f} to "
+             f"{gen2_pr.max():.2f}", transform=pax.get_yaxis_transform(), fontsize=7.8,
+             color=INK_SOFT, va="center", linespacing=1.25)
+    pax.set_yticks([0], ["participation ratio"])
+    pax.set_ylim(-0.5, 0.5)
+    pax.set_xlim(0, 13)
+    pax.grid(axis="y", visible=False)
+    pax.set_xlabel("participation ratio: the number of equally weighted directions that "
+                   "would give e's spread of variance")
+    pax.set_title("How many directions e spreads over", pad=8)
+    fig.legend(handles=checkpoint_handles(names), loc="lower center", ncol=6,
+               bbox_to_anchor=(0.5, -0.04), fontsize=8.3)
+    fig.suptitle("A linear probe reads a line's kind, cost and amounts better from every gen-2 "
+                 "checkpoint's e than from gen-1's,\nand gen-2's e spreads over about two to "
+                 "three times as many directions", x=0.01, ha="left", y=1.0)
+    save(fig, "embedding-probes")
+
+
+# ── the first arm against gen-1 on the shared loss ─────────────────────────
+
+
+def constant_predictor_losses(fe: pd.DataFrame) -> pd.Series:
+    """Each field's constant-predictor loss on the card-disjoint sample, ``field``.
+
+    The loss and the explained share satisfy loss = constant × (1 − explained / 100),
+    and the constant is the same at every epoch, so each epoch gives one estimate and the
+    median over epochs absorbs the rounding of the explained share to whole percent.
+    Epochs explaining 97% or more, where that rounding dominates, are left out. A field
+    whose loss stays under 0.002 at every epoch, or whose explained share is never
+    defined, has no labels in practice: 0.
+    """
+    d = fe.copy()
+    d["constant"] = d.card_disjoint_loss / (1 - d.explained_pct / 100)
+    d.loc[(d.explained_pct >= 97) | (d.card_disjoint_loss < 0.002), "constant"] = np.nan
+    out = d.groupby("field").constant.median()
+    by_field = d.groupby("field")
+    empty = (by_field.card_disjoint_loss.max() < 0.002) | by_field.explained_pct.apply(
+        lambda x: x.isna().all())
+    out[empty & out.isna()] = 0.0
+    return out
+
+
+#: Readable names for the output fields gen1_vs_first_arm names.
+FIELD_LABELS = {"gate": "affected gate", "counters_delta_p1p1": "+1/+1 counters",
+                "pt_duration": "pt_duration", "zone_outcome": "zone outcome",
+                "poison_delta": "poison", "power_delta": "power change",
+                "toughness_delta": "toughness change", "life_delta": "life change"}
+
+
+def gen1_vs_first_arm() -> None:
+    """(a) the 47 field terms summed, by epoch; (b) each field's gap at epoch 18.
+
+    Epoch 18 is the epoch of the gen-2 record's table; the gap swings from epoch to epoch
+    as much as panel (a) shows, so (b) is one epoch's split, not a mean.
+    """
+    fe = csv("fields_by_epoch.csv")
+    epoch = 18
+    first, gen1 = "e64 (earlier inputs)", "gen-1"
+    fig = plt.figure(figsize=(13.4, 7.6))
+    grid = fig.add_gridspec(1, 2, width_ratios=[1, 1.3], wspace=0.62)
+    ax, bax = fig.add_subplot(grid[0]), fig.add_subplot(grid[1])
+    styles = {gen1: dict(color=GEN1_GRAY, lw=1.8, ls="-", marker="X", ms=4),
+              first: dict(color=EARLIER_GRAY, lw=1.8, ls=(0, (4, 2)), marker="^", ms=4,
+                          mec="#666666"),
+              "e64": dict(color=NO_COPIES_GRAY, lw=1.8, ls="-", marker="^", ms=4,
+                          mec="#666666")}
+    labels = {gen1: "gen-1", first: "arm e64 (earlier inputs)", "e64": "arm e64"}
+    for run, style in styles.items():
+        d = fe[fe.run == run].groupby("epoch").card_disjoint_loss.sum()
+        ax.plot(d.index, d.values, label=labels[run], **style)
+    ax.axvline(epoch, color=INK_SOFT, lw=0.8, ls=":")
+    ax.text(epoch + 0.5, 4.68, f"epoch {epoch}: panel (b)", fontsize=7.8, color=INK_SOFT,
+            va="top")
+    ax.set_xlim(0, fe[fe.run == gen1].epoch.max() + 1)
+    ax.set_ylim(2.8, 4.7)
+    ax.set_xlabel("epoch")
+    ax.set_ylabel("card-disjoint loss, the 47 output-field terms summed")
+    ax.legend(fontsize=8.3, loc="lower left")
+    ax.set_title("(a) The shared part of the loss, by epoch", pad=10)
+
+    at = fe[fe.epoch == epoch].pivot(index="field", columns="run", values="card_disjoint_loss")
+    gap = (at[first] - at[gen1]).fillna(0)
+    const = {run: constant_predictor_losses(fe[fe.run == run]) for run in (gen1, first)}
+    mana = [f for f in gap.index if f.startswith("mana_delta_")]
+    # The affected gate is drawn whatever its gap: its constant-predictor loss fell.
+    rows = [(f, [f], gap[f]) for f in gap.index
+            if f not in mana and (abs(gap[f]) >= 0.01 or f == "gate")]
+    rows.append(("mana deltas, six fields", mana, gap[mana].sum()))
+    shown = {f for _, fs, _ in rows for f in fs}
+    rest = [f for f in gap.index if f not in shown]
+    rows.sort(key=lambda r: -r[2])
+    rows.append((f"the other {len(rest)} fields", rest, gap[rest].sum()))
+    larger, similar, smaller = PURPLE, "#bdbdbd", "#e3a39b"
+    added = {"larger": 0.0, "other": 0.0}  # the trailing fields' loss, by colour
+    for i, (label, fields, value) in enumerate(rows):
+        y = len(rows) - 1 - i
+        c1 = const[gen1].reindex(fields).sum(min_count=1)
+        c2 = const[first].reindex(fields).sum(min_count=1)
+        if label.startswith("the other"):
+            colour, note = "#e8e8e8", ""
+        else:
+            ratio = np.inf if c1 == 0 and c2 > 0 else c2 / c1 if c1 else 1.0
+            colour = larger if ratio >= 1.25 else smaller if ratio <= 0.8 else similar
+            note = f"{c1:.2f} → {c2:.2f}"
+        if value > 0:
+            added["larger" if colour == larger else "other"] += value
+        bax.barh(y, value, height=0.66, color=colour, edgecolor="white", lw=0.8)
+        name = FIELD_LABELS.get(label, label.replace("counters_delta_", "counters: ")
+                                .replace("_", " "))
+        bax.text(-0.103, y, name, ha="right", va="center", fontsize=8.2)
+        bax.text(1.03, y, note, ha="left", va="center", fontsize=7.6, color=INK_SOFT,
+                 transform=bax.get_yaxis_transform())
+        bax.text(value + (0.003 if value >= 0 else -0.003), y, f"{value:+.3f}",
+                 ha="left" if value >= 0 else "right", va="center", fontsize=7.2, color=INK)
+    total = gap.sum()
+    share = added["larger"] / (added["larger"] + added["other"])
+    bax.axvline(0, color=INK, lw=0.9)
+    bax.set_yticks([])
+    bax.set_ylim(-0.6, len(rows) - 0.4)
+    bax.set_xlim(-0.1, 0.125)
+    bax.set_xticks([-0.1, -0.05, 0, 0.05, 0.1])
+    bax.grid(axis="y", visible=False)
+    bax.text(1.03, len(rows) - 0.4, "constant-predictor\nloss, gen-1 → gen-2", fontsize=7.6,
+             color=INK_SOFT, va="bottom", transform=bax.get_yaxis_transform())
+    bax.set_xlabel(f"arm e64 (earlier inputs) minus gen-1, card-disjoint loss at epoch {epoch}"
+                   "\n(right: gen-2 trails; left: gen-2 leads)")
+    bax.set_title(f"(b) The gap of {total:+.2f} at epoch {epoch}, field by field", pad=10,
+                  x=-0.3)
+    bax.legend(handles=[Patch(color=larger, label="gen-2's constant-predictor loss is a "
+                              "quarter or more higher, or new"),
+                        Patch(color=similar, label="within a fifth either way"),
+                        Patch(color=smaller, label="a fifth or more lower, or gone"),
+                        Patch(color="#e8e8e8", label="fields under 0.01 either way, summed")],
+               loc="upper center", fontsize=7.8, bbox_to_anchor=(0.3, -0.13), ncol=2)
+    fig.suptitle("Arms e64 (earlier inputs) and e64 sat above gen-1 on the 47 output-field "
+                 "terms at every epoch from 4 on but one. At epoch 18,\nfields whose "
+                 "constant-predictor loss "
+                 f"gen-2's corpus made larger or new carry {share:.0%} of the loss the "
+                 "trailing fields add", x=0.01, ha="left", y=1.01)
+    save(fig, "gen1-vs-first-arm")
+
+
+# ── the share e carries against how much the trunk relies on it ────────────
+
+#: Board question of the ladder, the output field the [ACT]-slot ablation reads for it,
+#: its label and its colour. The affordable verdict and trigger firing are verdict bits
+#: with no ablation field; may block has no share.
+SHARE_RELIANCE = [("pt_until_end_of_turn", "pt_duration", "pump lasts until end of turn\n"
+                   "(pt_duration)", "#4b2a86"),
+                  ("affected", "gate", "card affected\n(the affected gate)", "#b8336a"),
+                  ("dies", "zone_outcome", "dies\n(zone outcome)", "#8c7a5b"),
+                  ("damage_taken", "damage_taken", "damage taken\n(damage_taken)", SLATE)]
+
+
+#: Label offsets in points for the crowded medians: ``(dx, dy, ha)``.
+SHARE_LABEL_OFFSETS = {"dies": (-30, 52, "center"), "affected": (60, -48, "left")}
+
+
+def share_vs_reliance() -> None:
+    """Median share carried by e against the loss the trunk loses without the acting e.
+
+    Share: the probes record's (rung 1 − rung 0) / (rung 3 − rung 0), MLP probes,
+    card-disjoint records. Reliance: the loss increase when matched noise replaces e at
+    the ``[ACT]`` slot alone, divided by the field's own loss. Both over the gen-2
+    checkpoints trained with lethality copies, a run whose last epoch is its kept one
+    counted once.
+    """
+    t = ladder_table()
+    names = gen2(t.index.get_level_values("checkpoint"))
+    a = csv("ablation.csv")
+    a = a[(a.replacement == "noise") & (a.scope == "act") & a.checkpoint.isin(names)]
+    a = a.assign(reliance=a.loss_increase / a.base_loss)
+    rel = a.pivot_table(index="checkpoint", columns="field", values="reliance")
+    med = t.groupby("target").median()
+    fig, ax = plt.subplots(figsize=(10.4, 6.6))
+    for target, field, label, colour in SHARE_RELIANCE:
+        share = t.loc[target, "share"].reindex(names)
+        r = rel[field].reindex(names)
+        read = not (med.loc[target, "share_o"] < ORACLE_FLOOR and med.loc[target, "share"] < 0.9)
+        ax.plot(share, r, "o", ms=4.2, color=colour, alpha=0.45, mec="none", zorder=3)
+        mx, my = share.median(), r.median()
+        ax.plot(mx, my, "o", ms=14, mec=colour, mew=2.2, color=colour if read else "white",
+                zorder=5)
+        dx, dy, ha = SHARE_LABEL_OFFSETS.get(target, (14, 0, "left"))
+        ax.annotate(f"{label}\nshare {mx:.2f}, +{my:.0%}", (mx, my), xytext=(dx, dy),
+                    textcoords="offset points", fontsize=8.2, va="center", ha=ha, color=INK,
+                    zorder=6, arrowprops=dict(arrowstyle="-", color=INK_SOFT, lw=0.6,
+                                                  shrinkA=2, shrinkB=9))
+    ax.set_yscale("log")
+    ticks = [0.25, 0.5, 1, 2, 4, 8]
+    ax.set_yticks(ticks, [f"+{t:.0%}" for t in ticks])
+    ax.yaxis.set_minor_formatter(matplotlib.ticker.NullFormatter())
+    ax.set_ylim(0.25, 9)
+    ax.set_xlim(-0.05, 1.45)
+    for x in (0, 1):
+        ax.axvline(x, color="black", lw=0.9, zorder=1)
+    ax.text(0.0, 9.3, "board alone", ha="center", va="bottom", fontsize=8)
+    ax.text(1.0, 9.3, "the model's answer", ha="center", va="bottom", fontsize=8)
+    ax.set_xlabel("share carried by e: (rung 1 − rung 0) / (rung 3 − rung 0), MLP probes, "
+                  "card-disjoint records")
+    ax.set_ylabel("reliance: loss increase when matched noise replaces e at the [ACT] slot\n"
+                  "alone, as a share of the field's own loss (log scale)")
+    corner = dict(fontsize=7.8, color=INK_SOFT, style="italic", linespacing=1.3)
+    ax.text(0.02, 7.6, "low share, high reliance: the trunk does work e could carry;\n"
+            "the probes record's rule moves it into e", va="top", **corner)
+    ax.text(1.43, 0.28, "low reliance: the field leans little\non the acting ability's e",
+            ha="right", va="bottom", **corner)
+    ax.text(1.43, 7.6, "high share, high reliance:\ne carries it and the trunk reads it",
+            ha="right", va="top", **corner)
+    handles = [Line2D([], [], marker="o", ls="none", ms=11, color=INK_SOFT, mec=INK_SOFT,
+                      label="median over the checkpoints, share interpreted"),
+               Line2D([], [], marker="o", ls="none", ms=11, color="white", mec=INK_SOFT,
+                      mew=2, label="median, share not interpreted: the oracle rung closes "
+                                   "under half the gap,\nso the rule asks for a stronger "
+                                   "probe first"),
+               Line2D([], [], marker="o", ls="none", ms=4.5, color=INK_SOFT, alpha=0.5,
+                      label="one checkpoint")]
+    fig.legend(handles=handles, loc="lower left", bbox_to_anchor=(0.06, -0.1), ncol=2,
+               fontsize=8)
+    fig.text(0.06, -0.135, "Not drawn: may block, whose share is undefined because the model "
+             "scores no better than the board alone; the affordable verdict and trigger "
+             "firing,\nwhich have no ablation field.", fontsize=7.8, color=INK_SOFT)
+    ax.set_title("Only pump duration has a share the probes record's rule can read, and there "
+                 "e carries the answer\nand the trunk relies on it; deaths and affected cards "
+                 f"need a stronger probe first ({len(names)} gen-2 checkpoints)", pad=22)
+    save(fig, "share-vs-reliance")
+
+
+# ── the noise pilots ───────────────────────────────────────────────────────
+
+
+def noise_pilot() -> None:
+    """The three stage-0 pilots: validation measures as a change from ratio 0.1, then the
+    cache measures and the value head beside gen-1's shipped cache."""
+    p = csv("noise_pilot.csv").set_index("measure")
+    g3 = csv("gate3.csv").set_index("checkpoint")
+    ratios = ["0.05", "0.1", "0.2"]
+    xs = np.arange(3)
+    fig, axes = plt.subplots(1, 5, figsize=(15.5, 3.9),
+                             gridspec_kw={"width_ratios": [1.5, 1, 1, 1, 1], "wspace": 0.42})
+    val = [("card-disjoint loss, epoch 3", "card-disjoint loss", "o"),
+           ("game-disjoint loss, epoch 3", "game-disjoint loss", "s"),
+           ("gate F1, epoch 3", "the affected gate's F1", "D"),
+           ("zone accuracy, epoch 3", "zone accuracy", "^")]
+    ax = axes[0]
+    for k, (row, label, marker) in enumerate(val):
+        v = p.loc[row, [f"ratio {r}" for r in ratios]].astype(float).values
+        change = 100 * (v / v[1] - 1)
+        ax.plot(xs + (k - 1.5) * 0.04, change, marker=marker, ms=5, lw=1.2,
+                color=[PURPLE, PURPLE_SOFT, SLATE, GRAY][k], label=label)
+    ax.axhline(0, color=INK, lw=0.8)
+    ax.axhspan(-2, 2, color="#f0f0f0", lw=0, zorder=0)
+    ax.set_ylim(-6, 6)
+    ax.set_ylabel("% change from ratio 0.1")
+    ax.set_title("validation, epoch 3", fontsize=10)
+    ax.legend(fontsize=7.5, loc="upper left", ncol=1)
+    ax.text(2.25, -5.6, "grey band: ±2%", fontsize=7.5, color=INK_SOFT, ha="right")
+    cache = [("top_component_share", "top component's share\nof e's variance", 0.30,
+              "gate 3's limit"),
+             ("participation_ratio", "participation ratio of e", None, None),
+             ("mean_pairwise_cosine", "mean pairwise cosine of e", None, None)]
+    for ax, (col, label, limit, limit_label) in zip(axes[1:4], cache):
+        v = [g3.loc[f"noise pilot {r}", col] for r in ratios]
+        ax.plot(xs, v, color=PURPLE, lw=1.4, marker="o", ms=6, zorder=3)
+        ax.axhline(g3.loc["gen-1", col], color=GEN1_GRAY, lw=1.0, ls="--")
+        ax.text(2.3, g3.loc["gen-1", col], f"gen-1's cache\n{g3.loc['gen-1', col]:g}",
+                fontsize=7.3, color=GEN1_GRAY, ha="right", va="bottom")
+        if limit is not None:
+            ax.axhline(limit, color=INK, lw=1.0)
+            ax.text(2.3, 0.02, f"solid line: {limit_label}, {limit:.2f}", fontsize=7.3,
+                    color=INK, va="bottom", ha="right")
+        for x, y in zip(xs, v):
+            ax.annotate(f"{y:g}", (x, y), xytext=(0, 7), textcoords="offset points",
+                        ha="center", fontsize=7.6)
+        top = max(max(v), g3.loc["gen-1", col], limit or 0)
+        ax.set_ylim(0, top * 1.3)
+        ax.set_title(label, fontsize=10)
+    v = p.loc["value-head training loss, epoch 3", [f"ratio {r}" for r in ratios]].astype(float)
+    ax = axes[4]
+    ax.plot(xs, v.values, color=PURPLE, lw=1.4, marker="o", ms=6)
+    for x, y in zip(xs, v.values):
+        ax.annotate(f"{y:g}", (x, y), xytext=(0, 7), textcoords="offset points", ha="center",
+                    fontsize=7.6)
+    ax.set_ylim(0, 2.6)
+    ax.set_title("value-head training loss,\nepoch 3", fontsize=10)
+    for ax in axes:
+        ax.set_xticks(xs, ratios)
+        ax.set_xlim(-0.4, 2.4)
+        ax.set_xlabel("noise ratio")
+        ax.grid(axis="x", visible=False)
+        ax.axvspan(0.75, 1.25, color=shade(PURPLE, 0.1), lw=0, zorder=0)
+    fig.suptitle("Noise pilots, three epochs on gen-1's corpus: the losses differ by about 2%, "
+                 "while ratio 0.1 (shaded) gives e the smallest top\ncomponent and the most "
+                 "directions, 0.2 breaks gate 3's limit, and the value head worsens as the "
+                 "noise grows", x=0.01, ha="left", y=1.08)
+    save(fig, "noise-pilot")
+
+
+# ── activated pings at a toughness-1 creature ──────────────────────────────
+
+
+def ping_deaths() -> None:
+    """Predicted death of a toughness-1 creature under each of the four activated 1-damage
+    pings of the toughness sweep, per checkpoint, the median marked."""
+    sr = csv("sweep_records.csv")
+    meta = csv("toughness_sweep_records.csv")
+    pings = meta[(meta.kind == "activated") & (meta.damage == 1)].record
+    d = sr[(sr.sweep == "toughness") & sr.record.isin(pings) & (sr.value == 1)]
+    values = d.pivot(index="checkpoint", columns="record", values="prediction")
+    rows = [("no copies", ["e64 (earlier inputs)", "e64", "e128"])]
+    for width in (64, 128, 256):
+        rows.append((f"{width}-wide e", [n for n in gen2(values.index, copies_only=True)
+                                         if WIDTH_OF[run_of(n)] == width]))
+    order = [(group, n) for group, names in rows for n in names if n in values.index]
+    fig, ax = plt.subplots(figsize=(8.6, 0.33 * len(order) + 1.8))
+    ax.axvspan(0, 0.5, color="#ececec", lw=0, zorder=0)
+    ax.text(0.25, 0.012, "wrong side of an even chance:\npredicted to survive", ha="center",
+            va="bottom", fontsize=7.6, color=INK_SOFT, transform=ax.transAxes)
+    y, ticks, labels, prev = 0.0, [], [], None
+    for group, name in order:
+        if prev is not None and group != prev:
+            y += 0.6
+        ax.plot(values.loc[name], np.full(values.shape[1], y), "|", ms=8, mew=1.4,
+                color=run_colour(name), zorder=3)
+        ax.plot(values.loc[name].median(), y, zorder=4, **checkpoint_marker(name, 7.5))
+        ax.text(1.02, y, f"{values.loc[name].median():.2f}", va="center", fontsize=7.8,
+                color=INK_SOFT, transform=ax.get_yaxis_transform())
+        ticks.append(y)
+        labels.append(short(name))
+        prev = group
+        y += 1
+    ax.axvline(0.5, color=INK, lw=0.9)
+    ax.set_yticks(ticks, labels, fontsize=8.3)
+    for label, (_, name) in zip(ax.get_yticklabels(), order):
+        if stage_of(name) not in ("none",):
+            label.set_color(shade(WIDTH_COLOUR[WIDTH_OF[run_of(name)]], 1.0))
+    ax.set_ylim(y - 0.4, -1.0)
+    ax.set_xlim(0, 1)
+    ax.grid(axis="y", visible=False)
+    ax.text(1.02, 1.0, "median", fontsize=7.8, color=INK_SOFT, va="bottom",
+            transform=ax.transAxes)
+    ax.set_xlabel("predicted death of the toughness-1 target: marker = median of the four "
+                  "pings, ticks = each ping")
+    ax.set_title("Activated 1-damage pings at a toughness-1 creature: every 64-wide checkpoint "
+                 "but\ne64 (earlier inputs), and arm e256-lethality, predict on the median ping "
+                 "that it\nsurvives; every 128-wide checkpoint and run A256, that it dies",
+                 fontsize=10.5, pad=16)
+    save(fig, "ping-deaths")
+
+
+# ── lethal and non-lethal hits in the corpus ───────────────────────────────
+
+
+def lethal_hits() -> None:
+    """Each kind of damage in 40 training shards, split into lethal and not lethal."""
+    t = csv("lethal_hits_in_corpus.csv")
+    t.columns = ["what", "lethal", "not_lethal"]
+    labels = {"a spell or ability's damage to a targeted creature":
+              "a spell or ability's damage\nto a targeted creature",
+              "its damage to a creature it did not target":
+              "a spell or ability's damage\nto a creature it did not target",
+              "-X/-X on a targeted creature": "-X/-X on a targeted creature",
+              "combat damage to a creature": "combat damage to a creature"}
+    fig, ax = plt.subplots(figsize=(9.0, 0.62 * len(t) + 1.4))
+    lethal, short_c = PURPLE, PURPLE_SOFT
+    for i, r in t.iterrows():
+        y = len(t) - 1 - i
+        n = r.lethal + r.not_lethal
+        share = r.lethal / n
+        ax.barh(y, share, height=0.6, color=lethal, edgecolor="white", lw=1)
+        ax.barh(y, 1 - share, left=share, height=0.6, color=short_c, edgecolor="white", lw=1)
+        ax.text(share / 2, y, f"{share:.0%}  ({r.lethal:,})", ha="center", va="center",
+                fontsize=8.4, color="white")
+        ax.text(share + (1 - share) / 2, y, f"{1 - share:.0%}  ({r.not_lethal:,})",
+                ha="center", va="center", fontsize=8.4, color=INK)
+    ax.set_yticks(range(len(t)), [labels.get(w, w) for w in t.what][::-1], fontsize=8.6)
+    ax.set_xlim(0, 1)
+    ax.xaxis.set_major_formatter(matplotlib.ticker.PercentFormatter(1.0))
+    ax.grid(axis="y", visible=False)
+    ax.legend(handles=[Patch(color=lethal, label="lethal: the creature dies"),
+                       Patch(color=short_c, label="not lethal")], loc="upper center",
+              bbox_to_anchor=(0.4, -0.13), ncol=2, fontsize=8.4)
+    ax.set_axisbelow(True)
+    ax.set_title("In 40 training shards, a targeted damage spell or ability falls short of the "
+                 "toughness in 36 hits,\none in six; combat damage falls short in 1,314, more "
+                 "than one in four", fontsize=10.5)
+    save(fig, "lethal-hits")
+
+
+# ── rule families in the rarity table ──────────────────────────────────────
+
+
+def rule_families() -> None:
+    """Distinct texts and games per rule family, on a log scale; a family with none is
+    written in place of its bar."""
+    t = csv("rule_families.csv")
+    fig, axes = plt.subplots(1, 2, figsize=(10.4, 0.42 * len(t) + 1.6), sharey=True)
+    for ax, (col, label) in zip(axes, (("distinct texts", "distinct texts"),
+                                       ("games", "games"))):
+        for i, r in t.iterrows():
+            y = len(t) - 1 - i
+            v = r[col]
+            if v > 0:
+                ax.barh(y, v, height=0.62, color=PURPLE, lw=0)
+                ax.text(v * 1.12, y, f"{v:,}", va="center", fontsize=8.2, color=INK)
+            else:
+                ax.text(1.12, y, "0", va="center", fontsize=8.2, color=INK)
+        ax.set_xscale("log")
+        ax.set_xlim(1, 2e6 if col == "games" else 6e4)
+        ax.set_xticks([10 ** k for k in range(6 if col == "games" else 5)])
+        ax.xaxis.set_major_formatter(matplotlib.ticker.FuncFormatter(
+            lambda v, _: f"{v:,.0f}"))
+        ax.xaxis.set_minor_formatter(matplotlib.ticker.NullFormatter())
+        ax.set_ylim(-0.6, len(t) - 0.4)
+        ax.set_axisbelow(True)
+        ax.set_xlabel(f"{label} (log scale)")
+        ax.grid(axis="y", visible=False)
+        ax.set_title(label, fontsize=10)
+    axes[0].set_yticks(range(len(t)), list(t["rule family"])[::-1])
+    fig.suptitle("Rule families in the rarity table span nearly three orders of magnitude, in "
+                 "texts and in games; cypher has none", x=0.01, ha="left", y=1.02)
+    save(fig, "rule-families")
+
+
 def main() -> None:
     """Draw every chart, or only the ones named on the command line."""
     only = set(sys.argv[1:])
@@ -2397,7 +2909,9 @@ def main() -> None:
                   ablation, width_summary, other_sweeps, evasion_grid, evasion_ranking,
                   target_flips, colour_pips, zone_outcomes, zone_amounts, zone_who,
                   run_lineage, scorecard, loss_rise_by_field, e_over_random, ping_gate_edits,
-                  planned_block_labels):
+                  planned_block_labels, damage_sweep_triggered, embedding_probes_gen1,
+                  gen1_vs_first_arm, share_vs_reliance, noise_pilot, ping_deaths, lethal_hits,
+                  rule_families):
         if not only or chart.__name__ in only:
             chart()
 
