@@ -1,6 +1,9 @@
 package com.pricepredictor.connector.effects;
 
+import com.pricepredictor.connector.ForgeExtension;
+import forge.game.card.Card;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.IOException;
@@ -21,6 +24,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * sidecar that does not exist, and the reader fails loudly on a corpus that is
  * in fact correct.
  */
+@ExtendWith(ForgeExtension.class)
 class VariantRegistryTest {
 
     // The registry is JVM-wide, so each test names its variants uniquely.
@@ -70,13 +74,15 @@ class VariantRegistryTest {
     }
 
     @Test
-    void aVariantKeyNamesTheVariantTree(@TempDir Path dir) throws IOException {
+    void aRegisteredVariantsKeyNamesTheVariantTree(@TempDir Path dir)
+            throws IOException {
         write(dir, "lightning_bolt_variant_4.txt", "Lightning Bolt Variant 4");
         VariantRegistry.registerAll(dir);
-        assertEquals(
-                "variant-scripts/lightning_bolt_variant_4.txt",
-                CardFilenames.scriptFile(
-                        SourceTree.VARIANT_SCRIPTS, "Lightning Bolt Variant 4"));
+        Card variant = new Card(TestCards.nextCardId(), TestCards.game());
+        variant.setName("Lightning Bolt Variant 4");
+
+        assertEquals("variant-scripts/lightning_bolt_variant_4.txt",
+                ProvenanceKey.scriptFileOf(variant));
     }
 
     private static void write(Path dir, String file, String name)
