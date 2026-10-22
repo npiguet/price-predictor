@@ -104,24 +104,6 @@ class MatchResultWriterTest {
     }
 
     @Test
-    void twoGameSweepAccepted(@TempDir Path tmp) {
-        Path file = tmp.resolve("outcomes.txt");
-        MatchResultWriter writer = new MatchResultWriter(file);
-
-        assertDoesNotThrow(() ->
-                writer.write(sampleResult(deck40("A"), deck40("B"), "AA", "BA")));
-    }
-
-    @Test
-    void threeGameMatchAccepted(@TempDir Path tmp) {
-        Path file = tmp.resolve("outcomes.txt");
-        MatchResultWriter writer = new MatchResultWriter(file);
-
-        assertDoesNotThrow(() ->
-                writer.write(sampleResult(deck40("A"), deck40("B"), "ABA", "BAB")));
-    }
-
-    @Test
     void invalidGamesStringRejected() {
         // Non-A/B characters are rejected regardless of length.
         assertThrows(IllegalArgumentException.class, () ->

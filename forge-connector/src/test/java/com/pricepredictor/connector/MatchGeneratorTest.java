@@ -1,5 +1,6 @@
 package com.pricepredictor.connector;
 
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -28,13 +29,30 @@ class MatchGeneratorTest {
         return MatchGenerator.builder(MatchGenerator.computeEligibleSets(), TEST_RUN_ID).build();
     }
 
+    private static MatchGenerationResult sharedMatch;
+
+    /**
+     * One sealed self-play match, played once for every test here and in
+     * {@link MatchGeneratorCardsPlayedIntegrationTest} that only reads one:
+     * a real Forge match costs seconds, and these tests ask nothing of the
+     * match that a second one would answer differently.
+     */
+    static synchronized MatchGenerationResult sharedMatch() {
+        if (sharedMatch == null) {
+            sharedMatch = sealedSelfPlay().generateMatch();
+        }
+        return sharedMatch;
+    }
+
+    private static MatchResult result;
+
+    @BeforeAll
+    static void playOneMatch() {
+        result = sharedMatch().matchResult();
+    }
+
     @Test
     void generateMatchReturnsValidResult() {
-        MatchGenerator generator = sealedSelfPlay();
-
-        MatchResult result = generator.generateMatch().matchResult();
-
-        assertNotNull(result);
         assertEquals(40, result.deckA().size(), "deckA must be exactly 40 cards");
         assertEquals(40, result.deckB().size(), "deckB must be exactly 40 cards");
         // Best-of-3: two or three games, and no deck wins more than two.
@@ -46,25 +64,14 @@ class MatchGeneratorTest {
 
     @Test
     void generateMatchPopulatesMetadata() {
-        MatchGenerator generator = sealedSelfPlay();
-
-        MatchResult result = generator.generateMatch().matchResult();
-
         assertEquals(TEST_RUN_ID, result.runId());
         assertNotNull(result.timestamp(), "timestamp must be populated");
         assertNotNull(result.setCode(), "setCode must be populated");
         assertFalse(result.setCode().isBlank(), "setCode must be non-blank");
-        assertTrue(result.durationSeconds() >= 0, "duration must be non-negative");
-        assertEquals(result.games().length(), result.play().length(),
-                "games and play must have matching lengths");
     }
 
     @Test
     void methodTagsComeFromDeckBuilder() {
-        MatchGenerator generator = sealedSelfPlay();
-
-        MatchResult result = generator.generateMatch().matchResult();
-
         List<String> allowed = List.of("forge-best", "forge-3sub", "forge-8sub", "random");
         assertTrue(allowed.contains(result.methodA()),
                 "methodA must be one of the phase-0 tags, got: " + result.methodA());

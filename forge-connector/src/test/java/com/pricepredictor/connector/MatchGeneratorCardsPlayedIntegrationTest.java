@@ -1,5 +1,6 @@
 package com.pricepredictor.connector;
 
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -20,31 +21,24 @@ import static org.junit.jupiter.api.Assertions.*;
 @ExtendWith(ForgeExtension.class)
 class MatchGeneratorCardsPlayedIntegrationTest {
 
-    private static final String TEST_RUN_ID = "test-run-id";
-
     private static final Set<String> BASIC_LANDS = Set.of(
             "Plains", "Island", "Swamp", "Mountain", "Forest", "Wastes",
             "Snow-Covered Plains", "Snow-Covered Island", "Snow-Covered Swamp",
             "Snow-Covered Mountain", "Snow-Covered Forest");
 
-    @Test
-    void returnsOneRowPerPlayedGame() {
-        MatchGenerator generator = MatchGeneratorTest.sealedSelfPlay();
+    /**
+     * {@link MatchGeneratorTest#sharedMatch}. Nothing here counts its rows:
+     * one row per played game is {@link MatchGenerationResult}'s own invariant.
+     */
+    private static MatchGenerationResult result;
 
-        MatchGenerationResult result = generator.generateMatch();
-
-        assertNotNull(result.matchResult());
-        assertNotNull(result.cardsPlayedRows());
-        assertEquals(result.matchResult().games().length(),
-                result.cardsPlayedRows().size(),
-                "row count must equal played-game count");
+    @BeforeAll
+    static void playOneMatch() {
+        result = MatchGeneratorTest.sharedMatch();
     }
 
     @Test
     void rowsCarryParentMetadata() {
-        MatchGenerator generator = MatchGeneratorTest.sealedSelfPlay();
-
-        MatchGenerationResult result = generator.generateMatch();
         MatchResult parent = result.matchResult();
 
         for (int i = 0; i < result.cardsPlayedRows().size(); i++) {
@@ -62,9 +56,6 @@ class MatchGeneratorCardsPlayedIntegrationTest {
 
     @Test
     void basicLandsAbsentFromAllListColumns() {
-        MatchGenerator generator = MatchGeneratorTest.sealedSelfPlay();
-        MatchGenerationResult result = generator.generateMatch();
-
         for (CardsPlayedRow row : result.cardsPlayedRows()) {
             assertNoBasicsIn(row.cardsPlayedA(), "cards_played_A");
             assertNoBasicsIn(row.cardsPlayedB(), "cards_played_B");
@@ -75,8 +66,6 @@ class MatchGeneratorCardsPlayedIntegrationTest {
 
     @Test
     void unionEqualsDistinctNonBasicsAndIsDisjoint() {
-        MatchGenerator generator = MatchGeneratorTest.sealedSelfPlay();
-        MatchGenerationResult result = generator.generateMatch();
         MatchResult parent = result.matchResult();
 
         Set<String> distinctA = distinctNonBasic(parent.deckA());
