@@ -17,8 +17,9 @@ import java.util.zip.GZIPInputStream;
  * One game's collectors writing one shard, and the records they wrote.
  *
  * <p>Wired as a worker wires them: the patched collectors file their clause
- * and outcome events through the bracket. The shard is closed before it is
- * read, so every record the body caused is on disk.
+ * and outcome events through the bracket, and a run with the hooks installed
+ * records through {@link GameRecording} itself. The shard is closed before it
+ * is read, so every record the body caused is on disk.
  *
  * <p>The writer creates its file only when it writes a record, so a run that
  * wrote nothing leaves no shard, and reading one fails. A test that expects
@@ -45,6 +46,12 @@ final class ShardRun {
     @FunctionalInterface
     interface Observed {
         void run(BusBracketCollector bracket) throws Throwable;
+    }
+
+    /** What a test plays while a game is recorded the way a worker records it. */
+    @FunctionalInterface
+    interface Played {
+        void run() throws Throwable;
     }
 
     /** A forced resolution: whether it wrote a record, and the shard it wrote to. */
@@ -77,40 +84,58 @@ final class ShardRun {
     }
 
     static Path shardOf(Path dir, Game game, CollectionCaps caps, Body body) throws Throwable {
-        return run(dir, game, caps, body, null);
+        return shardOf(dir, game, caps, null, body);
     }
 
-    /**
-     * Run {@code body} with the bracket on the game's bus and every hook the
-     * checkout offers installed, as a game in progress has them; skipped on a
-     * checkout without the clause hook.
-     *
-     * @param why what the test needs the clause hook for, shown when it skips
-     */
-    static List<String> recordsWithClauseHook(Path dir, Game game, String why, Body body)
-            throws Throwable {
-        return readShard(run(dir, game, CollectionCaps.defaults(), body, why));
+    /** The same, for a match whose random seat is {@code randomSeatPlayerId}. */
+    static List<String> recordsWithRandomSeat(
+            Path dir, Game game, String randomSeatPlayerId, Body body) throws Throwable {
+        return readShard(shardOf(dir, game, CollectionCaps.defaults(), randomSeatPlayerId, body));
     }
 
-    private static Path run(
-            Path dir, Game game, CollectionCaps caps, Body body, String hookNeededFor)
+    private static Path shardOf(
+            Path dir, Game game, CollectionCaps caps, String randomSeatPlayerId, Body body)
             throws Throwable {
         RecordShardWriter writer = new RecordShardWriter(dir, RUN, 0, LIFETIME);
         try {
-            BusBracketCollector bracket = new BusBracketCollector(game, writer, GAME_ID);
+            BusBracketCollector bracket = new BusBracketCollector(
+                    game, TestCollectors.context(writer, GAME_ID, randomSeatPlayerId));
             try (PatchedCollectors collectors = new PatchedCollectors(
-                    game, writer, GAME_ID, caps, SEED)) {
-                if (hookNeededFor != null) {
-                    game.subscribeToEvents(bracket);
-                    assumeClauseHook(collectors, hookNeededFor);
-                }
-                collectors.withBracket(bracket);
+                    game, TestCollectors.context(writer, GAME_ID, randomSeatPlayerId),
+                    caps, SEED, bracket, null)) {
                 body.run(bracket, collectors);
             }
         } finally {
             writer.close();
         }
         return writer.path();
+    }
+
+    /**
+     * Play {@code body} with the game recorded as a worker records it: the
+     * bracket on the game's bus and every hook the checkout offers installed;
+     * skipped on a checkout without the clause hook.
+     *
+     * <p>No fork budget, so the phase boundaries the body crosses copy nothing.
+     *
+     * @param why what the test needs the clause hook for, shown when it skips
+     */
+    static List<String> recordsWithClauseHook(Path dir, Game game, String why, Played body)
+            throws Throwable {
+        assumeClauseHook(why);
+        CollectionCaps defaults = CollectionCaps.defaults();
+        CollectionCaps noForks = new CollectionCaps(
+                defaults.manaCap(), defaults.playabilityRate(), 0, 0, List.of(),
+                defaults.randomSeatShare(), defaults.randomSeatProbability());
+        RecordShardWriter writer = new RecordShardWriter(dir, RUN, 0, LIFETIME);
+        try (GameRecording recording =
+                new GameRecording(game, writer, GAME_ID, noForks, SEED, null)) {
+            recording.open();
+            body.run();
+        } finally {
+            writer.close();
+        }
+        return readShard(writer.path());
     }
 
     // ── observed off the bus ────────────────────────────────────────────
@@ -123,7 +148,7 @@ final class ShardRun {
     static List<String> observed(Path dir, Game game, Observed body) throws Throwable {
         RecordShardWriter writer = new RecordShardWriter(dir, RUN, 0, LIFETIME);
         try {
-            BusBracketCollector bracket = new BusBracketCollector(game, writer, GAME_ID);
+            BusBracketCollector bracket = TestCollectors.bracket(game, writer, GAME_ID);
             game.subscribeToEvents(bracket);
             body.run(bracket);
         } finally {
@@ -139,7 +164,8 @@ final class ShardRun {
         RecordShardWriter writer = new RecordShardWriter(dir, RUN, 0, LIFETIME);
         boolean wrote;
         try {
-            wrote = new ForkCollector(game, writer, GAME_ID, caps, seed).intervene(ability, 1);
+            wrote = new ForkCollector(game, TestCollectors.context(writer, GAME_ID), caps, seed)
+                    .intervene(ability, 1);
         } finally {
             writer.close();
         }
@@ -156,23 +182,25 @@ final class ShardRun {
     static Fork forkedWithClauseHook(
             Path dir, Game game, CollectionCaps caps, long seed, SpellAbility ability,
             String why) {
+        assumeClauseHook(why);
         RecordShardWriter writer = new RecordShardWriter(dir, RUN, 0, LIFETIME);
         boolean wrote;
         try (PatchedCollectors collectors = new PatchedCollectors(
-                game, writer, GAME_ID, caps, SEED)) {
-            assumeClauseHook(collectors, why);
-            ForkCollector forks = new ForkCollector(game, writer, GAME_ID, caps, seed);
-            collectors.withForks(forks);
-            wrote = forks.intervene(ability, 1);
+                game, TestCollectors.context(writer, GAME_ID), caps, SEED,
+                TestCollectors.bracket(game, writer, GAME_ID), null)) {
+            collectors.install();
+            wrote = new ForkCollector(game, TestCollectors.context(writer, GAME_ID), caps, seed)
+                    .intervene(ability, 1);
         } finally {
             writer.close();
         }
         return new Fork(wrote, writer.path());
     }
 
-    private static void assumeClauseHook(PatchedCollectors collectors, String why) {
+    private static void assumeClauseHook(String why) {
         Assumptions.assumeTrue(
-                collectors.install() > 0 && PatchHooks.CLAUSE_LISTENER.present(),
+                AttributionMode.detect() == AttributionMode.PATCHED
+                        && PatchHooks.CLAUSE_LISTENER.present(),
                 "../forge has no clause hook" + (why.isEmpty() ? "" : " " + why));
     }
 

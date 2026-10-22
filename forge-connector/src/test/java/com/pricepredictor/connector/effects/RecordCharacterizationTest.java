@@ -28,12 +28,10 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.io.TempDir;
 
-import java.lang.reflect.Field;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.Callable;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -292,8 +290,8 @@ class RecordCharacterizationTest {
         board.game.getAction().checkStaticAbilities();
         SpellAbility bolt = board.spell(board.hand("Lightning Bolt", you), you);
 
-        List<String> records = records(board, CAPS, (bracket, collectors) -> {
-            collectors.setRandomSeatPlayerId(SnapshotBuilder.playerId(opponent));
+        List<String> records = records(board, CAPS, SnapshotBuilder.playerId(opponent),
+                (bracket, collectors) -> {
             HookShapes.proxy(HookShapes.Playability.class, collectors.playabilityHandler())
                     .onCandidate(bolt);
 
@@ -344,11 +342,9 @@ class RecordCharacterizationTest {
      * degraded, one cost half, and one effect half through the root line
      * holding every mode's bus events, since no clause hook splits them.
      *
-     * <p>The collector reads its mode from {@link AttributionMode#detect},
-     * which probes the sub-ability hook once per JVM; the probe's answer is
-     * set to degraded while the collector is built, as on a stock checkout,
-     * and put back after. The events are published outside any resolution,
-     * where the sub-ability pointer is empty as it always is unpatched.
+     * <p>The collector is handed the mode a stock checkout's probe answers.
+     * The events are published outside any resolution, where the
+     * sub-ability pointer is empty as it always is unpatched.
      */
     @Test
     void aDegradedWorkersModalResolution() throws Exception {
@@ -367,8 +363,8 @@ class RecordCharacterizationTest {
 
         writer = new RecordShardWriter(tempDir, "run", 0, "l1");
         try {
-            BusBracketCollector bracket = degraded(
-                    () -> new BusBracketCollector(board.game, writer, GAME_ID));
+            BusBracketCollector bracket = new BusBracketCollector(board.game,
+                    new CollectorContext(writer, GAME_ID, AttributionMode.DEGRADED, null));
             board.game.subscribeToEvents(bracket);
             bracket.beginBracket(charm);
             board.game.fireEvent(new GameEventCardDamaged(
@@ -385,19 +381,6 @@ class RecordCharacterizationTest {
 
         Characterization.assertMatches("record-degraded.jsonl",
                 Characterization.recordLines(ShardRun.readShard(writer.path())));
-    }
-
-    /** Build {@code collector} while the JVM's attribution probe answers degraded. */
-    private static <T> T degraded(Callable<T> collector) throws Exception {
-        Field detected = AttributionMode.class.getDeclaredField("detected");
-        detected.setAccessible(true);
-        Object probed = detected.get(null);
-        detected.set(null, AttributionMode.DEGRADED);
-        try {
-            return collector.call();
-        } finally {
-            detected.set(null, probed);
-        }
     }
 
     // ── combat ──────────────────────────────────────────────────────────
@@ -430,7 +413,6 @@ class RecordCharacterizationTest {
 
         List<String> records = records(board, caps, (bracket, collectors) -> {
             board.game.subscribeToEvents(bracket);
-            collectors.withForks(new ForkCollector(board.game, writer, GAME_ID, caps, 1L));
             bracket.onCombatRecord(collectors::writeHeldProbes);
             collectors.collectProbes();
             assertTrue(combat.assignCombatDamage(false), "the step assigned no damage");
@@ -464,8 +446,8 @@ class RecordCharacterizationTest {
         CollectionCaps caps = new CollectionCaps(1, 1.0, 1, 0, List.of(), 0.0, 0.0);
 
         List<String> records = records(board, caps, (bracket, collectors) -> {
-            ForkCollector forks = new ForkCollector(board.game, writer, GAME_ID, caps, 1L);
-            collectors.withForks(forks);
+            ForkCollector forks = new ForkCollector(
+                    board.game, TestCollectors.context(writer, GAME_ID), caps, 1L);
             assertTrue(forks.intervene(pyroclasm, 1), "the fork observed nothing");
         });
 
@@ -490,12 +472,24 @@ class RecordCharacterizationTest {
      */
     private List<String> records(CharacterizationBoard board, CollectionCaps caps, Body body)
             throws Throwable {
+        return records(board, caps, null, body);
+    }
+
+    /** The same, for a match whose random seat is {@code randomSeatPlayerId}. */
+    private List<String> records(
+            CharacterizationBoard board, CollectionCaps caps, String randomSeatPlayerId,
+            Body body) throws Throwable {
         writer = new RecordShardWriter(tempDir, "run", 0, "l1");
         try {
-            BusBracketCollector bracket = new BusBracketCollector(board.game, writer, GAME_ID);
+            BusBracketCollector bracket = new BusBracketCollector(
+                    board.game, TestCollectors.context(writer, GAME_ID, randomSeatPlayerId));
+            ForkCollector forks = caps.interventionsPerGame() > 0 || caps.probesEnabled()
+                    ? new ForkCollector(board.game,
+                            TestCollectors.context(writer, GAME_ID, randomSeatPlayerId), caps, 1L)
+                    : null;
             try (PatchedCollectors collectors = new PatchedCollectors(
-                    board.game, writer, GAME_ID, caps, 1L)) {
-                collectors.withBracket(bracket);
+                    board.game, TestCollectors.context(writer, GAME_ID, randomSeatPlayerId),
+                    caps, 1L, bracket, forks)) {
                 body.run(bracket, collectors);
             }
         } finally {

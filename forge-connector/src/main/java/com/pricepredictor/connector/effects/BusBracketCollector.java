@@ -188,16 +188,10 @@ public final class BusBracketCollector extends BusEventReader {
     /** Told each combat record's id, for a probe that mirrors it. */
     private java.util.function.Consumer<String> onCombatRecord;
 
-    public BusBracketCollector(
-            Game game, RecordShardWriter writer, String gameId) {
+    BusBracketCollector(Game game, CollectorContext context) {
         super(game);
-        this.context = new CollectorContext(writer, gameId);
+        this.context = context;
         this.snapshots = new SnapshotBuilder(game);
-        // Installed here and dropped at GameEventGameFinished, because this
-        // collector has no other lifecycle: it is subscribed to the bus for
-        // exactly one game and the bus tells it when that game is over. On an
-        // unpatched checkout install() finds no hook and nothing changes.
-        PatchHooks.CONFIRM_LISTENER.install(confirmHandler());
     }
 
     /**
@@ -211,11 +205,6 @@ public final class BusBracketCollector extends BusEventReader {
      */
     public void onCombatRecord(java.util.function.Consumer<String> listener) {
         this.onCombatRecord = listener;
-    }
-
-    /** Name the match's random seat, so every record can say whether it acted. */
-    public void setRandomSeatPlayerId(String playerId) {
-        context.setRandomSeatPlayerId(playerId);
     }
 
     // ── brackets ────────────────────────────────────────────────────────
@@ -915,9 +904,6 @@ public final class BusBracketCollector extends BusEventReader {
                             + names);
         }
         pendingActivations.clear();
-        // The listener is static and this collector lives for one game, so the
-        // game ending is where it has to go.
-        PatchHooks.CONFIRM_LISTENER.uninstall();
         return abandoned;
     }
 
@@ -936,9 +922,9 @@ public final class BusBracketCollector extends BusEventReader {
      * way the trigger-condition hook is, but an accepted offer is already
      * described by the events it produced.
      *
-     * <p>Package-visible so a test can drive it through a proxy of its own. The
-     * method name and the argument positions are the whole contract with the
-     * patch — {@link PatchHooks} looks both up by string — and a typo in either
+     * <p>Package-visible because {@link GameRecording} installs it, and so a
+     * test can drive it through a proxy of its own. The method name and the
+     * argument positions are the whole contract with the patch — {@link PatchHooks} looks both up by string — and a typo in either
      * degrades this channel silently.
      */
     InvocationHandler confirmHandler() {

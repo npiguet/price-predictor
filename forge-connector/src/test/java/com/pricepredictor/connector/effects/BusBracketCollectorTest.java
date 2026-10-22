@@ -69,7 +69,7 @@ class BusBracketCollectorTest {
 
     private BusBracketCollector collector(Game game) {
         writer = new RecordShardWriter(tempDir, "run", 0, "l1");
-        return new BusBracketCollector(game, writer, "run.0-l1.0");
+        return TestCollectors.bracket(game, writer, "run.0-l1.0");
     }
 
     /**

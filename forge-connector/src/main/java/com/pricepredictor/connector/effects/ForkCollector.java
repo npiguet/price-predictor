@@ -152,11 +152,9 @@ public final class ForkCollector {
     private int probesUsed;
     private final Map<Integer, Integer> forksPerResolution = new HashMap<>();
 
-    public ForkCollector(
-            Game game, RecordShardWriter writer, String gameId,
-            CollectionCaps caps, long seed) {
+    ForkCollector(Game game, CollectorContext context, CollectionCaps caps, long seed) {
         this.game = game;
-        this.context = new CollectorContext(writer, gameId);
+        this.context = context;
         this.interventionsPerGame = caps.interventionsPerGame();
         this.probesPerGame = caps.probesPerGame();
         this.probeKeywords = List.copyOf(caps.probeKeywords());
@@ -164,12 +162,7 @@ public final class ForkCollector {
         // the sampler's seed is: games are seeded consecutively, and the first
         // draw here is a mode or target count, which an unscrambled seed would
         // make nearly the same in every game.
-        this.choices = new RandomChoices(new Random(PatchedCollectors.scramble(seed)));
-    }
-
-    /** Name the match's random seat; every record this writes is stamped against it. */
-    public void setRandomSeatPlayerId(String playerId) {
-        context.setRandomSeatPlayerId(playerId);
+        this.choices = new RandomChoices(new Random(GameRecording.scramble(seed)));
     }
 
     // ── budgets ─────────────────────────────────────────────────────────

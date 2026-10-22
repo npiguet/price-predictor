@@ -340,11 +340,11 @@ class PatchedCollectorTest {
     private PatchedCollectors withForks(RecordShardWriter writer) {
         CollectionCaps probing = new CollectionCaps(
                 1, 1.0, 2, 2, List.of("trample"), 0.0, 0.0);
-        PatchedCollectors collector = new PatchedCollectors(
-                TestCards.game(), writer, "run.0-l1.0", probing, 1L);
-        collector.withForks(
-                new ForkCollector(null, writer, "run.0-l1.0", probing, 1L));
-        return collector;
+        Game game = TestCards.game();
+        return new PatchedCollectors(
+                game, TestCollectors.context(writer, "run.0-l1.0"), probing, 1L,
+                TestCollectors.bracket(game, writer, "run.0-l1.0"),
+                new ForkCollector(null, TestCollectors.context(writer, "run.0-l1.0"), probing, 1L));
     }
 
     /**
@@ -422,8 +422,8 @@ class PatchedCollectorTest {
      * sibling Forge is patched or not independently of this repository. The
      * expected set is derived from {@link PatchHooks#REQUIRED}, so a listener
      * hook added there is expected here without editing the test. The confirm
-     * listener is excluded because the bracket collector installs it, not this
-     * class.
+     * listener is excluded because the recording installs it with the
+     * bracket's handler, not this class.
      */
     @Test
     void everyHookTheCheckoutOffersIsInstalledAndNoOthers() {
@@ -791,8 +791,8 @@ class PatchedCollectorTest {
         Player other = game.getPlayers().get(1);
         Card mine = TestBoard.inPlay(game, active, "Grizzly Bears");
 
-        List<String> lines = ShardRun.records(tempDir, game, (bracket, collectors) -> {
-            collectors.setRandomSeatPlayerId(SnapshotBuilder.playerId(active));
+        List<String> lines = ShardRun.recordsWithRandomSeat(tempDir, game,
+                SnapshotBuilder.playerId(active), (bracket, collectors) -> {
             collectors.combatLegalityHandler().invoke(null, ON_ATTACKERS_DECLARABLE,
                     new Object[]{active, other, List.of(mine), List.of(mine)});
         });

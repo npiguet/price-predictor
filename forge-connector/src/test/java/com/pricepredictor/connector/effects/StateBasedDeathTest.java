@@ -178,7 +178,7 @@ class StateBasedDeathTest {
                 spellOf(TestBoard.inHand(game, caster, "Lightning Bolt"), caster), bears);
 
         List<String> records = ShardRun.recordsWithClauseHook(
-                tempDir, game, "", (bracket, collectors) -> {
+                tempDir, game, "", () -> {
                     castAndResolve(game, bolt);
                     nextStep(game);
                 });
@@ -524,7 +524,7 @@ class StateBasedDeathTest {
         SpellAbility charm = charm(game, caster, 0, 1);
 
         List<String> records = ShardRun.recordsWithClauseHook(
-                tempDir, game, "to split the modes", (bracket, collectors) -> {
+                tempDir, game, "to split the modes", () -> {
                     castAndResolve(game, charm);
                     nextStep(game);
                 });
@@ -553,7 +553,7 @@ class StateBasedDeathTest {
         SpellAbility charm = charm(game, caster, 0, 0, 1);
 
         List<String> records = ShardRun.recordsWithClauseHook(
-                tempDir, game, "to split the modes", (bracket, collectors) -> {
+                tempDir, game, "to split the modes", () -> {
                     castAndResolve(game, charm);
                     nextStep(game);
                 });

@@ -46,7 +46,7 @@ class ManaReservoirTest {
         int trials = 20000;
         int[] survivors = new int[activations];
         for (int trial = 0; trial < trials; trial++) {
-            ManaReservoir reservoir = new ManaReservoir(1, new Random(PatchedCollectors.scramble(trial)));
+            ManaReservoir reservoir = new ManaReservoir(1, new Random(GameRecording.scramble(trial)));
             int held = -1;
             for (int i = 0; i < activations; i++) {
                 if (reservoir.slot("Mana$ G") >= 0) {
@@ -69,7 +69,7 @@ class ManaReservoirTest {
         // Otherwise the reservoir is just "keep the first", renamed.
         boolean replaced = false;
         for (int seed = 0; seed < 50 && !replaced; seed++) {
-            ManaReservoir reservoir = new ManaReservoir(1, new Random(PatchedCollectors.scramble(seed)));
+            ManaReservoir reservoir = new ManaReservoir(1, new Random(GameRecording.scramble(seed)));
             reservoir.slot("Mana$ G");
             replaced = reservoir.slot("Mana$ G") == 0;
         }

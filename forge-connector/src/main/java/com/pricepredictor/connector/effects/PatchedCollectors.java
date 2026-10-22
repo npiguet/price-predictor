@@ -65,7 +65,6 @@ public final class PatchedCollectors implements AutoCloseable {
     private final CollectorContext context;
     private final SnapshotBuilder snapshots;
     private final AttributionMode mode;
-    private final String gameId;
     private final CollectionCaps caps;
 
     /** The sampled mana records, held until the game ends. */
@@ -73,13 +72,13 @@ public final class PatchedCollectors implements AutoCloseable {
     /** Lines already offered an intervention, so a redraw does not repeat one. */
     private final Set<String> interveneSeen = new LinkedHashSet<>();
     /** Stage three's forks, or null when the run takes none. */
-    private ForkCollector forks;
+    private final ForkCollector forks;
     /**
-     * The bracket this game's clause events are filed into, or null when none
-     * is wired: {@code recordClauseEvent} is the door, and only the bracket
-     * collector for this same game knows which resolution is open.
+     * The bracket this game's clause events are filed into:
+     * {@code recordClauseEvent} is the door, and only the bracket collector for
+     * this same game knows which resolution is open.
      */
-    private BusBracketCollector bracket;
+    private final BusBracketCollector bracket;
     /** Probe branches waiting for the combat record they mirror. */
     private final ProbeQueue heldProbes = new ProbeQueue();
     /** Boards a continuous static has already been recorded on, for coalescing. */
@@ -119,86 +118,22 @@ public final class PatchedCollectors implements AutoCloseable {
             new Listener(PatchHooks.CLAUSE_LISTENER, this::clauseHandler),
             new Listener(PatchHooks.OUTCOME_LISTENER, this::outcomeHandler));
 
-    public PatchedCollectors(
-            Game game, RecordShardWriter writer, String gameId,
-            CollectionCaps caps, long seed) {
+    /**
+     * @param bracket where the clause and outcome hooks file their events
+     * @param forks   stage three's forks, or null when the run takes none
+     */
+    PatchedCollectors(
+            Game game, CollectorContext context, CollectionCaps caps, long seed,
+            BusBracketCollector bracket, ForkCollector forks) {
         this.game = game;
-        this.context = new CollectorContext(writer, gameId);
-        this.gameId = gameId;
+        this.context = context;
         this.caps = caps;
         this.snapshots = new SnapshotBuilder(game);
         this.mode = context.mode();
-        this.sampler = new java.util.Random(scramble(seed));
+        this.sampler = new java.util.Random(GameRecording.scramble(seed));
         this.manaReservoir = new ManaReservoir(caps.manaCap(), sampler);
-    }
-
-    /**
-     * Spread out a seed before it reaches {@link java.util.Random}.
-     *
-     * <p>Games are seeded consecutively, and a linear congruential generator's
-     * first output is close to a linear function of its seed — so consecutive
-     * seeds make consecutive games take nearly the same first sampling
-     * decisions. That would correlate the mana reservoir and the playability
-     * sample across a whole run, in a way no test of one game could see.
-     *
-     * <p>SplitMix64's finalizer, which is the standard mixer for exactly this.
-     */
-    public static long scramble(long seed) {
-        long z = seed + 0x9E3779B97F4A7C15L;
-        z = (z ^ (z >>> 30)) * 0xBF58476D1CE4E5B9L;
-        z = (z ^ (z >>> 27)) * 0x94D049BB133111EBL;
-        return z ^ (z >>> 31);
-    }
-
-    /**
-     * Attach stage three's fork collector.
-     *
-     * <p>Optional and off by default: with none attached, or with
-     * {@code --interventions-per-game 0}, no game is ever copied. Separate from
-     * the constructor because forking is a build decision gate 2 informs, not
-     * something every collecting run should pay for.
-     */
-    public void withForks(ForkCollector forks) {
-        this.forks = forks;
-        if (forks != null) {
-            forks.setRandomSeatPlayerId(context.randomSeatPlayerId());
-        }
-    }
-
-    /**
-     * Give the clause-event hook somewhere to file what it builds.
-     *
-     * <p>Optional in the same sense {@link #withForks} is: on a checkout
-     * without the hook, or a caller that never wires this, {@code install()}
-     * still installs the listener where the patch offers it, and the handler's
-     * null check just means nothing is ever filed.
-     */
-    public void withBracket(BusBracketCollector bracket) {
         this.bracket = bracket;
-    }
-
-    /**
-     * Subscribes {@link #collectContinuous()} to the event bus.
-     *
-     * <p>A separate object rather than {@code @Subscribe} on the collector
-     * itself, because Forge's bus reflects over every public method of a
-     * subscriber and the collector's are the handler factories and the caps.
-     */
-    public final class PhaseBridge {
-        @com.google.common.eventbus.Subscribe
-        public void onPhase(forge.game.event.GameEventTurnPhase event) {
-            collectContinuous();
-            collectInterventions();
-            // Before the turn-based action that deals the damage: the phase
-            // event fires ahead of it, which is the only moment a probe can
-            // fork from a board where nothing has been dealt yet.
-            collectProbes();
-        }
-    }
-
-    /** A bus subscriber that records continuous effects at each phase. */
-    public PhaseBridge phaseBridge() {
-        return new PhaseBridge();
+        this.forks = forks;
     }
 
     /**
@@ -206,7 +141,7 @@ public final class PatchedCollectors implements AutoCloseable {
      *
      * @return how many were found
      */
-    public int install() {
+    int install() {
         if (mode == AttributionMode.DEGRADED) {
             return 0;
         }
@@ -1052,7 +987,7 @@ public final class PatchedCollectors implements AutoCloseable {
             return null;
         }
         return keywords.get(
-                Math.floorMod(String.valueOf(gameId).hashCode(), keywords.size()));
+                Math.floorMod(String.valueOf(context.gameId()).hashCode(), keywords.size()));
     }
 
     /**
@@ -2064,19 +1999,6 @@ public final class PatchedCollectors implements AutoCloseable {
             return null;
         }
         return SnapshotBuilder.playerId(phase.getPlayerTurn());
-    }
-
-    /**
-     * Name the match's random seat; the fork collector learns it too.
-     *
-     * <p>The mana reservoir's held records are stamped against it when they are
-     * written, like every other record: the seat is fixed for the game.
-     */
-    public void setRandomSeatPlayerId(String playerId) {
-        context.setRandomSeatPlayerId(playerId);
-        if (forks != null) {
-            forks.setRandomSeatPlayerId(playerId);
-        }
     }
 
     private void emit(EffectRecord record) {

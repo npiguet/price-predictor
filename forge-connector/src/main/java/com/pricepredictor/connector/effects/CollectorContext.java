@@ -4,10 +4,10 @@ package com.pricepredictor.connector.effects;
  * What a collector of one game writes its records through.
  *
  * <p>The envelope fields every record of a game shares — the run, the game, the
- * attribution mode — and the stamp applied at the write, so the three
- * collectors build and emit a record the same way rather than each keeping a
- * copy that can drift. Each collector has its own context: they count their
- * records separately.
+ * attribution mode, the random seat — and the stamp applied at the write, so
+ * the three collectors build and emit a record the same way rather than each
+ * keeping a copy that can drift. Each collector has its own context: they
+ * count their records separately.
  */
 final class CollectorContext {
 
@@ -19,16 +19,17 @@ final class CollectorContext {
      *
      * <p>Every record is stamped against it at the write (FR-030), held records
      * included: the seat is fixed for the game, so the stamp reads the same
-     * whenever it is applied. Set after the game is created and before the
-     * first event, because the seat is decided per match and the collector per
-     * game.
+     * whenever it is applied.
      */
-    private String randomSeatPlayerId;
+    private final String randomSeatPlayerId;
 
-    CollectorContext(RecordShardWriter writer, String gameId) {
+    CollectorContext(
+            RecordShardWriter writer, String gameId, AttributionMode mode,
+            String randomSeatPlayerId) {
         this.writer = writer;
         this.gameId = gameId;
-        this.mode = AttributionMode.detect();
+        this.mode = mode;
+        this.randomSeatPlayerId = randomSeatPlayerId;
     }
 
     AttributionMode mode() {
@@ -77,14 +78,6 @@ final class CollectorContext {
     /** An id for a record built later, by {@link #newResolution(Moment, String, String)}. */
     String nextRecordId() {
         return writer.nextRecordId();
-    }
-
-    String randomSeatPlayerId() {
-        return randomSeatPlayerId;
-    }
-
-    void setRandomSeatPlayerId(String playerId) {
-        this.randomSeatPlayerId = playerId;
     }
 
     /** Stamp {@code random_seat} and write. */

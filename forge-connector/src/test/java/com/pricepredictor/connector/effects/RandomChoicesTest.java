@@ -42,7 +42,7 @@ class RandomChoicesTest {
      * a range test over them sees one value.
      */
     private static RandomChoices drawsFor(int seed) {
-        return new RandomChoices(new Random(PatchedCollectors.scramble(seed)));
+        return new RandomChoices(new Random(GameRecording.scramble(seed)));
     }
 
     // ── modes ───────────────────────────────────────────────────────────

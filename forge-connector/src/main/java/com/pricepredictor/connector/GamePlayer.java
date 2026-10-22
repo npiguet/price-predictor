@@ -1,9 +1,7 @@
 package com.pricepredictor.connector;
 
-import com.pricepredictor.connector.effects.BusBracketCollector;
 import com.pricepredictor.connector.effects.CollectionCaps;
-import com.pricepredictor.connector.effects.ForkCollector;
-import com.pricepredictor.connector.effects.PatchedCollectors;
+import com.pricepredictor.connector.effects.GameRecording;
 import com.pricepredictor.connector.effects.RecordShardWriter;
 import com.pricepredictor.connector.effects.SnapshotBuilder;
 import forge.ai.LobbyPlayerAi;
@@ -188,7 +186,7 @@ public class GamePlayer {
         // apart, and a linear congruential generator's first draw is nearly
         // a linear function of its seed.
         java.util.Random matchRandom =
-                new java.util.Random(PatchedCollectors.scramble(startMillis));
+                new java.util.Random(GameRecording.scramble(startMillis));
         Optional<Side> randomSeat = drawRandomSeat(caps, matchRandom);
         var players = registeredPlayers(
                 deckA, deckB, randomSeat, caps.randomSeatProbability(), matchRandom);
@@ -199,54 +197,12 @@ public class GamePlayer {
         var match = new Match(rules, players, "sealed-match");
 
         List<GameOutcome> outcomes = new ArrayList<>();
-        // Seeds the patched collectors' sampling, so a worker's games sample
+        // Seeds each game's recording, so a worker's games sample
         // independently of one another rather than all alike.
         long gameSeed = startMillis;
 
         while (!match.isMatchOver()) {
-            var game = match.createGame();
-            var collector = new PlayedCardCollector(game);
-            game.subscribeToEvents(collector);
-            PatchedCollectors patched = null;
-            // The seat exists before the collectors do: the match creates the
-            // player, and only then is there a game to collect from. Found by
-            // its controller rather than by lobby name, because the lobby
-            // player is what a fork clones and the controller is what a fork
-            // does not attach.
-            RandomSeatController seat = randomSeatOf(game);
-            String randomSeatPlayerId = seat == null
-                    ? null : SnapshotBuilder.playerId(seat.getPlayer());
-            if (effectRecords != null) {
-                patched = wireCollectors(game, caps, gameSeed++, randomSeatPlayerId);
-            }
-            if (seat != null) {
-                // Live from here: a fork's clone of this seat is never
-                // attached and plays as the ordinary AI. The collectors may be
-                // null, in which case the seat plays at random and reports
-                // nothing -- FR-026 keeps that combination out of a run.
-                seat.attach(game, patched);
-            }
-            try {
-                match.startGame(game); // blocks until game is finished
-            } finally {
-                if (patched != null) {
-                    patched.close();
-                }
-            }
-
-            var winningLobby = game.getOutcome().getWinningLobbyPlayer();
-            if (winningLobby == null) {
-                continue;
-            }
-            // A name neither side registered throws rather than defaulting to
-            // B: a game credited to the wrong deck is a corrupt row.
-            Side winner = Side.ofLobbyName(winningLobby.getName());
-            Side playFirst = Side.ofLobbyName(
-                    game.getStartingPlayer().getLobbyPlayer().getName());
-
-            outcomes.add(new GameOutcome(
-                    winner, playFirst,
-                    collector.getCards(Side.A), collector.getCards(Side.B)));
+            playGame(match, caps, gameSeed++).ifPresent(outcomes::add);
         }
 
         int durationSeconds = (int) ((System.currentTimeMillis() - startMillis) / 1000);
@@ -254,47 +210,56 @@ public class GamePlayer {
     }
 
     /**
-     * Subscribe and install the effect-record collectors for one game.
+     * Play the match's next game, recording its effects when the run collects
+     * them.
      *
-     * @param gameSeed seeds the patched collectors' sampling, so a worker's
-     *                 games sample independently of one another
-     * @return the patched collectors, which the caller closes when the game ends
+     * @param gameSeed seeds the game's recording
+     * @return the game's outcome, or empty for a draw or an aborted game
      */
-    private PatchedCollectors wireCollectors(
-            forge.game.Game game, CollectionCaps caps, long gameSeed,
-            String randomSeatPlayerId) {
-        // One collector per game, with the game's own id: records join to a
-        // checkpoint's recorded split by game_id, so the id has to change when
-        // the game does. Both collectors share that id — they describe the
-        // same game.
-        String gameId = effectRecords.nextGameId();
-        BusBracketCollector bracket = new BusBracketCollector(game, effectRecords, gameId);
-        bracket.setRandomSeatPlayerId(randomSeatPlayerId);
-        game.subscribeToEvents(bracket);
-        // The patched collectors reach the engine through static listeners,
-        // so they are installed for the life of one game and uninstalled after
-        // it. On a stock checkout install() finds no hook and the game plays
-        // exactly as it did before.
-        PatchedCollectors patched = new PatchedCollectors(
-                game, effectRecords, gameId, caps, gameSeed);
-        patched.setRandomSeatPlayerId(randomSeatPlayerId);
-        // Where an effect API's own parameters describe its outcome, the
-        // clause hook files the event through the same bracket the
-        // bus-derived events land in.
-        patched.withBracket(bracket);
-        if (caps.interventionsPerGame() > 0 || caps.probesEnabled()) {
-            // Stage three. Nothing is copied unless a budget says so, because
-            // a fork costs a game copy and a stack resolution.
-            patched.withForks(new ForkCollector(game, effectRecords, gameId, caps, gameSeed));
+    private Optional<GameOutcome> playGame(Match match, CollectionCaps caps, long gameSeed) {
+        var game = match.createGame();
+        var collector = new PlayedCardCollector(game);
+        game.subscribeToEvents(collector);
+        // The seat exists before the recording does: the match creates the
+        // player, and only then is there a game to record. Found by its
+        // controller rather than by lobby name, because the lobby player is
+        // what a fork clones and the controller is what a fork does not
+        // attach.
+        RandomSeatController seat = randomSeatOf(game);
+        GameRecording recording = null;
+        if (effectRecords != null) {
+            recording = new GameRecording(
+                    game, effectRecords, effectRecords.nextGameId(), caps, gameSeed,
+                    seat == null ? null : SnapshotBuilder.playerId(seat.getPlayer()));
+            recording.open();
         }
-        // A probe forks before the damage step and cannot know which combat
-        // record it mirrors until that record is written.
-        bracket.onCombatRecord(patched::writeHeldProbes);
-        patched.install();
-        // Continuous effects are read off the layer tables at a phase
-        // boundary, which is the cheapest moment the board is stable.
-        game.subscribeToEvents(patched.phaseBridge());
-        return patched;
+        if (seat != null) {
+            // Live from here: a fork's clone of this seat is never attached
+            // and plays as the ordinary AI. Without a recording the seat plays
+            // at random and reports nothing -- FR-026 keeps that combination
+            // out of a run.
+            seat.attach(game, recording == null ? null : recording.playability());
+        }
+        try {
+            match.startGame(game); // blocks until game is finished
+        } finally {
+            if (recording != null) {
+                recording.close();
+            }
+        }
+
+        var winningLobby = game.getOutcome().getWinningLobbyPlayer();
+        if (winningLobby == null) {
+            return Optional.empty();
+        }
+        // A name neither side registered throws rather than defaulting to B:
+        // a game credited to the wrong deck is a corrupt row.
+        Side winner = Side.ofLobbyName(winningLobby.getName());
+        Side playFirst = Side.ofLobbyName(
+                game.getStartingPlayer().getLobbyPlayer().getName());
+        return Optional.of(new GameOutcome(
+                winner, playFirst,
+                collector.getCards(Side.A), collector.getCards(Side.B)));
     }
 
     /** The game's random seat, by its controller, or null when it has none. */

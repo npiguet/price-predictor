@@ -1,5 +1,6 @@
 package com.pricepredictor.connector.effects;
 
+import forge.game.Game;
 import forge.game.replacement.ReplacementEffect;
 import forge.game.replacement.ReplacementHandler;
 import forge.game.trigger.Trigger;
@@ -26,6 +27,22 @@ final class TestCollectors {
                 manaCap, playabilityRate, 2, 2, List.of(), 0.0, 0.0);
     }
 
+    /** A collector's context for a match with no random seat, in this checkout's mode. */
+    static CollectorContext context(RecordShardWriter writer, String gameId) {
+        return context(writer, gameId, null);
+    }
+
+    /** The same, for a match whose random seat is {@code randomSeatPlayerId}. */
+    static CollectorContext context(
+            RecordShardWriter writer, String gameId, String randomSeatPlayerId) {
+        return new CollectorContext(writer, gameId, AttributionMode.detect(), randomSeatPlayerId);
+    }
+
+    /** A bracket writing to {@code writer}, which nothing is told a combat record of. */
+    static BusBracketCollector bracket(Game game, RecordShardWriter writer, String gameId) {
+        return new BusBracketCollector(game, context(writer, gameId));
+    }
+
     /**
      * A collector over no game and no writer.
      *
@@ -34,7 +51,8 @@ final class TestCollectors {
      * installs.
      */
     static PatchedCollectors unwired(CollectionCaps caps) {
-        return new PatchedCollectors(null, null, "game-1", caps, 42L);
+        return new PatchedCollectors(
+                null, context(null, "game-1"), caps, 42L, bracket(null, null, "game-1"), null);
     }
 
     /**
@@ -46,10 +64,11 @@ final class TestCollectors {
      * taken.
      */
     static PatchedCollectors recording(Path dir) {
+        Game game = TestCards.game();
+        RecordShardWriter writer = new RecordShardWriter(dir, "run", 0, "l1");
         return new PatchedCollectors(
-                TestCards.game(),
-                new RecordShardWriter(dir, "run", 0, "l1"),
-                "run.0-l1.0", CollectionCaps.defaults(), 1L);
+                game, context(writer, "run.0-l1.0"), CollectionCaps.defaults(), 1L,
+                bracket(game, writer, "run.0-l1.0"), null);
     }
 
     /**

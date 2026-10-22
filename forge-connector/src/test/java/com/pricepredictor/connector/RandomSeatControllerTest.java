@@ -1,7 +1,7 @@
 package com.pricepredictor.connector;
 
-import com.pricepredictor.connector.effects.PatchedCollectors;
 import com.pricepredictor.connector.effects.CollectionCaps;
+import com.pricepredictor.connector.effects.GameRecording;
 import com.pricepredictor.connector.effects.RecordShardWriter;
 import com.pricepredictor.connector.effects.SnapshotBuilder;
 import com.pricepredictor.connector.effects.TestBoard;
@@ -309,10 +309,10 @@ class RandomSeatControllerTest {
         RandomSeatController seat = seatOf(game);
         int draws = 400;
         int[] attacks = new int[creatures.size()];
-        try (PatchedCollectors collectors = new PatchedCollectors(
-                game, writer, "run.0-l1.0", CollectionCaps.defaults(), 1L)) {
-            collectors.setRandomSeatPlayerId(SnapshotBuilder.playerId(a));
-            seat.attach(game, collectors);
+        try (GameRecording recording = new GameRecording(
+                game, writer, "run.0-l1.0", CollectionCaps.defaults(), 1L,
+                SnapshotBuilder.playerId(a))) {
+            seat.attach(game, recording.playability());
             for (int draw = 0; draw < draws; draw++) {
                 Combat combat = new Combat(a);
                 game.getPhaseHandler().setCombat(combat);
@@ -359,10 +359,10 @@ class RandomSeatControllerTest {
         RandomSeatController seat = seatOf(game);
         boolean blockedOnce = false;
         boolean heldBackOnce = false;
-        try (PatchedCollectors collectors = new PatchedCollectors(
-                game, writer, "run.0-l1.0", CollectionCaps.defaults(), 1L)) {
-            collectors.setRandomSeatPlayerId(SnapshotBuilder.playerId(a));
-            seat.attach(game, collectors);
+        try (GameRecording recording = new GameRecording(
+                game, writer, "run.0-l1.0", CollectionCaps.defaults(), 1L,
+                SnapshotBuilder.playerId(a))) {
+            seat.attach(game, recording.playability());
             for (int draw = 0; draw < 100; draw++) {
                 Combat combat = new Combat(b);
                 combat.addAttacker(attacker, a);
