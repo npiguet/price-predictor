@@ -14,8 +14,10 @@ import java.util.List;
  * collectors must compute identically: which face a state is, and which
  * printed keyword a keyword-derived trait came from.
  *
- * <p>Both sides call these methods rather than each counting for itself,
- * because a key is joined by value across two JVMs, and an ordinal counted
+ * <p>Both sides take them from here rather than each counting for itself —
+ * the converter emits faces in {@link #faceOrder}, the collectors number them
+ * with {@link #faceIndex}, and both call {@link #keywordIndex} — because a key
+ * is joined by value across two JVMs, and an ordinal counted
  * differently on each side names a different line on each side while staying
  * in range on both — a silent wrong join rather than a loud failure.
  */
@@ -28,9 +30,8 @@ public final class FaceOrder {
      * The face ordinal the converter emitted a state under.
      *
      * <p>Shared by the converter and the collectors so the two cannot drift:
-     * the converter renders the main part first (LeftSplit for a split card,
-     * Original otherwise), then the specialize parts in map order, or the single
-     * other part.
+     * the converter renders a face for each state of {@link #faceOrder} that
+     * has a printed part, in that order.
      */
     public static int faceIndex(Card card, CardStateName state) {
         if (state == null) return 0;
