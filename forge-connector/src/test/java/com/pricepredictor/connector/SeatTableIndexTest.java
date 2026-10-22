@@ -87,7 +87,7 @@ class SeatTableIndexTest {
                 List.of(seat("d1", "gen4"), seat("d1", "gen4")), false);
 
         assertEquals(0, index.eligiblePodCount());
-        assertNull(index.randomPairing(false));
+        assertTrue(index.randomPairing().isEmpty());
     }
 
     @Test
@@ -96,7 +96,7 @@ class SeatTableIndexTest {
                 List.of(seat("d1", "gen4"), seat("d1", "gen4")), true);
 
         assertEquals(1, index.eligiblePodCount());
-        assertNotNull(index.randomPairing(true));
+        assertTrue(index.randomPairing().isPresent());
     }
 
     // ── Pair drawing ────────────────────────────────────────────────
@@ -111,7 +111,7 @@ class SeatTableIndexTest {
                 new Random(7));
 
         for (int i = 0; i < 200; i++) {
-            SeatTableIndex.Pairing p = index.randomPairing(false);
+            SeatTableIndex.Pairing p = index.randomPairing().orElseThrow();
             assertEquals(p.a().draftId(), p.b().draftId());
         }
     }
@@ -124,7 +124,7 @@ class SeatTableIndexTest {
                 new Random(11));
 
         for (int i = 0; i < 200; i++) {
-            SeatTableIndex.Pairing p = index.randomPairing(false);
+            SeatTableIndex.Pairing p = index.randomPairing().orElseThrow();
             assertFalse(p.a() == p.b());
         }
     }
@@ -138,7 +138,7 @@ class SeatTableIndexTest {
                 new Random(3));
 
         for (int i = 0; i < 300; i++) {
-            SeatTableIndex.Pairing p = index.randomPairing(false);
+            SeatTableIndex.Pairing p = index.randomPairing().orElseThrow();
             assertFalse(p.a().label().equals(p.b().label()));
         }
     }
@@ -152,7 +152,7 @@ class SeatTableIndexTest {
 
         boolean sawMirror = false;
         for (int i = 0; i < 300 && !sawMirror; i++) {
-            SeatTableIndex.Pairing p = index.randomPairing(true);
+            SeatTableIndex.Pairing p = index.randomPairing().orElseThrow();
             sawMirror = p.a().label().equals(p.b().label());
         }
         assertTrue(sawMirror, "a mirror pair should be reachable when included");
@@ -160,6 +160,6 @@ class SeatTableIndexTest {
 
     @Test
     void anEmptyTableYieldsNoPairing() {
-        assertNull(new SeatTableIndex(List.of(), false).randomPairing(false));
+        assertTrue(new SeatTableIndex(List.of(), false).randomPairing().isEmpty());
     }
 }

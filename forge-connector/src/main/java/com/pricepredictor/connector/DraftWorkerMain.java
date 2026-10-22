@@ -1,7 +1,5 @@
 package com.pricepredictor.connector;
 
-import forge.StaticData;
-import forge.card.CardEdition;
 import forge.gamemodes.limited.BoosterDraft;
 import forge.gamemodes.limited.DraftPack;
 import forge.gamemodes.limited.LimitedPlayerAI;
@@ -24,6 +22,7 @@ import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Random;
 import java.util.Set;
 import java.util.UUID;
@@ -224,10 +223,11 @@ public class DraftWorkerMain {
             BoosterDraft context, String setCode, AgentMix mix, Random random,
             PrintStream out, BufferedReader stdin, Set<String> externalAgents,
             String draftId, String requiredAgent) {
-        SealedTemplate template = boosterTemplate(setCode);
-        if (template == null) {
+        Optional<SealedTemplate> found = BoosterTemplates.forSet(setCode);
+        if (found.isEmpty()) {
             return new DraftResult.Skipped("no booster template for set " + setCode);
         }
+        SealedTemplate template = found.get();
 
         // Generate all boosters: booster index k = (pack-1) * POD_SIZE + openingSeat.
         DraftPack[] boosters = new DraftPack[PACKS * POD_SIZE];
@@ -305,15 +305,6 @@ public class DraftWorkerMain {
 
         return new DraftResult.Completed(
                 SENTINEL + toJson(draftId, setCode, boosters, picksByBooster, agents));
-    }
-
-    private static SealedTemplate boosterTemplate(String setCode) {
-        SealedTemplate template = StaticData.instance().getBoosters().get(setCode);
-        if (template != null) {
-            return template;
-        }
-        CardEdition edition = StaticData.instance().getEditions().get(setCode);
-        return edition == null ? null : edition.getBoosterTemplate("Draft");
     }
 
     /**

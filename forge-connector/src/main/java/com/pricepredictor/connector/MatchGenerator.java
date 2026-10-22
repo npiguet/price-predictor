@@ -319,14 +319,13 @@ public class MatchGenerator {
      * candidate exists for {@code setCode} — <b>except</b> under
      * {@code decksOnly}, which has no Forge-legal fallback to reach (its set
      * code can be a sentinel like {@code COVERAGE} that resolves against no
-     * real Forge edition, so {@link #forgeBuilt} would throw
-     * {@code NullPointerException} resolving it). A decks-only round's
-     * live-card pool shrinks monotonically as cards are satisfied, so a round
-     * with exactly one card left produces byte-identical decks,
-     * deterministically — an ordinary tail state, not a rare one — and every
-     * match attempt would hit that throw, forever: nothing is ever appended
-     * to the progress file, and {@code ForgeWorkerPool.run()} blocks
-     * indefinitely. So under {@code decksOnly} this instead accepts a mirror
+     * real Forge edition, so {@link #forgeBuilt} would find no booster
+     * template for it and throw). A decks-only round's live-card pool shrinks
+     * monotonically as cards are satisfied, so a round with exactly one card
+     * left produces byte-identical decks, deterministically — an ordinary
+     * tail state, not a rare one — and every match attempt would hit that
+     * throw: each restarted worker gives up after {@link WorkerLoop}'s cap,
+     * and the round never appends another progress line. So under {@code decksOnly} this instead accepts a mirror
      * via {@link GeneratedDecksIndex#randomAnyDeckFromSet}: a mirror match
      * still puts every card in the round's decks into a game, which is all a
      * coverage or variant round requires.
@@ -390,11 +389,8 @@ public class MatchGenerator {
     }
 
     List<PaperCard> generatePool(String setCode) {
-        SealedTemplate template = StaticData.instance().getBoosters().get(setCode);
-        if (template == null) {
-            CardEdition edition = StaticData.instance().getEditions().get(setCode);
-            template = edition.getBoosterTemplate("Draft");
-        }
+        SealedTemplate template = BoosterTemplates.forSet(setCode).orElseThrow(
+                () -> new IllegalArgumentException("No booster template for set " + setCode));
         // Delegated so that depletion has one implementation: this is the pool
         // every collected effect record is played from, and a second copy of
         // the redraw rule here would be the copy that silently stopped matching.

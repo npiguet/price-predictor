@@ -78,11 +78,8 @@ public class DraftGameWorkerMain {
 
         WorkerLoop.runUntilBroken(
                 () -> {
-                    SeatTableIndex.Pairing pairing = index.randomPairing(includeMirrors);
-                    if (pairing == null) {
-                        throw new IllegalStateException("no pairing available");
-                    }
-                    player.play(pairing);
+                    // Never empty: a table with no eligible pod exited above.
+                    player.play(index.randomPairing().orElseThrow());
                     return WorkerLoop.Outcome.COMPLETED;
                 },
                 new WorkerLoop.Progress(
