@@ -14,6 +14,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -63,6 +64,30 @@ class PlayedCardNamesTest {
 
         assertEquals(List.of(full), playedAs(full, CardStateName.LeftSplit));
         assertEquals(List.of(full), playedAs(full, CardStateName.RightSplit));
+    }
+
+    /**
+     * A card the game does not hold has no printing to read, so it is
+     * recorded under the oracle name its view shows: for a Room shown by one
+     * door, the door's name rather than the deck's, which is what the
+     * printing route above exists to avoid.
+     */
+    @Test
+    void aCardTheGameDoesNotHoldIsRecordedUnderTheNameItsViewShows() {
+        Game elsewhere = TestBoard.twoPlayerGame("p1", "p2");
+        Player owner = elsewhere.getPlayers().get(0);
+        Card room = TestBoard.card(elsewhere, owner, "Painter's Studio // Defaced Gallery");
+        elsewhere.getAction().moveToHand(room, null);
+        room.setState(CardStateName.LeftSplit, true);
+        Game watched = TestBoard.twoPlayerGame("p1", "p2");
+        assertNull(watched.findById(room.getId()), "the watched game must not hold the card");
+
+        PlayedCardCollector collector = new PlayedCardCollector(watched);
+        collector.visit(new GameEventCardChangeZone(
+                CardView.get(room), null,
+                watched.getPlayers().get(0).getZone(ZoneType.Battlefield).getView()));
+
+        assertEquals(List.of("Painter's Studio"), collector.getCards(Side.A));
     }
 
     @Test
