@@ -10,6 +10,7 @@ import com.pricepredictor.connector.ability.DiceOutcomes;
 import com.pricepredictor.connector.ability.EtbReplacementAbility;
 import com.pricepredictor.connector.ability.GiftKeyword;
 import com.pricepredictor.connector.ability.HauntKeyword;
+import com.pricepredictor.connector.ability.KeywordSpec;
 import com.pricepredictor.connector.ability.ReplacementAbilityEntry;
 import com.pricepredictor.connector.ability.SpellAdditionalCost;
 import com.pricepredictor.connector.ability.SpellEffect;
@@ -574,7 +575,7 @@ public class RulesParser {
      * Chancellor-cycle cards where the named SVar lacks a SpellDescription.
      */
     private static Ability openingEffectAbility(KeywordInterface ki) {
-        String svarName = ki.getOriginal().split(":", 3)[1];
+        String svarName = new KeywordSpec(ki.getOriginal()).part(1);
         Card hostCard = ki.getHostCard();
         if (hostCard == null) return null;
         String desc = null;
@@ -660,7 +661,7 @@ public class RulesParser {
 
     private static String buildAlternateAdditionalCostDescription(String original) {
         List<String> costs = new ArrayList<>();
-        for (String costPart : original.split(":", 2)[1].split(":")) {
+        for (String costPart : new KeywordSpec(original).rest(1).split(":")) {
             Cost cost = new Cost(costPart, false);
             String costText = cost.toSimpleString();
             costs.add((cost.isOnlyManaCost() ? "pay " : "")

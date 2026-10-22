@@ -38,9 +38,8 @@ public final class HauntKeyword {
         }
         // Fallback: extract SpellDescription from the SVar content string
         if (effectDesc == null) {
-            String original = ki.getOriginal(); // "Haunt:SvarName"
-            if (original.contains(":")) {
-                String svarName = original.substring(original.indexOf(':') + 1);
+            String svarName = new KeywordSpec(ki.getOriginal()).rest(1); // "Haunt:SvarName"
+            if (svarName != null) {
                 effectDesc = SpellAbilityUtils.svarParam(card.getSVar(svarName), "SpellDescription");
             }
         }
