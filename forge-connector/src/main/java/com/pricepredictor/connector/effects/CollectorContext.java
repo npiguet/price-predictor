@@ -24,7 +24,6 @@ final class CollectorContext {
      * game.
      */
     private String randomSeatPlayerId;
-    private long recordsWritten;
 
     CollectorContext(RecordShardWriter writer, String gameId) {
         this.writer = writer;
@@ -74,10 +73,5 @@ final class CollectorContext {
         record.randomSeat(
                 randomSeatPlayerId != null && randomSeatPlayerId.equals(record.actorPlayer()));
         writer.write(record.toJson());
-        recordsWritten++;
-    }
-
-    long recordsWritten() {
-        return recordsWritten;
     }
 }

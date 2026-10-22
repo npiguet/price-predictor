@@ -153,7 +153,7 @@ class RecordCharacterizationTest {
             board.game.subscribeToEvents(bracket);
             Assumptions.assumeTrue(
                     collectors.install() > 0
-                            && collectors.installedHooks().contains("clause-events"),
+                            && PatchHooks.CLAUSE_LISTENER.present(),
                     "../forge has no clause hook to split the modes");
             resolveAll(board, charm);
             nextStep(board);

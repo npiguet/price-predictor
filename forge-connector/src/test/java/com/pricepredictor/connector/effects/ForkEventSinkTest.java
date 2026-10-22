@@ -166,7 +166,7 @@ class ForkEventSinkTest {
         sink.onCardChangeZone(new GameEventCardChangeZone(
                 TestCards.build("Mountain"),
                 zone(ZoneType.Hand), zone(ZoneType.Battlefield)));
-        assertFalse(sink.isEmpty(), "the move was not filed at all");
+        assertFalse(sink.events().isEmpty(), "the move was not filed at all");
         return sink.events().get(0);
     }
 

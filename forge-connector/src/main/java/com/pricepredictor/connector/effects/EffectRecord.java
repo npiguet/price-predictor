@@ -67,10 +67,8 @@ public final class EffectRecord {
     private String subkind;
     private String linkId;
     private String mirrorOf;
-    private String variantOf;
     private boolean interventional;
     private boolean fork;
-    private boolean synthetic;
     /**
      * Whether {@code actor_player} is the match's random seat (FR-030).
      *
@@ -135,11 +133,6 @@ public final class EffectRecord {
         return this;
     }
 
-    public EffectRecord variantOf(String value) {
-        this.variantOf = value;
-        return this;
-    }
-
     public EffectRecord interventional(boolean value) {
         this.interventional = value;
         return this;
@@ -147,11 +140,6 @@ public final class EffectRecord {
 
     public EffectRecord fork(boolean value) {
         this.fork = value;
-        return this;
-    }
-
-    public EffectRecord synthetic(boolean value) {
-        this.synthetic = value;
         return this;
     }
 
@@ -178,19 +166,6 @@ public final class EffectRecord {
      */
     public String actorPlayer() {
         return actorPlayer;
-    }
-
-    /**
-     * The acting line. Absent for {@code combat} and {@code playability}, where
-     * no single line acts; several keys where the rendered line merged several
-     * traits.
-     *
-     * <p>Prefer {@link #ability(ProvenanceKey.Resolved)} wherever a key was
-     * actually looked for: this form cannot say why an empty list is empty.
-     */
-    public EffectRecord ability(List<ProvenanceKey> keys) {
-        this.ability = keys == null ? null : new ArrayList<>(keys);
-        return this;
     }
 
     /**
@@ -261,11 +236,13 @@ public final class EffectRecord {
                 + ",\"subkind\":" + Json.string(subkind)
                 + ",\"link_id\":" + Json.string(linkId)
                 + ",\"mirror_of\":" + Json.string(mirrorOf)
-                + ",\"variant_of\":" + Json.string(variantOf)
+                // Frozen schema fields no collector sets: a reader still
+                // expects them on every record.
+                + ",\"variant_of\":null"
                 + ",\"mode\":" + Json.string(mode)
                 + ",\"interventional\":" + interventional
                 + ",\"fork\":" + fork
-                + ",\"synthetic\":" + synthetic
+                + ",\"synthetic\":false"
                 // Right after synthetic on every record, and what_if right
                 // after it on the two subkinds alone: the order is part of the
                 // contract (record-schema-delta.md), and the reader names a
@@ -277,11 +254,6 @@ public final class EffectRecord {
                 + ",\"ability_unresolved\":" + Json.string(abilityUnresolved)
                 + ",\"state\":" + stateJson
                 + ",\"payload\":" + payloadJson + "}";
-    }
-
-    /** Why {@link #abilityJson()} is empty, or null where it names a line. */
-    String abilityUnresolved() {
-        return abilityUnresolved;
     }
 
     String abilityJson() {
@@ -394,17 +366,6 @@ public final class EffectRecord {
 
     /**
      * ``{"costs": {...}, "outcome": "..."}`` — a resolution cost half.
-     *
-     * <p>Convenience for the common case where both halves are read at the same
-     * instant. A collector that defers the record until the outcome is known
-     * reads {@link #costsJson} at the cast and calls the two-string form later.
-     */
-    public static String costPayload(SpellAbility ability, String outcome) {
-        return costPayload(costsJson(ability), outcome);
-    }
-
-    /**
-     * The same payload from a costs object read earlier.
      *
      * <p>The two halves become knowable at different moments: what was paid is
      * only readable while the cast event is being published, and whether the

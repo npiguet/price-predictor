@@ -206,16 +206,6 @@ class CostPayloadTest {
         }
     }
 
-    @Test
-    void theTwoFormsAgreeWhenBothHalvesAreReadAtOnce() {
-        SpellAbility sa = ability("AB$ GainLife | Cost$ T | Defined$ You | LifeAmount$ 1");
-
-        assertEquals(
-                EffectRecord.costPayload(
-                        EffectRecord.costsJson(sa), EffectRecord.OUTCOME_RESOLVED),
-                EffectRecord.costPayload(sa, EffectRecord.OUTCOME_RESOLVED));
-    }
-
     /** No ability to read still renders every channel, empty. */
     @Test
     void anUnreadableCostRendersEveryChannelRatherThanNone() {

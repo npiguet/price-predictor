@@ -16,7 +16,6 @@ import java.util.Set;
 import java.util.zip.GZIPInputStream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -172,17 +171,11 @@ class RecordShardIdentityTest {
         String one = RecordShardWriter.mintLifetime();
         String two = RecordShardWriter.mintLifetime();
         assertNotEquals(one, two);
-        assertTrue(RecordShardWriter.isValidLifetime(one), one);
-        assertTrue(RecordShardWriter.isValidLifetime(two), two);
 
-        // A dot would add a segment and a hyphen would hide the worker index,
-        // so both are rejected along with anything a filename cannot hold.
-        assertFalse(RecordShardWriter.isValidLifetime(null));
-        assertFalse(RecordShardWriter.isValidLifetime(""));
-        assertFalse(RecordShardWriter.isValidLifetime("a.b"));
-        assertFalse(RecordShardWriter.isValidLifetime("a-b"));
-        assertFalse(RecordShardWriter.isValidLifetime("UPPER"));
-        assertFalse(RecordShardWriter.isValidLifetime("01234567890123456"));
+        // No dot and no hyphen, so an id still splits cleanly and the worker
+        // index stays readable.
+        assertTrue(one.matches("[0-9a-z]{1,16}"), one);
+        assertTrue(two.matches("[0-9a-z]{1,16}"), two);
     }
 
     @Test

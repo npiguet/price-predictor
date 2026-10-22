@@ -89,7 +89,6 @@ public final class PatchedCollectors implements AutoCloseable {
     private final Map<String, ModeBalance> triggerBalance = new HashMap<>();
     /** Records written per acting line and verdict, for the flood cap. */
     private final Map<LineVerdict, Integer> triggerPerLine = new HashMap<>();
-    private final List<String> installed = new ArrayList<>();
     /** Static ability by layer-table id, resolved once per game. */
     private final Map<Long, StaticAbility> staticsById = new HashMap<>();
     private final java.util.Random sampler;
@@ -105,24 +104,19 @@ public final class PatchedCollectors implements AutoCloseable {
             && PatchHooks.COLOR_WITHOUT.present()
             && PatchHooks.KEYWORDS_WITHOUT.present();
 
-    /**
-     * A hook this collector installs a listener on, and the name
-     * {@link #installedHooks} reports it by.
-     */
-    private record Listener(
-            String name, PatchHooks.Hook hook, Supplier<InvocationHandler> handler) {
+    /** A hook this collector installs a listener on. */
+    private record Listener(PatchHooks.Hook hook, Supplier<InvocationHandler> handler) {
     }
 
     /** Every listener this collector installs, in the order it installs them. */
     private final List<Listener> listeners = List.of(
-            new Listener("replacement", PatchHooks.REPLACEMENT_LISTENER, this::rewriteHandler),
-            new Listener("trigger-fire", PatchHooks.TRIGGER_LISTENER, this::triggerFireHandler),
-            new Listener("playability", PatchHooks.PLAYABILITY_LISTENER, this::playabilityHandler),
-            new Listener("mana", PatchHooks.MANA_LISTENER, this::manaHandler),
-            new Listener("combat-legality", PatchHooks.COMBAT_LISTENER,
-                    this::combatLegalityHandler),
-            new Listener("clause-events", PatchHooks.CLAUSE_LISTENER, this::clauseHandler),
-            new Listener("effect-outcome", PatchHooks.OUTCOME_LISTENER, this::outcomeHandler));
+            new Listener(PatchHooks.REPLACEMENT_LISTENER, this::rewriteHandler),
+            new Listener(PatchHooks.TRIGGER_LISTENER, this::triggerFireHandler),
+            new Listener(PatchHooks.PLAYABILITY_LISTENER, this::playabilityHandler),
+            new Listener(PatchHooks.MANA_LISTENER, this::manaHandler),
+            new Listener(PatchHooks.COMBAT_LISTENER, this::combatLegalityHandler),
+            new Listener(PatchHooks.CLAUSE_LISTENER, this::clauseHandler),
+            new Listener(PatchHooks.OUTCOME_LISTENER, this::outcomeHandler));
 
     public PatchedCollectors(
             Game game, RecordShardWriter writer, String gameId,
@@ -182,10 +176,6 @@ public final class PatchedCollectors implements AutoCloseable {
         this.bracket = bracket;
     }
 
-    public long recordsWritten() {
-        return context.recordsWritten() + (forks == null ? 0 : forks.recordsWritten());
-    }
-
     /**
      * Subscribes {@link #collectContinuous()} to the event bus.
      *
@@ -210,11 +200,6 @@ public final class PatchedCollectors implements AutoCloseable {
         return new PhaseBridge();
     }
 
-    /** Hooks that were found and installed; empty on a stock checkout. */
-    public List<String> installedHooks() {
-        return List.copyOf(installed);
-    }
-
     /**
      * Install every hook the checkout offers.
      *
@@ -224,12 +209,13 @@ public final class PatchedCollectors implements AutoCloseable {
         if (mode == AttributionMode.DEGRADED) {
             return 0;
         }
+        int installed = 0;
         for (Listener listener : listeners) {
             if (listener.hook().install(listener.handler().get())) {
-                installed.add(listener.name());
+                installed++;
             }
         }
-        return installed.size();
+        return installed;
     }
 
     @Override
@@ -240,7 +226,6 @@ public final class PatchedCollectors implements AutoCloseable {
         for (Listener listener : listeners) {
             listener.hook().uninstall();
         }
-        installed.clear();
         // Last, and outside the hook teardown: the question the tally answers
         // is about the run, so it is asked once per game whatever the game did.
         JVM_REWRITES.endOfGame();
@@ -871,7 +856,10 @@ public final class PatchedCollectors implements AutoCloseable {
 
     private void emitLegality(String subkind, Player decider, String payload) {
         String state = snapshots.toJson(null, List.of());
-        if (!allowLegalityRecord(subkind, payload, state)) {
+        // Keyed on the snapshot as well as the payload (FR-028): the same
+        // answer on a board that moved is a second observation, which a
+        // payload-only key would drop as a repeat of the first.
+        if (!allowDistinctRecord(subkind, payload, state)) {
             return;
         }
         emit(context.newRecord(EffectRecord.KIND_PLAYABILITY)
@@ -885,19 +873,6 @@ public final class PatchedCollectors implements AutoCloseable {
     /** The deciding player's id, or the active player's where none is known. */
     private String playerIdOrActive(Player decider) {
         return decider == null ? activePlayerId() : SnapshotBuilder.playerId(decider);
-    }
-
-    /**
-     * Whether this legality answer is new in this game.
-     *
-     * <p>Keyed on the subkind, the payload <b>and</b> the snapshot (FR-028).
-     * The payload alone would also collapse the same answer on a board that
-     * <em>had</em> moved: a creature that may attack on two different turns
-     * is two observations, and the second would be dropped as a repeat of
-     * the first.
-     */
-    public boolean allowLegalityRecord(String subkind, String payload, String state) {
-        return allowDistinctRecord(subkind, payload, state);
     }
 
     /** Distinct rendered records this game may hold before dedup stops. */
@@ -1221,11 +1196,6 @@ public final class PatchedCollectors implements AutoCloseable {
         return heldProbes.discardOtherThan(substep);
     }
 
-    /** Branches taken and not yet completed. */
-    int heldProbeCount() {
-        return heldProbes.size();
-    }
-
     // ── clause events (an API's own parameters) ─────────────────────────
 
     /**
@@ -1518,11 +1488,6 @@ public final class PatchedCollectors implements AutoCloseable {
         }
     }
 
-    /** Package-private seam for this hook's own test; production code never calls it. */
-    static void resetUnknownOutcomeTypeLatchForTest() {
-        UNKNOWN_OUTCOME_TYPE_REPORTED.set(false);
-    }
-
     /**
      * An effect's own account of what it did.
      *
@@ -1720,11 +1685,6 @@ public final class PatchedCollectors implements AutoCloseable {
         Object api = ability.getApi();
         return (api == null ? "?" : api.toString()) + "|"
                 + ability.getHostCard().getName() + "|" + produced;
-    }
-
-    /** Which reservoir slot this activation takes, or -1 to skip it; see {@link ManaReservoir}. */
-    int manaReservoirSlot(String abilityText) {
-        return manaReservoir.slot(abilityText);
     }
 
     /**

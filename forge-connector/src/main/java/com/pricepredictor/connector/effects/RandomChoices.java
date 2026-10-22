@@ -254,9 +254,4 @@ public final class RandomChoices {
         }
         ability.setXManaCostPaid(max < min ? min : min + random.nextInt(max - min + 1));
     }
-
-    /** The seeded source, for a caller that shuffles alongside these draws. */
-    public Random random() {
-        return random;
-    }
 }

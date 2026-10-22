@@ -59,9 +59,4 @@ public enum AttributionMode {
     private static AttributionMode probe() {
         return PatchHooks.SUB_ABILITY.present() ? PATCHED : DEGRADED;
     }
-
-    /** For tests: forget the probe so the next call re-runs it. */
-    static synchronized void reset() {
-        detected = null;
-    }
 }

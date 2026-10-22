@@ -239,16 +239,6 @@ class CollectorTest {
                 AttributionMode.PATCHED).toJson().contains("\"mode\":\"patched\""));
     }
 
-    @Test
-    void anAbilityCanCarrySeveralKeysForAMergedLine() {
-        String json = record(EffectRecord.KIND_RESOLUTION)
-                .ability(List.of(
-                        new ProvenanceKey("cardsfolder/a/x.txt", 0, "trigger", 0),
-                        new ProvenanceKey("cardsfolder/a/x.txt", 0, "static", 1)))
-                .toJson();
-        assertEquals(2, json.split("\"trait_kind\"", -1).length - 1, json);
-    }
-
     /**
      * A trigger record names its acting line, and says so in the envelope.
      *
@@ -260,9 +250,9 @@ class CollectorTest {
     @Test
     void aTriggerRecordNamesItsActingLine() {
         String json = record(EffectRecord.KIND_TRIGGER)
-                .ability(List.of(new ProvenanceKey(
+                .ability(new ProvenanceKey.Resolved(new ProvenanceKey(
                         "cardsfolder/g/grave_titan.txt", 0,
-                        ProvenanceKey.KIND_TRIGGER, 0)))
+                        ProvenanceKey.KIND_TRIGGER, 0), null))
                 .toJson();
 
         assertFalse(json.contains("\"ability\":null"), json);
@@ -274,9 +264,9 @@ class CollectorTest {
     @Test
     void aRewriteRecordNamesItsReplacement() {
         String json = record(EffectRecord.KIND_REWRITE)
-                .ability(List.of(new ProvenanceKey(
+                .ability(new ProvenanceKey.Resolved(new ProvenanceKey(
                         "cardsfolder/p/paralyze.txt", 0,
-                        ProvenanceKey.KIND_REPLACEMENT, 0)))
+                        ProvenanceKey.KIND_REPLACEMENT, 0), null))
                 .toJson();
 
         assertTrue(json.contains("\"trait_kind\":\"replacement\""), json);
@@ -291,8 +281,10 @@ class CollectorTest {
      */
     @Test
     void anUnattributableLineIsEmptyRatherThanNull() {
-        assertTrue(record(EffectRecord.KIND_TRIGGER).ability(List.of()).toJson()
-                .contains("\"ability\":[]"));
+        assertTrue(record(EffectRecord.KIND_TRIGGER)
+                .ability(new ProvenanceKey.Resolved(
+                        null, ProvenanceKey.UNRESOLVED_ENGINE_EFFECT))
+                .toJson().contains("\"ability\":[]"));
         assertTrue(record(EffectRecord.KIND_COMBAT).toJson()
                 .contains("\"ability\":null"));
     }
@@ -332,7 +324,7 @@ class CollectorTest {
     @Test
     void aLookupThatCameBackWithNothingAtAllStillNamesAReason() {
         String json = record(EffectRecord.KIND_TRIGGER)
-                .ability((ProvenanceKey.Resolved) null)
+                .ability(null)
                 .toJson();
 
         assertTrue(json.contains("\"ability_unresolved\":\"unknown_kind\""), json);

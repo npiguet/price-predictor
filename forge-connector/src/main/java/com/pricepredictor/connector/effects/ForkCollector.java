@@ -106,14 +106,6 @@ public final class ForkCollector {
         return FORK_RUNNING.get();
     }
 
-    /** Package-private seam for the null-ability gate's own test; production code never calls it. */
-    static void runAsForkForTest(Runnable action) {
-        asFork(() -> {
-            action.run();
-            return null;
-        });
-    }
-
     /** Run {@code action} with this thread marked as running a fork; see {@link #FORK_RUNNING}. */
     private static <T> T asFork(Supplier<T> action) {
         boolean was = FORK_RUNNING.get();
@@ -159,7 +151,6 @@ public final class ForkCollector {
     private int interventionsUsed;
     private int probesUsed;
     private final Map<Integer, Integer> forksPerResolution = new HashMap<>();
-    private int discarded;
 
     public ForkCollector(
             Game game, RecordShardWriter writer, String gameId,
@@ -176,20 +167,9 @@ public final class ForkCollector {
         this.choices = new RandomChoices(new Random(PatchedCollectors.scramble(seed)));
     }
 
-    public long recordsWritten() {
-        return context.recordsWritten();
-    }
-
     /** Name the match's random seat; every record this writes is stamped against it. */
     public void setRandomSeatPlayerId(String playerId) {
         context.setRandomSeatPlayerId(playerId);
-    }
-
-    /** Forks created and thrown away rather than written: a copy the score
-     *  check rejected, a resolution that observed nothing, a branch whose own
-     *  damage step wrote no record for it to mirror. */
-    int discardedForks() {
-        return discarded;
     }
 
     // ── budgets ─────────────────────────────────────────────────────────
@@ -284,8 +264,7 @@ public final class ForkCollector {
     }
 
     /**
-     * Copy the live game and score-check the copy, counting a discarded fork
-     * when either fails.
+     * Copy the live game and score-check the copy, empty when either fails.
      *
      * @param perspective read after the copy, because a game the copier cannot
      *                    read may not answer it either
@@ -299,12 +278,10 @@ public final class ForkCollector {
             copier = new GameCopier(game);
             fork = copier.makeCopy();
         } catch (RuntimeException e) {
-            discarded++;
             return Optional.empty();
         }
         Player from = perspective.get();
         if (from == null || !scoreCheck(fork, from)) {
-            discarded++;
             return Optional.empty();
         }
         return Optional.of(new VerifiedFork(copier, fork, from));
@@ -353,7 +330,6 @@ public final class ForkCollector {
             Player actor = forked == null
                     ? null : mappedPlayer(verified.get().copier(), perspective);
             if (forked == null || actor == null) {
-                discarded++;
                 return false;
             }
 
@@ -367,8 +343,7 @@ public final class ForkCollector {
                 // 24 of the 88 sampled interventions were empty and every one of
                 // them was a targeted spell that resolved with no target. A
                 // counterfactual nobody can read is worse than one that was never
-                // written, so this drops it and counts it.
-                discarded++;
+                // written, so this drops it.
                 return false;
             }
 
@@ -585,24 +560,6 @@ public final class ForkCollector {
         }
     }
 
-    /** The fork's mode draw, for a test of the draw alone. */
-    boolean chooseModes(SpellAbility ability) {
-        return choices.chooseModes(ability);
-    }
-
-    /** The fork's target draw, for a test of the draw alone. */
-    boolean chooseTargets(SpellAbility ability) {
-        return choices.chooseTargets(ability);
-    }
-
-    /**
-     * The fork's X, for a test of the draw alone: nobody pays, so the floor
-     * of one is the whole answer.
-     */
-    void announceX(SpellAbility ability) {
-        choices.announceX(ability, null, 1);
-    }
-
     /**
      * The fork's copy of a live ability, or null when it cannot be matched.
      *
@@ -683,7 +640,6 @@ public final class ForkCollector {
                 forkCarrier = null;
             }
             if (forkCarrier == null || fork.getCombat() == null) {
-                discarded++;
                 return null;
             }
 
@@ -731,7 +687,6 @@ public final class ForkCollector {
             } catch (RuntimeException | StackOverflowError e) {
                 // A stripped keyword reaches combat states ordinary play does not.
                 // Discarding is right; failing the worker is not.
-                discarded++;
                 return null;
             }
             return new HeldProbe(
@@ -768,20 +723,6 @@ public final class ForkCollector {
             String keyword, String carrier, String state,
             List<EffectEvent> events, String actor, String combatFields,
             String substep, int turn) {
-
-        /**
-         * A branch with no turn to be checked against.
-         *
-         * <p>For callers assembling a branch by hand rather than forking a
-         * live game; {@link #TURN_UNKNOWN} is what stands the guard down.
-         */
-        public HeldProbe(
-                String keyword, String carrier, String state,
-                List<EffectEvent> events, String actor, String combatFields,
-                String substep) {
-            this(keyword, carrier, state, events, actor, combatFields, substep,
-                    TURN_UNKNOWN);
-        }
 
         /**
          * The branch's payload, naming what was perturbed.
@@ -838,7 +779,6 @@ public final class ForkCollector {
         int now = liveTurn();
         if (held.turn() != TURN_UNKNOWN && now != TURN_UNKNOWN
                 && held.turn() != now) {
-            discarded++;
             System.err.println(
                     "Effect records: dropping a probe branch taken on turn "
                             + held.turn() + " that would mirror "

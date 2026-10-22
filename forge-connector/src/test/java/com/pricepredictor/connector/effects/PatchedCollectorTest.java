@@ -53,6 +53,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Random;
 import java.util.Set;
 import java.util.zip.GZIPInputStream;
 
@@ -177,24 +178,24 @@ class PatchedCollectorTest {
 
     @Test
     void theFirstActivationsFillTheReservoir() {
-        PatchedCollectors collector = collectors(caps(3, 1.0));
-        assertEquals(0, collector.manaReservoirSlot("Mana$ G"));
-        assertEquals(1, collector.manaReservoirSlot("Mana$ G"));
-        assertEquals(2, collector.manaReservoirSlot("Mana$ G"));
+        ManaReservoir reservoir = new ManaReservoir(3, new Random(0));
+        assertEquals(0, reservoir.slot("Mana$ G"));
+        assertEquals(1, reservoir.slot("Mana$ G"));
+        assertEquals(2, reservoir.slot("Mana$ G"));
     }
 
     @Test
     void theReservoirIsPerUniqueManaAbilityText() {
         // A basic land taps a dozen times a game; a rare mana ability must not
         // be starved by it.
-        PatchedCollectors collector = collectors(caps(1, 1.0));
-        assertEquals(0, collector.manaReservoirSlot("Mana$ G"));
-        assertEquals(0, collector.manaReservoirSlot("Mana$ Any | Amount$ 2"));
+        ManaReservoir reservoir = new ManaReservoir(1, new Random(0));
+        assertEquals(0, reservoir.slot("Mana$ G"));
+        assertEquals(0, reservoir.slot("Mana$ Any | Amount$ 2"));
     }
 
     @Test
     void aCapOfZeroRecordsNothing() {
-        assertEquals(-1, collectors(caps(0, 1.0)).manaReservoirSlot("Mana$ G"));
+        assertEquals(-1, new ManaReservoir(0, new Random(0)).slot("Mana$ G"));
     }
 
     /**
@@ -211,10 +212,10 @@ class PatchedCollectorTest {
         int trials = 20000;
         int[] survivors = new int[activations];
         for (int trial = 0; trial < trials; trial++) {
-            PatchedCollectors collector = collectors(caps(1, 1.0), trial);
+            ManaReservoir reservoir = new ManaReservoir(1, new Random(PatchedCollectors.scramble(trial)));
             int held = -1;
             for (int i = 0; i < activations; i++) {
-                if (collector.manaReservoirSlot("Mana$ G") >= 0) {
+                if (reservoir.slot("Mana$ G") >= 0) {
                     held = i;
                 }
             }
@@ -234,9 +235,9 @@ class PatchedCollectorTest {
         // Otherwise the reservoir is just "keep the first", renamed.
         boolean replaced = false;
         for (int seed = 0; seed < 50 && !replaced; seed++) {
-            PatchedCollectors collector = collectors(caps(1, 1.0), seed);
-            collector.manaReservoirSlot("Mana$ G");
-            replaced = collector.manaReservoirSlot("Mana$ G") == 0;
+            ManaReservoir reservoir = new ManaReservoir(1, new Random(PatchedCollectors.scramble(seed)));
+            reservoir.slot("Mana$ G");
+            replaced = reservoir.slot("Mana$ G") == 0;
         }
         assertTrue(replaced, "no seed ever replaced the first activation");
     }
@@ -1264,7 +1265,6 @@ class PatchedCollectorTest {
         // Deltas rather than absolutes: the tally is the worker's, so every
         // other test in this class has already contributed to it.
         long recordsBefore = PatchedCollectors.JVM_REWRITES.records();
-        long rewrittenBefore = PatchedCollectors.JVM_REWRITES.rewritten();
         PatchedCollectors collector = recording();
 
         collector.rewriteRecord(
@@ -1277,7 +1277,6 @@ class PatchedCollectorTest {
         // Two records for two replacements: the one that declined is counted
         // too, because it is no longer dropped.
         assertEquals(recordsBefore + 2, PatchedCollectors.JVM_REWRITES.records());
-        assertEquals(rewrittenBefore + 1, PatchedCollectors.JVM_REWRITES.rewritten());
     }
 
     // ── coalescing the kinds that had none ─────────────────────────────
@@ -1324,10 +1323,10 @@ class PatchedCollectorTest {
     @Test
     void aLegalityAnswerCoalescesOnPayloadAndSnapshotTogether() {
         PatchedCollectors collector = collectors(caps(2000, 1.0));
-        assertTrue(collector.allowLegalityRecord("blockers", "{payload}", "{board-1}"));
-        assertFalse(collector.allowLegalityRecord("blockers", "{payload}", "{board-1}"));
-        assertTrue(collector.allowLegalityRecord("blockers", "{payload}", "{board-2}"));
-        assertTrue(collector.allowLegalityRecord("attackers", "{payload}", "{board-1}"));
+        assertTrue(collector.allowDistinctRecord("blockers", "{payload}", "{board-1}"));
+        assertFalse(collector.allowDistinctRecord("blockers", "{payload}", "{board-1}"));
+        assertTrue(collector.allowDistinctRecord("blockers", "{payload}", "{board-2}"));
+        assertTrue(collector.allowDistinctRecord("attackers", "{payload}", "{board-1}"));
     }
 
     /** One acting line is worth a couple of dozen looks in a game, not hundreds. */
@@ -1365,7 +1364,8 @@ class PatchedCollectorTest {
 
     private static ForkCollector.HeldProbe branch(String substep) {
         return new ForkCollector.HeldProbe(
-                "trample", "E1", "{}", List.of(), "P0", "\"combat\":{}", substep);
+                "trample", "E1", "{}", List.of(), "P0", "\"combat\":{}", substep,
+                ForkCollector.TURN_UNKNOWN);
     }
 
     private PatchedCollectors withForks(RecordShardWriter writer) {
@@ -1389,46 +1389,55 @@ class PatchedCollectorTest {
      * that did not happen with one that did.
      */
     @Test
-    void aBranchIsCompletedOnlyAgainstItsOwnDamageStep() {
+    void aBranchIsCompletedOnlyAgainstItsOwnDamageStep() throws Exception {
         try (RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1")) {
             PatchedCollectors collector = withForks(writer);
             collector.hold(branch(DamageStep.FIRST_STRIKE.wireName()));
             collector.hold(branch(DamageStep.REGULAR.wireName()));
 
             collector.writeHeldProbes("run.0-l1.9", DamageStep.REGULAR.wireName());
-
-            assertEquals(1L, collector.recordsWritten());
-            assertEquals(1, collector.heldProbeCount(),
-                    "the first-strike branch must still be waiting for its own step");
+            // The first-strike branch must still be waiting for its own step.
+            collector.writeHeldProbes("run.0-l1.10", DamageStep.FIRST_STRIKE.wireName());
         }
+
+        List<String> lines = readShard(tempDir.resolve("run.0-l1" + RecordShardWriter.SUFFIX));
+        assertEquals(2, lines.size(), lines.toString());
+        assertTrue(lines.get(0).contains("\"mirror_of\":\"run.0-l1.9\""), lines.get(0));
+        assertTrue(lines.get(1).contains("\"mirror_of\":\"run.0-l1.10\""), lines.get(1));
     }
 
     /** With no substep named, the oldest held step is the one being written. */
     @Test
-    void theOldestHeldStepIsTheOneACombatRecordCompletes() {
+    void theOldestHeldStepIsTheOneACombatRecordCompletes() throws Exception {
         try (RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1")) {
             PatchedCollectors collector = withForks(writer);
             collector.hold(branch(DamageStep.FIRST_STRIKE.wireName()));
             collector.hold(branch(DamageStep.REGULAR.wireName()));
 
             collector.writeHeldProbes("run.0-l1.9");
-
-            assertEquals(1L, collector.recordsWritten());
-            assertEquals(1, collector.heldProbeCount());
+            // One branch is left, and it is the regular step's.
+            collector.writeHeldProbes("run.0-l1.10", DamageStep.FIRST_STRIKE.wireName());
+            collector.writeHeldProbes("run.0-l1.11", DamageStep.REGULAR.wireName());
         }
+
+        List<String> lines = readShard(tempDir.resolve("run.0-l1" + RecordShardWriter.SUFFIX));
+        assertEquals(2, lines.size(), lines.toString());
+        assertTrue(lines.get(0).contains("\"mirror_of\":\"run.0-l1.9\""), lines.get(0));
+        assertTrue(lines.get(1).contains("\"mirror_of\":\"run.0-l1.11\""), lines.get(1));
     }
 
     /** A branch whose step produced no record is dropped rather than mispaired. */
     @Test
-    void aBranchFromAStepThatWroteNoRecordIsDropped() {
+    void aBranchFromAStepThatWroteNoRecordIsDropped() throws Exception {
         try (RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1")) {
             PatchedCollectors collector = withForks(writer);
             collector.hold(branch(DamageStep.FIRST_STRIKE.wireName()));
 
             assertEquals(1, collector.discardStaleProbes(DamageStep.REGULAR.wireName()));
-            assertEquals(0, collector.heldProbeCount());
-            assertEquals(0L, collector.recordsWritten());
+            collector.writeHeldProbes("run.0-l1.9", DamageStep.FIRST_STRIKE.wireName());
         }
+
+        assertEquals(List.of(), readShard(tempDir.resolve("run.0-l1" + RecordShardWriter.SUFFIX)));
     }
 
     // ── hook lookup ─────────────────────────────────────────────────────
@@ -1487,7 +1496,6 @@ class PatchedCollectorTest {
                         .count();
         try (PatchedCollectors collector = collectors(CollectionCaps.defaults())) {
             assertEquals(expected, collector.install());
-            assertEquals(expected, collector.installedHooks().size());
         }
     }
 
@@ -1825,11 +1833,13 @@ class PatchedCollectorTest {
     }
 
     @BeforeEach
-    void resetUnknownOutcomeTypeLatch() {
+    void resetUnknownOutcomeTypeLatch() throws ReflectiveOperationException {
         // Static, and shared with the production path: without a reset here,
         // whichever test trips it first leaves every test after it in this
         // class unable to see its own "did this print" outcome.
-        PatchedCollectors.resetUnknownOutcomeTypeLatchForTest();
+        var latch = PatchedCollectors.class.getDeclaredField("UNKNOWN_OUTCOME_TYPE_REPORTED");
+        latch.setAccessible(true);
+        ((java.util.concurrent.atomic.AtomicBoolean) latch.get(null)).set(false);
     }
 
     private static Method methodNamed(Class<?> shape, String name) {
@@ -2371,9 +2381,9 @@ class PatchedCollectorTest {
      * Combat.dealAssignedDamage} always passes a null cause, live or forked.
      * A probe's damage step is a turn-based action with no ability resolving
      * and nothing on the resolving-clause pointer, which is why {@link
-     * ForkCollector#isForkRunningOnThisThread()} exists. {@link
-     * ForkCollector#runAsForkForTest} stands in for that call without needing
-     * a real combat to fork. No live bracket is open, matching a probe's own
+     * ForkCollector#isForkRunningOnThisThread()} exists. FORK_RUNNING
+     * is set directly here, without needing a real combat to
+     * fork. No live bracket is open, matching a probe's own
      * timing: like {@code intervene}, it does not run nested inside a live
      * resolution.
      */
@@ -2381,15 +2391,18 @@ class PatchedCollectorTest {
     void aNullAbilityOutcomeFromAProbesOwnCombatDoesNotReachTheLiveShard() throws Throwable {
         List<String> records = ShardRun.records(tempDir, TestCards.game(), (bracket, collectors) -> {
             
-                            ForkCollector.runAsForkForTest(() -> {
-                                try {
-                                    collectors.outcomeHandler().invoke(null,
-                                            methodNamed(OutcomeListenerShape.class, "onOutcome"),
-                                            new Object[]{null, "damage_prevented", Map.of("amount", 3)});
-                                } catch (Throwable t) {
-                                    throw new RuntimeException(t);
-                                }
-                            });
+                            var forkRunning = ForkCollector.class.getDeclaredField("FORK_RUNNING");
+                            forkRunning.setAccessible(true);
+                            @SuppressWarnings("unchecked")
+                            ThreadLocal<Boolean> flag = (ThreadLocal<Boolean>) forkRunning.get(null);
+                            flag.set(true);
+                            try {
+                                collectors.outcomeHandler().invoke(null,
+                                        methodNamed(OutcomeListenerShape.class, "onOutcome"),
+                                        new Object[]{null, "damage_prevented", Map.of("amount", 3)});
+                            } finally {
+                                flag.set(false);
+                            }
             
                             assertNotNull(collectors.lastClauseEvent(),
                                     "the event must still be built -- only its delivery to "

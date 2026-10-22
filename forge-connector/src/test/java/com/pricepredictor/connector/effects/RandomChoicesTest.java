@@ -226,6 +226,16 @@ class RandomChoicesTest {
         assertFalse(new RandomChoices(new Random(1)).chooseTargets(bolt));
     }
 
+    /** A line that targets nothing needs nothing chosen. */
+    @Test
+    void aLineThatTargetsNothingIsReadyToResolve() {
+        SpellAbility gain = AbilityFactory.getAbility(
+                "AB$ GainLife | Cost$ 1 | Defined$ You | LifeAmount$ 1",
+                TestCards.build("Fountain of Youth"));
+
+        assertTrue(new RandomChoices(new Random(1)).chooseTargets(gain));
+    }
+
     // ── X ───────────────────────────────────────────────────────────────
 
     /**
@@ -262,6 +272,18 @@ class RandomChoicesTest {
                 TestCards.build("Fountain of Youth"));
         new RandomChoices(new Random(1)).announceX(drain, null, 1);
         assertEquals(1, drain.getXManaCostPaid());
+    }
+
+    @Test
+    void anAbilityWithNoXIsLeftAlone() {
+        Player caster = twoPlayerGame().getPlayers().get(0);
+        SpellAbility gain = AbilityFactory.getAbility(
+                "AB$ GainLife | Cost$ 1 | Defined$ You | LifeAmount$ 1",
+                TestCards.build("Fountain of Youth"));
+
+        new RandomChoices(new Random(1)).announceX(gain, caster, 1);
+
+        assertNull(gain.getXManaCostPaid());
     }
 
     @Test

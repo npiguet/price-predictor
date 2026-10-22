@@ -169,7 +169,6 @@ public final class BusBracketCollector extends BusEventReader {
      * phase.
      */
     private boolean combatWindowClosed;
-    private final Set<String> combatParticipants = new LinkedHashSet<>();
     private String combatState;
 
     /**
@@ -185,9 +184,6 @@ public final class BusBracketCollector extends BusEventReader {
      * clauses inside it were declined.
      */
     private boolean bracketDeclined;
-
-    /** Casts still on the stack when the game ended, over the whole game. */
-    private long abandonedActivations;
 
     /** Told each combat record's id, for a probe that mirrors it. */
     private java.util.function.Consumer<String> onCombatRecord;
@@ -215,10 +211,6 @@ public final class BusBracketCollector extends BusEventReader {
      */
     public void onCombatRecord(java.util.function.Consumer<String> listener) {
         this.onCombatRecord = listener;
-    }
-
-    public long recordsWritten() {
-        return context.recordsWritten();
     }
 
     /** Name the match's random seat, so every record can say whether it acted. */
@@ -453,7 +445,6 @@ public final class BusBracketCollector extends BusEventReader {
         EventAttribution.stamp(damage, resolving, namedCause);
         if (combat) {
             openCombatBracket();
-            combatParticipants.addAll(damage.subjects());
             combatEvents.file(damage);
         } else {
             bracketEvents.file(damage);
@@ -619,9 +610,7 @@ public final class BusBracketCollector extends BusEventReader {
         EventAttribution.stamp(event, resolving, namedCause);
         if (inCombatDamage()) {
             openCombatBracket();
-            if (combatEvents.file(event)) {
-                combatParticipants.addAll(event.subjects());
-            }
+            combatEvents.file(event);
         } else {
             bracketEvents.file(event);
         }
@@ -699,11 +688,6 @@ public final class BusBracketCollector extends BusEventReader {
         openMode.events.addAll(bracketEvents.drain());
         modeHalves.add(openMode);
         openMode = null;
-    }
-
-    /** How many mode halves the open resolution has closed so far, for a test. */
-    int modeHalvesOpen() {
-        return modeHalves.size() + (openMode == null ? 0 : 1);
     }
 
     private static String actorOf(SpellAbility ability) {
@@ -868,19 +852,6 @@ public final class BusBracketCollector extends BusEventReader {
         return removed;
     }
 
-    /**
-     * Casts still waiting for an outcome, for a test that has to see the hold.
-     *
-     * <p>At the end of a game whatever is left here is dropped: a spell on the
-     * stack when the last player lost neither resolved nor was removed, and
-     * {@code outcome} has no member for it. Writing one of the five would be a
-     * claim about a game that stopped, so the count is reported instead — by
-     * {@link #abandonedActivations()}, which is the running total of them.
-     */
-    long unresolvedActivations() {
-        return pendingActivations.size();
-    }
-
     // ── the end of the game ─────────────────────────────────────────────
 
     /**
@@ -947,16 +918,10 @@ public final class BusBracketCollector extends BusEventReader {
                             + names);
         }
         pendingActivations.clear();
-        abandonedActivations += abandoned;
         // The listener is static and this collector lives for one game, so the
         // game ending is where it has to go.
         PatchHooks.CONFIRM_LISTENER.uninstall();
         return abandoned;
-    }
-
-    /** How many casts this game abandoned on the stack, over the whole game. */
-    long abandonedActivations() {
-        return abandonedActivations;
     }
 
     // ── an offer the controller turned down ─────────────────────────────
@@ -1114,7 +1079,6 @@ public final class BusBracketCollector extends BusEventReader {
             onCombatRecord.accept(record.recordId());
         }
         combatEvents.clear();
-        combatParticipants.clear();
         combatShape = CombatShape.empty();
         combatState = null;
     }

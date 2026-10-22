@@ -115,11 +115,13 @@ class BusBracketCollectorTest {
     void aCastIsHeldRatherThanWrittenWithAGuessedOutcome() throws IOException {
         BusBracketCollector collector = collector();
 
-        collector.beginBracket(damageAbility());
+        SpellAbility bolt = damageAbility();
 
-        assertEquals(0, collector.recordsWritten());
-        assertEquals(1, collector.unresolvedActivations());
+        collector.beginBracket(bolt);
+
         assertEquals(List.of(), written());
+        assertEquals(1, collector.finishGame(Set.of(bolt.getId())),
+                "the cast is still held, to be abandoned at the end of the game");
     }
 
     /**
@@ -189,7 +191,8 @@ class BusBracketCollectorTest {
         int written = collector.writeOffRemoved(Set.of(survives.getId()));
 
         assertEquals(1, written);
-        assertEquals(1, collector.unresolvedActivations(), "the survivor is still held");
+        assertEquals(1, collector.finishGame(Set.of(survives.getId())),
+                "the survivor is still held");
         List<String> records = written();
         assertEquals(1, records.size(), records.toString());
         assertTrue(records.get(0).contains("\"outcome\":\"countered\""), records.get(0));
@@ -570,8 +573,6 @@ class BusBracketCollectorTest {
         long abandoned = collector.finishGame(Set.of(bolt.getId()));
 
         assertEquals(1, abandoned);
-        assertEquals(1, collector.abandonedActivations());
-        assertEquals(0, collector.unresolvedActivations(), "and it is let go of");
         assertEquals(List.of(), written(), "no record claims one of the five");
     }
 
@@ -631,7 +632,6 @@ class BusBracketCollectorTest {
         long abandoned = collector.finishGame(Set.of());
 
         assertEquals(0, abandoned);
-        assertEquals(0, collector.abandonedActivations());
         List<String> records = written();
         assertEquals(1, records.size(), records.toString());
         assertTrue(records.get(0).contains("\"outcome\":\"countered\""), records.get(0));

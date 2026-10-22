@@ -62,7 +62,7 @@ final class ShardRun {
                     game.subscribeToEvents(bracket);
                     Assumptions.assumeTrue(
                             collectors.install() > 0
-                                    && collectors.installedHooks().contains("clause-events"),
+                                    && PatchHooks.CLAUSE_LISTENER.present(),
                             "../forge has no clause hook"
                                     + (hookNeededFor.isEmpty() ? "" : " " + hookNeededFor));
                 }
