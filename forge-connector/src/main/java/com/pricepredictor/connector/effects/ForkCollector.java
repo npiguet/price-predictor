@@ -64,39 +64,21 @@ public final class ForkCollector {
      * damage-step probe} -- for {@code
      * LiveGame.ownsNullAbilityOutcome()}.
      *
-     * <p>It covers both methods' <em>entire</em> bodies, not just
-     * {@link #probe}'s own {@code Combat.dealAssignedDamage} call. The
-     * resolving-clause pointer does cover a forced ability as it resolves
-     * through the normal {@code AbilityUtils.resolve} path, but it is null
-     * for every segment of a fork outside
-     * {@code AbilityUtils.resolve} itself -- {@link #intervene}'s own
-     * {@code GameCopier}/score-check/{@code findInFork} setup,
-     * {@link #forceResolution}'s pre-push {@code chooseModes}/
-     * {@code chooseTargets}/{@code announceX}, and inside
-     * {@code GameSimulator.resolveStack}, its own
-     * {@code checkStateEffects}/{@code addAllTriggeredAbilitiesToStack} calls
-     * -- and nothing currently reachable from those segments fires a
-     * null-ability outcome only because no emitter happens to sit there
-     * today. A future one would find the same hole {@link #probe}'s damage
-     * step has: null ability, null pointer, indistinguishable from the live
-     * game's own turn-based actions.
+     * <p>It covers both methods' <em>entire</em> bodies, not just the forced
+     * resolution or {@link #probe}'s {@code Combat.dealAssignedDamage}: the
+     * resolving-clause pointer is null for every segment of a fork outside
+     * {@code AbilityUtils.resolve} -- the copy, the score check and
+     * {@code findInFork}, {@link #forceResolution}'s mode, target and X
+     * draws, and {@code GameSimulator.resolveStack}'s own state-based check
+     * and trigger pass. A null-ability outcome fired in any of them would
+     * otherwise be indistinguishable from the live game's own turn-based
+     * actions. So "a fork is running on this thread" is a sufficient answer
+     * on its own, and {@code ownsNullAbilityOutcome} checks it first, with
+     * the pointer behind it as a second, independent signal.
      *
-     * <p>With the flag covering everything either method does, "a fork is
-     * running on this thread" is by itself a sufficient answer for every fork
-     * mechanism this class has today, so {@code
-     * ownsNullAbilityOutcome} checks it first -- the
-     * resolving-clause pointer is not needed to make this flag correct, only
-     * kept behind it as a second, independent signal, as insurance against a
-     * future fork mechanism that
-     * resolves an ability without going through this flag's two entry
-     * points.
-     *
-     * <p>A saved/restored value rather than a bare set/clear, matching
-     * {@code AbilityUtils}' own {@code EFFECT_RECORD_SUB_ABILITY} pattern:
-     * neither {@link #intervene} nor {@link #probe} is currently reentrant
-     * (and they are never called nested inside each other), but restoring the
-     * prior value rather than assuming it was {@code false} costs nothing and
-     * does not depend on that staying true.
+     * <p>Saved and restored rather than set and cleared, as {@code
+     * AbilityUtils}' {@code EFFECT_RECORD_SUB_ABILITY} is: correct without
+     * relying on the two methods never nesting.
      */
     private static final ThreadLocal<Boolean> FORK_RUNNING =
             ThreadLocal.withInitial(() -> Boolean.FALSE);
@@ -198,9 +180,8 @@ public final class ForkCollector {
     public boolean mayProbe(String keyword) {
         // Normalized before the check: the flag names keywords the way the
         // corpus spells them (first_strike) and a caller holding a card's
-        // keyword has Forge's (First Strike). Comparing the two directly is
-        // what made gate 2 report zero observations of first strike, and it
-        // would have made every probe silently decline here.
+        // keyword has Forge's (First Strike). Compared directly, every probe
+        // of a keyword spelled differently would silently decline here.
         if (keyword == null || probeKeywords.isEmpty()
                 || !probeKeywords.contains(
                         ProbeScheduler.normalizeKeyword(keyword))) {
@@ -332,9 +313,7 @@ public final class ForkCollector {
             if (resolution == null || resolution.events().isEmpty()) {
                 // An empty event list is not an observation. "The ability resolved
                 // and did nothing" and "the ability never got to act" render the
-                // same record, and the first corpus could not tell them apart —
-                // 24 of the 88 sampled interventions were empty and every one of
-                // them was a targeted spell that resolved with no target. A
+                // same record, and nothing in it tells them apart. A
                 // counterfactual nobody can read is worse than one that was never
                 // written, so this drops it.
                 return false;
@@ -483,11 +462,8 @@ public final class ForkCollector {
      * corpus wants what the effect <b>does</b>, and asking the AI which mode
      * is good would reproduce exactly the selection bias the intervention
      * exists to escape. Seeded so both branches of a probe and a rerun of a
-     * game make the same choice. The first implementation chose neither
-     * targets nor modes — it set the activating player, pushed the ability
-     * and resolved it — and every one of the 88 sampled interventional
-     * records had an empty {@code refs.targets}, the empty ones being Lava
-     * Axe, Disintegrate, Drain Life, Mind Control and their like.
+     * game make the same choice. Choosing none at all is not an option: a
+     * Lava Axe pushed with no target resolves into nothing.
      *
      * @return what resolved and where its modes began; events empty if the
      *         ability resolved and did nothing observable; null if it could
@@ -526,9 +502,8 @@ public final class ForkCollector {
             if (!choices.chooseModes(ability) || !choices.chooseTargets(ability)) {
                 return null;
             }
-            // Floor one, for the reason the first version announced exactly
-            // one: an X of zero resolves into the same silence a missing
-            // target does, and the fork never pays, so the leftover mana of
+            // Floor one: an X of zero resolves into the same silence a
+            // missing target does, and the fork never pays, so the leftover mana of
             // the forked actor is what bounds the draw above it.
             choices.announceX(ability, actor, 1);
             // Read after the draw and before the resolution: the board the
@@ -662,10 +637,8 @@ public final class ForkCollector {
                     step,
                     // The *live* game's turn, which is also the fork's: the copier
                     // carries the counter across (GameCopier hands it to
-                    // devModeSet), and the corpus agrees -- not one of the 1,788
-                    // interventional forks, written the instant they are taken,
-                    // ever named a turn behind the record before it. Read here so
-                    // the branch remembers the step it belongs to.
+                    // devModeSet). Read here so the branch remembers the step it
+                    // belongs to.
                     liveTurn());
         });
     }
@@ -716,8 +689,8 @@ public final class ForkCollector {
             fork.getCombat().dealAssignedDamage();
             // And then let the deaths happen. Damage alone kills nothing;
             // a creature with lethal damage on it leaves the battlefield
-            // during state-based actions, and stopping before them made the
-            // branch systematically miss every death the real step had —
+            // during state-based actions, and stopping before them would make
+            // the branch systematically miss every death the real step had —
             // biasing the difference gate 2 computes towards "the keyword
             // changed nothing". The same call Forge's own simulator makes
             // after resolving a stack.
@@ -736,10 +709,10 @@ public final class ForkCollector {
      *
      * <p>{@code substep} names the damage step this branched from, the one
      * the bracket collector's record names. Without it a branch taken at the
-     * first-strike step was completed against whichever combat record came
-     * next: in the first corpus that was the <b>regular</b> step's record, so
-     * gate 2 was reading a counterfactual for a step that did not happen
-     * against a real record for a different one.
+     * first-strike step would be completed against whichever combat record
+     * came next, the <b>regular</b> step's, and gate 2 would read a
+     * counterfactual for a step that did not happen against a real record for
+     * a different one.
      */
     public record HeldProbe(
             String keyword, String carrier, String state,
@@ -753,8 +726,11 @@ public final class ForkCollector {
          * tramplers gives the keyword alone two readings, and the evaluator
          * reproducing this perturbation model-side would strip the wrong one.
          *
-         * <p>{@code combatFields} is the fork's own combat, read when the
-         * branch was taken. It is the counterfactual's half of what gate 2
+         * <p>{@code combatFields} is the fork's own combat: a view of the
+         * {@link CombatShape} the probe's damage step filled in, rendered
+         * here rather than copied when the branch was taken. Nothing writes to
+         * that shape once the step has run, so it renders as the step left it.
+         * It is the counterfactual's half of what gate 2
          * compares: the observed record says who blocked whom and how the
          * damage was split with the keyword, and this says the same about the
          * board without it.
@@ -777,11 +753,8 @@ public final class ForkCollector {
      *
      * <p>Only if the two describe the same moment. A branch is completed
      * against the next combat record of its own substep, and a damage step that
-     * wrote no real record leaves its branch waiting for one — in the smoke
-     * corpus 55 of 1,069 probe records were completed that way, against a
-     * mirror one to <b>eight</b> turns later, and every mirrored pair whose
-     * turns disagreed was one of them. That is the whole residue of the
-     * validator's game_id invariant.
+     * wrote no real record leaves its branch waiting for one, which can then
+     * be completed against a mirror turns later.
      *
      * <p>Dropped rather than relabelled, which is the choice worth stating.
      * The fork's turn is not stale: the copier carries the counter across, and
@@ -791,8 +764,8 @@ public final class ForkCollector {
      * read the difference between two unrelated combats as something the
      * keyword did. The branch's budget was spent taking the fork either way;
      * the only question is whether an unreadable counterfactual is written,
-     * and it is not — the same policy {@code discardStaleProbes} already
-     * applies to a branch of the wrong substep.
+     * and it is not — the same policy {@code discardStaleProbes} applies to a
+     * branch of the wrong substep.
      */
     public boolean writeHeldProbe(HeldProbe held, String mirrorOfRecordId) {
         if (held == null || mirrorOfRecordId == null) {
