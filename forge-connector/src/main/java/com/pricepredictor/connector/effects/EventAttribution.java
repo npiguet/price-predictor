@@ -10,18 +10,17 @@ import java.util.Set;
 /**
  * The three fields an event carries about where it came from and how long it lasts.
  *
- * <p>All three were declared on the event shape and never written by the bus
- * paths. {@code duration} is why {@code pt_duration} and
- * {@code type_color_duration} were the only two head fields no target path fed:
- * an effect that pumps a creature and one that pumps it permanently produced
- * identical records, so there was nothing to learn the difference from.
+ * <p>{@code duration} is what feeds the {@code pt_duration} and
+ * {@code type_color_duration} head fields: without it an effect that pumps a creature
+ * until end of turn and one that pumps it permanently produce identical
+ * records, so there is nothing to learn the difference from.
  *
- * <p>{@code cause} joined them here rather than living in each shaper because
- * it answers the same question about the same instant as the other two, and
+ * <p>{@code cause} is stamped here rather than in each shaper because it
+ * answers the same question about the same instant as the other two, and
  * because it has a default the shapers cannot know: an event the engine names
  * no causer for was still produced by whatever line was resolving. Stamping all
- * three at one door is what stopped the fork paths writing nulls while the
- * observed path wrote answers.
+ * three at one door keeps the fork paths and the observed path writing the
+ * same answers.
  */
 final class EventAttribution {
 
@@ -66,11 +65,11 @@ final class EventAttribution {
      * The acting line's own top-level clause produced this event.
      *
      * <p>A literal rather than {@code null}, because "the root did it" and "no
-     * pointer was available" are different facts and the corpus could not tell
-     * them apart. A single-clause ability legitimately has no sub-ability and
-     * the root is the right answer; the pointer failing to land looks exactly
-     * the same from the record. Reported apart, the sub-ability share becomes a
-     * number that can be read; conflated, it was 3.2% of nothing interpretable.
+     * pointer was available" are different facts and a null would conflate
+     * them. A single-clause ability legitimately has no sub-ability and the
+     * root is the right answer; the pointer failing to land looks exactly the
+     * same from the record. Reported apart, the sub-ability share is a number
+     * that can be read.
      */
     static final String ROOT = "root";
 
@@ -119,7 +118,7 @@ final class EventAttribution {
         // Counted upward from the resolving clause rather than downward from
         // the acting one. Forge resolves a copy of the ability it was handed,
         // so the bracket's root and the pointer's chain need not be the same
-        // objects, and a walk down from the root matched nothing at all.
+        // objects, and a walk down from the root would match nothing at all.
         int index = 0;
         SpellAbility parent = resolving.getParent();
         while (parent instanceof AbilitySub above) {

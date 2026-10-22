@@ -58,10 +58,10 @@ public final class Json {
      * own iteration order, an iterable as an array, and anything else as the
      * string literal of its {@code String.valueOf}.
      *
-     * <p>A null therefore becomes the string {@code "null"}, not JSON null.
-     * Event params nested a null that way into corpora that cannot be
-     * rewritten, and dedup hashes the rendered bytes, so a different spelling
-     * here would split one event into two.
+     * <p>A null therefore becomes the string {@code "null"}, not JSON null:
+     * that is the spelling the renderer this was lifted from always produced,
+     * and dedup hashes the rendered bytes, so a different spelling here would
+     * split one event into two.
      */
     public static String value(Object value) {
         if (value instanceof Boolean || value instanceof Number) {
