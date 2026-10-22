@@ -62,7 +62,7 @@ public final class ForkCollector {
      * Marks this thread as running one of this class's two forks -- an
      * {@link #intervene interventional resolution} or a {@link #probe
      * damage-step probe} -- for {@code
-     * PatchedCollectors.nullAbilityOutcomeBelongsToLiveGame()}.
+     * LiveGame.ownsNullAbilityOutcome()}.
      *
      * <p>It covers both methods' <em>entire</em> bodies, not just
      * {@link #probe}'s own {@code Combat.dealAssignedDamage} call. The
@@ -84,7 +84,7 @@ public final class ForkCollector {
      * <p>With the flag covering everything either method does, "a fork is
      * running on this thread" is by itself a sufficient answer for every fork
      * mechanism this class has today, so {@code
-     * nullAbilityOutcomeBelongsToLiveGame} checks it first -- the
+     * ownsNullAbilityOutcome} checks it first -- the
      * resolving-clause pointer is not needed to make this flag correct, only
      * kept behind it as a second, independent signal, as insurance against a
      * future fork mechanism that
@@ -120,7 +120,7 @@ public final class ForkCollector {
     /**
      * Where a forced resolution's clauses report in, while one is running.
      *
-     * <p>The clause hook is a JVM static that {@code PatchedCollectors} owns,
+     * <p>The clause hook is a JVM static that {@code ClauseOutcomeRouter} owns,
      * and the live collector drops a fork's clauses on game identity — rightly,
      * for its own bracket. A fork that splits a modal resolution into per-mode
      * halves (FR-029f) needs those same clauses, so the live handler hands a

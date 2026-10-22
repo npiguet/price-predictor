@@ -97,7 +97,7 @@ class OutcomeVocabularyContractTest {
 
         List<String> records = ShardRun.records(tempDir, TestCards.game(), (bracket, collectors) -> {
             bracket.beginBracket(liveAbility);
-            collectors.outcomeHandler().invoke(null, onOutcome(),
+            collectors.clauses().outcomeHandler().invoke(null, onOutcome(),
                     new Object[]{liveAbility, type, Map.of()});
             bracket.endBracket(liveAbility.getId(), false);
             bracket.flushHeldResolution();
@@ -116,7 +116,7 @@ class OutcomeVocabularyContractTest {
 
         List<String> records = ShardRun.records(tempDir, TestCards.game(), (bracket, collectors) -> {
             bracket.beginBracket(liveAbility);
-            collectors.outcomeHandler().invoke(null, onOutcome(),
+            collectors.clauses().outcomeHandler().invoke(null, onOutcome(),
                     new Object[]{liveAbility, EffectEvent.TEXT_CHANGE,
                             Map.of("subjects", List.of(card, player))});
             bracket.endBracket(liveAbility.getId(), false);

@@ -129,13 +129,13 @@ class ModalResolutionTest {
         List<String> records = ShardRun.records(tempDir, game, (bracket, collectors) -> {
             bracket.beginBracket(charm);
 
-            collectors.clauseHandler().invoke(null, resolving(), new Object[]{charm});
-            collectors.clauseHandler().invoke(null, resolving(), new Object[]{clones.get(0)});
+            collectors.clauses().clauseHandler().invoke(null, resolving(), new Object[]{charm});
+            collectors.clauses().clauseHandler().invoke(null, resolving(), new Object[]{clones.get(0)});
             bracket.recordClauseEvent(new EffectEvent(EffectEvent.DAMAGE_DEALT).param("amount", 4));
             // The first mode's effect: a life total that moved, which the
             // second mode's snapshot must show.
             caster.getOpponents().get(0).setLife(16, null);
-            collectors.clauseHandler().invoke(null, resolving(), new Object[]{clones.get(1)});
+            collectors.clauses().clauseHandler().invoke(null, resolving(), new Object[]{clones.get(1)});
             bracket.recordClauseEvent(new EffectEvent(EffectEvent.KEYWORD_CHANGE));
             bracket.endBracket(charm.getId(), false);
             bracket.flushHeldResolution();
@@ -173,7 +173,7 @@ class ModalResolutionTest {
         List<String> records = ShardRun.records(tempDir, game, (bracket, collectors) -> {
             bracket.beginBracket(charm);
             for (AbilitySub clone : clones) {
-                collectors.clauseHandler().invoke(null, resolving(), new Object[]{clone});
+                collectors.clauses().clauseHandler().invoke(null, resolving(), new Object[]{clone});
             }
             bracket.endBracket(charm.getId(), false);
             bracket.flushHeldResolution();
@@ -198,8 +198,8 @@ class ModalResolutionTest {
 
         List<String> records = ShardRun.records(tempDir, game, (bracket, collectors) -> {
             bracket.beginBracket(charm);
-            collectors.clauseHandler().invoke(null, resolving(), new Object[]{clones.get(0)});
-            collectors.clauseHandler().invoke(null, resolving(), new Object[]{clones.get(1)});
+            collectors.clauses().clauseHandler().invoke(null, resolving(), new Object[]{clones.get(0)});
+            collectors.clauses().clauseHandler().invoke(null, resolving(), new Object[]{clones.get(1)});
             bracket.recordClauseEvent(new EffectEvent(EffectEvent.KEYWORD_CHANGE));
             bracket.endBracket(charm.getId(), false);
             bracket.flushHeldResolution();
@@ -325,7 +325,7 @@ class ModalResolutionTest {
 
         List<String> records = ShardRun.records(tempDir, game, (bracket, collectors) -> {
             bracket.beginBracket(charm);
-            collectors.clauseHandler().invoke(null, resolving(), new Object[]{otherClones.get(0)});
+            collectors.clauses().clauseHandler().invoke(null, resolving(), new Object[]{otherClones.get(0)});
             bracket.endBracket(charm.getId(), false);
             bracket.flushHeldResolution();
         });
