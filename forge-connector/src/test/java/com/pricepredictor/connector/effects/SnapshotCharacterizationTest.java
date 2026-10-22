@@ -78,7 +78,7 @@ class SnapshotCharacterizationTest {
     /** {@code ofBoardWithout(staticId)}: the board minus the anthem. */
     @Test
     void noActingLineWithoutTheAnthem() {
-        Assumptions.assumeTrue(PatchedCollectors.CAN_SUPPRESS,
+        Assumptions.assumeTrue(ContinuousChannel.CAN_SUPPRESS,
                 "../forge cannot remove one static's contributions");
         CharacterizationBoard board = CharacterizationBoard.full(PhaseType.MAIN1);
         StaticAbility anthem = board.named("Glorious Anthem")

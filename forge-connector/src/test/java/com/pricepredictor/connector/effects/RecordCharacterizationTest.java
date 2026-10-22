@@ -248,7 +248,7 @@ class RecordCharacterizationTest {
     /** One record per static: a P/T boost, a granted keyword, a type and a colour change. */
     @Test
     void continuousRecords() throws Throwable {
-        Assumptions.assumeTrue(PatchedCollectors.CAN_SUPPRESS,
+        Assumptions.assumeTrue(ContinuousChannel.CAN_SUPPRESS,
                 "../forge cannot remove one static's contributions");
         CharacterizationBoard board = CharacterizationBoard.empty(PhaseType.MAIN1);
         board.battlefield("Glorious Anthem", board.you);
@@ -259,7 +259,7 @@ class RecordCharacterizationTest {
         board.game.getAction().checkStaticAbilities();
 
         List<String> records = records(board, CAPS,
-                (bracket, collectors) -> collectors.collectContinuous());
+                (bracket, collectors) -> collectors.continuous().collect());
 
         Characterization.assertMatches(
                 "record-continuous.jsonl", Characterization.recordLines(records));

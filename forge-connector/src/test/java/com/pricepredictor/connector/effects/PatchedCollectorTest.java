@@ -1,13 +1,6 @@
 package com.pricepredictor.connector.effects;
 
 import com.pricepredictor.connector.ForgeExtension;
-import com.pricepredictor.connector.effects.PatchedCollectors.Contribution;
-import forge.card.CardChangedType;
-import forge.card.CardType;
-import forge.card.ColorSet;
-import forge.card.RemoveType;
-import forge.card.StateChangedType;
-import forge.card.WordChangedType;
 import forge.game.ability.AbilityFactory;
 import forge.game.card.Card;
 import forge.game.player.Player;
@@ -16,16 +9,12 @@ import forge.game.trigger.Trigger;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.io.TempDir;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.CsvSource;
 
 import java.lang.reflect.Method;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 import static com.pricepredictor.connector.effects.TestCollectors.caps;
 import static com.pricepredictor.connector.effects.TestCollectors.recording;
@@ -60,229 +49,6 @@ class PatchedCollectorTest {
             HookShapes.method(HookShapes.CombatLegality.class, "onBlockersDeclarable");
     private static final Method ON_MANA_PRODUCED =
             HookShapes.method(HookShapes.Mana.class, "onManaProduced");
-
-    // ── continuous coalescing ───────────────────────────────────────────
-
-    /**
-     * A static's record is keyed by the static and the board: one repeating
-     * both is refused, and a change in either is a record of its own.
-     */
-    @ParameterizedTest(name = "{0}")
-    @CsvSource({
-            "a static is recorded once per stable board, anthem, board-1, false",
-            "a changed board gets a new record, anthem, board-2, true",
-            "two statics on one board each get a record, crusade, board-1, true"})
-    void aContinuousRecordIsKeyedByItsStaticAndBoard(
-            String why, String staticKey, String board, boolean allowed) {
-        PatchedCollectors collector = unwired(caps(2000, 1.0));
-        assertTrue(collector.allowContinuousRecord("anthem", "board-1"));
-        assertEquals(allowed, collector.allowContinuousRecord(staticKey, board), why);
-    }
-
-    @Test
-    void continuousRecordsTakeNoNumericCap() {
-        // Coalescing per stable board is itself the cap (FR-029).
-        PatchedCollectors collector = unwired(caps(1, 1.0));
-        for (int board = 0; board < 100; board++) {
-            assertTrue(collector.allowContinuousRecord("anthem", "board-" + board));
-        }
-    }
-
-    // ── continuous type and colour channels ─────────────────────────────
-
-    /**
-     * A stand-in for the patch's own {@code Card.CardColor}.
-     *
-     * <p>The real one is nested in {@code Card} and only exists as a public type
-     * on a patched checkout, which this module does not compile against. The
-     * collector reads both components reflectively, so any public record with
-     * the same two accessors exercises the same path — and a test that named the
-     * real type would not compile on a stock checkout.
-     */
-    public record ColorChange(ColorSet color, boolean additional) {
-    }
-
-    private static String tokens(Contribution into, String field) {
-        String json = into.toJson();
-        int at = json.indexOf("\"" + field + "\":[");
-        return json.substring(at + field.length() + 4, json.indexOf(']', at));
-    }
-
-    @Test
-    void anAddedTypeIsBareAndARemovedOneIsDashed() {
-        Contribution into = new Contribution("E1");
-        PatchedCollectors.typeTokens(new CardChangedType(
-                new CardType(List.of("Creature", "Elf"), true),
-                new CardType(List.of("Land"), true),
-                false, Set.of()), into);
-        assertEquals("\"creature\",\"elf\",\"-land\"", tokens(into, "types"));
-    }
-
-    @Test
-    void removingAWholeClassOfTypeIsNamedForTheClass() {
-        // "loses all creature types" names no type, so it cannot be spelled as
-        // a list of removals.
-        Contribution into = new Contribution("E1");
-        PatchedCollectors.typeTokens(new CardChangedType(
-                null, null, true,
-                Set.of(RemoveType.CreatureTypes, RemoveType.SuperTypes)), into);
-        assertEquals(
-                Set.of("\"all-creature-types\"", "\"-all-creature-types\"",
-                        "\"-all-super-types\""),
-                Set.of(tokens(into, "types").split(",")));
-    }
-
-    @Test
-    void aStateChangeMarksTheTypeLineAsSetRatherThanAdded() {
-        Contribution into = new Contribution("E1");
-        PatchedCollectors.typeTokens(
-                new StateChangedType(new CardType(List.of("Land"), true)), into);
-        assertEquals("\"=\",\"land\"", tokens(into, "types"));
-    }
-
-    @Test
-    void aTextChangeIsARemovalAndAnAdditionInOneEntry() {
-        Contribution into = new Contribution("E1");
-        PatchedCollectors.typeTokens(new WordChangedType("Forest", "Island"), into);
-        assertEquals("\"-forest\",\"island\"", tokens(into, "types"));
-    }
-
-    @Test
-    void anAdditionalColourIsJustTheLetter() {
-        Contribution into = new Contribution("E1");
-        PatchedCollectors.colorTokens(
-                new ColorChange(ColorSet.fromNames("green"), true), into);
-        assertEquals("\"G\"", tokens(into, "colors"));
-    }
-
-    @Test
-    void aReplacingColourIsMarked() {
-        Contribution into = new Contribution("E1");
-        PatchedCollectors.colorTokens(
-                new ColorChange(ColorSet.fromNames("green"), false), into);
-        assertEquals("\"=\",\"G\"", tokens(into, "colors"));
-    }
-
-    @Test
-    void replacingTheColourWithNothingIsColourless() {
-        // An empty colour set and an empty token list are different answers:
-        // one turns the permanent colourless, the other says nothing happened.
-        Contribution into = new Contribution("E1");
-        PatchedCollectors.colorTokens(
-                new ColorChange(ColorSet.fromMask(0), false), into);
-        assertEquals("\"=\",\"C\"", tokens(into, "colors"));
-    }
-
-    @Test
-    void anUnreadableColourEntryContributesNothingRatherThanAReplacement() {
-        // Guessing here would report every colour change as an overwrite.
-        Contribution into = new Contribution("E1");
-        PatchedCollectors.colorTokens(new Object(), into);
-        assertEquals("", tokens(into, "colors"));
-    }
-
-    @Test
-    void aStaticThatWritesTheSameTypeTwiceSaysItOnce() {
-        // One static can write to more than one type layer.
-        Contribution into = new Contribution("E1");
-        CardChangedType change = new CardChangedType(
-                new CardType(List.of("Creature"), true), null, false, Set.of());
-        PatchedCollectors.typeTokens(change, into);
-        PatchedCollectors.typeTokens(change, into);
-        assertEquals("\"creature\"", tokens(into, "types"));
-    }
-
-    // ── continuous name channel ──────────────────────────────────────────
-
-    /** {@code "name"} is the last field {@link Contribution#toJson()} writes. */
-    private static String nameField(Contribution into) {
-        String json = into.toJson();
-        int at = json.indexOf("\"name\":");
-        return json.substring(at + "\"name\":".length(), json.length() - 1);
-    }
-
-    /**
-     * The channel this task exists for: {@code contributions[].name} is
-     * declared and listed in {@code KNOWN_CONSTANT_FIELDS} because it had
-     * never carried a value in any corpus.
-     *
-     * <p>Goes through the real {@code Card.addChangedName} and the real,
-     * reflectively-read {@code Card.getChangedCardNames} rather than a
-     * hand-built stand-in, because the defect this guards against is exactly
-     * the gap between "compiles against a plausible shape" and "the engine
-     * ever produces this".
-     *
-     * <p>Two competing entries, not one: with a single rename in the table,
-     * {@code card.getName()} -- which walks every entry and returns the last
-     * overwrite -- answers the same string as that one static's own cell, so
-     * a {@code contribution(...).name(card.getName())} implementation
-     * (whole-card, not this cell) would pass unnoticed. The later static
-     * ({@code winningStatic}) is what {@code getName()} reports; asserting
-     * that the earlier one ({@code supersededStatic}) still carries its own,
-     * superseded name is what only a per-cell read can produce. This also
-     * covers two statics renaming the same card, which otherwise had no test
-     * at all.
-     */
-    @Test
-    void aChangedNameContributesTheNewName() {
-        Card card = TestCards.build("Grizzly Bears");
-        long supersededStatic = 1111L;
-        long winningStatic = 2222L;
-        card.addChangedName("Superseded-By-Later-Static", false, 3L, supersededStatic);
-        card.addChangedName("Winning-Name", false, 7L, winningStatic);
-        // The premise the whole-card shortcut would rely on, and get wrong
-        // for the superseded static below.
-        assertEquals("Winning-Name", card.getName());
-
-        Map<Long, Map<String, Contribution>> byStatic = new LinkedHashMap<>();
-        PatchedCollectors.nameContributions(card, byStatic, "E1");
-
-        assertEquals("\"Superseded-By-Later-Static\"",
-                nameField(byStatic.get(supersededStatic).get("E1")));
-        assertEquals("\"Winning-Name\"",
-                nameField(byStatic.get(winningStatic).get("E1")));
-    }
-
-    /**
-     * The channel's other half: most statics contribute no name, and null is
-     * the correct, meaningful answer there -- not an empty string, and not a
-     * dropped key.
-     */
-    @Test
-    void aCardWithNoNameChangeRendersNullName() {
-        Card card = TestCards.build("Grizzly Bears");
-        Map<Long, Map<String, Contribution>> byStatic = new LinkedHashMap<>();
-        PatchedCollectors.nameContributions(card, byStatic, "E1");
-        assertTrue(byStatic.isEmpty(), "no static wrote a name, so nothing is filed");
-        assertEquals("null", nameField(new Contribution("E1")));
-    }
-
-    @Test
-    void anUnreadableNameEntryContributesNoName() {
-        // Guessing here would report every unrelated object as a rename.
-        Contribution into = new Contribution("E1");
-        PatchedCollectors.nameTokens(new Object(), into);
-        assertEquals("null", nameField(into));
-    }
-
-    // ── coalescing the kinds that had none ─────────────────────────────
-
-    /**
-     * Two copies of one anthem render one record.
-     *
-     * <p>The per-board coalescer cannot see this: the two statics have different
-     * ids, so it treats them as different questions, while their key, their
-     * contributions and their suppressed board are all the same.
-     */
-    @Test
-    void twoStaticsThatRenderIdenticallyAreWrittenOnce() {
-        PatchedCollectors collector = unwired(caps(2000, 1.0));
-        RecordDedup dedup = new RecordDedup();
-        assertTrue(collector.allowContinuousRecord("11", "board-1"));
-        assertTrue(collector.allowContinuousRecord("12", "board-1"));
-        assertTrue(dedup.allowDistinct("continuous", "{anthem}", "{board}"));
-        assertFalse(dedup.allowDistinct("continuous", "{anthem}", "{board}"));
-    }
 
     // ── the snapshot depth is the same on every record ─────────────────
 

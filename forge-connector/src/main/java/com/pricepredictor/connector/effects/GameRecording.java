@@ -133,7 +133,7 @@ public final class GameRecording implements AutoCloseable {
 
         @Subscribe
         public void onPhase(GameEventTurnPhase event) {
-            patched.collectContinuous();
+            patched.continuous().collect();
             interventions.ifPresent(InterventionScheduler::collect);
             // Before the turn-based action that deals the damage: the phase
             // event fires ahead of it, which is the only moment a probe can
