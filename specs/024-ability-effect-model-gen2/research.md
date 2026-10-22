@@ -101,7 +101,7 @@ path as `tests/unit/scripts/test_regenerate_forge_api_list.py` does. No deviatio
 
 **Rationale**: Forge gives a mode no identity of its own. `CharmEffect.chainAbilities`
 (forge/`CharmEffect.java:287-311`) copies each chosen mode, overwrites its `CharmOrder` with its chain
-position, and sets no back-reference; `ProvenanceKey.resolve` climbs every copy to the root
+position, and sets no back-reference; `ProvenanceResolver.resolve` climbs every copy to the root
 (`ProvenanceKey.java:230-233`). The only stable identity is the position in `Choices$`, which both the
 converter (`CharmAbility.java:57`, `getAdditionalAbilityList("Choices")`) and the collector (the spell's
 chosen list, which `chainAbilities` sorts in place by original `CharmOrder`) can compute. An additive

@@ -21,7 +21,7 @@ ProvenanceKey = (script_file, face, trait_kind, index_within_kind, option?)
 - JSON: an extra `"option"` member of the key object, written only when set. Additive under
   compatibility rule 1.
 - Equality and hashing include `option`, so a mode key never matches its root key.
-- Produced by: `RulesParser`/`ProvenanceRecorder` for sidecar `option` lines; `ProvenanceKey.resolve`
+- Produced by: `RulesParser`/`ProvenanceRecorder` for sidecar `option` lines; `ProvenanceResolver.resolve`
   for a cloned mode at resolution; `RandomChoices`/`ForkCollector` for fork modes.
 
 ### SidecarLine (extended)

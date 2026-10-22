@@ -141,7 +141,7 @@ trait's own `CardState.getIntrinsicKeywords()` **sorted by that text**. Not the 
 an ordinal neither side could reproduce. Restricting it to intrinsics also correctly refuses a *granted*
 keyword, which names no printed line on the card that received it.
 
-Both sides compute it from one shared function, `ProvenanceKey.keywordIndex`, the same discipline
+Both sides compute it from one shared function, `FaceOrder.keywordIndex`, the same discipline
 `faceIndex`/`faceOrder` already enforce for faces. The two are coupled: the moment the runtime emits
 `keyword@N`, the sidecars must have been rebuilt by the fixed converter, or every such record trips the
 fail-loudly rule below.

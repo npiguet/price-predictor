@@ -285,14 +285,14 @@ announcement — in **two distinct sub-shapes**, not one, which an earlier draft
 
 - **Reactive-trigger mode, not the ability's own outcome.** `spell_countered` and `token_created` are
   referenced by a live *trigger* mode name — `"Countered"`, `"TokenCreated"`/`"TokenCreatedOnce"`, all real
-  `TriggerType` members — reached from `PatchedCollectors.triggerRecord` (`:862-865`), which fires for a
+  `TriggerType` members — reached from `TriggerChannel.record`, which fires for a
   card that *reacts* to a counter or a token appearing elsewhere, never for the countering/token-making
   ability's own resolution.
 - **Replacement mode, not a trigger at all.** `dice_rolled` and `player_won` are referenced by a live
   *replacement* mode name instead — `"RollDice"` (`ReplacementType.java:46`) and `"GameWin"`
-  (`ReplacementType.java:34`) — reached from `PatchedCollectors.rewriteRecord` (`:461-467`), not
+  (`ReplacementType.java:34`) — reached from `RewriteChannel.record`, not
   `triggerRecord` at all, despite both mode-name spellings sitting in the same flat table (divided only by
-  a comment, `PatchedCollectors.java:2832`). Firing needs a replacement effect that intercepts the roll or
+  a comment in `RunParamNormalizer`). Firing needs a replacement effect that intercepts the roll or
   the win already in progress; there is no reactive-trigger path for these two, and no ability's-own-outcome
   path either.
 
@@ -608,9 +608,9 @@ above are covered by one of them:
 - **Bus-derived events**: `ForkEventSink` subscribes to the *fork's own* `Game` object's event bus, not
   the live game's, so a fork's `GameEventCardDamaged` and friends never reach the live game's
   `BusBracketCollector` in the first place — there is no shared channel for them to leak through.
-- **An ability-, replacement- or trigger-bearing argument**: `PatchedCollectors.clauseHandler()`,
-  `outcomeHandler()` (when the reporting ability is non-null), `rewriteHandler()`, `triggerFireHandler()`,
-  `manaHandler()`, `playabilityHandler()` and `combatLegalityHandler()`, and `BusBracketCollector
+- **An ability-, replacement- or trigger-bearing argument**: `ClauseOutcomeRouter.clauseHandler()`,
+  `outcomeHandler()` (when the reporting ability is non-null), `RewriteChannel.handler()`, `TriggerChannel.handler()`,
+  `ManaChannel.handler()`, `PlayabilityChannel.decisionHandler()` and `legalityHandler()`, and `BusBracketCollector
   .confirmHandler()`, each check the acting argument's own game identity — `belongsToLiveGame`, one
   overload keyed on `CardTraitBase.getHostCard()` (covers `SpellAbility`, `ReplacementEffect` and
   `Trigger`, which is why the rewrite and trigger-fire hooks share it with the clause/outcome hooks rather
