@@ -149,7 +149,7 @@ class PatchedCollectorTest {
 
     /**
      * final-fix-3.md item 2: {@code manaHandler} had no game check either.
-     * Held in {@link PatchedCollectors#manaReservoir} rather than written
+     * Held in {@link ManaChannel}'s reservoir rather than written
      * immediately, so the collector must be closed (which flushes it) before
      * the shard can be read.
      */
@@ -161,7 +161,7 @@ class PatchedCollectorTest {
         Player forkPlayer = new Player("fork-player", forkCard.getGame(), 92302);
 
         Path shard = ShardRun.shardOf(tempDir, TestCards.game(), (bracket, collectors) ->
-                collectors.manaHandler().invoke(null, ON_MANA_PRODUCED,
+                collectors.mana().handler().invoke(null, ON_MANA_PRODUCED,
                         new Object[]{forkAbility, forkPlayer, "G"}));
 
         assertFalse(Files.exists(shard),
@@ -229,10 +229,10 @@ class PatchedCollectorTest {
         Player livePlayer = new Player("live-player", TestCards.game(), 93102);
 
         // manaHandler holds records in the reservoir rather than writing them
-        // immediately (PatchedCollectors#manaReservoir); only flushMana(),
+        // immediately (ManaChannel); only ManaChannel.flush(),
         // called when the run closes the collectors, writes them out.
         List<String> lines = ShardRun.records(tempDir, TestCards.game(), (bracket, collectors) ->
-                collectors.manaHandler().invoke(null, ON_MANA_PRODUCED,
+                collectors.mana().handler().invoke(null, ON_MANA_PRODUCED,
                         new Object[]{liveAbility, livePlayer, "G"}));
         assertTrue(lines.stream().anyMatch(l -> l.contains("mana_produced")),
                 "live mana production must reach the shard: " + lines);

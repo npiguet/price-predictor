@@ -48,8 +48,6 @@ public final class PatchedCollectors implements AutoCloseable {
     private final SnapshotBuilder snapshots;
     private final AttributionMode mode;
 
-    /** The sampled mana records, held until the game ends. */
-    private final ManaReservoir manaReservoir;
     /**
      * The bracket this game's clause events are filed into:
      * {@code recordClauseEvent} is the door, and only the bracket collector for
@@ -62,6 +60,7 @@ public final class PatchedCollectors implements AutoCloseable {
     private final TriggerChannel triggers;
     private final PlayabilityChannel playability;
     private final ContinuousChannel continuous;
+    private final ManaChannel mana;
 
     /** A hook this collector installs a listener on. */
     private record Listener(PatchHooks.Hook hook, Supplier<InvocationHandler> handler) {
@@ -80,18 +79,19 @@ public final class PatchedCollectors implements AutoCloseable {
         this.snapshots = live.snapshots();
         this.mode = context.mode();
         this.sampler = new java.util.Random(GameRecording.scramble(seed));
-        this.manaReservoir = new ManaReservoir(caps.manaCap(), sampler);
         this.bracket = bracket;
         this.triggers = new TriggerChannel(
                 live, context, dedup, new TriggerNegativeSampler(sampler));
         this.playability = new PlayabilityChannel(
                 live, context, dedup, sampler, caps.playabilityRate());
         this.continuous = new ContinuousChannel(live, context, dedup);
+        this.mana = new ManaChannel(
+                live, context, new ManaReservoir(caps.manaCap(), sampler));
         this.listeners = List.of(
                 new Listener(PatchHooks.REPLACEMENT_LISTENER, this::rewriteHandler),
                 new Listener(PatchHooks.TRIGGER_LISTENER, triggers::handler),
                 new Listener(PatchHooks.PLAYABILITY_LISTENER, playability::decisionHandler),
-                new Listener(PatchHooks.MANA_LISTENER, this::manaHandler),
+                new Listener(PatchHooks.MANA_LISTENER, mana::handler),
                 new Listener(PatchHooks.COMBAT_LISTENER, playability::legalityHandler),
                 new Listener(PatchHooks.CLAUSE_LISTENER, this::clauseHandler),
                 new Listener(PatchHooks.OUTCOME_LISTENER, this::outcomeHandler));
@@ -110,6 +110,11 @@ public final class PatchedCollectors implements AutoCloseable {
     /** The continuous channel, collected at each phase boundary rather than on a hook. */
     ContinuousChannel continuous() {
         return continuous;
+    }
+
+    /** The mana channel. */
+    ManaChannel mana() {
+        return mana;
     }
 
     /**
@@ -134,7 +139,7 @@ public final class PatchedCollectors implements AutoCloseable {
     public void close() {
         // Before the hooks come down: this is the last moment the game can be
         // said to have ended, and the mana reservoir is only decided then.
-        flushMana();
+        mana.flush();
         for (Listener listener : listeners) {
             listener.hook().uninstall();
         }
@@ -529,83 +534,6 @@ public final class PatchedCollectors implements AutoCloseable {
      */
     private static Object outcomeRefOf(Object value) {
         return Refs.ofAny(value).<Object>map(ref -> ref).orElse(value);
-    }
-
-    // ── mana records ────────────────────────────────────────────────────
-
-    /**
-     * One resolution record per mana ability that produced mana.
-     *
-     * <p>A mana ability never uses the stack, so the bracket collector sees no
-     * cast and no resolution for it and the corpus has no effect half at all.
-     * That is what leaves the role-polarity probe unrunnable: paying {@code R}
-     * is observable from stage one, producing it is not.
-     *
-     * <p>Package-private rather than private, the same reason {@link
-     * #rewriteHandler()} is: this hook's own game-identity test calls it with
-     * a synthesized argument array.
-     */
-    InvocationHandler manaHandler() {
-        return PatchHooks.MANA_LISTENER.listener((callback, args) -> {
-            SpellAbility ability = args.get(0, SpellAbility.class);
-            String produced = String.valueOf(args.get(2));
-            // A fork's own mana abilities can resolve through the inline path
-            // too (forceResolution's forced ability,
-            // or costs it pays along the way), and this hook is a JVM static
-            // like the others.
-            if (ability == null || produced.isEmpty() || !live.owns(ability)) {
-                return;
-            }
-            String key = manaAbilityText(ability, produced);
-            int slot = manaReservoir.slot(key);
-            if (slot < 0) {
-                return;
-            }
-            Player producer = args.get(1, Player.class);
-            String player = producer != null
-                    ? SnapshotBuilder.playerId(producer) : live.activePlayerId();
-            EffectEvent event = new EffectEvent(EffectEvent.MANA_PRODUCED)
-                    .subject(player)
-                    .param("mana_by_color", RunParamNormalizer.manaByColor(produced));
-            // Held rather than written: which activation survives is not known
-            // until the game ends. The state is snapshotted here, at the moment
-            // the mana was made, so a record that does survive describes the
-            // board it was actually produced on.
-            EffectRecord record = context.newResolution(Moment.RESOLUTION)
-                    .actor(player)
-                    .ability(ProvenanceKey.resolve(ability))
-                    .state(snapshots.ofBoard().render())
-                    .payload(EffectRecord.eventsPayload(List.of(event)));
-            manaReservoir.hold(key, slot, record);
-        });
-    }
-
-    /**
-     * The cap's key: the ability, not the instance.
-     *
-     * <p>Every Mountain shares one text, so counting by text caps the whole
-     * class rather than each copy. The produced string rides along because a
-     * filter land producing {@code W} and the same land producing {@code U} are
-     * different observations of the same line.
-     */
-    static String manaAbilityText(SpellAbility ability, String produced) {
-        Object api = ability.getApi();
-        return (api == null ? "?" : api.toString()) + "|"
-                + ability.getHostCard().getName() + "|" + produced;
-    }
-
-    /**
-     * Write the sampled mana records, once the game can produce no more.
-     *
-     * <p>They are held until here because reservoir sampling does not know
-     * which activation won until the last one has happened. A game whose JVM
-     * dies loses its reservoir — at most {@code --mana-cap} records per mana
-     * ability, against a crash that already costs the rest of the game.
-     */
-    private void flushMana() {
-        for (EffectRecord record : manaReservoir.drain()) {
-            emit(record);
-        }
     }
 
     private void emit(EffectRecord record) {
