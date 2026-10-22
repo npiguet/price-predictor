@@ -156,14 +156,8 @@ final class LayerContributions {
         if (types == null) {
             return;
         }
-        for (var type : types.getCoreTypes()) {
-            into.type(prefix + SnapshotBuilder.typeName(type));
-        }
-        for (var supertype : types.getSupertypes()) {
-            into.type(prefix + SnapshotBuilder.typeName(supertype));
-        }
-        for (String subtype : types.getSubtypes()) {
-            into.type(prefix + SnapshotBuilder.typeName(subtype));
+        for (String name : TypeLine.names(types)) {
+            into.type(prefix + name);
         }
     }
 

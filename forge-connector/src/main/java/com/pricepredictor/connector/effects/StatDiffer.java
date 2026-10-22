@@ -66,8 +66,13 @@ final class StatDiffer {
                     .param("toughness_delta", now.toughness() - before.toughness()));
         }
         addKeywordEvents(events, subject, before.keywords(), now.keywords());
-        addTypeEvent(events, subject, before.types(), now.types());
-        addColorEvent(events, subject, before.colors(), now.colors());
+        addSetChangeEvent(events, subject, EffectEvent.TYPE_CHANGE,
+                "types_added", "types_removed", before.types(), now.types());
+        // colors_removed is this side's addition to the type's normalization:
+        // the head has a colors_lost field and the event carried no way to say
+        // a colour went away.
+        addSetChangeEvent(events, subject, EffectEvent.COLOR_CHANGE,
+                "colors", "colors_removed", before.colors(), now.colors());
         if (!java.util.Objects.equals(before.controller(), now.controller())) {
             events.add(new EffectEvent(EffectEvent.CONTROL_CHANGE)
                     .subject(subject)
@@ -113,35 +118,20 @@ final class StatDiffer {
         }
     }
 
-    private static void addTypeEvent(
-            List<EffectEvent> events, String subject,
+    /** One event naming what joined and what left a set, or none when neither did. */
+    private static void addSetChangeEvent(
+            List<EffectEvent> events, String subject, String type,
+            String addedParam, String removedParam,
             Set<String> before, Set<String> now) {
         Set<String> added = difference(now, before);
         Set<String> removed = difference(before, now);
         if (added.isEmpty() && removed.isEmpty()) {
             return;
         }
-        events.add(new EffectEvent(EffectEvent.TYPE_CHANGE)
+        events.add(new EffectEvent(type)
                 .subject(subject)
-                .param("types_added", List.copyOf(added))
-                .param("types_removed", List.copyOf(removed)));
-    }
-
-    private static void addColorEvent(
-            List<EffectEvent> events, String subject,
-            Set<String> before, Set<String> now) {
-        Set<String> added = difference(now, before);
-        Set<String> removed = difference(before, now);
-        if (added.isEmpty() && removed.isEmpty()) {
-            return;
-        }
-        // colors_removed is this side's addition to the type's normalization:
-        // the head has a colors_lost field and the event carried no way to say
-        // a colour went away.
-        events.add(new EffectEvent(EffectEvent.COLOR_CHANGE)
-                .subject(subject)
-                .param("colors", List.copyOf(added))
-                .param("colors_removed", List.copyOf(removed)));
+                .param(addedParam, List.copyOf(added))
+                .param(removedParam, List.copyOf(removed)));
     }
 
     private static Set<String> difference(Set<String> from, Set<String> without) {
@@ -158,16 +148,7 @@ final class StatDiffer {
                 keywords.add(original.toLowerCase(Locale.ROOT));
             }
         }
-        Set<String> types = new LinkedHashSet<>();
-        for (var type : card.getType().getCoreTypes()) {
-            types.add(SnapshotBuilder.typeName(type));
-        }
-        for (var supertype : card.getType().getSupertypes()) {
-            types.add(SnapshotBuilder.typeName(supertype));
-        }
-        for (String subtype : card.getType().getSubtypes()) {
-            types.add(SnapshotBuilder.typeName(subtype));
-        }
+        Set<String> types = new LinkedHashSet<>(TypeLine.names(card.getType()));
         return new Stats(
                 card.getNetPower(), card.getNetToughness(), keywords, types,
                 new LinkedHashSet<>(SnapshotBuilder.colorLetters(card.getColor())),
