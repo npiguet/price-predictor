@@ -152,15 +152,13 @@ class ApiEventsTest {
      * {@link TestCards#game()}'s zero-player game, so {@code ownerOf} would
      * fall back to the activator instead.
      *
-     * <p>{@code You & You} (the first version of this test) could not tell
-     * that fallback apart from a correct split, because both halves name the
-     * activator either way -- the test passed unchanged with the split
-     * deleted. {@code Targeted & You} can: split, the owner is the targeted
-     * player; unsplit, the whole string matches nothing and {@code ownerOf}
-     * falls back to the activator, a different id. Mutation-tested: deleting
-     * the {@code " & "} split in {@code definedPlayers} makes this fail with
-     * the activator's id where the targeted player's was expected, then
-     * passes again with the split restored.
+     * <p>{@code You & You} could not tell that fallback apart from a correct
+     * split, because both halves name the activator either way.
+     * {@code Targeted & You} can: split, the owner is the targeted player;
+     * unsplit, the whole string matches nothing and {@code ownerOf} falls back
+     * to the activator, a different id. Deleting the {@code " & "} split in
+     * {@code definedPlayers} makes this fail with the activator's id where the
+     * targeted player's was expected.
      */
     @Test
     void ownershipDefinedPlayerSplitsOnAmpersand() {
