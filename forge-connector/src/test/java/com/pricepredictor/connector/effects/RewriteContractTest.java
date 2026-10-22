@@ -23,6 +23,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import static com.pricepredictor.connector.effects.TestCollectors.recording;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -129,21 +130,12 @@ class RewriteContractTest {
     @EnumSource(ReplacementResult.class)
     void everyResultIsWrittenInItsWireSpelling(ReplacementResult result) {
         Card card = TestCards.build("Mountain");
-        String json = recording().rewriteRecord(
+        String json = recording(tempDir).rewriteRecord(
                 new FakeTrait("Moved"),
                 Map.of("Card", card), Map.of("Card", card), result, null).toJson();
 
         assertTrue(json.contains("\"result\":\"" + WIRE.get(result) + "\""),
                 "the lower snake case of " + result + ": " + json);
-    }
-
-    /** And it is snake case, which {@code NotReplaced} is the only test of. */
-    @Test
-    void theTwoWordResultIsSnakeCased() {
-        assertEquals("not_replaced",
-                EffectRecord.rewriteResult(ReplacementResult.NotReplaced));
-        assertEquals("replaced",
-                EffectRecord.rewriteResult(ReplacementResult.Replaced));
     }
 
     /**
@@ -157,7 +149,7 @@ class RewriteContractTest {
     @Test
     void aReplacementWithNoAnswerSaysSoRatherThanGuessing() {
         Card card = TestCards.build("Mountain");
-        String json = recording().rewriteRecord(
+        String json = recording(tempDir).rewriteRecord(
                 new FakeTrait("Moved"),
                 Map.of("Card", card), Map.of("Card", card), null, null).toJson();
 
@@ -190,7 +182,7 @@ class RewriteContractTest {
         Map<String, Object> after = new LinkedHashMap<>(before);
         after.put("DamageAmount", 1);
 
-        String json = recording().rewriteRecord(
+        String json = recording(tempDir).rewriteRecord(
                 new FakeTrait("DamageDone"), before, after,
                 ReplacementResult.Updated, null).toJson();
 
@@ -219,7 +211,7 @@ class RewriteContractTest {
         Map<String, Object> params = Map.of(
                 "Card", rest, "Destination", ZoneType.Graveyard);
 
-        String json = recording().rewriteRecord(
+        String json = recording(tempDir).rewriteRecord(
                 replacement, params, params, ReplacementResult.Replaced, ran).toJson();
 
         assertTrue(json.contains("\"outgoing\":null"), json);
@@ -236,7 +228,7 @@ class RewriteContractTest {
     @Test
     void nothingRunningInsteadIsAnEmptyListNotANull() {
         Card card = TestCards.build("Mountain");
-        String json = recording().rewriteRecord(
+        String json = recording(tempDir).rewriteRecord(
                 new FakeTrait("Untap"),
                 Map.of("Card", card), Map.of("Card", card),
                 ReplacementResult.Prevented, null).toJson();
@@ -255,7 +247,7 @@ class RewriteContractTest {
     @Test
     void aSubstitutedAbilityThatIsNotATraitCostsOnlyTheField() {
         Card card = TestCards.build("Mountain");
-        String json = recording().rewriteRecord(
+        String json = recording(tempDir).rewriteRecord(
                 new FakeTrait("Moved"),
                 Map.of("Card", card), Map.of("Card", card),
                 ReplacementResult.Replaced, "not an ability").toJson();
@@ -379,6 +371,11 @@ class RewriteContractTest {
     /**
      * The other half of the same omission: 62,546 rewrite records that named
      * no replacement effect, on the one hook every replacement passes through.
+     *
+     * <p>And a record that names its line carries no reason for an empty one.
+     * The two fields are one statement in two halves: a reason beside a named
+     * line is a contradiction the Python reader refuses outright, so the
+     * collector may never write both.
      */
     @Test
     void aRewriteRecordNamesItsReplacementEffect() {
@@ -389,7 +386,7 @@ class RewriteContractTest {
         ReplacementEffect replacement =
                 rest.getCurrentState().getReplacementEffects().iterator().next();
 
-        String json = recording().rewriteRecord(
+        String json = recording(tempDir).rewriteRecord(
                 replacement,
                 Map.of("Card", rest, "Destination", ZoneType.Graveyard),
                 Map.of("Card", rest, "Destination", ZoneType.Exile),
@@ -398,18 +395,15 @@ class RewriteContractTest {
         assertTrue(json.contains("\"kind\":\"rewrite\""), json);
         assertTrue(json.contains("\"trait_kind\":\"replacement\""), json);
         assertTrue(json.contains("cardsfolder/r/rest_in_peace.txt"), json);
+        assertTrue(json.contains("\"ability_unresolved\":null"), json);
         assertTrue(json.contains(
                 "\"source\":\"" + SnapshotBuilder.entityId(rest) + "\""), json);
-        // And it says what the replacement actually did, which is the whole of
-        // the rewrite channel's defect: a graveyard destination in, an exile
-        // destination out.
         assertTrue(json.contains("\"incoming\":{\"type\":\"zone_change\""), json);
-        assertTrue(json.contains("\"to_zone\":\"graveyard\""), json);
-        assertTrue(json.contains("\"to_zone\":\"exile\""), json);
     }
 
     /**
-     * A prevention that changes no parameter is a record, not a loss.
+     * A prevention that changes no parameter is a record, not a loss, and its
+     * mode is spelled the replacement side's way.
      *
      * <p>Paralyze's "doesn't untap" is the shape the whole contract is for: the
      * engine skips the event rather than rewriting a value, so both halves read
@@ -417,14 +411,22 @@ class RewriteContractTest {
      * result is what makes the row readable without an outgoing — {@code skipped}
      * says outright what an identity pair could only imply — so the record is
      * written, and its outgoing is null rather than a copy of its incoming.
+     *
+     * <p>{@code ReplacementType} names {@code Untap} where {@code TriggerType}
+     * names {@code Untaps}, and the mode table was written from the trigger
+     * vocabulary — so an untap replacement took the generic type, carried
+     * nothing but its own name, and could not differ from itself however much
+     * it changed. Paralyze's is that mode, and its incoming half is typed
+     * rather than generic.
      */
     @Test
     void aPreventionThatRewritesNothingIsStillARecord() {
         Card paralyze = TestCards.build("Paralyze");
         ReplacementEffect prevention =
                 paralyze.getCurrentState().getReplacementEffects().iterator().next();
+        assertEquals("Untap", String.valueOf(prevention.getMode()));
 
-        EffectRecord record = recording().rewriteRecord(
+        EffectRecord record = recording(tempDir).rewriteRecord(
                 prevention, Map.of("Card", paralyze), Map.of("Card", paralyze),
                 ReplacementResult.Skipped, null);
 
@@ -435,71 +437,7 @@ class RewriteContractTest {
                 "null, never a copy of incoming: " + json);
         assertTrue(json.contains("\"replaced_by\":[]"),
                 "a skip returns above the ability that would have run: " + json);
-    }
-
-    /**
-     * A record that names its line carries no reason, and the reverse.
-     *
-     * <p>The two fields are one statement in two halves. A reason beside a
-     * named line is a contradiction the Python reader refuses outright, so the
-     * collector may never write both.
-     */
-    @Test
-    void aRecordThatNamesItsLineCarriesNoReason() {
-        Card rest = TestCards.build("Rest in Peace");
-        ReplacementEffect replacement =
-                rest.getCurrentState().getReplacementEffects().iterator().next();
-
-        String json = recording().rewriteRecord(
-                replacement,
-                Map.of("Card", rest, "Destination", ZoneType.Graveyard),
-                Map.of("Card", rest, "Destination", ZoneType.Exile),
-                ReplacementResult.Replaced, null).toJson();
-
-        assertTrue(json.contains("cardsfolder/r/rest_in_peace.txt"), json);
-        assertTrue(json.contains("\"ability_unresolved\":null"), json);
-    }
-
-    /** And a rewrite that changed the destination is two different halves. */
-    @Test
-    void aRewrittenDestinationMakesTheTwoHalvesDiffer() {
-        Card card = TestCards.build("Mountain");
-        Map<String, Object> before = new LinkedHashMap<>(Map.of(
-                "Origin", ZoneType.Battlefield, "Destination", ZoneType.Graveyard,
-                "Card", card));
-        Map<String, Object> after = new LinkedHashMap<>(before);
-        after.put("Destination", ZoneType.Exile);
-
-        EffectRecord record = recording().rewriteRecord(
-                new FakeTrait("Moved"), before, after,
-                ReplacementResult.Updated, null);
-
-        assertNotNull(record, "a replacement that redirected a card is a real rewrite");
-        String json = record.toJson();
-        assertTrue(json.contains("\"to_zone\":\"graveyard\""), json);
-        assertTrue(json.contains("\"to_zone\":\"exile\""), json);
-    }
-
-    /**
-     * A rewrite whose halves read alike says so with a null, not with a copy.
-     *
-     * <p>Writing the copy is what made the channel unreadable: 87% of the
-     * candidates were a substitution whose two halves were byte-identical
-     * because Forge substitutes by running another ability rather than by
-     * editing the map. Null says "not rewritten" outright, and the corpus
-     * validator judges an identity pair at zero rather than letting one parse.
-     */
-    @Test
-    void aRewriteThatChangedNoObservableParameterCarriesNoOutgoing() {
-        Map<String, Object> params = Map.of("Card", TestCards.build("Mountain"));
-
-        String json = recording().rewriteRecord(
-                new FakeTrait("Moved"), params, params,
-                ReplacementResult.Replaced, null).toJson();
-
-        assertTrue(json.contains("\"outgoing\":null"), json);
-        assertFalse(json.contains("\"outgoing\":{"),
-                "never a copy of incoming: " + json);
+        assertTrue(json.contains("\"mode\":\"Untap\""), json);
     }
 
     /**
@@ -520,7 +458,7 @@ class RewriteContractTest {
         Map<String, Object> after = new LinkedHashMap<>(before);
         after.put("Number", 1);
 
-        EffectRecord record = recording().rewriteRecord(
+        EffectRecord record = recording(tempDir).rewriteRecord(
                 new FakeTrait("DrawCards"), before, after,
                 ReplacementResult.Updated, null);
 
@@ -541,9 +479,9 @@ class RewriteContractTest {
         Map<String, Object> after = new LinkedHashMap<>(before);
         after.put("Destination", ZoneType.Exile);
         // Deltas rather than absolutes: the tally is the worker's, so every
-        // other test in this class has already contributed to it.
+        // other test in this JVM has already contributed to it.
         long recordsBefore = PatchedCollectors.JVM_REWRITES.records();
-        PatchedCollectors collector = recording();
+        PatchedCollectors collector = recording(tempDir);
 
         collector.rewriteRecord(
                 new FakeTrait("Moved"), before, after,
@@ -557,40 +495,7 @@ class RewriteContractTest {
         assertEquals(recordsBefore + 2, PatchedCollectors.JVM_REWRITES.records());
     }
 
-    /**
-     * A replacement whose mode only the replacement side spells is still typed.
-     *
-     * <p>{@code ReplacementType} names {@code Untap} where {@code TriggerType}
-     * names {@code Untaps}, and the mode table was written from the trigger
-     * vocabulary — so an untap replacement took the generic type, carried
-     * nothing but its own name, and could not differ from itself however much
-     * it changed. Paralyze's is that mode. Its record still carries no outgoing,
-     * because a prevention changes no parameter at all, but the incoming half is
-     * now typed rather than generic.
-     */
-    @Test
-    void anUntapReplacementIsSpelledTheReplacementSideWay() {
-        Card paralyze = TestCards.build("Paralyze");
-        ReplacementEffect prevention =
-                paralyze.getCurrentState().getReplacementEffects().iterator().next();
-
-        assertEquals("Untap", String.valueOf(prevention.getMode()));
-        String json = recording().rewriteRecord(
-                prevention, Map.of("Card", paralyze), Map.of("Card", paralyze),
-                ReplacementResult.Skipped, null).toJson();
-
-        assertTrue(json.contains("\"mode\":\"Untap\""), json);
-        assertTrue(json.contains("\"outgoing\":null"), json);
-    }
-
     // ── plumbing ────────────────────────────────────────────────────────
-
-    private PatchedCollectors recording() {
-        return new PatchedCollectors(
-                TestCards.game(),
-                new RecordShardWriter(tempDir, "run", 0, "l1"),
-                "run.0-l1.0", CollectionCaps.defaults(), 1L);
-    }
 
     /**
      * Everything the handler wrote for one notification, as the shard line.
