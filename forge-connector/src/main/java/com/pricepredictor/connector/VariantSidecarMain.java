@@ -94,7 +94,7 @@ public class VariantSidecarMain {
                 if (!script.toString().endsWith(".txt")) {
                     continue;
                 }
-                String name = nameLineOf(script);
+                String name = ScriptHeader.of(Files.readAllLines(script)).name();
                 if (name == null) {
                     continue;
                 }
@@ -107,15 +107,5 @@ public class VariantSidecarMain {
         java.util.Collections.sort(accepted);
         Files.write(variants.resolve(LOADABLE_FILE), accepted);
         return accepted.size();
-    }
-
-    /** The {@code Name:} a Forge card script declares, or null. */
-    private static String nameLineOf(Path script) throws java.io.IOException {
-        for (String line : Files.readAllLines(script)) {
-            if (line.startsWith("Name:")) {
-                return line.substring("Name:".length()).trim();
-            }
-        }
-        return null;
     }
 }

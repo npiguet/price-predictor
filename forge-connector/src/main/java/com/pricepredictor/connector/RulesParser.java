@@ -106,26 +106,7 @@ public class RulesParser {
                                           String scriptFile) {
         reader.reset();
 
-        // Pre-pass: capture front-face Oracle, Name, and Draft lines.
-        // We stop at ALTERNATE so we never accidentally use a back-face oracle.
-        String frontOracle = null;
-        String frontName = null;
-        List<String> frontDraftLines = new ArrayList<>();
-        boolean inAlternate = false;
-        for (String line : scriptLines) {
-            String trimmed = line.trim();
-            if ("ALTERNATE".equals(trimmed)) { inAlternate = true; continue; }
-            if (inAlternate) continue;
-            if (trimmed.startsWith("Oracle:") && frontOracle == null) {
-                frontOracle = trimmed.substring(7).trim();
-            }
-            if (trimmed.startsWith("Name:") && frontName == null) {
-                frontName = trimmed.substring(5).trim();
-            }
-            if (trimmed.startsWith("Draft:")) {
-                frontDraftLines.add(trimmed.substring(6).trim());
-            }
-        }
+        ScriptHeader header = ScriptHeader.of(scriptLines);
 
         for (String line : scriptLines) {
             if (line.isEmpty() || line.charAt(0) == '#') {
@@ -142,14 +123,15 @@ public class RulesParser {
         // Skip oracle fallback when draft lines are present: draft-only cards (e.g. Cogwork
         // Librarian) produce their content via applyDraftLines(); firing the oracle fallback
         // too would duplicate those lines as both draft: and text: entries.
-        if (frontOracle != null && !frontOracle.isEmpty() && frontDraftLines.isEmpty()) {
-            result = applyOracleFallbackIfNeeded(result, frontOracle, frontName);
+        if (header.oracle() != null && !header.oracle().isEmpty()
+                && header.draftLines().isEmpty()) {
+            result = applyOracleFallbackIfNeeded(result, header.oracle(), header.name());
         }
         // Prepend Draft: lines (if any) as TEXT abilities on the primary face.
         // The Forge game engine ignores Draft fields, so they never appear in game abilities,
         // but they are part of the card's oracle text and must be included in the output.
-        if (!frontDraftLines.isEmpty()) {
-            result = applyDraftLines(result, frontDraftLines, frontName);
+        if (!header.draftLines().isEmpty()) {
+            result = applyDraftLines(result, header.draftLines(), header.name());
         }
         return result;
     }
