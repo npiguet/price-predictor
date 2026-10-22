@@ -1,6 +1,5 @@
 package com.pricepredictor.connector;
 
-import forge.StaticData;
 import forge.card.CardRarity;
 import forge.item.PaperCard;
 import forge.item.SealedTemplate;
@@ -45,7 +44,7 @@ public class PoolGenerator {
      * @param poolCount Number of pools to generate.
      * @param excluded  Cards no pool may contain; {@link HoldoutCards#NONE} for an ordinary pool.
      * @return List of pools; each pool is a list of non-basic-land card names.
-     * @throws IllegalArgumentException if setCode is null or not found in Forge's booster database.
+     * @throws IllegalArgumentException if setCode is null or names no set with a draft booster.
      */
     public List<List<String>> generate(String setCode, int poolCount, HoldoutCards excluded) {
         SealedTemplate boosterTemplate = boosterTemplate(setCode);
@@ -65,26 +64,19 @@ public class PoolGenerator {
         if (setCode == null) {
             throw new IllegalArgumentException("Set code must not be null");
         }
-        SealedTemplate boosterTemplate = StaticData.instance().getBoosters().get(setCode);
-        if (boosterTemplate == null) {
-            throw new IllegalArgumentException("Unknown or unsupported set code: " + setCode);
-        }
-        return boosterTemplate;
+        return BoosterTemplates.forSet(setCode).orElseThrow(
+                () -> new IllegalArgumentException("Unknown or unsupported set code: " + setCode));
     }
 
     /**
      * Open one pool from an already-resolved template, depleted of {@code excluded}.
      *
      * <p>Package-visible because {@link MatchGenerator} resolves its own
-     * template — it falls back to a draft booster for sets with no sealed one —
-     * and must share this redraw rule rather than keeping a second copy. Its
-     * pools are what every collected effect record is played from.
+     * template, with its own error for a set it cannot open, and must share
+     * this redraw rule rather than keeping a second copy. Its pools are what
+     * every collected effect record is played from.
      */
-    List<PaperCard> openPool(SealedTemplate boosterTemplate, HoldoutCards excluded) {
-        return openSinglePool(boosterTemplate, excluded);
-    }
-
-    private List<PaperCard> openSinglePool(SealedTemplate boosterTemplate, HoldoutCards excluded) {
+    List<PaperCard> openSinglePool(SealedTemplate boosterTemplate, HoldoutCards excluded) {
         List<PaperCard> pool = new ArrayList<>();
         Map<CardRarity, Deque<PaperCard>> spares = new EnumMap<>(CardRarity.class);
         int replacementBoosters = 0;

@@ -50,7 +50,7 @@ class DeckBuilderLandsTest {
     private static List<PaperCard> nonlandSpells(int count) {
         List<PaperCard> spells = new ArrayList<>();
         while (spells.size() < count) {
-            for (PaperCard card : new PoolGenerator().openPool(
+            for (PaperCard card : new PoolGenerator().openSinglePool(
                     BoosterTemplates.forSet("RVR").orElseThrow(), HoldoutCards.NONE)) {
                 if (!card.getRules().getMainPart().getType().isLand()) {
                     spells.add(card);
